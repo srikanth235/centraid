@@ -30,5 +30,9 @@ export const DEVICES_EMPTY_BODY =
  * the desktop shell, "browser" in the web PWA's settings.
  */
 export function forgetDeviceMessage(surface: "browser" | "device"): string {
-  return `This ${surface} drops its pairing, its offline copy, and its cached previews, and returns to onboarding. Your vault is untouched — the enrollment stays on its host until you revoke it from Household → Devices.`;
+  // The pointer names the surface that actually holds the roster. Devices and
+  // the census merged into one Vault surface in v11, so "Household → Devices"
+  // named a page that no longer exists — a confirm that tells a member to go
+  // somewhere they cannot get to is worse than one that says nothing.
+  return `This ${surface} drops its pairing, its offline copy, and its cached previews, and returns to onboarding. Your vault is untouched — the enrollment stays on its host until you revoke it from Vault → Where it lives.`;
 }

@@ -11,10 +11,16 @@ import type {
 } from "./SettingsEnrichmentScreen.js";
 
 /*
- * Settings → Enrichment (issue #807). The behaviour that matters is that this
- * page is a PROJECTION: every control writes through the store that owns its
- * path and renders what came back, and the faces capability is refused a
- * delegate rather than merely defaulted away from one.
+ * Settings → Enrichment (issue #807, reshaped for v11). The behaviour that
+ * matters is that this page is a PROJECTION: every control writes through the
+ * store that owns its path and renders what came back, the resolver's answer is
+ * what a row shows rather than a fold done here, and the faces capability is
+ * offered no delegate at all.
+ *
+ * v11 removed the per-domain CEILING CONTROL — enrichment runs on the gateway,
+ * and where it runs is not a member's choice. The ceiling itself did not go
+ * anywhere, so the row a stored ceiling stops still says so; that pair is what
+ * these tests pin.
  */
 
 const CARD: HarnessCardDTO = {
@@ -32,7 +38,6 @@ function makeData(
   over: Partial<EnrichmentSettingsData> = {}
 ): EnrichmentSettingsData {
   return {
-    policy: { photos: "device", docs: "off" },
     rules: [
       {
         scope: { type: "domain", ref: "photos" },
@@ -63,8 +68,8 @@ function makeData(
         delegateCapable: false,
       },
       {
-        id: "sharp-ocr",
-        label: "Sharp OCR",
+        id: "ocr-codex",
+        label: "Codex",
         capability: "ocr",
         engine: { kind: "delegate", harness: "codex" },
         egress: "provider",
@@ -83,6 +88,24 @@ function makeData(
       },
     ],
     cards: [CARD],
+    modelByHarness: { codex: "gpt-5" },
+    effortByHarness: { codex: "high" },
+    effective: {
+      faces: {
+        capability: "faces",
+        enabled: true,
+        profileId: "built-in",
+        trigger: "on-ingest",
+        egressCeiling: "on-device",
+      },
+      ocr: {
+        capability: "ocr",
+        enabled: true,
+        profileId: "built-in",
+        trigger: "on-view",
+        egressCeiling: "on-device",
+      },
+    },
     ...over,
   };
 }
@@ -94,14 +117,14 @@ function makeProps(
     load: vi
       .fn<SettingsEnrichmentScreenProps["load"]>()
       .mockResolvedValue(makeData()),
-    setTier: vi
-      .fn<SettingsEnrichmentScreenProps["setTier"]>()
-      .mockResolvedValue({ photos: "gateway", docs: "off" }),
+    setEngineModel: vi
+      .fn<SettingsEnrichmentScreenProps["setEngineModel"]>()
+      .mockResolvedValue(null),
+    setEngineEffort: vi
+      .fn<SettingsEnrichmentScreenProps["setEngineEffort"]>()
+      .mockResolvedValue(null),
     saveProfile: vi
       .fn<SettingsEnrichmentScreenProps["saveProfile"]>()
-      .mockResolvedValue(undefined),
-    deleteProfile: vi
-      .fn<SettingsEnrichmentScreenProps["deleteProfile"]>()
       .mockResolvedValue(undefined),
     setRule: vi
       .fn<SettingsEnrichmentScreenProps["setRule"]>()
@@ -138,24 +161,22 @@ function control(el: HTMLElement, label: string): HTMLElement {
   return found as HTMLElement;
 }
 
-/** The one button whose visible label is `text`. */
-function button(el: HTMLElement, text: string): HTMLButtonElement {
+/** The engine pill of one row, by the words it currently states. */
+function pill(el: HTMLElement, label: string): HTMLButtonElement {
   const found = [...el.querySelectorAll("button")].find(
-    (candidate) => candidate.textContent?.trim() === text
+    (button) => button.textContent === label
   );
-  if (!found) throw new Error(`no button labelled "${text}"`);
+  if (!found) throw new Error(`no pill reading "${label}"`);
   return found;
 }
 
-async function type(input: HTMLInputElement, value: string): Promise<void> {
-  const setter = Object.getOwnPropertyDescriptor(
-    globalThis.HTMLInputElement.prototype,
-    "value"
-  )?.set;
-  await act(async () => {
-    setter?.call(input, value);
-    input.dispatchEvent(new Event("input", { bubbles: true }));
-  });
+/** One engine chip inside an opened pill. */
+function chip(el: HTMLElement, label: string): HTMLButtonElement {
+  const found = [...el.querySelectorAll(".capChip")].find(
+    (button) => button.textContent === label
+  );
+  if (!found) throw new Error(`no engine chip "${label}"`);
+  return found as HTMLButtonElement;
 }
 
 async function pick(select: HTMLSelectElement, value: string): Promise<void> {
@@ -178,107 +199,256 @@ describe(SettingsEnrichmentScreen, () => {
     vi.clearAllMocks();
   });
 
-  it("renders each domain's standing tier, the engines, the rules and the answers", async () => {
+  it("renders a capability as its plain name and what it gets you, under a head that counts", async () => {
     const el = await mount(makeProps());
-    const photos = control(el, "Enrichment for Photos");
-    expect(
-      photos.querySelector<HTMLElement>('[data-active="true"]')?.dataset.value
-    ).toBe("device");
-    // A profile states where its work goes, in the phone's words.
-    expect(el.textContent).toContain("Sharp OCR");
-    expect(el.textContent).toContain("sent to a provider");
-    // The stored rule and the recorded answer both render as facts.
     expect(el.textContent).toContain("Text in photos");
-    expect(el.textContent).toContain("declined");
+    expect(el.textContent).toContain("receipts, signs, whiteboards");
+    // The head states how many of its own rows are on.
+    expect(el.textContent).toContain("2 of 2 on");
+    // The recorded answer reads as a sentence about the member, not a decision
+    // enum beside an egress class.
+    expect(el.textContent).toContain("You declined");
   });
 
-  it("renders the tier the vault answered with, not the one that was clicked", async () => {
-    const setTier = vi
-      .fn<SettingsEnrichmentScreenProps["setTier"]>()
-      .mockResolvedValue({ photos: "off", docs: "off" });
-    const el = await mount(makeProps({ setTier }));
-    const photos = control(el, "Enrichment for Photos");
-    const gateway = photos.querySelector<HTMLButtonElement>(
-      '[data-value="gateway"]'
+  it("offers no ceiling control — where enrichment runs is not a member's choice", async () => {
+    const el = await mount(makeProps());
+    expect(el.querySelector('[aria-label="Enrichment for Photos"]')).toBeNull();
+    expect(el.textContent).not.toContain("On this device");
+    expect(el.textContent).not.toContain("How far your photos may go");
+  });
+
+  it("states only the egress that matters — a provider, and nothing otherwise", async () => {
+    const el = await mount(makeProps());
+    // The built-in engines run on the gateway, which is not a fact worth a
+    // line: the row would otherwise wear a label for the only place work runs.
+    expect(el.textContent).not.toContain("on your gateway");
+    expect(el.textContent).not.toContain("at a provider");
+  });
+
+  it("shows the resolver's answer on the switch, not a fold of its own", async () => {
+    const el = await mount(
+      makeProps({
+        load: vi.fn<SettingsEnrichmentScreenProps["load"]>().mockResolvedValue(
+          makeData({
+            effective: {
+              ...makeData().effective,
+              ocr: {
+                capability: "ocr",
+                enabled: false,
+                profileId: "built-in",
+                trigger: "on-view",
+                egressCeiling: "on-device",
+              },
+            },
+          })
+        ),
+      })
     );
+    expect((control(el, "Text in photos") as HTMLInputElement).checked).toBe(
+      false
+    );
+    expect((control(el, "Faces") as HTMLInputElement).checked).toBe(true);
+  });
+
+  it("says at the row when a stored ceiling will refuse it", async () => {
+    // The ceiling lost its control, not its teeth: photos is stored at
+    // `on-device` while the bundled OCR engine is gateway-lane, so the row
+    // states the gate rather than reading as on and quietly never running.
+    const el = await mount(makeProps());
+    expect(el.textContent).toContain(
+      "Stopped by a stored ceiling: no further than this device."
+    );
+  });
+
+  it("does not call an agent-backed row refused — provider egress is a consent question, not a ceiling one", async () => {
+    // `provider` outranks every ceiling, so measuring the delegate's class
+    // against it would mark every agent row dead. The gate compares the
+    // enricher's LANE, which is the built-in profile's class.
+    const el = await mount(
+      makeProps({
+        load: vi.fn<SettingsEnrichmentScreenProps["load"]>().mockResolvedValue(
+          makeData({
+            effective: {
+              faces: {
+                capability: "faces",
+                enabled: true,
+                profileId: "built-in",
+                trigger: "on-ingest",
+                egressCeiling: "gateway",
+              },
+              ocr: {
+                capability: "ocr",
+                enabled: true,
+                profileId: "ocr-codex",
+                trigger: "on-view",
+                egressCeiling: "gateway",
+              },
+            },
+          })
+        ),
+      })
+    );
+    expect(el.textContent).toContain("at a provider");
+    expect(el.textContent).not.toContain("Stopped by a stored ceiling");
+  });
+
+  it("writes one vault-scope rule when a switch is flipped, keeping what it isn't changing", async () => {
+    const setRule = vi
+      .fn<SettingsEnrichmentScreenProps["setRule"]>()
+      .mockResolvedValue(undefined);
+    const el = await mount(makeProps({ setRule }));
     await act(async () => {
-      gateway?.click();
+      (control(el, "Faces") as HTMLInputElement).click();
+    });
+    expect(setRule.mock.lastCall?.[0]).toStrictEqual({
+      scope: "vault",
+      ref: "",
+      capability: "faces",
+      enabled: false,
+      profile: null,
+      trigger: null,
+    });
+  });
+
+  it("offers faces no engine to pick, and carries its reassurance in its own description", async () => {
+    const el = await mount(makeProps());
+    expect(el.querySelector("[data-open]")?.textContent).not.toContain("Faces");
+    expect(el.textContent).toContain(
+      "Named only by you, and never sent to a provider."
+    );
+  });
+
+  it("renders a capability this build has no words for as un-switchable", async () => {
+    const el = await mount(
+      makeProps({
+        load: vi.fn<SettingsEnrichmentScreenProps["load"]>().mockResolvedValue(
+          makeData({
+            effective: { ...makeData().effective, faces: null },
+          })
+        ),
+      })
+    );
+    expect(el.querySelector('[aria-label="Faces"]')).toBeNull();
+    expect(el.textContent).toContain("no vocabulary");
+  });
+
+  it("creates the engine profile behind the row rather than asking for a name", async () => {
+    const saveProfile = vi
+      .fn<SettingsEnrichmentScreenProps["saveProfile"]>()
+      .mockResolvedValue(undefined);
+    const setRule = vi
+      .fn<SettingsEnrichmentScreenProps["setRule"]>()
+      .mockResolvedValue(undefined);
+    const el = await mount(makeProps({ saveProfile, setRule }));
+    // The engine is collapsed behind one pill — reading "Built in" while the
+    // bundled engine runs — and the chips only exist once it is pressed.
+    await act(async () => {
+      pill(el, "Built in").click();
+    });
+    await act(async () => {
+      chip(el, "Codex").click();
     });
     await act(async () => {
       await Promise.resolve();
     });
-    expect(setTier.mock.lastCall).toStrictEqual(["photos", "gateway"]);
-    expect(
-      photos.querySelector<HTMLElement>('[data-active="true"]')?.dataset.value
-    ).toBe("off");
-  });
-
-  it("refuses a delegate engine for faces", async () => {
-    const el = await mount(makeProps());
-    const capability = control(
-      el,
-      "Capability for the new engine"
-    ) as HTMLSelectElement;
-    const faces = [...capability.options].find(
-      (option) => option.value === "faces"
-    );
-    expect(faces?.disabled).toBe(true);
-    expect(el.textContent).toContain("Faces has no delegate engine");
-  });
-
-  it("writes a member engine as a slugged profile with its capability and agent", async () => {
-    const saveProfile = vi
-      .fn<SettingsEnrichmentScreenProps["saveProfile"]>()
-      .mockResolvedValue(undefined);
-    const el = await mount(makeProps({ saveProfile }));
-    await type(control(el, "New engine name") as HTMLInputElement, "Fast OCR");
-    await pick(
-      control(el, "Capability for the new engine") as HTMLSelectElement,
-      "ocr"
-    );
-    await pick(
-      control(el, "Agent for the new engine") as HTMLSelectElement,
-      "codex"
-    );
-    await act(async () => {
-      button(el, "Add engine").click();
-    });
     expect(saveProfile.mock.lastCall?.[0]).toStrictEqual({
-      id: "fast-ocr",
-      label: "Fast OCR",
+      id: "ocr-codex",
+      label: "Codex",
       capability: "ocr",
       harness: "codex",
     });
+    expect(setRule.mock.lastCall?.[0]?.profile).toBe("ocr-codex");
   });
 
-  it("says a member engine is inert when its capability ships no delegate variant", async () => {
-    const data = makeData();
+  it("writes the Agents page's own model pin from the engine's model row", async () => {
+    const setEngineModel = vi
+      .fn<SettingsEnrichmentScreenProps["setEngineModel"]>()
+      .mockResolvedValue(null);
     const el = await mount(
       makeProps({
-        load: vi.fn<SettingsEnrichmentScreenProps["load"]>().mockResolvedValue({
-          ...data,
-          profiles: [
-            ...data.profiles,
-            {
-              id: "my-embedder",
-              label: "My embedder",
-              capability: "embed-text",
-              engine: { kind: "delegate", harness: "codex" },
-              egress: "provider",
-              builtIn: false,
-              delegateCapable: false,
+        setEngineModel,
+        load: vi.fn<SettingsEnrichmentScreenProps["load"]>().mockResolvedValue(
+          makeData({
+            effective: {
+              ...makeData().effective,
+              ocr: {
+                capability: "ocr",
+                enabled: true,
+                profileId: "ocr-codex",
+                trigger: "on-view",
+                egressCeiling: "gateway",
+              },
             },
-          ],
-        }),
+          })
+        ),
       })
     );
-
-    expect(el.textContent).toContain(
-      "No agent engine ships for this capability"
+    await act(async () => {
+      pill(el, "Codex · high").click();
+    });
+    await pick(
+      control(el, "Model for Text in photos") as HTMLSelectElement,
+      "gpt-5"
     );
-    // And the profile that DOES have one is not labelled inert: the note is a
-    // fact about the capability, not decoration on every member engine.
-    expect(el.textContent?.match(/No agent engine ships/gu)).toHaveLength(1);
+    // Same key the Agents page writes — one pin, not a second copy of it.
+    expect(setEngineModel.mock.lastCall).toStrictEqual(["codex", "gpt-5"]);
+  });
+
+  it("returns the gateway's own words when a switch is refused", async () => {
+    const showToast = vi.fn<SettingsEnrichmentScreenProps["showToast"]>();
+    const el = await mount(
+      makeProps({
+        showToast,
+        setRule: vi
+          .fn<SettingsEnrichmentScreenProps["setRule"]>()
+          .mockRejectedValue(
+            new Error(
+              "enrich.policy.write refused: filing requires the entity reader"
+            )
+          ),
+      })
+    );
+    const faces = control(el, "Faces") as HTMLInputElement;
+    await act(async () => {
+      faces.click();
+    });
+    await act(async () => {
+      await Promise.resolve();
+    });
+    expect(showToast.mock.lastCall?.[0]).toContain(
+      "enrich.policy.write refused"
+    );
+    // The switch is back where the gateway has it — the row renders the
+    // resolver's answer, never a local optimistic copy.
+    expect((control(el, "Faces") as HTMLInputElement).checked).toBe(true);
+  });
+
+  it("lists a deeper scope as an exception", async () => {
+    const el = await mount(makeProps());
+    expect(el.textContent).toContain("Exceptions");
+    expect(el.textContent).toContain("domain · photos");
+  });
+
+  it("has no exceptions group when every decision is a vault-scope switch", async () => {
+    const el = await mount(
+      makeProps({
+        load: vi.fn<SettingsEnrichmentScreenProps["load"]>().mockResolvedValue(
+          makeData({
+            rules: [
+              {
+                scope: { type: "vault", ref: "" },
+                capability: "ocr",
+                enabled: false,
+                profile: null,
+                trigger: null,
+                updatedAt: "2026-08-01T00:00:00.000Z",
+              },
+            ],
+          })
+        ),
+      })
+    );
+    expect(el.textContent).not.toContain("Exceptions");
   });
 
   it("says so when the gateway does not answer", async () => {

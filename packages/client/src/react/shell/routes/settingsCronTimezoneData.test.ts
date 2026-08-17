@@ -55,10 +55,27 @@ describe("settingsCronTimezoneData", () => {
       });
     });
 
-    it("refuses an unknown IANA name without writing", async () => {
-      const err = await saveDefaultCronTimeZone("Not/A_Zone");
-      expect(err).toMatch(/not a known IANA timezone/u);
+    it("refuses an unknown IANA name without writing, naming the last good zone", async () => {
+      // The typo is on screen already; what a member cannot see is which zone
+      // their schedules are still firing in, so the error states that.
+      const err = await saveDefaultCronTimeZone("Not/A_Zone", "Europe/London");
+      expect(err).toBe(
+        "Not a zone the gateway knows. Still using Europe/London."
+      );
       expect(saveUserPrefs).not.toHaveBeenCalled();
+    });
+
+    it("names the host clock when there is no last good zone", async () => {
+      await expect(saveDefaultCronTimeZone("Not/A_Zone")).resolves.toBe(
+        "Not a zone the gateway knows. Still using the host clock."
+      );
+    });
+
+    it("returns the gateway's own words when the write is refused", async () => {
+      saveUserPrefs.mockRejectedValue(new Error("prefs.write refused"));
+      await expect(
+        saveDefaultCronTimeZone("Europe/Paris", "Europe/London")
+      ).resolves.toBe("prefs.write refused. Still using Europe/London.");
     });
   });
 });

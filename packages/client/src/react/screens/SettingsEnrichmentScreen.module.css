@@ -1,6 +1,6 @@
-/* Settings → Enrichment (issue #807). Three lists and two forms, all the same
-   object visually: a bordered panel of hairline-separated rows, matching the
-   Agents console's `.panel` idiom so the two Models pages read as one surface. */
+/* Settings → Enrichment (issue #807). Every list is the same object visually:
+   a bordered panel of hairline-separated rows, matching the Agents console's
+   `.panel` idiom so the two Models pages read as one surface. */
 .panel {
   border: 1px solid var(--line);
   border-radius: var(--r-lg);
@@ -8,8 +8,8 @@
   overflow: hidden;
 }
 
-/* One profile / rule / answer. The name takes the space, the meta line states
-   what the gateway computed, and any act sits at the end of the row. */
+/* One exception / answer. The name takes the space, the meta line states what
+   the gateway computed, and any act sits at the end of the row. */
 .row {
   display: flex;
   flex-wrap: wrap;
@@ -32,23 +32,178 @@
   line-height: 1.45;
   color: var(--text-faint);
 }
-/* A statement about the row that is not a control: its own line, so the meta
-   line above stays one glance. */
-.rowNote {
-  flex: 1 0 100%;
-}
 .empty {
   font-size: var(--t-small-size);
   color: var(--text-faint);
   padding: var(--sp-3) var(--sp-4);
 }
 
-/* The add form under each list — controls wrap onto as many lines as the
-   settings column needs, so nothing shrinks below a legible option. */
+/* A control row under a panel. Settings → Enrichment no longer has one — every
+   control it kept lives inside a capability row — but `AppEnrichmentSurface`
+   shares this stylesheet for the app popover's "Enrich with…" picker and is now
+   its only consumer. Kept here rather than moved so the two enrichment surfaces
+   keep reading as one; delete it with that picker, not before. */
 .form {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
   gap: var(--sp-2);
   margin-top: var(--sp-2);
+}
+
+/* ONE CAPABILITY. Reading order across the row is the order the questions are
+   asked: is it on, what is it, where does its work go, what runs it. The
+   switch leads because it is the only thing most people came to change. */
+.capRow {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: var(--sp-2) var(--sp-3);
+  padding: var(--sp-3) var(--sp-4);
+}
+.capRow + .capRow {
+  border-top: 1px solid var(--line);
+}
+.capSwitch {
+  display: grid;
+  place-items: center;
+}
+.capText {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+.capName {
+  font-size: var(--t-small-size);
+  font-weight: 600;
+  color: var(--text);
+}
+.capBlurb {
+  font-size: var(--t-control-size);
+  line-height: 1.45;
+  color: var(--text-faint);
+  text-wrap: pretty;
+}
+
+/* The computed egress fact. Quiet by default — it is reassurance, not an
+   alarm — and only `provider` earns colour, because that is the one answer
+   where something left the member's own machines. `--net` is the token whose
+   whole meaning is "this leaves the device", so this is the role it exists for
+   rather than a hue picked to look cautionary. */
+.capWhere {
+  grid-column: 2;
+  justify-self: start;
+  font-size: var(--t-control-size);
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  color: var(--text-faint);
+}
+.capWhere[data-egress="provider"] {
+  color: var(--net);
+}
+/* THE ENGINE, COLLAPSED. Two rows out of nine have an engine to choose, so it
+   is one pill beside the switch rather than a select every row wears. Pressing
+   it opens the chips and the model/level row below. */
+.capPill {
+  grid-column: 3;
+  grid-row: 1;
+  justify-self: end;
+  display: inline-flex;
+  align-items: center;
+  /* `--target-min`, not `--h-control`: this is the only route to the engine
+     choice, so it holds the touch floor and drops to control height only where
+     a fine pointer is proven. */
+  min-height: var(--target-min);
+  padding-inline: var(--sp-3);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--r-lg);
+  background: transparent;
+  color: var(--text);
+  font-size: var(--t-control-size);
+  white-space: nowrap;
+  cursor: pointer;
+}
+.capPill[data-open="true"] {
+  border-color: var(--text);
+  background: var(--bg-sunken);
+  font-weight: 600;
+}
+/* A capability this build has no words for: stated where the switch would be,
+   never a control that would write a guess. */
+.capLock {
+  font-size: var(--t-control-size);
+  color: var(--text-ghost);
+  white-space: nowrap;
+}
+.capEngine {
+  grid-column: 2 / -1;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sp-2);
+}
+.capEngineLabel {
+  font-size: var(--t-control-size);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-ghost);
+}
+.capChip {
+  min-height: var(--target-min);
+  padding-inline: var(--sp-3);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--r-pill);
+  background: transparent;
+  color: var(--text);
+  font-size: var(--t-control-size);
+  white-space: nowrap;
+  cursor: pointer;
+}
+.capChip[data-on="true"] {
+  border-color: var(--text);
+  background: var(--bg-sunken);
+  font-weight: 600;
+}
+/* A disconnected agent is OFFERED and not selectable — dashed, so the row says
+   "this exists, and not here" rather than hiding the answer. */
+.capChip[data-off="true"] {
+  border-style: dashed;
+  color: var(--text-disabled);
+  cursor: default;
+}
+.capModelRow {
+  flex: 1 1 100%;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sp-2);
+}
+
+/* A statement about the row that is not a control: its own full-width line, so
+   the row above it stays one glance. */
+.capRefusal,
+.capNote {
+  grid-column: 2 / -1;
+  font-size: var(--t-control-size);
+  line-height: 1.5;
+  text-wrap: pretty;
+}
+.capRefusal {
+  color: var(--warning);
+}
+.capNote {
+  color: var(--text-faint);
+}
+
+/* Narrow settings pane: the engine picker drops under the name rather than
+   squeezing the blurb to two words. */
+@container settings-shell (max-width: 720px) {
+  .capRow {
+    grid-template-columns: auto minmax(0, 1fr);
+  }
+  .capPill {
+    grid-column: 2;
+    grid-row: auto;
+    justify-self: start;
+  }
 }

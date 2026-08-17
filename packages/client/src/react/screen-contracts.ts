@@ -937,20 +937,28 @@ export interface AutomationThreadBridgeProps {
 /** The three positions of the Appearance control. `system` is a standing mode
  *  the shell keeps tracking, not a one-shot snap to the current OS value. */
 export type SettingsThemeMode = "light" | "dark" | "system";
-/** Appearance is the one visual-treatment page: theme and card
- *  surface. Layout was folded into it (#608). The app-tile treatment picker
- *  was cut but keeps its pref; the dark ramp's surface temperature was removed
- *  outright, so dark has exactly one ramp — parity with light, which never had
- *  a temperature.
+/** Appearance is the one visual-treatment page, and theme is now the whole of
+ *  it. Layout was folded in (#608), and the controls that came with it have
+ *  been retired one by one: the app-tile treatment picker was cut but keeps its
+ *  pref; the dark ramp's surface temperature was removed outright, so dark has
+ *  exactly one ramp — parity with light, which never had a temperature; and the
+ *  card surface followed, a three-way choice nothing in the product asked the
+ *  owner to make. `cardVariant` still paints (`html.dataset.cards`, default
+ *  `outlined`) — it is a stored pref with no control, like the tile treatment.
  *
  *  The accent swatches went the same way in #608 and their PREF went in #707:
  *  the shell spends no hue at all now, so there is no accent to store. Neither
  *  is `sidebarOpen` — the stem never hides, so there is no open state. */
 export interface SettingsAppearanceBridgeProps {
   themeMode: SettingsThemeMode;
-  cardVariant: "flat" | "outlined" | "elevated";
   onSetThemeMode: (mode: SettingsThemeMode) => void;
-  onSetCards: (v: "flat" | "outlined" | "elevated") => void;
+  /** Whether this gateway runs automations, which decides whether the default
+   *  cron timezone is offered at all — a schedule default on a gateway that
+   *  schedules nothing is a control whose effect can never be observed. The
+   *  row is a squatter here regardless (see the screen's own note); the gate is
+   *  the honest floor until it moves to the Automations surface. Defaults ON so
+   *  an unprovided screen (a test tree) shows it, matching `useShellCapabilities`. */
+  automations?: boolean;
 }
 
 // ── Settings: harnesses (Agents console) ────────────────────────────────────
@@ -1051,33 +1059,40 @@ export interface HarnessesStatusDTO {
   /** Ordered automatic failover members after the resolved primary harness. */
   subsystemHarnessLadders: Partial<Record<ModelSubsystem, HarnessKind[]>>;
 }
+/**
+ * Every writer here resolves to the GATEWAY'S OWN TEXT when the write was
+ * refused, and `null` when it landed. It used to be `void` for the model,
+ * effort and ladder pins, which made a refusal invisible: the pick stayed on
+ * screen looking saved. The screen restores the previous value and puts the
+ * refusal on the status line.
+ */
+export type HarnessPrefWrite = Promise<string | null>;
 export interface SettingsHarnessesBridgeProps {
   loadStatus: () => Promise<HarnessesStatusDTO>;
   refreshModels: () => Promise<HarnessesStatusDTO>;
-  /** Switch the DEFAULT harness — the fallback every unpinned subsystem
-   *  inherits; resolves true on success. */
-  activateHarness: (kind: HarnessKind) => Promise<boolean>;
+  /** Switch the DEFAULT harness — the fallback every unpinned subsystem inherits. */
+  activateHarness: (kind: HarnessKind) => HarnessPrefWrite;
   /** Persist this harness's default model ('' = clears back to the backend default). */
-  setHarnessModel: (kind: HarnessKind, modelId: string) => void;
+  setHarnessModel: (kind: HarnessKind, modelId: string) => HarnessPrefWrite;
   /** Persist this harness's per-subsystem model override ('' = clears back to the default model). */
   setSubsystemModel: (
     kind: HarnessKind,
     subsystem: ModelSubsystem,
     modelId: string
-  ) => void;
+  ) => HarnessPrefWrite;
   /** Persist a semantic harness-default config pin ('' clears it). */
   setHarnessConfigPin: (
     kind: HarnessKind,
     category: string,
     value: string
-  ) => void;
+  ) => HarnessPrefWrite;
   /** Persist a semantic per-subsystem config pin ('' clears it). */
   setSubsystemConfigPin: (
     kind: HarnessKind,
     subsystem: ModelSubsystem,
     category: string,
     value: string
-  ) => void;
+  ) => HarnessPrefWrite;
   /**
    * Pin this subsystem to a harness, independent of the default harness.
    * `''` clears the pin, so the subsystem inherits `selectedKind` again.
@@ -1085,7 +1100,7 @@ export interface SettingsHarnessesBridgeProps {
   setSubsystemHarness: (
     subsystem: ModelSubsystem,
     kind: HarnessKind | ""
-  ) => Promise<boolean>;
+  ) => HarnessPrefWrite;
   /**
    * Replace one lane's ordered automatic failover membership. Removing a
    * member also revokes ladder-derived provider grants at the gateway.
@@ -1093,7 +1108,9 @@ export interface SettingsHarnessesBridgeProps {
   setSubsystemHarnessLadder: (
     subsystem: ModelSubsystem,
     kinds: HarnessKind[]
-  ) => void;
+  ) => HarnessPrefWrite;
+  /** The status line — where a refused pin states what the gateway said. */
+  showToast: (message: string) => void;
 }
 
 // ── Settings: Vault (issue #382) ─────────────────────────────────────────────

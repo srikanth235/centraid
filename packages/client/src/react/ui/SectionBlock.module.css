@@ -32,6 +32,24 @@
   margin-inline-start: auto;
 }
 
+/* The Show/Hide disclosure. Trailing, centred and quiet, on the same terms as
+   the verb above it — it holds `--target-min` from `.btn` (44 on touch, the
+   control rung under a fine pointer), because on a phone this toggle is the
+   only way the section opens and a 34px target would make it the one control
+   in the head a member has to aim at. */
+.toggle {
+  align-self: center;
+  flex: none;
+  margin-inline-start: auto;
+}
+
+/* With a verb beside it, the VERB takes the free space and the toggle sits
+   against it — two `auto` margins would split the gap and strand the verb in
+   the middle of the head. */
+.action + .toggle {
+  margin-inline-start: var(--sp-1);
+}
+
 /* The count truncates; the label above does not. */
 .meta {
   color: var(--text-faint);

@@ -4,10 +4,8 @@ import type { JSX } from "react";
 import type { IconName } from "@centraid/design";
 
 import type { AppearancePrefs } from "../../../app-shell-context.js";
-import { forgetDeviceMessage } from "../../../devices-copy.js";
 import { isWebHost } from "../../host-platform.js";
 import SettingsAppearanceScreen from "../../screens/SettingsAppearanceScreen.js";
-import SettingsDeviceScreen from "../../screens/SettingsDeviceScreen.js";
 import SettingsEnrichmentScreen from "../../screens/SettingsEnrichmentScreen.js";
 import SettingsHarnessesScreen from "../../screens/SettingsHarnessesScreen.js";
 import SettingsProfileScreen from "../../screens/SettingsProfileScreen.js";
@@ -18,18 +16,17 @@ import { disconnectConfirmCopy } from "../gatewayRegistry.js";
 import { openPrompt } from "../prompt.js";
 import { PageEmpty, PageLoading } from "../status.js";
 import { useAsyncData } from "../useAsyncData.js";
+import { useShellCapabilities } from "../useCapabilities.js";
 import { loadSelfProfile, saveSelfProfile } from "./profileData.js";
 import {
-  forgetThisDeviceLocally,
   loadActiveVaultData,
+  loadSettingsStamp,
   loadThisDeviceData,
   setOfflineCopy,
 } from "./settingsAccountData.js";
 import {
-  deleteEngineProfile,
   loadEnrichmentSettings,
   saveEngineProfile,
-  setDomainTier,
   writeEnrichRule,
   dropEnrichRule,
 } from "./settingsEnrichmentData.js";
@@ -60,8 +57,6 @@ import styles from "./SettingsRoute.module.css";
 export type SettingsPageId =
   | "appearance"
   | "vault"
-  | "profile"
-  | "device"
   | "harnesses"
   | "enrichment";
 
@@ -70,67 +65,90 @@ interface PageDef {
   label: string;
   section: string;
   icon: IconName;
+  /**
+   * Three words, carried by the NAV ROW rather than the page head. A rail
+   * entry that names only its page makes a member open pages to find where a
+   * setting lives; three words under the label answer that from the rail.
+   */
   subtitle: string;
 }
 
-const ALL_PAGES: readonly PageDef[] = [
+/*
+ * Marks. Four rules, in the order they bite:
+ *
+ * 1. No two rows share a glyph. `Agents` and `Enrichment` both wore `Sparkle`,
+ *    so half the rail was a coin flip. `Sparkle` is the ASK/assistant mark
+ *    (`ICON_CONCEPTS.ask`), which is what enrichment is — a machine reading
+ *    your data for you — so it stays there and Agents moves.
+ * 2. A row wears the glyph its subject already wears elsewhere. Harnesses are
+ *    marked `Cpu` where they are picked (AutomationEditorHarnessPicker), and
+ *    the frame's Vault destination is `DESTINATION_MARKS.data` = `Database`.
+ *    Settings → Vault said `Users`: a people glyph on a page that edits a
+ *    container's name and colour, and the same word wearing two marks in one
+ *    product.
+ * 3. Neighbours must be distinguishable at 15px, not merely different. `User`
+ *    beside `Users` is one silhouette at two counts — unreadable at rail size,
+ *    which is the size it is always read at.
+ * 4. A glyph the shell spends as a VERB cannot be a category here: `Eye` means
+ *    "open this record" everywhere else, so it is not available for a nav row
+ *    however well "what Centraid reads for you" reads.
+ */
+const PAGES: readonly PageDef[] = [
   {
     id: "appearance",
-    label: "Appearance",
-    section: "Workspace",
-    icon: "Mood",
-    subtitle: "Theme and card surface for Centraid chrome.",
-  },
-  {
-    id: "profile",
-    label: "Profile",
+    label: "You",
     section: "Account",
     icon: "User",
-    subtitle: "Your name and color, as the rest of your household sees them.",
+    subtitle: "Name, colour, theme",
   },
   {
     id: "vault",
     label: "Vault",
     section: "Account",
-    icon: "Users",
-    subtitle:
-      "This vault’s name, icon, color, and description, plus where it lives.",
-  },
-  // Web only: on desktop the gateway runs in-process, so "this device" has no
-  // separate pairing to forget; the desktop case is the active vault's own
-  // "On this device → Disconnect" above.
-  {
-    id: "device",
-    label: "This device",
-    section: "Account",
-    icon: "Globe",
-    subtitle:
-      "What this browser stores locally — its pairing, its offline copy, and its cached previews.",
+    icon: "Database",
+    subtitle: "Name, colour, copies",
   },
   {
     id: "harnesses",
     label: "Agents",
     section: "Models",
-    icon: "Sparkle",
-    subtitle:
-      "The coding tools the gateway can drive, and the model each one uses.",
+    icon: "Cpu",
+    subtitle: "Harnesses and lanes",
   },
   {
     id: "enrichment",
     label: "Enrichment",
     section: "Models",
     icon: "Sparkle",
-    subtitle: "What Centraid reads for you, with what, and where that runs.",
+    subtitle: "What is read, and where",
   },
 ];
 // Workspace, Import and Storage provider were hidden pages for several
 // releases and are now gone (issue #807): a page nothing routes to is not a
-// page. `resolveSettingsPage` still collapses their deep links, and every
-// other unknown id, onto Appearance.
-const PAGES = ALL_PAGES.filter((page) => page.id !== "device" || isWebHost());
+// page. "This device" went the same way, though not identically: Pair a phone,
+// What's new and Log out restated the stem's account menu, which still carries
+// all three, and the offline copy moved to Vault → On this device, next to
+// Disconnect. "Forget this device" is the one row that was neither — it was the
+// standalone local-only purge, and retiring it is a real reduction. Its effect
+// survives because `logOut` runs the same `forgetThisDeviceLocally` behind the
+// same confirm copy, so the act is still reachable from the account menu.
+// `resolveSettingsPage` still collapses their deep links, and every other
+// unknown id, onto the first page.
+//
+// Profile and Appearance are now ONE page, "You": once Appearance lost the
+// card surface it held a single segment, and two pages carrying three controls
+// between them is a rail padded to look substantial. It keeps the `appearance`
+// id so old deep links (including `profile`, via the collapse above) still
+// land on the page that holds what they asked for. That emptied the Workspace
+// section, so its header went with it.
 
-const AUTO_SAVE = new Set<SettingsPageId>(["appearance"]);
-const SECTIONS = ["Workspace", "Account", "Models"];
+// Pages whose every EDIT writes on its own: picks save on the pick, text
+// fields on blur or Enter. The badge is a claim about the whole page, so it
+// belongs only where nothing is left waiting on a Save button — both of these
+// dropped theirs. Destructive acts (erase, disconnect) are not edits and keep
+// their explicit buttons and confirms; they do not disqualify a page.
+const AUTO_SAVE = new Set<SettingsPageId>(["appearance", "vault"]);
+const SECTIONS = ["Account", "Models"];
 
 function isSettingsPageId(id: string | undefined): id is SettingsPageId {
   return PAGES.some((p) => p.id === id);
@@ -162,18 +180,6 @@ export interface SettingsRouteProps {
    * a vault this device no longer reaches.
    */
   onDisconnectVault: (gatewayId: string) => Promise<boolean>;
-  /**
-   * The three acts the sidebar's account menu used to hold (#707 Decision §2).
-   *
-   * The stem carries the launcher and nothing else, so the account row went
-   * with the column. Each of these is something you do a handful of times, so
-   * they belong behind Settings — reachable from Home and from All apps —
-   * rather than standing in the navigation. They land on "This device", which
-   * is already the page about THIS browser's half of the pairing.
-   */
-  onPairDevice?: () => void;
-  onWhatsNew?: () => void;
-  onLogOut?: () => void;
 }
 
 export default function SettingsRoute({
@@ -182,14 +188,12 @@ export default function SettingsRoute({
   initialPage,
   onClose,
   onDisconnectVault,
-  onPairDevice,
-  onWhatsNew,
-  onLogOut,
 }: SettingsRouteProps): JSX.Element {
   const [page, setPage] = useState<SettingsPageId>(() =>
     resolveSettingsPage(initialPage)
   );
   const dialogRef = useRef<HTMLDialogElement>(null);
+  const capabilities = useShellCapabilities();
 
   // Escape closes, and focus lands inside on open so the rail is immediately
   // keyboard-reachable rather than leaving focus behind on the sidebar.
@@ -250,10 +254,14 @@ export default function SettingsRoute({
         )
       );
   };
-  // Settings → Profile. Read once per mount: the screen keeps the saved values
+  // Settings → You, the profile half. Read once per mount: the screen keeps the saved values
   // as its own new baseline, so a refetch here would only unmount the form at
   // the moment it is confirming the save.
   const selfProfile = useAsyncData(loadSelfProfile, []);
+  // The foot stamp. Read once per mount: neither the running build's version
+  // nor the gateway's host changes while the modal is open, and a gateway
+  // switch closes the shell's routes underneath it anyway.
+  const stamp = useAsyncData(loadSettingsStamp, []);
   const saveProfile = async (input: {
     name: string;
     avatarColor: string;
@@ -267,9 +275,9 @@ export default function SettingsRoute({
     });
   };
 
-  // Settings → This device. `getGatewayAuth` is the only host call that reports
-  // both halves of this browser's local state, and it is cheap enough to read
-  // on every mount rather than caching a second copy of the same truth.
+  // Settings → Vault → On this device. `getGatewayAuth` is the only host call
+  // that reports this browser's local state, and it is cheap enough to read on
+  // every mount rather than caching a second copy of the same truth.
   const thisDeviceState = useAsyncData(loadThisDeviceData, []);
   const thisDevice =
     thisDeviceState.status === "ready" ? thisDeviceState.data : undefined;
@@ -285,24 +293,6 @@ export default function SettingsRoute({
       );
       return !next;
     }
-  };
-  const forgetThisDevice = (): void => {
-    void (async () => {
-      const ok = await confirm({
-        confirmLabel: "Forget",
-        danger: true,
-        message: forgetDeviceMessage("browser"),
-        title: "Forget this device?",
-      });
-      if (!ok) return;
-      try {
-        await forgetThisDeviceLocally(thisDevice?.gatewayId);
-      } catch (error) {
-        showToast(
-          `Couldn't forget this device: ${error instanceof Error ? error.message : String(error)}`
-        );
-      }
-    })();
   };
   // "On this device → Disconnect" (issue #665). Offered only when the active
   // vault sits on a REMOTE connection — the primordial local gateway is this
@@ -394,13 +384,20 @@ export default function SettingsRoute({
                     onClick={() => setPage(p.id)}
                   >
                     <Icon name={p.icon} size={15} />
-                    <span>{p.label}</span>
+                    <span className={styles.settingsNavText}>
+                      <span className={styles.settingsNavLabel}>{p.label}</span>
+                      <span className={styles.settingsNavSub}>
+                        {p.subtitle}
+                      </span>
+                    </span>
                   </button>
                 ))}
               </Fragment>
             ))}
             <div className={styles.settingsNavFoot}>
-              <span className={styles.settingsNavVer}>v0.5.2</span>
+              <span className={styles.settingsNavVer}>
+                {stamp.status === "ready" ? stamp.data : "Centraid"}
+              </span>
             </div>
           </aside>
 
@@ -417,19 +414,32 @@ export default function SettingsRoute({
                   </span>
                 ) : null}
               </div>
-              {def ? (
-                <p className={styles.settingsPageSub}>{def.subtitle}</p>
-              ) : null}
             </header>
 
             <div className={styles.settingsPage} data-testid="settings-page">
               {page === "appearance" ? (
-                <SettingsAppearanceScreen
-                  cardVariant={prefs.cardVariant}
-                  themeMode={prefs.themeMode}
-                  onSetCards={(v) => setPrefs({ cardVariant: v })}
-                  onSetThemeMode={(m) => setPrefs({ themeMode: m })}
-                />
+                // Profile first, theme second: the name and colour are what
+                // everyone else sees, the theme is what only this browser
+                // sees. The theme group renders whatever the roster does —
+                // a connection with no roster loses the profile group, not
+                // the page.
+                <>
+                  {selfProfile.status === "loading" ? (
+                    <PageLoading label="Loading your profile…" />
+                  ) : selfProfile.status === "ready" && selfProfile.data ? (
+                    <SettingsProfileScreen
+                      profile={selfProfile.data}
+                      onSave={saveProfile}
+                    />
+                  ) : (
+                    <PageEmpty message="This connection doesn’t expose a household roster, so there is no name or color to edit here." />
+                  )}
+                  <SettingsAppearanceScreen
+                    themeMode={prefs.themeMode}
+                    onSetThemeMode={(m) => setPrefs({ themeMode: m })}
+                    automations={capabilities.automations}
+                  />
+                </>
               ) : page === "harnesses" ? (
                 <SettingsHarnessesScreen
                   loadStatus={() => loadHarnesses()}
@@ -441,36 +451,19 @@ export default function SettingsRoute({
                   setSubsystemConfigPin={setSubsystemConfigPin}
                   setSubsystemHarness={setSubsystemHarness}
                   setSubsystemHarnessLadder={setSubsystemHarnessLadder}
-                />
-              ) : page === "profile" ? (
-                selfProfile.status === "loading" ? (
-                  <PageLoading label="Loading your profile…" />
-                ) : selfProfile.status === "ready" && selfProfile.data ? (
-                  <SettingsProfileScreen
-                    profile={selfProfile.data}
-                    onSave={saveProfile}
-                  />
-                ) : (
-                  <PageEmpty message="This connection doesn’t expose a household roster, so there is no profile to edit here." />
-                )
-              ) : page === "device" ? (
-                <SettingsDeviceScreen
-                  {...(thisDevice?.gatewayLabel
-                    ? { gatewayLabel: thisDevice.gatewayLabel }
-                    : {})}
-                  offlineCopy={thisDevice?.offlineCopy ?? false}
-                  onOfflineCopy={changeOfflineCopy}
-                  onForget={forgetThisDevice}
-                  {...(onPairDevice ? { onPairDevice } : {})}
-                  {...(onWhatsNew ? { onWhatsNew } : {})}
-                  {...(onLogOut ? { onLogOut } : {})}
+                  showToast={showToast}
                 />
               ) : page === "enrichment" ? (
                 <SettingsEnrichmentScreen
                   load={loadEnrichmentSettings}
-                  setTier={setDomainTier}
                   saveProfile={saveEngineProfile}
-                  deleteProfile={deleteEngineProfile}
+                  // The engine's model and level ARE the Agents page's pins:
+                  // same prefs keys, one answer, written from whichever page
+                  // the member happens to be reading.
+                  setEngineModel={setHarnessModel}
+                  setEngineEffort={(harness, value) =>
+                    setHarnessConfigPin(harness, "thought_level", value)
+                  }
                   setRule={writeEnrichRule}
                   deleteRule={dropEnrichRule}
                   showToast={showToast}
@@ -491,6 +484,12 @@ export default function SettingsRoute({
                       : {})}
                     {...(activeVault.data.connection
                       ? { onDisconnect: disconnectActiveVault }
+                      : {})}
+                    {...(isWebHost()
+                      ? {
+                          offlineCopy: thisDevice?.offlineCopy ?? false,
+                          onOfflineCopy: changeOfflineCopy,
+                        }
                       : {})}
                   />
                 ) : (

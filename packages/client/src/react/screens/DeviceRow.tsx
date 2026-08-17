@@ -1,12 +1,12 @@
 import { useState } from "react";
 import type { JSX } from "react";
 
-import { formatDuration } from "../shell/routes/gatewayData.js";
 import Button from "../ui/Button.js";
 import Icon from "../ui/Icon.js";
 import type { RowDef } from "../ui/RowsBlock.js";
 import { lastDeviceVault } from "./device-errors.js";
 import type { GroupedDevice } from "./device-groups.js";
+import { replicaClause, seenAge } from "./vault-custody.js";
 
 import styles from "./HouseholdScreen.module.css";
 
@@ -50,11 +50,13 @@ export interface DeviceRowOptions extends DeviceRowActions {
   onToggle: () => void;
 }
 
+/**
+ * A bare age, live-ticked each minute — "just now", "an hour ago", "2 days
+ * ago". Re-exported from the custody model so a row, a tombstone and the
+ * custody line above them all read the same clock.
+ */
 export function ageLabel(iso: string | undefined, now: number): string {
-  if (!iso) return "";
-  const at = Date.parse(iso);
-  if (Number.isNaN(at)) return "";
-  return `${formatDuration(Math.max(0, now - at))} ago`;
+  return seenAge(iso, now);
 }
 
 /** The day something happened, in the reader's own locale ("3 March"). A
@@ -89,14 +91,23 @@ function subLine(
       ? "contributing compute"
       : "not contributing compute"
     : undefined;
-  const seen = device.lastUsedAt
-    ? `seen ${ageLabel(device.lastUsedAt, now)}`
-    : "never used";
+  // THE CLAUSES ARE ASSEMBLED, NOT CONCATENATED. A device that IS this device
+  // gets no "seen" clause — it is being seen — and a device the gateway has
+  // never heard from says so instead of reporting an age it does not have.
+  const seen = device.current
+    ? ""
+    : device.lastUsedAt
+      ? `seen ${ageLabel(device.lastUsedAt, now)}`
+      : "never used";
   const paired = device.addedAt ? `paired ${dateLabel(device.addedAt)}` : "";
   return [
     showOwner ? device.ownerLabel : "",
     device.current ? "This device" : "",
     compute ?? "",
+    // The same string the custody line counts, so a row can never say a
+    // machine holds a copy while the line above it counts it as one that
+    // does not.
+    replicaClause(device),
     device.platform ?? "",
     paired,
     seen,
@@ -273,6 +284,13 @@ export function DeviceRowDetail({
           />
         </form>
       ) : null}
+
+      {/* The same replica string the row and the custody line quote — the
+          drill-in restates it because this is where a member decides whether
+          losing this machine costs them anything. */}
+      <p className={styles.detailNote}>
+        What it holds · {replicaClause(device)}
+      </p>
 
       {device.grantProfile === undefined ? null : (
         <p className={styles.detailNote}>

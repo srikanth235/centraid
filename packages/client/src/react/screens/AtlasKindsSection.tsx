@@ -1,40 +1,70 @@
-import type { JSX } from "react";
+import type { JSX, ReactNode } from "react";
 
-import { ATLAS_KINDS_NOTE } from "../../data-copy.js";
+import { ATLAS_EXPORT_ROW, ATLAS_KINDS_NOTE } from "../../data-copy.js";
 import NoteBlock from "../ui/NoteBlock.js";
 import RowsBlock from "../ui/RowsBlock.js";
 import type { RowDef } from "../ui/RowsBlock.js";
 import SectionBlock from "../ui/SectionBlock.js";
-import { kindMeta, kindSubLine, kindWritten } from "./atlasScreenModel.js";
+import AtlasMeterRows from "./AtlasMeterRows.js";
+import type { MeterRowDef } from "./AtlasMeterRows.js";
+import {
+  kindCount,
+  kindMeta,
+  kindWritten,
+  largestRecords,
+  meterShare,
+} from "./atlasScreenModel.js";
 import type { KindRow } from "./atlasScreenModel.js";
 
-// The Kinds block of the Data route (v9 §6, issue #765) — what used to be the
-// periodic-table tab.
+// "What it holds" — the first of the Vault surface's three questions (v11).
 //
-// Every kind the vault's schema defines, one row each: whose pack it belongs
-// to, what it holds, when it was last written, and one outlined verb that opens
-// it. The per-card sparkline went with the restructure (a row carries a
-// sentence, not a chart), and so did the machinery shelf — a plumbing kind is a
-// row in this same list, sorted below the life data, so it stays reachable
-// without a second, differently-shaped table.
+// It was the Kinds block of the retired Data route: one `RowsBlock` row per
+// kind, each carrying its pack, its counts and a Browse verb. The row said
+// everything and showed nothing, so a vault with forty kinds was forty
+// sentences a member had to hold in their head to find the two that matter.
+// The v11 row keeps the same facts and adds a bar — share of the LARGEST kind
+// — so the list reads as an ordering before it is read as text.
 //
-// A kind nothing has ever written is a GHOST ROW (#775): drawn `off`, with its
-// verb inert, because there is nothing to browse. It is drawn rather than
-// dropped because a list that silently omitted it left "showing 9 of 40" with
-// no way to see the other thirty-one — the count named an absence the page then
-// refused to explain.
+// A kind nothing has ever written stays in the list: "we hold nothing of that
+// sort" is an answer a custody page owes, and dropping it left the head's
+// "25 of 31 kinds written" naming an absence the page then refused to explain.
+// Its trailing cell is inert text rather than a disabled button — no verb that
+// does nothing.
+//
+// The two things a member can do to the whole census — see how the kinds
+// relate, take one out — are ROWS here rather than app-bar verbs. The bar
+// carries the surface's identity and its one commit ("Pair a device"); a verb
+// about the census belongs beside the census, where it keeps its subject.
 
 export interface AtlasKindsSectionProps {
-  /** The kinds to show — already filtered by the page's chips. */
+  /** The kinds to show — already filtered by the chips. */
   kinds: readonly KindRow[];
-  /** Every kind the schema defines, written or not: the "of M" in the head. */
+  /** Every kind the schema defines, written or not: the caption's "of M". */
   totalKinds: number;
-  /** Open a kind's records in the section below. */
+  /** The head's own sentence: "25 of 31 kinds written · 41,208 records". */
+  meta: string;
+  /** Open a kind's records in the browser below. */
   onBrowse: (logical: string) => void;
+  /** Open (or close) the relations drill-in. */
+  onRelations: () => void;
+  /** Is it open? The row's verb reads its own state rather than always
+   *  saying "Open" over a chart that is already on screen. */
+  relationsOpen: boolean;
+  /** The relations drill-in itself, rendered under the verbs when open. */
+  relations?: ReactNode;
+  /** Copy out every record of the browsed kind. */
+  onExport: () => void;
   /** The head's trailing verb: when the census was read, and a way to read it
    *  again. Omitted while nothing has been read. */
   stamp?: string | undefined;
   onRefresh: () => void;
+  /** The chip row, when the list is long enough to need one. */
+  chips?: ReactNode;
+  /** Disclosure state — the parent owns it, and renders no body when closed.
+   *  Absent `onToggle`, the head draws no toggle at all: a disclosure nothing
+   *  can open is a verb that does nothing. */
+  collapsed: boolean;
+  onToggle?: () => void;
 }
 
 // The rule this page explains once lives in `../../data-copy.js` (issue #805)
@@ -43,34 +73,52 @@ export interface AtlasKindsSectionProps {
 export default function AtlasKindsSection({
   kinds,
   totalKinds,
+  meta,
   onBrowse,
+  onRelations,
+  relationsOpen,
+  relations,
+  onExport,
   stamp,
   onRefresh,
+  chips,
+  collapsed,
+  onToggle,
 }: AtlasKindsSectionProps): JSX.Element {
-  const rows: RowDef[] = kinds.map((kind) => {
-    const meta = kindMeta(kind);
-    const written = kindWritten(kind);
-    return {
-      action: {
-        // The verb keeps its word while it is inert: hiding it would make the
-        // ghost row a different SHAPE from its neighbours, which reads as a
-        // different kind of thing rather than the same thing with nothing in
-        // it. `off` disables it on the leaf, never as a container opacity.
-        hint: written
-          ? `Browse ${kind.label}`
-          : `${kind.label} has no records to browse`,
-        label: "Browse",
-        onClick: () => onBrowse(kind.logical),
-      },
-      id: kind.logical,
-      sub: kindSubLine(kind),
-      title: kind.label,
-      ...(written ? {} : { off: true as const }),
-      ...(meta ? { meta } : {}),
-    };
-  });
+  const largest = largestRecords(kinds);
+  const rows: MeterRowDef[] = kinds.map((kind) => ({
+    count: kindCount(kind),
+    id: kind.logical,
+    name: kind.label,
+    pack: kind.packLabel,
+    share: meterShare(kind, largest),
+    when: kindMeta(kind),
+    // Absent, not disabled: the row states "Nothing to browse" instead.
+    ...(kindWritten(kind) ? { onBrowse: () => onBrowse(kind.logical) } : {}),
+  }));
 
-  const count = `showing ${kinds.length.toLocaleString()} of ${totalKinds.toLocaleString()}`;
+  // The census is a snapshot, and a snapshot with no timestamp reads as live.
+  const shown = `${kinds.length.toLocaleString()} of ${totalKinds.toLocaleString()} kinds · the bar is a share of the largest`;
+  const caption = stamp ? `${shown} · ${stamp}` : shown;
+
+  const verbs: RowDef[] = [
+    {
+      action: {
+        label: relationsOpen ? "Close" : "Open",
+        onClick: onRelations,
+      },
+      id: "relations",
+      meta: "graph",
+      sub: "Which kinds point at which.",
+      title: "How the kinds relate",
+    },
+    {
+      action: { label: "Export", onClick: onExport },
+      id: "export",
+      sub: ATLAS_EXPORT_ROW,
+      title: "Export a kind",
+    },
+  ];
 
   return (
     <>
@@ -80,11 +128,20 @@ export default function AtlasKindsSection({
           label: "Refresh",
           onClick: onRefresh,
         }}
-        label="Kinds"
-        meta={stamp ? `${count} · ${stamp}` : count}
+        collapsed={collapsed}
+        label="What it holds"
+        meta={meta}
+        {...(onToggle ? { onToggle } : {})}
       />
-      <RowsBlock ariaLabel="Kinds" rows={rows} />
-      <NoteBlock>{ATLAS_KINDS_NOTE}</NoteBlock>
+      {collapsed ? null : (
+        <>
+          {chips}
+          <AtlasMeterRows ariaLabel="Kinds" caption={caption} rows={rows} />
+          <RowsBlock rows={verbs} stacked={relationsOpen} />
+          {relationsOpen ? relations : null}
+          <NoteBlock>{ATLAS_KINDS_NOTE}</NoteBlock>
+        </>
+      )}
     </>
   );
 }

@@ -39,7 +39,6 @@ import type { TurnStreamEvent } from "./turn-stream.js";
 export * from "./gateway-client-core.js";
 export * from "./gateway-client-automations.js";
 export * from "./gateway-client-automation-compile.js";
-export * from "./gateway-client-capture.js";
 export * from "./gateway-client-push.js";
 
 /** Feature flags advertised by the active gateway, or undefined if malformed. */

@@ -335,7 +335,13 @@ describe("shell/Stem", () => {
       expect(names).toContain("Assistant");
       expect(names).toContain("Connectors");
       expect(names).toContain("System");
-      expect(names.length).toBeGreaterThan(10);
+      expect(names).toContain("Vault");
+      // Every destination this gateway can OFFER — the sheet is the complete
+      // index. It lost a row with v11: Copies merged into Vault, and a second
+      // row opening the same surface under a second name would make the index
+      // a list of two places that are one.
+      expect(names.filter((name) => name === "Vault")).toHaveLength(1);
+      expect(names.length).toBeGreaterThan(9);
     });
 
     it("filters as you type, and says so when nothing matches", () => {

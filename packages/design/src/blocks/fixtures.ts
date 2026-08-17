@@ -56,6 +56,19 @@ export const ROW_PLAIN_FIXTURE: RowData = {
 };
 
 /**
+ * A revoked row that stays on the record. It is deliberately NOT also `off`:
+ * the two flags are close enough to be confused, and a kit that drew the rule
+ * only for the pair would leave every real revoked holder — which is struck and
+ * nothing else — reading as if it still held the store.
+ */
+export const ROW_STRUCK_FIXTURE: RowData = {
+  title: "Photos · full store",
+  sub: "read · since June",
+  meta: "revoked",
+  struck: true,
+};
+
+/**
  * The verb of an inert row. `hint` is the string a screen reader needs when ten
  * rows all say "Open"; a kit that drops it passes every visual check and leaves
  * a blind member with ten identical controls.

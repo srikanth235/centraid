@@ -61,6 +61,35 @@ export const APPROVALS_EDIT_TITLE = "Edit before sending";
 export const APPROVALS_EDIT_SUB =
   "Your changes replace the draft above; nothing is sent until you approve.";
 
+/**
+ * What discarding a staged write costs — the fallback wording, stated in the
+ * card where the decision is made (#815). The route that performs the call
+ * passes the gateway's own terms over the top of it.
+ */
+export const APPROVALS_DISCARD_CONSEQUENCE =
+  "Irreversible — nothing is written and the draft is destroyed.";
+
+/** Revoking a standing grant, in one sentence: what re-parks, and what else
+ *  re-parks with it. A destructive confirm states its consequence in place. */
+export const APPROVALS_REVOKE_GRANT_CONSEQUENCE =
+  "Matching items park for review again, including anything approved but not yet drained.";
+
+/** The held tray (#815). A background refresh never takes work out of a
+ *  member's hands; arrivals wait, and say that they are waiting. */
+export const APPROVALS_HELD_BODY =
+  "Held back while you are part-way through an item.";
+
+/** A write the gateway refused after the page had already let it go. The item
+ *  comes back as it was, and the gateway's own words ride under this. */
+export const APPROVALS_REFUSED_TITLE = "The gateway refused that approval";
+
+/** A gateway older than the consent ledger. It says so, rather than rendering
+ *  an empty section — "no answers" and "cannot be asked" are different facts. */
+export const APPROVALS_OLD_GATEWAY_TITLE =
+  "This gateway is older than the consent ledger";
+export const APPROVALS_OLD_GATEWAY_BODY =
+  "It cannot say which questions were answered.";
+
 /** The error plate: what failed, and the verb beside it. The body used to add
  *  "Nothing has been approved or denied in the meantime, and nothing expired"
  *  — two clauses of reassurance in front of a member who wants the verb. */

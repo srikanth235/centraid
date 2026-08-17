@@ -16,6 +16,7 @@ const {
   deleteEnrichRule,
   getEnrichPolicy,
   getEnrichRules,
+  getEffectiveEnrichPolicy,
   getHarnessesStatus,
   getUserPrefs,
   listEnrichEgressConsent,
@@ -25,6 +26,8 @@ const {
   setEnrichRule,
 } = vi.hoisted(() => ({
   deleteEnrichRule: vi.fn<typeof TypeImport_1e7rich.deleteEnrichRule>(),
+  getEffectiveEnrichPolicy:
+    vi.fn<typeof TypeImport_1e7rich.getEffectiveEnrichPolicy>(),
   getEnrichPolicy: vi.fn<typeof TypeImport_1e7rich.getEnrichPolicy>(),
   getEnrichRules: vi.fn<typeof TypeImport_1e7rich.getEnrichRules>(),
   getHarnessesStatus: vi.fn<typeof TypeImport_1e7rich.getHarnessesStatus>(),
@@ -41,6 +44,7 @@ const {
 // pulls gateway-client-core's load-time side-effect.
 vi.mock(import("../../../gateway-client.js") as Promise<unknown>, () => ({
   deleteEnrichRule,
+  getEffectiveEnrichPolicy,
   getEnrichPolicy,
   getEnrichRules,
   getHarnessesStatus,
@@ -53,18 +57,15 @@ vi.mock(import("../../../gateway-client.js") as Promise<unknown>, () => ({
 }));
 
 import {
-  deleteEngineProfile,
   dropEnrichRule,
   loadEnrichmentSettings,
   saveEngineProfile,
-  setDomainTier,
   writeEnrichRule,
 } from "./settingsEnrichmentData.js";
 
 describe("settingsEnrichmentData", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    getEnrichPolicy.mockResolvedValue({ photos: "device", docs: "off" });
     getEnrichRules.mockResolvedValue([]);
     listEnrichProfiles.mockResolvedValue([]);
     listEnrichEgressConsent.mockResolvedValue([]);
@@ -81,19 +82,77 @@ describe("settingsEnrichmentData", () => {
     } as Awaited<ReturnType<typeof TypeImport_1e7rich.getHarnessesStatus>>);
     getUserPrefs.mockResolvedValue({});
     saveUserPrefs.mockResolvedValue({});
+    getEffectiveEnrichPolicy.mockResolvedValue({
+      tier: "device",
+      rules: [],
+      effective: {
+        capability: "ocr",
+        enabled: true,
+        profileId: "built-in",
+        trigger: "on-ingest",
+        egressCeiling: "on-device",
+      },
+    });
   });
 
   it("reads the whole page in one pass, agent cards included", async () => {
     const data = await loadEnrichmentSettings();
-    expect(data.policy).toStrictEqual({ photos: "device", docs: "off" });
     expect(data.cards.map((card) => card.kind)).toStrictEqual(["codex"]);
   });
 
-  it("writes one domain's tier and returns what the vault answered", async () => {
-    setEnrichPolicy.mockResolvedValue({ photos: "off", docs: "off" });
-    const after = await setDomainTier("photos", "off");
-    expect(setEnrichPolicy.mock.lastCall?.[0]).toStrictEqual({ photos: "off" });
-    expect(after.photos).toBe("off");
+  it("never reads the per-domain ceiling — it is no longer a control here", async () => {
+    // v11 removed the ceiling control (enrichment runs on the gateway), so the
+    // page stops reading the tier store and reads the gateway's own resolver,
+    // which is what still reports a ceiling that refuses a row.
+    listEnrichProfiles.mockResolvedValue([
+      {
+        id: "built-in",
+        label: "Built-in (ocr)",
+        capability: "ocr",
+        engine: { kind: "built-in" },
+        egress: "gateway",
+        builtIn: true,
+        delegateCapable: true,
+      },
+    ]);
+    await loadEnrichmentSettings();
+    expect(getEnrichPolicy).not.toHaveBeenCalled();
+    expect(getEffectiveEnrichPolicy).toHaveBeenCalledWith({
+      capability: "ocr",
+      domain: "photos",
+    });
+  });
+
+  it("carries the Agents page's own model and level pins rather than a second copy", async () => {
+    getUserPrefs.mockResolvedValue({
+      "model.codex.default": "gpt-5",
+      "config.codex.default.thought_level": "high",
+    });
+    getHarnessesStatus.mockResolvedValue({
+      harnesses: [
+        {
+          kind: "codex",
+          label: "Codex",
+          available: true,
+          modelsStatus: "ready",
+          models: [{ id: "gpt-5", name: "GPT-5", default: true }],
+          capabilities: {
+            reachable: true,
+            configOptions: [
+              {
+                id: "thought",
+                category: "thought_level",
+                type: "select",
+                values: [{ value: "high", name: "High" }],
+              },
+            ],
+          },
+        },
+      ],
+    } as Awaited<ReturnType<typeof TypeImport_1e7rich.getHarnessesStatus>>);
+    const data = await loadEnrichmentSettings();
+    expect(data.modelByHarness["codex"]).toBe("gpt-5");
+    expect(data.effortByHarness["codex"]).toBe("high");
   });
 
   it("stores an engine profile as its prefs key, with no egress claim", async () => {
@@ -116,11 +175,51 @@ describe("settingsEnrichmentData", () => {
     });
   });
 
-  it("deletes an engine profile by clearing its key", async () => {
-    await deleteEngineProfile("fast-ocr");
-    expect(saveUserPrefs.mock.lastCall?.[0]).toStrictEqual({
-      "enrich.profile.fast-ocr": null,
-    });
+  it("asks the gateway's resolver per capability instead of folding here", async () => {
+    listEnrichProfiles.mockResolvedValue([
+      {
+        id: "built-in",
+        label: "Built-in (ocr)",
+        capability: "ocr",
+        engine: { kind: "built-in" },
+        egress: "gateway",
+        builtIn: true,
+        delegateCapable: true,
+      },
+      {
+        id: "ocr-codex",
+        label: "Codex",
+        capability: "ocr",
+        engine: { kind: "delegate", harness: "codex" },
+        egress: "provider",
+        builtIn: false,
+        delegateCapable: true,
+      },
+    ]);
+    const data = await loadEnrichmentSettings();
+    // Once, for the BUILT-IN of each capability — a member profile is another
+    // engine for the same capability, not a second thing to resolve.
+    expect(getEffectiveEnrichPolicy.mock.calls).toStrictEqual([
+      [{ capability: "ocr", domain: "photos" }],
+    ]);
+    expect(data.effective["ocr"]?.enabled).toBe(true);
+  });
+
+  it("leaves out a capability whose domain this build has no word for", async () => {
+    listEnrichProfiles.mockResolvedValue([
+      {
+        id: "built-in",
+        label: "Built-in (sentiment)",
+        capability: "sentiment",
+        engine: { kind: "built-in" },
+        egress: "gateway",
+        builtIn: true,
+        delegateCapable: false,
+      },
+    ]);
+    const data = await loadEnrichmentSettings();
+    expect(getEffectiveEnrichPolicy).not.toHaveBeenCalled();
+    expect(data.effective).toStrictEqual({});
   });
 
   it("writes and drops one scope's rule through the vault's rules route", async () => {

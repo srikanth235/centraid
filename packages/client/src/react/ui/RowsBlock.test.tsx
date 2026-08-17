@@ -135,6 +135,49 @@ describe("ui/RowsBlock", () => {
     expect(shell.querySelector(".detail textarea")).toBeTruthy();
   });
 
+  it("rules a struck row through and leaves it a real row", () => {
+    const el = mount(
+      <RowsBlock
+        rows={[
+          {
+            id: "h",
+            meta: "revoked",
+            struck: true,
+            sub: "read · since June",
+            title: "Photos · full store",
+          },
+        ]}
+      />
+    );
+    const row = el.querySelector(".row") as HTMLElement;
+    expect(row.dataset.struck).toBe("true");
+    // The record survives the revoke: the row is still in the list, with its
+    // sub still saying who held what.
+    expect(el.querySelector(".title")?.textContent).toBe("Photos · full store");
+    expect(el.querySelector(".sub")?.textContent).toBe("read · since June");
+  });
+
+  it("leaves a live row unstruck, so the rule means something", () => {
+    const el = mount(<RowsBlock rows={[{ id: "h", title: "Photos" }]} />);
+    expect(
+      (el.querySelector(".row") as HTMLElement).dataset.struck
+    ).toBeUndefined();
+  });
+
+  it("marks a list stacked with others, and leaves a lone list unmarked", () => {
+    const stacked = mount(<RowsBlock rows={[]} stacked />);
+    expect(
+      (stacked.querySelector(".rows") as HTMLElement).dataset.stacked
+    ).toBe("true");
+    act(() => root?.unmount());
+    root = null;
+    container?.remove();
+    const lone = mount(<RowsBlock rows={[]} />);
+    expect(
+      (lone.querySelector(".rows") as HTMLElement).dataset.stacked
+    ).toBeUndefined();
+  });
+
   it("becomes a named group when it is given a name", () => {
     const el = mount(<RowsBlock ariaLabel="Standing grants" rows={[]} />);
     const rows = el.querySelector(".rows") as HTMLElement;

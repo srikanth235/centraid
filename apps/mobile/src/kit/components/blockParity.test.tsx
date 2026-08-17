@@ -29,6 +29,7 @@ import {
   ROW_ACTION_FIXTURE,
   ROW_FIXTURE,
   ROW_PLAIN_FIXTURE,
+  ROW_STRUCK_FIXTURE,
   SECTION_FIXTURE,
 } from "@centraid/design/blocks";
 
@@ -129,6 +130,19 @@ describe("[law:native-block-flag-marks] block parity — the phone draws every s
     const texts = nodesOf(el, "span");
     expect(styleOf(texts[0]).color).toBe(colors.text);
     expect(styleOf(texts[1]).color).not.toBe(colors.net);
+  });
+
+  it("rules a struck row through and recedes it on the leaf", () => {
+    const el = render(
+      <RowsBlock rows={[{ ...ROW_STRUCK_FIXTURE, key: "r" }]} />
+    );
+    const texts = nodesOf(el, "span");
+    expect(styleOf(texts[0]).textDecorationLine).toBe("line-through");
+    expect(styleOf(texts[0]).color).toBe(colors.textDisabled);
+    // The record survives the revoke: the sub still says who held what, in
+    // ordinary faint ink rather than the struck title's step.
+    expect(texts[1]?.textContent).toBe(ROW_STRUCK_FIXTURE.sub);
+    expect(styleOf(texts[1]).textDecorationLine).not.toBe("line-through");
   });
 
   it("tones only the value of a net fact, and shows the key as the word", () => {

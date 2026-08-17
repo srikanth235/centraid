@@ -583,12 +583,12 @@ export default function AssistantRoute({
 
   const setModel = (modelId: string): void => {
     m.current.selectedModel = modelId;
-    setSubsystemModel(modelPickerHarnessRef.current, "assistant", modelId);
+    void setSubsystemModel(modelPickerHarnessRef.current, "assistant", modelId);
   };
 
   const setEffort = (effort: string): void => {
     m.current.selectedEffort = effort;
-    setSubsystemConfigPin(
+    void setSubsystemConfigPin(
       modelPickerHarnessRef.current,
       "assistant",
       "thought_level",

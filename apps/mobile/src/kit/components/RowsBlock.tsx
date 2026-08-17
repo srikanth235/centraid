@@ -11,7 +11,9 @@
 //     inside a list row would be the second filled commit on a page that is
 //     allowed exactly one.
 //  3. `off` recedes on the LEAF (disabled ink on the title, a disabled button)
-//     and never as a container opacity.
+//     and never as a container opacity. `struck` recedes the same way and adds
+//     the rule through the title: a revoked holder stays on the record, so the
+//     row keeps its height and its place in the list.
 //
 // `children` is the per-row escape hatch: a row that has to open something in
 // place (Notifications' outbox editor) renders it under its own line, inside
@@ -97,9 +99,12 @@ export default function RowsBlock({
                 <Text
                   style={[
                     styles.title,
+                    row.struck === true ? styles.struck : undefined,
                     {
                       color:
-                        row.off === true ? colors.textDisabled : colors.text,
+                        row.off === true || row.struck === true
+                          ? colors.textDisabled
+                          : colors.text,
                     },
                   ]}
                 >

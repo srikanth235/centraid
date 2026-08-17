@@ -24,6 +24,7 @@ import {
   setReceiveSetting,
 } from "../../../gateway-client.js";
 import HouseholdScreen from "../../screens/HouseholdScreen.js";
+import type { HouseholdReport } from "../../screens/HouseholdScreen.js";
 import { useShellActions } from "../actions.js";
 import PageScroll from "../PageScroll.js";
 import { useOwnerScopes } from "../useOwnerScopes.js";
@@ -39,9 +40,28 @@ import { startVisibilityTicker } from "./visibility-ticker.js";
 // page; the vaults half reads the owner's scope registry, which is also what
 // every "which vault?" picker resolves against — one source, so the page and
 // the pickers can never disagree about what this owner can reach.
+/** How often the humanized ages advance. Minute granularity, because that is
+ *  the granularity `seenAge` actually reports. */
+const AGE_TICK_MS = 60_000;
+
+export interface HouseholdRouteProps {
+  /** Drawn as the "Where it lives" section of the merged Vault surface. */
+  embedded?: boolean;
+  /** Embedded only — the section's disclosure and its report upward. */
+  collapsed?: boolean;
+  onToggle?: () => void;
+  onReport?: (report: HouseholdReport) => void;
+  /** Embedded only — the census's record count, for the custody line. */
+  records?: number | null;
+}
+
 export default function HouseholdRoute({
   embedded = false,
-}: { embedded?: boolean } = {}): JSX.Element {
+  collapsed,
+  onToggle,
+  onReport,
+  records,
+}: HouseholdRouteProps = {}): JSX.Element {
   const { navigate, showToast } = useShellActions();
   const scopes = useOwnerScopes();
   const [now, setNow] = useState(() => Date.now());
@@ -53,9 +73,15 @@ export default function HouseholdRoute({
   const canCreateVault = typeof window.CentraidApi.createVault === "function";
   const ownVaultIds = scopes.scopes.map((scope) => scope.id);
 
-  // 1s ticker for the devices card's humanized ages, suspended while the tab is
-  // hidden (issue #528 Phase D wakeup hygiene) — same discipline as Gateway.
-  useEffect(() => startVisibilityTicker(() => setNow(Date.now())), []);
+  // A MINUTE, not a second (v11). The roster's ages are bare and singular now
+  // — "an hour ago", "yesterday", "2 days ago" — so a second-by-second tick
+  // recomputed a string that changes once an hour, sixty times a minute. It
+  // stays suspended while the tab is hidden (#528 Phase D wakeup hygiene) and
+  // catches up the moment it returns.
+  useEffect(
+    () => startVisibilityTicker(() => setNow(Date.now()), AGE_TICK_MS),
+    []
+  );
 
   const content = (
     <>
@@ -81,6 +107,11 @@ export default function HouseholdRoute({
       ) : null}
       <HouseholdScreen
         now={now}
+        {...(embedded ? { embedded: true as const } : {})}
+        {...(collapsed === undefined ? {} : { collapsed })}
+        {...(onToggle ? { onToggle } : {})}
+        {...(onReport ? { onReport } : {})}
+        {...(records === undefined ? {} : { records })}
         vaults={scopes.scopes}
         defaultScopeId={scopes.defaultScopeId}
         vaultsLoading={scopes.loading}

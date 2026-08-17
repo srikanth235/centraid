@@ -45,7 +45,6 @@ import {
 } from "./assistant-companion/index.js";
 import { isRouteAvailable, routeCapability } from "./capabilities.js";
 import CapabilityWall from "./CapabilityWall.js";
-import { CaptureLauncher, CaptureOverlay } from "./CaptureOverlay.js";
 import {
   commitAvailabilityFor,
   CommitAvailabilityProvider,
@@ -86,7 +85,6 @@ import {
 } from "./routes/conversationScopes.js";
 import GatewayRoute from "./routes/GatewayRoute.js";
 import HomeRoute from "./routes/HomeRoute.js";
-import HouseholdRoute from "./routes/HouseholdRoute.js";
 import InlineAppRoute from "./routes/InlineAppRoute.js";
 import { inlineAppLoader } from "./routes/inlineApps.js";
 import InsightsRoute from "./routes/InsightsRoute.js";
@@ -412,10 +410,6 @@ export default function App({
     []
   );
   const [paletteOpen, setPaletteOpen] = useState(false);
-  const [captureOpen, setCaptureOpen] = useState(() =>
-    new URL(window.location.href).searchParams.has("capture")
-  );
-  const captureInitialText = useMemo(() => sharedCaptureText(), []);
   // The palette's injected refresh() (issue #420) — held so the async
   // conversation-search source can re-run buildPaletteGroups when hits land.
   // Created once per mount; the palette hands it its `refresh()` on mount via
@@ -507,13 +501,6 @@ export default function App({
       } else if (meta && (e.key === "k" || e.key === "K")) {
         e.preventDefault();
         setPaletteOpen((open) => !open);
-      } else if (
-        !meta &&
-        (e.key === "c" || e.key === "C") &&
-        !isEditableTarget(e.target)
-      ) {
-        e.preventDefault();
-        setCaptureOpen(true);
       } else if (meta && e.key === ",") {
         // The platform-standard Preferences shortcut. Toggles, so the same
         // keystroke that opened the dialog dismisses it.
@@ -538,7 +525,6 @@ export default function App({
         window.dispatchEvent(
           new CustomEvent("centraid:open-app-vault-settings")
         ),
-      openCapture: () => setCaptureOpen(true),
       openSearch: () => setPaletteOpen(true),
       openStarred: go({ kind: "starred" }),
       openAutomations: go({ kind: "automations" }),
@@ -547,8 +533,6 @@ export default function App({
       renderHome: go({ kind: "home" }),
       getRuntimeMode: () => undefined,
     };
-    const onOpenCapture = (): void => setCaptureOpen(true);
-    window.addEventListener("centraid:open-capture", onOpenCapture);
     const enablePush = (): void => {
       void enableWebPushWake(true);
     };
@@ -601,7 +585,6 @@ export default function App({
       offGatewayScope?.();
       offVaultScope?.();
       document.removeEventListener("keydown", onKey);
-      window.removeEventListener("centraid:open-capture", onOpenCapture);
       window.removeEventListener("centraid:notification-value", enablePush);
       window.removeEventListener("message", onPushMessage);
       navigator.serviceWorker?.removeEventListener(
@@ -1285,12 +1268,16 @@ export default function App({
               }}
             />
           );
+        // Data and Copies merged into one Vault custody surface (v11). Both
+        // route kinds resolve to it so old deep links and old pins land; the
+        // kind is passed through because it is also the vitals channel the
+        // bar above this outlet is reading.
         case "household":
-          return <HouseholdRoute />;
+          return <VaultRoute page="household" />;
         case "storage":
           return <StorageRoute />;
         case "atlas":
-          return <VaultRoute />;
+          return <VaultRoute page="atlas" />;
         case "automation-view":
           // Keyed so an in-place automation change remounts: traces, watched
           // turn ids, and any open SSE all belong to one automation (#541).
@@ -1425,20 +1412,15 @@ export default function App({
             initialPage={settingsPage}
             onClose={closeSettings}
             onDisconnectVault={dropGatewayConnection}
-            {...(account ? { onLogOut: logOut } : {})}
-            onPairDevice={() => setPairDeviceOpen(true)}
-            onWhatsNew={() => setWhatsNewOpen(true)}
           />
         )}
         {pairDeviceOpen ? <PairDeviceModal onClose={closePairDevice} /> : null}
       </ShellActionsProvider>
     ),
     [
-      account,
       closePairDevice,
       closeSettings,
       dropGatewayConnection,
-      logOut,
       openCommandPalette,
       pairDeviceOpen,
       prefs,
@@ -1518,16 +1500,6 @@ export default function App({
             onClose={() => setAllAppsOpen(false)}
           />
         ) : null}
-        <CaptureLauncher onOpen={() => setCaptureOpen(true)} />
-        {captureOpen ? (
-          <CaptureOverlay
-            initialText={captureInitialText}
-            onClose={() => {
-              setCaptureOpen(false);
-              clearSharedCaptureQuery();
-            }}
-          />
-        ) : null}
         {whatsNewOpen ? <WhatsNewModal onClose={closeWhatsNew} /> : null}
         {paletteOpen ? (
           <PaletteScreen
@@ -1603,31 +1575,5 @@ export default function App({
         ) : null}
       </CommitAvailabilityProvider>
     </CapabilitiesProvider>
-  );
-}
-
-function isEditableTarget(target: EventTarget | null): boolean {
-  return (
-    target instanceof HTMLElement &&
-    (target.isContentEditable ||
-      target.matches("input, textarea, select, [role='textbox']"))
-  );
-}
-
-function sharedCaptureText(): string {
-  const params = new URL(window.location.href).searchParams;
-  return [params.get("title"), params.get("text"), params.get("url")]
-    .filter((value): value is string => Boolean(value?.trim()))
-    .join("\n");
-}
-
-function clearSharedCaptureQuery(): void {
-  const url = new URL(window.location.href);
-  for (const key of ["capture", "title", "text", "url"])
-    url.searchParams.delete(key);
-  window.history.replaceState(
-    window.history.state,
-    "",
-    `${url.pathname}${url.search}${url.hash}`
   );
 }

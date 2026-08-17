@@ -94,6 +94,13 @@ export interface MockState {
   enrichConsent: Array<Record<string, unknown>>;
   /** GET /centraid/_enrich/profiles → `{profiles}` (engine-profiles.ts). */
   enrichProfiles: Array<Record<string, unknown>>;
+  /**
+   * GET /centraid/_vault/enrich/effective?domain=&capability= → what the ONE
+   * resolver folds, keyed by capability (issue #814). Settings asks this per
+   * capability rather than folding tiers and rules itself, so the mock has to
+   * answer it or the page renders its gateway-didn't-answer state.
+   */
+  enrichEffective: Record<string, Record<string, unknown> | null>;
   /** GET /_centraid-conversations/apps/:appId/sessions → { sessions } */
   conversations: Array<Record<string, unknown>>;
   /** GET /_centraid-conversations/apps/:appId/sessions/:id → messages */
@@ -214,6 +221,7 @@ function defaultState(): MockState {
     enrichRules: [],
     enrichConsent: [],
     enrichProfiles: [],
+    enrichEffective: {},
     conversations: [],
     conversationMessages: [],
     automationsStatus: 200,
@@ -631,6 +639,25 @@ async function route(
       s.enrich = { ...s.enrich, ...safeJson(body) };
       return json(res, 200, { enrich: s.enrich });
     }
+  }
+  if (p === "/centraid/_vault/enrich/effective" && method === "GET") {
+    // Keyed by capability, matching the real resolver's answer shape. A
+    // capability the test did not seed resolves to null, which is exactly what
+    // the page renders as "this build has no words for it".
+    const capability = url.searchParams.get("capability") ?? "";
+    return json(res, 200, {
+      tier: s.enrich[url.searchParams.get("domain") ?? ""] ?? null,
+      rules: s.enrichRules,
+      effective: s.enrichEffective[capability] ?? null,
+    });
+  }
+  if (p === "/centraid/_vault/enrich/rules" && method === "PUT") {
+    // One scope's decision about one capability. The owner route answers with
+    // the stored rule, which is what the page re-reads rather than assuming.
+    const rule = safeJson(body) as Record<string, unknown>;
+    return json(res, 200, {
+      rule: { ...rule, updatedAt: new Date().toISOString() },
+    });
   }
   if (p === "/centraid/_vault/enrich/consent" && method === "GET")
     return json(res, 200, { consent: s.enrichConsent });
@@ -1509,9 +1536,9 @@ function testTitle(): string {
 const RAIL_LABEL_ALIASES: Readonly<Record<string, string>> = {
   Analytics: "Activity",
   Data: "Vault",
-  Devices: "Copies",
+  Devices: "Vault",
   Gateway: "System",
-  Household: "Copies",
+  Household: "Vault",
   Insights: "Activity",
   "Vault Atlas": "Vault",
 };
