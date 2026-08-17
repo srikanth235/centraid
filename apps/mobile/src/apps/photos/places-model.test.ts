@@ -18,6 +18,10 @@ import { PLACE_UNNAMED } from "@centraid/blueprints/apps/photos/shared-copy";
 import { makePhotosFixture } from "./photos-fixtures";
 import {
   assetsAtPlace,
+  assetsWithNoPlace,
+  NO_LOCATION_KEY,
+  NO_LOCATION_NAME,
+  noLocationCard,
   PIN_MIN,
   pinLabel,
   pinSize,
@@ -459,5 +463,75 @@ describe("what a pin says and how big it is", () => {
         places: 1,
       })
     ).toBe("an unnamed place, 2 photographs");
+  });
+});
+
+// THE NO-LOCATION BUCKET (issue #816). The photographs nobody told where they
+// were taken were in the library and on no shelf: every card on Places stands
+// at a coordinate, so the whole set was reachable only by scrolling the
+// timeline. It is a card at the end of the shelf now, and the same reserved key
+// resolves it wherever a surface asks — which is what makes the card's count and
+// the screen it opens one number rather than two.
+describe("the photographs that carry no place at all", () => {
+  it("is exactly the rows with no place id, trash excluded", () => {
+    const assets = [
+      photo("scan", undefined),
+      photo("screenshot", undefined),
+      photo("binned", undefined, { deleted: true }),
+      photo("placed", "place-home"),
+    ];
+    expect(assetsWithNoPlace(assets).map((asset) => asset.id)).toStrictEqual([
+      "scan",
+      "screenshot",
+    ]);
+  });
+
+  it("keeps a photograph at a coordinate-less place OUT of the bucket — it has a place", () => {
+    // "The kitchen" is unplottable, not unknown. Calling it "no location"
+    // would be a false sentence about the photograph.
+    const roomOnly: PlaceRow = { place_id: "place-room", name: "The kitchen" };
+    expect(placeCardKey(roomOnly)).toBeNull();
+    expect(assetsWithNoPlace([photo("a", "place-room")])).toStrictEqual([]);
+  });
+
+  it("cards the bucket with its own honest name, its count and a cover", () => {
+    const card = noLocationCard([
+      photo("scan", undefined),
+      photo("placed", "place-home"),
+      photo("screenshot", undefined),
+    ]);
+    expect(card).toStrictEqual({
+      id: NO_LOCATION_KEY,
+      name: NO_LOCATION_NAME,
+      count: 2,
+      coverUri: "https://fixture.invalid/thumb/scan",
+    });
+    // The name is a name, not the unnamed-place fallback and not a coordinate.
+    expect(card?.name).toBe("No location yet");
+  });
+
+  it("draws no card when every photograph carries a place", () => {
+    expect(noLocationCard([photo("a", "place-home")])).toBeNull();
+  });
+
+  it("opens the same set the card counted, through the reserved key", () => {
+    // The law this file exists for, extended to the bucket: one key, two
+    // readers, one number.
+    const assets = [
+      photo("scan", undefined),
+      photo("screenshot", undefined),
+      photo("placed", "place-home"),
+    ];
+    const card = noLocationCard(assets)!;
+    expect(assetsAtPlace(assets, [HOME], card.id)).toHaveLength(card.count);
+    expect(
+      assetsAtPlace(assets, [HOME], NO_LOCATION_KEY).map((asset) => asset.id)
+    ).toStrictEqual(["scan", "screenshot"]);
+  });
+
+  it("does not answer for the bucket's key with a real place's photographs", () => {
+    expect(
+      assetsAtPlace([photo("a", "place-home")], [HOME], NO_LOCATION_KEY)
+    ).toStrictEqual([]);
   });
 });

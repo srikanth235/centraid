@@ -351,3 +351,215 @@ describe("the semantic row", () => {
     ]);
   });
 });
+
+// A PLACE IS A SEARCH TERM (issue #816). A place used to answer to exactly one
+// string — its `name` column — so the Tahoe weekend was unfindable by the word
+// "Tahoe" once the member had called the sections something of their own (or the
+// vault had called them a coordinate), and "near home" matched nothing at all.
+// The three fixtures below are the seeded roll's own geography: a declared home
+// in Palo Alto, an errand a few kilometres away, and Tahoe ~250 km off.
+const HOME_ROW = {
+  place_id: "place-home",
+  name: "Home",
+  kind: "home",
+  geo_lat: 37.4419,
+  geo_lng: -122.143,
+};
+const PARK_ROW = {
+  place_id: "place-park",
+  name: "The park by the school",
+  geo_lat: 37.47,
+  geo_lng: -122.16,
+};
+/** Named "the shore" by the member; the gazetteer says which shore. */
+const SHORE_ROW = {
+  place_id: "place-shore",
+  name: "the shore",
+  address_json: JSON.stringify({ gazetteer: { name: "South Lake Tahoe, CA" } }),
+  geo_lat: 38.9542,
+  geo_lng: -120.1094,
+};
+/** Unnamed — the coordinate `findOrCreatePlaceTx` minted — and 250 km from
+ *  home, so the gazetteer is the only rung with an answer. */
+const RIVER_ROW = {
+  place_id: "place-river",
+  name: "39.16820, -120.14290",
+  address_json: JSON.stringify({ gazetteer: { name: "Truckee, CA" } }),
+  geo_lat: 39.1682,
+  geo_lng: -120.1429,
+};
+
+const GEO_LIBRARY = [
+  asset("h1", { placeId: "place-home" }),
+  asset("h2", { placeId: "place-home" }),
+  asset("p1", { placeId: "place-park" }),
+  asset("s1", { placeId: "place-shore" }),
+  asset("s2", { placeId: "place-shore" }),
+  asset("r1", { placeId: "place-river" }),
+  asset("n1"),
+  asset("n2"),
+];
+
+function geoSources(query: string): SearchHitSources {
+  return sources({
+    assets: GEO_LIBRARY,
+    collections: [],
+    contentTitles: new Map(),
+    entries: [],
+    faces: [],
+    matches: [],
+    parties: [],
+    places: [HOME_ROW, PARK_ROW, SHORE_ROW, RIVER_ROW],
+    query,
+  });
+}
+
+function placeHitsFor(query: string): ReturnType<typeof groupedSearchHits> {
+  return groupedSearchHits(geoSources(query)).filter(
+    (hit) => hit.kind === "place"
+  );
+}
+
+describe("the vocabulary a place answers to", () => {
+  it("finds a place by the gazetteer's settlement name, still titled with the member's own", () => {
+    const hits = placeHitsFor("tahoe");
+    expect(hits).toHaveLength(1);
+    expect(hits[0]).toMatchObject({
+      key: "place:place-shore",
+      // A name a person entered outranks a derived one in display, always.
+      label: "the shore",
+      sub: "place · 2 photographs",
+      target: { screen: "PlacesMap" },
+    });
+  });
+
+  it("does not pull in a section whose gazetteer says somewhere else", () => {
+    // Truckee is not called Tahoe, and a search that returned it would be
+    // guessing at geography. It is findable by its own name, phrased through
+    // the gazetteer rung because the place itself has no name.
+    expect(placeHitsFor("truckee").map((hit) => hit.label)).toStrictEqual([
+      "near Truckee, CA",
+    ]);
+  });
+
+  it("answers 'near home' with home and around town, and nothing on the trip", () => {
+    for (const query of ["home", "near home", "at home"]) {
+      expect(placeHitsFor(query).map((hit) => hit.key)).toStrictEqual([
+        "place:place-home",
+        "place:place-park",
+      ]);
+    }
+  });
+
+  it("has no home vocabulary until a member declares which place is home", () => {
+    // No `kind: 'home'` anywhere: "near home" is a claim about a place a person
+    // named, and the phone does not guess which one that is either.
+    const hits = groupedSearchHits(
+      sources({
+        assets: GEO_LIBRARY,
+        collections: [],
+        contentTitles: new Map(),
+        entries: [],
+        faces: [],
+        matches: [],
+        parties: [],
+        // Named for the street, so nothing here answers to the WORD "home"
+        // except the declaration this case removes.
+        places: [{ ...HOME_ROW, name: "Cedar Street", kind: null }, PARK_ROW],
+        query: "near home",
+      })
+    );
+    expect(hits).toStrictEqual([]);
+    // The SAME rows, with the declaration back: the vocabulary is the
+    // declaration's doing, not the absence of a match.
+    const declared = groupedSearchHits(
+      sources({
+        assets: GEO_LIBRARY,
+        collections: [],
+        contentTitles: new Map(),
+        entries: [],
+        faces: [],
+        matches: [],
+        parties: [],
+        places: [{ ...HOME_ROW, name: "Cedar Street" }, PARK_ROW],
+        query: "near home",
+      })
+    );
+    expect(declared.map((hit) => hit.label)).toStrictEqual([
+      "Cedar Street",
+      "The park by the school",
+    ]);
+  });
+
+  it("never titles a hit with a coordinate, whatever matched it", () => {
+    for (const query of [
+      "home",
+      "near home",
+      "at home",
+      "around town",
+      "tahoe",
+      "truckee",
+      "shore",
+      "no location",
+      "39.16",
+    ]) {
+      for (const hit of groupedSearchHits(geoSources(query))) {
+        expect(hit.label).not.toMatch(/^-?\d{1,3}\.\d+,\s*-?\d{1,3}\.\d+$/u);
+      }
+    }
+    // And digits are not a search term: the coordinate on an unnamed place is a
+    // placeholder, not something a member types.
+    expect(placeHitsFor("39.16")).toStrictEqual([]);
+  });
+});
+
+describe("the no-location bucket", () => {
+  it("is a hit with the place-less count, for each of the words a member types", () => {
+    for (const query of ["no location", "no place", "unlocated"]) {
+      const hits = placeHitsFor(query);
+      expect(hits).toHaveLength(1);
+      expect(hits[0]).toMatchObject({
+        key: "place:no-location",
+        label: "No location yet",
+        sub: "place · 2 photographs",
+        // Opens the same asset list the shelf's own trailing card opens.
+        target: {
+          screen: "PlaceDetail",
+          params: { placeKey: "no-location", placeName: "No location yet" },
+        },
+      });
+    }
+  });
+
+  it("carries the place-less photographs into the grid below", () => {
+    expect(placeHitsFor("no location")[0]?.assetIds).toStrictEqual([
+      "asset-n1",
+      "asset-n2",
+    ]);
+  });
+
+  it("sits after the named places when a query somehow hits both", () => {
+    // "home" is home vocabulary; nothing about it is the bucket, so the bucket
+    // stays out — the order claim is that the bucket is never first.
+    expect(
+      placeHitsFor("home").every((hit) => hit.key !== "place:no-location")
+    ).toBe(true);
+  });
+
+  it("is absent when every photograph carries a place", () => {
+    const hits = groupedSearchHits(
+      sources({
+        assets: [asset("h1", { placeId: "place-home" })],
+        collections: [],
+        contentTitles: new Map(),
+        entries: [],
+        faces: [],
+        matches: [],
+        parties: [],
+        places: [HOME_ROW],
+        query: "no location",
+      })
+    );
+    expect(hits).toStrictEqual([]);
+  });
+});

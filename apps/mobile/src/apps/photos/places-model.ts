@@ -29,6 +29,7 @@ import type {
 } from "@centraid/blueprints/apps/photos/place-map";
 import { readableName } from "@centraid/blueprints/apps/photos/place-map";
 import {
+  PLACE_NO_LOCATION,
   PLACE_UNNAMED,
   photosPinLabel,
 } from "@centraid/blueprints/apps/photos/shared-copy";
@@ -194,15 +195,72 @@ export function placeCards(
 }
 
 /**
+ * The reserved shelf key of the "no location" card (issue #816) — the same
+ * spelling the web shelf's trailing section carries (`components/Places.tsx`),
+ * because a hit and the destination it opens have to agree on it.
+ *
+ * It cannot collide with a real card key: those are two fixed-point numbers
+ * joined by a colon (`placeCardKey`).
+ */
+export const NO_LOCATION_KEY = "no-location";
+
+/** What that card is called. A different sentence from `PLACE_UNNAMED`: this is
+ *  a photograph nobody told where it was taken, not a located place with no
+ *  label. */
+export const NO_LOCATION_NAME = PLACE_NO_LOCATION;
+
+/**
+ * The photographs that carry NO place at all — the ones nobody, and no camera,
+ * ever told where they were taken: the scans, the screenshots, the imports a
+ * phone stripped the EXIF from.
+ *
+ * Strictly "no place id", NOT "no card on the shelf". A photograph at a place
+ * that happens to carry no coordinate has a place — it is just unplottable —
+ * and calling it "no location" would be a false sentence about it.
+ *
+ * Trash is excluded, exactly as `assetsAtPlace` excludes it: a deleted
+ * photograph is not somewhere, it is gone.
+ */
+export function assetsWithNoPlace(assets: readonly PhotoAsset[]): PhotoAsset[] {
+  return assets.filter((asset) => !asset.deleted && !asset.placeId);
+}
+
+/**
+ * The shelf's trailing card for that bucket, or null when there is nothing in
+ * it (issue #816). Kept out of `placeCards` on purpose: that function answers
+ * "which places are in this library" and the bucket is not a place.
+ */
+export function noLocationCard(
+  assets: readonly PhotoAsset[]
+): PlaceCard | null {
+  const placeless = assetsWithNoPlace(assets);
+  if (placeless.length === 0) return null;
+  const cover = placeless.find((asset) => asset.previewUri ?? asset.uri);
+  return {
+    id: NO_LOCATION_KEY,
+    name: NO_LOCATION_NAME,
+    count: placeless.length,
+    // The timeline hands assets over newest first, so this is the most recent
+    // place-less photograph rather than an arbitrary one.
+    ...(cover ? { coverUri: cover.previewUri ?? cover.uri } : {}),
+  };
+}
+
+/**
  * The photographs one card opens: everything taken at that shelf key, minus
  * anything in the trash. Same key `placeCards` mints, so the count on a card
  * and the count in its detail cannot disagree.
+ *
+ * `NO_LOCATION_KEY` resolves here rather than in `PlaceDetail` (issue #816) for
+ * exactly the reason this module exists: the card's count and the screen's
+ * count are one arithmetic, written once.
  */
 export function assetsAtPlace(
   assets: readonly PhotoAsset[],
   rows: readonly PlaceRow[],
   placeKey: string
 ): PhotoAsset[] {
+  if (placeKey === NO_LOCATION_KEY) return assetsWithNoPlace(assets);
   const placeById = placeRowsById(rows);
   return assets.filter((asset) => {
     if (asset.deleted || !asset.placeId) return false;

@@ -375,6 +375,10 @@ export function PhotosSearchView({
       navigation.navigate("AlbumDetail", target.params);
     else if (target.screen === "PhotoLightbox")
       navigation.navigate("PhotoLightbox", target.params);
+    // The no-location bucket (issue #816) opens the same asset list a card on
+    // the Places shelf opens — it has no pin to send the member to a map for.
+    else if (target.screen === "PlaceDetail")
+      navigation.navigate("PlaceDetail", target.params);
     else navigation.navigate("PlacesMap");
   };
 

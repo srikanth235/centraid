@@ -18,6 +18,7 @@ import type { InlineScope } from "../../inline-types.ts";
 import { assetKey } from "../asset-key.ts";
 import { justify } from "../layout.ts";
 import { readableName } from "../place-map.ts";
+import { PLACE_NO_LOCATION } from "../shared-copy.ts";
 import { vaultMarker } from "../tile-state.ts";
 import type { Asset } from "../types.ts";
 import { PLACE_UNNAMED } from "../view-copy.ts";
@@ -29,7 +30,8 @@ import styles from "./Places.module.css";
 
 /** One place and everything in the loaded window taken there. */
 export interface PlaceSection {
-  /** The place id, or `""` for the group of rows whose place carries no name. */
+  /** The place id, `""` for the group of rows whose place carries no name, or
+   *  `NO_LOCATION_KEY` for the trailing bucket of rows with no place at all. */
   key: string;
   name: string | null;
   assets: Asset[];
@@ -38,7 +40,25 @@ export interface PlaceSection {
    *  photographs, it simply has no pin. */
   lat: number | null;
   lng: number | null;
+  /** `core_place.kind` — `'home'` marks the one place a relative phrase is
+   *  anchored to, and the one search can answer "near home" with (issue #816,
+   *  `search-groups.ts`). */
+  kind?: string | null;
+  /** The settlement name the opt-in gazetteer automation derived, if any. A
+   *  place can be FOUND by it even when the member has named it something else
+   *  ("Tahoe" finding a section called "the shore"). */
+  gazetteer?: string | null;
 }
+
+/**
+ * The reserved key of the trailing "no location" section (issue #816).
+ *
+ * Not a place id and never confusable with one: place ids are uuids, and this
+ * carries a hyphen and no digits. Both surfaces spell it the same way
+ * (`places-model.ts` on the phone) because it is the key a search hit and the
+ * destination it opens have to agree on.
+ */
+export const NO_LOCATION_KEY = "no-location";
 
 /**
  * Group assets into place sections, newest place first. Only assets that
@@ -60,12 +80,61 @@ export function placeSections(assets: readonly Asset[]): PlaceSection[] {
         assets: [],
         lat: place.lat ?? null,
         lng: place.lng ?? null,
+        kind: place.kind ?? null,
+        gazetteer: place.gazetteer ?? null,
       };
       byPlace.set(key, section);
     }
     section.assets.push(asset);
   }
   return [...byPlace.values()];
+}
+
+/**
+ * The trailing bucket: everything in the loaded window that carries NO place
+ * (issue #816). Null when there is nothing in it — an empty section would be a
+ * heading standing over nothing.
+ *
+ * This is not the section above's "a place with no name": there is no place
+ * here at all, and the two are different facts about a photograph, which is why
+ * they are different sentences (`PLACE_NO_LOCATION`). It exists because "no
+ * location" is a question a member asks — the photographs a phone stripped the
+ * EXIF from, the scans, the screenshots — and before this it was the one answer
+ * Places could not give: the shelf listed every place and nothing else, so the
+ * set was reachable by scrolling the whole timeline or not at all.
+ *
+ * It has no coordinates, so `placePoints` draws no pin for it and the map above
+ * the sections is unchanged.
+ */
+export function noLocationSection(
+  assets: readonly Asset[]
+): PlaceSection | null {
+  const placeless = assets.filter((asset) => !asset.place);
+  if (placeless.length === 0) return null;
+  return {
+    key: NO_LOCATION_KEY,
+    name: PLACE_NO_LOCATION,
+    assets: placeless,
+    lat: null,
+    lng: null,
+  };
+}
+
+/**
+ * The Places shelf as it is actually drawn: the places, newest first, then the
+ * no-location bucket (issue #816).
+ *
+ * A sibling of `placeSections` rather than a widening of it, because that
+ * function answers "which places are in this window" and its answer is still
+ * exactly the places — the bucket is a section on the shelf, not a place. The
+ * shelf, the search groups over it and the lightbox's walk order all read this
+ * one, so the three cannot disagree about what the shelf contains.
+ */
+export function placeSectionsWithNoLocation(
+  assets: readonly Asset[]
+): PlaceSection[] {
+  const bucket = noLocationSection(assets);
+  return bucket ? [...placeSections(assets), bucket] : placeSections(assets);
 }
 
 /** The dom id a place's section carries, so a pin can find it. Derived on

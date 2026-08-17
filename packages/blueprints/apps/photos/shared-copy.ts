@@ -28,6 +28,44 @@
 export const PLACE_UNNAMED = "A place with no name yet";
 
 /**
+ * The trailing Places section/card holding the photographs that carry no place
+ * at all (issue #816).
+ *
+ * A DIFFERENT sentence from `PLACE_UNNAMED`, and the difference is the whole
+ * point: `PLACE_UNNAMED` is a place the vault located and cannot name, this is
+ * a photograph nobody ever told where it was taken. "yet" because an EXIF-less
+ * import can still be placed by hand later. It is a name in its own right, so
+ * it never falls through `readableName`'s coordinate fallback.
+ */
+export const PLACE_NO_LOCATION = "No location yet";
+
+/**
+ * The words a member types when they are looking for that bucket.
+ *
+ * Held here rather than in either client because both surfaces answer the same
+ * question — "where are the ones with no place?" — and a query that worked on
+ * the phone and not on the desktop would read as one of them being broken.
+ * Matched case-insensitively, substring either way, exactly like a place name.
+ */
+export const PLACE_NO_LOCATION_TERMS: readonly string[] = [
+  "no location",
+  "no place",
+  "unlocated",
+];
+
+/**
+ * The relative/home vocabulary a place can be FOUND by (issue #816), beside
+ * whatever it is called: a member who cannot remember the name of the park
+ * still knows it was near home. Only the "at home" and "around town" bands
+ * answer to these — a photograph 200 km away is not near home in any register.
+ */
+export const PLACE_HOME_TERMS: readonly string[] = [
+  "home",
+  "at home",
+  "near home",
+];
+
+/**
  * The Duplicates shelf's own lede line (§5, proto 4437), with the live
  * cluster count substituted for the prototype's fixed "Six" and the correct
  * grammar for exactly one cluster. Never names the issue that shipped this
