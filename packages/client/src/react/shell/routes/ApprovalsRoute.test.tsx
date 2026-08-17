@@ -170,7 +170,7 @@ describe("ApprovalsRoute", () => {
       });
       const el = await render();
       const reconnect = [...el.querySelectorAll("button")].find(
-        (button) => button.textContent === "Reconnect"
+        (button) => button.textContent === "Open Connectors"
       );
       expect(reconnect).toBeDefined();
       act(() => reconnect?.click());
@@ -230,13 +230,18 @@ describe("ApprovalsRoute", () => {
         output: { item_id: "item1", status: "approved" },
       });
       const el = await render();
-      // The staged write is already the panel — there is nothing to expand.
-      expect(el.textContent).toContain("See you at 6.");
-      const approveBtn = [...el.querySelectorAll("button")].find(
-        (b) => b.textContent === "Approve and send"
-      ) as HTMLButtonElement;
+      // The staged write is a card: closed it states the decision, open it
+      // quotes the draft and offers the three verbs.
+      const findButton = (text: string): HTMLButtonElement =>
+        [...el.querySelectorAll("button")].find(
+          (b) => b.textContent === text
+        ) as HTMLButtonElement;
       await act(async () => {
-        approveBtn.click();
+        findButton("Review").click();
+      });
+      expect(el.textContent).toContain("See you at 6.");
+      await act(async () => {
+        findButton("Approve").click();
         await Promise.resolve();
       });
       expect(decideOutboxItem).toHaveBeenCalledWith({
@@ -304,6 +309,9 @@ describe("ApprovalsRoute", () => {
         [...el.querySelectorAll("button")].find(
           (b) => b.textContent === text
         ) as HTMLButtonElement;
+      await act(async () => {
+        findButton("Review").click();
+      });
       await act(async () => {
         findButton("Edit and approve").click();
       });
@@ -453,16 +461,16 @@ describe("ApprovalsRoute", () => {
         unreadNoticeCount: 5,
       });
       const el = await render();
-      // Every notice is a row now — no chip gates any of them — so opening one
-      // means pressing the Open action in the row that carries its headline.
+      // Every notice is a card now — no chip gates any of them — so opening
+      // one means pressing the Open verb on the card carrying its headline.
       const openNotice = (headline: string): void => {
         const title = [...el.querySelectorAll(".title")].find((node) =>
           node.textContent?.includes(headline)
         );
         expect(title).toBeDefined();
-        const button = title
-          ?.closest(".rowShell")
-          ?.querySelector<HTMLButtonElement>("button");
+        const button = [
+          ...(title?.closest("section")?.querySelectorAll("button") ?? []),
+        ].find((b) => b.textContent === "Open");
         expect(button).toBeDefined();
         act(() => button?.click());
       };
@@ -489,10 +497,76 @@ describe("ApprovalsRoute", () => {
       openNotice("Message needs approval again");
       expect(navigate).toHaveBeenCalledTimes(navigationsBefore);
       expect(
-        el.querySelector<HTMLElement>('[data-testid="staged-write"]')?.dataset
-          .itemId
+        el.querySelector<HTMLElement>(
+          '[data-testid="staged-write"][data-open="true"]'
+        )?.dataset.itemId
       ).toBe("item-1");
       expect(el.textContent).toContain("See you at 6.");
+    });
+
+    it("says an old gateway cannot be asked about egress, and draws the rest", async () => {
+      listEnrichEgressConsent.mockRejectedValueOnce(new Error("404"));
+      const el = await render();
+      expect(el.textContent).toContain(
+        "This gateway is older than the consent ledger"
+      );
+      // One unreadable ledger never fails the page.
+      expect(el.textContent).toContain("Nothing is waiting on you");
+    });
+
+    it("puts a refused write back, in the gateway's own words", async () => {
+      getNotifications.mockResolvedValue({
+        decisions: {
+          outbox: [
+            {
+              itemId: "item1",
+              connection: { kind: "pull.gmail", label: "personal" },
+              actor: "gmail-send",
+              actorId: "agent-1",
+              actorKind: "ai_agent",
+              verb: "gmail.send",
+              target: "ravi@example.com",
+              artifact: { to: "ravi@example.com", subject: "Hi", body: "Six." },
+              status: "pending",
+              grantId: null,
+              stagedAt: new Date().toISOString(),
+              decidedAt: null,
+              drainedAt: null,
+              result: null,
+              note: null,
+              canEdit: false,
+            },
+          ],
+          needsAuth: [],
+          parked: [],
+          scopeRequests: [],
+          count: 1,
+        },
+        notices: [],
+        unreadNoticeCount: 0,
+      } as unknown as Awaited<ReturnType<OutboxModule["getNotifications"]>>);
+      decideOutboxItem.mockRejectedValue(
+        new Error("repo.comment: GitHub token expired")
+      );
+      const el = await render();
+      const findButton = (text: string): HTMLButtonElement =>
+        [...el.querySelectorAll("button")].find(
+          (b) => b.textContent === text
+        ) as HTMLButtonElement;
+      await act(async () => {
+        findButton("Review").click();
+      });
+      await act(async () => {
+        findButton("Approve").click();
+        await Promise.resolve();
+      });
+      expect(el.textContent).toContain("The gateway refused that approval");
+      expect(el.textContent).toContain("repo.comment: GitHub token expired");
+      // The item is back, exactly as it was.
+      expect(
+        el.querySelector<HTMLElement>('[data-testid="staged-write"]')?.dataset
+          .itemId
+      ).toBe("item1");
     });
 
     it("keeps the screen mounted across an SSE doorbell refetch", async () => {
@@ -536,7 +610,12 @@ describe("ApprovalsRoute", () => {
       });
 
       const el = await render();
-      // Put the owner mid-flight: row expanded, edit form open.
+      // Put the owner mid-flight: card open, edit in progress.
+      await act(async () => {
+        [...el.querySelectorAll("button")]
+          .find((b) => b.textContent === "Review")!
+          .click();
+      });
       await act(async () => {
         [...el.querySelectorAll("button")]
           .find((b) => b.textContent === "Edit and approve")!

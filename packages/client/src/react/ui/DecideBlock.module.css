@@ -1,0 +1,301 @@
+/* The decision card (binding layer v11, issue #815).
+ *
+ * Raised paper, a container radius, one explicit border, and the spacing scale
+ * for everything inside it. The border is the card's whole state channel: an
+ * ordinary decision draws `--line-strong`, a decision whose consequence leaves
+ * the device draws `--net`, and a confirm in progress draws `--net` too —
+ * never a fill, because nothing alarming in this system is a large filled
+ * surface.
+ *
+ * Tokens only, logical properties only, state on `data-*`.
+ */
+
+.card {
+  background: var(--bg-elev);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--r-lg);
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-3);
+  margin-block-end: var(--sp-2);
+  padding: var(--sp-4);
+}
+
+.card[data-net="true"],
+.card[data-confirm="true"] {
+  border-color: var(--net);
+}
+
+/* ── The eyebrow row ───────────────────────────────────────────────────── */
+
+.head {
+  align-items: baseline;
+  display: flex;
+  gap: var(--sp-3);
+}
+
+/* The kind, never wrapped: it is three words that classify the card, and a
+   classifier broken over two lines reads as a second heading. */
+.eyebrow {
+  color: var(--text-faint);
+  flex: 1;
+  font: var(--t-eyebrow);
+  letter-spacing: var(--t-eyebrow-tracking);
+  margin: 0;
+  min-inline-size: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  text-transform: var(--t-eyebrow-transform);
+  white-space: nowrap;
+}
+
+.card[data-net="true"] .eyebrow,
+.card[data-confirm="true"] .eyebrow {
+  color: var(--net);
+}
+
+.age {
+  color: var(--text-faint);
+  direction: var(--t-mono-direction);
+  flex: none;
+  font: var(--t-mono);
+  font-variant-numeric: var(--t-mono-numeric);
+  unicode-bidi: var(--t-mono-bidi);
+}
+
+/* ── The title block, which IS the disclosure ──────────────────────────── */
+
+.titleBtn {
+  background: none;
+  border: 0;
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-1);
+  inline-size: 100%;
+  padding: 0;
+  text-align: start;
+}
+
+.titleBtn:focus-visible {
+  outline: 2px solid var(--focus-ring-color);
+  outline-offset: 2px;
+}
+
+.title {
+  color: var(--text);
+  font: var(--t-title);
+  text-wrap: pretty;
+}
+
+.sub {
+  color: var(--text-soft);
+  font: var(--t-body);
+  text-wrap: pretty;
+}
+
+/* ── Facts ─────────────────────────────────────────────────────────────── */
+/* Touch is the default and the pointer overrides it, the same way the token
+   sheet does: on 390 the key column eats a third of the width and the value
+   wraps to two lines beside a one-word key, so the pair stacks instead. */
+
+.facts {
+  display: flex;
+  flex-direction: column;
+  margin: 0;
+}
+
+.fact {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-1);
+  padding-block: var(--sp-1);
+}
+
+.fact + .fact {
+  border-block-start: 1px solid var(--line);
+}
+
+.factKey {
+  color: var(--text-faint);
+  font: var(--t-eyebrow);
+  letter-spacing: var(--t-eyebrow-tracking);
+  text-transform: var(--t-eyebrow-transform);
+}
+
+.factValue {
+  display: flex;
+  flex: 1;
+  margin: 0;
+  min-inline-size: 0;
+}
+
+.factText {
+  color: var(--text);
+  font: var(--t-annot-label);
+  text-wrap: pretty;
+  word-break: break-word;
+}
+
+.factText[data-mono="true"] {
+  direction: var(--t-mono-direction);
+  font: var(--t-mono);
+  font-variant-numeric: var(--t-mono-numeric);
+  unicode-bidi: var(--t-mono-bidi);
+}
+
+.factText[data-net="true"] {
+  color: var(--net);
+}
+
+@media (pointer: fine) {
+  .fact {
+    align-items: baseline;
+    flex-direction: row;
+    gap: var(--sp-3);
+  }
+
+  .factKey {
+    flex: none;
+    inline-size: var(--w-key-col);
+  }
+}
+
+/* The editable half of a fact. `inline-size: 100%` rather than `flex: 1`:
+   in the stacked (touch) layout the flex axis is the BLOCK axis, so a flex
+   basis there collapses the field to its line box whatever the height says. */
+
+.input,
+.textarea {
+  background: var(--bg);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--r-md);
+  color: var(--text);
+  font: var(--t-body);
+  inline-size: 100%;
+  min-block-size: var(--h-control);
+  padding: var(--sp-1) var(--sp-2);
+}
+
+.textarea {
+  font-family: var(--font-sans);
+  min-block-size: 7rem;
+  resize: vertical;
+}
+
+.input:focus-visible,
+.textarea:focus-visible {
+  border-color: var(--accent);
+  outline: 2px solid var(--focus-ring-color);
+  outline-offset: 2px;
+}
+
+/* ── What it would do ──────────────────────────────────────────────────── */
+/* Somebody else's words, in a recess behind a 2px rule — quoted, never
+   restyled into the card's own voice. */
+
+.preview {
+  background: var(--bg-sunken);
+  border-inline-start: 2px solid var(--line-strong);
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-1);
+  padding: var(--sp-2) var(--sp-3);
+}
+
+.previewLabel {
+  color: var(--text-faint);
+  font: var(--t-eyebrow);
+  letter-spacing: var(--t-eyebrow-tracking);
+  margin: 0;
+  text-transform: var(--t-eyebrow-transform);
+}
+
+.previewBody {
+  color: var(--text-soft);
+  font: var(--t-body);
+  margin: 0;
+  overflow-wrap: break-word;
+  text-wrap: pretty;
+  white-space: pre-wrap;
+}
+
+/* ── The standing-grant offer ──────────────────────────────────────────── */
+
+.check {
+  align-items: flex-start;
+  cursor: pointer;
+  display: flex;
+  gap: var(--sp-2);
+  min-block-size: var(--target-min);
+}
+
+.checkBox {
+  flex: none;
+  margin-block-start: var(--sp-1);
+}
+
+.checkText {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-1);
+  min-inline-size: 0;
+}
+
+.checkLabel {
+  color: var(--text);
+  font: var(--t-body);
+}
+
+.checkSub {
+  color: var(--text-faint);
+  font: var(--t-mono);
+  text-wrap: pretty;
+}
+
+/* ── The one line under the facts ──────────────────────────────────────── */
+/* Either the honest limitation, the editing rule, or the consequence of the
+   verb being confirmed — in which case it takes the `--net` rule that says
+   this one does not come back. */
+
+.note {
+  color: var(--text-faint);
+  font: var(--t-body);
+  margin: 0;
+  max-inline-size: 64ch;
+  text-wrap: pretty;
+}
+
+.note[data-net="true"] {
+  border-inline-start: 2px solid var(--net);
+  color: var(--net);
+  padding: var(--sp-2) var(--sp-3);
+}
+
+/* ── The verbs ─────────────────────────────────────────────────────────── */
+/* At most three, and on touch they stack and fill the width rather than
+   wrapping as shrunken pills in an order nobody chose. */
+
+.actions {
+  align-items: stretch;
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+  padding-block-start: var(--sp-1);
+}
+
+.action {
+  white-space: nowrap;
+}
+
+@media (pointer: fine) {
+  .actions {
+    align-items: center;
+    flex-direction: row;
+    flex-wrap: wrap;
+  }
+
+  .action {
+    flex: none;
+  }
+}

@@ -1,14 +1,16 @@
-/* Notifications (issue #765).
+/* Notifications (issues #765, #815).
  *
- * The screen itself is now assembled from the shared block kit (`ui/*Block`),
- * so almost everything this module used to carry — the page header, the group
- * heads, the row family, the notice tiles, the coloured decision accents — is
- * gone rather than restyled: a screen that redraws a shared shape is how the
- * six of them drifted apart in the first place.
+ * The screen is assembled from the shared block kit (`ui/*Block`), so almost
+ * everything this module used to carry — the page header, the group heads, the
+ * row family, the notice tiles, the coloured decision accents — is gone rather
+ * than restyled: a screen that redraws a shared shape is how the six of them
+ * drifted apart in the first place. The v11 pass took the rest: the staged
+ * write's editor, its always-allow checkbox and its facts now belong to
+ * `ui/DecideBlock`, which is the block a decision IS.
  *
- * What is left is the two things no block owns: the DETAIL a row expands to
- * (the outbox editor, the parked input preview, an activity receipt) and the
- * page's own vertical rhythm. Tokens only, logical properties only.
+ * What is left is the two things no block owns: the DETAIL an activity row
+ * expands to, and the page's own vertical rhythm. Tokens only, logical
+ * properties only.
  */
 
 .page {
@@ -25,34 +27,18 @@
   gap: var(--sp-3);
 }
 
-/* One strip of quiet verbs. A row's detail never carries a second filled
-   control: the view's one commit is the staged write's own. */
+/* One strip of quiet verbs. A row's detail never carries a filled control:
+   the view's one commit belongs to the decision card that is open. */
 .detailActions {
   display: flex;
   flex-wrap: wrap;
   gap: var(--sp-2);
 }
 
-/* The staged input a parked invocation would run. Verbatim, monospaced and
-   scrollable — it is evidence, so it is never reflowed or truncated. */
-.inputPreview {
-  background: var(--bg-sunken);
-  border-radius: var(--r-md);
-  color: var(--text-soft);
-  font: var(--t-mono);
-  font-family: var(--font-code);
-  margin: 0;
-  max-block-size: 14rem;
-  overflow: auto;
-  padding: var(--sp-3);
-  white-space: pre-wrap;
-  word-break: break-word;
-}
-
 /* ── Facts inside a row's detail ────────────────────────────────────────── */
-/* The same key/value geometry `PanelBlock` uses, at the row's own indent —
-   `--w-key-col` is the shared metric, so a fact list reads identically
-   whether it is in a panel or under a row. */
+/* The same key/value geometry `PanelBlock` and `DecideBlock` use, at the row's
+   own indent — `--w-key-col` is the shared metric, so a fact list reads
+   identically wherever it lands. */
 
 .facts {
   display: flex;
@@ -88,66 +74,4 @@
   font: var(--t-mono);
   font-variant-numeric: var(--t-mono-numeric);
   unicode-bidi: var(--t-mono-bidi);
-}
-
-/* ── The outbox editor ──────────────────────────────────────────────────── */
-
-.editForm {
-  display: flex;
-  flex-direction: column;
-  gap: var(--sp-3);
-}
-
-.editField {
-  display: flex;
-  flex-direction: column;
-  gap: var(--sp-1);
-}
-
-.editLabel {
-  color: var(--text-faint);
-  font: var(--t-eyebrow);
-}
-
-.editInput,
-.editTextarea {
-  background: var(--bg);
-  border: 1px solid var(--line-strong);
-  border-radius: var(--r-md);
-  color: var(--text);
-  font: var(--t-body);
-  inline-size: 100%;
-  padding: var(--sp-2) var(--sp-3);
-}
-
-.editTextarea {
-  font-family: var(--font-sans);
-  min-block-size: 7rem;
-  resize: vertical;
-}
-
-.editInput:focus-visible,
-.editTextarea:focus-visible {
-  border-color: var(--accent);
-  outline: 2px solid var(--focus-ring-color);
-  outline-offset: 2px;
-}
-
-/* The one checkbox on the page. It mints a standing grant, so it sits in the
-   staged write's own control list rather than beside the commit — a switch
-   that changes what a button MEANS must not be adjacent to it. */
-.alwaysAllow {
-  align-items: center;
-  color: var(--text-soft);
-  cursor: pointer;
-  display: flex;
-  font: var(--t-body);
-  gap: var(--sp-2);
-}
-
-/* ── The history's one trailing control ─────────────────────────────────── */
-
-.seeAllRow {
-  display: flex;
-  padding-block-start: var(--sp-2);
 }
