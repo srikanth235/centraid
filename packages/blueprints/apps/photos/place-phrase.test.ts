@@ -8,6 +8,7 @@ import {
   distanceKm,
   exactLocation,
   formatDistance,
+  gazetteerNameFrom,
   homeBand,
   placePhrase,
   relativePhrase,
@@ -304,5 +305,79 @@ describe("the home band", () => {
 
   it("claims nothing about a distance it does not know", () => {
     expect(homeBand(Number.NaN)).toBeNull();
+  });
+});
+
+describe("the gazetteer record, read out of address_json", () => {
+  it("finds the settlement name the automation wrote", () => {
+    expect(
+      gazetteerNameFrom(
+        JSON.stringify({
+          gazetteer: {
+            name: "Truckee, CA",
+            admin: "CA",
+            distance_km: 18.1,
+            checked_at: "2026-08-17T00:00:00.000Z",
+          },
+        })
+      )
+    ).toBe("Truckee, CA");
+  });
+
+  it("ignores every other key in the blob", () => {
+    expect(
+      gazetteerNameFrom(
+        JSON.stringify({
+          street: "10 Somewhere Road",
+          gazetteer: { name: "Kyoto" },
+        })
+      )
+    ).toBe("Kyoto");
+  });
+
+  it("reads a checked-and-found-nothing marker as no name", () => {
+    // A miss is a recorded result, not a name. The ladder must fall through to
+    // the relative rung rather than print anything about it.
+    expect(
+      gazetteerNameFrom(
+        JSON.stringify({
+          gazetteer: { none: true, checked_at: "2026-08-17T00:00:00.000Z" },
+        })
+      )
+    ).toBeNull();
+  });
+
+  it("survives every shape of nothing", () => {
+    expect(gazetteerNameFrom(null)).toBeNull();
+    expect(gazetteerNameFrom(undefined)).toBeNull();
+    expect(gazetteerNameFrom("")).toBeNull();
+    expect(gazetteerNameFrom("{not json")).toBeNull();
+    expect(gazetteerNameFrom("null")).toBeNull();
+    expect(gazetteerNameFrom('"a string"')).toBeNull();
+    expect(gazetteerNameFrom("{}")).toBeNull();
+    expect(gazetteerNameFrom(JSON.stringify({ gazetteer: null }))).toBeNull();
+    expect(
+      gazetteerNameFrom(JSON.stringify({ gazetteer: "Truckee" }))
+    ).toBeNull();
+    expect(
+      gazetteerNameFrom(JSON.stringify({ gazetteer: { name: 7 } }))
+    ).toBeNull();
+    expect(
+      gazetteerNameFrom(JSON.stringify({ gazetteer: { name: "  " } }))
+    ).toBeNull();
+  });
+
+  it("feeds rung 2 of the ladder, and loses to a name the member typed", () => {
+    const addressJson = JSON.stringify({ gazetteer: { name: "Truckee, CA" } });
+
+    expect(
+      placePhrase({ gazetteerName: gazetteerNameFrom(addressJson) })
+    ).toStrictEqual({ text: "near Truckee, CA", source: "gazetteer" });
+    expect(
+      placePhrase({
+        placeName: "Grandma's house",
+        gazetteerName: gazetteerNameFrom(addressJson),
+      })
+    ).toStrictEqual({ text: "Grandma's house", source: "member" });
   });
 });

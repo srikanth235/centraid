@@ -354,6 +354,48 @@ export function placePhrase({
 }
 
 /**
+ * Rung 2's INPUT, dug out of the column it is stored in.
+ *
+ * The opt-in `place-names` automation records what it found inside
+ * `core_place.address_json`, under one key it owns:
+ * `{ "gazetteer": { "name": "Truckee, CA", … } }`. A place with nothing within
+ * range gets `{ "gazetteer": { "none": true, … } }` instead, which is a result
+ * and not a name — so it reads as null here and the ladder falls through.
+ *
+ * Tolerant on purpose, and every branch matters: the column is nullable, shared
+ * with whatever wrote a street address, and only `json_valid`-checked at the
+ * moment of writing. A surface that threw on one unparseable blob would take a
+ * whole shelf of photographs down over a field nobody asked for. So absence,
+ * blankness, malformed JSON, a non-object payload, a non-object `gazetteer`, a
+ * non-string `name` and a whitespace name all mean the same thing: this rung has
+ * no answer, ask the next one.
+ *
+ * Deliberately duplicated from `queries/_shared.ts`'s `gazetteerOf` rather than
+ * shared with it, for the reason in this module's header: the query lives in the
+ * web app's module graph and this file links nothing, because Expo compiles it
+ * straight out of the blueprints package. The two must agree on the key, which
+ * is what the tests either side of the duplication are for.
+ */
+export function gazetteerNameFrom(
+  addressJson: string | null | undefined
+): string | null {
+  if (typeof addressJson !== "string" || addressJson === "") return null;
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(addressJson);
+  } catch {
+    return null;
+  }
+  if (parsed === null || typeof parsed !== "object") return null;
+  const gazetteer = (parsed as { gazetteer?: unknown }).gazetteer;
+  if (gazetteer === null || typeof gazetteer !== "object") return null;
+  const name = (gazetteer as { name?: unknown }).name;
+  if (typeof name !== "string") return null;
+  const trimmed = name.trim();
+  return trimmed === "" ? null : trimmed;
+}
+
+/**
  * The coordinate, spelled out — the ONE place in this module that prints
  * digits, and only ever behind an explicit "exact location" action a member
  * took on purpose. Five decimals is about a metre, which is the finest thing

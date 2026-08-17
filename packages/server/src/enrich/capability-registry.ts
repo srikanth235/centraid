@@ -40,6 +40,11 @@ export const CAPABILITY_INPUT_KINDS = [
   "text",
   "document",
   "audio-video",
+  // A latitude/longitude pair on a row that has one — `core_place.geo_lat/lng`
+  // today (issue #816). A coordinate is its own data shape: no bytes are read,
+  // no content item is involved, and a capability over it consumes a FACT the
+  // vault already holds rather than material it has to fetch.
+  "coordinate",
 ] as const;
 export type CapabilityInputKind = (typeof CAPABILITY_INPUT_KINDS)[number];
 
@@ -100,6 +105,24 @@ export const ENRICH_CAPABILITIES: readonly CapabilityContract[] = [
     input: "audio-video",
     outputSchema: "transcript@1",
     defaultTemplateId: "transcript",
+    delegateCapable: false,
+  },
+  {
+    // A coordinate yields the nearest settlement's name (issue #816). Photos
+    // because a place is where a photograph was taken; the contract says
+    // nothing about the bundled GeoNames table that answers it today, which is
+    // exactly the point of the registry — a later engine with better data
+    // satisfies the same `place-names@1` shape.
+    //
+    // `delegateCapable: false`, and not merely "not yet": the whole reason this
+    // capability exists as bundled arithmetic is that asking anyone else where a
+    // coordinate is means telling them. A delegate profile bound here stays
+    // inert and Settings → Enrichment says so, from this flag.
+    id: "place-names",
+    domain: "photos",
+    input: "coordinate",
+    outputSchema: "place-names@1",
+    defaultTemplateId: "place-names",
     delegateCapable: false,
   },
   {

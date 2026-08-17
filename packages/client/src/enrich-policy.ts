@@ -171,6 +171,7 @@ export const ENRICH_CAPABILITY_LABELS: Readonly<Record<string, string>> = {
   faces: "Faces",
   obligations: "Dates and deadlines",
   ocr: "Text in photos",
+  "place-names": "Place names",
   transcript: "Video and audio transcripts",
 };
 
@@ -203,6 +204,8 @@ export const ENRICH_CAPABILITY_BLURBS: Readonly<Record<string, string>> = {
   obligations:
     "Spots renewal dates and deadlines so they can become reminders.",
   ocr: "Makes the words inside a picture searchable — receipts, signs, whiteboards.",
+  "place-names":
+    "Says which town a photograph was taken near, from a settlement list bundled with Centraid and read on this device. Your own names for places always win.",
   transcript: "Writes out what is said in your videos and voice notes.",
 };
 
@@ -291,5 +294,6 @@ export const ENRICH_CAPABILITY_DOMAIN: Readonly<Record<string, EnrichDomain>> =
     faces: "photos",
     obligations: "docs",
     ocr: "photos",
+    "place-names": "photos",
     transcript: "photos",
   };

@@ -86,6 +86,7 @@ import {
   registerKnowledgeCommands,
   registerLinkCommands,
   registerMediaCommands,
+  registerMediaGazetteerCommands,
   registerPartyCommands,
   registerPeopleCommands,
   registerScheduleCommands,
@@ -749,6 +750,7 @@ export class VaultPlane {
     registerLinkCommands(this.gateway);
     registerPartyCommands(this.gateway);
     registerMediaCommands(this.gateway);
+    registerMediaGazetteerCommands(this.gateway);
     registerDocumentCommands(this.gateway);
     registerHomeCommands(this.gateway);
     registerPeopleCommands(this.gateway);

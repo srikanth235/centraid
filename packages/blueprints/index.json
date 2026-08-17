@@ -416,6 +416,20 @@
       "integrations": []
     },
     {
+      "id": "place-names",
+      "name": "Place names",
+      "desc": "Names the nearest town for places that only have coordinates, from a settlement list bundled with Centraid and read on this device.",
+      "colorKey": "green",
+      "iconKey": "MapPin",
+      "version": "0.1.0",
+      "kind": "automation",
+      "emoji": "📍",
+      "category": "Recognition",
+      "triggerKind": "data",
+      "triggerLabel": "When a place gains coordinates",
+      "integrations": []
+    },
+    {
       "id": "embed-text",
       "name": "Text embeddings",
       "desc": "Builds deterministic embeddings for extracted text and transcripts so semantic search stays model-versioned.",

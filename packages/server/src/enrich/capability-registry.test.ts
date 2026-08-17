@@ -7,6 +7,7 @@ import { describe, expect, test } from "vitest";
 import { parseModelId } from "@centraid/vault";
 
 import {
+  CAPABILITY_INPUT_KINDS,
   ENRICH_CAPABILITIES,
   ENRICH_CAPABILITY_IDS,
   capabilitiesForDomain,
@@ -28,6 +29,7 @@ describe("capability registry", () => {
       "faces",
       "obligations",
       "ocr",
+      "place-names",
       "transcript",
     ]);
   });
@@ -62,6 +64,7 @@ describe("capability registry", () => {
       "faces",
       "embed-image",
       "transcript",
+      "place-names",
     ]);
     expect(capabilitiesForDomain("docs")).toHaveLength(5);
   });
@@ -71,6 +74,33 @@ describe("capability registry", () => {
     expect(ocr?.input).toBe("image");
     expect(capabilityForTemplateId("photo-ocr")).toBe(ocr);
     expect(ocr && capabilityDefaultRef(ocr)).toBe("photo-ocr/photo-ocr");
+  });
+
+  test("a coordinate is its own input kind", () => {
+    // `place-names` (#816) consumes a fact the vault already holds rather than
+    // bytes it has to read, which is why the kind union grew rather than the
+    // capability being filed under "image" because a photograph is nearby.
+    expect(CAPABILITY_INPUT_KINDS).toContain("coordinate");
+    const places = capabilityContract("place-names");
+    expect(places?.input).toBe("coordinate");
+    expect(places?.domain).toBe("photos");
+    expect(places?.outputSchema).toBe("place-names@1");
+    expect(places && capabilityDefaultRef(places)).toBe(
+      "place-names/place-names"
+    );
+  });
+
+  test("naming a coordinate is never delegated to anyone", () => {
+    // Not "no delegate implementation yet": asking a third party where a
+    // coordinate is means telling them where the member was. The bundled table
+    // exists so that question is never asked, and the flag says so to Settings.
+    expect(capabilityContract("place-names")?.delegateCapable).toBe(false);
+  });
+
+  test("every contract's input kind is one the union declares", () => {
+    for (const contract of ENRICH_CAPABILITIES) {
+      expect(CAPABILITY_INPUT_KINDS, contract.id).toContain(contract.input);
+    }
   });
 
   test("an unknown id is never a default", () => {

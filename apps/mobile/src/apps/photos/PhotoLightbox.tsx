@@ -38,6 +38,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { SAVED_TO_MY_VAULT } from "@centraid/blueprints/apps/_shared/shared-copy";
 import { readableName } from "@centraid/blueprints/apps/photos/place-map";
+import { gazetteerNameFrom } from "@centraid/blueprints/apps/photos/place-phrase";
 import type { NamedPlace } from "@centraid/blueprints/apps/photos/place-phrase";
 import { PHOTOS_SAVED_AS_NEW } from "@centraid/blueprints/apps/photos/shared-copy";
 
@@ -813,6 +814,17 @@ export default function PhotoLightbox({
           }
           namedPlaces={namedPlaces}
           people={people}
+          // Rung 2 of the phrase ladder, when the opt-in automation has run:
+          // the settlement name it recorded inside this place's own
+          // `address_json`. Absent — and it is absent until a member turns the
+          // automation on — the sheet's phrase falls to the relative rung.
+          placeGazetteer={
+            gazetteerNameFrom(
+              currentPlace?.address_json == null
+                ? null
+                : String(currentPlace.address_json)
+            ) ?? undefined
+          }
           placeLat={
             Number.isFinite(Number(currentPlace?.geo_lat))
               ? Number(currentPlace?.geo_lat)

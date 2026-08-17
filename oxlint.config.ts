@@ -164,6 +164,11 @@ export default defineConfig({
     "packages/blueprints/automations/embed-image/automations/embed-image/handler.js",
     "packages/blueprints/automations/embed-text/automations/embed-text/handler.js",
     "packages/blueprints/automations/faces/automations/faces/handler.js",
+    // `place-names` (#816) is the same kind of artefact for a different reason:
+    // no model, but a vendored settlement table inlined into the bundle. Its
+    // authored halves — the handler and the lookup — are linted under
+    // packages/model-runtime.
+    "packages/blueprints/automations/place-names/automations/place-names/handler.js",
     "packages/blueprints/automations/transcript/automations/transcript/handler.js",
   ]),
   rules: {

@@ -691,6 +691,7 @@ export {
 } from "./commands/links.js";
 export { registerPartyCommands } from "./commands/parties.js";
 export { registerMediaCommands } from "./commands/media.js";
+export { registerMediaGazetteerCommands } from "./commands/media-gazetteer.js";
 export {
   registerDocumentCommands,
   FOLDER_SCHEME_URI,

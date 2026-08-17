@@ -19,18 +19,25 @@ const handlers = [
       "packages/blueprints/automations/photo-ocr/automations/photo-ocr"
     ),
   },
-  ...(["embed-image", "embed-text", "faces", "transcript"] as const).map(
-    (id) => ({
-      entrypoint: path.join(
-        import.meta.dirname,
-        `automation-handlers/${id}.js`
-      ),
-      output: path.join(
-        root,
-        `packages/blueprints/automations/${id}/automations/${id}`
-      ),
-    })
-  ),
+  ...(
+    [
+      "embed-image",
+      "embed-text",
+      "faces",
+      // Not a model recipe: `place-names` inlines a vendored settlement table
+      // (`src/gazetteer-data.ts`) instead of loading weights, so its bundle is
+      // large where the others are small and needs no `runtime/` assets at all.
+      // The build is the same one — one entrypoint, minified, self-contained.
+      "place-names",
+      "transcript",
+    ] as const
+  ).map((id) => ({
+    entrypoint: path.join(import.meta.dirname, `automation-handlers/${id}.js`),
+    output: path.join(
+      root,
+      `packages/blueprints/automations/${id}/automations/${id}`
+    ),
+  })),
 ] as const;
 
 const results = await Promise.all(

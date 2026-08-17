@@ -563,6 +563,7 @@
         "actions/create-album.ts",
         "actions/delete-album.ts",
         "actions/delete-asset.ts",
+        "actions/name-place.ts",
         "actions/purge-asset.ts",
         "actions/remove-from-album.ts",
         "actions/rename-album.ts",
@@ -605,6 +606,7 @@
         "components/Lightbox.tsx",
         "components/LightboxInfo.module.css",
         "components/LightboxInfo.tsx",
+        "components/LightboxLocation.tsx",
         "components/LoadingGrid.module.css",
         "components/LoadingGrid.tsx",
         "components/Memories.module.css",
@@ -623,6 +625,9 @@
         "components/PlaceMap.module.css",
         "components/PlaceMap.test.tsx",
         "components/PlaceMap.tsx",
+        "components/PlaceNaming.module.css",
+        "components/PlaceNaming.test.tsx",
+        "components/PlaceNaming.tsx",
         "components/Places.module.css",
         "components/Places.tsx",
         "components/ScrubRail.module.css",
@@ -1708,6 +1713,26 @@
         "app.json",
         "automations/embed-image/automation.json",
         "automations/embed-image/handler.js"
+      ]
+    },
+    {
+      "id": "place-names",
+      "name": "Place names",
+      "desc": "Names the nearest town for places that only have coordinates, from a settlement list bundled with Centraid and read on this device.",
+      "colorKey": "green",
+      "iconKey": "MapPin",
+      "version": "0.1.0",
+      "kind": "automation",
+      "emoji": "📍",
+      "category": "Recognition",
+      "triggerKind": "data",
+      "triggerLabel": "When a place gains coordinates",
+      "integrations": [],
+      "files": [
+        "LICENSE-GEONAMES.md",
+        "app.json",
+        "automations/place-names/automation.json",
+        "automations/place-names/handler.js"
       ]
     },
     {

@@ -12,6 +12,7 @@ Waves landed so far:
 - Wave 1 — place-phrase ladder, phrase-first info panels, OSM link gone.
 - Native fingerprints refreshed for the JS-side dependency removal (maintainer-authorized `ci:native-state --write`, 2026-08-17); the macOS `pod install` pass re-runs it after regenerating `Podfile.lock`.
 - Wave 2 — naming conversations: `media.name_place`, "Name this place?" + "This is home" on both surfaces, retroactive re-phrasing verified.
+- Wave 3 — opt-in offline gazetteer: vendored GeoNames cities15000 (CC-BY 3.0, snapshot 2017-02-27), `place-names` automation off by default, `media.set_place_gazetteer` writes address_json only.
 
 ## User impact
 
