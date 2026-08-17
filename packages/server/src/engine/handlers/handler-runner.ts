@@ -150,13 +150,6 @@ export async function runHandler(
   // eslint-disable-next-line unicorn/require-post-message-target-origin -- node:worker_threads postMessage has no targetOrigin (#252)
   worker.postMessage(runMessage);
 
-  let timeoutHandle: NodeJS.Timeout | undefined;
-  if (opts.timeoutMs && opts.timeoutMs > 0) {
-    timeoutHandle = setTimeout(() => {
-      worker.terminate().catch(() => {});
-    }, opts.timeoutMs);
-  }
-
   const handlerName = path
     .basename(opts.handlerFile)
     .replace(/\.(?:ts|js)$/u, "");
@@ -164,6 +157,7 @@ export async function runHandler(
 
   return await new Promise<HandlerOutcome>((resolve) => {
     let resolved = false;
+    let timeoutHandle: NodeJS.Timeout | undefined;
     const finish = (outcome: HandlerOutcome) => {
       if (resolved) return;
       resolved = true;
@@ -190,6 +184,23 @@ export async function runHandler(
       // eslint-disable-next-line promise/no-multiple-resolved -- grandfathered pre-existing suppression (#247)
       resolve(outcome);
     };
+
+    // Timeout must unblock the caller even if terminate()/exit is delayed
+    // under thread pressure (#811). finish() already terminates the worker
+    // and releases the admission slot.
+    if (opts.timeoutMs && opts.timeoutMs > 0) {
+      timeoutHandle = setTimeout(() => {
+        const error = `worker timed out after ${opts.timeoutMs}ms`;
+        persistedEntries.push({
+          ts: Date.now(),
+          level: "error",
+          msg: error,
+          source: opts.handlerKind,
+          handler: handlerName,
+        });
+        finish({ ok: false, error, logs });
+      }, opts.timeoutMs);
+    }
 
     worker.on("message", (msg: { type: string }) => {
       if (msg.type === "vault") {

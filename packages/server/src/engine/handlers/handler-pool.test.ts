@@ -11,7 +11,11 @@ import { afterEach, beforeEach, describe, expect, test } from "vitest";
 import { tempDir } from "@centraid/test-kit/temp-dir";
 
 import { runHandler, HANDLER_WORKER_FILE } from "./handler-runner.js";
-import { workerMaxConcurrentFromEnv } from "./worker-admission.js";
+import type { HandlerOutcome, RunHandlerOptions } from "./handler-runner.js";
+import {
+  WorkerAdmission,
+  workerMaxConcurrentFromEnv,
+} from "./worker-admission.js";
 import {
   WorkerPool,
   workerPoolSizeFromEnv,
@@ -22,10 +26,14 @@ import {
 
 let appDir: string;
 let pool: WorkerPool;
+let admission: WorkerAdmission;
 
 describe("handler-pool", () => {
   beforeEach(async () => {
     appDir = await tempDir("centraid-worker-pool-");
+    // Private gate: these cases must not share the process-wide production
+    // admission slots with the rest of a coverage worker (#811).
+    admission = new WorkerAdmission(4, 0, 1_000);
   });
 
   afterEach(() => {
@@ -45,6 +53,19 @@ describe("handler-pool", () => {
     return file;
   }
 
+  function dispatch(
+    opts: Omit<RunHandlerOptions, "admission" | "pool" | "app"> & {
+      handlerFile: string;
+    }
+  ): Promise<HandlerOutcome> {
+    return runHandler({
+      app: { id: "demo", dir: appDir },
+      admission,
+      pool,
+      ...opts,
+    });
+  }
+
   test("keeps warm spares between runs and refills after an acquire", async () => {
     pool = new WorkerPool(HANDLER_WORKER_FILE, 2);
     pool.prewarm();
@@ -55,13 +76,11 @@ describe("handler-pool", () => {
       "ok.js",
       `export default async () => ({ ok: 1 });`
     );
-    const outcome = await runHandler({
-      app: { id: "demo", dir: appDir },
+    const outcome = await dispatch({
       handlerFile,
       handlerKind: "query",
       args: { query: {} },
       timeoutMs: 5_000,
-      pool,
     });
     expect(outcome.ok).toBe(true);
     expect(outcome.value).toStrictEqual({ ok: 1 });
@@ -80,13 +99,11 @@ describe("handler-pool", () => {
       "ok.js",
       `export default async () => 'cold';`
     );
-    const outcome = await runHandler({
-      app: { id: "demo", dir: appDir },
+    const outcome = await dispatch({
       handlerFile,
       handlerKind: "query",
       args: { query: {} },
       timeoutMs: 5_000,
-      pool,
     });
     expect(outcome.ok).toBe(true);
     expect(outcome.value).toBe("cold");
@@ -103,13 +120,11 @@ describe("handler-pool", () => {
       `let seen = 0;\nexport default async () => { seen += 1; return { seen }; };`
     );
     const run = () =>
-      runHandler({
-        app: { id: "demo", dir: appDir },
+      dispatch({
         handlerFile,
         handlerKind: "query",
         args: { query: {} },
         timeoutMs: 5_000,
-        pool,
       });
     const first = await run();
     const second = await run();
@@ -136,13 +151,11 @@ describe("handler-pool", () => {
     );
     pool = new WorkerPool(HANDLER_WORKER_FILE, 1);
     pool.prewarm();
-    const outcome = await runHandler({
-      app: { id: "demo", dir: appDir },
+    const outcome = await dispatch({
       handlerFile,
       handlerKind: "action",
       args: { body: { a: 40, b: 2 } },
       timeoutMs: 30_000,
-      pool,
     });
     expect(outcome.ok).toBe(true);
     expect(outcome.value).toStrictEqual({ total: 42 });
@@ -155,29 +168,25 @@ describe("handler-pool", () => {
       "hang.js",
       `export default async () => { await new Promise(() => {}); };`
     );
-    const outcome = await runHandler({
-      app: { id: "demo", dir: appDir },
+    const outcome = await dispatch({
       handlerFile: hung,
       handlerKind: "query",
       args: { query: {} },
       timeoutMs: 100,
-      pool,
     });
     expect(outcome.ok).toBe(false);
-    expect(outcome.error).toMatch(/exited with code|worker/iu);
+    expect(outcome.error).toMatch(/timed out after 100ms/iu);
 
     // The pool is unharmed: a normal handler runs fine right after.
     const ok = await writeHandler(
       "ok.js",
       `export default async () => 'alive';`
     );
-    const after = await runHandler({
-      app: { id: "demo", dir: appDir },
+    const after = await dispatch({
       handlerFile: ok,
       handlerKind: "query",
       args: { query: {} },
       timeoutMs: 5_000,
-      pool,
     });
     expect(after.ok).toBe(true);
     expect(after.value).toBe("alive");
@@ -190,13 +199,11 @@ describe("handler-pool", () => {
       "crash.js",
       `export default async () => { process.exit(1); };`
     );
-    const crashed = await runHandler({
-      app: { id: "demo", dir: appDir },
+    const crashed = await dispatch({
       handlerFile: crash,
       handlerKind: "query",
       args: { query: {} },
       timeoutMs: 5_000,
-      pool,
     });
     expect(crashed.ok).toBe(false);
 
@@ -204,13 +211,11 @@ describe("handler-pool", () => {
       "ok.js",
       `export default async () => 'recovered';`
     );
-    const after = await runHandler({
-      app: { id: "demo", dir: appDir },
+    const after = await dispatch({
       handlerFile: ok,
       handlerKind: "query",
       args: { query: {} },
       timeoutMs: 5_000,
-      pool,
     });
     expect(after.ok).toBe(true);
     expect(after.value).toBe("recovered");
