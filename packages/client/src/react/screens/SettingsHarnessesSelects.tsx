@@ -127,6 +127,41 @@ export function ModelSelect({
   );
 }
 
+/**
+ * The reasoning levels this harness's live probe offers, in its own vocabulary.
+ *
+ * REASONING LEVEL IS A PROPERTY OF THE MODEL, and this is as close as the wire
+ * gets to saying so: ACP reports one `thought_level` option per SESSION
+ * (`packages/server/src/acp/backends/acp/session-config.ts`), refreshed by
+ * `config_option_update`, and `HarnessModelDTO` carries no per-model levels at
+ * all. So the offered set is read from the probe rather than invented here, and
+ * a level outside it is treated as a level the model cannot do.
+ */
+export function effortValues(card: HarnessCardDTO): string[] {
+  const option = card.configOptions?.find(
+    (entry) => entry.category === "thought_level"
+  );
+  return (option?.values ?? []).map((entry) => entry.value);
+}
+
+/**
+ * A stored level the newly-picked model cannot do is dropped back to inherit —
+ * a pin the harness would silently ignore is a control lying about its effect.
+ * Returns the value to store, which is `saved` whenever the level still fits.
+ */
+export function clampEffort(card: HarnessCardDTO, saved: string): string {
+  if (!saved) return "";
+  return effortValues(card).includes(saved) ? saved : "";
+}
+
+/**
+ * A pick with nothing to open, stated rather than offered: a model with no
+ * thinking budget gets this line, not a disabled select that looks openable.
+ */
+export function NoThinkingPick(): JSX.Element {
+  return <span className={styles.inertPick}>no thinking</span>;
+}
+
 export function ConfigSelect({
   card,
   category,
@@ -145,7 +180,8 @@ export function ConfigSelect({
   const option = card.configOptions?.find(
     (entry) => entry.category === category
   );
-  if (!option || option.values.length === 0) return null;
+  if (!option || option.values.length === 0)
+    return category === "thought_level" ? <NoThinkingPick /> : null;
   return (
     <Select
       value={saved}

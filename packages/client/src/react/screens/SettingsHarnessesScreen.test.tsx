@@ -108,21 +108,30 @@ function makeProps(
     refreshModels: vi
       .fn<SettingsHarnessesBridgeProps["refreshModels"]>()
       .mockResolvedValue(makeStatus()),
+    // Every writer resolves to the gateway's own text on refusal and `null`
+    // when it wrote — a green mock is a write that landed.
     activateHarness: vi
       .fn<SettingsHarnessesBridgeProps["activateHarness"]>()
-      .mockResolvedValue(true),
-    setHarnessModel: vi.fn<SettingsHarnessesBridgeProps["setHarnessModel"]>(),
-    setHarnessConfigPin:
-      vi.fn<SettingsHarnessesBridgeProps["setHarnessConfigPin"]>(),
-    setSubsystemModel:
-      vi.fn<SettingsHarnessesBridgeProps["setSubsystemModel"]>(),
-    setSubsystemConfigPin:
-      vi.fn<SettingsHarnessesBridgeProps["setSubsystemConfigPin"]>(),
+      .mockResolvedValue(null),
+    setHarnessModel: vi
+      .fn<SettingsHarnessesBridgeProps["setHarnessModel"]>()
+      .mockResolvedValue(null),
+    setHarnessConfigPin: vi
+      .fn<SettingsHarnessesBridgeProps["setHarnessConfigPin"]>()
+      .mockResolvedValue(null),
+    setSubsystemModel: vi
+      .fn<SettingsHarnessesBridgeProps["setSubsystemModel"]>()
+      .mockResolvedValue(null),
+    setSubsystemConfigPin: vi
+      .fn<SettingsHarnessesBridgeProps["setSubsystemConfigPin"]>()
+      .mockResolvedValue(null),
     setSubsystemHarness: vi
       .fn<SettingsHarnessesBridgeProps["setSubsystemHarness"]>()
-      .mockResolvedValue(true),
-    setSubsystemHarnessLadder:
-      vi.fn<SettingsHarnessesBridgeProps["setSubsystemHarnessLadder"]>(),
+      .mockResolvedValue(null),
+    setSubsystemHarnessLadder: vi
+      .fn<SettingsHarnessesBridgeProps["setSubsystemHarnessLadder"]>()
+      .mockResolvedValue(null),
+    showToast: vi.fn<SettingsHarnessesBridgeProps["showToast"]>(),
     ...over,
   };
 }
@@ -529,6 +538,128 @@ describe("SettingsHarnessesScreen suite", () => {
         "codex",
         "thought_level",
         "high"
+      );
+    });
+
+    it("states “no thinking” instead of a select for a model with no thinking budget", async () => {
+      // A pick with nothing to open is not a pick: the harness advertises no
+      // `thought_level` option, so the row states the fact rather than
+      // rendering a dead control that looks openable.
+      const el = await mount(makeProps());
+      expect(
+        el.querySelector('[aria-label="Effort for Assistant"]')
+      ).toBeNull();
+      expect(el.textContent).toContain("no thinking");
+      expect(el.querySelectorAll(".inertPick").length).toBeGreaterThan(0);
+    });
+
+    it("clamps a stored level the newly-picked model cannot do", async () => {
+      // `xhigh` is pinned but the probe offers medium/high only, so changing
+      // the model drops the pin back to inherit rather than displaying a level
+      // the runtime would silently ignore.
+      const base = makeStatus();
+      const withEffort: HarnessesStatusDTO = {
+        ...base,
+        defaultConfigPinsByKind: { codex: { thought_level: "xhigh" } },
+        cards: base.cards.map((card) =>
+          card.kind === "codex"
+            ? {
+                ...card,
+                configOptions: [
+                  {
+                    id: "thought",
+                    category: "thought_level",
+                    type: "select",
+                    values: [
+                      { value: "medium", name: "Medium" },
+                      { value: "high", name: "High" },
+                    ],
+                  },
+                ],
+              }
+            : card
+        ),
+      };
+      const props = makeProps({
+        loadStatus: vi
+          .fn<SettingsHarnessesBridgeProps["loadStatus"]>()
+          .mockResolvedValue(withEffort),
+      });
+      const el = await mount(props);
+      await pick(sel(el, "Default model for Codex"), "gpt-5-mini");
+      expect(props.setHarnessConfigPin).toHaveBeenCalledWith(
+        "codex",
+        "thought_level",
+        ""
+      );
+    });
+
+    it("keeps a stored level the model still offers", async () => {
+      const base = makeStatus();
+      const props = makeProps({
+        loadStatus: vi
+          .fn<SettingsHarnessesBridgeProps["loadStatus"]>()
+          .mockResolvedValue({
+            ...base,
+            defaultConfigPinsByKind: { codex: { thought_level: "high" } },
+            cards: base.cards.map((card) =>
+              card.kind === "codex"
+                ? {
+                    ...card,
+                    configOptions: [
+                      {
+                        id: "thought",
+                        category: "thought_level",
+                        type: "select",
+                        values: [{ value: "high", name: "High" }],
+                      },
+                    ],
+                  }
+                : card
+            ),
+          }),
+      });
+      const el = await mount(props);
+      await pick(sel(el, "Default model for Codex"), "gpt-5-mini");
+      expect(props.setHarnessConfigPin).not.toHaveBeenCalled();
+    });
+
+    it("restores the pick and states the gateway's own words when a model write is refused", async () => {
+      const props = makeProps({
+        setHarnessModel: vi
+          .fn<SettingsHarnessesBridgeProps["setHarnessModel"]>()
+          .mockResolvedValue("prefs.write refused: model not offered"),
+      });
+      const el = await mount(props);
+      await pick(sel(el, "Default model for Codex"), "gpt-5-mini");
+      await act(async () => {
+        await Promise.resolve();
+      });
+      // Back where the gateway has it…
+      expect(sel(el, "Default model for Codex").value).toBe("gpt-5");
+      // …and the refusal is quoted, not swallowed.
+      expect(props.showToast).toHaveBeenCalledWith(
+        "Model not saved: prefs.write refused: model not offered"
+      );
+    });
+
+    it("restores the lane's agent when its write is refused", async () => {
+      const props = makeProps({
+        loadStatus: vi
+          .fn<SettingsHarnessesBridgeProps["loadStatus"]>()
+          .mockResolvedValue(makeStatusBothConnected()),
+        setSubsystemHarness: vi
+          .fn<SettingsHarnessesBridgeProps["setSubsystemHarness"]>()
+          .mockResolvedValue("prefs unavailable"),
+      });
+      const el = await mount(props);
+      await pick(sel(el, "Agent for In-app Ask"), "claude-code");
+      await act(async () => {
+        await Promise.resolve();
+      });
+      expect(sel(el, "Agent for In-app Ask").value).toBe("");
+      expect(props.showToast).toHaveBeenCalledWith(
+        "Agent not saved: prefs unavailable"
       );
     });
 

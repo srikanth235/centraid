@@ -187,6 +187,21 @@
   color: var(--text-faint);
 }
 
+/* A pick with nothing to open is not a pick. A model with no thinking budget
+   states that in place of the control: dashed edge, no chevron, no pointer —
+   an inert affordance is stated as text, never styled as a button. */
+.inertPick {
+  display: inline-flex;
+  align-items: center;
+  min-height: var(--h-control);
+  padding-inline: var(--sp-3);
+  border: 1px dashed var(--line-strong);
+  border-radius: var(--r-lg);
+  font-size: var(--t-control-size);
+  color: var(--text-faint);
+  white-space: nowrap;
+}
+
 /* ── Harness inventory ─────────────────────────────────────────────────── */
 .entry + .entry {
   border-top: 1px solid var(--line);

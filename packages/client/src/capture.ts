@@ -142,7 +142,7 @@ export function classifyCapture(raw: string, now = new Date()): CapturePreview {
   };
 }
 
-/** OCR card fields shared by web CaptureScanPanel and mobile Scan. */
+/** OCR card fields, read by mobile Scan (the web scan panel retired with quick capture). */
 export function parseCard(text: string): {
   cardholder: string;
   cardNumber: string;

@@ -88,20 +88,21 @@ test("12.5 — appearance choices persist across a reload", async () => {
     await waitForHome(page);
     await gotoSettings(page);
     await page.getByTestId("settings-page").waitFor({ state: "visible" });
-    // Cards is a standing control on the same page. `elevated` is never the
-    // default (`outlined`), so a reload that restores it proves the prefs
-    // write path rather than the shipped default. This used to drive the
-    // Density control, which #672 removed along with the density system.
-    const cards = page.getByRole("tablist", { name: "Cards" });
-    await cards.getByRole("tab", { name: "elevated" }).click();
+    // Cards was retired from You (#814); the pref still paints with no
+    // control. Theme is the remaining visual pick on this page. `light` is
+    // never the shipped default (`dark`), so a reload that restores it proves
+    // the prefs write path. Reload is not a restart — 12.6 still covers
+    // Electron process death.
+    const appearance = page.getByRole("tablist", { name: "Appearance" });
+    await appearance.getByRole("tab", { name: "Light" }).click();
     await expect
-      .poll(() => page.evaluate(() => document.documentElement.dataset.cards))
-      .toBe("elevated");
+      .poll(() => page.evaluate(() => document.documentElement.dataset.theme))
+      .toBe("light");
     await page.reload();
     await waitForHome(page);
     await expect
-      .poll(() => page.evaluate(() => document.documentElement.dataset.cards))
-      .toBe("elevated");
+      .poll(() => page.evaluate(() => document.documentElement.dataset.theme))
+      .toBe("light");
   } finally {
     await closeApp(app);
   }

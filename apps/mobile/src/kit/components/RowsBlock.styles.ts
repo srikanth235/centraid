@@ -35,6 +35,10 @@ export const styles = StyleSheet.create({
   row: { borderTopWidth: borders.hairline },
   // The first row carries no rule; the container's own edge is its top.
   rowFirst: { borderTopWidth: 0 },
+  // Revoked, and still on the record: the title is ruled through while the row
+  // keeps its height and its rule. The ink step comes from the theme at the
+  // call site, on the leaf, never as a container opacity.
+  struck: { textDecorationLine: "line-through" as const },
   sub: t("mono"),
   text: { flex: 1, gap: TITLE_SEAM, minWidth: 0 },
   title: t("body"),

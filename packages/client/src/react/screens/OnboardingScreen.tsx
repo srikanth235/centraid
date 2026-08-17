@@ -29,7 +29,7 @@ export interface OnboardingScreenProps {
 
 /**
  * First-run onboarding is deliberately one act: connect, then enter Home.
- * Name and color are profile preferences, so Settings → Profile owns them and
+ * Name and color are profile preferences, so Settings → You owns them and
  * a first-time user never has to invent identity data before seeing the app.
  */
 export default function OnboardingScreen({

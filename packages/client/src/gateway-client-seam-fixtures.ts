@@ -1,7 +1,7 @@
 /*
  * Shared harness for the client↔gateway SEAM contract tests (#656 Layer 1B):
- * the storage, backup, atlas, owners, devices, capture, conversation-history
- * and app-editing wire surfaces that had no test file at all.
+ * the storage, backup, atlas, owners, devices, conversation-history and
+ * app-editing wire surfaces that had no test file at all.
  *
  * Same shape as `gateway-client-contract-fixtures.ts` — stub `window.CentraidApi`
  * and `fetch` first, import the client modules after — but with a *recording*
@@ -344,17 +344,6 @@ const ROUTES: Record<string, Responder> = {
       ],
     }),
 
-  // ── capture ──
-  "POST /centraid/_gateway/capture/ocr": () =>
-    json({
-      extraction: { text: "hi", confidence: 0.9, engine: "automation" },
-    }),
-  "POST /centraid/_gateway/capture/classify": () =>
-    json({ preview: { kind: "task", title: "Buy milk" } }),
-  "POST /centraid/_vault/blobs": () => json({ sha256: "a".repeat(64) }),
-  "POST /centraid/tally/queries/recent": () => json({ rows: [] }),
-  "POST /centraid/tally/actions/record": () => json({ ok: true }),
-
   // ── conversation history (#420 / #599 Decision 14) ──
   "GET /_centraid-conversations/apps/daily/sessions": () =>
     json({ sessions: [{ sessionId: "s-1", title: "First" }] }),
@@ -436,7 +425,6 @@ export const atlas = await import("./gateway-client-atlas.js");
 export const owners = await import("./gateway-client-owners.js");
 export const devices = await import("./gateway-client-devices.js");
 export const edges = await import("./gateway-client-edges.js");
-export const capture = await import("./gateway-client-capture.js");
 export const history = await import("./gateway-client-conversation-history.js");
 export const editing = await import("./gateway-client-editing.js");
 export const vaultOwner = await import("./gateway-client-vault.js");

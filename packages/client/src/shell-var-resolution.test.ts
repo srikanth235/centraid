@@ -56,7 +56,7 @@ const SKIP_DIRS = new Set(["node_modules", "dist", "build", ".turbo"]);
  * listing them would mean the gate stops noticing if that default is deleted.
  */
 const RUNTIME_DECLARED: Readonly<Record<string, string>> = {
-  // Settings → Profile: the avatar ring, focus state, and save affordance all
+  // Settings → You, profile group: the avatar ring, focus state, and save affordance all
   // take the swatch the user is currently pointing at, before anything is
   // saved, so the value only exists per render. No CSS default on purpose —
   // the ring has no meaning until a colour is chosen.

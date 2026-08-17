@@ -15,7 +15,11 @@
      `min-width: auto` and refuse to shrink below their content, so the page
      scrolls sideways instead of the blocks reflowing. */
   min-inline-size: 0;
-  max-inline-size: 1080px;
+  /* The reading column every ops page shares. It read 1080 here and 1120 on
+     the census, which the v11 merge stacked in one scroll — a column that
+     visibly stepped in halfway down. Embedded, the measure is the merged
+     route's (`VaultRoute.module.css`) and this rule does not apply at all. */
+  max-inline-size: 1120px;
   padding: var(--sp-4) var(--sp-5) var(--sp-6);
 }
 

@@ -39,6 +39,13 @@ export interface ButtonProps extends ButtonData {
   title?: string;
   ariaLabel?: string;
   /**
+   * This control opens and closes something — a section's body, a picker.
+   * The state belongs on the control a member presses, and there is nowhere
+   * else to put it: the thing being disclosed is UNRENDERED while closed, so
+   * assistive tech has only the button to read the state from.
+   */
+  ariaExpanded?: boolean;
+  /**
    * Is this the control that COMMITS — the one that writes data (issue #708,
    * C7)? Defaults to `variant === "primary"`, because the filled ink IS the
    * commit control in this grammar. Set it explicitly on a commit that is not
@@ -78,6 +85,7 @@ export default function Button({
   className,
   title,
   ariaLabel,
+  ariaExpanded,
   commit,
 }: ButtonProps): JSX.Element {
   const availability = useCommitAvailability();
@@ -118,6 +126,7 @@ export default function Button({
         aria-describedby={refused ? reasonId : undefined}
         title={title}
         aria-label={ariaLabel}
+        aria-expanded={ariaExpanded}
         onClick={disabled || refused ? undefined : onClick}
       >
         {icon ? (

@@ -90,4 +90,57 @@ describe("screens/SettingsVaultScreen", () => {
     const el = await mount({ onDisconnect: vi.fn<() => void>() });
     expect(el.textContent?.toLowerCase()).not.toContain("gateway");
   });
+
+  // The offline copy moved here when Settings → This device was retired. It is
+  // still the whole of the owner's control over the replica — pairing stopped
+  // asking — so the three laws that guarded it there guard it here.
+  describe("the offline copy", () => {
+    const toggle = (el: HTMLElement): HTMLInputElement =>
+      el.querySelector('input[type="checkbox"]') as HTMLInputElement;
+
+    it("renders as a real control, not prose", async () => {
+      const el = await mount({
+        offlineCopy: true,
+        onOfflineCopy: async () => true,
+      });
+      expect(el.textContent).toContain("On this device");
+      expect(el.textContent).toContain("Keep an offline copy");
+      expect(el.textContent).toContain("encrypted replica");
+      expect(toggle(el).checked).toBe(true);
+    });
+
+    it("flipping it off calls the host setter and shows what took effect", async () => {
+      const onOfflineCopy = vi.fn<(next: boolean) => Promise<boolean>>(
+        async () => false
+      );
+      const el = await mount({ offlineCopy: true, onOfflineCopy });
+      await act(async () => {
+        toggle(el).click();
+      });
+      expect(onOfflineCopy).toHaveBeenCalledWith(false);
+      expect(toggle(el).checked).toBe(false);
+    });
+
+    // The switch reports the DEVICE's state, never the user's intent: a
+    // refused or failed write must leave it where it was.
+    it("a rejected change leaves the switch where it was", async () => {
+      const onOfflineCopy = vi.fn<(next: boolean) => Promise<boolean>>(
+        async () => true
+      );
+      const el = await mount({ offlineCopy: true, onOfflineCopy });
+      await act(async () => {
+        toggle(el).click();
+      });
+      expect(onOfflineCopy).toHaveBeenCalledWith(false);
+      expect(toggle(el).checked).toBe(true);
+    });
+
+    // Desktop runs the gateway in-process: there is no second copy to keep, so
+    // the row is absent rather than present-and-inert.
+    it("is absent when the host does not offer one", async () => {
+      const el = await mount({ onDisconnect: vi.fn<() => void>() });
+      expect(el.querySelector('input[type="checkbox"]')).toBeNull();
+      expect(el.textContent).not.toContain("Keep an offline copy");
+    });
+  });
 });

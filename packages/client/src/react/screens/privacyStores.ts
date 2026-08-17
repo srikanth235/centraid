@@ -185,3 +185,36 @@ export function groupGrantsByStore(
     ),
   }));
 }
+
+// ── The revoked-this-session snapshot (issue #708 A2) ─────────────────────
+// A revoke DELETES the grant server-side, so the next fetch simply drops the
+// row. Keeping a copy of it as it looked at the moment of revoke is what lets
+// the row stay visible, struck through, instead of vanishing — the history of
+// who once held a store is the ledger's whole point. Pure, so the rule is
+// testable without rendering anything.
+
+/** `${storeId}:${grantId}` — a grant is only unique to a store when both are
+ *  present, since the same underlying grant can span several stores' scopes
+ *  and each store's row needs its own independent revoked state. */
+export function revokedHolderKey(storeId: string, grantId: string): string {
+  return `${storeId}:${grantId}`;
+}
+
+/**
+ * Re-attach any revoked-this-session snapshot whose grant is no longer in the
+ * live group (the revoke call deleted it server-side) — pure so it is
+ * unit-testable independent of the screen's rendering.
+ */
+export function mergeRevokedHolders(
+  group: StoreGroup,
+  revoked: ReadonlyMap<string, StoreHolderDTO>
+): StoreGroup {
+  const liveIds = new Set(group.holders.map((h) => h.grantId));
+  const reattached: StoreHolderDTO[] = [];
+  for (const [key, holder] of revoked) {
+    if (key !== revokedHolderKey(group.storeId, holder.grantId)) continue;
+    if (liveIds.has(holder.grantId)) continue;
+    reattached.push(holder);
+  }
+  return { ...group, holders: [...group.holders, ...reattached] };
+}

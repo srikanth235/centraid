@@ -1,0 +1,147 @@
+/* The census meter row (v11 "What it holds").
+
+   Same container recipe as `RowsBlock` — raised paper, one outer edge, internal
+   hairlines — because it is the same kind of statement with one extra cell. The
+   two measures the spacing scale does not name outright (the name column and
+   the last-written column) are composed FROM it rather than typed.
+
+   Every direction is logical: the list mirrors whole under RTL, and the bar
+   grows from the reading edge because that is the edge the name sits on. */
+
+.meter {
+  --meter-name: calc(var(--sp-6) * 5);
+  --meter-when: calc(var(--sp-6) * 3);
+  --meter-track: var(--sp-2);
+
+  background: var(--bg-elev);
+  border: 1px solid var(--line);
+  border-radius: var(--r-lg);
+  display: flex;
+  flex-direction: column;
+  /* One of several blocks stacked under one head — the same step `RowsBlock`
+     takes for the same reason: two groups must read as two statements rather
+     than one list with a seam in it. */
+  margin-block-end: var(--sp-2);
+  overflow: hidden;
+}
+
+.row {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-3);
+  min-block-size: var(--h-row);
+  padding: var(--sp-1) var(--sp-3);
+}
+
+.row + .row {
+  border-block-start: 1px solid var(--line);
+}
+
+/* The name column: the kind, and whose pack it is under it. It never shrinks
+   past its column, and neither line wraps — a name broken over two lines reads
+   as two kinds. */
+.text {
+  display: flex;
+  flex: none;
+  flex-direction: column;
+  gap: var(--sp-hair);
+  inline-size: var(--meter-name);
+  min-inline-size: 0;
+}
+
+.name {
+  color: var(--text);
+  font: var(--t-body);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.pack {
+  color: var(--text-faint);
+  font: var(--t-annot-label);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* A kind nothing has written is recessive on its own leaf — never an opacity
+   on the row, which would take the count and the verb down with it. */
+.name[data-empty="true"] {
+  color: var(--text-faint);
+}
+
+.track {
+  background: var(--bg-sunken);
+  block-size: var(--meter-track);
+  border-radius: var(--r-pill);
+  flex: 1;
+  min-inline-size: calc(var(--sp-6) * 3);
+  overflow: hidden;
+}
+
+/* NEVER chromatic. The bar is a content mark in the tertiary ink, the same
+   rung the runs chart takes — a hue here would be the shell spending an app's
+   colour on its own page. */
+.fill {
+  background: var(--text-faint);
+  block-size: 100%;
+  border-radius: var(--r-pill);
+  display: block;
+  inline-size: calc(var(--meter-share, 0) * 1%);
+}
+
+/* Zero records draws the hairline rung rather than nothing at all: an empty
+   track and a missing track look identical, and one of them is a bug. */
+.fill[data-empty="true"] {
+  background: var(--line-strong);
+  inline-size: 100%;
+}
+
+.count {
+  color: var(--text-soft);
+  direction: var(--t-mono-direction);
+  flex: none;
+  font: var(--t-mono);
+  font-variant-numeric: var(--t-mono-numeric);
+  unicode-bidi: var(--t-mono-bidi);
+}
+
+.when {
+  color: var(--text-faint);
+  direction: var(--t-mono-direction);
+  flex: none;
+  font: var(--t-mono);
+  font-variant-numeric: var(--t-mono-numeric);
+  inline-size: var(--meter-when);
+  text-align: end;
+  unicode-bidi: var(--t-mono-bidi);
+}
+
+.action {
+  flex: none;
+  white-space: nowrap;
+}
+
+/* "Nothing to browse" is a FACT about the row, so it is stated and not
+   offered. It holds the row's trailing slot in the annotation register — the
+   one register that is words rather than figures — so the column still lines
+   up without a button that cannot act. */
+.inert {
+  color: var(--text-faint);
+  flex: none;
+  font: var(--t-annot-label);
+  white-space: nowrap;
+}
+
+.caption {
+  border-block-start: 1px solid var(--line);
+  color: var(--text-faint);
+  direction: var(--t-mono-direction);
+  font: var(--t-mono);
+  font-variant-numeric: var(--t-mono-numeric);
+  margin: 0;
+  padding: var(--sp-2) var(--sp-3);
+  unicode-bidi: var(--t-mono-bidi);
+}

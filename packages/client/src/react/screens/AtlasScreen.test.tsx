@@ -280,6 +280,13 @@ describe("screens/AtlasScreen", () => {
   ];
   const rowsUnder = (el: HTMLElement, label: string) =>
     $$(el, `fieldset[aria-label="${label}"] .row`);
+  /** Open the relations drill-in, which is a row of "What it holds" now. */
+  const openRelations = async (el: HTMLElement): Promise<void> => {
+    const row = $$(el, ".row").find((r) =>
+      r.textContent?.includes("How the kinds relate")
+    );
+    await click([...(row?.querySelectorAll("button") ?? [])].at(-1));
+  };
   const click = async (node: Element | null | undefined): Promise<void> => {
     await act(async () =>
       node?.dispatchEvent(new MouseEvent("click", { bubbles: true }))
@@ -294,10 +301,13 @@ describe("screens/AtlasScreen", () => {
       // Every kind, never-written ones included — the count and the list agree.
       expect(rows).toHaveLength(3);
       expect(rows[0]?.textContent).toContain("Party");
-      expect(rows[0]?.textContent).toContain("Core"); // the pack, drawn at last
+      expect(rows[0]?.textContent).toContain("Core"); // the pack, in its cell
       expect(rows[0]?.textContent).toContain("214 records");
       expect(rows[0]?.textContent).toContain("1.9 MB");
-      expect(el.textContent).toContain("showing 3 of 3");
+      expect(el.textContent).toContain("3 of 3 kinds");
+      // The bar is a share of the LARGEST kind, so the fullest one fills it.
+      const fills = $$(el, ".fill");
+      expect(fills[0]?.style.getPropertyValue("--meter-share")).toBe("100");
     });
 
     it("draws a never-written kind as an inert ghost row rather than dropping it", async () => {
@@ -306,11 +316,10 @@ describe("screens/AtlasScreen", () => {
         r.textContent?.includes("Place")
       );
       expect(ghost?.textContent).toContain("Never written");
-      expect(ghost?.dataset.off).toBe("true");
-      const verb = ghost?.querySelector("button");
-      // The verb keeps its word and refuses: there is nothing to browse.
-      expect(verb?.textContent).toContain("Browse");
-      expect((verb as HTMLButtonElement | null)?.disabled).toBe(true);
+      // NO VERB THAT DOES NOTHING (v11). The trailing cell is a stated fact,
+      // never a button a member can press to be refused by.
+      expect(ghost?.querySelector("button")).toBeNull();
+      expect(ghost?.textContent).toContain("Nothing to browse");
     });
 
     it("stamps the census with when it was read, and reads it again on ask", async () => {
@@ -336,6 +345,10 @@ describe("screens/AtlasScreen", () => {
 
     it("names the relations a person authored and keeps the map reachable", async () => {
       const el = await mount(makeProps());
+      // The relations are a drill-in from a row of "What it holds" now, so
+      // the census is not two sections deep before it is read.
+      expect(el.textContent).toContain("How the kinds relate");
+      await openRelations(el);
       const rows = rowsUnder(el, "How they relate");
       expect(rows[0]?.textContent).toContain("People → Notes");
       expect(rows[0]?.textContent).toContain("“wrote”");
@@ -358,6 +371,52 @@ describe("screens/AtlasScreen", () => {
       );
       // The section head follows the kind that was asked for.
       expect(el.textContent).toContain("Device");
+    });
+  });
+
+  describe("merged into the Vault surface", () => {
+    it("draws its own section head, and publishes nothing to a second channel", async () => {
+      const reports: { count: string; records: number | null }[] = [];
+      const el = await mount(
+        makeProps({
+          embedded: true,
+          onReport: (report) => reports.push(report),
+        })
+      );
+      expect(el.textContent).toContain("What it holds");
+      expect(el.textContent).toContain("2 of 3 kinds written · 226 records");
+      // ONE PUBLISHER. Two channels behind one bar is two answers the bar can
+      // only draw one of; the half reports upward instead.
+      expect(readVitals("atlas")).toBeUndefined();
+      expect(reports.at(-1)?.count).toBe("2 kinds · 226 records · 2.9 MB");
+      // The custody line's first clause is this half's to supply.
+      expect(reports.at(-1)?.records).toBe(226);
+    });
+
+    it("keeps the head over a body that failed, and reports no record count", async () => {
+      const reports: { records: number | null; state: string }[] = [];
+      const el = await mount(
+        makeProps({
+          embedded: true,
+          loadStats: vi
+            .fn<AtlasScreenProps["loadStats"]>()
+            .mockRejectedValue(new Error("vault.open: permission denied")),
+          onReport: (report) => reports.push(report),
+        })
+      );
+      // The other two questions still have to be readable beneath: one section
+      // failing is not the surface failing.
+      expect(el.textContent).toContain("Cannot open the store");
+      expect(reports.at(-1)?.state).toBe("error");
+      expect(reports.at(-1)?.records).toBeNull();
+    });
+
+    it("hides its rows outright when the section is closed", async () => {
+      const el = await mount(
+        makeProps({ collapsed: true, embedded: true, onToggle: () => {} })
+      );
+      expect(el.textContent).toContain("What it holds");
+      expect(el.querySelectorAll(".row")).toHaveLength(0);
     });
   });
 
@@ -466,7 +525,10 @@ describe("screens/AtlasScreen", () => {
       // rather than pretending otherwise.
       await click(chips.find((c) => c.textContent === "Written today"));
       expect(rowsUnder(el, "Kinds")).toHaveLength(0);
-      expect(el.textContent).toContain("showing 0 of 12");
+      expect(el.textContent).toContain("0 of 12 kinds");
+      // The head keeps counting the CENSUS, not the filtered list: a head that
+      // followed the chips would tell a member the vault had shrunk.
+      expect(el.textContent).toContain("10 of 12 kinds written");
     });
 
     it("isolates the never-written kinds the count line names", async () => {

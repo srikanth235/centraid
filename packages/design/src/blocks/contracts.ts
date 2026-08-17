@@ -50,6 +50,11 @@ import type { IconName } from "../icons";
 //   off        Present but inert — paused, revoked, not yet enrolled. It
 //              recedes on the LEAF (disabled ink, disabled control), never as a
 //              container opacity.
+//   struck     This was REVOKED, and the record of it stays. The title is
+//              ruled through in disabled ink and the row keeps its height, its
+//              hairlines and its place in the list: a revoked holder that
+//              vanished would leave a member unable to see that it was ever
+//              there. Distinct from `off`, which is inert but still standing.
 //   mono       Render in the numeric register: tabular figures, isolated, ltr.
 //              For values that are counts, sizes, times or identifiers.
 //   routine    This empty state is one state of a usually-populated view, not a
@@ -91,6 +96,8 @@ export interface RowData {
   net?: boolean;
   dangerous?: boolean;
   off?: boolean;
+  /** Revoked, and still on the record — ruled through, never removed. */
+  struck?: boolean;
 }
 
 // ---------------------------------------------------------------------------

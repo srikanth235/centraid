@@ -20,20 +20,18 @@ import {
 import type { MockGateway, TestEnv } from "./fixtures";
 
 /**
- * §2.12–2.13 — Household (the "Devices" route), restored from the journey
- * deleted in #762 (#750 → #781 "sharing plane ownership").
+ * §2.12–2.13 — Household as the "Where it lives" half of Vault (v11).
  *
- * The original 2.12 could only assert the page's heading, because the e2e
- * mock gateway did not serve the roster/owner-scope reads the route renders
- * from — the deletion commit records exactly that. The mock now mirrors the
- * real handlers (`owners-routes.ts`, `devices-routes.ts`, `scopes-routes.ts`,
- * `vault-links-routes.ts`, `edge-answer-routes.ts`,
- * `commons-recovery-routes.ts`), so these journeys prove the sharing surface
- * itself: the roster renders people-first, the owner's scope registry is the
- * vault list, and another person's seat changes PRESENTATION (grouping,
- * attribution, state word) but never AUTHORIZATION (the verb set is
- * identical — visibility on the gateway's read is the authorization
- * boundary, and the client never withholds a verb by role).
+ * Atlas and Household both label "Vault" and land on one custody surface;
+ * Household is retired as a launcher destination. The mock still mirrors the
+ * real roster/owner-scope/sharing handlers (`owners-routes.ts`,
+ * `devices-routes.ts`, `scopes-routes.ts`, `vault-links-routes.ts`,
+ * `edge-answer-routes.ts`, `commons-recovery-routes.ts`), so these journeys
+ * prove the merged surface: the roster renders people-first, the owner's
+ * scope registry is the vault list, and another person's seat changes
+ * PRESENTATION (grouping, attribution, state word) but never AUTHORIZATION
+ * (the verb set is identical — visibility on the gateway's read is the
+ * authorization boundary, and the client never withholds a verb by role).
  */
 
 let env: TestEnv;
@@ -172,20 +170,25 @@ test("2.12 — Household renders the roster, the owner's scopes, and the sharing
   const { app, page } = await launchApp(env);
   try {
     await waitForHome(page);
-    await gotoNav(page, "Household");
+    await gotoNav(page, "Vault");
 
-    // The frame's app bar names the route (what the deleted 2.12 asserted) —
-    // and, now that the reads are served, counts what the roster resolved:
-    // 3 devices (the MacBook's two enrollments fold into one), 2 people,
-    // 1 pending decision.
-    // The route's current frame title is Copies; Devices is the body
-    // vocabulary retained in the roster sections below.
+    // The frame's app bar names the merged custody surface. Household is
+    // the third disclosure; on pointer it starts open. The old Copies
+    // count ("3 devices · 2 people · 1 pending") is not published when
+    // Household is embedded. The custody sentence prefixes the census
+    // record count when atlas answered, so pin the clauses — not a guessed
+    // full line — on the section meta next to the h2.
     await expect(
-      page.getByRole("heading", { name: "Copies", exact: true })
+      page.getByRole("heading", { name: "Vault", exact: true })
     ).toBeVisible();
-    await expect(
-      page.getByText("3 devices · 2 people · 1 pending")
-    ).toBeVisible();
+    const livesHead = page.getByRole("heading", {
+      name: "Where it lives",
+      exact: true,
+    });
+    await expect(livesHead).toBeVisible();
+    const livesMeta = livesHead.locator("xpath=..").locator('[class*="meta"]');
+    await expect(livesMeta).toContainText(/\d+ devices enrolled/u);
+    await expect(livesMeta).toContainText(/full copy/u);
 
     // People-first roster: your hardware, then everyone else's.
     await expect(
@@ -247,7 +250,10 @@ test("2.13 — another person's seat changes presentation, never authorization",
   const { app, page } = await launchApp(env);
   try {
     await waitForHome(page);
-    await gotoNav(page, "Household");
+    await gotoNav(page, "Vault");
+    await expect(
+      page.getByRole("heading", { name: "Where it lives", exact: true })
+    ).toBeVisible();
     await expect(
       page.getByRole("heading", { name: "Other people", exact: true })
     ).toBeVisible();

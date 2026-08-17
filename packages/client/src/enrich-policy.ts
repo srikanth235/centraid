@@ -174,6 +174,78 @@ export const ENRICH_CAPABILITY_LABELS: Readonly<Record<string, string>> = {
   transcript: "Video and audio transcripts",
 };
 
+/**
+ * The member-facing name of a capability, falling back to its registry id — a
+ * gateway that ships a capability this build has no word for still renders as
+ * something, rather than as a blank row.
+ */
+export function capabilityLabel(capability: string): string {
+  return ENRICH_CAPABILITY_LABELS[capability] ?? capability;
+}
+
+/**
+ * What each capability GETS YOU, in one line — the answer to "why would I leave
+ * this on", which the label alone does not give. Settings renders the label and
+ * this together, because a member deciding whether to run face recognition is
+ * deciding about finding photos of their kid, not about a capability id.
+ */
+export const ENRICH_CAPABILITY_BLURBS: Readonly<Record<string, string>> = {
+  "doc-entities":
+    "Picks out who and what a document is about, so it can be filed and found.",
+  "doc-filing": "Suggests where a new document belongs.",
+  "doc-text":
+    "Pulls the words out of PDFs and scans so the rest of this list can work on them.",
+  "embed-image":
+    "Find photos by describing them, instead of by filename or date.",
+  "embed-text": "Find documents by what they mean, not only by exact wording.",
+  faces:
+    "Groups photos of the same person, so everyone’s pictures come up at once.",
+  obligations:
+    "Spots renewal dates and deadlines so they can become reminders.",
+  ocr: "Makes the words inside a picture searchable — receipts, signs, whiteboards.",
+  transcript: "Writes out what is said in your videos and voice notes.",
+};
+
+/**
+ * A standing reassurance about ONE capability, carried INSIDE its description.
+ *
+ * Faces is the only entry and is not decoration: `DELEGATE_REFUSALS` in
+ * `packages/server/src/enrich/engine-profiles.ts` refuses a delegate engine for
+ * it outright, so face imagery cannot reach a provider by any setting. It is a
+ * separate literal from the blurb only so each stays one sentence; the row
+ * renders the two as one description, which is where a member reading the
+ * switch will meet it.
+ */
+export const ENRICH_CAPABILITY_NOTES: Readonly<Record<string, string>> = {
+  faces: "Named only by you, and never sent to a provider.",
+};
+
+/**
+ * Ordinal rank of an egress class, and whether one fits under a ceiling.
+ *
+ * A DISPLAY mirror of `EGRESS_RANK` / `egressWithinCeiling` in
+ * `packages/server/src/automation/fire/enrich-resolve.ts`, and deliberately not
+ * a second gate: the runtime refusal is that module's, and this one only lets
+ * Settings SAY that a row will be refused. Before this existed, choosing "On
+ * this device" for Documents silently stopped all five of them with nothing on
+ * screen admitting it — the worst kind of quiet, since the member reads the
+ * switch as on.
+ */
+const EGRESS_RANK: Readonly<Record<EnrichEgressCeiling, number>> = {
+  gateway: 2,
+  off: 0,
+  "on-device": 1,
+  provider: 3,
+};
+
+/** Whether work of this egress class runs at all under this ceiling. */
+export function egressWithinCeiling(
+  egress: EnrichEgressClass,
+  ceiling: EnrichEgressCeiling
+): boolean {
+  return EGRESS_RANK[egress] <= EGRESS_RANK[ceiling];
+}
+
 /** Where an engine's work happens, in the member's words. */
 export const ENRICH_EGRESS_WORDS: Readonly<Record<EnrichEgressClass, string>> =
   {
@@ -199,12 +271,14 @@ export const ENRICH_TRIGGER_WORDS: Readonly<Record<EnrichTrigger, string>> = {
   "on-view": "when you open an item",
 };
 
-/** The tier axis in the member's words — how far work may go by default. */
-export const ENRICH_TIER_WORDS: Readonly<Record<EnrichTier, string>> = {
-  device: "On this device",
-  gateway: "On your gateway",
-  off: "Off",
-};
+/*
+ * There are no member-facing words for the TIER axis any more. Settings stopped
+ * offering the per-domain ceiling as a control (v11: enrichment runs on the
+ * gateway, and where it runs is not a member's choice), and the one place the
+ * ceiling still reaches a member — a row it refuses — states it as a CEILING,
+ * in `ENRICH_CEILING_WORDS`. The tier enum itself stays: the vault still stores
+ * it and the gate still honours it.
+ */
 
 /** Which domain each capability's data shape belongs to. */
 export const ENRICH_CAPABILITY_DOMAIN: Readonly<Record<string, EnrichDomain>> =

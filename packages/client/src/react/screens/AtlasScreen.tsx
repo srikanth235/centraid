@@ -9,17 +9,20 @@ import type {
   AtlasPulsePayload,
 } from "../../gateway-client.js";
 import { SKELETON_NOTE } from "../../surface-copy.js";
+import type { OpsState } from "../shell/opsBar.js";
 import {
   clearRouteSignals,
   publishRouteSignals,
   publishRouteVerbs,
 } from "../shell/routeVitals.js";
+import type { RouteHealth } from "../shell/routeVitals.js";
 import { PageSkeleton } from "../shell/status.js";
 import { postStatus } from "../shell/statusChannel.js";
 import ChipsBlock from "../ui/ChipsBlock.js";
 import EmptyBlock from "../ui/EmptyBlock.js";
 import NoteBlock from "../ui/NoteBlock.js";
 import PanelBlock from "../ui/PanelBlock.js";
+import SectionBlock from "../ui/SectionBlock.js";
 import AtlasKindsSection from "./AtlasKindsSection.js";
 import AtlasRecordsSection from "./AtlasRecordsSection.js";
 import AtlasRelationsSection from "./AtlasRelationsSection.js";
@@ -27,6 +30,8 @@ import {
   censusStamp,
   countLine,
   healthDetail,
+  holdsMeta,
+  isCensusPayload,
   kindRowsFrom,
   kindWritten,
   NEVER_WRITTEN,
@@ -61,6 +66,31 @@ export interface AtlasScreenProps {
    * off rather than guessed at.
    */
   loadLastBackupAt?: () => Promise<string | null>;
+  /**
+   * Drawn as ONE SECTION of the merged Vault surface rather than as a page of
+   * its own (v11). Embedded, it draws no page frame, publishes nothing to the
+   * frame's two slots, and reports what it knows to the surface above it.
+   */
+  embedded?: boolean;
+  /** Embedded only: hand the surface what this half knows, once per change. */
+  onReport?: (report: AtlasReport) => void;
+  /** Embedded only: the section's disclosure, owned by the surface. */
+  collapsed?: boolean;
+  onToggle?: () => void;
+}
+
+/** What the "What it holds" half tells the merged surface about itself. */
+export interface AtlasReport {
+  state: OpsState;
+  /** The census count line — "9 kinds · 12,408 records · 2.1 GB". */
+  count: string;
+  /**
+   * Records the census counted, for the custody line's first clause. `null`
+   * while the census has not answered: the clause is then omitted rather than
+   * guessed, and one unrelated read failing does not fail the page.
+   */
+  records: number | null;
+  health: RouteHealth | null;
 }
 
 /** Kinds beyond this and the page is `full`: the chip row appears. */
@@ -112,6 +142,10 @@ export default function AtlasScreen({
   loadPulse,
   loadGraph,
   loadLastBackupAt,
+  embedded = false,
+  onReport,
+  collapsed = false,
+  onToggle,
 }: AtlasScreenProps): JSX.Element {
   const [stats, setStats] = useState<AtlasCensusPayload | null>(null);
   const [statsError, setStatsError] = useState<string | null>(null);
@@ -120,6 +154,7 @@ export default function AtlasScreen({
   const [lastBackupAt, setLastBackupAt] = useState<string | null>(null);
   const [chip, setChip] = useState<ChipId>("all");
   const [picked, setPicked] = useState<string | null>(null);
+  const [relationsOpen, setRelationsOpen] = useState(false);
   // When THIS PAGE last read the census. Not the payload's own `generatedAt`:
   // the gateway may serve a cached census, and the stamp is a promise about
   // when the page asked, which is the thing a Refresh verb changes.
@@ -132,10 +167,16 @@ export default function AtlasScreen({
   const loadCensus = useCallback(() => {
     void Promise.allSettled([loadStats(), loadPulse()]).then(([s, p]) => {
       if (!mountedRef.current) return;
-      if (s.status === "fulfilled") {
+      if (s.status === "fulfilled" && isCensusPayload(s.value)) {
         setStats(s.value);
         setStatsError(null);
         setCensusReadAt(new Date().toISOString());
+      } else if (s.status === "fulfilled") {
+        // A 200 that is not a census (no packs / no totals) is a load
+        // error. Treating it as success would throw in kindRowsFrom and
+        // take the merged Vault surface down with it.
+        setStats(null);
+        setStatsError("The host did not return a vault census.");
       } else
         setStatsError(
           s.reason instanceof Error ? s.reason.message : String(s.reason)
@@ -196,22 +237,48 @@ export default function AtlasScreen({
     written.find((k) => k.logical === picked) ?? written[0] ?? null;
 
   // ── The frame's two slots ────────────────────────────────────────────────
+  // Embedded, the surface above publishes ONE count line and ONE status line
+  // for the whole of Vault; a second publisher on a second channel would put
+  // two answers behind one bar.
+  const health = useMemo<RouteHealth | null>(
+    () =>
+      state === "ready" || state === "full"
+        ? {
+            detail: healthDetail(pulse, lastBackupAt),
+            label: "Everything is readable",
+          }
+        : null,
+    [lastBackupAt, pulse, state]
+  );
   useEffect(() => {
+    if (embedded) return;
     publishRouteSignals("atlas", {
       state,
       ...(stats ? { count: countLine(stats) } : {}),
-      ...(state === "ready" || state === "full"
-        ? {
-            health: {
-              detail: healthDetail(pulse, lastBackupAt),
-              label: "Everything is readable",
-            },
-          }
-        : {}),
+      ...(health ? { health } : {}),
     });
-  }, [state, stats, pulse, lastBackupAt]);
+  }, [embedded, health, state, stats]);
 
-  useEffect(() => () => clearRouteSignals("atlas"), []);
+  useEffect(() => {
+    if (embedded) return undefined;
+    return () => clearRouteSignals("atlas");
+  }, [embedded]);
+
+  const report = useMemo<AtlasReport>(
+    () => ({
+      count: stats ? countLine(stats) : "",
+      health,
+      records: stats ? (stats.totals?.rows ?? null) : null,
+      state,
+    }),
+    [health, state, stats]
+  );
+  // A BLOCK BODY, deliberately: an arrow that returned the callback's value
+  // would hand React whatever the caller's reporter happened to return as an
+  // effect destructor, and React would try to call it on unmount.
+  useEffect(() => {
+    onReport?.(report);
+  }, [onReport, report]);
 
   // "Export a kind" — the bar's one verb. It copies out what the page is
   // showing: every record of the browsed kind, as the vault stores it. Not a
@@ -248,73 +315,108 @@ export default function AtlasScreen({
   }, [selected]);
 
   useEffect(() => {
+    // Standalone, "Export a kind" is still the bar's quiet verb. Merged, the
+    // bar's two verbs are the surface's ("Pair a device" / "Recovery") and
+    // export is a ROW beside the census, where it keeps its subject.
+    if (embedded) return;
     publishRouteVerbs("atlas", { onSecondary: exportKind });
-  }, [exportKind]);
+  }, [embedded, exportKind]);
 
   // ── The five states ──────────────────────────────────────────────────────
-  if (state === "error")
-    return (
-      <div className={styles.page}>
-        <PanelBlock
-          action={{ label: "Try again", onClick: retry }}
-          body="The host could not open the vault — usually a permissions problem on this machine."
-          eyebrow="Vault"
-          title="Cannot open the store"
-          tone="net"
-          wide
+  // A state that is the WHOLE page standalone is the section's BODY when
+  // merged: the head, its census sentence and its disclosure stay drawn, so a
+  // member reading "Where it lives" beneath is never told the surface failed
+  // because one of its three questions did.
+  const frame = (body: JSX.Element): JSX.Element =>
+    embedded ? (
+      <>
+        <SectionBlock
+          collapsed={collapsed}
+          label="What it holds"
+          meta={stats ? holdsMeta(stats) : "Reading the census"}
+          {...(onToggle ? { onToggle } : {})}
         />
-      </div>
+        {collapsed ? null : body}
+      </>
+    ) : (
+      <div className={styles.page}>{body}</div>
+    );
+
+  if (state === "error")
+    return frame(
+      <PanelBlock
+        action={{ label: "Try again", onClick: retry }}
+        body="The host could not open the vault — usually a permissions problem on this machine."
+        eyebrow="What it holds"
+        title="Cannot open the store"
+        tone="net"
+        wide
+      />
     );
 
   if (state === "loading")
-    return (
-      <div className={styles.page}>
+    return frame(
+      <>
         <PageSkeleton label="Reading your vault’s census" rows={6} />
         <NoteBlock>{SKELETON_NOTE}</NoteBlock>
-      </div>
+      </>
     );
 
   if (state === "empty")
-    return (
-      <div className={styles.page}>
-        <EmptyBlock body={ATLAS_EMPTY_BODY} routine title={ATLAS_EMPTY_TITLE} />
-      </div>
+    return frame(
+      <EmptyBlock body={ATLAS_EMPTY_BODY} routine title={ATLAS_EMPTY_TITLE} />
     );
 
-  return (
-    <div className={styles.page}>
-      {state === "full" ? (
-        <ChipsBlock
-          ariaLabel="Filter kinds"
-          chips={CHIPS.map((c) => ({ ...c, on: c.id === chip }))}
-          onPick={(id) => setChip(id as ChipId)}
-        />
-      ) : null}
-
+  const holds = (
+    <>
       <AtlasKindsSection
+        chips={
+          state === "full" ? (
+            <ChipsBlock
+              ariaLabel="Filter kinds"
+              chips={CHIPS.map((c) => ({ ...c, on: c.id === chip }))}
+              onPick={(id) => setChip(id as ChipId)}
+            />
+          ) : undefined
+        }
+        collapsed={embedded ? collapsed : false}
         kinds={shown}
+        meta={stats ? holdsMeta(stats) : ""}
         onBrowse={setPicked}
+        onExport={exportKind}
         onRefresh={loadCensus}
+        onRelations={() => setRelationsOpen((open) => !open)}
+        {...(embedded && onToggle ? { onToggle } : {})}
+        relations={
+          <AtlasRelationsSection
+            graph={graph}
+            onBrowse={setPicked}
+            fetchSampleRows={(logical) =>
+              browseRows({ limit: 3, table: logical }).then((r) => r.rows)
+            }
+          />
+        }
+        relationsOpen={relationsOpen}
         stamp={censusStamp(censusReadAt)}
         totalKinds={stats?.totals.kinds ?? kinds.length}
       />
 
-      <AtlasRelationsSection
-        graph={graph}
-        onBrowse={setPicked}
-        fetchSampleRows={(logical) =>
-          browseRows({ limit: 3, table: logical }).then((r) => r.rows)
-        }
-      />
-
-      {selected ? (
+      {/* The table browser is part of "What it holds", so it closes with it:
+          a section that hid its list and left a 500-row table under the closed
+          head would not have closed anything. */}
+      {(embedded && collapsed) || !selected ? null : (
         <AtlasRecordsSection
           key={selected.logical}
           label={selected.label}
           logical={selected.logical}
           records={selected.records}
         />
-      ) : null}
-    </div>
+      )}
+    </>
   );
+
+  // The section head is `AtlasKindsSection`'s own in the ready states — it
+  // carries the Refresh verb beside the toggle, and two heads over one list is
+  // two headings for one thing.
+  return embedded ? holds : <div className={styles.page}>{holds}</div>;
 }

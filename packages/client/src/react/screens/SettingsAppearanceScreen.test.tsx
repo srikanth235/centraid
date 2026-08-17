@@ -23,9 +23,7 @@ function makeProps(
 ): SettingsAppearanceBridgeProps {
   return {
     themeMode: "dark",
-    cardVariant: "outlined",
     onSetThemeMode: vi.fn<SettingsAppearanceBridgeProps["onSetThemeMode"]>(),
-    onSetCards: vi.fn<SettingsAppearanceBridgeProps["onSetCards"]>(),
     ...over,
   };
 }
@@ -75,19 +73,20 @@ describe("screens/SettingsAppearanceScreen", () => {
       expect(el.querySelectorAll(".themeCard")).toHaveLength(0);
     });
 
-    it("is the theme and nothing else — no accent or tile controls", () => {
+    it("is the theme and nothing else — no accent, tile or card controls", () => {
       const el = mount(makeProps());
-      // Accent swatches and app-tile treatment were cut from the page; their
-      // prefs still apply, there is just no control for choosing them.
+      // Accent swatches, app-tile treatment and the card surface were each cut
+      // from the page; their prefs still apply, there is just no control for
+      // choosing them. The sidebar switch did NOT come with them — the chrome
+      // already has a toggle for it.
       expect(el.querySelectorAll(".swatch")).toHaveLength(0);
       expect(el.querySelectorAll(".previewTile")).toHaveLength(0);
       expect(el.querySelector('.seg[aria-label="Treatment"]')).toBeNull();
-      // Cards are the remaining layout control.
-      // The sidebar switch did NOT come with them — the chrome already has a
-      // toggle for it.
+      expect(el.querySelector('.seg[aria-label="Cards"]')).toBeNull();
+      expect(el.textContent).not.toContain("Surface");
       expect(
         [...el.querySelectorAll(".groupLabel")].map((n) => n.textContent)
-      ).toStrictEqual(["Theme", "Cards", "Automations"]);
+      ).toStrictEqual(["Theme", "Automations"]);
       expect(el.querySelector('[aria-label="Show sidebar"]')).toBeNull();
     });
 
@@ -103,19 +102,72 @@ describe("screens/SettingsAppearanceScreen", () => {
       );
     });
 
-    it("carries the card control and the cron setting", async () => {
+    it("states that Match system is a standing mode, only while it is chosen", () => {
       const props = makeProps();
       const el = mount(props);
+      expect(el.textContent).not.toContain("Follows the system as it changes");
+      const system = segment(el, "Appearance").get("system");
+      if (!system) throw new Error("no system position");
+      click(system);
+      expect(el.textContent).toContain("Follows the system as it changes");
+    });
+
+    it("returns the time zone to the gateway's value and names it when refused", async () => {
+      const saved = vi.mocked(
+        (await import("../shell/routes/settingsCronTimezoneData.js"))
+          .saveDefaultCronTimeZone
+      );
+      const loaded = vi.mocked(
+        (await import("../shell/routes/settingsCronTimezoneData.js"))
+          .loadDefaultCronTimeZone
+      );
+      loaded.mockResolvedValueOnce("Europe/London");
+      saved.mockResolvedValueOnce(
+        "Not a zone the gateway knows. Still using Europe/London."
+      );
+      const el = mount(makeProps());
       await act(async () => {});
-      const group = (n: number): HTMLButtonElement[] => [
-        ...el.querySelectorAll(".seg")[n]!.querySelectorAll("button"),
-      ];
-      expect(el.querySelectorAll(".seg")).toHaveLength(2);
-      click(group(1).find((b) => b.textContent === "elevated")!);
-      expect(props.onSetCards).toHaveBeenCalledWith("elevated");
+      const field = el.querySelector<HTMLInputElement>(
+        '[data-testid="settings-default-cron-timezone"]'
+      );
+      if (!field) throw new Error("no time zone field");
+      const setValue = Object.getOwnPropertyDescriptor(
+        globalThis.HTMLInputElement.prototype,
+        "value"
+      )?.set;
+      await act(async () => {
+        setValue?.call(field, "Not/A_Zone");
+        field.dispatchEvent(new Event("input", { bubbles: true }));
+        field.dispatchEvent(new Event("focusout", { bubbles: true }));
+      });
+      await act(async () => {});
+      expect(field.value).toBe("Europe/London");
+      expect(el.textContent).toContain("Still using Europe/London.");
+    });
+
+    it("leaves the theme as the page's only segmented control", async () => {
+      const el = mount(makeProps());
+      await act(async () => {});
+      expect(el.querySelectorAll(".seg")).toHaveLength(1);
       expect(
         el.querySelector('[data-testid="settings-default-cron-timezone"]')
       ).toBeTruthy();
+    });
+
+    // The cron default is a squatter on this page and a gateway-wide AUTOMATION
+    // default. On a gateway that runs no automations it is a control whose
+    // effect can never be observed, so it is not offered at all — including its
+    // suggestion list, which would otherwise be markup nothing can reach.
+    it("withholds the cron default when the gateway runs no automations", async () => {
+      const el = mount(makeProps({ automations: false }));
+      await act(async () => {});
+      expect(
+        el.querySelector('[data-testid="settings-default-cron-timezone"]')
+      ).toBeNull();
+      expect(el.querySelector("#centraid-cron-timezones")).toBeNull();
+      expect(
+        [...el.querySelectorAll(".groupLabel")].map((n) => n.textContent)
+      ).toStrictEqual(["Theme"]);
     });
 
     it("offers no surface-temperature control at all", () => {

@@ -7,6 +7,7 @@ import {
   vaultAtlasStats,
 } from "../../../gateway-client.js";
 import AtlasScreen from "../../screens/AtlasScreen.js";
+import type { AtlasReport } from "../../screens/AtlasScreen.js";
 import PageScroll from "../PageScroll.js";
 
 // The Data route (issue #441 Part B, revamped for v9 in #765). Thin: it hands
@@ -26,15 +27,31 @@ async function lastBackupAt(): Promise<string | null> {
   return stamps.length === 0 ? null : (stamps.sort().at(-1) ?? null);
 }
 
+export interface AtlasRouteProps {
+  /** Drawn as the "What it holds" section of the merged Vault surface. */
+  embedded?: boolean;
+  /** Embedded only — the section's disclosure and its report upward. */
+  collapsed?: boolean;
+  onToggle?: () => void;
+  onReport?: (report: AtlasReport) => void;
+}
+
 export default function AtlasRoute({
   embedded = false,
-}: { embedded?: boolean } = {}): JSX.Element {
+  collapsed,
+  onToggle,
+  onReport,
+}: AtlasRouteProps = {}): JSX.Element {
   const screen = (
     <AtlasScreen
       loadGraph={vaultAtlasGraph}
       loadLastBackupAt={lastBackupAt}
       loadPulse={vaultAtlasPulse}
       loadStats={vaultAtlasStats}
+      {...(embedded ? { embedded: true as const } : {})}
+      {...(collapsed === undefined ? {} : { collapsed })}
+      {...(onToggle ? { onToggle } : {})}
+      {...(onReport ? { onReport } : {})}
     />
   );
   return embedded ? screen : <PageScroll>{screen}</PageScroll>;

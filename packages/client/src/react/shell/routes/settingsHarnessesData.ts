@@ -407,14 +407,33 @@ export async function loadHarnesses(opts?: {
   );
 }
 
-/** Switch the DEFAULT harness — the harness every unpinned subsystem inherits. */
-export async function activateHarness(kind: HarnessKind): Promise<boolean> {
+/**
+ * ONE writer for every pick on this page, and the reason it exists is honesty:
+ * these were `void saveUserPrefs(...)` calls, so a gateway that refused a model
+ * or an effort left the pick sitting on screen as though it had been kept.
+ *
+ * The resolved value is the GATEWAY'S OWN TEXT when it refused and `null` when
+ * it wrote — not a boolean. Settings restores the previous pick and puts that
+ * text on the status line, so what is displayed is what the gateway holds.
+ */
+export type PrefWriteResult = string | null;
+
+async function writePrefs(
+  patch: Record<string, string | string[] | null>
+): Promise<PrefWriteResult> {
   try {
-    await saveUserPrefs({ "harness.kind": kind });
-    return true;
-  } catch {
-    return false;
+    await saveUserPrefs(patch);
+    return null;
+  } catch (error: unknown) {
+    return error instanceof Error ? error.message : String(error);
   }
+}
+
+/** Switch the DEFAULT harness — the harness every unpinned subsystem inherits. */
+export async function activateHarness(
+  kind: HarnessKind
+): Promise<PrefWriteResult> {
+  return writePrefs({ "harness.kind": kind });
 }
 
 /**
@@ -425,55 +444,53 @@ export async function activateHarness(kind: HarnessKind): Promise<boolean> {
 export async function setSubsystemHarness(
   subsystem: ModelSubsystem,
   kind: HarnessKind | ""
-): Promise<boolean> {
-  try {
-    await saveUserPrefs({ [harnessPrefKey(subsystem)]: kind || null });
-    return true;
-  } catch {
-    return false;
-  }
+): Promise<PrefWriteResult> {
+  return writePrefs({ [harnessPrefKey(subsystem)]: kind || null });
 }
 
-export function setSubsystemHarnessLadder(
+export async function setSubsystemHarnessLadder(
   subsystem: ModelSubsystem,
   kinds: HarnessKind[]
-): void {
-  void saveUserPrefs({
+): Promise<PrefWriteResult> {
+  return writePrefs({
     [harnessLadderPrefKey(subsystem)]: kinds.length > 0 ? kinds : null,
   });
 }
 
 /** Persist this harness's default model ('' clears the key, falling through to the harness default). */
-export function setHarnessModel(kind: HarnessKind, modelId: string): void {
-  void saveUserPrefs({ [modelPrefKey(kind, "default")]: modelId || null });
+export async function setHarnessModel(
+  kind: HarnessKind,
+  modelId: string
+): Promise<PrefWriteResult> {
+  return writePrefs({ [modelPrefKey(kind, "default")]: modelId || null });
 }
 
 /** Persist this harness's per-subsystem model override ('' clears the key, falling through to the default model). */
-export function setSubsystemModel(
+export async function setSubsystemModel(
   kind: HarnessKind,
   subsystem: ModelSubsystem,
   modelId: string
-): void {
-  void saveUserPrefs({ [modelPrefKey(kind, subsystem)]: modelId || null });
+): Promise<PrefWriteResult> {
+  return writePrefs({ [modelPrefKey(kind, subsystem)]: modelId || null });
 }
 
-export function setHarnessConfigPin(
+export async function setHarnessConfigPin(
   kind: HarnessKind,
   category: string,
   value: string
-): void {
-  void saveUserPrefs({
+): Promise<PrefWriteResult> {
+  return writePrefs({
     [configPrefKey(kind, "default", category)]: value || null,
   });
 }
 
-export function setSubsystemConfigPin(
+export async function setSubsystemConfigPin(
   kind: HarnessKind,
   subsystem: ModelSubsystem,
   category: string,
   value: string
-): void {
-  void saveUserPrefs({
+): Promise<PrefWriteResult> {
+  return writePrefs({
     [configPrefKey(kind, subsystem, category)]: value || null,
   });
 }

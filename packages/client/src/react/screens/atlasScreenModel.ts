@@ -66,6 +66,19 @@ export function dayLabel(day: string, now: number = Date.now()): string {
  * are drawn `off`: present, reachable, and inert, since there is nothing to
  * browse. {@link kindWritten} is the one predicate that decides which is which.
  */
+/** Is this a census the derivations can read — packs listed, totals present?
+ *  A 200 body that is not a census (the e2e mock's `{}` absorb, an old
+ *  gateway) must not become `stats`; that is a load error, not an empty vault. */
+export function isCensusPayload(value: unknown): value is AtlasCensusPayload {
+  if (value === null || typeof value !== "object") return false;
+  const rec = value as Record<string, unknown>;
+  return (
+    Array.isArray(rec.packs) &&
+    rec.totals !== null &&
+    typeof rec.totals === "object"
+  );
+}
+
 export function kindRowsFrom(
   stats: AtlasCensusPayload,
   pulse: AtlasPulsePayload | null,
@@ -74,8 +87,8 @@ export function kindRowsFrom(
   const today = todayKey(now);
   const byType = new Map((pulse?.series ?? []).map((s) => [s.entityType, s]));
   const rows: KindRow[] = [];
-  for (const pack of stats.packs) {
-    for (const table of pack.tables) {
+  for (const pack of stats.packs ?? []) {
+    for (const table of pack.tables ?? []) {
       const series = byType.get(table.logical);
       const days = series?.days ?? [];
       const lastDay = days.reduce(
@@ -107,30 +120,6 @@ export function kindWritten(kind: KindRow): boolean {
   return kind.records > 0;
 }
 
-/**
- * "Photos · 1,908 records · 1.2 GB · 12 written today" — each clause only when
- * the census/pulse carries it.
- *
- * The pack leads. It is the one thing that says WHOSE kind this is, the census
- * has always carried it, and a list of forty kinds with no owner beside them
- * is forty rows a member has to recognise by name alone.
- *
- * A never-written kind says so instead of claiming "0 records", which reads as
- * a count that has moved rather than one that never has.
- */
-export function kindSubLine(kind: KindRow): string {
-  const parts = [kind.packLabel];
-  if (!kindWritten(kind)) {
-    parts.push(NEVER_WRITTEN);
-    return parts.join(" · ");
-  }
-  parts.push(`${kind.records.toLocaleString()} records`);
-  if (kind.bytes !== null) parts.push(formatBytes(kind.bytes));
-  if (kind.writtenToday !== null && kind.writtenToday > 0)
-    parts.push(`${kind.writtenToday.toLocaleString()} written today`);
-  return parts.join(" · ");
-}
-
 /** The words for a kind the schema defines and nothing has ever written. One
  *  string, used by the sub line and by the chip that filters for them. */
 export const NEVER_WRITTEN = "Never written";
@@ -153,15 +142,82 @@ export function kindMeta(
   return dayLabel(kind.lastWriteDay, now);
 }
 
+/**
+ * The "What it holds" head: "25 of 31 kinds written · 41,208 records".
+ *
+ * Both halves are the census's own totals rather than the rendered list's:
+ * the list is filtered by the chips, and a head that counted what is on screen
+ * would tell a member the vault shrank when they pressed "Written today".
+ */
+export function holdsMeta(stats: AtlasCensusPayload): string {
+  const totals = stats.totals;
+  if (!totals) return "";
+  const parts: string[] = [];
+  if (
+    typeof totals.populatedKinds === "number" &&
+    typeof totals.kinds === "number"
+  ) {
+    parts.push(
+      `${totals.populatedKinds.toLocaleString()} of ${totals.kinds.toLocaleString()} kinds written`
+    );
+  }
+  if (typeof totals.rows === "number") {
+    parts.push(`${totals.rows.toLocaleString()} records`);
+  }
+  return parts.join(" · ");
+}
+
+/**
+ * The meter bar's length: this kind's share of the LARGEST kind, 0–100.
+ *
+ * Share of the largest, never of the total. A vault's records are so unevenly
+ * distributed that shares of the total round nine kinds out of ten to a bar
+ * one pixel wide — a chart that says "everything is nothing" and answers no
+ * question. Against the largest, the list reads as an ordering.
+ */
+export function meterShare(kind: KindRow, largest: number): number {
+  if (largest <= 0 || kind.records <= 0) return 0;
+  return Math.min(100, Math.round((kind.records / largest) * 100));
+}
+
+/** The biggest record count in a list of kinds — the meter's 100%. */
+export function largestRecords(kinds: readonly KindRow[]): number {
+  return kinds.reduce((most, kind) => Math.max(most, kind.records), 0);
+}
+
+/**
+ * The meter row's numeric cell: `1,908 records · 1.2 GB · 12 written today`,
+ * each clause only when the census/pulse carries it — or {@link
+ * NEVER_WRITTEN} for a kind nothing has ever written. "0 records" reads as a
+ * count that has moved rather than one that never has, and the never-written
+ * words are the SAME string the chip that isolates those rows uses.
+ */
+export function kindCount(kind: KindRow): string {
+  if (!kindWritten(kind)) return NEVER_WRITTEN;
+  const parts = [`${kind.records.toLocaleString()} records`];
+  if (kind.bytes !== null) parts.push(formatBytes(kind.bytes));
+  // The clause the "Written today" chip filters on. Without it the chip sorts
+  // rows by a fact none of them state, which is a filter a member cannot check.
+  if (kind.writtenToday !== null && kind.writtenToday > 0)
+    parts.push(`${kind.writtenToday.toLocaleString()} written today`);
+  return parts.join(" · ");
+}
+
 /** The app bar's count line: "9 kinds · 12,408 records · 2.1 GB". */
 export function countLine(stats: AtlasCensusPayload): string {
-  if (stats.totals.populatedKinds === 0) return "No kinds yet";
-  const size = formatBytes(stats.totals.bytes ?? stats.fileBytesTotal);
-  return [
-    `${stats.totals.populatedKinds.toLocaleString()} kinds`,
-    `${stats.totals.rows.toLocaleString()} records`,
-    size,
-  ].join(" · ");
+  const totals = stats.totals;
+  if (!totals) return "";
+  if (totals.populatedKinds === 0) return "No kinds yet";
+  const parts: string[] = [];
+  if (typeof totals.populatedKinds === "number") {
+    parts.push(`${totals.populatedKinds.toLocaleString()} kinds`);
+  }
+  if (typeof totals.rows === "number") {
+    parts.push(`${totals.rows.toLocaleString()} records`);
+  }
+  const sizeBytes = totals.bytes ?? stats.fileBytesTotal;
+  if (typeof sizeBytes === "number") parts.push(formatBytes(sizeBytes));
+  return parts.join(" · ");
 }
 
 /** The status line's second half. Both clauses are optional and neither is
@@ -206,14 +262,15 @@ export function relationRowsFrom(graph: AtlasGraphPayload | null): {
   authored: boolean;
 } {
   if (!graph) return { authored: true, rows: [] };
+  const nodes = graph.nodes ?? [];
   const nameOf = new Map<string, string>();
-  for (const node of graph.nodes) {
+  for (const node of nodes) {
     const name = node.friendly ?? node.label;
     nameOf.set(node.logical, name);
     nameOf.set(node.physical, name);
   }
   const logicalOf = new Map<string, string>();
-  for (const node of graph.nodes) {
+  for (const node of nodes) {
     logicalOf.set(node.logical, node.logical);
     logicalOf.set(node.physical, node.logical);
   }
@@ -222,7 +279,7 @@ export function relationRowsFrom(graph: AtlasGraphPayload | null): {
     string,
     { from: string; to: string; labels: Set<string>; count: number }
   >();
-  for (const link of graph.authoredLinks) {
+  for (const link of graph.authoredLinks ?? []) {
     const key = `${link.fromType}→${link.toType}`;
     const entry = pairs.get(key) ?? {
       count: 0,
@@ -250,7 +307,7 @@ export function relationRowsFrom(graph: AtlasGraphPayload | null): {
     return { authored: true, rows };
   }
 
-  const rows = graph.fkEdges
+  const rows = (graph.fkEdges ?? [])
     .filter((e) => !e.ghost && !e.selfRef && e.fill > 0)
     .sort((a, b) => b.fill - a.fill)
     .slice(0, 8)

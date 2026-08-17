@@ -15,17 +15,29 @@ export async function loadDefaultCronTimeZone(): Promise<string> {
 
 /**
  * Persist the gateway default. Empty string clears the pref (host-local fallback).
- * Returns an error message when the name is non-empty but not a known IANA zone.
+ *
+ * Resolves `null` when the zone was written, and otherwise the sentence the
+ * field shows. THE ERROR NAMES THE LAST GOOD VALUE: "not a known IANA
+ * timezone" told a member what they had just typed, which they could already
+ * see, and left the more useful fact — which zone automations are still firing
+ * in — unstated. A gateway refusal is reported the same way, in its own words.
  */
 export async function saveDefaultCronTimeZone(
-  value: string
+  value: string,
+  lastGood = ""
 ): Promise<string | null> {
+  const standing = lastGood || "the host clock";
   const trimmed = value.trim();
   if (trimmed && !isValidIanaTimeZone(trimmed)) {
-    return `"${trimmed}" is not a known IANA timezone`;
+    return `Not a zone the gateway knows. Still using ${standing}.`;
   }
-  await saveUserPrefs({
-    [CRON_DEFAULT_TIMEZONE_PREF]: trimmed || null,
-  });
+  try {
+    await saveUserPrefs({
+      [CRON_DEFAULT_TIMEZONE_PREF]: trimmed || null,
+    });
+  } catch (error: unknown) {
+    const text = error instanceof Error ? error.message : String(error);
+    return `${text}. Still using ${standing}.`;
+  }
   return null;
 }

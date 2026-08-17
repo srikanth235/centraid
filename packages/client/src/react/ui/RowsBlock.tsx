@@ -42,6 +42,17 @@ export interface RowsBlockProps {
   /** Names the list for assistive tech when it is not already introduced by a
    *  `SectionBlock` heading above it. */
   ariaLabel?: string;
+  /**
+   * This list is one of several stacked under a single head — the store and
+   * its holders, the capped table and the verb that raises the cap. It takes a
+   * bottom margin so the groups read as separate statements rather than one
+   * list with a seam in it.
+   *
+   * It lives on the block rather than on each caller's page CSS because the
+   * gap between two statements is the same gap everywhere it happens; three
+   * screens spelling it out is three chances to spell it differently.
+   */
+  stacked?: boolean;
   className?: string;
 }
 
@@ -49,6 +60,7 @@ export interface RowsBlockProps {
 export default function RowsBlock({
   rows,
   ariaLabel,
+  stacked,
   className,
 }: RowsBlockProps): JSX.Element {
   // A NAMED list is a real group, and `<fieldset>` is the native element
@@ -57,13 +69,18 @@ export default function RowsBlock({
   // container — a nameless group is a stop with nothing to announce.
   const Frame = ariaLabel ? "fieldset" : "div";
   return (
-    <Frame aria-label={ariaLabel} className={cx(styles.rows, className)}>
+    <Frame
+      aria-label={ariaLabel}
+      className={cx(styles.rows, className)}
+      data-stacked={stacked ? "true" : undefined}
+    >
       {rows.map((row) => (
         <div className={styles.rowShell} key={row.id}>
           <div
             className={styles.row}
             data-net={row.net ? "true" : undefined}
             data-off={row.off ? "true" : undefined}
+            data-struck={row.struck ? "true" : undefined}
           >
             <div className={styles.text}>
               <span className={styles.title}>{row.title}</span>

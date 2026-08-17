@@ -1,17 +1,15 @@
+import { ENRICH_CAPABILITY_DOMAIN } from "../../../enrich-policy.js";
 import type {
-  EnrichDomain,
-  EnrichPolicy,
   EnrichScopeType,
-  EnrichTier,
+  ResolvedEnrichPolicy,
 } from "../../../enrich-policy.js";
 import {
   deleteEnrichRule,
-  getEnrichPolicy,
+  getEffectiveEnrichPolicy,
   getEnrichRules,
   listEnrichEgressConsent,
   listEnrichProfiles,
   saveUserPrefs,
-  setEnrichPolicy,
   setEnrichRule,
 } from "../../../gateway-client.js";
 import type {
@@ -40,24 +38,74 @@ function profilePrefsKey(id: string): string {
   return `enrich.profile.${id}`;
 }
 
-/** Everything the page renders, read in one pass. */
+/**
+ * Everything the page renders, read in one pass.
+ *
+ * The per-domain TIER is no longer read here. Enrichment runs on the gateway,
+ * so where it runs is not a member's choice and the ceiling control is gone
+ * (v11 handoff, "Deliberate relocations"). The ceiling still exists in the
+ * vault and still refuses work, which is why the page keeps reading the
+ * gateway's own resolver per capability: a stored ceiling that stops a row is
+ * stated at that row rather than left as silence.
+ *
+ * The model and level a delegate engine runs on ARE the Agents page's pins —
+ * same `model.<kind>.default` / `config.<kind>.default.thought_level` keys —
+ * so they are read from the same snapshot rather than kept a second time.
+ */
 export async function loadEnrichmentSettings(): Promise<EnrichmentSettingsData> {
-  const [policy, rules, profiles, consent, harnesses] = await Promise.all([
-    getEnrichPolicy(),
+  const [rules, profiles, consent, harnesses] = await Promise.all([
     getEnrichRules(),
     listEnrichProfiles(),
     listEnrichEgressConsent(),
     loadHarnesses(),
   ]);
-  return { policy, rules, profiles, consent, cards: harnesses.cards };
+  return {
+    rules,
+    profiles,
+    consent,
+    cards: harnesses.cards,
+    modelByHarness: harnesses.savedModelByKind,
+    effortByHarness: Object.fromEntries(
+      Object.entries(harnesses.defaultConfigPinsByKind).map(
+        ([kind, pins]) => [kind, pins["thought_level"] ?? ""] as const
+      )
+    ),
+    effective: await readEffective(profiles.filter((one) => one.builtIn)),
+  };
 }
 
-/** Write one domain's tier; resolves with the tiers the vault holds after. */
-export async function setDomainTier(
-  domain: EnrichDomain,
-  tier: EnrichTier
-): Promise<EnrichPolicy> {
-  return setEnrichPolicy({ [domain]: tier });
+/**
+ * What the gateway's resolver folds for each capability, ASKED PER CAPABILITY
+ * because that is the shape the one resolver answers in.
+ *
+ * The screen needs "is this on" and "how far may it go", and both are folds of
+ * the stored ceiling and the rule cascade. Computing them from the `rules`
+ * this module already holds would be a second fold — exactly the parallel
+ * policy #807 is arranged to prevent — so it costs one request per capability
+ * instead. The same trade is already made twice for the same stated reason:
+ * `appSettingsData.ts` asks this resolver per capability for the app-settings
+ * enrichment panel, and the phone's `lib/enrichment.ts` does it too.
+ *
+ * A capability whose domain this build does not know is left out of the map
+ * rather than guessed at; the screen renders it without a switch and says so.
+ */
+async function readEffective(
+  builtIns: { capability: string }[]
+): Promise<Record<string, ResolvedEnrichPolicy | null>> {
+  const answers = await Promise.all(
+    builtIns.map(async ({ capability }) => {
+      const domain = ENRICH_CAPABILITY_DOMAIN[capability];
+      if (!domain) return null;
+      const answer = await getEffectiveEnrichPolicy({ capability, domain });
+      return [capability, answer.effective] as const;
+    })
+  );
+  return Object.fromEntries(
+    answers.filter(
+      (one): one is readonly [string, ResolvedEnrichPolicy | null] =>
+        one !== null
+    )
+  );
 }
 
 /**
@@ -79,10 +127,14 @@ export async function saveEngineProfile(
   });
 }
 
-/** Drop one member profile. Built-ins have no key, so none can be deleted. */
-export async function deleteEngineProfile(id: string): Promise<void> {
-  await saveUserPrefs({ [profilePrefsKey(id)]: null });
-}
+/*
+ * There is deliberately NO profile delete. A profile's id is now derived from
+ * (capability, agent) by the row that picks it, so re-picking rewrites one key
+ * instead of accumulating engines, and the set is bounded and invisible —
+ * there is nothing for a member to tidy. Deleting one would also be the only
+ * act on this page that can strand a rule at a deeper scope still pinning it,
+ * which would silently move that scope back to the built-in engine.
+ */
 
 /** Write one scope's rule for one capability. */
 export async function writeEnrichRule(rule: EnrichRuleInput): Promise<void> {

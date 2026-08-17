@@ -21,3 +21,22 @@ export const ATLAS_EMPTY_BODY = "Kinds appear here as apps write records.";
  */
 export const ATLAS_KINDS_NOTE =
   "A kind is a shape of record an app writes; sizes include every version kept.";
+
+/** The "Export a kind" row's one line. An export is a file this device writes
+ *  — not a share, and not a thing that leaves anything behind on the gateway. */
+export const ATLAS_EXPORT_ROW =
+  "A file this device writes, in pages of records.";
+
+/**
+ * "Who can reach it" — the Vault surface's second question (v11).
+ *
+ * The section is three POINTERS and no copies, and this is the sentence that
+ * says why. It is a consent disclosure, which is one of the three places
+ * DESIGN.md § Copy allows full sentences.
+ */
+export const ATLAS_REACH_NOTE = "Consent is answered where it is asked.";
+
+/** The half of the same disclosure that names the one place this page cannot
+ *  point at, kept as its own line so neither sentence has to carry both. */
+export const ATLAS_REACH_SUB =
+  "A grant an app holds over its own data lives in that app’s consent pane.";

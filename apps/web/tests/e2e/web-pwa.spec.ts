@@ -101,19 +101,22 @@ test("boots as a PWA and establishes a cookie control session", async ({
 
   const manifest = await page.request.get("/manifest.webmanifest");
   expect(manifest.ok()).toBeTruthy();
-  await expect(manifest.json()).resolves.toMatchObject({
-    share_target: {
-      action: "/?capture=shared",
-      method: "GET",
-      params: { text: "text", title: "title", url: "url" },
-    },
-    shortcuts: expect.arrayContaining([
-      expect.objectContaining({
-        name: "Quick capture",
-        url: "/?capture=shortcut",
-      }),
-    ]),
-  });
+  // Quick capture is retired on this seat — the assistant is the one place a
+  // stray thought goes, so the manifest declares neither a share target nor a
+  // capture shortcut and no `?capture=` URL opens anything.
+  const manifestBody = (await manifest.json()) as {
+    share_target?: unknown;
+    shortcuts?: Array<{ name?: string; url?: string }>;
+  };
+  expect(manifestBody.share_target).toBeUndefined();
+  expect(
+    (manifestBody.shortcuts ?? []).map((shortcut) => shortcut.name)
+  ).not.toContain("Quick capture");
+  expect(
+    (manifestBody.shortcuts ?? []).some((shortcut) =>
+      shortcut.url?.includes("capture")
+    )
+  ).toBe(false);
   await expect
     .poll(() =>
       page.evaluate(() => navigator.serviceWorker.controller !== null)

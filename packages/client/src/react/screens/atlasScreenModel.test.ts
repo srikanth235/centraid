@@ -14,10 +14,14 @@ import {
   gridColumnsFrom,
   gridRowsFrom,
   healthDetail,
+  holdsMeta,
+  isCensusPayload,
+  kindCount,
   kindMeta,
   kindRowsFrom,
-  kindSubLine,
   kindWritten,
+  largestRecords,
+  meterShare,
   relationRowsFrom,
   sortLabel,
   tableCaption,
@@ -120,14 +124,17 @@ describe("screens/atlasScreenModel", () => {
       expect(rows.map(kindWritten)).toStrictEqual([true, false, true]);
     });
 
-    it("says what a kind holds, whose it is, and today's writes when there are some", () => {
+    it("says what a kind holds, and today's writes when there are some", () => {
       const [party, place, segment] = kindRowsFrom(stats, pulse, NOW);
-      expect(kindSubLine(party!)).toBe(
-        "Core · 214 records · 1.9 MB · 12 written today"
-      );
-      expect(kindSubLine(segment!)).toBe("Journal · 9,000 records · 400 B");
-      // Never written says so rather than claiming a count that has moved.
-      expect(kindSubLine(place!)).toBe("Core · Never written");
+      // The pack has its own cell on the meter row, so it is no longer a
+      // prefix on the count: one fact, one place.
+      expect(kindCount(party!)).toBe("214 records · 1.9 MB · 12 written today");
+      expect(kindCount(segment!)).toBe("9,000 records · 400 B");
+      // Never written says so rather than claiming a count that has moved,
+      // in the same words the chip that isolates those rows uses.
+      expect(kindCount(place!)).toBe("Never written");
+      expect(party!.packLabel).toBe("Core");
+      expect(segment!.packLabel).toBe("Journal");
     });
 
     it("reports the last write at the granularity the pulse actually has", () => {
@@ -141,7 +148,28 @@ describe("screens/atlasScreenModel", () => {
     it("says nothing about writes at all when the pulse never landed", () => {
       const [party] = kindRowsFrom(stats, null, NOW);
       expect(kindMeta(party!, NOW)).toBeUndefined();
-      expect(kindSubLine(party!)).toBe("Core · 214 records · 1.9 MB");
+      expect(kindCount(party!)).toBe("214 records · 1.9 MB");
+    });
+
+    it("heads the section with what is written of what is defined", () => {
+      expect(holdsMeta(stats)).toBe("2 of 3 kinds written · 9,214 records");
+    });
+
+    it("scales the meter against the largest kind, never the total", () => {
+      const rows = kindRowsFrom(stats, pulse, NOW);
+      const largest = largestRecords(rows);
+      expect(largest).toBe(9000);
+      const [party, place, segment] = rows;
+      // Share of the largest: the fullest kind fills its track, and the one
+      // beside it is read against that rather than against a total that would
+      // round both to nothing.
+      expect(meterShare(segment!, largest)).toBe(100);
+      expect(meterShare(party!, largest)).toBe(2);
+      // A kind nothing has written draws no bar at all.
+      expect(meterShare(place!, largest)).toBe(0);
+      // And a census with nothing in it never divides by zero.
+      expect(meterShare(party!, 0)).toBe(0);
+      expect(largestRecords([])).toBe(0);
     });
 
     it("counts the vault in the app bar's one line", () => {
@@ -155,6 +183,33 @@ describe("screens/atlasScreenModel", () => {
           totals: { rows: 0, bytes: 0, kinds: 3, populatedKinds: 0 },
         })
       ).toBe("No kinds yet");
+    });
+
+    it("does not throw when packs or totals are missing", () => {
+      const empty = {} as AtlasCensusPayload;
+      expect(() => kindRowsFrom(empty, null, NOW)).not.toThrow();
+      expect(kindRowsFrom(empty, null, NOW)).toStrictEqual([]);
+      expect(() => holdsMeta(empty)).not.toThrow();
+      expect(holdsMeta(empty)).toBe("");
+      expect(() => countLine(empty)).not.toThrow();
+      expect(countLine(empty)).toBe("");
+      expect(
+        kindRowsFrom(
+          {
+            ...stats,
+            packs: [{ ...stats.packs[0]!, tables: undefined as never }],
+          },
+          null,
+          NOW
+        )
+      ).toStrictEqual([]);
+    });
+
+    it("rejects a 200 body that is not a census", () => {
+      expect(isCensusPayload({})).toBe(false);
+      expect(isCensusPayload({ packs: [] })).toBe(false);
+      expect(isCensusPayload({ totals: {} })).toBe(false);
+      expect(isCensusPayload(stats)).toBe(true);
     });
 
     it("names yesterday and dates anything older", () => {
@@ -270,6 +325,11 @@ describe("screens/atlasScreenModel", () => {
 
     it("has nothing to say before the graph lands", () => {
       expect(relationRowsFrom(null).rows).toStrictEqual([]);
+    });
+
+    it("does not throw when a fulfilled graph is an empty object", () => {
+      expect(() => relationRowsFrom({} as AtlasGraphPayload)).not.toThrow();
+      expect(relationRowsFrom({} as AtlasGraphPayload).rows).toStrictEqual([]);
     });
   });
 

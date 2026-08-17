@@ -33,8 +33,9 @@ test.beforeEach(async () => {
   env = await makeEnv();
   gateway = await startMockGateway();
   // Enough policy state for the page to render every group it owns: two
-  // built-in engines, one member engine that reaches a provider, one scoped
-  // rule, and one answered egress question.
+  // built-in engines (one delegate-capable, one structurally not), one member
+  // engine that reaches a provider, one scoped rule, and one answered egress
+  // question.
   gateway.state.enrichProfiles = [
     {
       id: "built-in",
@@ -43,6 +44,7 @@ test.beforeEach(async () => {
       engine: { kind: "built-in" },
       egress: "gateway",
       builtIn: true,
+      delegateCapable: true,
     },
     {
       id: "built-in",
@@ -51,16 +53,37 @@ test.beforeEach(async () => {
       engine: { kind: "built-in" },
       egress: "on-device",
       builtIn: true,
+      delegateCapable: false,
     },
     {
-      id: "sharp-ocr",
-      label: "Sharp OCR",
+      id: "ocr-codex",
+      label: "Codex",
       capability: "ocr",
       engine: { kind: "delegate", harness: "codex" },
       egress: "provider",
       builtIn: false,
+      delegateCapable: true,
     },
   ];
+  // The page asks the ONE resolver per capability rather than folding the
+  // cascade itself (issue #814), so the mock has to answer for each built-in
+  // the profiles above declare.
+  gateway.state.enrichEffective = {
+    faces: {
+      capability: "faces",
+      enabled: true,
+      profileId: "built-in",
+      trigger: "on-ingest",
+      egressCeiling: "on-device",
+    },
+    ocr: {
+      capability: "ocr",
+      enabled: true,
+      profileId: "built-in",
+      trigger: "on-view",
+      egressCeiling: "on-device",
+    },
+  };
   gateway.state.enrichRules = [
     {
       scope: { type: "domain", ref: "photos" },
@@ -81,6 +104,22 @@ test.beforeEach(async () => {
       receiptId: null,
     },
   ];
+  // 12.9 opens the engine pill and picks an agent chip. Cards come from
+  // GET /_harnesses/status; the mock default is an empty list.
+  gateway.state.harnessesStatus = {
+    harnesses: [
+      {
+        kind: "codex",
+        label: "Codex",
+        available: true,
+        version: "test",
+        models: [
+          { id: "tier-fast", name: "Fast", default: true, tier: "fast" },
+        ],
+      },
+    ],
+    models: [],
+  };
   await seedRemoteGateway(env, gateway);
 });
 
@@ -89,7 +128,7 @@ test.afterEach(async () => {
   await cleanupEnv(env);
 });
 
-test("12.9 — Settings → Enrichment states the policy and writes the tier the vault answers with", async () => {
+test("12.9 — Settings → Enrichment states what runs, and says when a stored ceiling stops it", async () => {
   const { app, page } = await launchApp(env);
   try {
     await waitForHome(page);
@@ -97,22 +136,33 @@ test("12.9 — Settings → Enrichment states the policy and writes the tier the
     await page.getByTestId("settings-page").waitFor({ state: "visible" });
     await page
       .getByTestId("settings-nav")
-      .getByRole("button", { name: "Enrichment", exact: true })
+      .getByRole("button", { name: /Enrichment/u })
       .click();
 
     const pane = page.getByTestId("settings-page");
-    // The tier the gateway holds is what renders — `device` was seeded.
-    const photos = pane.getByRole("tablist", { name: "Enrichment for Photos" });
-    await expect(photos.getByRole("tab", { selected: true })).toHaveText(
-      "On this device"
-    );
-    // Every group the page owns is present, with the gateway's own words.
-    await expect(pane).toContainText("Sharp OCR");
-    await expect(pane).toContainText("sent to a provider");
+    // WHERE ENRICHMENT RUNS IS NOT A CHOICE (v11): the per-domain ceiling
+    // control is gone, and the group head counts its own rows instead.
+    await expect(
+      pane.getByRole("tablist", { name: "Enrichment for Photos" })
+    ).toHaveCount(0);
+    await expect(pane).toContainText("2 of 2 on");
+    // A capability is a ROW: its plain name, what it gets you, and a switch.
     await expect(pane).toContainText("Text in photos");
-    await expect(pane).toContainText("declined");
+    await expect(pane).toContainText("receipts, signs, whiteboards");
+    await expect(pane).toContainText("Faces");
+    // Faces is structurally undelegatable, so it is offered no engine at all
+    // and carries its reassurance inside its own description.
+    await expect(pane).toContainText(
+      "Named only by you, and never sent to a provider."
+    );
+    // The ceiling lost its control, not its teeth: photos is stored at
+    // `on-device` while the bundled OCR engine is gateway-lane, so the row
+    // states the gate rather than reading as on and never running.
+    await expect(pane).toContainText("Stopped by a stored ceiling");
+    // The answered egress question reads as a sentence about the member.
+    await expect(pane).toContainText("You declined");
 
-    // The UI-receipt evidence for issue #807 (docs/… check:ui-receipt): the
+    // The UI-receipt evidence for issue #814 (check:ui-receipt): the
     // Enrichment page as a first run finds it.
     const evidenceDir = path.resolve(
       import.meta.dirname,
@@ -120,26 +170,32 @@ test("12.9 — Settings → Enrichment states the policy and writes the tier the
     );
     await mkdir(evidenceDir, { recursive: true });
     await page.screenshot({
-      path: path.join(evidenceDir, "issue-807-enrichment-settings.png"),
+      path: path.join(evidenceDir, "issue-814-enrichment-capabilities.png"),
       fullPage: true,
     });
 
-    // Raising the tier writes the vault's route, and the page renders what
-    // came back rather than what was clicked.
-    await photos.getByRole("tab", { name: "On your gateway" }).click();
+    // The engine is collapsed behind one pill; pressing it reveals the chips,
+    // and picking an agent creates the engine profile behind the row.
+    await pane
+      .getByRole("button", { name: "Built in", exact: true })
+      .first()
+      .click();
+    await expect(
+      pane.getByRole("button", { name: "Codex", exact: true })
+    ).toBeVisible();
+
+    // Flipping a switch writes ONE vault-scope rule through the owner route.
+    await pane.getByLabel("Faces", { exact: true }).click();
     await expect
       .poll(() =>
         gateway.calls.some(
           (call) =>
             call.method === "PUT" &&
-            call.pathname === "/centraid/_vault/enrich" &&
-            /"photos"\s*:\s*"gateway"/u.test(call.body ?? "")
+            call.pathname === "/centraid/_vault/enrich/rules" &&
+            /"capability"\s*:\s*"faces"/u.test(call.body ?? "")
         )
       )
       .toBe(true);
-    await expect(photos.getByRole("tab", { selected: true })).toHaveText(
-      "On your gateway"
-    );
   } finally {
     await closeApp(app);
   }

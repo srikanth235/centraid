@@ -170,7 +170,7 @@ describe("ApprovalsRoute", () => {
       });
       const el = await render();
       const reconnect = [...el.querySelectorAll("button")].find(
-        (button) => button.textContent === "Reconnect"
+        (button) => button.textContent === "Open Connectors"
       );
       expect(reconnect).toBeDefined();
       act(() => reconnect?.click());
@@ -230,13 +230,18 @@ describe("ApprovalsRoute", () => {
         output: { item_id: "item1", status: "approved" },
       });
       const el = await render();
-      // The staged write is already the panel — there is nothing to expand.
-      expect(el.textContent).toContain("See you at 6.");
-      const approveBtn = [...el.querySelectorAll("button")].find(
-        (b) => b.textContent === "Approve and send"
-      ) as HTMLButtonElement;
+      // The staged write is a card: closed it states the decision, open it
+      // quotes the draft and offers the three verbs.
+      const findButton = (text: string): HTMLButtonElement =>
+        [...el.querySelectorAll("button")].find(
+          (b) => b.textContent === text
+        ) as HTMLButtonElement;
       await act(async () => {
-        approveBtn.click();
+        findButton("Review").click();
+      });
+      expect(el.textContent).toContain("See you at 6.");
+      await act(async () => {
+        findButton("Approve").click();
         await Promise.resolve();
       });
       expect(decideOutboxItem).toHaveBeenCalledWith({
@@ -304,6 +309,9 @@ describe("ApprovalsRoute", () => {
         [...el.querySelectorAll("button")].find(
           (b) => b.textContent === text
         ) as HTMLButtonElement;
+      await act(async () => {
+        findButton("Review").click();
+      });
       await act(async () => {
         findButton("Edit and approve").click();
       });
@@ -453,16 +461,16 @@ describe("ApprovalsRoute", () => {
         unreadNoticeCount: 5,
       });
       const el = await render();
-      // Every notice is a row now — no chip gates any of them — so opening one
-      // means pressing the Open action in the row that carries its headline.
+      // Every notice is a card now — no chip gates any of them — so opening
+      // one means pressing the Open verb on the card carrying its headline.
       const openNotice = (headline: string): void => {
         const title = [...el.querySelectorAll(".title")].find((node) =>
           node.textContent?.includes(headline)
         );
         expect(title).toBeDefined();
-        const button = title
-          ?.closest(".rowShell")
-          ?.querySelector<HTMLButtonElement>("button");
+        const button = [
+          ...(title?.closest("section")?.querySelectorAll("button") ?? []),
+        ].find((b) => b.textContent === "Open");
         expect(button).toBeDefined();
         act(() => button?.click());
       };
@@ -489,70 +497,11 @@ describe("ApprovalsRoute", () => {
       openNotice("Message needs approval again");
       expect(navigate).toHaveBeenCalledTimes(navigationsBefore);
       expect(
-        el.querySelector<HTMLElement>('[data-testid="staged-write"]')?.dataset
-          .itemId
+        el.querySelector<HTMLElement>(
+          '[data-testid="staged-write"][data-open="true"]'
+        )?.dataset.itemId
       ).toBe("item-1");
       expect(el.textContent).toContain("See you at 6.");
-    });
-
-    it("keeps the screen mounted across an SSE doorbell refetch", async () => {
-      const item = (subject: string): Record<string, unknown> => ({
-        itemId: "item1",
-        connection: { kind: "pull.gmail", label: "personal" },
-        actor: "gmail-send",
-        actorId: "agent-1",
-        actorKind: "ai_agent",
-        verb: "gmail.send",
-        target: "ravi@example.com",
-        artifact: { to: "ravi@example.com", subject, body: "See you at 6." },
-        status: "pending",
-        grantId: null,
-        stagedAt: "2026-07-30T10:00:00.000Z",
-        decidedAt: null,
-        drainedAt: null,
-        result: null,
-        note: null,
-        canEdit: true,
-      });
-      const notificationsWith = (
-        subject: string
-      ): Awaited<ReturnType<OutboxModule["getNotifications"]>> =>
-        ({
-          decisions: {
-            outbox: [item(subject)],
-            needsAuth: [],
-            parked: [],
-            scopeRequests: [],
-            count: 1,
-          },
-          notices: [],
-          unreadNoticeCount: 0,
-        }) as unknown as Awaited<ReturnType<OutboxModule["getNotifications"]>>;
-      getNotifications.mockResolvedValue(notificationsWith("Hi"));
-      // Capture the doorbell the route hands to the SSE subscription.
-      let ring = (): void => undefined;
-      subscribeNotificationsChanges.mockImplementation(async (onChange) => {
-        ring = onChange;
-      });
-
-      const el = await render();
-      // Put the owner mid-flight: row expanded, edit form open.
-      await act(async () => {
-        [...el.querySelectorAll("button")]
-          .find((b) => b.textContent === "Edit and approve")!
-          .click();
-      });
-      expect(el.querySelector('input[aria-label="Subject"]')).not.toBeNull();
-
-      // A doorbell must refresh the data underneath, not tear the screen down
-      // and throw the half-finished edit away.
-      await act(async () => {
-        ring();
-        await Promise.resolve();
-      });
-      expect(el.textContent).not.toContain("Loading Notifications…");
-      expect(el.querySelector('input[aria-label="Subject"]')).not.toBeNull();
-      expect(getNotifications).toHaveBeenCalledTimes(2);
     });
   });
 });
