@@ -63,11 +63,15 @@ export const SHARE_PLACE_TITLE = "Send a copy — how much of the place?";
  *
  * A refusal, not a downgrade: the alternative to "we could not remove it" is
  * sending it anyway, which is the one outcome this whole module exists to make
- * impossible. Names the way out, because a member who genuinely wants to send
- * a video of somewhere they were is allowed to.
+ * impossible.
+ *
+ * One sentence, and it does not spell out the way through (U4, DESIGN.md
+ * § Copy). A member who genuinely wants to send a video of somewhere they were
+ * is still allowed to — the exact rung is on the sheet the next attempt opens,
+ * which is a control rather than a sentence about a control.
  */
 export const SHARE_PLACE_NOT_REMOVABLE =
-  "The location could not be taken out of this file, so nothing was sent. Send it with the exact location if you meant to.";
+  "The location could not be taken out of this file, so nothing was sent.";
 
 /** Where the photograph was taken, as the caller already holds it. */
 export interface SharePlaceInput {
