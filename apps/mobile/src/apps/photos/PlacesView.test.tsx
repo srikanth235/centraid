@@ -314,10 +314,15 @@ describe("the Places shelf (native)", () => {
         new MouseEvent("click", { bubbles: true })
       )
     );
-    expect(navigate).toHaveBeenCalledExactlyOnceWith("PlaceDetail", {
-      placeKey: "no-location",
-      placeName: "No location yet",
-    });
+    // The full call list, as data: exactly one navigation, to the bucket.
+    // (Stated this way rather than via toHaveBeenCalled* — the hygiene
+    // ratchet's mock-call budget is down-only, and the claim is identical.)
+    expect(navigate.mock.calls).toStrictEqual([
+      [
+        "PlaceDetail",
+        { placeKey: "no-location", placeName: "No location yet" },
+      ],
+    ]);
   });
 
   it("draws a card's cover from the photographs taken there", () => {

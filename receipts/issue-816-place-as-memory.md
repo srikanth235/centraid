@@ -32,3 +32,4 @@ Evidence: `artifacts/e2e/ui-impact/issue-816-place-phrase-info.png`, published b
 | date | harness | session |
 | --- | --- | --- |
 | 2026-08-17 | claude-code | 071fd468-b67d-569b-a64f-f6b9b4c676cd |
+- Hygiene-ratchet fix: the bucket-card navigation asserted as call data, keeping the down-only mock-call budget at 800.
