@@ -20,13 +20,13 @@ import { useShellCapabilities } from "../useCapabilities.js";
 import { loadSelfProfile, saveSelfProfile } from "./profileData.js";
 import {
   loadActiveVaultData,
+  loadSettingsStamp,
   loadThisDeviceData,
   setOfflineCopy,
 } from "./settingsAccountData.js";
 import {
   loadEnrichmentSettings,
   saveEngineProfile,
-  setDomainTier,
   writeEnrichRule,
   dropEnrichRule,
 } from "./settingsEnrichmentData.js";
@@ -65,6 +65,11 @@ interface PageDef {
   label: string;
   section: string;
   icon: IconName;
+  /**
+   * Three words, carried by the NAV ROW rather than the page head. A rail
+   * entry that names only its page makes a member open pages to find where a
+   * setting lives; three words under the label answer that from the rail.
+   */
   subtitle: string;
 }
 
@@ -94,31 +99,28 @@ const PAGES: readonly PageDef[] = [
     label: "You",
     section: "Account",
     icon: "User",
-    subtitle:
-      "Your name and color, as the rest of your household sees them — and the theme, which only you see.",
+    subtitle: "Name, colour, theme",
   },
   {
     id: "vault",
     label: "Vault",
     section: "Account",
     icon: "Database",
-    subtitle:
-      "This vault’s name, icon, color, and description, plus where it lives.",
+    subtitle: "Name, colour, copies",
   },
   {
     id: "harnesses",
     label: "Agents",
     section: "Models",
     icon: "Cpu",
-    subtitle:
-      "The coding tools the gateway can drive, and the model each one uses.",
+    subtitle: "Harnesses and lanes",
   },
   {
     id: "enrichment",
     label: "Enrichment",
     section: "Models",
     icon: "Sparkle",
-    subtitle: "What Centraid reads for you, with what, and where that runs.",
+    subtitle: "What is read, and where",
   },
 ];
 // Workspace, Import and Storage provider were hidden pages for several
@@ -256,6 +258,10 @@ export default function SettingsRoute({
   // as its own new baseline, so a refetch here would only unmount the form at
   // the moment it is confirming the save.
   const selfProfile = useAsyncData(loadSelfProfile, []);
+  // The foot stamp. Read once per mount: neither the running build's version
+  // nor the gateway's host changes while the modal is open, and a gateway
+  // switch closes the shell's routes underneath it anyway.
+  const stamp = useAsyncData(loadSettingsStamp, []);
   const saveProfile = async (input: {
     name: string;
     avatarColor: string;
@@ -378,13 +384,20 @@ export default function SettingsRoute({
                     onClick={() => setPage(p.id)}
                   >
                     <Icon name={p.icon} size={15} />
-                    <span>{p.label}</span>
+                    <span className={styles.settingsNavText}>
+                      <span className={styles.settingsNavLabel}>{p.label}</span>
+                      <span className={styles.settingsNavSub}>
+                        {p.subtitle}
+                      </span>
+                    </span>
                   </button>
                 ))}
               </Fragment>
             ))}
             <div className={styles.settingsNavFoot}>
-              <span className={styles.settingsNavVer}>v0.5.2</span>
+              <span className={styles.settingsNavVer}>
+                {stamp.status === "ready" ? stamp.data : "Centraid"}
+              </span>
             </div>
           </aside>
 
@@ -401,9 +414,6 @@ export default function SettingsRoute({
                   </span>
                 ) : null}
               </div>
-              {def ? (
-                <p className={styles.settingsPageSub}>{def.subtitle}</p>
-              ) : null}
             </header>
 
             <div className={styles.settingsPage} data-testid="settings-page">
@@ -441,12 +451,19 @@ export default function SettingsRoute({
                   setSubsystemConfigPin={setSubsystemConfigPin}
                   setSubsystemHarness={setSubsystemHarness}
                   setSubsystemHarnessLadder={setSubsystemHarnessLadder}
+                  showToast={showToast}
                 />
               ) : page === "enrichment" ? (
                 <SettingsEnrichmentScreen
                   load={loadEnrichmentSettings}
-                  setTier={setDomainTier}
                   saveProfile={saveEngineProfile}
+                  // The engine's model and level ARE the Agents page's pins:
+                  // same prefs keys, one answer, written from whichever page
+                  // the member happens to be reading.
+                  setEngineModel={setHarnessModel}
+                  setEngineEffort={(harness, value) =>
+                    setHarnessConfigPin(harness, "thought_level", value)
+                  }
                   setRule={writeEnrichRule}
                   deleteRule={dropEnrichRule}
                   showToast={showToast}

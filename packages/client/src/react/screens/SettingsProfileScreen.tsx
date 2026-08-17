@@ -118,9 +118,11 @@ export default function SettingsProfileScreen({
             >
               {trimmed || "Unnamed"}
             </span>
+            {/* What the roster CURRENTLY holds, not what the field holds: a
+                draft commits on blur, so the two differ while it is being
+                typed and that difference is the thing worth stating. */}
             <span className={styles.identityWhere}>
-              This is how you appear to everyone in this household — on the
-              roster, and beside anything you or your devices wrote.
+              Household sees “{baseline.name}”
             </span>
           </span>
         </div>

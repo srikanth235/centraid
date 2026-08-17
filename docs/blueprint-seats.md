@@ -119,6 +119,8 @@ No blueprint app, native seat, or automation imports a provider SDK, calls a mod
 
 **The policy cascade (#807).** That per-domain tier is the vault-default layer of a scoped cascade — vault → domain → collection → item (`enrich_policy_rule`). Each level states, per capability, up to three things: `enabled`, the engine `profile`, and the `trigger` (`on-ingest | on-view | on-demand`); `null` is inherit, and the fold is most-specific-wins **per field**. The tier's `off | device | gateway` migrate into that vault layer as **egress-class ceilings** (`off | on-device | gateway`) that no deeper level can raise — a rule may pick a cheaper engine, never one that reaches further than the vault allows, and the gate refuses a profile whose computed egress exceeds the ceiling. There is still ONE gate: `decideEnrichmentGate` grew the resolver (`automation/fire/enrich-resolve.ts`, re-exported through `enrich-gate.ts`), and no reader of `enrich_policy_rule` answers "may this run" anywhere else. An unreadable policy is a refusal, never a default.
 
+**The ceiling is stored, not chosen (#815).** Settings → Enrichment offers no per-domain tier control: enrichment work runs on the gateway, and where it runs is not a member's choice, so it is not surfaced as one. Everything above still holds server-side — the vault layer still carries a ceiling and the gate still refuses under it — so a capability a stored ceiling stops states that at its own row, in ceiling words (`ENRICH_CEILING_WORDS`). A member's remaining enrichment choices are per capability: on or off, and for the two delegate-capable capabilities, which engine reads it.
+
 ## Worked example: search is not one behaviour
 
 Photos search resolves differently per seat, and the copy has to follow:

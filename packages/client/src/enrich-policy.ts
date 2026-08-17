@@ -207,16 +207,17 @@ export const ENRICH_CAPABILITY_BLURBS: Readonly<Record<string, string>> = {
 };
 
 /**
- * A standing reassurance about ONE capability, shown on its row.
+ * A standing reassurance about ONE capability, carried INSIDE its description.
  *
  * Faces is the only entry and is not decoration: `DELEGATE_REFUSALS` in
  * `packages/server/src/enrich/engine-profiles.ts` refuses a delegate engine for
- * it outright, so face imagery cannot reach a provider by any setting. The
- * member is owed that sentence at the switch, not in a footnote under a form.
+ * it outright, so face imagery cannot reach a provider by any setting. It is a
+ * separate literal from the blurb only so each stays one sentence; the row
+ * renders the two as one description, which is where a member reading the
+ * switch will meet it.
  */
 export const ENRICH_CAPABILITY_NOTES: Readonly<Record<string, string>> = {
-  faces:
-    "Face imagery never leaves for a provider — no agent engine can be chosen for it.",
+  faces: "Named only by you, and never sent to a provider.",
 };
 
 /**
@@ -270,12 +271,14 @@ export const ENRICH_TRIGGER_WORDS: Readonly<Record<EnrichTrigger, string>> = {
   "on-view": "when you open an item",
 };
 
-/** The tier axis in the member's words — how far work may go by default. */
-export const ENRICH_TIER_WORDS: Readonly<Record<EnrichTier, string>> = {
-  device: "On this device",
-  gateway: "On your gateway",
-  off: "Off",
-};
+/*
+ * There are no member-facing words for the TIER axis any more. Settings stopped
+ * offering the per-domain ceiling as a control (v11: enrichment runs on the
+ * gateway, and where it runs is not a member's choice), and the one place the
+ * ceiling still reaches a member — a row it refuses — states it as a CEILING,
+ * in `ENRICH_CEILING_WORDS`. The tier enum itself stays: the vault still stores
+ * it and the gate still honours it.
+ */
 
 /** Which domain each capability's data shape belongs to. */
 export const ENRICH_CAPABILITY_DOMAIN: Readonly<Record<string, EnrichDomain>> =

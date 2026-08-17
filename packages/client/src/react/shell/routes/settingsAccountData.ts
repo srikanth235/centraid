@@ -52,6 +52,38 @@ export async function loadThisDeviceData(): Promise<ThisDeviceData> {
 }
 
 /**
+ * The modal's foot stamp: what this build is, and which gateway it is talking
+ * to. `Centraid <version> · <host>`.
+ *
+ * ONLY WHAT THE BUILD CAN TRUTHFULLY PRODUCE. The version is the running
+ * build's own (`getChangelog().currentVersion`, which the host reads from the
+ * app itself — the release list is irrelevant here); the host is the authority
+ * of the gateway's base URL. A part this client cannot answer for is left out
+ * rather than guessed, so the stamp is never a hard-coded number pretending to
+ * be a fact — which is exactly what the literal `v0.5.2` it replaces was.
+ */
+export async function loadSettingsStamp(): Promise<string> {
+  const version = await window.CentraidApi.getChangelog?.()
+    .then((changelog) => changelog.currentVersion.replace(/^v/iu, ""))
+    .catch(() => undefined);
+  const host = await window.CentraidApi.getGatewayAuth()
+    .then((auth) => gatewayHost(auth.baseUrl))
+    .catch(() => undefined);
+  return [version ? `Centraid ${version}` : "Centraid", host]
+    .filter((part): part is string => Boolean(part))
+    .join(" · ");
+}
+
+/** The gateway's host, as the member would name it. `''` when unparseable. */
+function gatewayHost(baseUrl: string): string {
+  try {
+    return new URL(baseUrl).host;
+  } catch {
+    return "";
+  }
+}
+
+/**
  * Turn this device's offline copy on or off.
  *
  * The pairing/onboarding flow stopped asking (it is ON by default), so this is

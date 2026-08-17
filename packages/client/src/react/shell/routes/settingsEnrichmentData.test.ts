@@ -60,14 +60,12 @@ import {
   dropEnrichRule,
   loadEnrichmentSettings,
   saveEngineProfile,
-  setDomainTier,
   writeEnrichRule,
 } from "./settingsEnrichmentData.js";
 
 describe("settingsEnrichmentData", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    getEnrichPolicy.mockResolvedValue({ photos: "device", docs: "off" });
     getEnrichRules.mockResolvedValue([]);
     listEnrichProfiles.mockResolvedValue([]);
     listEnrichEgressConsent.mockResolvedValue([]);
@@ -99,15 +97,62 @@ describe("settingsEnrichmentData", () => {
 
   it("reads the whole page in one pass, agent cards included", async () => {
     const data = await loadEnrichmentSettings();
-    expect(data.policy).toStrictEqual({ photos: "device", docs: "off" });
     expect(data.cards.map((card) => card.kind)).toStrictEqual(["codex"]);
   });
 
-  it("writes one domain's tier and returns what the vault answered", async () => {
-    setEnrichPolicy.mockResolvedValue({ photos: "off", docs: "off" });
-    const after = await setDomainTier("photos", "off");
-    expect(setEnrichPolicy.mock.lastCall?.[0]).toStrictEqual({ photos: "off" });
-    expect(after.photos).toBe("off");
+  it("never reads the per-domain ceiling — it is no longer a control here", async () => {
+    // v11 removed the ceiling control (enrichment runs on the gateway), so the
+    // page stops reading the tier store and reads the gateway's own resolver,
+    // which is what still reports a ceiling that refuses a row.
+    listEnrichProfiles.mockResolvedValue([
+      {
+        id: "built-in",
+        label: "Built-in (ocr)",
+        capability: "ocr",
+        engine: { kind: "built-in" },
+        egress: "gateway",
+        builtIn: true,
+        delegateCapable: true,
+      },
+    ]);
+    await loadEnrichmentSettings();
+    expect(getEnrichPolicy).not.toHaveBeenCalled();
+    expect(getEffectiveEnrichPolicy).toHaveBeenCalledWith({
+      capability: "ocr",
+      domain: "photos",
+    });
+  });
+
+  it("carries the Agents page's own model and level pins rather than a second copy", async () => {
+    getUserPrefs.mockResolvedValue({
+      "model.codex.default": "gpt-5",
+      "config.codex.default.thought_level": "high",
+    });
+    getHarnessesStatus.mockResolvedValue({
+      harnesses: [
+        {
+          kind: "codex",
+          label: "Codex",
+          available: true,
+          modelsStatus: "ready",
+          models: [{ id: "gpt-5", name: "GPT-5", default: true }],
+          capabilities: {
+            reachable: true,
+            configOptions: [
+              {
+                id: "thought",
+                category: "thought_level",
+                type: "select",
+                values: [{ value: "high", name: "High" }],
+              },
+            ],
+          },
+        },
+      ],
+    } as Awaited<ReturnType<typeof TypeImport_1e7rich.getHarnessesStatus>>);
+    const data = await loadEnrichmentSettings();
+    expect(data.modelByHarness["codex"]).toBe("gpt-5");
+    expect(data.effortByHarness["codex"]).toBe("high");
   });
 
   it("stores an engine profile as its prefs key, with no egress claim", async () => {

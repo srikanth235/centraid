@@ -13,7 +13,11 @@ vi.mock(import("../../../gateway-client.js"), () => ({
   listVaults: () => listVaults(),
 }));
 
-import { loadActiveVaultData, phoneCallbacks } from "./settingsAccountData.js";
+import {
+  loadActiveVaultData,
+  loadSettingsStamp,
+  phoneCallbacks,
+} from "./settingsAccountData.js";
 
 describe("settingsAccountData", () => {
   beforeEach(() => {
@@ -35,6 +39,27 @@ describe("settingsAccountData", () => {
       getPhoneLinkStatus: vi.fn<typeof window.CentraidApi.getPhoneLinkStatus>(),
       revokePhoneDevice: vi.fn<typeof window.CentraidApi.revokePhoneDevice>(),
     } as unknown as typeof window.CentraidApi;
+  });
+
+  describe(loadSettingsStamp, () => {
+    it("states the running build and the gateway it is talking to", async () => {
+      window.CentraidApi.getChangelog = () =>
+        Promise.resolve({ currentVersion: "v0.6.0", releases: [] });
+      window.CentraidApi.getGatewayAuth = () =>
+        Promise.resolve({ baseUrl: "http://home-gateway.local:4319" });
+      await expect(loadSettingsStamp()).resolves.toBe(
+        "Centraid 0.6.0 · home-gateway.local:4319"
+      );
+    });
+
+    it("omits what this build cannot answer for rather than inventing it", async () => {
+      // The stamp replaced a hard-coded `v0.5.2`, which was a number the build
+      // could not vouch for. A host with no changelog bridge states the host.
+      window.CentraidApi.getChangelog = undefined;
+      window.CentraidApi.getGatewayAuth = () =>
+        Promise.reject(new Error("no gateway"));
+      await expect(loadSettingsStamp()).resolves.toBe("Centraid");
+    });
   });
 
   describe(loadActiveVaultData, () => {

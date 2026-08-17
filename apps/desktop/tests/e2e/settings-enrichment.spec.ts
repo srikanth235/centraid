@@ -112,7 +112,7 @@ test.afterEach(async () => {
   await cleanupEnv(env);
 });
 
-test("12.9 — Settings → Enrichment states the policy and writes the tier the vault answers with", async () => {
+test("12.9 — Settings → Enrichment states what runs, and says when a stored ceiling stops it", async () => {
   const { app, page } = await launchApp(env);
   try {
     await waitForHome(page);
@@ -124,27 +124,25 @@ test("12.9 — Settings → Enrichment states the policy and writes the tier the
       .click();
 
     const pane = page.getByTestId("settings-page");
-    // The tier the gateway holds is what renders — `device` was seeded.
-    const photos = pane.getByRole("tablist", { name: "Enrichment for Photos" });
-    await expect(photos.getByRole("tab", { selected: true })).toHaveText(
-      "On this device"
-    );
-    // A capability is a ROW: its plain name, what it gets you, and where its
-    // work goes — not an engine-profile label (issue #814).
+    // WHERE ENRICHMENT RUNS IS NOT A CHOICE (v11): the per-domain ceiling
+    // control is gone, and the group head counts its own rows instead.
+    await expect(
+      pane.getByRole("tablist", { name: "Enrichment for Photos" })
+    ).toHaveCount(0);
+    await expect(pane).toContainText("2 of 2 on");
+    // A capability is a ROW: its plain name, what it gets you, and a switch.
     await expect(pane).toContainText("Text in photos");
     await expect(pane).toContainText("receipts, signs, whiteboards");
     await expect(pane).toContainText("Faces");
     // Faces is structurally undelegatable, so it is offered no engine at all
-    // and says why where the control would have been.
-    await expect(
-      pane.getByLabel("Engine for Faces", { exact: true })
-    ).toHaveCount(0);
+    // and carries its reassurance inside its own description.
     await expect(pane).toContainText(
-      "Face imagery never leaves for a provider"
+      "Named only by you, and never sent to a provider."
     );
-    // The photos ceiling is `device` while the bundled OCR engine is
-    // gateway-lane, so the row states the refusal instead of failing silently.
-    await expect(pane).toContainText("Won’t run");
+    // The ceiling lost its control, not its teeth: photos is stored at
+    // `on-device` while the bundled OCR engine is gateway-lane, so the row
+    // states the gate rather than reading as on and never running.
+    await expect(pane).toContainText("Stopped by a stored ceiling");
     // The answered egress question reads as a sentence about the member.
     await expect(pane).toContainText("You declined");
 
@@ -160,22 +158,28 @@ test("12.9 — Settings → Enrichment states the policy and writes the tier the
       fullPage: true,
     });
 
-    // Raising the tier writes the vault's route, and the page renders what
-    // came back rather than what was clicked.
-    await photos.getByRole("tab", { name: "On your gateway" }).click();
+    // The engine is collapsed behind one pill; pressing it reveals the chips,
+    // and picking an agent creates the engine profile behind the row.
+    await pane
+      .getByRole("button", { name: "Built in", exact: true })
+      .first()
+      .click();
+    await expect(
+      pane.getByRole("button", { name: "Codex", exact: true })
+    ).toBeVisible();
+
+    // Flipping a switch writes ONE vault-scope rule through the owner route.
+    await pane.getByLabel("Faces", { exact: true }).click();
     await expect
       .poll(() =>
         gateway.calls.some(
           (call) =>
             call.method === "PUT" &&
-            call.pathname === "/centraid/_vault/enrich" &&
-            /"photos"\s*:\s*"gateway"/u.test(call.body ?? "")
+            call.pathname === "/centraid/_vault/enrich/rules" &&
+            /"capability"\s*:\s*"faces"/u.test(call.body ?? "")
         )
       )
       .toBe(true);
-    await expect(photos.getByRole("tab", { selected: true })).toHaveText(
-      "On your gateway"
-    );
   } finally {
     await closeApp(app);
   }

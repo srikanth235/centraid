@@ -47,6 +47,8 @@ export default function SettingsAppearanceScreen({
 }: SettingsAppearanceBridgeProps): JSX.Element {
   const [curMode, setCurMode] = useState(themeMode);
   const [cronTz, setCronTz] = useState("");
+  /** The zone the gateway holds — what a refused edit returns the field to. */
+  const [lastGood, setLastGood] = useState("");
   const [cronTzError, setCronTzError] = useState<string | null>(null);
   const [cronTzLoaded, setCronTzLoaded] = useState(false);
 
@@ -56,6 +58,7 @@ export default function SettingsAppearanceScreen({
       .then((value) => {
         if (!cancelled) {
           setCronTz(value);
+          setLastGood(value);
           setCronTzLoaded(true);
         }
       })
@@ -84,15 +87,19 @@ export default function SettingsAppearanceScreen({
               onSetThemeMode(next);
             }}
           />
+          {/* Match is a standing MODE, not a one-shot snap to whatever the OS
+              says right now, and the caption is where that difference is
+              stated — the segment alone reads as a third theme. */}
+          {curMode === "system" ? (
+            <p className={sc.rowHint}>Follows the system as it changes</p>
+          ) : null}
         </DrawerRow>
       </DrawerGroup>
-      {/* Not appearance, and it knows it. This rode along when Layout was
-          folded in (#608) because it had nowhere else to live — it is a
-          gateway-wide automation default, and the Automations surface is the
-          right home for it. Move it there rather than growing this group.
-          Until then it is at least gated on the same capability the Automations
-          route is: a default for a feature this gateway does not run is a
-          setting whose effect the owner can never see. */}
+      {/* The time zone belongs to YOU: it is the zone a schedule with none of
+          its own fires in, which is a fact about the member's day rather than
+          about the automation. It stays gated on the same capability the
+          Automations route is — a default for a feature this gateway does not
+          run is a setting whose effect the owner can never see. */}
       {automations ? (
         <>
           <DrawerGroup label="Automations">
@@ -115,9 +122,15 @@ export default function SettingsAppearanceScreen({
                   setCronTzError(null);
                 }}
                 onBlur={() => {
-                  void saveDefaultCronTimeZone(cronTz).then((err) => {
+                  // A refused zone leaves the field where the gateway has it,
+                  // and the error names that value rather than the typo.
+                  void saveDefaultCronTimeZone(cronTz, lastGood).then((err) => {
                     setCronTzError(err);
-                    if (!err) setCronTz(cronTz.trim());
+                    if (err) setCronTz(lastGood);
+                    else {
+                      setCronTz(cronTz.trim());
+                      setLastGood(cronTz.trim());
+                    }
                   });
                 }}
               />

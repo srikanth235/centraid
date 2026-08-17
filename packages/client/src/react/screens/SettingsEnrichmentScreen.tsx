@@ -6,23 +6,19 @@ import {
   ENRICH_DOMAINS,
   ENRICH_DOMAIN_LABELS,
   ENRICH_EGRESS_WORDS,
-  ENRICH_TIER_WORDS,
   capabilityLabel,
 } from "../../enrich-policy.js";
 import type {
   EnrichConsentRecord,
-  EnrichDomain,
   EnrichEngineProfile,
-  EnrichPolicy,
   EnrichPolicyRule,
   EnrichScopeType,
-  EnrichTier,
   EnrichTrigger,
   ResolvedEnrichPolicy,
 } from "../../enrich-policy.js";
 import { relativeTime } from "../format.js";
 import type { HarnessCardDTO } from "../screen-contracts.js";
-import { DrawerGroup, Segmented } from "./settings-controls.js";
+import { DrawerGroup } from "./settings-controls.js";
 import CapabilityRows from "./SettingsEnrichmentCapabilities.js";
 import EnrichmentRules from "./SettingsEnrichmentRules.js";
 
@@ -37,12 +33,18 @@ import styles from "./SettingsEnrichmentScreen.module.css";
 // can never show as applied.
 //
 // THE PAGE IS ORGANISED BY THE MEMBER'S QUESTION, NOT BY THE STORES. It used to
-// be four groups named after four objects — tiers, engines, scoped rules,
+// be four groups named after four objects — ceilings, engines, scoped rules,
 // egress answers — which is the schema wearing a UI. Nobody arrives wanting to
 // name an engine. They arrive asking: what is this doing with my photos, can I
-// stop it, and does any of it leave my devices. So each DOMAIN is a group: how
-// far its work may go, then the list of what runs, each row a plain name, a
-// switch, and the computed fact of where it goes.
+// stop it, and does any of it leave my devices. So each DOMAIN is a group whose
+// head counts its own rows, and each row is a plain name, a switch, and the one
+// fact worth stating.
+//
+// THE PER-DOMAIN CEILING CONTROL IS GONE (v11 handoff, "Deliberate
+// relocations"): enrichment always runs on the gateway, and where it runs is
+// not a member's choice, so it is not offered as one. The vault's stored
+// ceiling still gates the runtime, so a row it stops still says so — removing
+// the control must not turn a refusal back into silence.
 //
 // The two remaining groups are the ones that answer a different question:
 // exceptions (places you decided differently, listed only when some exist), and
@@ -50,12 +52,15 @@ import styles from "./SettingsEnrichmentScreen.module.css";
 
 /** Everything the page renders, read in one pass. */
 export interface EnrichmentSettingsData {
-  policy: EnrichPolicy;
   rules: EnrichPolicyRule[];
   profiles: EnrichEngineProfile[];
   consent: EnrichConsentRecord[];
   /** The harnesses this gateway can run — the row engine pickers' options. */
   cards: HarnessCardDTO[];
+  /** Settings → Agents' own model pin per harness. Shared, never a second copy. */
+  modelByHarness: Record<string, string>;
+  /** Settings → Agents' own level pin per harness. Shared, never a second copy. */
+  effortByHarness: Record<string, string>;
   /**
    * What the gateway's ONE resolver folds per capability. Read from
    * `/_vault/enrich/effective` rather than computed here; a capability whose
@@ -86,9 +91,11 @@ export interface EnrichRuleInput {
 
 export interface SettingsEnrichmentScreenProps {
   load: () => Promise<EnrichmentSettingsData>;
-  /** Write one domain's tier; resolves with the tiers the vault holds after. */
-  setTier: (domain: EnrichDomain, tier: EnrichTier) => Promise<EnrichPolicy>;
   saveProfile: (input: EngineProfileInput) => Promise<void>;
+  /** Write the harness model pin Settings → Agents reads; the gateway's text on refusal. */
+  setEngineModel: (harness: string, modelId: string) => Promise<string | null>;
+  /** Write the harness level pin Settings → Agents reads; the gateway's text on refusal. */
+  setEngineEffort: (harness: string, value: string) => Promise<string | null>;
   setRule: (rule: EnrichRuleInput) => Promise<void>;
   deleteRule: (
     scope: EnrichScopeType,
@@ -97,8 +104,6 @@ export interface SettingsEnrichmentScreenProps {
   ) => Promise<void>;
   showToast: (message: string) => void;
 }
-
-const TIERS: readonly EnrichTier[] = ["off", "device", "gateway"];
 
 /** What the gateway answered, or why it could not. */
 type Load =
@@ -126,8 +131,9 @@ function ConsentRow({ row }: { row: EnrichConsentRecord }): JSX.Element {
 
 export default function SettingsEnrichmentScreen({
   load: read,
-  setTier,
   saveProfile,
+  setEngineModel,
+  setEngineEffort,
   setRule,
   deleteRule,
   showToast,
@@ -150,24 +156,6 @@ export default function SettingsEnrichmentScreen({
     };
   }, [read, nonce]);
 
-  // The tier the vault holds after the write is what renders — never the one
-  // this screen asked for. It then re-reads: the ceiling decides which rows
-  // will actually run, so every row's refusal note is stale until it does.
-  const pickTier = (domain: EnrichDomain, tier: EnrichTier): void => {
-    void setTier(domain, tier)
-      .then((policy) => {
-        setLoad((current) =>
-          current.kind === "ready"
-            ? { kind: "ready", data: { ...current.data, policy } }
-            : current
-        );
-        refresh();
-      })
-      .catch((error: unknown) =>
-        showToast(`Couldn’t change enrichment: ${errorText(error)}`)
-      );
-  };
-
   if (load.kind === "failed")
     return (
       <div className={controlsCss.note}>
@@ -188,35 +176,27 @@ export default function SettingsEnrichmentScreen({
         const mine = builtIns.filter(
           (profile) => ENRICH_CAPABILITY_DOMAIN[profile.capability] === domain
         );
+        const on = mine.filter(
+          (profile) => data.effective[profile.capability]?.enabled === true
+        ).length;
         return (
-          <DrawerGroup key={domain} label={label}>
-            <div className={styles.ceiling}>
-              <span className={styles.ceilingText}>
-                <span className={styles.ceilingLabel}>
-                  How far your {label.toLowerCase()} may go
-                </span>
-                <span className={styles.ceilingHint}>
-                  Everything below is held to this, whatever its own switch
-                  says.
-                </span>
-              </span>
-              <Segmented
-                options={TIERS}
-                selected={data.policy[domain]}
-                labels={ENRICH_TIER_WORDS}
-                ariaLabel={`Enrichment for ${label}`}
-                onSelect={(tier) => pickTier(domain, tier)}
-              />
-            </div>
+          <DrawerGroup
+            key={domain}
+            label={label}
+            meta={`${on} of ${mine.length} on`}
+          >
             <CapabilityRows
               builtIns={mine}
               profiles={data.profiles}
               rules={data.rules}
               effective={data.effective}
               cards={data.cards}
-              domainLabel={label}
+              modelByHarness={data.modelByHarness}
+              effortByHarness={data.effortByHarness}
               setRule={setRule}
               saveProfile={saveProfile}
+              setEngineModel={setEngineModel}
+              setEngineEffort={setEngineEffort}
               showToast={showToast}
               onChanged={refresh}
             />

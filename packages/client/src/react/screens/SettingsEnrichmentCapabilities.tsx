@@ -1,10 +1,10 @@
+import { useState } from "react";
 import type { JSX } from "react";
 
 import {
   ENRICH_CAPABILITY_BLURBS,
   ENRICH_CAPABILITY_NOTES,
-  ENRICH_EGRESS_WORDS,
-  ENRICH_TIER_WORDS,
+  ENRICH_CEILING_WORDS,
   capabilityLabel,
   egressWithinCeiling,
 } from "../../enrich-policy.js";
@@ -18,32 +18,35 @@ import type {
   EngineProfileInput,
   EnrichRuleInput,
 } from "./SettingsEnrichmentScreen.js";
-import { Select } from "./SettingsHarnessesSelects.js";
+import {
+  ConfigSelect,
+  ModelSelect,
+  modelLabel,
+} from "./SettingsHarnessesSelects.js";
 
 import styles from "./SettingsEnrichmentScreen.module.css";
 
-// Settings → Enrichment, THE CAPABILITY LIST (issue #807; reshaped after the
-// page was read back and found unusable).
+// Settings → Enrichment, THE CAPABILITY LIST (issue #807; reshaped again for
+// the v11 binding layer).
 //
 // WHY THE CAPABILITY IS THE ROW. The member's questions here are "what is
 // Centraid doing with my things", "can I stop it", and "does any of it leave
-// my devices". The stores answer in tiers, engine profiles, scoped rules and
+// my devices". The stores answer in ceilings, engine profiles, scoped rules and
 // consent records — four objects, none of which is a thing anyone wants. This
 // list is the projection back: one row per capability, carrying its plain name,
-// what it gets you, a switch, and the computed fact of where its work goes.
+// what it gets you, a switch, and the one fact worth stating.
 //
-// WHAT IS DELIBERATELY NOT OFFERED. Egress is computed by the gateway from the
-// engine and is stated here, never set — a control that let a member call a
-// provider engine "on-device" would be a lie the runtime would then honour.
-// Model and effort pins are not offered either: Settings → Agents is where a
-// harness's model is chosen, and asking the same question twice is what made
-// this page an engine-configuration console instead of a privacy surface.
+// WHERE THE WORK RUNS IS NOT A CHOICE, so it is not a control and not a label.
+// Enrichment runs on the gateway; the per-domain ceiling control is gone. The
+// one fact still stated is EGRESS: a delegated row reads "at a provider",
+// computed by the gateway from the engine and never settable here. A control
+// that let a member call a provider engine "on-device" would be a lie the
+// runtime would then honour.
 //
-// THE ENGINE PICKER IS A CONSEQUENCE, NOT AN OBJECT. Only `ocr` and `doc-text`
-// ship a delegate variant, so seven of nine rows have no choice to make and say
-// so. On the two that do, picking an agent CREATES the engine profile behind
-// the row — a member should never have to name an engine, which is a prefs-key
-// suffix wearing a form field.
+// THE ENGINE IS EXPERT MACHINERY FOR TWO ROWS OUT OF NINE, so it collapses
+// behind one pill beside the switch. Pressing the pill reveals the engine chips
+// and a model/level row that writes the SAME gateway prefs Settings → Agents
+// writes — one pin per (harness, slot), never a second copy of the same answer.
 
 /**
  * The profile id a row's agent choice is stored under — derived, never typed.
@@ -54,6 +57,9 @@ function rowProfileId(capability: string, harness: string): string {
   return `${capability}-${harness}`;
 }
 
+/** The egress fact this row states. Only a provider is worth a member's eye. */
+const PROVIDER_EGRESS_WORD = "at a provider";
+
 export interface CapabilityRowsProps {
   /** The built-in profiles of the capabilities this panel lists, in order. */
   builtIns: EnrichEngineProfile[];
@@ -62,10 +68,14 @@ export interface CapabilityRowsProps {
   rules: EnrichPolicyRule[];
   effective: Record<string, ResolvedEnrichPolicy | null>;
   cards: HarnessCardDTO[];
-  /** This panel's domain, in the member's words — named in refusal notes. */
-  domainLabel: string;
+  /** The Agents page's own model pin per harness — shared, not copied. */
+  modelByHarness: Record<string, string>;
+  /** The Agents page's own level pin per harness — shared, not copied. */
+  effortByHarness: Record<string, string>;
   setRule: (rule: EnrichRuleInput) => Promise<void>;
   saveProfile: (input: EngineProfileInput) => Promise<void>;
+  setEngineModel: (harness: string, modelId: string) => Promise<string | null>;
+  setEngineEffort: (harness: string, value: string) => Promise<string | null>;
   showToast: (message: string) => void;
   onChanged: () => void;
 }
@@ -77,32 +87,34 @@ function errorText(error: unknown): string {
 /**
  * Why a row will not run despite its switch, or `null` when it will.
  *
- * MEASURED AGAINST THE BUILT-IN, NOT THE RUNNING PROFILE. The tier gate is
- * `rank(lane) <= rank(tier)` over the ENRICHER's declared lane
- * (`automation/fire/enrich-gate.ts`), and the built-in profile's computed
- * egress is exactly that lane — `on-device` or `gateway`, never `provider`.
- * A delegate profile's `provider` egress is not a tier question at all: it is
- * gated per call by egress consent (#567), which is what the badge and the
- * "Sharing you've been asked about" group are for. Comparing the delegate's
- * class here would mark every agent-backed row as refused, since no tier's
- * ceiling ever reaches `provider`.
+ * THE CEILING IS NO LONGER A CONTROL, BUT IT IS STILL A GATE. The vault keeps a
+ * stored ceiling per domain and the runtime still refuses under it
+ * (`automation/fire/enrich-gate.ts`). Removing the control without keeping this
+ * note would strand a member whose stored ceiling silently stops a row — which
+ * is exactly how "On this device" once stopped every document capability with
+ * nothing on screen admitting it.
  *
- * The runtime gate is still the authority and refuses on its own; this only
- * makes the refusal visible at the switch. Saying nothing is how "On this
- * device" came to silently stop every document capability.
+ * MEASURED AGAINST THE BUILT-IN, NOT THE RUNNING PROFILE. The gate compares the
+ * ENRICHER's declared lane, and the built-in profile's computed egress is
+ * exactly that lane — `on-device` or `gateway`, never `provider`. A delegate's
+ * `provider` egress is not a ceiling question at all: it is gated per call by
+ * egress consent (#567).
  */
 function refusalNote(
   builtIn: EnrichEngineProfile,
-  resolved: ResolvedEnrichPolicy,
-  domainLabel: string
+  resolved: ResolvedEnrichPolicy
 ): string | null {
   if (egressWithinCeiling(builtIn.egress, resolved.egressCeiling)) return null;
-  if (resolved.egressCeiling === "off")
-    return `Won’t run while ${domainLabel} is set to “${ENRICH_TIER_WORDS.off}”.`;
-  // The only refusal left: a gateway-lane enricher under an on-device ceiling.
-  // Short on purpose — a whole domain can be refused at once, and five copies
-  // of a full explanation is a wall, not a warning.
-  return `Won’t run — needs “${ENRICH_TIER_WORDS.gateway}”.`;
+  return `Stopped by a stored ceiling: ${ENRICH_CEILING_WORDS[resolved.egressCeiling]}.`;
+}
+
+/** The engine pill's own words: the agent, and the level it will think at. */
+function engineSummary(
+  card: HarnessCardDTO | undefined,
+  effort: string
+): string {
+  if (!card) return "Built in";
+  return effort ? `${card.title} · ${effort}` : card.title;
 }
 
 export default function CapabilityRows({
@@ -111,19 +123,30 @@ export default function CapabilityRows({
   rules,
   effective,
   cards,
-  domainLabel,
+  modelByHarness,
+  effortByHarness,
   setRule,
   saveProfile,
+  setEngineModel,
+  setEngineEffort,
   showToast,
   onChanged,
 }: CapabilityRowsProps): JSX.Element {
+  /** Which row currently has its engine open. One at a time, or none. */
+  const [openEngine, setOpenEngine] = useState<string | null>(null);
+
   /** What the vault's own layer already decides, so a write preserves the rest. */
   const vaultRule = (capability: string): EnrichPolicyRule | undefined =>
     rules.find(
       (rule) => rule.scope.type === "vault" && rule.capability === capability
     );
 
-  /** One vault-scope write, carrying forward every answer it is not changing. */
+  /**
+   * One vault-scope write, carrying forward every answer it is not changing.
+   * The row renders the RESOLVER's answer, never a local optimistic copy, so a
+   * refused write leaves the switch exactly where the gateway has it and the
+   * gateway's own text goes to the status line.
+   */
   const write = (
     capability: string,
     patch: Partial<Pick<EnrichRuleInput, "enabled" | "profile">>
@@ -140,7 +163,7 @@ export default function CapabilityRows({
     })
       .then(onChanged)
       .catch((error: unknown) =>
-        showToast(`Couldn’t change that: ${errorText(error)}`)
+        showToast(`${errorText(error)} — the switch is back where it was`)
       );
   };
 
@@ -169,6 +192,17 @@ export default function CapabilityRows({
       );
   };
 
+  /** The Agents page's pin, written from here — same key, one answer. */
+  const writeEnginePin = (
+    what: string,
+    result: Promise<string | null>
+  ): void => {
+    void result.then((refusal) => {
+      if (refusal) showToast(`${what} not saved: ${refusal}`);
+      else onChanged();
+    });
+  };
+
   return (
     <div className={styles.panel}>
       {builtIns.map((builtIn) => {
@@ -181,24 +215,30 @@ export default function CapabilityRows({
           ) ?? builtIn;
         const harness =
           running.engine.kind === "delegate" ? running.engine.harness : "";
-        const refusal = resolved
-          ? refusalNote(builtIn, resolved, domainLabel)
-          : null;
+        const card = cards.find((one) => one.kind === harness);
+        const refusal = resolved ? refusalNote(builtIn, resolved) : null;
         const note = ENRICH_CAPABILITY_NOTES[capability];
+        const open = openEngine === capability;
+        const effort = harness ? (effortByHarness[harness] ?? "") : "";
 
         return (
           <div className={styles.capRow} key={capability}>
-            <label className={styles.capSwitch}>
-              <input
-                type="checkbox"
-                aria-label={capabilityLabel(capability)}
-                checked={resolved?.enabled === true}
-                disabled={!resolved}
-                onChange={(event) =>
-                  write(capability, { enabled: event.target.checked })
-                }
-              />
-            </label>
+            {resolved ? (
+              <label className={styles.capSwitch}>
+                <input
+                  type="checkbox"
+                  aria-label={capabilityLabel(capability)}
+                  checked={resolved.enabled}
+                  onChange={(event) =>
+                    write(capability, { enabled: event.target.checked })
+                  }
+                />
+              </label>
+            ) : (
+              // A capability the gateway offers and this build has no words
+              // for: stated, never a switch that would write a guess.
+              <span className={styles.capLock}>no vocabulary</span>
+            )}
 
             <span className={styles.capText}>
               <span className={styles.capName}>
@@ -206,53 +246,92 @@ export default function CapabilityRows({
               </span>
               <span className={styles.capBlurb}>
                 {ENRICH_CAPABILITY_BLURBS[capability] ??
-                  "This build does not describe this one yet."}
+                  "Offered by your gateway; this build has no words for it."}
+                {note ? ` ${note}` : ""}
               </span>
             </span>
 
             {/* The computed fact, worn where a control would be if it were a
                 choice. It is not one — see the header. */}
-            <span className={styles.capWhere} data-egress={running.egress}>
-              {ENRICH_EGRESS_WORDS[running.egress]}
-            </span>
+            {running.egress === "provider" ? (
+              <span className={styles.capWhere} data-egress="provider">
+                {PROVIDER_EGRESS_WORD}
+              </span>
+            ) : null}
 
-            <span className={styles.capEngine}>
-              {builtIn.delegateCapable ? (
-                <Select
-                  value={harness}
-                  ariaLabel={`Engine for ${capabilityLabel(capability)}`}
-                  onChange={(next) => pickEngine(capability, next)}
-                >
-                  <option value="">Built in</option>
-                  {cards.map((card) => (
-                    <option
-                      key={card.kind}
-                      value={card.kind}
-                      disabled={!card.connected}
-                    >
-                      {card.connected
-                        ? card.title
-                        : `${card.title} · unavailable`}
-                    </option>
-                  ))}
-                </Select>
-              ) : (
-                <span className={styles.capBuiltIn}>Built in</span>
-              )}
-            </span>
+            {builtIn.delegateCapable && resolved ? (
+              <button
+                type="button"
+                className={styles.capPill}
+                data-open={String(open)}
+                aria-expanded={open}
+                onClick={() => setOpenEngine(open ? null : capability)}
+              >
+                {engineSummary(card, effort)}
+              </button>
+            ) : null}
 
             {refusal ? (
               <span className={styles.capRefusal} role="note">
                 {refusal}
               </span>
             ) : null}
-            {note ? <span className={styles.capNote}>{note}</span> : null}
-            {resolved ? null : (
-              <span className={styles.capRefusal} role="note">
-                Your gateway offers this, but this build has no words for it —
-                it can’t be switched here.
-              </span>
-            )}
+
+            {open && builtIn.delegateCapable ? (
+              <div className={styles.capEngine}>
+                <span className={styles.capEngineLabel}>Reads with</span>
+                <button
+                  type="button"
+                  className={styles.capChip}
+                  data-on={String(harness === "")}
+                  onClick={() => pickEngine(capability, "")}
+                >
+                  Built in
+                </button>
+                {cards.map((one) => (
+                  <button
+                    key={one.kind}
+                    type="button"
+                    className={styles.capChip}
+                    data-on={String(one.kind === harness)}
+                    data-off={String(!one.connected)}
+                    disabled={!one.connected}
+                    onClick={() => pickEngine(capability, one.kind)}
+                  >
+                    {one.title}
+                  </button>
+                ))}
+                {card ? (
+                  <span className={styles.capModelRow}>
+                    <span className={styles.capEngineLabel}>
+                      Model and level
+                    </span>
+                    <ModelSelect
+                      card={card}
+                      saved={modelByHarness[card.kind] ?? ""}
+                      onChange={(next) =>
+                        writeEnginePin("Model", setEngineModel(card.kind, next))
+                      }
+                      emptyLabel={`Use default · ${modelLabel(card, "")}`}
+                      ariaLabel={`Model for ${capabilityLabel(capability)}`}
+                    />
+                    <ConfigSelect
+                      card={card}
+                      category="thought_level"
+                      saved={effort}
+                      onChange={(next) =>
+                        writeEnginePin(
+                          "Level",
+                          setEngineEffort(card.kind, next)
+                        )
+                      }
+                      emptyLabel="Use default · agent level"
+                      ariaLabel={`Level for ${capabilityLabel(capability)}`}
+                    />
+                  </span>
+                ) : null}
+              </div>
+            ) : null}
           </div>
         );
       })}

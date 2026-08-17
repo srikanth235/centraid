@@ -651,6 +651,14 @@ async function route(
       effective: s.enrichEffective[capability] ?? null,
     });
   }
+  if (p === "/centraid/_vault/enrich/rules" && method === "PUT") {
+    // One scope's decision about one capability. The owner route answers with
+    // the stored rule, which is what the page re-reads rather than assuming.
+    const rule = safeJson(body) as Record<string, unknown>;
+    return json(res, 200, {
+      rule: { ...rule, updatedAt: new Date().toISOString() },
+    });
+  }
   if (p === "/centraid/_vault/enrich/consent" && method === "GET")
     return json(res, 200, { consent: s.enrichConsent });
 

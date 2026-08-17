@@ -1,4 +1,3 @@
-// governance: allow-repo-hygiene file-size-limit (#567) the provider settings screen coordinates one atomic harness/preflight/capability/ladder state surface whose optimistic rollback must remain centralized
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { CSSProperties, JSX } from "react";
 
@@ -9,16 +8,14 @@ import type {
   ModelSubsystem,
   SettingsHarnessesBridgeProps,
 } from "../screen-contracts.js";
-import { openConfirm } from "../shell/confirm.js";
 import Button from "../ui/Button.js";
 import { DrawerGroup } from "./settings-controls.js";
 import HarnessEntry from "./SettingsHarnessEntries.js";
-import {
-  ConfigSelect,
-  ModelSelect,
-  Select,
-  modelLabel,
-} from "./SettingsHarnessesSelects.js";
+import { Select, clampEffort, modelLabel } from "./SettingsHarnessesSelects.js";
+import RouteRow, {
+  ALL_SUBSYSTEM_ROWS,
+  ROUTING_ROWS,
+} from "./SettingsHarnessLanes.js";
 
 import controlsCss from "../styles/controls.module.css";
 import styles from "./SettingsHarnessesScreen.module.css";
@@ -61,266 +58,6 @@ function clearTimers(
 }
 
 /**
- * The routing lanes. Each resolves independently to a (harness, model) pair —
- * a lane left unset inherits the default lane. Before per-subsystem harnesses
- * these were model-only overrides hanging off one globally-active harness.
- */
-const ALL_SUBSYSTEM_ROWS: ReadonlyArray<{
-  key: ModelSubsystem;
-  label: string;
-  hint: string;
-}> = [
-  {
-    key: "assistant",
-    label: "Assistant",
-    hint: "Global Ask across your vault.",
-  },
-  { key: "ask", label: "In-app Ask", hint: "The Ask panel inside each app." },
-  { key: "builder", label: "Builder", hint: "The app-building agent." },
-  {
-    key: "automations",
-    label: "Automations",
-    hint: "Background automations & enrichers.",
-  },
-];
-
-/**
- * The lanes that get a routing row. Builder is withheld: every builder entry
- * point is hidden by default (#434), so a routing control for a surface the
- * member cannot open is configuration for nothing.
- *
- * It stays in `ALL_SUBSYSTEM_ROWS` on purpose, because that list also feeds the
- * inventory's "used by" chips. A stored builder pin keeps resolving, and
- * hiding the row must not also hide the fact that a harness is carrying that
- * lane — invisible-but-active routing is what group D was about.
- */
-const ROUTING_ROWS = ALL_SUBSYSTEM_ROWS.filter((row) => row.key !== "builder");
-
-/**
- * One routing lane. `harness === ''` means inherit the default lane, and the
- * inherit option names what it resolves to — "Use default model" alone told you
- * nothing about what would actually run, and with agents inheriting too that
- * ambiguity would have doubled.
- */
-function RouteRow({
-  label,
-  hint,
-  cards,
-  harness,
-  model,
-  effort,
-  resolvedCard,
-  resolvedHarnessDefault,
-  resolvedHarnessDefaultEffort,
-  defaultCard,
-  ladder,
-  onSetHarness,
-  onSetModel,
-  onSetEffort,
-  onSetLadder,
-  unattended,
-}: {
-  label: string;
-  hint: string;
-  cards: HarnessCardDTO[];
-  harness: HarnessKind | "";
-  model: string;
-  effort: string;
-  resolvedCard: HarnessCardDTO | undefined;
-  /** The resolved harness's own default model id — what this lane inherits. */
-  resolvedHarnessDefault: string;
-  resolvedHarnessDefaultEffort: string;
-  defaultCard: HarnessCardDTO | undefined;
-  ladder: HarnessKind[];
-  onSetHarness: (v: string) => void;
-  onSetModel: (v: string) => void;
-  onSetEffort: (v: string) => void;
-  onSetLadder: (v: HarnessKind[]) => void;
-  unattended: boolean;
-}): JSX.Element {
-  const [fallbackPick, setFallbackPick] = useState("");
-  const [fallbackFeedback, setFallbackFeedback] = useState<string | null>(null);
-  // D13: ladder membership IS the consent record, so the row shows exactly what
-  // is stored — including a member that currently resolves as this lane's
-  // primary. Hiding it made the UI disagree with the consent the gateway holds.
-  const activeLadder = ladder.filter(
-    (kind, index) => ladder.indexOf(kind) === index
-  );
-  // Unattended failover runs with no one watching, so a fallback must be past
-  // its session preflight — `connected` alone admits a harness that will stop
-  // and ask for auth mid-run.
-  const availableFallbacks = cards.filter(
-    (card) =>
-      card.sessionReady &&
-      card.kind !== resolvedCard?.kind &&
-      !activeLadder.includes(card.kind)
-  );
-  return (
-    <div
-      className={styles.routeRow}
-      style={{ "--route-accent": resolvedCard?.accent } as CSSProperties}
-    >
-      <div className={styles.routeMeta}>
-        <div className={styles.routeName}>
-          <span className={styles.routeDot} />
-          {label}
-        </div>
-        <span className={styles.routeHint}>{hint}</span>
-      </div>
-      <div className={styles.routeControls}>
-        <Select
-          value={harness}
-          onChange={onSetHarness}
-          inherited={!harness}
-          ariaLabel={`Agent for ${label}`}
-        >
-          <option value="">
-            {defaultCard ? `Use default · ${defaultCard.title}` : "Use default"}
-          </option>
-          {harness && !cards.some((card) => card.kind === harness) ? (
-            <option value={harness}>{harness} · existing hidden pin</option>
-          ) : null}
-          {cards.map((c) => (
-            <option key={c.kind} value={c.kind} disabled={!c.connected}>
-              {c.connected ? c.title : `${c.title} · unavailable`}
-            </option>
-          ))}
-        </Select>
-        {resolvedCard ? (
-          <>
-            <ModelSelect
-              card={resolvedCard}
-              saved={model}
-              onChange={onSetModel}
-              emptyLabel={`Use default · ${modelLabel(resolvedCard, resolvedHarnessDefault)}`}
-              ariaLabel={`Model for ${label}`}
-            />
-            <ConfigSelect
-              card={resolvedCard}
-              category="thought_level"
-              saved={effort}
-              onChange={onSetEffort}
-              emptyLabel={`Use default · ${resolvedHarnessDefaultEffort || "agent effort"}`}
-              ariaLabel={`Effort for ${label}`}
-            />
-          </>
-        ) : (
-          <span className={styles.routeHint}>—</span>
-        )}
-      </div>
-      {/* Failover is configurable only for the unattended lane. Attended lanes
-          recover at the next turn with the member right there to see it and
-          pick differently, so a stored ladder mostly served to hand the
-          conversation to another provider without being asked. Automations
-          fire with nobody watching, which is the case that needs a ladder. An
-          attended lane's existing ladder is left stored and still honoured. */}
-      {unattended ? (
-        <div className={styles.ladderRow}>
-          <span className={styles.routeHint}>In-fire failover</span>
-          {activeLadder.length === 0 ? (
-            <span className={styles.routeHint}>None</span>
-          ) : (
-            activeLadder.map((kind, index) => {
-              const card = cards.find((candidate) => candidate.kind === kind);
-              return (
-                <span className={styles.ladderMember} key={kind}>
-                  {card?.title ?? kind}
-                  <button
-                    type="button"
-                    aria-label={`Move ${card?.title ?? kind} earlier for ${label}`}
-                    disabled={index === 0}
-                    onClick={() => {
-                      const next = [...activeLadder];
-                      [next[index - 1], next[index]] = [
-                        next[index]!,
-                        next[index - 1]!,
-                      ];
-                      onSetLadder(next);
-                    }}
-                  >
-                    ↑
-                  </button>
-                  <button
-                    type="button"
-                    aria-label={`Move ${card?.title ?? kind} later for ${label}`}
-                    disabled={index === activeLadder.length - 1}
-                    onClick={() => {
-                      const next = [...activeLadder];
-                      [next[index], next[index + 1]] = [
-                        next[index + 1]!,
-                        next[index]!,
-                      ];
-                      onSetLadder(next);
-                    }}
-                  >
-                    ↓
-                  </button>
-                  <button
-                    type="button"
-                    aria-label={`Remove ${card?.title ?? kind} from ${label} failover`}
-                    onClick={() =>
-                      onSetLadder(
-                        activeLadder.filter((entry) => entry !== kind)
-                      )
-                    }
-                  >
-                    ×
-                  </button>
-                </span>
-              );
-            })
-          )}
-          <select
-            className={styles.ladderAdd}
-            aria-label={`Add fallback agent for ${label}`}
-            value={fallbackPick}
-            disabled={availableFallbacks.length === 0}
-            onChange={(event) => {
-              const kind = event.target.value as HarnessKind;
-              if (!kind) return;
-              setFallbackPick(kind);
-              setFallbackFeedback(null);
-              const title =
-                cards.find((card) => card.kind === kind)?.title ?? kind;
-              void openConfirm({
-                confirmLabel: "Add fallback",
-                title: `Add ${title} to ${label} failover?`,
-                message: `If earlier agents fail, Centraid may send the conversation handoff, attachments, and vault-derived context to ${title} without another prompt. A later manual switch remains separately confirm-gated.`,
-              }).then((approved) => {
-                if (approved) {
-                  onSetLadder([...activeLadder, kind]);
-                  setFallbackFeedback(`${title} added`);
-                } else {
-                  setFallbackFeedback(`${title} was not added`);
-                }
-                setFallbackPick("");
-              });
-            }}
-          >
-            <option value="">Add fallback…</option>
-            {availableFallbacks.map((card) => (
-              <option key={card.kind} value={card.kind}>
-                {card.title}
-              </option>
-            ))}
-          </select>
-          {fallbackFeedback ? (
-            <span className={styles.routeHint}>{fallbackFeedback}</span>
-          ) : null}
-          {cards
-            .filter((card) => card.connected && !card.sessionReady)
-            .map((card) => (
-              <span className={styles.routeHint} key={card.kind}>
-                {card.title}: {card.fallbackBlockedReason}
-              </span>
-            ))}
-        </div>
-      ) : null}
-    </div>
-  );
-}
-
-/**
  * Settings → Agents. Two sections, and the split is the point: **Routing** is
  * where every decision lives (each subsystem resolves to its own harness and
  * model), **Agents** is inventory — what is installed, what it exposes, and
@@ -342,6 +79,7 @@ export default function SettingsHarnessesScreen({
   setSubsystemConfigPin,
   setSubsystemHarness,
   setSubsystemHarnessLadder,
+  showToast,
 }: SettingsHarnessesBridgeProps): JSX.Element {
   const [status, setStatus] = useState<HarnessesStatusDTO | null>(null);
   const [defaultKind, setDefaultKind] = useState<HarnessKind>("codex");
@@ -405,89 +143,158 @@ export default function SettingsHarnessesScreen({
       .finally(() => setBusy(false));
   };
 
+  /**
+   * EVERY PICK ON THIS PAGE IS OPTIMISTIC AND EVERY PICK ROLLS BACK. A refused
+   * write used to be invisible here — the model and effort setters were
+   * fire-and-forget, so a gateway that rejected a pin left the pick sitting on
+   * screen as though it were saved. The gateway's own text goes on the status
+   * line and the displayed value returns to what the gateway holds.
+   */
+  const settle = (
+    what: string,
+    write: Promise<string | null>,
+    rollback: () => void
+  ): void => {
+    void write.then((refusal) => {
+      if (!refusal) return;
+      rollback();
+      showToast(`${what} not saved: ${refusal}`);
+    });
+  };
+
   const onSetDefault = (kind: string): void => {
     if (!kind || kind === defaultKind) return;
     const prev = defaultKind;
     setDefaultKind(kind as HarnessKind); // optimistic
-    void activateHarness(kind as HarnessKind).then((ok) => {
-      if (!ok) setDefaultKind(prev);
-    });
+    settle("Agent", activateHarness(kind as HarnessKind), () =>
+      setDefaultKind(prev)
+    );
   };
 
-  const onSetModel = (kind: HarnessKind, v: string): void => {
+  /** Apply (or clear) one harness-default model in local state. */
+  const applyModel = (kind: HarnessKind, v: string): void =>
     setSavedByKind((m) => {
       const next = { ...m };
       if (v) next[kind] = v;
       else delete next[kind];
       return next;
     });
-    setHarnessModel(kind, v);
+
+  const onSetModel = (kind: HarnessKind, v: string): void => {
+    const prev = savedByKind[kind] ?? "";
+    applyModel(kind, v);
+    settle("Model", setHarnessModel(kind, v), () => applyModel(kind, prev));
+    clampHarnessEffort(kind);
   };
 
-  const onSetSubsystemModel = (
+  /**
+   * Changing the model clamps the level. A level the harness no longer offers
+   * for the model now selected is one the runtime would drop on its own
+   * (`pinThoughtLevel` answers `thought_level_not_offered`), so the pin goes
+   * back to inherit rather than displaying a level nothing will honour.
+   */
+  const clampHarnessEffort = (kind: HarnessKind): void => {
+    const card = cardFor(kind);
+    const saved = defaultConfigByKind[kind]?.thought_level ?? "";
+    if (!card || !saved || clampEffort(card, saved) === saved) return;
+    onSetHarnessConfig(kind, "thought_level", "");
+  };
+
+  const clampSubsystemEffort = (
+    kind: HarnessKind,
+    subsystem: ModelSubsystem
+  ): void => {
+    const card = cardFor(kind);
+    const saved = subsystemConfigByKind[kind]?.[subsystem]?.thought_level ?? "";
+    if (!card || !saved || clampEffort(card, saved) === saved) return;
+    onSetSubsystemConfig(kind, subsystem, "thought_level", "");
+  };
+
+  const applySubsystemModel = (
     kind: HarnessKind,
     subsystem: ModelSubsystem,
     v: string
-  ): void => {
+  ): void =>
     setSubsystemByKind((m) => {
       const next = { ...m, [kind]: { ...m[kind] } };
       if (v) next[kind]![subsystem] = v;
       else delete next[kind]![subsystem];
       return next;
     });
-    setSubsystemModel(kind, subsystem, v);
-  };
 
-  const onSetSubsystemHarness = (
+  const onSetSubsystemModel = (
+    kind: HarnessKind,
     subsystem: ModelSubsystem,
     v: string
   ): void => {
-    const previous = harnessBySubsystem[subsystem];
+    const prev = subsystemByKind[kind]?.[subsystem] ?? "";
+    applySubsystemModel(kind, subsystem, v);
+    settle("Model", setSubsystemModel(kind, subsystem, v), () =>
+      applySubsystemModel(kind, subsystem, prev)
+    );
+    clampSubsystemEffort(kind, subsystem);
+  };
+
+  const applySubsystemHarness = (subsystem: ModelSubsystem, v: string): void =>
     setHarnessBySubsystem((m) => {
       const next = { ...m };
       if (v) next[subsystem] = v as HarnessKind;
       else delete next[subsystem];
       return next;
     });
-    void setSubsystemHarness(subsystem, v as HarnessKind | "").then((ok) => {
-      if (ok) return;
-      setHarnessBySubsystem((current) => {
-        const next = { ...current };
-        if (previous) next[subsystem] = previous;
-        else delete next[subsystem];
-        return next;
-      });
-    });
+
+  const onSetSubsystemHarness = (
+    subsystem: ModelSubsystem,
+    v: string
+  ): void => {
+    const previous = harnessBySubsystem[subsystem] ?? "";
+    applySubsystemHarness(subsystem, v);
+    settle("Agent", setSubsystemHarness(subsystem, v as HarnessKind | ""), () =>
+      applySubsystemHarness(subsystem, previous)
+    );
   };
 
   const onSetSubsystemHarnessLadder = (
     subsystem: ModelSubsystem,
     kinds: HarnessKind[]
   ): void => {
+    const previous = harnessLadders[subsystem] ?? [];
     setHarnessLadders((current) => ({ ...current, [subsystem]: kinds }));
-    setSubsystemHarnessLadder(subsystem, kinds);
+    settle("Failover", setSubsystemHarnessLadder(subsystem, kinds), () =>
+      setHarnessLadders((current) => ({ ...current, [subsystem]: previous }))
+    );
   };
 
-  const onSetHarnessConfig = (
+  const applyHarnessConfig = (
     kind: HarnessKind,
     category: string,
     value: string
-  ): void => {
+  ): void =>
     setDefaultConfigByKind((current) => {
       const next = { ...current, [kind]: { ...current[kind] } };
       if (value) next[kind]![category] = value;
       else delete next[kind]![category];
       return next;
     });
-    setHarnessConfigPin(kind, category, value);
+
+  const onSetHarnessConfig = (
+    kind: HarnessKind,
+    category: string,
+    value: string
+  ): void => {
+    const prev = defaultConfigByKind[kind]?.[category] ?? "";
+    applyHarnessConfig(kind, category, value);
+    settle("Level", setHarnessConfigPin(kind, category, value), () =>
+      applyHarnessConfig(kind, category, prev)
+    );
   };
 
-  const onSetSubsystemConfig = (
+  const applySubsystemConfig = (
     kind: HarnessKind,
     subsystem: ModelSubsystem,
     category: string,
     value: string
-  ): void => {
+  ): void =>
     setSubsystemConfigByKind((current) => {
       const next = {
         ...current,
@@ -500,7 +307,20 @@ export default function SettingsHarnessesScreen({
       else delete next[kind]![subsystem]![category];
       return next;
     });
-    setSubsystemConfigPin(kind, subsystem, category, value);
+
+  const onSetSubsystemConfig = (
+    kind: HarnessKind,
+    subsystem: ModelSubsystem,
+    category: string,
+    value: string
+  ): void => {
+    const prev = subsystemConfigByKind[kind]?.[subsystem]?.[category] ?? "";
+    applySubsystemConfig(kind, subsystem, category, value);
+    settle(
+      "Level",
+      setSubsystemConfigPin(kind, subsystem, category, value),
+      () => applySubsystemConfig(kind, subsystem, category, prev)
+    );
   };
 
   const cards = status?.cards ?? [];

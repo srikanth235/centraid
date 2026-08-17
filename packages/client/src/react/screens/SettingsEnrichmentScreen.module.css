@@ -51,34 +51,6 @@
   margin-top: var(--sp-2);
 }
 
-/* The domain's ceiling, above its capabilities rather than in a "Defaults"
-   group of its own: the limit and the things it limits are one decision, and
-   splitting them is what let "On this device" quietly stop every document
-   capability with the explanation two groups away. */
-.ceiling {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--sp-3);
-}
-.ceilingText {
-  display: grid;
-  gap: 3px;
-  min-width: 12rem;
-  flex: 1 1 16rem;
-}
-.ceilingLabel {
-  font-size: var(--t-small-size);
-  font-weight: 600;
-  color: var(--text);
-}
-.ceilingHint {
-  font-size: var(--t-control-size);
-  line-height: 1.45;
-  color: var(--text-faint);
-}
-
 /* ONE CAPABILITY. Reading order across the row is the order the questions are
    asked: is it on, what is it, where does its work go, what runs it. The
    switch leads because it is the only thing most people came to change. */
@@ -129,14 +101,82 @@
 .capWhere[data-egress="provider"] {
   color: var(--net);
 }
-.capEngine {
+/* THE ENGINE, COLLAPSED. Two rows out of nine have an engine to choose, so it
+   is one pill beside the switch rather than a select every row wears. Pressing
+   it opens the chips and the model/level row below. */
+.capPill {
   grid-column: 3;
   grid-row: 1;
   justify-self: end;
+  display: inline-flex;
+  align-items: center;
+  /* `--target-min`, not `--h-control`: this is the only route to the engine
+     choice, so it holds the touch floor and drops to control height only where
+     a fine pointer is proven. */
+  min-height: var(--target-min);
+  padding-inline: var(--sp-3);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--r-lg);
+  background: transparent;
+  color: var(--text);
+  font-size: var(--t-control-size);
+  white-space: nowrap;
+  cursor: pointer;
 }
-.capBuiltIn {
+.capPill[data-open="true"] {
+  border-color: var(--text);
+  background: var(--bg-sunken);
+  font-weight: 600;
+}
+/* A capability this build has no words for: stated where the switch would be,
+   never a control that would write a guess. */
+.capLock {
   font-size: var(--t-control-size);
   color: var(--text-ghost);
+  white-space: nowrap;
+}
+.capEngine {
+  grid-column: 2 / -1;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sp-2);
+}
+.capEngineLabel {
+  font-size: var(--t-control-size);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-ghost);
+}
+.capChip {
+  min-height: var(--target-min);
+  padding-inline: var(--sp-3);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--r-pill);
+  background: transparent;
+  color: var(--text);
+  font-size: var(--t-control-size);
+  white-space: nowrap;
+  cursor: pointer;
+}
+.capChip[data-on="true"] {
+  border-color: var(--text);
+  background: var(--bg-sunken);
+  font-weight: 600;
+}
+/* A disconnected agent is OFFERED and not selectable — dashed, so the row says
+   "this exists, and not here" rather than hiding the answer. */
+.capChip[data-off="true"] {
+  border-style: dashed;
+  color: var(--text-disabled);
+  cursor: default;
+}
+.capModelRow {
+  flex: 1 1 100%;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sp-2);
 }
 
 /* A statement about the row that is not a control: its own full-width line, so
@@ -161,7 +201,7 @@
   .capRow {
     grid-template-columns: auto minmax(0, 1fr);
   }
-  .capEngine {
+  .capPill {
     grid-column: 2;
     grid-row: auto;
     justify-self: start;

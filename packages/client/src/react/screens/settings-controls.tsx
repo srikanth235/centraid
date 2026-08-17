@@ -12,14 +12,20 @@ import styles from "./settings-controls.module.css";
 
 export function DrawerGroup({
   label,
+  meta,
   children,
 }: {
   label: string;
+  /** A count the head states about its own rows (`3 of 4 on`). */
+  meta?: string;
   children: ReactNode;
 }): JSX.Element {
   return (
     <div className={drawerGroupCss.group}>
-      <div className={drawerGroupCss.groupLabel}>{label}</div>
+      <div className={drawerGroupCss.groupHead}>
+        <span className={drawerGroupCss.groupLabel}>{label}</span>
+        {meta ? <span className={drawerGroupCss.groupMeta}>{meta}</span> : null}
+      </div>
       <div className={drawerGroupCss.groupBody}>{children}</div>
     </div>
   );

@@ -102,6 +102,49 @@ describe("screens/SettingsAppearanceScreen", () => {
       );
     });
 
+    it("states that Match system is a standing mode, only while it is chosen", () => {
+      const props = makeProps();
+      const el = mount(props);
+      expect(el.textContent).not.toContain("Follows the system as it changes");
+      const system = segment(el, "Appearance").get("system");
+      if (!system) throw new Error("no system position");
+      click(system);
+      expect(el.textContent).toContain("Follows the system as it changes");
+    });
+
+    it("returns the time zone to the gateway's value and names it when refused", async () => {
+      const saved = vi.mocked(
+        (await import("../shell/routes/settingsCronTimezoneData.js"))
+          .saveDefaultCronTimeZone
+      );
+      const loaded = vi.mocked(
+        (await import("../shell/routes/settingsCronTimezoneData.js"))
+          .loadDefaultCronTimeZone
+      );
+      loaded.mockResolvedValueOnce("Europe/London");
+      saved.mockResolvedValueOnce(
+        "Not a zone the gateway knows. Still using Europe/London."
+      );
+      const el = mount(makeProps());
+      await act(async () => {});
+      const field = el.querySelector<HTMLInputElement>(
+        '[data-testid="settings-default-cron-timezone"]'
+      );
+      if (!field) throw new Error("no time zone field");
+      const setValue = Object.getOwnPropertyDescriptor(
+        globalThis.HTMLInputElement.prototype,
+        "value"
+      )?.set;
+      await act(async () => {
+        setValue?.call(field, "Not/A_Zone");
+        field.dispatchEvent(new Event("input", { bubbles: true }));
+        field.dispatchEvent(new Event("focusout", { bubbles: true }));
+      });
+      await act(async () => {});
+      expect(field.value).toBe("Europe/London");
+      expect(el.textContent).toContain("Still using Europe/London.");
+    });
+
     it("leaves the theme as the page's only segmented control", async () => {
       const el = mount(makeProps());
       await act(async () => {});
