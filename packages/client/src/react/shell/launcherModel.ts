@@ -83,6 +83,18 @@ export interface LauncherDestination {
    * place. A fourth gated destination is then one line here and nothing else.
    */
   requires?: ExperimentalCapability;
+  /**
+   * A destination whose surface merged into another's (v11).
+   *
+   * It stays in this file because this file is the COMPLETE set of places the
+   * shell can go and the id is a persisted pin key — deleting the row would
+   * make a member's stored pin unresolvable rather than merely unshown. It is
+   * filtered out of every VIEW by `visibleDestinations`, so the stem, the
+   * band, All apps and ⌘K each list the surviving destination once and only
+   * once. Unifying the two ids is a pin-set migration and is deliberately not
+   * done here (see `destinations.ts`).
+   */
+  retired?: true;
 }
 
 /**
@@ -162,11 +174,16 @@ export const LAUNCHER_DESTINATIONS: readonly LauncherDestination[] = [
     route: { kind: "atlas" },
   },
   {
+    // Copies merged into Vault: devices, people, gateways and commons answer
+    // the same question the census does — which machines and which people can
+    // reach these bytes. The route still resolves, so an old pin and an old
+    // deep link both land on the merged surface.
     icon: DESTINATION_MARKS.devices,
     id: "household",
-    label: "Copies",
+    label: "Vault",
     page: "household",
-    route: { kind: "household" },
+    retired: true,
+    route: { kind: "atlas" },
   },
   {
     icon: DESTINATION_MARKS.gateway,
@@ -190,8 +207,8 @@ export const LAUNCHER_DESTINATIONS: readonly LauncherDestination[] = [
  * The default set answers the four household questions: Home carries ambient
  * health, Notifications what needs a decision, Activity what happened, and
  * Vault what is held and shared. Setup destinations (Automations and
- * Connectors), Copies, and diagnostics (System) remain in All apps and may be
- * pinned deliberately; System is never shipped pinned.
+ * Connectors) and diagnostics (System) remain in All apps and may be pinned
+ * deliberately; System is never shipped pinned.
  *
  * Home is not listed: it is pinned by law (see `isPinned`), the way a browser
  * cannot unpin its own back button.
@@ -238,7 +255,9 @@ export function visibleDestinations(
   capabilities: ShellCapabilities
 ): readonly LauncherDestination[] {
   return LAUNCHER_DESTINATIONS.filter(
-    (d) => d.requires === undefined || capabilities[d.requires]
+    (d) =>
+      d.retired !== true &&
+      (d.requires === undefined || capabilities[d.requires])
   );
 }
 

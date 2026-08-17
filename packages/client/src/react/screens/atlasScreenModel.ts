@@ -107,30 +107,6 @@ export function kindWritten(kind: KindRow): boolean {
   return kind.records > 0;
 }
 
-/**
- * "Photos · 1,908 records · 1.2 GB · 12 written today" — each clause only when
- * the census/pulse carries it.
- *
- * The pack leads. It is the one thing that says WHOSE kind this is, the census
- * has always carried it, and a list of forty kinds with no owner beside them
- * is forty rows a member has to recognise by name alone.
- *
- * A never-written kind says so instead of claiming "0 records", which reads as
- * a count that has moved rather than one that never has.
- */
-export function kindSubLine(kind: KindRow): string {
-  const parts = [kind.packLabel];
-  if (!kindWritten(kind)) {
-    parts.push(NEVER_WRITTEN);
-    return parts.join(" · ");
-  }
-  parts.push(`${kind.records.toLocaleString()} records`);
-  if (kind.bytes !== null) parts.push(formatBytes(kind.bytes));
-  if (kind.writtenToday !== null && kind.writtenToday > 0)
-    parts.push(`${kind.writtenToday.toLocaleString()} written today`);
-  return parts.join(" · ");
-}
-
 /** The words for a kind the schema defines and nothing has ever written. One
  *  string, used by the sub line and by the chip that filters for them. */
 export const NEVER_WRITTEN = "Never written";
@@ -151,6 +127,57 @@ export function kindMeta(
   if (kind.lastWriteDay === null) return undefined;
   if (kind.lastWriteDay === "") return "Quiet";
   return dayLabel(kind.lastWriteDay, now);
+}
+
+/**
+ * The "What it holds" head: "25 of 31 kinds written · 41,208 records".
+ *
+ * Both halves are the census's own totals rather than the rendered list's:
+ * the list is filtered by the chips, and a head that counted what is on screen
+ * would tell a member the vault shrank when they pressed "Written today".
+ */
+export function holdsMeta(stats: AtlasCensusPayload): string {
+  const { kinds, populatedKinds, rows } = stats.totals;
+  return [
+    `${populatedKinds.toLocaleString()} of ${kinds.toLocaleString()} kinds written`,
+    `${rows.toLocaleString()} records`,
+  ].join(" · ");
+}
+
+/**
+ * The meter bar's length: this kind's share of the LARGEST kind, 0–100.
+ *
+ * Share of the largest, never of the total. A vault's records are so unevenly
+ * distributed that shares of the total round nine kinds out of ten to a bar
+ * one pixel wide — a chart that says "everything is nothing" and answers no
+ * question. Against the largest, the list reads as an ordering.
+ */
+export function meterShare(kind: KindRow, largest: number): number {
+  if (largest <= 0 || kind.records <= 0) return 0;
+  return Math.min(100, Math.round((kind.records / largest) * 100));
+}
+
+/** The biggest record count in a list of kinds — the meter's 100%. */
+export function largestRecords(kinds: readonly KindRow[]): number {
+  return kinds.reduce((most, kind) => Math.max(most, kind.records), 0);
+}
+
+/**
+ * The meter row's numeric cell: `1,908 records · 1.2 GB · 12 written today`,
+ * each clause only when the census/pulse carries it — or {@link
+ * NEVER_WRITTEN} for a kind nothing has ever written. "0 records" reads as a
+ * count that has moved rather than one that never has, and the never-written
+ * words are the SAME string the chip that isolates those rows uses.
+ */
+export function kindCount(kind: KindRow): string {
+  if (!kindWritten(kind)) return NEVER_WRITTEN;
+  const parts = [`${kind.records.toLocaleString()} records`];
+  if (kind.bytes !== null) parts.push(formatBytes(kind.bytes));
+  // The clause the "Written today" chip filters on. Without it the chip sorts
+  // rows by a fact none of them state, which is a filter a member cannot check.
+  if (kind.writtenToday !== null && kind.writtenToday > 0)
+    parts.push(`${kind.writtenToday.toLocaleString()} written today`);
+  return parts.join(" · ");
 }
 
 /** The app bar's count line: "9 kinds · 12,408 records · 2.1 GB". */

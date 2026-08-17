@@ -142,8 +142,10 @@ describe("the launcher model", () => {
 
   describe("the All-apps filter", () => {
     it("lists everything when the query is empty", () => {
+      // Everything the sheet can OFFER — which is every destination except
+      // the one whose surface merged into another's (v11: Copies → Vault).
       expect(searchDestinations("  ", CAPABILITIES_ON)).toStrictEqual(
-        LAUNCHER_DESTINATIONS
+        LAUNCHER_DESTINATIONS.filter((d) => d.retired !== true)
       );
     });
 
@@ -152,9 +154,33 @@ describe("the launcher model", () => {
       expect(
         searchDestinations("activity", CAPABILITIES_ON).map((d) => d.id)
       ).toStrictEqual(["insights"]);
+      // "Copies" merged into Vault and its row is retired from every view, so
+      // the word finds nothing and "Vault" finds exactly one place — never two
+      // rows offering the same surface under two names.
+      expect(searchDestinations("COPIES", CAPABILITIES_ON)).toHaveLength(0);
       expect(
-        searchDestinations("COPIES", CAPABILITIES_ON).map((d) => d.id)
-      ).toStrictEqual(["household"]);
+        searchDestinations("vault", CAPABILITIES_ON).map((d) => d.id)
+      ).toStrictEqual(["atlas"]);
+    });
+
+    it("keeps the retired id resolvable, and out of every view", () => {
+      // The id is a PERSISTED PIN KEY: deleting the row would make a stored
+      // pin unresolvable rather than merely unshown. It stays in the complete
+      // list, points at the surviving surface, and is filtered from the views.
+      const retired = LAUNCHER_DESTINATIONS.find((d) => d.id === "household");
+      expect(retired?.retired).toBe(true);
+      expect(retired?.route).toStrictEqual({ kind: "atlas" });
+      expect(
+        visibleDestinations(CAPABILITIES_ON).map((d) => d.id)
+      ).not.toContain("household");
+      // A pin on the retired id resolves to nothing in the stem — the same
+      // treatment a gated-off destination gets, and for the same reason: the
+      // view is filtered, the stored pin is never mutated.
+      expect(
+        pinnedDestinations(pinsOf("household"), CAPABILITIES_ON).map(
+          (d) => d.id
+        )
+      ).toStrictEqual(["home"]);
     });
 
     it("returns nothing for a query that matches nothing", () => {

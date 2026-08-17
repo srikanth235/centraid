@@ -52,6 +52,32 @@ export interface OpsBarDef {
   tone: OpsTone;
 }
 
+/**
+ * Vault — ONE surface, two persisted keys (v11).
+ *
+ * Data and Household merged into one custody page: what it holds, who can
+ * reach it, where it lives. The two route kinds both resolve to it so old deep
+ * links and old pins still land, and they share ONE definition object rather
+ * than two entries that happen to agree — two entries is two chances for the
+ * bar to say "Copies" over a page titled "Vault".
+ *
+ * The verbs are the SURFACE's, not a section's. "Pair a device" is the one act
+ * this page performs, so it is the commit. "Recovery" is the quiet verb: the
+ * shared-space steward ceremony is the one thing here a member arrives already
+ * needing, and it is otherwise three sections down. "Export a kind" is NOT in
+ * the bar — it is a verb about the census, and in the bar it would lose the
+ * subject that makes it mean anything, so it is a row beside the census.
+ *
+ * The tone stays `seam`: pending pairings and unanswered invitations are
+ * neither an alarm nor nothing.
+ */
+const VAULT: Omit<OpsBarDef, "page"> = {
+  commit: { label: "Pair a device" },
+  secondary: { label: "Recovery" },
+  title: "Vault",
+  tone: "seam",
+};
+
 const DEFS: Record<OpsPage, OpsBarDef> = {
   approvals: {
     commit: { label: "Review all" },
@@ -60,14 +86,7 @@ const DEFS: Record<OpsPage, OpsBarDef> = {
     title: "Notifications",
     tone: "net",
   },
-  atlas: {
-    // No commit: Data is a read surface. "Export a kind" copies out, which is
-    // not a write to the vault.
-    page: "atlas",
-    secondary: { label: "Export a kind" },
-    title: "Vault",
-    tone: "ok",
-  },
+  atlas: { ...VAULT, page: "atlas" },
   automations: {
     commit: { label: "New automation" },
     page: "automations",
@@ -82,15 +101,9 @@ const DEFS: Record<OpsPage, OpsBarDef> = {
     title: "Connectors",
     tone: "net",
   },
-  household: {
-    commit: { label: "Pair a device" },
-    page: "household",
-    // The one page whose tone is `seam` — pending pairings and unaccepted
-    // recovery invitations are neither an alarm nor nothing.
-    secondary: { label: "Recovery" },
-    title: "Copies",
-    tone: "seam",
-  },
+  // The retired Copies route. Same surface, same words — the id survives only
+  // because pin sets are persisted (`destinations.ts`).
+  household: { ...VAULT, page: "household" },
   insights: {
     // No commit, as above: Analytics counts what already happened.
     page: "insights",

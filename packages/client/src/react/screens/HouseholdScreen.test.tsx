@@ -179,16 +179,68 @@ describe("HouseholdScreen suite", () => {
     });
   }
 
+  describe("merged into the Vault surface", () => {
+    it("draws its own section head, and publishes nothing to a second channel", async () => {
+      const reports: unknown[] = [];
+      const el = await mount({
+        ...roster(),
+        embedded: true,
+        onReport: (report) => reports.push(report),
+        records: 41_208,
+      });
+      expect(el.textContent).toContain("Where it lives");
+      // ONE PUBLISHER. Two channels behind one bar is two answers the bar can
+      // only draw one of; the half reports upward instead.
+      expect(readVitals("household")).toBeUndefined();
+      expect(readVitals("atlas")).toBeUndefined();
+      const last = reports.at(-1) as { custody: string; state: string };
+      expect(last.state).toBe("ready");
+      expect(last.custody).toBe(
+        "41,208 records · 2 machines hold a full copy · 2 devices enrolled"
+      );
+    });
+
+    it("omits the record clause when the census has not answered", async () => {
+      const reports: { custody: string }[] = [];
+      await mount({
+        ...roster(),
+        embedded: true,
+        onReport: (report) => reports.push(report),
+        records: null,
+      });
+      // An old gateway that cannot report a census must not cost the page the
+      // two numbers it does know, and must not make it guess the third.
+      const custody = reports.at(-1)?.custody ?? "";
+      expect(custody).toBe("2 machines hold a full copy · 2 devices enrolled");
+      expect(custody).not.toContain("records");
+    });
+
+    it("hides its rows outright when the section is closed", async () => {
+      const el = await mount({
+        ...roster(),
+        embedded: true,
+        collapsed: true,
+        onToggle: () => {},
+      });
+      expect(el.textContent).toContain("Where it lives");
+      expect(el.querySelectorAll(".row")).toHaveLength(0);
+    });
+  });
+
   describe(HouseholdScreen, () => {
-    it("leads with the roster, then the vaults that hardware reaches", async () => {
+    it("leads with the vaults, then the hardware, then the people (v11)", async () => {
       const el = await mount(roster());
       const text = el.textContent ?? "";
+      expect(text).toContain("Vaults you own");
       expect(text).toContain("Yours");
       expect(text).toContain("This laptop");
-      expect(text).toContain("Vaults you own");
-      expect(text.indexOf("Yours")).toBeLessThan(
-        text.indexOf("Vaults you own")
+      expect(text).toContain("People");
+      // The order the question narrows: the containers, then the machines
+      // holding them, then the people those machines belong to.
+      expect(text.indexOf("Vaults you own")).toBeLessThan(
+        text.indexOf("Yours")
       );
+      expect(text.indexOf("Yours")).toBeLessThan(text.indexOf("People"));
       // Identity belongs to the frame now — the page draws no title of its own.
       expect(el.querySelector("h1")).toBeNull();
     });
@@ -347,11 +399,20 @@ describe("HouseholdScreen suite", () => {
       expect(onOpenVaultSettings).toHaveBeenCalledWith();
     });
 
-    it("routes every vault to storage and backups", async () => {
+    it("draws ONE door to storage for the gateway, not one per vault", async () => {
       const onOpenStorage = vi.fn<HouseholdScreenProps["onOpenStorage"]>();
-      const el = await mount({ ...roster(), onOpenStorage });
-      await click(rowAction(el, "Personal", "Manage"));
-      await click(button(el, "System capacity & backups"));
+      const el = await mount({
+        ...roster(),
+        onOpenStorage,
+        vaults: [scope(), scope({ id: "v2", label: "Family" })],
+      });
+      // Capacity is one fact about the gateway. It used to be a button inside
+      // each vault's own detail, which drew the same door once per vault and
+      // implied it was a per-vault fact.
+      expect(el.textContent?.match(/Storage on this gateway/gu)).toHaveLength(
+        1
+      );
+      await click(rowAction(el, "Storage on this gateway", "Open"));
       expect(onOpenStorage).toHaveBeenCalledWith();
     });
 
@@ -377,13 +438,23 @@ describe("HouseholdScreen suite", () => {
       expect(empty.textContent).toContain("No vaults are reachable");
     });
 
-    it('offers "New vault" only when the host can create one', async () => {
-      const withCreate = await mount({ ...roster(), onNewVault: () => {} });
-      expect(withCreate.textContent).toContain("New vault");
+    it('offers "Create a vault" only when the host can create one', async () => {
+      let opened = 0;
+      const withCreate = await mount({
+        ...roster(),
+        onNewVault: () => {
+          opened += 1;
+        },
+      });
+      expect(withCreate.textContent).toContain("Create a vault");
+      await click(rowAction(withCreate, "Create a vault", "Create"));
+      expect(opened).toBe(1);
       act(() => root?.unmount());
       container?.remove();
+      // Withdrawn, not disabled: a gateway this client cannot create vaults on
+      // offers no verb rather than a failing one.
       const without = await mount(roster());
-      expect(without.textContent).not.toContain("New vault");
+      expect(without.textContent).not.toContain("Create a vault");
     });
 
     it("shows receiver Commons offers with size and explicit Accept/Refuse", async () => {

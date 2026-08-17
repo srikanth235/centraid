@@ -85,7 +85,6 @@ import {
 } from "./routes/conversationScopes.js";
 import GatewayRoute from "./routes/GatewayRoute.js";
 import HomeRoute from "./routes/HomeRoute.js";
-import HouseholdRoute from "./routes/HouseholdRoute.js";
 import InlineAppRoute from "./routes/InlineAppRoute.js";
 import { inlineAppLoader } from "./routes/inlineApps.js";
 import InsightsRoute from "./routes/InsightsRoute.js";
@@ -1269,12 +1268,16 @@ export default function App({
               }}
             />
           );
+        // Data and Copies merged into one Vault custody surface (v11). Both
+        // route kinds resolve to it so old deep links and old pins land; the
+        // kind is passed through because it is also the vitals channel the
+        // bar above this outlet is reading.
         case "household":
-          return <HouseholdRoute />;
+          return <VaultRoute page="household" />;
         case "storage":
           return <StorageRoute />;
         case "atlas":
-          return <VaultRoute />;
+          return <VaultRoute page="atlas" />;
         case "automation-view":
           // Keyed so an in-place automation change remounts: traces, watched
           // turn ids, and any open SSE all belong to one automation (#541).

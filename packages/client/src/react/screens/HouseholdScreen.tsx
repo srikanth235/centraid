@@ -9,6 +9,7 @@ import type {
   GatewayLink,
   PendingEdge,
 } from "../../gateway-client.js";
+import type { OpsState } from "../shell/opsBar.js";
 import type { OwnerScope } from "../shell/ownerScope.js";
 import { startVisibilityTicker } from "../shell/routes/visibility-ticker.js";
 import {
@@ -16,6 +17,7 @@ import {
   publishRouteSignals,
   publishRouteVerbs,
 } from "../shell/routeVitals.js";
+import type { RouteHealth } from "../shell/routeVitals.js";
 import { PageSkeleton } from "../shell/status.js";
 import Button from "../ui/Button.js";
 import EmptyBlock from "../ui/EmptyBlock.js";
@@ -24,11 +26,13 @@ import PanelBlock from "../ui/PanelBlock.js";
 import RowsBlock from "../ui/RowsBlock.js";
 import type { RowDef } from "../ui/RowsBlock.js";
 import SectionBlock from "../ui/SectionBlock.js";
+import type { OwnerGroup } from "./device-groups.js";
 import { dateLabel } from "./DeviceRow.js";
 import DevicesCard, { useDeviceRoster } from "./DevicesCard.js";
 import type { DeviceRosterWiring } from "./DevicesCard.js";
 import SharingCard from "./SharingCard.js";
 import type { SharingCardProps } from "./SharingCard.js";
+import { custodyCounts, custodyLine } from "./vault-custody.js";
 
 import styles from "./HouseholdScreen.module.css";
 
@@ -101,6 +105,41 @@ export interface HouseholdScreenProps {
   /** Sharing wiring (#726 P6). Optional so a gateway with no edge/link plane
    *  (or a test) renders the page without it. */
   sharing?: SharingCardProps;
+  /**
+   * Drawn as ONE SECTION of the merged Vault surface rather than as a page of
+   * its own (v11). Embedded, it draws no page frame, publishes nothing to the
+   * frame's two slots, and reports what it knows to the surface above it
+   * instead — one route, one bar, one status line.
+   */
+  embedded?: boolean;
+  /**
+   * How many records the census counted, for the custody line's first clause.
+   * `null` when the census has not answered (an old gateway, or a read that
+   * failed beside a roster that succeeded): the clause is then OMITTED rather
+   * than guessed, and the two numbers this half does know still get said.
+   */
+  records?: number | null;
+  /** Embedded only: hand the surface what this half knows, once per change. */
+  onReport?: (report: HouseholdReport) => void;
+  /** Embedded only: the section's disclosure, owned by the surface. */
+  collapsed?: boolean;
+  onToggle?: () => void;
+}
+
+/** What the "Where it lives" half tells the merged surface about itself. */
+export interface HouseholdReport {
+  state: OpsState;
+  /** The custody line — the section head's meta and half the bar's count. */
+  custody: string;
+  deviceCount: number;
+  personCount: number;
+  pendingCount: number;
+  health: RouteHealth;
+  /** The surface's one commit. */
+  openPairing: () => void;
+  /** The surface's quiet verb: the recovery ceremony lives in the sharing
+   *  card, so "Recovery" scrolls to it. */
+  reviewPending: () => void;
 }
 
 /** One thing waiting on this owner's decision, said as a sentence. */
@@ -190,17 +229,16 @@ function usePendingRequests(
   );
 }
 
-/** The vaults block — one row per vault, its two settings doors in the row's
- *  own detail so the block keeps one action per row. */
+/** The vaults block — one row per vault, its settings door in the row's own
+ *  detail so the block keeps one action per row. Capacity is NOT here: it is
+ *  one fact about the gateway, so it is one row under the group. */
 function VaultRows({
   vaults,
   defaultScopeId,
-  onOpenStorage,
   onOpenVaultSettings,
 }: {
   vaults: readonly OwnerScope[];
   defaultScopeId: string;
-  onOpenStorage: () => void;
   onOpenVaultSettings?: () => void;
 }): JSX.Element {
   const [openId, setOpenId] = useState<string | null>(null);
@@ -221,15 +259,11 @@ function VaultRows({
         ? {
             children: (
               <div className={styles.detailActions}>
-                <Button
-                  commit={false}
-                  label="System capacity & backups"
-                  onClick={() => onOpenStorage()}
-                  size="sm"
-                  variant="secondary"
-                />
                 {/* Settings → Vault edits whichever vault the client resolves
-                    to, so it is offered only where it cannot mis-target. */}
+                    to, so it is offered only where it cannot mis-target.
+                    Capacity is NOT here any more: it is one door for every
+                    vault on this gateway, so it is one row under the group
+                    rather than the same button repeated inside each vault. */}
                 {isDefault && onOpenVaultSettings ? (
                   <Button
                     commit={false}
@@ -238,7 +272,11 @@ function VaultRows({
                     size="sm"
                     variant="secondary"
                   />
-                ) : null}
+                ) : (
+                  <span className={styles.detailAsk}>
+                    Settings edit the vault this device resolves to.
+                  </span>
+                )}
               </div>
             ),
           }
@@ -246,6 +284,31 @@ function VaultRows({
     };
   });
   return <RowsBlock rows={rows} />;
+}
+
+/**
+ * The household roster — who, not what (v11 "Where it lives").
+ *
+ * A vault has exactly one owner and a device caller sees only its own owner's
+ * roster row, so this block is almost always one row long. It is drawn anyway:
+ * "which people can reach these bytes" is half the question the section asks,
+ * and a section that answered it only when the answer was interesting would
+ * leave a member unable to check that it is still one.
+ */
+function PeopleRows({
+  people,
+}: {
+  people: readonly OwnerGroup[];
+}): JSX.Element {
+  const rows: RowDef[] = people.map((person) => ({
+    id: person.ownerId,
+    sub: [
+      `${person.devices.length} device${person.devices.length === 1 ? "" : "s"}`,
+      `${person.vaults.length} vault${person.vaults.length === 1 ? "" : "s"}`,
+    ].join(" · "),
+    title: person.isSelf ? `${person.label} · you` : person.label,
+  }));
+  return <RowsBlock ariaLabel="People" rows={rows} stacked />;
 }
 
 export default function HouseholdScreen(
@@ -320,7 +383,28 @@ export default function HouseholdScreen(
     state === "empty"
       ? "This device only"
       : `${devices} · ${people} · ${requests.length} pending`;
+
+  // COPIES AND ENROLMENT ARE TWO NUMBERS (v11). The custody line states both,
+  // over the census's record count when there is one — and drops that clause
+  // rather than guessing when there is not.
+  const everyDevice = useMemo(
+    () => [
+      ...(roster.self?.devices ?? []),
+      ...roster.others.flatMap((group) => group.devices),
+    ],
+    [roster.others, roster.self]
+  );
+  const custody = useMemo(
+    () => custodyLine(custodyCounts(everyDevice), props.records ?? null),
+    [everyDevice, props.records]
+  );
+
+  const { embedded = false, onReport } = props;
   useEffect(() => {
+    // Embedded, the surface above publishes ONE count line and ONE status line
+    // for the whole of Vault; a second publisher on a second channel would put
+    // two answers behind one bar.
+    if (embedded) return;
     publishRouteSignals("household", {
       count,
       health,
@@ -329,9 +413,13 @@ export default function HouseholdScreen(
     });
     // `health` is rebuilt every render; its CONTENT is what matters, and the
     // channel itself drops a republish that says the same thing.
-  }, [count, health, requests.length, state]);
-  useEffect(() => () => clearRouteSignals("household"), []);
+  }, [count, embedded, health, requests.length, state]);
   useEffect(() => {
+    if (embedded) return undefined;
+    return () => clearRouteSignals("household");
+  }, [embedded]);
+  useEffect(() => {
+    if (embedded) return;
     // The commit opens this page's own pairing panel rather than the shell's
     // modal: pairing here refreshes the roster it just changed.
     publishRouteVerbs("household", {
@@ -344,10 +432,64 @@ export default function HouseholdScreen(
     // `hasSharing`, not the props object: the route rebuilds that every clock
     // tick, and republishing the verbs once a second would wake the frame for
     // nothing.
-  }, [hasSharing, openPairing, reviewPending]);
+  }, [embedded, hasSharing, openPairing, reviewPending]);
 
-  return (
-    <div className={styles.page}>
+  const report = useMemo<HouseholdReport>(
+    () => ({
+      custody,
+      deviceCount: roster.deviceCount,
+      health,
+      openPairing,
+      pendingCount: requests.length,
+      personCount: roster.personCount,
+      reviewPending,
+      state,
+    }),
+    [
+      custody,
+      health,
+      openPairing,
+      requests.length,
+      reviewPending,
+      roster.deviceCount,
+      roster.personCount,
+      state,
+    ]
+  );
+  // A BLOCK BODY, deliberately: an arrow that returned the callback's value
+  // would hand React whatever the caller's reporter happened to return as an
+  // effect destructor, and React would try to call it on unmount.
+  useEffect(() => {
+    onReport?.(report);
+  }, [onReport, report]);
+
+  const everyone = [...(roster.self ? [roster.self] : []), ...roster.others];
+
+  const vaultDoors: RowDef[] = [
+    ...(props.onNewVault
+      ? [
+          {
+            action: { label: "Create", onClick: () => props.onNewVault?.() },
+            id: "new-vault",
+            sub: "A name, an icon and a colour.",
+            title: "Create a vault",
+          } satisfies RowDef,
+        ]
+      : []),
+    {
+      // ONE door for every vault on this gateway. It used to be a button
+      // inside each vault's own detail, which drew the same door once per
+      // vault and implied capacity was a per-vault fact.
+      action: { label: "Open", onClick: props.onOpenStorage },
+      id: "storage",
+      meta: "System",
+      sub: "Capacity, disk use and backups, where the bytes physically sit.",
+      title: "Storage on this gateway",
+    },
+  ];
+
+  const body = (
+    <>
       {state === "loading" ? (
         <>
           <PageSkeleton rows={6} label="Reading the roster" />
@@ -360,7 +502,7 @@ export default function HouseholdScreen(
         <PanelBlock
           action={{ label: "Try again", onClick: roster.refresh }}
           body="Pairing and revocation need the vault host — this page is a cached copy."
-          eyebrow="Copies"
+          eyebrow="Where it lives"
           title="Cannot reach the vault host"
           tone="net"
           wide
@@ -382,25 +524,15 @@ export default function HouseholdScreen(
         />
       )}
 
-      {hasRoster && state !== "loading" && state !== "error" ? (
-        <DevicesCard
-          now={now}
-          onPairingChange={setPairing}
-          pairing={pairing}
-          roster={roster}
-          {...(props.onCreateDeviceTicket
-            ? { onCreateTicket: props.onCreateDeviceTicket }
-            : {})}
-        />
-      ) : null}
-
+      {/* The groups, in the order the question narrows: the containers, then
+          the machines holding them, then the people those machines belong to,
+          then everything reached across a wire. */}
       {state === "loading" ? null : (
         <>
           <SectionBlock label="Vaults you own" meta={String(vaults.length)} />
           {vaults.length > 0 ? (
             <VaultRows
               defaultScopeId={defaultScopeId}
-              onOpenStorage={props.onOpenStorage}
               vaults={vaults}
               {...(props.onOpenVaultSettings
                 ? { onOpenVaultSettings: props.onOpenVaultSettings }
@@ -413,30 +545,56 @@ export default function HouseholdScreen(
                 : "No vaults are reachable from this device."}
             </NoteBlock>
           )}
-          {props.onNewVault ? (
-            <p className={styles.asideAction}>
-              <Button
-                commit={false}
-                label="New vault"
-                onClick={() => props.onNewVault?.()}
-                size="sm"
-                variant="secondary"
-              />
-            </p>
-          ) : null}
-
-          {sharing ? (
-            <div className={styles.sharing} ref={sharingRef}>
-              {/* Links, parked shares and the shared-space steward ceremony
-                  still render in their pre-v9 card: they are the sharing
-                  surface's own vocabulary, and rebuilding them as "other
-                  gateways" would state a local/remote distinction this product
-                  refuses (#726 D3). */}
-              <SharingCard {...sharing} />
-            </div>
-          ) : null}
+          <RowsBlock ariaLabel="Vault doors" rows={vaultDoors} />
         </>
       )}
-    </div>
+
+      {hasRoster && state !== "loading" && state !== "error" ? (
+        <DevicesCard
+          now={now}
+          onPairingChange={setPairing}
+          pairing={pairing}
+          roster={roster}
+          {...(props.onCreateDeviceTicket
+            ? { onCreateTicket: props.onCreateDeviceTicket }
+            : {})}
+        />
+      ) : null}
+
+      {state === "loading" || everyone.length === 0 ? null : (
+        <>
+          <SectionBlock label="People" meta={String(everyone.length)} />
+          <PeopleRows people={everyone} />
+        </>
+      )}
+
+      {state === "loading" || !sharing ? null : (
+        <div className={styles.sharing} ref={sharingRef}>
+          {/* Gateways, edges and commons still render in their pre-v9 card:
+              they are the sharing surface's own vocabulary, and rebuilding
+              them as "other gateways" would state a local/remote distinction
+              this product refuses (#726 D3). Their pass is its own slice. */}
+          <SharingCard {...sharing} />
+        </div>
+      )}
+    </>
   );
+
+  // Embedded, this half IS the third section of the Vault surface: it draws
+  // the head, the custody line and the disclosure, and no page frame of its
+  // own — the surface above owns the one column everything stacks in.
+  if (embedded)
+    return (
+      <>
+        <SectionBlock
+          collapsed={props.collapsed ?? false}
+          label="Where it lives"
+          meta={custody}
+          {...(props.onToggle ? { onToggle: props.onToggle } : {})}
+        />
+        {props.collapsed ? null : body}
+      </>
+    );
+
+  return <div className={styles.page}>{body}</div>;
 }
