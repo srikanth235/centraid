@@ -268,7 +268,7 @@ const LEDGER_NOTE =
 /** The enrichment ledger's note (issue #807). It states the rule the rows
  *  obey: each is an answer, asked once and recorded, not a switch on a page. */
 const ENRICH_CONSENT_NOTE =
-  "Asked once, answered once, recorded — including the answers that were no. Where the question was asked is where it is answered again.";
+  "Asked once, answered once, recorded — including the answers that were no.";
 
 /** The waiting-queue filter, shown only when the queue is full enough to need
  *  one. Ids are the v9 chip set; the labels are its copy. */

@@ -334,4 +334,4 @@ unnarrated) were folded into `## What changed` after the audit.
 
 | date | harness | session |
 | --- | --- | --- |
-| 2026-08-16 | claude-code | 97726ea0-2cc1-5450-a046-cac6be0b3d6a |
+| 2026-08-17 | claude-code | 97726ea0-2cc1-5450-a046-cac6be0b3d6a |
