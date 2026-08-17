@@ -205,7 +205,7 @@ export const ENRICH_CAPABILITY_BLURBS: Readonly<Record<string, string>> = {
     "Spots renewal dates and deadlines so they can become reminders.",
   ocr: "Makes the words inside a picture searchable — receipts, signs, whiteboards.",
   "place-names":
-    "Says which town a photograph was taken near, from a settlement list bundled with Centraid and read on this device. Your own names for places always win.",
+    "Says which town a photograph was taken near, from a list bundled on this device.",
   transcript: "Writes out what is said in your videos and voice notes.",
 };
 

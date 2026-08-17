@@ -22,7 +22,7 @@ import {
   surfaceWriteFailure,
   surfaceWriteOutcome,
 } from "../../kit/replica/write-outcome";
-import { spacing, t, useTheme } from "../../kit/theme";
+import { borders, spacing, t, useTheme } from "../../kit/theme";
 import type { PhotosScreenProps } from "../../navigation";
 import PhotosScreen from "./PhotosScreen";
 import PhotoTimeline from "./PhotoTimeline";
@@ -231,7 +231,7 @@ const styles = StyleSheet.create({
   },
   input: {
     ...t("body"),
-    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomWidth: borders.hairline,
     flex: 1,
     // 44 is the target floor, and a text field a thumb can miss is worse than
     // no field at all.

@@ -40,6 +40,7 @@
       { "schema": "media", "table": "answer_face_proposal", "verbs": "act" },
       { "schema": "core", "table": "place", "verbs": "read" },
       { "schema": "media", "table": "set_asset_place", "verbs": "act" },
+      { "schema": "media", "table": "name_place", "verbs": "act" },
       { "schema": "core", "table": "tag_item", "verbs": "act" },
       { "schema": "core", "table": "untag_item", "verbs": "act" },
       { "schema": "enrich", "table": "policy", "verbs": "read" },

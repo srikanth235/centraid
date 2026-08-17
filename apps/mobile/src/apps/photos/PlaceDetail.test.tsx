@@ -82,7 +82,6 @@ vi.mock(import("react-native"), async () => {
       }),
     StyleSheet: {
       create: <T,>(styles: T): T => styles,
-      hairlineWidth: 1,
     },
     View: ({ children }: { children?: React.ReactNode }) =>
       element("div", { children }),
@@ -175,6 +174,7 @@ vi.mock(
   import("../../kit/theme"),
   () =>
     ({
+      borders: { hairline: 1 },
       spacing: Array.from({ length: 8 }, (_, index) => index * 4),
       t: () => ({}),
       useTheme: () => ({ colors: mocks.colors }),
