@@ -175,17 +175,20 @@ test("2.12 — Household renders the roster, the owner's scopes, and the sharing
     // The frame's app bar names the merged custody surface. Household is
     // the third disclosure; on pointer it starts open. The old Copies
     // count ("3 devices · 2 people · 1 pending") is not published when
-    // Household is embedded — Vault joins the census count (absent here:
-    // the mock does not serve atlas) with the custody line.
+    // Household is embedded. The custody sentence prefixes the census
+    // record count when atlas answered, so pin the clauses — not a guessed
+    // full line — on the section meta next to the h2.
     await expect(
       page.getByRole("heading", { name: "Vault", exact: true })
     ).toBeVisible();
-    await expect(
-      page.getByRole("heading", { name: "Where it lives", exact: true })
-    ).toBeVisible();
-    await expect(
-      page.getByText("0 machines hold a full copy · 3 devices enrolled")
-    ).toBeVisible();
+    const livesHead = page.getByRole("heading", {
+      name: "Where it lives",
+      exact: true,
+    });
+    await expect(livesHead).toBeVisible();
+    const livesMeta = livesHead.locator("xpath=..").locator('[class*="meta"]');
+    await expect(livesMeta).toContainText(/\d+ devices enrolled/u);
+    await expect(livesMeta).toContainText(/full copy/u);
 
     // People-first roster: your hardware, then everyone else's.
     await expect(

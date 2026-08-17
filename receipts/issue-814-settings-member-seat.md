@@ -151,7 +151,9 @@ reasoning bound to the model (`SettingsHarnessesScreen.tsx`,
 
 `apps/desktop/tests/e2e/fixtures.ts` aliases Household/Devices to **Vault**.
 `apps/desktop/tests/e2e/household.spec.ts` 2.12/2.13 assert the merged Vault
-surface (title Vault, custody line, Where it lives).
+surface (title Vault, Where it lives). 2.12 pins custody by clause
+(`/\d+ devices enrolled/`, `/full copy/`) on the section meta, not a
+guessed full sentence.
 `apps/desktop/tests/e2e/settings-enrichment.spec.ts` 12.9 matches Enrichment
 nav by `/Enrichment/` because the row's accessible name is now
 "Enrichment What is read, and where".
@@ -325,6 +327,7 @@ emitted by `apps/desktop/tests/e2e/settings-enrichment.spec.ts` (§12.9).
 bash .governance/run.sh
 bun run lint:types
 bun run --cwd packages/client test -- src/react/screens/atlasScreenModel.test.ts
+# 2.12 pins custody clauses on the Where it lives meta, not a full sentence
 ```
 
 Targeted client tests after the splits: ApprovalsRoute 6 + held 3 +
