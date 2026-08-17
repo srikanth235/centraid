@@ -135,6 +135,16 @@ export default function EnrichmentProfiles({
                 }}
               />
             )}
+            {/* INERT, NOT ILLEGAL (issue #807). A capability whose bundled
+                enricher declares no delegate variant ignores this profile and
+                runs its built-in engine — fire.ts says so in the run log, and
+                the member who made the profile deserves to read it here. */}
+            {!profile.builtIn && !profile.delegateCapable ? (
+              <span className={`${styles.rowMeta} ${styles.rowNote}`}>
+                No agent engine ships for this capability yet, so the built-in
+                one runs.
+              </span>
+            ) : null}
           </div>
         ))}
       </div>

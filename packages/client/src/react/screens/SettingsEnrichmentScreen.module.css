@@ -32,6 +32,11 @@
   line-height: 1.45;
   color: var(--text-faint);
 }
+/* A statement about the row that is not a control: its own line, so the meta
+   line above stays one glance. */
+.rowNote {
+  flex: 1 0 100%;
+}
 .empty {
   font-size: var(--t-small-size);
   color: var(--text-faint);

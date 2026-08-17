@@ -143,6 +143,7 @@ describe("prefs round-trip", () => {
       },
       egress: "provider",
       builtIn: false,
+      delegateCapable: true,
     });
     expect(validateEngineProfilePatch(prefs)).toBeUndefined();
   });

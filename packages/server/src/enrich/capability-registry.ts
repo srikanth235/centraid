@@ -53,6 +53,16 @@ export interface CapabilityContract {
   readonly outputSchema: string;
   /** Blueprint app id of the bundled automation implementing it today. */
   readonly defaultTemplateId: string;
+  /**
+   * Whether that bundled implementation declares a delegate variant
+   * (`manifest.enrich.delegateStep`). A member may bind any non-refused
+   * capability to a harness profile, but only these capabilities have a step
+   * for the harness to run — elsewhere the built-in engine runs regardless, so
+   * surfaces that offer the choice say so rather than letting it look live.
+   * A fact about the shipped manifests, pinned against them by
+   * `automation/manifest/enricher-templates.test.ts`.
+   */
+  readonly delegateCapable: boolean;
 }
 
 /**
@@ -66,6 +76,7 @@ export const ENRICH_CAPABILITIES: readonly CapabilityContract[] = [
     input: "image",
     outputSchema: "ocr@1",
     defaultTemplateId: "photo-ocr",
+    delegateCapable: true,
   },
   {
     id: "faces",
@@ -73,6 +84,7 @@ export const ENRICH_CAPABILITIES: readonly CapabilityContract[] = [
     input: "image",
     outputSchema: "faces@1",
     defaultTemplateId: "faces",
+    delegateCapable: false,
   },
   {
     id: "embed-image",
@@ -80,6 +92,7 @@ export const ENRICH_CAPABILITIES: readonly CapabilityContract[] = [
     input: "image",
     outputSchema: "embed-image@1",
     defaultTemplateId: "embed-image",
+    delegateCapable: false,
   },
   {
     id: "transcript",
@@ -87,6 +100,7 @@ export const ENRICH_CAPABILITIES: readonly CapabilityContract[] = [
     input: "audio-video",
     outputSchema: "transcript@1",
     defaultTemplateId: "transcript",
+    delegateCapable: false,
   },
   {
     id: "embed-text",
@@ -94,6 +108,7 @@ export const ENRICH_CAPABILITIES: readonly CapabilityContract[] = [
     input: "text",
     outputSchema: "embed-text@1",
     defaultTemplateId: "embed-text",
+    delegateCapable: false,
   },
   {
     id: "doc-text",
@@ -101,6 +116,7 @@ export const ENRICH_CAPABILITIES: readonly CapabilityContract[] = [
     input: "document",
     outputSchema: "doc-text@1",
     defaultTemplateId: "doc-text-extractor",
+    delegateCapable: true,
   },
   {
     id: "doc-entities",
@@ -108,6 +124,7 @@ export const ENRICH_CAPABILITIES: readonly CapabilityContract[] = [
     input: "text",
     outputSchema: "doc-entities@1",
     defaultTemplateId: "doc-entity-linker",
+    delegateCapable: false,
   },
   {
     id: "doc-filing",
@@ -115,6 +132,7 @@ export const ENRICH_CAPABILITIES: readonly CapabilityContract[] = [
     input: "text",
     outputSchema: "doc-filing@1",
     defaultTemplateId: "doc-filer",
+    delegateCapable: false,
   },
   {
     id: "obligations",
@@ -122,6 +140,7 @@ export const ENRICH_CAPABILITIES: readonly CapabilityContract[] = [
     input: "text",
     outputSchema: "obligations@1",
     defaultTemplateId: "obligation-extractor",
+    delegateCapable: false,
   },
 ];
 

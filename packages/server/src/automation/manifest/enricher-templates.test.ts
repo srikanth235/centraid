@@ -15,6 +15,7 @@ import { deflateSync } from "node:zlib";
 
 import { describe, expect, it } from "vitest";
 
+import { ENRICH_CAPABILITIES } from "../../enrich/capability-registry.js";
 import { lintHandlerSource } from "../handler/lint.js";
 import { parseManifest } from "./manifest.js";
 
@@ -296,6 +297,25 @@ describe("enricher template hygiene", () => {
     );
     expect(manifest.enrich?.delegateStep !== undefined).toBe(expected);
   });
+
+  // The registry's `delegateCapable` is a claim ABOUT these manifests, read by
+  // Settings to say when a member's delegate profile would be inert. It is a
+  // second copy of the fact, so it is pinned to the first here rather than
+  // trusted.
+  it.each(ENRICH_CAPABILITIES.map((cap) => [cap.id, cap] as const))(
+    "%s's delegateCapable flag matches its shipped manifest",
+    (_id, cap) => {
+      const manifest = parseManifest(
+        readFileSync(
+          path.join(automationDir(cap.defaultTemplateId), "automation.json"),
+          "utf8"
+        )
+      );
+      expect(cap.delegateCapable).toBe(
+        manifest.enrich?.delegateStep !== undefined
+      );
+    }
+  );
 
   it.each(ENRICHERS.map((id) => [id] as const))(
     "%s: handler passes the determinism lint",

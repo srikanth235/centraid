@@ -86,6 +86,7 @@ describe("enrich-profiles-routes", () => {
       engine: { kind: "delegate", harness: "codex", model: "some-model-id" },
       egress: "provider",
       builtIn: false,
+      delegateCapable: true,
     });
   });
 

@@ -51,6 +51,7 @@ function makeData(
         engine: { kind: "built-in" },
         egress: "gateway",
         builtIn: true,
+        delegateCapable: true,
       },
       {
         id: "built-in",
@@ -59,6 +60,7 @@ function makeData(
         engine: { kind: "built-in" },
         egress: "on-device",
         builtIn: true,
+        delegateCapable: false,
       },
       {
         id: "sharp-ocr",
@@ -67,6 +69,7 @@ function makeData(
         engine: { kind: "delegate", harness: "codex" },
         egress: "provider",
         builtIn: false,
+        delegateCapable: true,
       },
     ],
     consent: [
@@ -246,6 +249,36 @@ describe(SettingsEnrichmentScreen, () => {
       capability: "ocr",
       harness: "codex",
     });
+  });
+
+  it("says a member engine is inert when its capability ships no delegate variant", async () => {
+    const data = makeData();
+    const el = await mount(
+      makeProps({
+        load: vi.fn<SettingsEnrichmentScreenProps["load"]>().mockResolvedValue({
+          ...data,
+          profiles: [
+            ...data.profiles,
+            {
+              id: "my-embedder",
+              label: "My embedder",
+              capability: "embed-text",
+              engine: { kind: "delegate", harness: "codex" },
+              egress: "provider",
+              builtIn: false,
+              delegateCapable: false,
+            },
+          ],
+        }),
+      })
+    );
+
+    expect(el.textContent).toContain(
+      "No agent engine ships for this capability"
+    );
+    // And the profile that DOES have one is not labelled inert: the note is a
+    // fact about the capability, not decoration on every member engine.
+    expect(el.textContent?.match(/No agent engine ships/gu)).toHaveLength(1);
   });
 
   it("says so when the gateway does not answer", async () => {

@@ -140,6 +140,12 @@ export interface EnrichEngineProfile {
   engine: EnrichEngine;
   egress: EnrichEgressClass;
   builtIn: boolean;
+  /**
+   * Whether the capability's bundled enricher has a delegate variant at all.
+   * `false` means a delegate profile for it is legal but inert — the built-in
+   * engine runs — which Settings states rather than leaving it to look live.
+   */
+  delegateCapable: boolean;
 }
 
 /*

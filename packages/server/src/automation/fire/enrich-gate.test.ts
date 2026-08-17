@@ -1,5 +1,6 @@
+// governance: allow-repo-hygiene file-size-limit (#807) one gate suite — tier ranks, the scoped cascade, profile egress and the consent step are one decision and share the real fire spine, policy seam and dispatch fixtures
 /*
- * The enrichment tier gate — the privacy promise as behaviour.
+ * The enrichment gate — the privacy promise as behaviour.
  *
  * `enrich_policy` says what a vault allows per domain (`off | device |
  * gateway`); Photos tells the member "what leaves the device: nothing" when
@@ -20,6 +21,7 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import { tempDir } from "@centraid/test-kit/temp-dir";
 
+import { readEngineProfile } from "../../enrich/engine-profiles.js";
 import type { Manifest } from "../manifest/manifest.js";
 import {
   decideEnrichmentGate,
@@ -414,6 +416,34 @@ describe("enrichment tier gate", () => {
     }
   );
 
+  // The other side of that law, stated so nobody "fixes" it later: an
+  // `on-device` row IS written — the phone's capture-time OCR latch writes one
+  // (apps/mobile/src/screens/scan-consent.ts) — and the gate still does not
+  // read it. That latch is per-device by law (#712 C3); enforcing one phone's
+  // "not now" here would bind it to every device and to the gateway. The row
+  // is the record Privacy reads back, enforced where it was given.
+  it("does not let a device-scoped on-device decline refuse the gateway's own work", async () => {
+    const { outcome, opened } = await fire({
+      lane: "device",
+      resolveEnrichPolicy: () => ({
+        tier: "device",
+        rules: [],
+        egressForProfile: () => "on-device",
+        egressConsent: (egress) => ({
+          capability: "faces",
+          egress,
+          scopeRef: "",
+          decision: "declined",
+          decidedAt: "2026-08-14T09:00:00.000Z",
+          receiptId: null,
+        }),
+      }),
+    });
+
+    expect(outcome.ok).toBe(true);
+    expect(opened).toHaveLength(1);
+  });
+
   it("asks the host for the firing capability's own scope chain", async () => {
     const asked: unknown[] = [];
     await fire({
@@ -598,6 +628,36 @@ describe(decideEnrichmentGate, () => {
     expect(decision.allowed).toBe(false);
     expect(decision.allowed === false && decision.reason).toContain(
       "does not carry"
+    );
+  });
+
+  // FAIL-CLOSED OFF THE REGISTRY (issue #807). `manifest.ts` accepts any
+  // capability string, so a third-party or hand-written enricher can declare
+  // one this build carries no contract for. There is then no profile to read
+  // an egress class from, and work whose egress class cannot be named cannot
+  // be judged safe — so the gate refuses it rather than running it on the tier
+  // alone, as it would have before the profile check existed.
+  it("refuses an enricher whose capability this gateway carries no contract for", () => {
+    const policy = resolveEnrichmentPolicy([], "gateway", "sentiment")!;
+    const decision = decideEnrichmentGate({
+      automationRef: "photos/mood-reader",
+      domain: "photos",
+      capability: "sentiment",
+      lane: "gateway",
+      tier: "gateway",
+      policy,
+      // Exactly what the host supplies (`serve/build-gateway.ts`): the profile
+      // registry's own answer, which is `undefined` off the registry.
+      profileEgress: readEngineProfile({}, policy.profileId, "sentiment")
+        ?.egress,
+    });
+
+    expect(decision.allowed).toBe(false);
+    expect(decision.allowed === false && decision.reason).toContain(
+      "does not carry"
+    );
+    expect(decision.allowed === false && decision.reason).toContain(
+      "sentiment"
     );
   });
 

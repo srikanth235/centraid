@@ -59,7 +59,7 @@ Two enrichers ship a delegate variant: `photo-ocr` (`ocr`) and `doc-text-extract
 Consequences of that seam, each enforced on the fire path:
 
 - A delegate variant with no pinned model anywhere is refused before any dispatch surface opens. Consent is decided once, upstream, at the one enrichment gate; engine details are read only after it allowed the run.
-- A delegate profile selected for a capability whose handler has **no** delegate code path — the embedding capabilities today — is inert: the deterministic engine runs, the input is untouched, nothing reaches a provider, and the selection is logged. A future engine can be selected for `embed-*` without a policy change; this build simply ships no delegate implementation for them.
+- A delegate profile selected for a capability whose handler has **no** delegate code path — the embedding capabilities today — is inert: the deterministic engine runs, the input is untouched, nothing reaches a provider, and the selection is logged. Settings → Enrichment says so on the profile itself, from `CapabilityContract.delegateCapable` carried on every profile the profiles route lists — inertness is stated where the choice is offered, not left to the run log. A future engine can be selected for `embed-*` without a policy change; this build simply ships no delegate implementation for them.
 - A profile may pin a prompt revision, but the prompt text belongs to the handler: a handler refuses a revision it does not ship rather than stamping one it did not send.
 - Derivation stamps carry the profile that produced them (`enrich_derivation.profile`, defaulting to `built-in`), and handlers read and re-derive per profile. Two profiles' answers for one target are two rows, never a re-derivation loop.
 

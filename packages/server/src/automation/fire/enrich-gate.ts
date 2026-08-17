@@ -248,7 +248,10 @@ export function decideEnrichmentGate(
   // The profile check: a level deeper in the cascade may PICK an engine, never
   // one that goes further than the vault's ceiling. An unknown profile is a
   // refusal for the same reason an unreadable tier is — a policy this runtime
-  // cannot honour is not permission.
+  // cannot honour is not permission. The same refusal catches an enricher
+  // declaring a capability outside the registry: no contract means no profile
+  // and therefore no known egress class, and work whose egress class cannot be
+  // named cannot be judged safe.
   const egress = input.profileEgress;
   if (egress === undefined) {
     return {
@@ -290,6 +293,15 @@ export function decideEnrichmentGate(
     // `gateway` has already said its own gateway may do this work), which is
     // why every enricher shipped before #807 keeps running with no rows at
     // all.
+    //
+    // AN `on-device` ROW IS A RECORD, NOT A SECOND GATE. The ledger does hold
+    // `granted`/`declined` rows for that class — the phone's capture-time OCR
+    // latch writes one (`apps/mobile/src/screens/scan-consent.ts`) — and this
+    // gate deliberately does not read them: that latch is per-device by law
+    // (#712 C3, so a new phone never inherits an answer it was never asked),
+    // and enforcing one device's "not now" here would bind it to every device
+    // and to the gateway. The answer is enforced where it was given; the row
+    // is the durable record of it, which is what Privacy reads back.
     const record = input.egressConsent?.(egress) ?? null;
     if (record === null) {
       return {

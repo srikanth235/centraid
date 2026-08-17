@@ -96,6 +96,15 @@ export interface EngineProfile {
   readonly egress: EnrichEgressClass;
   /** True only for the derived, immutable per-capability built-in. */
   readonly builtIn: boolean;
+  /**
+   * Whether this profile's CAPABILITY has a shipped delegate variant
+   * (`CapabilityContract.delegateCapable`). Carried on the profile because
+   * `GET /_enrich/profiles` is the one place Settings learns capability facts
+   * from — without it a member's delegate profile for a capability with no
+   * such variant looks live while the built-in engine runs (fire.ts says so
+   * only in the run log).
+   */
+  readonly delegateCapable: boolean;
 }
 
 /**
@@ -182,6 +191,7 @@ export function builtInProfileFor(
       options
     ),
     builtIn: true,
+    delegateCapable: contract.delegateCapable,
   };
 }
 
@@ -247,8 +257,9 @@ function toProfile(
   const stored = parseStored(value);
   if (!stored) return undefined;
   const capability = stored.capability;
-  if (typeof capability !== "string" || !capabilityContract(capability))
-    return undefined;
+  if (typeof capability !== "string") return undefined;
+  const contract = capabilityContract(capability);
+  if (!contract) return undefined;
   if (!isHarnessKind(stored.harness)) return undefined;
   if (!capabilityAllowsDelegate(capability)) return undefined;
   const pins = readConfigPins(stored.configPins);
@@ -270,6 +281,7 @@ function toProfile(
     engine,
     egress: engineProfileEgress({ capability, engine }, options),
     builtIn: false,
+    delegateCapable: contract.delegateCapable,
   };
 }
 

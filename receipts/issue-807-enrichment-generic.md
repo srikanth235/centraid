@@ -21,8 +21,11 @@ Wave 0 → 1 → 2 (with a main merge) → 3+6 together → 4, 5 → docs and au
 **Wave 0 — schema and contracts.** `enrich_derivation` gained a `profile` dimension (default
 `built-in`) and its uniqueness widened to
 `(target_type, target_id, variant, profile)`, so several engine profiles' results
-for one variant coexist; `preferredDerivation` is the single resolution helper
-every consumer reads through (issue Q5), and `stampedModel` resolves through it.
+for one variant coexist; `preferredDerivation` is the one resolution helper for
+"which profile's result counts" (issue Q5) and `stampedModel` resolves through
+it. Handlers still read `enrich.derivation` rows directly for their own cursor
+work; `photo-ocr` and `doc-text-extractor` filter those reads by profile, which
+is what stops two profiles re-deriving each other's work forever.
 Two new vault tables land ahead of the waves that consume them:
 `enrich_policy_rule` (the scoped cascade's rule store — vault | domain |
 collection | item, per capability, `NULL` meaning inherit) and `enrich_consent`
@@ -65,7 +68,10 @@ chain over the legacy tier — `resolveEnrichmentPolicy(rules, legacyTier,
 capability)` — with most-specific-wins per field and the legacy tier preserved
 as an egress-class CEILING (`off → off`, `device → on-device`, `gateway →
 gateway`); only the vault-default layer can set the ceiling, so no rule and no
-per-item selection can widen egress. `decideEnrichmentGate` gains the
+per-item selection can widen egress on its own. The one deliberate exception,
+added in Wave 3, is `provider` over a `gateway` ceiling: that combination is
+released by an explicit granted consent row and by nothing else, so the widening
+is the member's recorded answer rather than a rule's doing. `decideEnrichmentGate` gains the
 profile-aware form (refuses when the selected profile's egress exceeds the
 ceiling; `profileEgress: undefined` is a refusal) while the legacy tier form
 and the C5 rank law stay byte-compatible; allowed decisions now carry
@@ -192,6 +198,31 @@ stating that `selected` is one of two selectors, so it is never read as the
 run's answer. `docs/recognition-automations.md` replaces its "only photo-ocr"
 paragraph with the policy-driven delegate section.
 
+**Audit follow-ups.** Three substantive findings were fixed rather than
+narrated. (1) A recorded `declined` answer for `on-device`/`gateway` is a
+RECORD, not a gate, and the code now says so at both ends
+(`packages/server/src/automation/fire/enrich-gate.ts` consent step,
+`apps/mobile/src/screens/Scan.tsx` write site, `docs/photos/derived-ledger.md`)
+with a new test pinning that a declined on-device row does not refuse a fire.
+Honouring such a row was considered and rejected: the ledger key is
+vault-scoped, the only writer is the phone's per-device capture latch (#712
+C3), so enforcing it would turn one phone's "not now" into a vault-wide refusal
+and make a new phone inherit an answer it was never asked. (2) The new
+fail-closed refusal for a capability outside the registry — an enricher may
+declare any capability string, and one with no contract has no known egress
+class, so it cannot be judged safe — is now pinned by a test and an invariant
+comment at the refusal site. (3) Settings no longer offers a silently inert
+delegate profile without saying so: `delegateCapable` is a fact on the
+capability contract (`packages/server/src/enrich/capability-registry.ts`,
+pinned against the shipped manifests by a test in
+`enricher-templates.test.ts`), flows through `EngineProfile` and the profiles
+route into `packages/client/src/enrich-policy.ts`, and
+`SettingsEnrichmentProfiles.tsx` shows a one-sentence note on a member profile
+whose capability ships no agent engine. It states the fact; it does not block.
+`packages/server/src/automation/fire/enrich-gate.test.ts` takes the same
+file-size waiver its sibling fire-spine suites carry, for the same reason —
+one decision, one set of fixtures.
+
 **Doctrine and vocabulary.** `docs/decisions.md` gains the dated
 `## Generic enrichment (#807)` ruling (E-capability, E-engine, E-egress,
 E-policy, E-ceiling, E-consent, E-plural, E-faces, E-oneshot, E-budget) and
@@ -299,12 +330,46 @@ stamped engine, not local-versus-remote.
 
 ## Out of scope
 
-Waves 1–6 (engine profiles, policy cascade + gate resolver, consent re-keying,
-Settings consolidation, delegate expansions, mobile projection) land as later
-waves under this same receipt. Provider-cost ceilings (issue Q7), a `tally`
-domain (Q1), functional blueprint settings (Q2), and delegate engines for faces
-(Q3) are out of scope per the issue's rulings. The legacy `EnrichTier` mirror
-stays authoritative until the Wave 2 resolver absorbs it.
+All seven waves landed under this receipt. Provider-cost ceilings (issue Q7), a
+`tally` domain (Q1), functional blueprint settings (Q2), and delegate engines
+for faces (Q3) are out of scope per the issue's own rulings.
+
+Two pieces of Waves 4–5 are deliberately **short of what the issue sketched**,
+and are called out rather than left to be discovered:
+
+- **Embeddings and captions have no VLM delegate engine.** The issue's Wave 5
+  asked for "embeddings/captions via VLM profiles behind provider consent".
+  What landed is the machinery, not the engine: policy can select a delegate
+  profile for `embed-*`, and the run is then explicitly INERT — it proceeds on
+  the built-in engine, the profile's model never reaches dispatch, and the
+  skipped selection is logged and tested. Writing a credible VLM embedding
+  engine is a separate engineering problem from the policy system this umbrella
+  is about, and shipping a profile that silently produced vectors of a
+  different shape would have been worse than shipping none. Settings now says
+  so on such a profile rather than implying it runs.
+- **The in-context one-shot is not enqueued end to end.** The picker and "Run
+  once" exist and are tested, but no owner-side seam reaches
+  `enrich.request_enrichment` with an arbitrary profile (the only client path
+  runs an app's own action, and Photos' pins `capability: 'faces'` with
+  `additionalProperties: false`). The control therefore renders disabled and
+  says it is not wired, rather than pretending. The seam carries an
+  issue-linked marker (#807).
+
+Also unfinished by design: a profile's `harness` is provenance only — its model
+and config pins bind the dispatch, but switching the harness rung would move
+`ensureAutomationConversation` and the durable turn lock with it.
+
+**Disclosures the audit surfaced.** (1) `enrich.request_enrichment` writes a
+`granted` on-device consent row without the confirm gate that
+`enrich.record_consent` imposes. That is deliberate: the member is answering
+the consent moment itself when they choose "run on device", so the ask IS the
+answer; the confirm-gated command exists for the case where an app or agent
+would otherwise answer on their behalf. (2) Scoped rule writes go through
+`putEnrichPolicyRule` from the owner-plane route rather than a journalled
+command — one writer, but not a journalled one; consent writes ARE journalled.
+(3) The regenerated `photo-ocr` handler bundle in
+`packages/blueprints/automations/photo-ocr/` is a build artifact of the
+model-runtime source change, not a hand edit.
 
 ## User impact
 
@@ -373,24 +438,70 @@ bun run lint:mobile-design                                            # clean
 bunx turbo run typecheck --filter=@centraid/server --filter=@centraid/vault --filter=@centraid/client --filter=@centraid/blueprints # 19/19
 ```
 
+Waves 4 and 5, and the audit follow-ups:
+
+```sh
+env -u IS_SANDBOX bun run --cwd packages/client test -- SettingsEnrichment  # 10 passed
+env -u IS_SANDBOX bun run --cwd packages/client test -- settingsEnrichment  # 10 passed
+env -u IS_SANDBOX bun run --cwd packages/client test -- SettingsRoute       # 6 passed
+env -u IS_SANDBOX bun run --cwd packages/server test -- enrich-engine-selection # 10 passed
+env -u IS_SANDBOX bun run --cwd packages/model-runtime test                 # 156 passed
+xvfb-run -a bunx playwright test -c tests/e2e/playwright.config.ts settings-enrichment  # 1 passed
+```
+
+Whole-tree gates on the integrated branch:
+
+```sh
+bash .governance/run.sh          # all 22 directives pass
+bunx turbo run typecheck         # 25/25
+env -u IS_SANDBOX bunx turbo run test --filter=@centraid/server --filter=@centraid/vault \
+  --filter=@centraid/client --filter=@centraid/blueprints --filter=@centraid/model-runtime
+  # server 2857 · vault 1316 · client 2212 · blueprints 3752 · model-runtime 156, 0 failed
+bun run lint && bun run knip && bun run lint:types           # clean
+bun run check:ui-receipt && bun run lint:quality-knobs && bun run lint:schema-export
+bun run test:ratchet && bun run test:hygiene-ratchet         # no decreases vs origin/main
+```
+
 ## Audit
 
-Fresh-context adversarial sub-agent, handed the diff, this receipt, and issue
-#807's Wave 0 scope; instructed to default to REFUTED.
+Two rounds of fresh-context adversarial attestation, each handed only the diff,
+this receipt, and the issue, and each instructed to default to REFUTED.
 
-1. `## What changed` faithfully describes the diff — **PASS** (re-verified the
-   widened UNIQUE key, `preferredDerivation` fallback order, both new tables'
-   DDL, `schema/tables.ts` registration, and that no UI files changed).
-2. Each `- [x]` item is realized in the diff — **PASS** (re-ran vault
-   derivation/policy-rules/egress-consent tests, 26 passed, and
-   capability-registry, 6 passed).
-3. Checklist mirrors the issue's Wave 0 plan — **PASS** (Q1 keeps
-   `EnrichDomain` closed, so "opened per Q1" resolves to a deliberate no-op;
-   the policy-rule and consent tables land ahead of Waves 2–3 by the
-   single-schema-owner decision, disclosed above).
+**Round 1 (Wave 0 scope).** All three criteria **PASS**; its two narration
+findings (the backfill story and the `poly-refs` exclusion) were folded into
+`## What changed`.
 
-Auditor's minor findings (backfill story and the poly-refs exclusion were
-unnarrated) were folded into `## What changed` after the audit.
+**Round 2 (the whole umbrella, Waves 0–6).**
+
+1. `## What changed` faithfully describes the diff — **PASS**. The auditor
+   re-derived the cascade fold and ceiling (`enrich-resolve.ts:222-243`), the
+   profile-aware gate (`enrich-gate.ts:204-318`), the consent lookup, the prefs
+   writer hook, the routes, the Wave 4 deletions (`git diff --diff-filter=D` is
+   exactly the eight Import/Storage files), the Wave 5 engine selection
+   (`fire.ts:440-548`), and confirmed `## Files` is byte-identical to
+   `git diff --name-only origin/main`.
+2. Each `- [x]` item is realized in the diff — **PASS** (re-ran server
+   `enrich`, 205 passed; client enrichment screens, 14 passed).
+3. `## Checklist` mirrors the issue's Waves 0–6 — **PASS**.
+
+It separately confirmed the load-bearing invariants hold: one gate
+(`decideEnrichmentGate` has exactly one caller, and the only other resolver use
+is the report-only `effective` route), egress ceiling, consent evaluated
+independently with the back-compat law genuinely tested, no faces delegate path
+anywhere, one writer per config path, and the Q1–Q8 rulings respected.
+
+**Findings acted on.** The auditor raised nine; six were receipt-accuracy
+issues, now fixed in place: this section was stale and still claimed "no UI
+files changed" (false for the umbrella); `## Verification` carried no Wave 4/5
+evidence; the ceiling claim was stated absolutely without its Wave 3
+provider-consent exception; `preferredDerivation` was described as the helper
+"every consumer" reads through; `ctx.input carries profileId` was true only for
+enrichers declaring a delegate step; and the regenerated `photo-ocr` handler
+bundle was unnarrated. The three substantive ones are addressed in code and
+disclosed under `## Decisions`: a recorded `declined` answer for
+on-device/gateway, the new fail-closed refusal for capabilities outside the
+registry, and delegate profiles offered for capabilities with no shipped
+delegate variant.
 
 ## Files
 
