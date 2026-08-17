@@ -2,6 +2,17 @@
 
 ## Open
 
+- **A place shared into an audience scope may be phrased against the wrong
+  Home.** #816 made "what leaves with a copy" a decided question for the OS
+  share path (`share-place.ts`: a chosen precision, GPS stripped below the
+  exact rung, and the Home-relative rung suppressed in `"shared"` context).
+  In-product sharing through an audience scope was not audited to a
+  conclusion in that umbrella, because the answer lives in `packages/vault`:
+  if a sharer's `kind: "home"` place row can reach a receiver's scope, the
+  receiver's own info panel would phrase that photograph relative to somebody
+  else's Home — a wrong statement, not merely a leak. Needs a vault-side read
+  of how place rows travel with a scope.
+
 - **`apps/mobile/src/apps/tally/PendingRestartJourney.test.tsx` cannot load**:
   `Cannot bundle Node.js built-in "node:sqlite" imported from
   "src/lib/replica/node-sqlite-driver.ts"`. The whole file fails to collect, so
