@@ -30,6 +30,7 @@ import {
   ROW_ACTION_FIXTURE,
   ROW_FIXTURE,
   ROW_PLAIN_FIXTURE,
+  ROW_STRUCK_FIXTURE,
   SECTION_ACTION_FIXTURE,
   SECTION_FIXTURE,
 } from "@centraid/design/blocks";
@@ -96,6 +97,19 @@ describe("block parity — the shell draws every shared flag", () => {
     const row = el.querySelector("[class*='row']");
     expect((row as HTMLElement | null)?.dataset.net).toBeUndefined();
     expect((row as HTMLElement | null)?.dataset.off).toBeUndefined();
+  });
+
+  it("rules a struck row through while it stays a row", () => {
+    const el = render(
+      <RowsBlock rows={[{ ...ROW_STRUCK_FIXTURE, id: "r" }]} />
+    );
+    const row = el.querySelector("[data-struck]") as HTMLElement;
+    expect(row.dataset.struck).toBe("true");
+    // The record survives the revoke: sub and meta still say who held what.
+    expect(el.querySelector(".sub")?.textContent).toBe(ROW_STRUCK_FIXTURE.sub);
+    expect(el.querySelector(".meta")?.textContent).toBe(
+      ROW_STRUCK_FIXTURE.meta
+    );
   });
 
   it("tones only the value of a net fact, and only the mono one is numeric", () => {

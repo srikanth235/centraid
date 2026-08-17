@@ -10,6 +10,13 @@
   overflow: hidden;
 }
 
+/* One of several lists stacked under one head. The margin is what makes two
+   groups read as two statements instead of one list with a seam in it — the
+   smallest step in the scale, because they are still the same subject. */
+.rows[data-stacked="true"] {
+  margin-block-end: var(--sp-2);
+}
+
 /* The shell carries the seam, not the row, so a row that has expanded detail
    under it still reads as ONE entry with one line above it. */
 .rowShell + .rowShell {
@@ -40,8 +47,18 @@
   text-wrap: pretty;
 }
 
-.row[data-off="true"] .title {
+.row[data-off="true"] .title,
+.row[data-struck="true"] .title {
   color: var(--text-disabled);
+}
+
+/* Revoked, and still on the record. The rule goes through the TITLE only — the
+   sub still has to be readable, because it is what says who lost the store and
+   when. The row keeps its height and its hairlines: it is a real row, not a
+   receding one, and the recession is a token on this leaf rather than an
+   opacity on the container. */
+.row[data-struck="true"] .title {
+  text-decoration: line-through;
 }
 
 .sub {
