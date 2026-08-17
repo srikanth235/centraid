@@ -323,6 +323,168 @@ describe("media: places", () => {
     expect(row.place_id).not.toBe("home");
   });
 
+  // NAMING A PLACE (issue #816) — the write that turns a coordinate into a
+  // location. Every surface phrases a place from this row at render, so the
+  // only thing these tests have to hold is that the row says what the member
+  // said and nothing else moved.
+  describe("media.name_place", () => {
+    function seedPlace(
+      placeId: string,
+      name: string,
+      extra: { kind?: string; addressJson?: string } = {}
+    ): void {
+      db.vault
+        .prepare(
+          `INSERT INTO core_place (place_id, name, kind, geo_lat, geo_lng, address_json, created_at)
+           VALUES (?, ?, ?, 37.4419, -122.143, ?, datetime('now'))`
+        )
+        .run(placeId, name, extra.kind ?? null, extra.addressJson ?? null);
+    }
+
+    function placeRow(placeId: string): {
+      name: string;
+      kind: string | null;
+      address_json: string | null;
+    } {
+      return db.vault
+        .prepare(
+          "SELECT name, kind, address_json FROM core_place WHERE place_id = ?"
+        )
+        .get(placeId) as {
+        name: string;
+        kind: string | null;
+        address_json: string | null;
+      };
+    }
+
+    test("names a place that was only ever labelled with its coordinate", () => {
+      seedPlace("coord", "37.4419, -122.1430");
+      expect(
+        invoke("media.name_place", {
+          place_id: "coord",
+          name: "Grandma's house",
+        }).status
+      ).toBe("executed");
+      expect(placeRow("coord").name).toBe("Grandma's house");
+    });
+
+    test("renames a place the member had already named", () => {
+      seedPlace("named", "The old flat");
+      expect(
+        invoke("media.name_place", { place_id: "named", name: "Mum's flat" })
+          .status
+      ).toBe("executed");
+      expect(placeRow("named").name).toBe("Mum's flat");
+    });
+
+    test("trims the name rather than storing the member's stray spaces", () => {
+      seedPlace("coord", "37.4419, -122.1430");
+      expect(
+        invoke("media.name_place", {
+          place_id: "coord",
+          name: "  Lake Tahoe  ",
+        }).status
+      ).toBe("executed");
+      expect(placeRow("coord").name).toBe("Lake Tahoe");
+    });
+
+    test("marks a place as home, which is what anchors every relative phrase", () => {
+      seedPlace("coord", "37.4419, -122.1430");
+      expect(
+        invoke("media.name_place", {
+          place_id: "coord",
+          name: "Home",
+          kind: "home",
+        }).status
+      ).toBe("executed");
+      const row = placeRow("coord");
+      expect(row.name).toBe("Home");
+      expect(row.kind).toBe("home");
+    });
+
+    test("a rename leaves a kind the member already declared alone", () => {
+      seedPlace("home", "Home", { kind: "home" });
+      expect(
+        invoke("media.name_place", { place_id: "home", name: "The house" })
+          .status
+      ).toBe("executed");
+      const row = placeRow("home");
+      expect(row.name).toBe("The house");
+      expect(row.kind).toBe("home");
+    });
+
+    test("a blank name is refused — an empty one and a whitespace one alike", () => {
+      seedPlace("coord", "37.4419, -122.1430");
+      expect(
+        invoke("media.name_place", { place_id: "coord", name: "" }).status
+      ).not.toBe("executed");
+      expect(
+        invoke("media.name_place", { place_id: "coord", name: "   " }).status
+      ).not.toBe("executed");
+      // And the row still carries the label it had: a refused write wrote
+      // nothing, rather than half-naming the place.
+      expect(placeRow("coord").name).toBe("37.4419, -122.1430");
+    });
+
+    test("an unknown place id is refused", () => {
+      expect(
+        invoke("media.name_place", { place_id: "nope", name: "Home" }).status
+      ).not.toBe("executed");
+    });
+
+    test("a kind outside the vocabulary is refused", () => {
+      seedPlace("coord", "37.4419, -122.1430");
+      expect(
+        invoke("media.name_place", {
+          place_id: "coord",
+          name: "Home",
+          kind: "spaceship",
+        }).status
+      ).not.toBe("executed");
+    });
+
+    // THE INVARIANT THIS COMMAND EXISTS TO KEEP. A member-entered name outranks
+    // a derived one for DISPLAY; it does not delete it. `address_json` is a
+    // gazetteer's finding with its own writer, and a rename that cleared it
+    // would destroy a fact on the strength of a label about the same point.
+    test("naming a place does not clear the gazetteer's derived address", () => {
+      const address = JSON.stringify({ locality: "Truckee", region: "CA" });
+      seedPlace("derived", "37.4419, -122.1430", { addressJson: address });
+      expect(
+        invoke("media.name_place", {
+          place_id: "derived",
+          name: "Grandma's house",
+          kind: "venue",
+        }).status
+      ).toBe("executed");
+      const row = placeRow("derived");
+      expect(row.name).toBe("Grandma's house");
+      expect(row.address_json).toBe(address);
+    });
+
+    test("a named place is then adopted by the next photograph taken there", () => {
+      seedPlace("coord", "37.4419, -122.1430");
+      expect(
+        invoke("media.name_place", { place_id: "coord", name: "Home" }).status
+      ).toBe("executed");
+      // ~90m up the garden: `findOrCreatePlaceTx` refuses to adopt a
+      // coordinate-labelled row and adopts a named one, so the SAME row that
+      // was unnameable a moment ago now gathers the photographs around it.
+      const { asset_id } = addAsset({
+        data_uri: PIXEL,
+        latitude: 37.4427,
+        longitude: -122.1432,
+      });
+      expect(
+        (
+          db.vault
+            .prepare("SELECT place_id FROM media_asset WHERE asset_id = ?")
+            .get(asset_id) as { place_id: string }
+        ).place_id
+      ).toBe("coord");
+    });
+  });
+
   test("half a coordinate is refused, not silently dropped", () => {
     expect(
       invoke("media.add_asset", { data_uri: PIXEL, latitude: 38.9542 }).status

@@ -160,6 +160,24 @@ vi.mock(
   () => ({ default: () => null }) as never
 );
 
+// `PlaceDetail` reaches for the session to write a place name (issue #816), and
+// the real provider imports expo-network — which cannot load in this renderer.
+// No session here: this file renders the screen to count photographs, and the
+// naming conversation is owned by `PlaceDetail.test.tsx`.
+vi.mock(
+  import("../../kit/replica/ReplicaProvider"),
+  () => ({ useReplica: () => ({ session: undefined }) }) as never
+);
+
+vi.mock(
+  import("../../kit/replica/write-outcome"),
+  () =>
+    ({
+      surfaceWriteFailure: () => undefined,
+      surfaceWriteOutcome: () => true,
+    }) as never
+);
+
 vi.mock(
   import("../../kit/replica/useReplicaRefresh"),
   () =>

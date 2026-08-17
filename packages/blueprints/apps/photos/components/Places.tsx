@@ -22,6 +22,7 @@ import { vaultMarker } from "../tile-state.ts";
 import type { Asset } from "../types.ts";
 import { PLACE_UNNAMED } from "../view-copy.ts";
 import { PlaceMap, placePoints } from "./PlaceMap.tsx";
+import { PlaceNaming } from "./PlaceNaming.tsx";
 import { Tile } from "./Tile.tsx";
 
 import styles from "./Places.module.css";
@@ -83,6 +84,7 @@ export function PlacesShelf({
   selectMode,
   selectedIds,
   vaultOf,
+  refresh,
   onOpen,
   onToggleSelect,
   onEnterSelectMode,
@@ -94,6 +96,8 @@ export function PlacesShelf({
   selectMode: boolean;
   selectedIds: Set<string>;
   vaultOf: (scopeId: string | null | undefined) => InlineScope | undefined;
+  /** Re-read the library after a place is named, so every heading re-phrases. */
+  refresh: () => Promise<void>;
   onOpen: (key: string) => void;
   onToggleSelect: (key: string) => void;
   onEnterSelectMode: () => void;
@@ -144,6 +148,17 @@ export function PlacesShelf({
               {readableName(section.name) ?? PLACE_UNNAMED}
             </span>
             <span className={styles.count}>{section.assets.length}</span>
+            {/* THE ASK, exactly where the fallback shows (issue #816). A place
+                the member has already named has nothing to answer, and a
+                section with no place id — the group of rows whose place is
+                unknown — has no row to write to. */}
+            {section.key && readableName(section.name) === null ? (
+              <PlaceNaming
+                placeId={section.key}
+                scope={section.assets[0]?.scope_id}
+                refresh={refresh}
+              />
+            ) : null}
           </h2>
           {justify(section.assets, containerWidth, targetHeight).map(
             (tiles, index) => (

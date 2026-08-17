@@ -868,6 +868,126 @@ function setAssetPlace(ctx: HandlerCtx): Record<string, unknown> {
   return { asset_id: input.asset_id, place_id: placeId };
 }
 
+/**
+ * The kinds a member may declare a place to be.
+ *
+ * The column's own CHECK also permits `'virtual'` (core.ts) — deliberately not
+ * offered here: a photograph is taken somewhere, and a member naming the place
+ * a photograph was taken is never naming a video call. Everything else in the
+ * column's vocabulary is reachable, because the same row is the vault's one
+ * place record and Home, Agenda and Photos all read it.
+ */
+const PLACE_KINDS = ["home", "work", "venue", "city", "region", "other"];
+
+/**
+ * A member names a place (issue #816).
+ *
+ * THE ONE WRITE THAT MAKES A COORDINATE INTO A LOCATION. `findOrCreatePlaceTx`
+ * mints a row labelled with its own coordinates when it knows nothing better,
+ * and every surface phrases such a row as "A place with no name yet" rather
+ * than printing the digits. This is how that ends: the member says what the
+ * place is called, and the phrase ladder's top rung (place-phrase.ts) answers
+ * everywhere at once — the shelf heading, the info panel, a relative phrase
+ * anchored on it — because they all read this row at render.
+ *
+ * MEMBER AUTHORITY, AND ONLY THE NAME. The handler writes `name` (and `kind`
+ * when the member declared one) and NOTHING else. `address_json`, `geohash`
+ * and `tz` are derived gazetteer facts with their own writers; a rename that
+ * cleared them would destroy a machine's finding on the strength of a human's
+ * label, and the two claims are not in competition — "Grandma's house" and
+ * "Truckee, CA" are both true about the same point. The name outranks the
+ * derived name for DISPLAY; it does not delete it.
+ */
+const NAME_PLACE: CommandDefinition = {
+  name: "media.name_place",
+  ownerSchema: "media",
+  inputSchema: {
+    type: "object",
+    required: ["place_id", "name"],
+    additionalProperties: false,
+    properties: {
+      place_id: { type: "string", minLength: 1 },
+      // 120 is a signage ceiling, not a storage one: "Grandma's house" and
+      // "The bench at the end of the north pier" both fit, and a heading no
+      // surface can draw is not a name anybody typed on purpose.
+      name: { type: "string", minLength: 1, maxLength: 120 },
+      kind: { type: "string", enum: PLACE_KINDS },
+    },
+  },
+  outputSchema: {
+    type: "object",
+    required: ["place_id", "name"],
+    properties: {
+      place_id: { type: "string" },
+      name: { type: "string" },
+      kind: {},
+    },
+  },
+  preconditions: [
+    {
+      name: "place_exists",
+      sql: "SELECT count(*) AS n FROM core_place WHERE place_id = :place_id",
+      column: "n",
+      op: "eq",
+      value: 1,
+    },
+    {
+      // `minLength` in the schema catches `""`; only SQL catches "   ". A place
+      // whose name is whitespace reads as named everywhere and says nothing,
+      // which is strictly worse than the honest fallback it replaced.
+      name: "name_not_blank",
+      sql: "SELECT CASE WHEN trim(:name) <> '' THEN 1 ELSE 0 END AS n",
+      column: "n",
+      op: "eq",
+      value: 1,
+    },
+  ],
+  postconditions: [
+    {
+      name: "name_applied",
+      sql: `SELECT count(*) AS n FROM core_place
+             WHERE place_id = :place_id AND name = trim(:name)
+               AND (:kind IS NULL OR kind = :kind)`,
+      column: "n",
+      op: "eq",
+      value: 1,
+    },
+  ],
+  idempotency: "idempotent",
+  risk: "low",
+  handler: namePlace,
+};
+
+function namePlace(ctx: HandlerCtx): Record<string, unknown> {
+  const input = ctx.input as { place_id: string; name: string; kind?: string };
+  const name = input.name.trim();
+  // Two statements rather than one with a COALESCE, so an absent `kind` cannot
+  // be confused with a member clearing it: this command has no way to say "no
+  // kind", and silently rewriting the column on every rename would let a
+  // rename undo a "this is home" the member declared a moment earlier.
+  ctx.db
+    .prepare("UPDATE core_place SET name = ? WHERE place_id = ?")
+    .run(name, input.place_id);
+  if (input.kind !== undefined) {
+    ctx.db
+      .prepare("UPDATE core_place SET kind = ? WHERE place_id = ?")
+      .run(input.kind, input.place_id);
+  }
+  ctx.wrote("core.place", input.place_id);
+  ctx.cite({
+    claim: input.kind
+      ? `place ${input.place_id} named "${name}" by the member, kind ${input.kind}`
+      : `place ${input.place_id} named "${name}" by the member`,
+    entityType: "core.place",
+    entityId: input.place_id,
+  });
+  return {
+    place_id: input.place_id,
+    name,
+    kind: input.kind ?? null,
+  };
+}
+
 const DELETE_ASSET: CommandDefinition = {
   name: "media.delete_asset",
   ownerSchema: "media",
@@ -1996,6 +2116,7 @@ export function registerMediaCommands(gateway: Gateway): void {
   gateway.registerCommand(ADD_ASSET);
   gateway.registerCommand(UPDATE_ASSET);
   gateway.registerCommand(SET_ASSET_PLACE);
+  gateway.registerCommand(NAME_PLACE);
   gateway.registerCommand(SET_FAVORITE);
   gateway.registerCommand(SET_ARCHIVED);
   gateway.registerCommand(DELETE_ASSET);

@@ -39,10 +39,17 @@ type TimelineSourceModule = typeof import("./timeline-source");
 const mocks = vi.hoisted(() => ({
   assets: [] as unknown[],
   colors: {
+    accentText: "#mock-accent-text",
+    line: "#mock-line",
     text: "#mock-text",
     textSoft: "#mock-text-soft",
   },
   places: [] as unknown[],
+  /** Every `session.write` this screen fired, in order. */
+  writes: [] as unknown[],
+  /** Whether the replica has a session at all — a screen with none must not
+   *  offer a control that cannot land (§1: no silent no-ops). */
+  session: true,
 }));
 
 vi.mock(import("react-native"), async () => {
@@ -73,7 +80,10 @@ vi.mock(import("react-native"), async () => {
         role: accessibilityRole,
         type: "button",
       }),
-    StyleSheet: { create: <T,>(styles: T): T => styles },
+    StyleSheet: {
+      create: <T,>(styles: T): T => styles,
+      hairlineWidth: 1,
+    },
     View: ({ children }: { children?: React.ReactNode }) =>
       element("div", { children }),
   } as unknown as Partial<ReactNative>;
@@ -93,6 +103,52 @@ vi.mock(
     ({
       Text: ({ children }: { children?: React.ReactNode }) =>
         React.createElement("span", {}, children),
+      // The naming input, as an ordinary DOM input: `onChangeText` is the
+      // native contract and `input`/`change` is how this renderer expresses it.
+      TextInput: ({
+        accessibilityLabel,
+        onChangeText,
+        placeholder,
+        value,
+      }: {
+        accessibilityLabel?: string;
+        onChangeText?: (text: string) => void;
+        placeholder?: string;
+        value?: string;
+      }) =>
+        React.createElement("input", {
+          "aria-label": accessibilityLabel,
+          onChange: (event: { target: { value: string } }) =>
+            onChangeText?.(event.target.value),
+          placeholder,
+          value: value ?? "",
+        }),
+    }) as never
+);
+
+vi.mock(
+  import("../../kit/replica/ReplicaProvider"),
+  () =>
+    ({
+      useReplica: () => ({
+        session: mocks.session
+          ? {
+              write: (app: string, request: unknown) => {
+                mocks.writes.push({ app, request });
+                return Promise.resolve({ status: "executed" });
+              },
+            }
+          : undefined,
+      }),
+    }) as never
+);
+
+vi.mock(
+  import("../../kit/replica/write-outcome"),
+  () =>
+    ({
+      surfaceWriteFailure: () => undefined,
+      surfaceWriteOutcome: () => true,
     }) as never
 );
 
@@ -232,6 +288,8 @@ describe("one place's photographs (native)", () => {
       { ...TAHOE_PHOTO, id: "place-tahoe-2" },
       HOME_PHOTO,
     ];
+    mocks.writes = [];
+    mocks.session = true;
   });
 
   afterEach(() => {
@@ -290,5 +348,132 @@ describe("one place's photographs (native)", () => {
     expect(navigate).toHaveBeenCalledExactlyOnceWith("PhotoLightbox", {
       assetId: "place-tahoe-2",
     });
+  });
+});
+
+// THE NAMING CONVERSATION (issue #816) — the phone is the primary surface for
+// it, because the phone is where the photographs were taken.
+//
+// A place minted from GPS carries its own coordinate as a label, and every
+// surface phrases it as "A place with no name yet" rather than printing the
+// digits. This screen is where that question gets asked: the ask appears
+// exactly where the fallback phrase appears, one tap declares home, and a
+// place the member already named is never asked again.
+describe("naming this place (native)", () => {
+  const COORD_ROWS = [
+    {
+      place_id: "place-coord",
+      name: "39.0968, -120.0324",
+      geo_lat: 39.096_8,
+      geo_lng: -120.032_4,
+    },
+  ];
+
+  const labelled = (label: string): HTMLElement | undefined =>
+    Array.from(container!.querySelectorAll("button, input")).find(
+      (node) => node.getAttribute("aria-label") === label
+    ) as HTMLElement | undefined;
+
+  /** Type into the naming field. Through the prototype's own value setter, the
+   *  way `ShareSheet.test.tsx` does it: React tracks the node's value and
+   *  ignores an `input` event whose value it believes it already applied. */
+  function type(text: string): void {
+    const field = labelled("Place name") as HTMLInputElement | undefined;
+    expect(field).toBeDefined();
+    act(() => {
+      Object.getOwnPropertyDescriptor(
+        HTMLInputElement.prototype,
+        "value"
+      )?.set?.call(field, text);
+      field!.dispatchEvent(new Event("input", { bubbles: true }));
+    });
+  }
+
+  beforeEach(() => {
+    container = document.createElement("div");
+    document.body.appendChild(container);
+    mocks.writes = [];
+    mocks.session = true;
+    mocks.places = COORD_ROWS;
+    mocks.assets = [{ ...TAHOE_PHOTO, placeId: "place-coord" }];
+  });
+
+  afterEach(() => {
+    act(() => root?.unmount());
+    container?.remove();
+    root = undefined;
+    container = undefined;
+  });
+
+  it("asks for a name where the fallback phrase stands, and prints no coordinate", () => {
+    renderDetail(TAHOE_KEY, "A place with no name yet");
+    expect(labelled("Name this place")).toBeDefined();
+    expect(labelled("This is home")).toBeDefined();
+    expect(container!.textContent).not.toContain("39.0968");
+  });
+
+  it("asks nothing of a place the member already named", () => {
+    mocks.places = PLACE_ROWS;
+    mocks.assets = [TAHOE_PHOTO];
+    renderDetail(TAHOE_KEY, "Lake Tahoe");
+    expect(labelled("Name this place")).toBeUndefined();
+    expect(labelled("This is home")).toBeUndefined();
+  });
+
+  it("writes the name the member typed, for the place row this screen shows", () => {
+    renderDetail(TAHOE_KEY, "A place with no name yet");
+    click(labelled("Name this place"));
+    type("  Grandma's house  ");
+    click(labelled("Save place name"));
+    expect(mocks.writes).toStrictEqual([
+      {
+        app: "photos",
+        request: {
+          action: "name-place",
+          input: { place_id: "place-coord", name: "Grandma's house" },
+        },
+      },
+    ]);
+  });
+
+  it("declares home in one tap, with the kind every relative phrase anchors on", () => {
+    renderDetail(TAHOE_KEY, "A place with no name yet");
+    click(labelled("This is home"));
+    expect(mocks.writes).toStrictEqual([
+      {
+        app: "photos",
+        request: {
+          action: "name-place",
+          input: { place_id: "place-coord", name: "Home", kind: "home" },
+        },
+      },
+    ]);
+  });
+
+  // RETROACTIVE, BY CONSTRUCTION. The head reads the row, not the route
+  // parameter the card handed over — so the moment the replica pushes the named
+  // row this screen says the member's own name for the place. A pinned
+  // parameter would leave the fallback standing over a place just named here.
+  it("prints the name the row carries now, not the one the card was tapped with", () => {
+    mocks.places = [{ ...COORD_ROWS[0], name: "Grandma's house" }] as unknown[];
+    renderDetail(TAHOE_KEY, "A place with no name yet");
+    expect(container!.textContent).toContain("Grandma's house");
+    expect(container!.textContent).not.toContain("A place with no name yet");
+    expect(labelled("Name this place")).toBeUndefined();
+  });
+
+  it("writes nothing when there is no session to write through", () => {
+    mocks.session = false;
+    renderDetail(TAHOE_KEY, "A place with no name yet");
+    click(labelled("This is home"));
+    expect(mocks.writes).toStrictEqual([]);
+  });
+
+  it("writes nothing for a blank name", () => {
+    renderDetail(TAHOE_KEY, "A place with no name yet");
+    click(labelled("Name this place"));
+    type("   ");
+    click(labelled("Save place name"));
+    expect(mocks.writes).toStrictEqual([]);
   });
 });

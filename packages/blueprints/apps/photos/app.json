@@ -413,6 +413,33 @@
       "writes": []
     },
     {
+      "name": "name-place",
+      "description": "Name a place through media.name_place (issue #816) — the member's own name for somewhere the vault knows only as a coordinate, plus an optional kind ('home' is what anchors a relative phrase elsewhere). Writes core.place.name only; the gazetteer's derived address survives a rename.",
+      "confirmation": "none",
+      "input": {
+        "type": "object",
+        "properties": {
+          "place_id": { "type": "string", "minLength": 1 },
+          "name": { "type": "string", "minLength": 1, "maxLength": 120 },
+          "kind": {
+            "type": "string",
+            "enum": ["home", "work", "venue", "city", "region", "other"]
+          }
+        },
+        "required": ["place_id", "name"],
+        "additionalProperties": false
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "status": { "type": "string" },
+          "output": { "type": "object" },
+          "reason": { "type": "string" }
+        }
+      },
+      "writes": []
+    },
+    {
       "name": "tag-asset",
       "description": "Add a free-form label to a photo through core.tag_item (issue #352) — additive and idempotent over the shared \"Tags\" concept scheme.",
       "confirmation": "none",

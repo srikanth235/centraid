@@ -23,7 +23,9 @@ import {
   pinSize,
   placeCardKey,
   placeCards,
+  placeNameAt,
   placePoints,
+  unnamedPlaceAt,
 } from "./places-model";
 import type { PlaceRow } from "./places-model";
 import type { PhotoAsset } from "./timeline-model";
@@ -138,6 +140,90 @@ describe("the Places shelf's cards", () => {
     expect(placeCards([photo("a", "place-room")], [roomOnly])).toStrictEqual(
       []
     );
+  });
+});
+
+// A place minted from GPS is labelled with its own coordinate until a member
+// names it. Both halves of that fact are this block's subject: the label is
+// never printed as a name, and it is exactly the case the ask exists for.
+describe("naming a place (issue #816)", () => {
+  const COORD: PlaceRow = {
+    place_id: "place-coord",
+    name: "39.0968, -120.0324",
+    geo_lat: 39.096_8,
+    geo_lng: -120.032_4,
+  };
+  const COORD_KEY = "39.1:-120.0";
+
+  it("cards a coordinate-labelled place as unnamed, never as its digits", () => {
+    const cards = placeCards([photo("a", "place-coord")], [COORD]);
+    expect(cards.map((card) => card.name)).toStrictEqual([PLACE_UNNAMED]);
+  });
+
+  it("offers the coordinate-labelled row as the one to name", () => {
+    expect(
+      unnamedPlaceAt([photo("a", "place-coord")], [COORD], COORD_KEY)
+    ).toBe("place-coord");
+  });
+
+  it("offers a row with no name at all as the one to name", () => {
+    const nameless: PlaceRow = {
+      place_id: "place-bare",
+      name: "",
+      geo_lat: 39.096_8,
+      geo_lng: -120.032_4,
+    };
+    expect(
+      unnamedPlaceAt([photo("a", "place-bare")], [nameless], COORD_KEY)
+    ).toBe("place-bare");
+  });
+
+  it("asks nothing of a place the member already named", () => {
+    expect(
+      unnamedPlaceAt([photo("a", "place-tahoe")], [TAHOE], COORD_KEY)
+    ).toBeNull();
+  });
+
+  it("names the row the card took its title from, not a neighbour in the cell", () => {
+    // Two rows in one 0.1° cell: the card is titled from the NEWEST
+    // photograph's row, so the ask must be about that same row — otherwise a
+    // member answers a question about a name they were never shown.
+    const assets = [
+      photo("newest", "place-coord"),
+      photo("older", "place-cabin"),
+    ];
+    const cards = placeCards(assets, [COORD, TAHOE_CABIN]);
+    expect(cards[0]!.name).toBe(PLACE_UNNAMED);
+    expect(unnamedPlaceAt(assets, [COORD, TAHOE_CABIN], cards[0]!.id)).toBe(
+      "place-coord"
+    );
+  });
+
+  it("ignores a trashed photograph when deciding what to ask about", () => {
+    const assets = [
+      photo("trashed", "place-coord", { deleted: true }),
+      photo("kept", "place-tahoe"),
+    ];
+    expect(unnamedPlaceAt(assets, [COORD, TAHOE], COORD_KEY)).toBeNull();
+  });
+
+  it("prints no name for a coordinate-labelled row, so a caller falls back", () => {
+    expect(
+      placeNameAt([photo("a", "place-coord")], [COORD], COORD_KEY)
+    ).toBeNull();
+  });
+
+  it("prints the member's own name once the row carries one", () => {
+    const named: PlaceRow = { ...COORD, name: "Grandma's house" };
+    expect(placeNameAt([photo("a", "place-coord")], [named], COORD_KEY)).toBe(
+      "Grandma's house"
+    );
+  });
+
+  it("asks nothing when no photograph at that key exists", () => {
+    expect(
+      unnamedPlaceAt([photo("a", "place-home")], [HOME], "0.0:0.0")
+    ).toBeNull();
   });
 });
 

@@ -1269,6 +1269,7 @@ export function Root({
           selectMode={selection.isActive()}
           selectedIds={selection.keys}
           vaultOf={vaultOf}
+          refresh={refresh}
           onOpen={handleOpenLightbox}
           onToggleSelect={handleToggleSelect}
           onEnterSelectMode={handleEnterSelect}

@@ -1,0 +1,35 @@
+/* The naming prompt (issue #816) — type, not chrome. It stands where a place
+   name would stand, so it borrows that slot's size and adds only the link
+   colour that says it is a thing to press. No pill, no outline: a question in
+   a heading is quieter than a button in one, and this one is asked on every
+   unnamed section at once. */
+
+.prompt {
+  display: inline-flex;
+  align-items: baseline;
+  gap: var(--sp-2);
+}
+
+/* Sentence case and no eyebrow tracking even inside the shelf's micro-caps
+   heading: the heading SHOUTS a place name, and a question that shouted with it
+   would read as the name itself. */
+.ask {
+  font: var(--t-small);
+  text-transform: none;
+  letter-spacing: normal;
+  color: var(--link);
+  background: none;
+  border: none;
+  padding: 0;
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+/* Narrow enough to sit in a heading, wide enough for "The bench at the end of
+   the north pier". */
+.input {
+  inline-size: 22ch;
+  max-inline-size: 100%;
+  text-transform: none;
+  letter-spacing: normal;
+}

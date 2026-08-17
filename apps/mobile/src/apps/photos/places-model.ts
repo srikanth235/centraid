@@ -47,6 +47,68 @@ export interface PlaceCard {
   coverUri?: string;
 }
 
+/**
+ * The `core_place` row a surface standing at `placeKey` speaks for: the one the
+ * NEWEST photograph taken there points at.
+ *
+ * The same row `placeCards` takes a card's title from, which is what makes the
+ * two agree — a member is asked about, and answers for, the place whose name
+ * they are looking at, not a neighbour inside the same 0.1° cell.
+ */
+function newestRowAt(
+  assets: readonly PhotoAsset[],
+  rows: readonly PlaceRow[],
+  placeKey: string
+): PlaceRow | null {
+  const placeById = placeRowsById(rows);
+  for (const asset of assets) {
+    if (asset.deleted || !asset.placeId) continue;
+    const row = placeById.get(asset.placeId);
+    if (row && placeCardKey(row) === placeKey) return row;
+  }
+  return null;
+}
+
+/**
+ * The name to PRINT for `placeKey` right now, or null when there is no name a
+ * person would recognise (issue #816).
+ *
+ * Read from the rows at render, never from a route parameter: a screen opened
+ * before the place was named would otherwise keep the fallback in its head
+ * while the member's own name sat in the row underneath it. A coordinate-shaped
+ * label is not a name (`readableName`), which is the whole reason a caller
+ * needs this rather than `row.name`.
+ */
+export function placeNameAt(
+  assets: readonly PhotoAsset[],
+  rows: readonly PlaceRow[],
+  placeKey: string
+): string | null {
+  const row = newestRowAt(assets, rows, placeKey);
+  return row ? readableName(row.name ? String(row.name) : null) : null;
+}
+
+/**
+ * The `core_place` row a surface standing at `placeKey` would NAME, or null when
+ * there is nothing to ask (issue #816).
+ *
+ * Null when the place already has a name a person would recognise: a member who
+ * named somewhere is not asked again. A coordinate-shaped label is NOT such a
+ * name (`readableName`) — it is the placeholder `findOrCreatePlaceTx` mints, and
+ * it is exactly the case this ask exists for.
+ */
+export function unnamedPlaceAt(
+  assets: readonly PhotoAsset[],
+  rows: readonly PlaceRow[],
+  placeKey: string
+): string | null {
+  const row = newestRowAt(assets, rows, placeKey);
+  if (!row) return null;
+  return readableName(row.name ? String(row.name) : null) === null
+    ? String(row.place_id)
+    : null;
+}
+
 /** Matches the web map's pin ramp: AREA tracks the count, so nine photographs
  *  read as three times one rather than nine times it. The floor is a fingertip
  *  and also the smallest a photograph can be and still be recognised — which
@@ -109,7 +171,11 @@ export function placeCards(
     const row = placeById.get(asset.placeId);
     const key = placeCardKey(row);
     if (!row || key === null) continue;
-    const name = row.name ? String(row.name) : PLACE_UNNAMED;
+    // A coordinate-shaped label is not a name (issue #816). `readableName` is
+    // the one predicate both surfaces ask, and this card used to print the
+    // digits `findOrCreatePlaceTx` minted as if a person had typed them.
+    const name =
+      readableName(row.name ? String(row.name) : null) ?? PLACE_UNNAMED;
     const current = groups.get(key);
     if (current) {
       current.count += 1;
