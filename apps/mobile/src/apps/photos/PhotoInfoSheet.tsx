@@ -26,8 +26,15 @@
 //    panel is a misfire waiting to happen, and the prototype's own panel
 //    deliberately carries no destructive control either.
 
+import * as Clipboard from "expo-clipboard";
 import React, { useMemo, useState } from "react";
 import { Modal, Pressable, ScrollView, View } from "react-native";
+
+import type { NamedPlace } from "@centraid/blueprints/apps/photos/place-phrase";
+import {
+  exactLocation,
+  placePhrase,
+} from "@centraid/blueprints/apps/photos/place-phrase";
 
 import Grabber from "../../kit/components/Grabber";
 import Icon from "../../kit/components/Icon";
@@ -54,7 +61,17 @@ export interface PhotoInfoSheetProps {
   onClose: () => void;
   asset: PhotoAsset;
   screenHeight: number;
+  /** The linked place's STORED name — may still be its own coordinate, which
+   *  the phrase ladder refuses to print. Undefined when no place is linked. */
   placeName?: string;
+  /** A settlement name from the opt-in gazetteer automation, when there is one. */
+  placeGazetteer?: string;
+  /** Where the photograph was taken, for the relative rung of the ladder, the
+   *  copy action, and nothing else. Never rendered as a name. */
+  placeLat?: number;
+  placeLng?: number;
+  /** The member's own named places, as anchors for "3.4 km NE of Home". */
+  namedPlaces?: readonly NamedPlace[];
   placeSetByYou: boolean;
   onRemovePlace: () => void;
   tags: readonly InfoChip[];
@@ -86,6 +103,7 @@ export function PhotoInfoSheet(
   const [captionAssetId, setCaptionAssetId] = useState(asset.id);
   const [pendingTag, setPendingTag] = useState("");
   const [refusal, setRefusal] = useState<Refusal>();
+  const [copiedLocation, setCopiedLocation] = useState(false);
   // Page to another photograph and the sheet is about that one instead. Derived
   // during render so the field can never show the previous caption for a frame.
   if (captionAssetId !== asset.id) {
@@ -93,7 +111,24 @@ export function PhotoInfoSheet(
     setCaption(asset.filename ?? "");
     setPendingTag("");
     setRefusal(undefined);
+    setCopiedLocation(false);
   }
+
+  // WHERE IT WAS TAKEN IS A PHRASE. The ladder in
+  // `@centraid/blueprints/apps/photos/place-phrase` is the same one the web
+  // panel renders, so the two surfaces cannot drift on what they say about a
+  // place: the member's own name, else a gazetteer name, else a phrase relative
+  // to a place they DID name, else "A place with no name yet". Never the
+  // coordinate — that goes only into the clipboard, and only when asked.
+  const place = placePhrase({
+    placeName: props.placeName,
+    gazetteerName: props.placeGazetteer,
+    lat: props.placeLat,
+    lng: props.placeLng,
+    namedPlaces: props.namedPlaces,
+    context: "private",
+  });
+  const exact = exactLocation(props.placeLat, props.placeLng);
 
   const placement = resolveOriginalPlacement({
     hasDeviceOriginal: Boolean(asset.localId ?? asset.localIds?.length),
@@ -195,7 +230,9 @@ export function PhotoInfoSheet(
 
           <Row label="Place" colors={colors}>
             <Text style={[styles.infoValue, { color: colors.text }]}>
-              {props.placeName ?? "No place"}
+              {place.source === "none" && props.placeName === undefined
+                ? "No place"
+                : place.text}
             </Text>
             {props.placeName ? (
               <View style={styles.chipRow}>
@@ -214,6 +251,34 @@ export function PhotoInfoSheet(
                 </Pressable>
               </View>
             ) : null}
+            {/* The one action that spells the coordinate out, and only because
+                the member asked. The label carries no digits: a control that
+                prints the thing it is about has already handed it over. */}
+            {exact === null ? null : (
+              <View style={styles.chipRow}>
+                <Pressable
+                  accessibilityLabel="Copy exact location"
+                  accessibilityRole="button"
+                  hitSlop={8}
+                  onPress={() => {
+                    void Clipboard.setStringAsync(exact).then(() =>
+                      setCopiedLocation(true)
+                    );
+                  }}
+                >
+                  <Text style={[styles.chipText, { color: colors.link }]}>
+                    Copy exact location
+                  </Text>
+                </Pressable>
+                {copiedLocation ? (
+                  <Text
+                    style={[styles.infoMeaning, { color: colors.textSoft }]}
+                  >
+                    Copied
+                  </Text>
+                ) : null}
+              </View>
+            )}
           </Row>
 
           <Row label="Tags" colors={colors}>

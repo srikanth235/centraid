@@ -30,6 +30,14 @@
 // where the original currently lives, which is the only place in the app that
 // question is answered in prose.
 //
+// WHERE IT WAS TAKEN IS A PHRASE, NOT A NUMBER. The Place row prints whatever
+// `place-phrase.ts` resolves — the member's own name for the place, else a
+// gazetteer name, else a phrase relative to a place they DID name, else "A
+// place with no name yet". Never the coordinate: a coordinate in a name slot
+// looks like an answer and is not one. Under it sits the same map the Places
+// shelf draws, at thumbnail size, and the digits live behind one explicit
+// action the member takes on purpose.
+//
 // The storage noun never reaches a user-visible string. What a member reads
 // for a vault is `scope.label` — the shell owns it and the owner may rename
 // it — and what it MEANS comes from whether that scope is the member's own
@@ -48,12 +56,17 @@ import { CloseIcon } from "../icons.tsx";
 // selection — including the album/tag/place ones, whose collection ids are
 // only meaningful inside that same scope.
 import { act, narrate } from "../outcomes.ts";
+import { readableName } from "../place-map.ts";
+import type { PlacePoint } from "../place-map.ts";
+import type { NamedPlace } from "../place-phrase.ts";
+import { PLACE_NO_NAME, exactLocation, placePhrase } from "../place-phrase.ts";
 import type { Album, Asset, Place } from "../types.ts";
 import {
   DEFAULT_GATEWAY_NAME,
   originParagraph,
   scopeMeaning,
 } from "../viewer.ts";
+import { PlaceMap } from "./PlaceMap.tsx";
 
 import styles from "./LightboxInfo.module.css";
 
@@ -105,6 +118,69 @@ function factRows(asset: Asset): Array<[string, string]> {
   return rows;
 }
 
+/**
+ * Where this ONE photograph was taken, as coordinates — or null.
+ *
+ * The camera's own stamp first, because that is this frame's point; the linked
+ * place second, which is a point shared by every photograph that adopted it.
+ * These numbers never reach the screen as a name: they feed the phrase ladder,
+ * the mini map, and the member's own "exact location" action.
+ */
+function assetCoords(asset: Asset): { lat: number; lng: number } | null {
+  let exif: Record<string, unknown> | null = null;
+  if (typeof asset.exif_json === "string") {
+    try {
+      exif = JSON.parse(asset.exif_json) as Record<string, unknown> | null;
+    } catch {
+      exif = null;
+    }
+  } else if (asset.exif_json && typeof asset.exif_json === "object") {
+    exif = asset.exif_json;
+  }
+  if (exif?.latitude != null && exif.longitude != null) {
+    const lat = Number(exif.latitude);
+    const lng = Number(exif.longitude);
+    if (Number.isFinite(lat) && Number.isFinite(lng)) return { lat, lng };
+  }
+  const place = asset.place;
+  if (place?.lat != null && place.lng != null) {
+    return { lat: place.lat, lng: place.lng };
+  }
+  return null;
+}
+
+/**
+ * The member's named places, as anchors for a relative phrase — the ones with
+ * a name a person would recognise AND somewhere to measure from. A place still
+ * labelled with its own coordinate is not an anchor: "3.4 km NE of 37.4419,
+ * -122.1430" is the coordinate back again with extra steps.
+ */
+function namedAnchors(places: readonly Place[]): NamedPlace[] {
+  return places.flatMap((place) => {
+    const name = readableName(place.name);
+    if (name === null || place.lat == null || place.lng == null) return [];
+    return [
+      {
+        key: place.place_id,
+        name,
+        lat: place.lat,
+        lng: place.lng,
+        isHome: place.kind === "home",
+      },
+    ];
+  });
+}
+
+/**
+ * How wide the panel's own map is drawn.
+ *
+ * The rail is 320px and the sheet is wider, but this map answers one question —
+ * "roughly whereabouts is this" — and a figure that grew with the panel would
+ * start competing with the photograph the panel describes. A fixed small box,
+ * capped by the stylesheet's `max-inline-size`, keeps it a thumbnail.
+ */
+const MINI_MAP_WIDTH = 280;
+
 export function LightboxInfo({
   asset,
   albums: albumList,
@@ -126,6 +202,7 @@ export function LightboxInfo({
   const [placeEditorOpen, setPlaceEditorOpen] = useState(false);
   const [addingTag, setAddingTag] = useState(false);
   const [tagText, setTagText] = useState("");
+  const [copied, setCopied] = useState(false);
 
   useEffect(() => {
     void renderFaces(
@@ -135,6 +212,14 @@ export function LightboxInfo({
     );
     // (#360) this component remounts fresh per asset/refresh (keyed by renderSeq in the shell)
   }, [asset.asset_id]);
+
+  // "Copied" is a receipt for a gesture, not a state — it says the clipboard
+  // holds the coordinate now, and two seconds later that is old news.
+  useEffect(() => {
+    if (!copied) return;
+    const timer = setTimeout(() => setCopied(false), 2000);
+    return () => clearTimeout(timer);
+  }, [copied]);
 
   /**
    * Fire one write and report it the way §7.2 asks: nothing on success (the
@@ -159,6 +244,56 @@ export function LightboxInfo({
       tried,
       reason: holder.textContent || "The write was refused.",
     });
+  }
+
+  // WHERE THIS WAS TAKEN, in the falling order of what the vault knows: the
+  // member's own name for the place, a gazetteer name when that opt-in
+  // automation is on, a phrase relative to a place the member named, then the
+  // honest fallback. Private context — this is the member's own panel — so the
+  // relative rung is allowed; an export must never carry it (place-phrase.ts).
+  const coords = assetCoords(asset);
+  const phrase = placePhrase({
+    placeName: asset.place?.name,
+    gazetteerName: asset.place?.gazetteer,
+    lat: coords?.lat,
+    lng: coords?.lng,
+    namedPlaces: namedAnchors(places),
+    context: "private",
+  });
+  // A photograph with no place row AND nothing to phrase is an invitation, not
+  // a fallback: the row is the control that adds one.
+  const placeLabel =
+    phrase.source === "none" && !asset.place ? "Add a place" : phrase.text;
+  const exact = exactLocation(coords?.lat, coords?.lng);
+  const mapPoints: PlacePoint[] = coords
+    ? [
+        {
+          key: asset.place?.place_id ?? asset.asset_id,
+          lat: coords.lat,
+          lng: coords.lng,
+          count: 1,
+          // The pin carries no name: the phrase above the map already said
+          // where this is, in words, and a second label would either repeat it
+          // or contradict it.
+          name: null,
+          thumb: asset.thumb_uri ?? asset.preview_uri ?? asset.content_uri,
+        },
+      ]
+    : [];
+
+  async function copyExact(): Promise<void> {
+    if (exact === null) return;
+    // No clipboard (an older engine, a hardened context) means no copy and no
+    // claim that there was one — the button simply does nothing rather than
+    // reporting a success that did not happen.
+    const clipboard = navigator.clipboard;
+    if (!clipboard?.writeText) return;
+    try {
+      await clipboard.writeText(exact);
+      setCopied(true);
+    } catch {
+      setCopied(false);
+    }
   }
 
   const scope = mountedScopes().find((s) => s.id === (asset.scope_id ?? ""));
@@ -232,9 +367,14 @@ export function LightboxInfo({
             }}
           >
             <option value="">No place</option>
+            {/* A place still labelled with its own coordinate reads as the
+                fallback phrase, never as the digits. Several such places share
+                the label, and that is correct: they are all a place with no
+                name yet, and the member picks by what they know rather than by
+                a number they cannot tell apart anyway. */}
             {places.map((p) => (
               <option key={p.place_id} value={p.place_id}>
-                {p.name}
+                {readableName(p.name) ?? PLACE_NO_NAME}
               </option>
             ))}
           </select>
@@ -260,7 +400,7 @@ export function LightboxInfo({
             className={styles.editable}
             onClick={() => setPlaceEditorOpen(true)}
           >
-            {asset.place?.name ?? "Add a place"}
+            {placeLabel}
           </button>
           {asset.place ? (
             <span className={styles.rowNote}>
@@ -280,6 +420,36 @@ export function LightboxInfo({
           ) : null}
         </p>
       )}
+
+      {/* The map, in the panel: the SAME projection the Places shelf draws
+          (place-map.ts through PlaceMap), one point, and the pin is this
+          photograph. No basemap, no tile request, nothing that asks a third
+          party where the member has been in order to show them. */}
+      {coords ? (
+        <div className={styles.mapSlot}>
+          <PlaceMap
+            points={mapPoints}
+            width={MINI_MAP_WIDTH}
+            height={Math.round(MINI_MAP_WIDTH * 0.66)}
+            // There is nowhere to open: the pin IS the photograph on the stage
+            // beside this panel. The pin stays a real control because PlaceMap
+            // owns that decision for both surfaces, and pressing it here simply
+            // lands back where you already are.
+            onOpen={() => {}}
+          />
+          {/* The one action in this app that spells a coordinate out, and only
+              after the member asks for it. The label carries no digits — a
+              button that prints the thing it is about has already leaked it. */}
+          <button
+            type="button"
+            className={styles.inlineAction}
+            onClick={() => void copyExact()}
+          >
+            Copy exact location
+          </button>
+          {copied ? <output className={styles.rowNote}>Copied</output> : null}
+        </div>
+      ) : null}
 
       {/* Tags — 24px chips at a pill radius, with `+ add`. */}
       <div className={styles.rowLabel}>Tags</div>

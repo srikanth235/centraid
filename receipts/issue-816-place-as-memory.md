@@ -9,6 +9,7 @@ Umbrella receipt for the waved Photos location rework. Waves land as sequential 
 Waves landed so far:
 
 - Wave 0 — rulings recorded, react-native-maps removed JS-side.
+- Wave 1 — place-phrase ladder, phrase-first info panels, OSM link gone.
 
 ## Session
 

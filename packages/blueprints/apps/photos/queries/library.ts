@@ -207,6 +207,10 @@ export default async function libraryHandler({ input, ctx }: HandlerArgs) {
             name: place.name,
             lat: place.lat,
             lng: place.lng,
+            // What the phrase ladder (place-phrase.ts) needs to say where this
+            // was taken in words rather than in digits.
+            kind: place.kind,
+            gazetteer: place.gazetteer,
           }
         : null;
     };

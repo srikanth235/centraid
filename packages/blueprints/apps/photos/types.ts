@@ -24,6 +24,13 @@ export interface Place {
    *  a place with no geography (a room, a venue someone simply named). */
   lat?: number | null;
   lng?: number | null;
+  /** `core_place.kind` — `'home'` is the one value the phrase ladder reads,
+   *  because "3.4 km NE of Home" needs to know which place is home. */
+  kind?: string | null;
+  /** A settlement name from the opt-in gazetteer automation, lifted out of
+   *  `core_place.address_json`. Null until that automation writes one — the
+   *  ladder simply skips the rung. */
+  gazetteer?: string | null;
 }
 
 /** One decorated library/search/trash row (queries/library.js `join()`). */
@@ -127,7 +134,9 @@ export interface MemoryMemberRow {
 export interface ExifRow {
   label: string;
   value: string;
-  href?: string;
+  // No `href`: the only row that ever carried one was Location, linking out to
+  // a public map with the coordinate in the query string. A detail row is a
+  // fact, not a departure.
 }
 
 /** One honest Activity row (activity.js `buildActivity`). */

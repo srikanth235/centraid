@@ -141,6 +141,10 @@ export default async function searchHandler({ input, ctx }: HandlerArgs) {
             name: place.name,
             lat: place.lat,
             lng: place.lng,
+            // Same shape the library projection ships — a search hit's place
+            // phrases exactly like the same photograph's does in the grid.
+            kind: place.kind,
+            gazetteer: place.gazetteer,
           }
         : null;
     };

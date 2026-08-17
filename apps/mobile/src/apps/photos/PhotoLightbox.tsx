@@ -37,6 +37,8 @@ import { GestureDetector } from "react-native-gesture-handler";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { SAVED_TO_MY_VAULT } from "@centraid/blueprints/apps/_shared/shared-copy";
+import { readableName } from "@centraid/blueprints/apps/photos/place-map";
+import type { NamedPlace } from "@centraid/blueprints/apps/photos/place-phrase";
 import { PHOTOS_SAVED_AS_NEW } from "@centraid/blueprints/apps/photos/shared-copy";
 
 import AnchoredMenu, { useMenuAnchor } from "../../kit/components/AnchoredMenu";
@@ -201,6 +203,31 @@ export default function PhotoLightbox({
     }));
   const currentPlace = places.rows.find(
     (row) => row.place_id === current?.placeId
+  );
+  // The member's named places, as anchors for the info sheet's relative phrase
+  // ("3.4 km NE of Home"). A place still labelled with its own coordinate is
+  // not an anchor — `readableName` refuses it — and neither is one with no
+  // geography to measure from.
+  const namedPlaces = useMemo<NamedPlace[]>(
+    () =>
+      places.rows.flatMap((row) => {
+        const name = readableName(row.name == null ? null : String(row.name));
+        const lat = Number(row.geo_lat);
+        const lng = Number(row.geo_lng);
+        if (name === null || !Number.isFinite(lat) || !Number.isFinite(lng)) {
+          return [];
+        }
+        return [
+          {
+            key: String(row.place_id),
+            name,
+            lat,
+            lng,
+            isHome: row.kind === "home",
+          },
+        ];
+      }),
+    [places.rows]
   );
   const currentScope = scopes.find(
     (scope) => scope.vaultId === current?.sourceVaultId
@@ -566,7 +593,13 @@ export default function PhotoLightbox({
   // line, the one mode where "how far through" is the question. The photograph's
   // NAME is still computed — it is the stamp's accessible name, and its visible
   // first line for a photograph that carries no capture time to show instead.
-  const placeName = currentPlace ? String(currentPlace.name ?? "") : undefined;
+  // The stamp prints a place name only when it is one a person would recognise:
+  // a place still labelled with its own coordinate has nothing to say over a
+  // photograph, and printing the digits there would be the worst place in the
+  // app to do it.
+  const placeName =
+    readableName(currentPlace ? String(currentPlace.name ?? "") : null) ??
+    undefined;
   const photographName = viewerTitle({
     caption: current.filename,
     filename: current.filename,
@@ -778,7 +811,18 @@ export default function PhotoLightbox({
           onRemovePlace={() =>
             void writeReason("set-place", { asset_id: current.assetId! })
           }
+          namedPlaces={namedPlaces}
           people={people}
+          placeLat={
+            Number.isFinite(Number(currentPlace?.geo_lat))
+              ? Number(currentPlace?.geo_lat)
+              : undefined
+          }
+          placeLng={
+            Number.isFinite(Number(currentPlace?.geo_lng))
+              ? Number(currentPlace?.geo_lng)
+              : undefined
+          }
           placeName={
             currentPlace ? String(currentPlace.name ?? "Place") : undefined
           }
