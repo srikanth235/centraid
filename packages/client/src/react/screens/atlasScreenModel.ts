@@ -66,6 +66,19 @@ export function dayLabel(day: string, now: number = Date.now()): string {
  * are drawn `off`: present, reachable, and inert, since there is nothing to
  * browse. {@link kindWritten} is the one predicate that decides which is which.
  */
+/** Is this a census the derivations can read — packs listed, totals present?
+ *  A 200 body that is not a census (the e2e mock's `{}` absorb, an old
+ *  gateway) must not become `stats`; that is a load error, not an empty vault. */
+export function isCensusPayload(value: unknown): value is AtlasCensusPayload {
+  if (value === null || typeof value !== "object") return false;
+  const rec = value as Record<string, unknown>;
+  return (
+    Array.isArray(rec.packs) &&
+    rec.totals !== null &&
+    typeof rec.totals === "object"
+  );
+}
+
 export function kindRowsFrom(
   stats: AtlasCensusPayload,
   pulse: AtlasPulsePayload | null,
@@ -74,8 +87,8 @@ export function kindRowsFrom(
   const today = todayKey(now);
   const byType = new Map((pulse?.series ?? []).map((s) => [s.entityType, s]));
   const rows: KindRow[] = [];
-  for (const pack of stats.packs) {
-    for (const table of pack.tables) {
+  for (const pack of stats.packs ?? []) {
+    for (const table of pack.tables ?? []) {
       const series = byType.get(table.logical);
       const days = series?.days ?? [];
       const lastDay = days.reduce(
@@ -137,11 +150,21 @@ export function kindMeta(
  * would tell a member the vault shrank when they pressed "Written today".
  */
 export function holdsMeta(stats: AtlasCensusPayload): string {
-  const { kinds, populatedKinds, rows } = stats.totals;
-  return [
-    `${populatedKinds.toLocaleString()} of ${kinds.toLocaleString()} kinds written`,
-    `${rows.toLocaleString()} records`,
-  ].join(" · ");
+  const totals = stats.totals;
+  if (!totals) return "";
+  const parts: string[] = [];
+  if (
+    typeof totals.populatedKinds === "number" &&
+    typeof totals.kinds === "number"
+  ) {
+    parts.push(
+      `${totals.populatedKinds.toLocaleString()} of ${totals.kinds.toLocaleString()} kinds written`
+    );
+  }
+  if (typeof totals.rows === "number") {
+    parts.push(`${totals.rows.toLocaleString()} records`);
+  }
+  return parts.join(" · ");
 }
 
 /**
@@ -182,13 +205,19 @@ export function kindCount(kind: KindRow): string {
 
 /** The app bar's count line: "9 kinds · 12,408 records · 2.1 GB". */
 export function countLine(stats: AtlasCensusPayload): string {
-  if (stats.totals.populatedKinds === 0) return "No kinds yet";
-  const size = formatBytes(stats.totals.bytes ?? stats.fileBytesTotal);
-  return [
-    `${stats.totals.populatedKinds.toLocaleString()} kinds`,
-    `${stats.totals.rows.toLocaleString()} records`,
-    size,
-  ].join(" · ");
+  const totals = stats.totals;
+  if (!totals) return "";
+  if (totals.populatedKinds === 0) return "No kinds yet";
+  const parts: string[] = [];
+  if (typeof totals.populatedKinds === "number") {
+    parts.push(`${totals.populatedKinds.toLocaleString()} kinds`);
+  }
+  if (typeof totals.rows === "number") {
+    parts.push(`${totals.rows.toLocaleString()} records`);
+  }
+  const sizeBytes = totals.bytes ?? stats.fileBytesTotal;
+  if (typeof sizeBytes === "number") parts.push(formatBytes(sizeBytes));
+  return parts.join(" · ");
 }
 
 /** The status line's second half. Both clauses are optional and neither is
@@ -233,14 +262,15 @@ export function relationRowsFrom(graph: AtlasGraphPayload | null): {
   authored: boolean;
 } {
   if (!graph) return { authored: true, rows: [] };
+  const nodes = graph.nodes ?? [];
   const nameOf = new Map<string, string>();
-  for (const node of graph.nodes) {
+  for (const node of nodes) {
     const name = node.friendly ?? node.label;
     nameOf.set(node.logical, name);
     nameOf.set(node.physical, name);
   }
   const logicalOf = new Map<string, string>();
-  for (const node of graph.nodes) {
+  for (const node of nodes) {
     logicalOf.set(node.logical, node.logical);
     logicalOf.set(node.physical, node.logical);
   }
@@ -249,7 +279,7 @@ export function relationRowsFrom(graph: AtlasGraphPayload | null): {
     string,
     { from: string; to: string; labels: Set<string>; count: number }
   >();
-  for (const link of graph.authoredLinks) {
+  for (const link of graph.authoredLinks ?? []) {
     const key = `${link.fromType}→${link.toType}`;
     const entry = pairs.get(key) ?? {
       count: 0,
@@ -277,7 +307,7 @@ export function relationRowsFrom(graph: AtlasGraphPayload | null): {
     return { authored: true, rows };
   }
 
-  const rows = graph.fkEdges
+  const rows = (graph.fkEdges ?? [])
     .filter((e) => !e.ghost && !e.selfRef && e.fill > 0)
     .sort((a, b) => b.fill - a.fill)
     .slice(0, 8)

@@ -15,6 +15,7 @@ import {
   gridRowsFrom,
   healthDetail,
   holdsMeta,
+  isCensusPayload,
   kindCount,
   kindMeta,
   kindRowsFrom,
@@ -184,6 +185,33 @@ describe("screens/atlasScreenModel", () => {
       ).toBe("No kinds yet");
     });
 
+    it("does not throw when packs or totals are missing", () => {
+      const empty = {} as AtlasCensusPayload;
+      expect(() => kindRowsFrom(empty, null, NOW)).not.toThrow();
+      expect(kindRowsFrom(empty, null, NOW)).toStrictEqual([]);
+      expect(() => holdsMeta(empty)).not.toThrow();
+      expect(holdsMeta(empty)).toBe("");
+      expect(() => countLine(empty)).not.toThrow();
+      expect(countLine(empty)).toBe("");
+      expect(
+        kindRowsFrom(
+          {
+            ...stats,
+            packs: [{ ...stats.packs[0]!, tables: undefined as never }],
+          },
+          null,
+          NOW
+        )
+      ).toStrictEqual([]);
+    });
+
+    it("rejects a 200 body that is not a census", () => {
+      expect(isCensusPayload({})).toBe(false);
+      expect(isCensusPayload({ packs: [] })).toBe(false);
+      expect(isCensusPayload({ totals: {} })).toBe(false);
+      expect(isCensusPayload(stats)).toBe(true);
+    });
+
     it("names yesterday and dates anything older", () => {
       expect(dayLabel("2026-07-16", NOW)).toBe("Yesterday");
       expect(dayLabel("2026-07-01", NOW)).not.toBe("Yesterday");
@@ -297,6 +325,11 @@ describe("screens/atlasScreenModel", () => {
 
     it("has nothing to say before the graph lands", () => {
       expect(relationRowsFrom(null).rows).toStrictEqual([]);
+    });
+
+    it("does not throw when a fulfilled graph is an empty object", () => {
+      expect(() => relationRowsFrom({} as AtlasGraphPayload)).not.toThrow();
+      expect(relationRowsFrom({} as AtlasGraphPayload).rows).toStrictEqual([]);
     });
   });
 

@@ -161,6 +161,19 @@ Light across reload — Cards was removed from You.
 `setSubsystemModel` / `setSubsystemConfigPin` with `void`.
 `tests/hygiene-budgets.json` ratchet, `packages/client/src/react/screens/settings-controls.tsx`.
 
+### Census robustness (desktop e2e 2.12/2.13)
+
+Vault embeds Atlas. A fulfilled `GET /_vault/atlas/stats` that is not a
+census (`{}` from the e2e absorb fallback) used to become `stats` and
+throw in `kindRowsFrom` (`stats.packs is not iterable`), crashing the
+ErrorBoundary and hiding Household. `atlasScreenModel.ts` now iterates
+`stats.packs ?? []` / `pack.tables ?? []`; `holdsMeta` and `countLine`
+omit clauses when `totals` is missing. `isCensusPayload` is the gate;
+`AtlasScreen.tsx` `loadCensus` treats a non-census 200 as a census
+**error**, so "Where it lives" stays up. The mock now serves a valid
+empty census, pulse, and graph. 12.9 seeds a connected Codex harness
+on `harnessesStatus` so the engine pill can reveal an agent chip.
+
 ### Files (every ACMR path vs origin/main, compact)
 
 QUALITY.md, apps/desktop/tests/e2e/fixtures.ts,
@@ -278,6 +291,9 @@ tests/hygiene-budgets.json.
   restoring a Copies/Household launcher entry.
 - **Cards stays without a control.** 12.5 persists theme Light across reload.
 - **One receipt for the combined PR.** v11 audit is here, not a second #707 file.
+- **A garbage census 200 is a load error.** `{}` is not an empty vault;
+  treating it as success crashed the merged Vault surface. The atlas half
+  fails closed; Household stays.
 
 ## User impact
 
@@ -308,7 +324,7 @@ emitted by `apps/desktop/tests/e2e/settings-enrichment.spec.ts` (§12.9).
 ```sh
 bash .governance/run.sh
 bun run lint:types
-bun run --cwd packages/client test -- src/react/shell/routes/ApprovalsRoute.test.tsx src/react/shell/routes/ApprovalsRoute.held.test.tsx src/react/screens/SettingsAppearanceScreen.test.tsx src/react/screens/HouseholdScreen.test.tsx src/react/shell/launcherModel.test.ts
+bun run --cwd packages/client test -- src/react/screens/atlasScreenModel.test.ts
 ```
 
 Targeted client tests after the splits: ApprovalsRoute 6 + held 3 +
@@ -348,3 +364,8 @@ this receipt, and `gh issue view 814`. Default REFUTED if uncertain.
    an issue checklist that does not exist.
 
 Overall: **REFUTED** on check 3 only.
+
+Follow-up (desktop e2e 2.12/2.13/12.9): previous Audit still applies. This
+pass only added census-robustness (`atlasScreenModel.ts`, `AtlasScreen.tsx`),
+mock atlas routes (`fixtures.ts`), and a Codex harness seed
+(`settings-enrichment.spec.ts`). Not independently re-audited.

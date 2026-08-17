@@ -627,6 +627,42 @@ async function route(
   if (p === "/centraid/_harnesses/status" && method === "GET")
     return json(res, 200, s.harnessesStatus);
 
+  // ---- vault atlas (v11 Vault embeds the census) ----
+  // The absorb fallback is `{}`. AtlasScreen used to treat that as a census
+  // and crash on `stats.packs` — the client now refuses a non-census 200,
+  // and the mock serves a valid empty census so household e2e is deterministic.
+  if (p === "/centraid/_vault/atlas/stats" && method === "GET") {
+    return json(res, 200, {
+      generatedAt: "2026-08-01T00:00:00.000Z",
+      method: "estimate",
+      fileBytesTotal: 0,
+      packs: [],
+      totals: { rows: 0, bytes: 0, kinds: 0, populatedKinds: 0 },
+    });
+  }
+  if (p === "/centraid/_vault/atlas/pulse" && method === "GET") {
+    return json(res, 200, {
+      generatedAt: "2026-08-01T00:00:00.000Z",
+      since: "2026-07-02T00:00:00.000Z",
+      windowDays: 30,
+      live: true,
+      series: [],
+    });
+  }
+  if (p === "/centraid/_vault/atlas/graph" && method === "GET") {
+    return json(res, 200, {
+      generatedAt: "2026-08-01T00:00:00.000Z",
+      center: "core_party",
+      nodes: [],
+      fkEdges: [],
+      authoredLinks: [],
+      island: [],
+      edgeCount: 0,
+      centerEdgeCount: 0,
+      selfRefCount: 0,
+    });
+  }
+
   // ---- enrichment policy + engine profiles (issue #807) ----
   // Tiers, rules and answers are vault state; profiles are gateway prefs, and
   // the two paths stay separate here exactly as they are in the product.

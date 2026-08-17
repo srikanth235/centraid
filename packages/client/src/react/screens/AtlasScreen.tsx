@@ -31,6 +31,7 @@ import {
   countLine,
   healthDetail,
   holdsMeta,
+  isCensusPayload,
   kindRowsFrom,
   kindWritten,
   NEVER_WRITTEN,
@@ -166,10 +167,16 @@ export default function AtlasScreen({
   const loadCensus = useCallback(() => {
     void Promise.allSettled([loadStats(), loadPulse()]).then(([s, p]) => {
       if (!mountedRef.current) return;
-      if (s.status === "fulfilled") {
+      if (s.status === "fulfilled" && isCensusPayload(s.value)) {
         setStats(s.value);
         setStatsError(null);
         setCensusReadAt(new Date().toISOString());
+      } else if (s.status === "fulfilled") {
+        // A 200 that is not a census (no packs / no totals) is a load
+        // error. Treating it as success would throw in kindRowsFrom and
+        // take the merged Vault surface down with it.
+        setStats(null);
+        setStatsError("The host did not return a vault census.");
       } else
         setStatsError(
           s.reason instanceof Error ? s.reason.message : String(s.reason)
@@ -261,7 +268,7 @@ export default function AtlasScreen({
     () => ({
       count: stats ? countLine(stats) : "",
       health,
-      records: stats ? stats.totals.rows : null,
+      records: stats ? (stats.totals?.rows ?? null) : null,
       state,
     }),
     [health, state, stats]

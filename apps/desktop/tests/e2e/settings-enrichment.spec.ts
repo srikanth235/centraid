@@ -104,6 +104,22 @@ test.beforeEach(async () => {
       receiptId: null,
     },
   ];
+  // 12.9 opens the engine pill and picks an agent chip. Cards come from
+  // GET /_harnesses/status; the mock default is an empty list.
+  gateway.state.harnessesStatus = {
+    harnesses: [
+      {
+        kind: "codex",
+        label: "Codex",
+        available: true,
+        version: "test",
+        models: [
+          { id: "tier-fast", name: "Fast", default: true, tier: "fast" },
+        ],
+      },
+    ],
+    models: [],
+  };
   await seedRemoteGateway(env, gateway);
 });
 
