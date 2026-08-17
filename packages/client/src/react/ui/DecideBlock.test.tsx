@@ -52,8 +52,14 @@ describe("ui/DecideBlock", () => {
   });
 
   it("makes the whole title block the disclosure, and nothing else", () => {
-    const onToggle = vi.fn<() => void>();
-    const el = render({ ...base, onToggle, open: false });
+    let toggles = 0;
+    const el = render({
+      ...base,
+      onToggle: () => {
+        toggles += 1;
+      },
+      open: false,
+    });
     const disclosure = el.querySelector(
       "button[aria-expanded]"
     ) as HTMLButtonElement;
@@ -62,7 +68,7 @@ describe("ui/DecideBlock", () => {
     // One target for one act — there is no chevron beside the sentence.
     expect(el.querySelectorAll("button[aria-expanded]")).toHaveLength(1);
     act(() => disclosure.click());
-    expect(onToggle).toHaveBeenCalledWith();
+    expect(toggles).toBe(1);
   });
 
   it("renders a title block that is not a control when nothing can open", () => {
@@ -71,13 +77,13 @@ describe("ui/DecideBlock", () => {
   });
 
   it("states a computed fact and edits an authorable one", () => {
-    const onChange = vi.fn<(next: string) => void>();
+    const typed: string[] = [];
     const el = render({
       ...base,
       facts: [
         { key: "size", value: "4.2 KB across 3 files" },
         {
-          field: { label: "Subject", onChange },
+          field: { label: "Subject", onChange: (next) => typed.push(next) },
           key: "subject",
           value: "Hi",
         },
@@ -99,7 +105,7 @@ describe("ui/DecideBlock", () => {
       setter?.call(input, "New subject");
       input.dispatchEvent(new Event("input", { bubbles: true }));
     });
-    expect(onChange).toHaveBeenCalledWith("New subject");
+    expect(typed).toStrictEqual(["New subject"]);
   });
 
   it("gives a body-like field a textarea rather than a single line", () => {
@@ -138,13 +144,13 @@ describe("ui/DecideBlock", () => {
   });
 
   it("quotes what the write would do, and offers the standing grant in place", () => {
-    const onChange = vi.fn<(next: boolean) => void>();
+    const ticks: boolean[] = [];
     const el = render({
       ...base,
       check: {
         label: "Always allow this",
         on: false,
-        onChange,
+        onChange: (next) => ticks.push(next),
         sub: "Briefing sends to that address without asking.",
       },
       open: true,
@@ -160,7 +166,10 @@ describe("ui/DecideBlock", () => {
       "Briefing sends to that address without asking."
     );
     act(() => box.click());
-    expect(onChange).toHaveBeenCalledWith(true);
+    // The tick REPORTS itself; the block is controlled, so it does not also
+    // move on its own.
+    expect(ticks).toStrictEqual([true]);
+    expect(box.checked).toBe(false);
   });
 
   it("fills the commit, outlines the destructive verb, and states a refused one", () => {

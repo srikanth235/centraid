@@ -290,8 +290,13 @@ describe("screens/ApprovalsScreen", () => {
     });
 
     it("confirms a discard in place, in --net, and keeps it on Keep it", () => {
-      const onDenyOutbox = vi.fn<ApprovalsScreenProps["onDenyOutbox"]>();
-      const el = mount(makeProps({ outbox: [outboxRow], onDenyOutbox }));
+      const discarded: string[] = [];
+      const el = mount(
+        makeProps({
+          onDenyOutbox: (id) => discarded.push(id),
+          outbox: [outboxRow],
+        })
+      );
       click(el, "Review");
       click(el, "Discard");
       const card = el.querySelector<HTMLElement>(
@@ -305,10 +310,12 @@ describe("screens/ApprovalsScreen", () => {
       // still offers Approve is not a confirm.
       expect(() => findButton(el, "Approve")).toThrow(Error);
       click(el, "Keep it");
-      expect(onDenyOutbox).not.toHaveBeenCalled();
+      expect(discarded).toStrictEqual([]);
       click(el, "Discard");
       click(el, "Do it");
-      expect(onDenyOutbox).toHaveBeenCalledWith("item1");
+      // Exactly one discard, of exactly this item — a Keep it followed by a
+      // Do it must not send two.
+      expect(discarded).toStrictEqual(["item1"]);
     });
 
     it("states the consequence the route gives it, in the gateway's terms", () => {
@@ -414,9 +421,12 @@ describe("screens/ApprovalsScreen", () => {
     });
 
     it('submits the edited artifact on "Approve with edits", splitting recipients on comma', () => {
-      const onApproveOutbox = vi.fn<ApprovalsScreenProps["onApproveOutbox"]>();
+      const approvals: unknown[][] = [];
       const el = mount(
-        makeProps({ outbox: [editableOutboxRow], onApproveOutbox })
+        makeProps({
+          onApproveOutbox: (...args) => approvals.push(args),
+          outbox: [editableOutboxRow],
+        })
       );
       click(el, "Review");
       click(el, "Edit and approve");
@@ -449,11 +459,19 @@ describe("screens/ApprovalsScreen", () => {
         );
       });
       click(el, "Approve with edits");
-      expect(onApproveOutbox).toHaveBeenCalledWith("item1", false, {
-        to: ["x@example.com", "y@example.com"],
-        subject: "New subject",
-        body: "New body.",
-      });
+      // One approval, carrying the whole artifact: the edited fields AND the
+      // untouched ones, which ride through unchanged.
+      expect(approvals).toStrictEqual([
+        [
+          "item1",
+          false,
+          {
+            body: "New body.",
+            subject: "New subject",
+            to: ["x@example.com", "y@example.com"],
+          },
+        ],
+      ]);
     });
 
     it("Cancel leaves the editor without approving, and the quote survives", () => {
@@ -623,25 +641,37 @@ describe("screens/ApprovalsScreen", () => {
     });
 
     it("decides a parked invocation from its own card, over its input", () => {
-      const onConfirmParked = vi.fn<ApprovalsScreenProps["onConfirmParked"]>();
-      const el = mount(makeProps({ parked: [parkedRow], onConfirmParked }));
+      const rulings: Array<[string, boolean]> = [];
+      const el = mount(
+        makeProps({
+          onConfirmParked: (id, approve) => rulings.push([id, approve]),
+          parked: [parkedRow],
+        })
+      );
       expect(el.textContent).toContain("asked by the app Briefing");
       click(el, "Review");
       expect(el.textContent).toContain('"to": "x"');
       click(el, "Approve");
-      expect(onConfirmParked).toHaveBeenCalledWith("inv1", true);
+      expect(rulings).toStrictEqual([["inv1", true]]);
     });
 
     it("confirms a parked denial in place, naming who must ask again", () => {
-      const onConfirmParked = vi.fn<ApprovalsScreenProps["onConfirmParked"]>();
-      const el = mount(makeProps({ parked: [parkedRow], onConfirmParked }));
+      const rulings: Array<[string, boolean]> = [];
+      const el = mount(
+        makeProps({
+          onConfirmParked: (id, approve) => rulings.push([id, approve]),
+          parked: [parkedRow],
+        })
+      );
       click(el, "Review");
       click(el, "Deny");
       expect(el.textContent).toContain(
         "A denied command cannot be replayed — Briefing must ask again."
       );
+      // Opening the confirm rules nothing; only [Do it] does, and only once.
+      expect(rulings).toStrictEqual([]);
       click(el, "Do it");
-      expect(onConfirmParked).toHaveBeenCalledWith("inv1", false);
+      expect(rulings).toStrictEqual([["inv1", false]]);
     });
 
     it("distinguishes an assistant-asked parked invocation from an automation's", () => {
@@ -671,10 +701,12 @@ describe("screens/ApprovalsScreen", () => {
     });
 
     it("decides a scope request from its opened card, confirming the denial", () => {
-      const onDecideScopeRequest =
-        vi.fn<ApprovalsScreenProps["onDecideScopeRequest"]>();
+      const decisions: Array<[string, boolean]> = [];
       const el = mount(
-        makeProps({ scopeRequests: [scopeRow], onDecideScopeRequest })
+        makeProps({
+          onDecideScopeRequest: (id, approve) => decisions.push([id, approve]),
+          scopeRequests: [scopeRow],
+        })
       );
       click(el, "Review");
       expect(el.textContent).toContain("business.invoice (act)");
@@ -684,12 +716,17 @@ describe("screens/ApprovalsScreen", () => {
         "invoicer keeps what it has, and is not asked again."
       );
       click(el, "Do it");
-      expect(onDecideScopeRequest).toHaveBeenCalledWith("r1", false);
+      expect(decisions).toStrictEqual([["r1", false]]);
     });
 
     it("renders standing grants with a Revoke that states what re-parks", () => {
-      const onRevokeGrant = vi.fn<ApprovalsScreenProps["onRevokeGrant"]>();
-      const el = mount(makeProps({ grants: [grantRow], onRevokeGrant }));
+      const revoked: string[] = [];
+      const el = mount(
+        makeProps({
+          grants: [grantRow],
+          onRevokeGrant: (id) => revoked.push(id),
+        })
+      );
       expect(el.textContent).toContain("gmail-send may always gmail.send");
       expect(el.textContent).toContain("ravi@example.com");
       expect(el.textContent).toContain(
@@ -699,9 +736,9 @@ describe("screens/ApprovalsScreen", () => {
       expect(el.textContent).toContain(
         "Matching items park for review again, including anything approved but not yet drained."
       );
-      expect(onRevokeGrant).not.toHaveBeenCalled();
+      expect(revoked).toStrictEqual([]);
       click(el, "Do it");
-      expect(onRevokeGrant).toHaveBeenCalledWith("g1");
+      expect(revoked).toStrictEqual(["g1"]);
     });
 
     it("opens and closes the record's sections from their own heads", () => {
