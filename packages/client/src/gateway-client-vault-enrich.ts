@@ -9,6 +9,7 @@ import type {
   EnrichConsentRecord,
   EnrichDomain,
   EnrichEgressClass,
+  EnrichEngineProfile,
   EnrichPolicy,
   EnrichPolicyRule,
   EnrichScopeType,
@@ -209,4 +210,27 @@ export async function recordEnrichEgressConsent(input: {
     "record enrichment egress consent"
   );
   return body.consent;
+}
+
+/**
+ * The engine profiles this gateway offers (`GET /centraid/_enrich/profiles`).
+ *
+ * Not a vault route, and it lives here anyway: a profile is the other half of
+ * every policy answer above, so the surface that renders one renders both. The
+ * list is the gateway's — built-ins are derived from the shipped engines, and
+ * `egress` is computed there — so nothing on this side keys off a local table
+ * of capabilities or harnesses. Writes go through the prefs API
+ * (`enrich.profile.<id>`), which is where the one validation gate lives.
+ */
+export async function listEnrichProfiles(): Promise<EnrichEngineProfile[]> {
+  const { baseUrl, token } = await auth();
+  const res = await doFetch(baseUrl, "/centraid/_enrich/profiles", {
+    method: "GET",
+    headers: authHeaders(token),
+  });
+  const body = await readJson<{ profiles?: EnrichEngineProfile[] }>(
+    res,
+    "read enrichment engine profiles"
+  );
+  return body.profiles ?? [];
 }

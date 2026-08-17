@@ -98,6 +98,7 @@ export type {
   EnrichPolicyRequest,
   EnrichPolicyResolution,
   ResolveEnrichPolicy,
+  ResolvedEngineBinding,
   ResolvedEnrichPolicy,
 } from "./enrich-resolve.js";
 

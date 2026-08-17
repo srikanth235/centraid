@@ -1,3 +1,5 @@
+import { ENRICH_CAPABILITY_DOMAIN } from "../../../enrich-policy.js";
+import type { EnrichDomain } from "../../../enrich-policy.js";
 import {
   appSettings,
   appSettingWrite,
@@ -11,6 +13,8 @@ import {
   vaultDemoStatus,
   vaultParked,
   vaultStatus,
+  getEffectiveEnrichPolicy,
+  listEnrichProfiles,
   auth,
   authHeaders,
   doFetch,
@@ -21,6 +25,7 @@ import type {
   VaultBlockDTO,
   VaultBridgeProps,
 } from "../../screen-contracts.js";
+import type { AppEnrichmentCapability } from "../../screens/AppEnrichmentSurface.js";
 
 // The gateway I/O + manifest parsing behind the React app-settings popover —
 // the successor to the helpers that lived in the deleted app-appview.ts /
@@ -214,4 +219,66 @@ export function buildVaultProps(
     ...(cbs.onParkedCount ? { onParkedCount: cbs.onParkedCount } : {}),
     ...(cbs.showToast ? { showToast: cbs.showToast } : {}),
   };
+}
+
+/*
+ * The app popover's Enrichment surface (issue #807).
+ *
+ * An app is bound to a data-shape DOMAIN, not to a capability: Photos holds
+ * photos, Docs holds documents, and the capability list of each domain is the
+ * gateway's to say. The map below is that binding and nothing else — every
+ * word the surface renders comes from the effective-policy read and the
+ * profile list, so a gateway that grows a capability shows it without a client
+ * release.
+ */
+const ENRICH_DOMAIN_BY_APP: Readonly<Record<string, EnrichDomain>> = {
+  docs: "docs",
+  photos: "photos",
+};
+
+/** The enrichment domain this app's data belongs to, when it has one. */
+export function enrichDomainForApp(appId: string): EnrichDomain | undefined {
+  return ENRICH_DOMAIN_BY_APP[appId];
+}
+
+/** Every capability of one domain, in the vocabulary's own order. */
+function capabilitiesOf(domain: EnrichDomain): string[] {
+  return Object.keys(ENRICH_CAPABILITY_DOMAIN).filter(
+    (capability) => ENRICH_CAPABILITY_DOMAIN[capability] === domain
+  );
+}
+
+/**
+ * What the gateway's ONE resolver would answer for this app's domain, per
+ * capability, joined to the profile each answer names. Nothing is folded here:
+ * an unreachable gateway rejects, and the surface says so.
+ */
+export async function loadAppEnrichment(
+  domain: EnrichDomain
+): Promise<AppEnrichmentCapability[]> {
+  const capabilities = capabilitiesOf(domain);
+  const [profiles, answers] = await Promise.all([
+    listEnrichProfiles(),
+    Promise.all(
+      capabilities.map((capability) =>
+        getEffectiveEnrichPolicy({ capability, domain })
+      )
+    ),
+  ]);
+  return capabilities.map((capability, index) => {
+    const effective = answers[index]?.effective ?? null;
+    return {
+      capability,
+      effective,
+      // A built-in profile's id is the same string for every capability, so
+      // profile identity is the PAIR (engine-profiles.ts), never the id alone.
+      profile: effective
+        ? profiles.find(
+            (entry) =>
+              entry.capability === capability &&
+              entry.id === effective.profileId
+          )
+        : undefined,
+    };
+  });
 }

@@ -284,8 +284,11 @@ describe("enricher template hygiene", () => {
 
   it.each([
     ["photo-ocr", true],
+    // The docs domain's delegate-capable enricher (issue #807, Wave 5).
+    ["doc-text-extractor", true],
     ["embed-image", false],
     ["embed-text", false],
+    // Faces has no delegate variant anywhere, structurally (#807 Q3).
     ["faces", false],
   ] as const)("%s declares its delegate step honestly", (id, expected) => {
     const manifest = parseManifest(
@@ -962,6 +965,97 @@ describe("doc-text-extractor behavior", () => {
       text: "Warranty expires 2027-03-01",
     });
     expect(result.summary).toContain("OCRed 1");
+  });
+
+  // ── the delegate variant (issue #807, Wave 5) ───────────────────────────
+  // `doc-text` has no bundled deterministic engine — both variants take a
+  // model turn. What the delegate variant adds is a PINNED engine whose
+  // answer is stamped: profile, ACP-confirmed model, prompt revision.
+  it("stamps the resolved profile and confirmed model on a delegate transcription", async () => {
+    const handler = await loadHandler("doc-text-extractor");
+    const harness = stubCtx({
+      reads: {
+        "core.content_item": [
+          { content_id: "d1", media_type: "application/pdf" },
+        ],
+        "core.content_derivative": [{ content_id: "d1", variant: "preview" }],
+      },
+      input: {
+        variant: "delegate",
+        profileId: "docs-vlm",
+        delegateModel: "owner/pin",
+      },
+      delegate: () => ({
+        text: "Warranty expires 2027-03-01",
+        __centraidModel: "acp-confirmed@7",
+      }),
+    });
+
+    await handler({ ctx: harness.ctx, log: harness.log });
+
+    expect(harness.invokes[0]!.input).toStrictEqual({
+      content_id: "d1",
+      text: "Warranty expires 2027-03-01",
+      capability: "doc-text",
+      // The identity that ANSWERED, never the id that was asked for.
+      model: "acp-confirmed@7",
+      prompt_rev: "doc-text-v1",
+      profile: "docs-vlm",
+    });
+  });
+
+  it("refuses a delegate transcription with no ACP-confirmed model identity", async () => {
+    const handler = await loadHandler("doc-text-extractor");
+    const harness = stubCtx({
+      reads: {
+        "core.content_item": [
+          { content_id: "d1", media_type: "application/pdf" },
+        ],
+        "core.content_derivative": [{ content_id: "d1", variant: "preview" }],
+      },
+      input: {
+        variant: "delegate",
+        profileId: "docs-vlm",
+        delegateModel: "owner/pin",
+      },
+      delegate: () => ({ text: "Warranty expires 2027-03-01" }),
+    });
+
+    await expect(
+      handler({ ctx: harness.ctx, log: harness.log })
+    ).rejects.toThrow("no ACP-confirmed model identity");
+    expect(harness.invokes).toHaveLength(0);
+  });
+
+  it("refuses a delegate fire that names no pinned model, spending no turn", async () => {
+    const handler = await loadHandler("doc-text-extractor");
+    const harness = stubCtx({
+      reads: { "core.content_item": [], "core.content_derivative": [] },
+      input: { variant: "delegate", profileId: "docs-vlm" },
+    });
+
+    await expect(
+      handler({ ctx: harness.ctx, log: harness.log })
+    ).rejects.toThrow("requires an explicit pinned model");
+    expect(harness.delegateCalls).toHaveLength(0);
+  });
+
+  it("refuses a prompt revision the profile pinned but the handler does not ship", async () => {
+    const handler = await loadHandler("doc-text-extractor");
+    const harness = stubCtx({
+      reads: { "core.content_item": [], "core.content_derivative": [] },
+      input: {
+        variant: "delegate",
+        profileId: "docs-vlm",
+        delegateModel: "owner/pin",
+        promptRev: "doc-text-v9",
+      },
+    });
+
+    await expect(
+      handler({ ctx: harness.ctx, log: harness.log })
+    ).rejects.toThrow('pins prompt revision "doc-text-v9"');
+    expect(harness.delegateCalls).toHaveLength(0);
   });
 
   it("summarizes a document that already has text, staged as an annotation", async () => {

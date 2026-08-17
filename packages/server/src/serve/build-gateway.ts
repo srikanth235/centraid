@@ -2379,6 +2379,15 @@ export async function buildGateway(
               readEngineProfile(snapshot, profileId, request.capability, {
                 laneFor: () => request.lane,
               })?.egress,
+            // The same registry, asked the OTHER half of the profile: which
+            // engine computes this capability (#807 Wave 5). The fire path
+            // reads it only after the gate allowed the run, and turns it into
+            // the handler's `variant` — so binding `ocr` to a harness profile
+            // selects the delegate step, and no manifest is edited to do it.
+            engineForProfile: (profileId: string) =>
+              readEngineProfile(snapshot, profileId, request.capability, {
+                laneFor: () => request.lane,
+              })?.engine,
             // The egress ANSWER, read from the same owner-plane vault handle
             // and never from the automation's grants (#807 Wave 3). A read
             // only: `enrich_consent` has exactly one writer, and it is the
@@ -3195,6 +3204,10 @@ export async function buildGateway(
             )
           )
         : {};
+      // The member's own choice of recognition step survives a template
+      // upgrade. Since #807 this switch is one of two selectors — a resolved
+      // engine profile elects the delegate variant too — so preserving it
+      // carries the recipe's answer forward, not the run's.
       const currentVariant = current?.manifest.enrich?.delegateStep?.selected;
       const merged = automation.validateManifest({
         ...desired,

@@ -33,6 +33,7 @@ import type {
   VaultBridge,
 } from "@centraid/server/engine";
 import type { EnrichEgressClass } from "@centraid/vault";
+import { BUILT_IN_PROFILE } from "@centraid/vault";
 
 import { runHandler } from "../handler/runner.js";
 import type {
@@ -53,6 +54,7 @@ import type {
   EnrichEgressConsentLookup,
   EnrichTier,
   ResolveEnrichPolicy,
+  ResolvedEngineBinding,
   ResolvedEnrichPolicy,
 } from "./enrich-gate.js";
 
@@ -357,33 +359,6 @@ export async function runFire(
     };
   };
 
-  // Recognition selection is recipe state, not a one-off fire option. Inject
-  // it into every invocation so cron/data/manual fires cannot diverge, and do
-  // not let a caller smuggle the billed lane through an arbitrary payload.
-  const configuredDelegateStep = row.manifest.enrich?.delegateStep;
-  const handlerInput = configuredDelegateStep
-    ? {
-        ...(opts.input !== null &&
-        typeof opts.input === "object" &&
-        !Array.isArray(opts.input)
-          ? (opts.input as Record<string, unknown>)
-          : {}),
-        variant: configuredDelegateStep.selected,
-        ...(configuredDelegateStep.selected === "delegate" &&
-        row.manifest.requires.model
-          ? { delegateModel: row.manifest.requires.model }
-          : {}),
-      }
-    : opts.input;
-  if (
-    configuredDelegateStep?.selected === "delegate" &&
-    !row.manifest.requires.model
-  ) {
-    return skipRun(
-      `${opts.automationRef}: delegate step requires an explicit pinned model and provider-egress consent`
-    );
-  }
-
   // ENRICHMENT TIER GATE — the privacy choke point.
   //
   // An automation that declares `manifest.enrich` is subject to the owner's
@@ -399,12 +374,20 @@ export async function runFire(
   const enrich = row.manifest.enrich;
   /** Set under the `local` tier: the domain whose promise seals `ctx.delegate`. */
   let sealedDomain: EnrichDomain | undefined;
+  /** The profile the cascade selected for this capability, once allowed. */
+  let selectedProfileId: string | undefined;
+  /** How that profile computes the capability — read only AFTER the gate. */
+  let selectedEngine: ResolvedEngineBinding | undefined;
   if (enrich) {
     let tier: EnrichTier | undefined;
     let policy: ResolvedEnrichPolicy | undefined;
     let profileEgress: EnrichEgressClass | undefined;
     /** The vault's standing egress answer, when the host wired the lookup. */
     let egressConsent: EnrichEgressConsentLookup | undefined;
+    /** The engine registry's answer for the selected profile (Wave 5). */
+    let engineForProfile:
+      | ((profileId: string) => ResolvedEngineBinding | undefined)
+      | undefined;
     try {
       const answer = await opts.resolveEnrichPolicy?.({
         domain: enrich.domain,
@@ -427,6 +410,7 @@ export async function runFire(
         // gate. A throwing lookup lands in the catch below with everything
         // else and refuses; an absent one fails closed inside the gate.
         egressConsent = answer.egressConsent;
+        engineForProfile = answer.engineForProfile;
       }
     } catch (error) {
       onLog(
@@ -436,6 +420,7 @@ export async function runFire(
       tier = undefined;
       policy = undefined;
       egressConsent = undefined;
+      engineForProfile = undefined;
     }
     const decision = decideEnrichmentGate({
       automationRef: opts.automationRef,
@@ -455,19 +440,121 @@ export async function runFire(
       });
     }
     if (decision.sealModelTurns) sealedDomain = enrich.domain;
+    // Read the engine ONLY on the allowed path: which engine computes a
+    // capability must never be an input to whether it may run.
+    if (policy) {
+      selectedProfileId = policy.profileId;
+      selectedEngine = engineForProfile?.(policy.profileId);
+    }
   }
 
+  // RECOGNITION SELECTION (issue #807, Wave 5) — WHICH ENGINE RUNS, resolved
+  // from policy rather than pinned in the manifest.
+  //
+  // `manifest.enrich.delegateStep` is the capability's DECLARATION that a
+  // delegate variant exists at all: the prompt revision the handler ships, the
+  // honest latency, and the consequence of switching. It is not the choice.
+  // The choice is the engine profile the cascade resolved
+  // (`enrich-resolve.ts`) — so a member who binds `ocr` to a harness profile
+  // gets the delegate variant everywhere that capability runs, instead of
+  // hand-editing one recipe's manifest.
+  //
+  // Three laws hold across the move:
+  //   1. A capability whose handler declares NO delegate variant is INERT
+  //      under a delegate profile — the deterministic engine runs and the
+  //      selection is logged, because a profile cannot conjure a code path the
+  //      handler does not have. (The gate has already applied the profile's
+  //      egress class, so this run is still bounded by consent.)
+  //   2. The manifest's own `selected: "delegate"` stays honoured — that is
+  //      the pre-Wave-5 per-recipe switch (`lifecycle-automation-routes.ts`),
+  //      and a member's built-in profile must not silently revoke it.
+  //   3. A delegate variant with no pinned model is refused, exactly as before:
+  //      profile model first (the member's own binding), manifest pin second.
+  // Selection is recipe/policy state, never a one-off fire option, so it is
+  // injected into every invocation and a caller cannot smuggle the billed lane
+  // through an arbitrary payload.
+  const declaredDelegateStep = row.manifest.enrich?.delegateStep;
+  const profileDelegate =
+    selectedEngine?.kind === "delegate" ? selectedEngine : undefined;
+  if (profileDelegate && !declaredDelegateStep) {
+    onLog(
+      "info",
+      `${opts.automationRef}: engine profile "${selectedProfileId}" selects a delegate engine, but this enricher ` +
+        `declares no delegate variant — the built-in engine ran.`
+    );
+  }
+  const selectedVariant = declaredDelegateStep
+    ? profileDelegate !== undefined ||
+      declaredDelegateStep.selected === "delegate"
+      ? "delegate"
+      : "deterministic"
+    : undefined;
+  const delegateModel = profileDelegate
+    ? (profileDelegate.model ?? row.manifest.requires.model)
+    : row.manifest.requires.model;
+  if (selectedVariant === "delegate" && !delegateModel) {
+    return skipRun(
+      `${opts.automationRef}: delegate step requires an explicit pinned model and provider-egress consent`
+    );
+  }
+  const handlerInput = declaredDelegateStep
+    ? {
+        ...(opts.input !== null &&
+        typeof opts.input === "object" &&
+        !Array.isArray(opts.input)
+          ? (opts.input as Record<string, unknown>)
+          : {}),
+        variant: selectedVariant,
+        // Which profile produced the values this run writes — the handler
+        // stamps it on `enrich_derivation`, so two profiles' answers for the
+        // same target stay separate rows rather than overwriting each other.
+        profileId: selectedProfileId ?? BUILT_IN_PROFILE,
+        ...(selectedVariant === "delegate" && delegateModel
+          ? { delegateModel }
+          : {}),
+        ...(selectedVariant === "delegate" && profileDelegate?.harness
+          ? { delegateHarness: profileDelegate.harness }
+          : {}),
+        ...(selectedVariant === "delegate" && profileDelegate?.configPins
+          ? { delegateConfigPins: profileDelegate.configPins }
+          : {}),
+        // A profile MAY pin a prompt revision. The handler owns the prompt
+        // text, so it refuses a pin it does not ship rather than stamping a
+        // revision it did not send.
+        ...(selectedVariant === "delegate" && profileDelegate?.promptRev
+          ? { promptRev: profileDelegate.promptRev }
+          : {}),
+      }
+    : opts.input;
+
+  // The dispatch surface carries the profile's engine binding: a profile that
+  // names a model is the MEMBER's own configuration (gateway prefs), not a
+  // harness-writable manifest pin, so it outranks both. The harness rung is
+  // not switched here — the automation's canonical conversation identity is
+  // established before policy is read, and moving that is out of Wave 5's
+  // scope (TODO #807): a profile that names a harness other than the fire's
+  // still runs its model on the fire's harness, and the handler records the
+  // ACP-confirmed identity of whatever answered.
+  //
+  // Bound only when a delegate variant ACTUALLY runs: a profile that selects
+  // a delegate for a capability whose handler has no delegate code path must
+  // change nothing at all, not even the ambient model of the deterministic
+  // turn it never takes.
+  const boundDelegate =
+    selectedVariant === "delegate" ? profileDelegate : undefined;
   const effectiveModel =
-    opts.allowManifestProviderPins === false
+    boundDelegate?.model ??
+    (opts.allowManifestProviderPins === false
       ? opts.model
-      : (row.manifest.requires.model ?? opts.model);
+      : (row.manifest.requires.model ?? opts.model));
+  const effectiveConfigPins = boundDelegate?.configPins ?? opts.configPins;
   const dispatch = await deps.openDispatch({
     workdir: row.dir,
     automationRef: opts.automationRef,
     runId,
     ...(opts.harnessKind ? { harnessKind: opts.harnessKind } : {}),
     ...(effectiveModel ? { model: effectiveModel } : {}),
-    ...(opts.configPins ? { configPins: opts.configPins } : {}),
+    ...(effectiveConfigPins ? { configPins: effectiveConfigPins } : {}),
     onLog,
   });
 

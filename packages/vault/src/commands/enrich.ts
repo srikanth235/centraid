@@ -46,6 +46,10 @@ const SET_EXTRACTED_TEXT: CommandDefinition = {
       variant: { type: "string", enum: ["text", "transcript"] },
       capability: { type: "string", minLength: 1 },
       model: { type: "string", minLength: 1 },
+      // Which engine profile produced this text (issue #807, Wave 5). Absent
+      // means the bundled engine, which is what every stamp written before
+      // profiles existed carries — see `BUILT_IN_PROFILE`.
+      profile: { type: "string", minLength: 1 },
       prompt_rev: { type: "string", minLength: 1 },
       confidence: { type: "number", minimum: 0, maximum: 1 },
       regions: {
@@ -113,6 +117,7 @@ function setExtractedText(ctx: HandlerCtx): Record<string, unknown> {
     variant?: "text" | "transcript";
     capability?: string;
     model?: string;
+    profile?: string;
     prompt_rev?: string;
     confidence?: number;
     regions?: ExtractedTextRegion[];
@@ -134,6 +139,7 @@ function setExtractedText(ctx: HandlerCtx): Record<string, unknown> {
       variant: input.variant ?? "text",
       capability: input.capability,
       model: input.model,
+      ...(input.profile ? { profile: input.profile } : {}),
       payload: {
         ...(input.prompt_rev ? { prompt_rev: input.prompt_rev } : {}),
         ...(input.confidence === undefined

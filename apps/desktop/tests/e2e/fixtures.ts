@@ -86,6 +86,14 @@ export interface MockState {
   harnessStatus: Record<string, unknown>;
   /** GET /centraid/_harnesses/status */
   harnessesStatus: Record<string, unknown>;
+  /** GET/PUT /centraid/_vault/enrich → `{enrich, rules}` (issue #807). */
+  enrich: Record<string, unknown>;
+  /** The cascade's scoped rules, served alongside the tiers above. */
+  enrichRules: Array<Record<string, unknown>>;
+  /** GET /centraid/_vault/enrich/consent → `{consent}` — answered questions. */
+  enrichConsent: Array<Record<string, unknown>>;
+  /** GET /centraid/_enrich/profiles → `{profiles}` (engine-profiles.ts). */
+  enrichProfiles: Array<Record<string, unknown>>;
   /** GET /_centraid-conversations/apps/:appId/sessions → { sessions } */
   conversations: Array<Record<string, unknown>>;
   /** GET /_centraid-conversations/apps/:appId/sessions/:id → messages */
@@ -202,6 +210,10 @@ function defaultState(): MockState {
       models: ["tier-fast", "tier-deep"],
     },
     harnessesStatus: { harnesses: [], models: [] },
+    enrich: { photos: "device", docs: "off" },
+    enrichRules: [],
+    enrichConsent: [],
+    enrichProfiles: [],
     conversations: [],
     conversationMessages: [],
     automationsStatus: 200,
@@ -606,6 +618,22 @@ async function route(
     return json(res, 200, s.harnessStatus);
   if (p === "/centraid/_harnesses/status" && method === "GET")
     return json(res, 200, s.harnessesStatus);
+
+  // ---- enrichment policy + engine profiles (issue #807) ----
+  // Tiers, rules and answers are vault state; profiles are gateway prefs, and
+  // the two paths stay separate here exactly as they are in the product.
+  if (p === "/centraid/_enrich/profiles" && method === "GET")
+    return json(res, 200, { profiles: s.enrichProfiles });
+  if (p === "/centraid/_vault/enrich") {
+    if (method === "GET")
+      return json(res, 200, { enrich: s.enrich, rules: s.enrichRules });
+    if (method === "PUT") {
+      s.enrich = { ...s.enrich, ...safeJson(body) };
+      return json(res, 200, { enrich: s.enrich });
+    }
+  }
+  if (p === "/centraid/_vault/enrich/consent" && method === "GET")
+    return json(res, 200, { consent: s.enrichConsent });
 
   // ---- vault consent context used by the current automation fleet/thread ----
   // NOT part of the agent→harness rename: `_vault/agents` lists *enrolled

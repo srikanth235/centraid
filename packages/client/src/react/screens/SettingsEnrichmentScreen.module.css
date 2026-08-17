@@ -1,0 +1,49 @@
+/* Settings → Enrichment (issue #807). Three lists and two forms, all the same
+   object visually: a bordered panel of hairline-separated rows, matching the
+   Agents console's `.panel` idiom so the two Models pages read as one surface. */
+.panel {
+  border: 1px solid var(--line);
+  border-radius: var(--r-lg);
+  background: var(--bg-elev);
+  overflow: hidden;
+}
+
+/* One profile / rule / answer. The name takes the space, the meta line states
+   what the gateway computed, and any act sits at the end of the row. */
+.row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sp-2);
+  padding: var(--sp-3) var(--sp-4);
+}
+.row + .row {
+  border-top: 1px solid var(--line);
+}
+.rowName {
+  font-size: var(--t-small-size);
+  font-weight: 600;
+  color: var(--text);
+  flex: 1 1 auto;
+  min-width: 0;
+}
+.rowMeta {
+  font-size: var(--t-control-size);
+  line-height: 1.45;
+  color: var(--text-faint);
+}
+.empty {
+  font-size: var(--t-small-size);
+  color: var(--text-faint);
+  padding: var(--sp-3) var(--sp-4);
+}
+
+/* The add form under each list — controls wrap onto as many lines as the
+   settings column needs, so nothing shrinks below a legible option. */
+.form {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sp-2);
+  margin-top: var(--sp-2);
+}

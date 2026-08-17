@@ -48,6 +48,8 @@ Automations remain owner-authored — the automation compiler is a live "builder
 | **#599 member/role model** | Superseded by [#726](https://github.com/srikanth235/centraid/issues/726); current authority is one owner per vault. |
 | **#724 enrichment service** | Superseded by [#731](https://github.com/srikanth235/centraid/issues/731); current recognition runs inside bundled handlers. |
 | **#505 served-app plane** | Superseded by [#799](https://github.com/srikanth235/centraid/issues/799); an app UI reaches the screen one way — an inline React route in the shared shell, or the same app as an Expo screen on mobile. |
+| **Single-scalar `EnrichTier` per domain** | Superseded by [#807](https://github.com/srikanth235/centraid/issues/807); policy is a scoped cascade with engine selection. The tier survives as the vault-default layer and its `off\|device\|gateway` values as egress-class ceilings — see [Generic enrichment](#generic-enrichment-807). |
+| **Delegate step as an OCR-only one-off** | Superseded by [#807](https://github.com/srikanth235/centraid/issues/807); delegate engines are engine profiles selected by policy, and a recipe's `delegateStep.selected` is one of two selectors. OCR remains the first shipped delegate. |
 | **#690 / #765 DOM custom elements** | Superseded by [#799](https://github.com/srikanth235/centraid/issues/799); the third rendering technology is gone and every DOM composition is a React block. |
 | **"personal app builder" positioning** | Superseded by [#799](https://github.com/srikanth235/centraid/issues/799); Centraid is a personal, local-first **superapp** — see [Product positioning](#product-positioning). |
 | **16-package workspace split** | Superseded by [#801](https://github.com/srikanth235/centraid/issues/801); see [Package boundaries](#package-boundaries-801). |
@@ -103,9 +105,28 @@ The proposed fixed-window replacement for steward-side ack-gated compaction is *
 
 ## Recognition automations and derived data
 
-Recognition is self-contained automation. `photo-ocr`, `transcript`, `embed-image`, `embed-text`, and `faces` read bytes through `ctx.vault.content`, run their bundled implementation, and persist through `ctx.vault.invoke`. The automation engine owns scheduling, consent, retries, cursor watermarks, and ledger history. There is no service wire, `ctx.infer`, or `ctx.enrich`; only OCR may use the explicit consented `ctx.delegate` variant. Device-side model inference is not part of the product; clients consume replicated derived rows. See [recognition-automations.md](recognition-automations.md) and [Photos derived ledger](photos/derived-ledger.md).
+Recognition is self-contained automation. `photo-ocr`, `transcript`, `embed-image`, `embed-text`, and `faces` read bytes through `ctx.vault.content`, run their bundled implementation, and persist through `ctx.vault.invoke`. The automation engine owns scheduling, consent, retries, cursor watermarks, and ledger history. There is no service wire, `ctx.infer`, or `ctx.enrich`. A recipe may declare a consented `ctx.delegate` variant — `photo-ocr` and `doc-text-extractor` do — and which engine runs it is answered by the policy cascade below, not by the recipe alone ([#807](https://github.com/srikanth235/centraid/issues/807)). Device-side model inference is not part of the product; clients consume replicated derived rows. See [recognition-automations.md](recognition-automations.md) and [Photos derived ledger](photos/derived-ledger.md).
 
 Faces consume only an open `enrich_request(capability='faces')` or a prior consent stamp. `media.forget_person` removes regions, embeddings, derivation stamps, and clusters. `enrich_derivation` is the provenance record, and model upgrades are backfills that leave older rows serving until replacements land. The stamp is keyed by **engine profile** as well as target and variant ([#807](https://github.com/srikanth235/centraid/issues/807)): several profiles' results for one variant coexist, and consumers read the one `preferredDerivation` ([`packages/vault/src/enrich/derivation.ts`](../packages/vault/src/enrich/derivation.ts)) resolves — never a hand-picked row.
+
+## Generic enrichment (#807)
+
+Ruled 2026-08-17 by [#807](https://github.com/srikanth235/centraid/issues/807). Enrichment is four independent layers, and conflating any two is what made the old single-scalar policy unable to grow. The binding statements live in [blueprint-seats.md](blueprint-seats.md#enrichment-doctrine) and [recognition-automations.md](recognition-automations.md).
+
+| Id | Current decision |
+| --- | --- |
+| **E-capability** | A capability is a typed contract — input kind to versioned output schema — registered in [`capability-registry.ts`](../packages/server/src/enrich/capability-registry.ts). Apps consume capabilities by contract only. `EnrichDomain` stays closed at `photos \| docs`; an app is not a domain, so Tally receipts ride `docs` and app-level differences are expressed by the cascade's app scope. |
+| **E-engine** | An engine profile is a named bundle of capability + engine + parameters. Bundled deterministic models are immutable `built-in` profiles; member profiles bind a harness, model, config pins and prompt revision. Profiles are **gateway prefs** (`enrich.profile.*`) because execution is a device property — see [config-ownership.md](config-ownership.md). |
+| **E-egress** | Every engine carries a computed egress class — `on-device`, `gateway` (the member's own infrastructure, not egress), or `provider`. It is a fact about the harness, never a user knob, and a profile can never claim a lower class than its engine implies. |
+| **E-policy** | Policy is one scoped cascade — vault, domain, collection, item — stating per capability: enabled, engine profile, trigger. `NULL` inherits; most specific wins. Rules and consent are **vault-owned** because permission travels with the data. There is exactly one resolver, inside `decideEnrichmentGate`; a second policy path is a defect. |
+| **E-ceiling** | The legacy per-domain tier survives as the vault-default layer, its values read as egress ceilings (`off`, `on-device`, `gateway`). Only that layer sets the ceiling, so no rule, profile, or per-item choice can widen egress. |
+| **E-consent** | Egress consent is keyed capability × egress class (× optional scope), asked once, receipted, and evaluated **independently** of the cascade. The tier is the recorded answer for `on-device` and `gateway`; `provider` requires an explicit granted row, and an absent answer is not a grant. |
+| **E-plural** | Derived results are keyed by engine profile and coexist. Consumers read the policy-preferred result through the one resolver; re-enrichment is backfill, never destructive. |
+| **E-faces** | Faces stays built-in, on-device-class only. Biometric egress needs its own proposal before any delegate engine may claim it. |
+| **E-oneshot** | A per-item "enrich with X" is a one-shot run with stamped provenance, not a standing item rule; durable rules stop at collection scope. |
+| **E-budget** | Triggers live in the cascade; resource budgeting stays in the gateway Resource mode machinery. Enrichment grows no second throttling policy, and provider-cost ceilings are out of scope. |
+
+Blueprints gain nothing from this: apps declare consumed capabilities and never touch inference, and `app.json#knobs` stays cosmetic. The per-app enrichment surface writes host-owned policy through host UI.
 
 ## Blueprint-readiness policies
 

@@ -638,6 +638,11 @@ export async function handleAutomationUpdate(
           "delegate recognition requires an explicit pinned model before provider egress can be consented",
       });
     }
+    // This writes the RECIPE's own switch, which since #807 is one of two
+    // selectors: an engine profile the policy cascade resolves also elects the
+    // delegate variant (automation/fire/fire.ts). So `selected: "deterministic"`
+    // here means "this recipe does not itself elect delegate", never "this run
+    // will be deterministic" — read the resolved policy for that.
     patched.enrich = {
       ...enrich,
       delegateStep: { ...enrich.delegateStep, selected: body.recognitionStep },

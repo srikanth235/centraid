@@ -521,6 +521,10 @@ export default function InlineAppRoute({
               setSettings(null);
               nav.navigate({ kind: "automations" });
             }}
+            onOpenEnrichmentSettings={() => {
+              setSettings(null);
+              nav.navigate({ kind: "settings", page: "enrichment" });
+            }}
             onOpenOrder={(ref) => {
               setSettings(null);
               nav.navigate({ kind: "automation-view", automationId: ref });

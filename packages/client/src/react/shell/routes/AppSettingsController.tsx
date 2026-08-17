@@ -4,18 +4,23 @@ import { createRoot } from "react-dom/client";
 import type { Root } from "react-dom/client";
 
 import { formatDuration, triggersSummary } from "../../../app-format.js";
+import type { EnrichDomain } from "../../../enrich-policy.js";
 import {
   listAutomations,
+  listEnrichProfiles,
   runAutomationNow,
   setAutomationEnabled,
 } from "../../../gateway-client.js";
 import type { AppSettingsSnapshot } from "../../screen-contracts.js";
+import AppEnrichmentSurface from "../../screens/AppEnrichmentSurface.js";
 import AppSettingsPanel from "../../screens/AppSettingsPanel.js";
 import VaultScreen from "../../screens/VaultScreen.js";
 import { useShellCapabilities } from "../useCapabilities.js";
 import {
   buildVaultProps,
+  enrichDomainForApp,
   fetchAppKnobValues,
+  loadAppEnrichment,
   fetchAppManifestRaw,
   knobsManifestFrom,
   manifestVaultBlock,
@@ -30,6 +35,26 @@ type RunState =
   | { kind: "idle" }
   | { kind: "running" }
   | { kind: "done"; ok: boolean; durationMs: number; error?: string };
+
+/**
+ * Render the app popover's Enrichment pane into the host the panel provides.
+ * At module scope so the JSX is not built during the controller's render.
+ */
+function mountEnrichmentPane(
+  host: HTMLElement,
+  domain: EnrichDomain,
+  onOpenSettings: () => void,
+  mountInto: (host: HTMLElement, node: JSX.Element) => void
+): void {
+  mountInto(
+    host,
+    <AppEnrichmentSurface
+      load={() => loadAppEnrichment(domain)}
+      loadProfiles={listEnrichProfiles}
+      onOpenSettings={onOpenSettings}
+    />
+  );
+}
 
 function mountRunsPane(
   host: HTMLElement,
@@ -48,6 +73,8 @@ export interface AppSettingsControllerProps {
   initialTab?: "appearance" | "vault";
   onClose: () => void;
   onOpenAutomations: () => void;
+  /** Open Settings → Enrichment, where this app's policy is authored (#807). */
+  onOpenEnrichmentSettings: () => void;
   onOpenOrder: (ref: string) => void;
   onRename: () => void;
   onShare: () => void;
@@ -74,6 +101,7 @@ export default function AppSettingsController({
   initialTab,
   onClose,
   onOpenAutomations,
+  onOpenEnrichmentSettings,
   onOpenOrder,
   onRename,
   onShare,
@@ -87,6 +115,14 @@ export default function AppSettingsController({
   // reads the same one verdict the launcher does rather than discovering the
   // absence by request.
   const { automations } = useShellCapabilities();
+  // The app popover's Enrichment tab exists only for an app whose data shape
+  // HAS capabilities (#807); everything it shows is the gateway's answer for
+  // that domain. The one-shot's `onEnrichOnce` is deliberately NOT passed: the
+  // vault command behind it (`enrich.request_enrichment`) is reached by an
+  // app's own action with its capability pinned, and no owner-plane seam
+  // enqueues one for an arbitrary profile yet, so the picker says so rather
+  // than firing something else. TODO(#807): pass it once that seam exists.
+  const enrichDomain = enrichDomainForApp(appId);
   // Mutable snapshot inputs — refs so the async fetches + run streams mutate in
   // place and re-push without re-rendering this controller.
   const knobs = useRef<AppKnob[] | null>(null);
@@ -281,6 +317,17 @@ export default function AppSettingsController({
       onToggleOrder={(ref, enabled) => void toggleOrder(ref, enabled)}
       onOpenOrder={onOpenOrder}
       onOpenAutomations={onOpenAutomations}
+      {...(enrichDomain
+        ? {
+            onMountEnrichment: (host: HTMLElement) =>
+              mountEnrichmentPane(
+                host,
+                enrichDomain,
+                onOpenEnrichmentSettings,
+                mountInto
+              ),
+          }
+        : {})}
       onRename={onRename}
       onShare={onShare}
       onReveal={onReveal}

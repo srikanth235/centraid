@@ -12,6 +12,8 @@ Wave 0 → 1 → 2 (with a main merge) → 3+6 together → 4, 5 → docs and au
 - [x] Wave 1 — engine profiles
 - [x] Wave 2 — policy cascade and gate resolver
 - [x] Wave 3 — egress-consent re-keying
+- [x] Wave 4 — Settings consolidation and the Enrichment page
+- [x] Wave 5 — delegate expansions through engine profiles
 - [x] Wave 6 — mobile read-only effective-policy projection
 
 ## What changed
@@ -130,6 +132,77 @@ provider"); `effective: null` reported as the fail-closed state; offline
 renders an honest unavailable state with no cached fabrication
 (docs/mobile-offline.md). Read-only — no toggles, no writes.
 
+**Wave 4 — Settings consolidation and the Enrichment page.** The three dead
+pages are gone: `packages/client/src/react/shell/routes/SettingsRoute.tsx`
+drops the `workspace`/`import`/`storage` entries and the `HIDDEN` set with
+them (6 pages, `resolveSettingsPage`'s collapse law intact and retested in
+`SettingsRoute.test.ts`), and the orphaned
+`packages/client/src/react/screens/ImportScreen.tsx`,
+`SettingsStorageScreen.tsx` and
+`packages/client/src/react/shell/routes/settingsStorageData.ts` (with their
+tests and CSS modules) are deleted, along with the `importCallbacks` and
+Import DTOs in `settingsAccountData.ts` / `screen-contracts.ts` that only fed
+them. In their place, Settings → Enrichment lands in the Models section beside
+Agents: `SettingsEnrichmentScreen.tsx` (+ `.module.css`, `.test.tsx`) with
+`SettingsEnrichmentProfiles.tsx` and `SettingsEnrichmentRules.tsx`, over
+`packages/client/src/react/shell/routes/settingsEnrichmentData.ts` — vault
+tier defaults, engine profiles (built-ins read-only, member profiles created
+through the shared `Select`/`ModelSelect`/`ConfigSelect`, faces greyed with
+its reason, egress rendered and never editable), the scoped rules, and the
+receipted consent answers. `packages/client/src/enrich-policy.ts` restates the
+member-facing vocabulary verbatim from mobile Wave 6, and
+`gateway-client-vault-enrich.ts` gains `listEnrichProfiles`. The per-app
+popover gains an Enrichment tab through a new `onMountEnrichment` bridge prop
+(`AppEnrichmentSurface.tsx`, `AppSettingsPanel.tsx`,
+`AppSettingsController.tsx`, `appSettingsData.ts`, `InlineAppRoute.tsx`)
+showing that app's effective policy with a deep link into the page.
+`apps/desktop/tests/e2e/settings-enrichment.spec.ts` drives the page and emits
+the UI-impact screenshot; `apps/desktop/tests/e2e/fixtures.ts` serves the
+enrichment routes so it screenshots real policy. `tests/hygiene-budgets.json`
+ratchets DOWN (381→379, 811→801) because deleting the dead tests left the
+budgets slack.
+
+**Wave 5 — delegate expansions through engine profiles.** Delegate selection
+moves from the manifest's static switch to the resolved policy:
+`packages/server/src/automation/fire/fire.ts` picks the engine AFTER the gate
+from `ResolvedEngineBinding` (new in
+`packages/server/src/automation/fire/enrich-resolve.ts`, re-exported by
+`enrich-gate.ts`, wired in `build-gateway.ts` off the same `readEngineProfile`
+registry as `egressForProfile`), so a run is delegate iff the resolved profile
+binds a delegate engine OR the recipe's own switch elects it; model precedence
+is profile → manifest pin → refusal, and the engine is read only on the
+ALLOWED path so no engine fact can influence a permission decision. The
+resolved profile id now reaches the stamp: `ctx.input` carries `profileId`,
+`core.set_extracted_text` accepts `profile` and passes it to `stampDerivation`
+(`packages/vault/src/commands/enrich.ts`), and `photo-ocr.js` filters its
+stamp reads by profile so two profiles cannot re-derive each other's
+photographs forever. `doc-text-extractor` joins photo-ocr as delegate-capable
+(manifest `delegateStep`, promptRev `doc-text-v1`, handler delegate variant
+canonicalizing to the same extracted-text shape). Embeddings and faces stay
+declaration-only and their inertness is now explicit and tested: with a
+delegate profile resolved, the run proceeds deterministically, `ctx.input` is
+untouched, the profile's model never reaches dispatch, and the skipped
+selection is logged. Tests:
+`packages/server/src/automation/fire/enrich-engine-selection.test.ts`,
+extended `enricher-templates.test.ts` and `photo-ocr.test.ts`.
+Two surfaces that still write the recipe's own switch —
+`packages/server/src/routes/lifecycle-automation-routes.ts` and the
+template-upgrade merge in `build-gateway.ts` — carry a new invariant comment
+stating that `selected` is one of two selectors, so it is never read as the
+run's answer. `docs/recognition-automations.md` replaces its "only photo-ocr"
+paragraph with the policy-driven delegate section.
+
+**Doctrine and vocabulary.** `docs/decisions.md` gains the dated
+`## Generic enrichment (#807)` ruling (E-capability, E-engine, E-egress,
+E-policy, E-ceiling, E-consent, E-plural, E-faces, E-oneshot, E-budget) and
+two supersession rows — the single-scalar `EnrichTier` per domain, and the
+delegate step as an OCR-only one-off; the standing recognition ruling is
+amended so "only OCR may delegate" now reads as the recipe declaring a
+variant whose engine policy answers. `docs/glossary.md` adds *capability*,
+*engine profile*, *egress class*, and *policy cascade*, and rewrites the
+*delegate step* entry. `CHANGELOG.md` gains the member-facing Unreleased
+entry under Added.
+
 ## Decisions
 
 #807 Wave 0 registers two new enrichment tables (enrich.policy_rule, enrich.consent) in schema/tables.ts, and the Atlas census counts one row-count query per REGISTERED table: the measured SQL baseline rises 138 -> 140, with no additional HTTP request and no new query per table beyond that count. Registration is what carries both tables through portable export and the replica change log, so the two statements are the price of them being real vault rows rather than a side store. Prior: #731 Atlas now counts the registered Commons control tables during its bounded first-paint census; the measured SQL baseline rises from 128 to 138 with no additional HTTP request.
@@ -188,6 +261,42 @@ its shipped "nothing was run and nothing was written" copy; Scan's decline is
 recorded. (4) Mobile Wave-6 section fetches through a `lib/` wire module with
 one optional `read` test-seam prop, diverging from prop-less sibling sections.
 
+**Wave 4 deviations.** (1) Deleting `ImportScreen` orphaned `importCallbacks`
+and the Import DTOs, so they went with it. (2) The desktop e2e `fixtures.ts`
+mock gateway gained the enrichment routes so the screenshot shows real policy
+rather than an error state. (3) `tests/hygiene-budgets.json` had to ratchet
+DOWN in the same change — that gate fails on slack, and deleting three dead
+test files created it. (4) The app-popover surface is a fifth tab through an
+`onMountEnrichment` bridge prop (the `onMountVault` idiom), so no React types
+leak into `screen-contracts.ts` and the tab is absent, not empty, for apps
+whose domain has no capabilities. In practice only Docs reaches it — Photos
+keeps its registered exclusion from the generic sheet
+(docs/design-divergences.md:85), which this wave did not touch.
+(5) **The one-shot run is deliberately not wired end to end.** There is no
+owner-side seam to `enrich.request_enrichment`; the only client path runs an
+app's own action, and Photos' pins `capability: 'faces'` with
+`additionalProperties: false`, so it cannot honour an arbitrary profile. The
+picker and "Run once" call an `onEnrichOnce(profile)` prop that
+`AppSettingsController` does not pass, so the control renders disabled and
+says so rather than pretending. The seam carries a TODO citing #807.
+
+**Wave 5 deviations.** (1) A profile's `harness` rides in the input as
+provenance only — its model and configPins bind the dispatch, but the
+automation's canonical harness identity is established by
+`ensureAutomationConversation` before policy is read, and moving that touches
+the durable turn lock. A profile naming a foreign harness therefore runs its
+model on the fire's harness; the handler still records whatever ACP confirmed.
+TODO cites #807. (2) `packages/vault/src/commands/enrich.ts` was touched
+outside the slice's stated territory because `additionalProperties: false`
+makes the profile stamp unreachable otherwise — schema plus passthrough, no
+other vault change. (3) doc-text's delegate variant ships without cursor
+re-arm on profile switch (its cursors cannot re-derive — once a text
+derivative exists the handler summarizes instead of re-extracting), its
+summary half takes no profile stamp (an annotation is not a derivation), and
+its "deterministic" variant is the ambient automation engine rather than a
+bundled local model — so the delegate variant's value there is a pinned,
+stamped engine, not local-versus-remote.
+
 ## Out of scope
 
 Waves 1–6 (engine profiles, policy cascade + gate resolver, consent re-keying,
@@ -196,6 +305,25 @@ waves under this same receipt. Provider-cost ceilings (issue Q7), a `tally`
 domain (Q1), functional blueprint settings (Q2), and delegate engines for faces
 (Q3) are out of scope per the issue's rulings. The legacy `EnrichTier` mirror
 stays authoritative until the Wave 2 resolver absorbs it.
+
+## User impact
+
+First-run: Settings → Enrichment states how far photo and document enrichment
+may travel, which engine runs each capability and where its work goes, the
+scoped rules over that, and the egress questions already answered. Nothing is
+enabled or disabled by this change — a vault that never opens the page keeps
+the tiers it had, and every shipped enricher keeps running on its built-in
+engine.
+
+Privacy gains an "Enrichment egress answers" block listing each recorded
+answer (capability × where the work goes × granted or declined) as a receipted
+answer, never a toggle. Photos' and Scan's existing consent moments are
+unchanged to answer; they now also record the answer where it travels with the
+data. On phone, Settings shows the same effective policy read-only, and says
+so honestly when the gateway cannot be reached.
+
+Evidence: `artifacts/e2e/ui-impact/issue-807-enrichment-settings.png`, emitted
+by `apps/desktop/tests/e2e/settings-enrichment.spec.ts`.
 
 ## Verification
 
@@ -266,65 +394,107 @@ unnarrated) were folded into `## What changed` after the audit.
 
 ## Files
 
-- `packages/vault/src/schema/enrich.ts`
-- `packages/vault/src/schema/tables.ts`
-- `packages/vault/src/schema/poly-refs.ts`
-- `packages/vault/src/enrich/derivation.ts`
-- `packages/vault/src/enrich/derivation.test.ts`
-- `packages/vault/src/enrich/policy-rules.ts`
-- `packages/vault/src/enrich/policy-rules.test.ts`
-- `packages/vault/src/enrich/egress-consent.ts`
-- `packages/vault/src/enrich/egress-consent.test.ts`
-- `packages/vault/src/gateway/portable-export.ts`
-- `packages/vault/src/index.ts`
-- `packages/server/src/enrich/capability-registry.ts`
-- `packages/server/src/enrich/capability-registry.test.ts`
-- `tests/schema-export-fingerprint.json`
-- `tests/quality/classification-ratchet.json`
-- `tests/experience-budgets/client-query-counts.json`
-- `docs/photos/derived-ledger.md`
-- `docs/decisions.md`
-- `packages/server/src/enrich/engine-profiles.ts`
-- `packages/server/src/enrich/engine-profiles.test.ts`
-- `packages/server/src/routes/enrich-profiles-routes.ts`
-- `packages/server/src/routes/enrich-profiles-routes.test.ts`
-- `packages/server/src/serve/build-gateway.ts`
-- `packages/server/src/serve/build-gateway.test.ts`
-- `packages/server/src/routes/route-security.ts`
-- `docs/config-ownership.md`
-- `packages/server/src/automation/fire/enrich-resolve.ts`
-- `packages/server/src/automation/fire/enrich-resolve.test.ts`
-- `packages/server/src/automation/fire/enrich-gate.ts`
-- `packages/server/src/automation/fire/enrich-gate.test.ts`
-- `packages/server/src/automation/fire/fire.ts`
-- `packages/server/src/automation/index.ts`
-- `packages/server/src/routes/vault-routes.ts`
-- `packages/server/src/routes/vault-enrich-rules-routes.ts`
-- `packages/server/src/routes/vault-enrich-rules-routes.test.ts`
-- `packages/vault/src/enrich/policy.ts`
-- `packages/vault/src/enrich/enrich.test.ts`
-- `packages/client/src/enrich-policy.ts`
-- `packages/client/src/gateway-client-vault.ts` (enrichment section split into
-  `packages/client/src/gateway-client-vault-enrich.ts`, re-exported — file-size
-  directive)
-- `packages/client/src/gateway-client-seam-fixtures.ts`
-- `packages/client/src/gateway-client-enrich.contract.test.ts`
-- `docs/blueprint-seats.md`
-- `packages/server/src/enrich/egress-consent-lookup.ts`
-- `packages/server/src/enrich/egress-consent-lookup.test.ts`
-- `packages/vault/src/commands/enrich.ts`
-- `packages/client/src/gateway-client-vault-enrich.ts`
-- `packages/client/src/react/screens/ApprovalsScreen.tsx`
-- `packages/client/src/react/screens/ApprovalsScreen.test.tsx`
-- `packages/client/src/react/shell/routes/approvalsData.ts`
-- `packages/client/src/react/shell/routes/approvalsData.test.ts`
-- `packages/client/src/react/shell/routes/ApprovalsRoute.tsx`
-- `apps/mobile/src/screens/Scan.tsx`
-- `packages/client/src/react/shell/routes/ApprovalsRoute.test.tsx`
-- `apps/mobile/src/screens/Settings.tsx`
-- `apps/mobile/src/screens/settings/EnrichmentSection.tsx`
-- `apps/mobile/src/screens/settings/EnrichmentSection.test.tsx`
-- `apps/mobile/src/lib/enrichment.ts`
+Every file in this change set (generated from the diff):
+
+```
+CHANGELOG.md
+apps/desktop/tests/e2e/fixtures.ts
+apps/desktop/tests/e2e/settings-enrichment.spec.ts
+apps/mobile/src/lib/enrichment.ts
+apps/mobile/src/screens/Scan.tsx
+apps/mobile/src/screens/Settings.tsx
+apps/mobile/src/screens/settings/EnrichmentSection.test.tsx
+apps/mobile/src/screens/settings/EnrichmentSection.tsx
+docs/blueprint-seats.md
+docs/config-ownership.md
+docs/decisions.md
+docs/glossary.md
+docs/photos/derived-ledger.md
+docs/recognition-automations.md
+packages/blueprints/automations/doc-text-extractor/automations/doc-text-extractor/automation.json
+packages/blueprints/automations/doc-text-extractor/automations/doc-text-extractor/handler.js
+packages/blueprints/automations/photo-ocr/automations/photo-ocr/handler.js
+packages/client/src/enrich-policy.ts
+packages/client/src/gateway-client-enrich.contract.test.ts
+packages/client/src/gateway-client-seam-fixtures.ts
+packages/client/src/gateway-client-vault-enrich.ts
+packages/client/src/gateway-client-vault.ts
+packages/client/src/react/screen-contracts.ts
+packages/client/src/react/screens/AppEnrichmentSurface.test.tsx
+packages/client/src/react/screens/AppEnrichmentSurface.tsx
+packages/client/src/react/screens/AppSettingsPanel.tsx
+packages/client/src/react/screens/ApprovalsScreen.test.tsx
+packages/client/src/react/screens/ApprovalsScreen.tsx
+packages/client/src/react/screens/ImportScreen.module.css
+packages/client/src/react/screens/ImportScreen.test.tsx
+packages/client/src/react/screens/ImportScreen.tsx
+packages/client/src/react/screens/SettingsEnrichmentProfiles.tsx
+packages/client/src/react/screens/SettingsEnrichmentRules.tsx
+packages/client/src/react/screens/SettingsEnrichmentScreen.module.css
+packages/client/src/react/screens/SettingsEnrichmentScreen.test.tsx
+packages/client/src/react/screens/SettingsEnrichmentScreen.tsx
+packages/client/src/react/screens/SettingsStorageScreen.module.css
+packages/client/src/react/screens/SettingsStorageScreen.test.tsx
+packages/client/src/react/screens/SettingsStorageScreen.tsx
+packages/client/src/react/shell/routes/AppSettingsController.tsx
+packages/client/src/react/shell/routes/ApprovalsRoute.test.tsx
+packages/client/src/react/shell/routes/ApprovalsRoute.tsx
+packages/client/src/react/shell/routes/InlineAppRoute.tsx
+packages/client/src/react/shell/routes/SettingsRoute.test.ts
+packages/client/src/react/shell/routes/SettingsRoute.tsx
+packages/client/src/react/shell/routes/appSettingsData.ts
+packages/client/src/react/shell/routes/approvalsData.test.ts
+packages/client/src/react/shell/routes/approvalsData.ts
+packages/client/src/react/shell/routes/settingsAccountData.test.ts
+packages/client/src/react/shell/routes/settingsAccountData.ts
+packages/client/src/react/shell/routes/settingsEnrichmentData.test.ts
+packages/client/src/react/shell/routes/settingsEnrichmentData.ts
+packages/client/src/react/shell/routes/settingsStorageData.test.ts
+packages/client/src/react/shell/routes/settingsStorageData.ts
+packages/model-runtime/automation-handlers/photo-ocr.js
+packages/model-runtime/automation-handlers/photo-ocr.test.ts
+packages/server/src/automation/fire/enrich-engine-selection.test.ts
+packages/server/src/automation/fire/enrich-gate.test.ts
+packages/server/src/automation/fire/enrich-gate.ts
+packages/server/src/automation/fire/enrich-resolve.test.ts
+packages/server/src/automation/fire/enrich-resolve.ts
+packages/server/src/automation/fire/fire.ts
+packages/server/src/automation/index.ts
+packages/server/src/automation/manifest/enricher-templates.test.ts
+packages/server/src/enrich/capability-registry.test.ts
+packages/server/src/enrich/capability-registry.ts
+packages/server/src/enrich/egress-consent-lookup.test.ts
+packages/server/src/enrich/egress-consent-lookup.ts
+packages/server/src/enrich/engine-profiles.test.ts
+packages/server/src/enrich/engine-profiles.ts
+packages/server/src/routes/enrich-profiles-routes.test.ts
+packages/server/src/routes/enrich-profiles-routes.ts
+packages/server/src/routes/lifecycle-automation-routes.ts
+packages/server/src/routes/route-security.ts
+packages/server/src/routes/vault-enrich-rules-routes.test.ts
+packages/server/src/routes/vault-enrich-rules-routes.ts
+packages/server/src/routes/vault-routes.ts
+packages/server/src/serve/build-gateway.test.ts
+packages/server/src/serve/build-gateway.ts
+packages/vault/src/commands/enrich.ts
+packages/vault/src/enrich/derivation.test.ts
+packages/vault/src/enrich/derivation.ts
+packages/vault/src/enrich/egress-consent.test.ts
+packages/vault/src/enrich/egress-consent.ts
+packages/vault/src/enrich/enrich.test.ts
+packages/vault/src/enrich/policy-rules.test.ts
+packages/vault/src/enrich/policy-rules.ts
+packages/vault/src/enrich/policy.ts
+packages/vault/src/gateway/portable-export.ts
+packages/vault/src/index.ts
+packages/vault/src/schema/enrich.ts
+packages/vault/src/schema/poly-refs.ts
+packages/vault/src/schema/tables.ts
+tests/experience-budgets/client-query-counts.json
+tests/hygiene-budgets.json
+tests/quality/classification-ratchet.json
+tests/schema-export-fingerprint.json
+```
 
 ## Session
 

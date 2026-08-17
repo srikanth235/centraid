@@ -46,6 +46,7 @@ import type {
   EnrichTrigger,
 } from "@centraid/vault";
 
+import type { HarnessKind } from "../../engine/conversation/turn.js";
 import type { EnrichDomain, EnrichLane, EnrichTier } from "./enrich-gate.js";
 
 /**
@@ -158,6 +159,43 @@ export interface EnrichPolicyResolution {
   readonly egressConsent?: (
     egress: EnrichEgressClass
   ) => EnrichConsentRecord | null | undefined;
+  /**
+   * The engine binding of a profile id, from the same gateway registry
+   * `egressForProfile` answers from (issue #807, Wave 5). Two lookups over one
+   * registry on purpose: the GATE reads the egress class and nothing else, and
+   * this one is read only after the gate allowed the run — so no engine detail
+   * can ever influence a permission decision.
+   *
+   * A host that omits it leaves selection where it was before Wave 5: with the
+   * enricher's own `manifest.enrich.delegateStep.selected`.
+   */
+  readonly engineForProfile?: (
+    profileId: string
+  ) => ResolvedEngineBinding | undefined;
+}
+
+/**
+ * HOW the profile the cascade selected computes its capability (issue #807,
+ * Wave 5) — the engine half of `EngineProfile`, flattened to what the fire
+ * path may act on.
+ *
+ * It is deliberately NOT the whole profile: the fire path has no business
+ * knowing a profile's label or its computed egress class (the gate already
+ * decided on that, from `egressForProfile`). What it needs is the one fact
+ * `manifest.enrich.delegateStep` used to hard-code — is this capability being
+ * computed by the bundled engine or by a harness, and if a harness, which
+ * model/pins the member bound it to.
+ */
+export interface ResolvedEngineBinding {
+  readonly kind: "built-in" | "delegate";
+  /** Delegate only: the harness the member bound this capability to. */
+  readonly harness?: HarnessKind;
+  /** Delegate only: whatever model id the harness offered — data, never a literal. */
+  readonly model?: string;
+  /** Delegate only: open ACP config categories the member pinned. */
+  readonly configPins?: Readonly<Record<string, string>>;
+  /** Delegate only: a prompt revision the member pinned the profile to. */
+  readonly promptRev?: string;
 }
 
 /** The seam's full type — see `RunFireOptions.resolveEnrichPolicy`. */
