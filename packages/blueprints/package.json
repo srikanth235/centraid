@@ -34,16 +34,16 @@
   "dependencies": {
     "@centraid/core": "workspace:*",
     "@centraid/design": "workspace:*",
-    "pdfjs-dist": "6.1.200",
-    "tldts": "7.4.9"
+    "pdfjs-dist": "6.2.108",
+    "tldts": "7.4.10"
   },
   "devDependencies": {
     "@centraid/test-kit": "workspace:*",
     "@types/node": "^26.1.2",
-    "@types/react": "~19.2.17",
-    "esbuild": "^0.28.1",
-    "react": "19.2.3",
-    "react-dom": "19.2.3",
+    "@types/react": "~19.2.18",
+    "esbuild": "^0.28.2",
+    "react": "19.2.8",
+    "react-dom": "19.2.8",
     "typescript": "catalog:"
   },
   "engines": {
