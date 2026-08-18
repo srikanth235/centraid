@@ -1,0 +1,10 @@
+/* The seat-state panels (components/SeatStates.tsx).
+
+   They borrow the whole panel from Blocks.module.css and add only their
+   placement: they stand above a route body that has its own padding, so the
+   wrapper supplies the inline margin the Screen column would otherwise have
+   given them. */
+
+.wrap {
+  padding: var(--sp-3) var(--sp-4) 0;
+}

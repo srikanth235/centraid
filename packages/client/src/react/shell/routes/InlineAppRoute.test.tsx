@@ -265,7 +265,12 @@ describe("InlineAppRoute suite", () => {
       expect(
         host!.querySelector('[data-testid="tasks-root"]')?.textContent
       ).toBe("Buy milk");
-      expect(host!.querySelector('[aria-label="App settings"]')).not.toBeNull();
+      // THE FRAME CONTRIBUTES NOTHING TO THE BAR (InlineAppRoute.tsx). The
+      // settings gear used to sit ahead of the app's own actions; every bundled
+      // app now draws its bar to a design handoff and none of those handoffs
+      // has a frame control in it. What the gear opened is unreachable until a
+      // door is designed - recorded there, and pinned here.
+      expect(host!.querySelector('[aria-label="App settings"]')).toBeNull();
       // Offline first paint: no gateway tool route touched.
       expect(doFetch).not.toHaveBeenCalled();
       // window.centraid is installed for the app.
@@ -281,6 +286,10 @@ describe("InlineAppRoute suite", () => {
       );
     });
 
+    // Photos was the FIRST app to refuse the generic sheet, back when the gear
+    // was still contributed for everyone else. It is now the rule rather than
+    // the exception, and this case survives as the second app proving it - one
+    // that draws its own bar and never had a frame control at all.
     it("does not expose the generic app-settings sheet for Photos", async () => {
       const photos = { ...app, id: "photos", name: "Photos" };
       function Root({ rootRef }: InlineAppProps): JSX.Element {

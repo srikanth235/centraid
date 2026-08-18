@@ -986,6 +986,23 @@ button.kit-avatar:focus-visible {
 .kit-popover-item.danger {
   color: var(--danger);
 }
+/* The label takes the slack, so the trailing slot lands on the far edge and
+   every row's text still starts on the same one. */
+.kit-popover-label {
+  flex: 1;
+  min-width: 0;
+}
+/* The trailing slot: a `✓` on the option a menu of choices is currently in, or
+   a keyboard shortcut for a verb. `--t-small-strong` and full ink — the mark
+   answers a question the row was asking, so it is not a whisper. */
+.kit-popover-key {
+  flex: none;
+  font: var(--t-small-strong);
+  color: var(--text);
+}
+.kit-popover-item.danger .kit-popover-key {
+  color: inherit;
+}
 .kit-popover-sep {
   height: 1px;
   background: var(--line);

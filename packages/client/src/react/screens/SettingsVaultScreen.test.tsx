@@ -62,16 +62,17 @@ describe("screens/SettingsVaultScreen", () => {
   it("offers Disconnect for a vault reached over a remote connection", async () => {
     const onDisconnect = vi.fn<() => void>();
     const el = await mount({ onDisconnect });
-    expect(el.textContent).toContain("On this device");
-    const disconnect = button(el, "Disconnect from this device")!;
+    expect(el.textContent).toContain("Leaving");
+    expect(el.textContent).toContain("Disconnect from this device");
+    const disconnect = button(el, "Disconnect")!;
     act(() => disconnect.click());
     expect(onDisconnect).toHaveBeenCalledOnce();
   });
 
   it("has no Disconnect at all on the local host", async () => {
     const el = await mount();
-    expect(button(el, "Disconnect from this device")).toBeUndefined();
-    expect(el.textContent).not.toContain("On this device");
+    expect(button(el, "Disconnect")).toBeUndefined();
+    expect(el.textContent).not.toContain("Disconnect from this device");
   });
 
   it("keeps disconnecting and erasing visibly separate acts", async () => {
@@ -81,9 +82,10 @@ describe("screens/SettingsVaultScreen", () => {
     });
     // Leaving this device is reversible; erasing the vault is not. They must
     // never read as two labels for the same button.
-    expect(button(el, "Disconnect from this device")).toBeDefined();
-    expect(button(el, "Erase this vault")).toBeDefined();
-    expect(el.textContent).toContain("Danger zone");
+    expect(button(el, "Disconnect")).toBeDefined();
+    expect(button(el, "Erase")).toBeDefined();
+    expect(el.textContent).toContain("Leaving");
+    expect(el.textContent).toContain("Erase this vault");
   });
 
   it("never calls the connection a gateway", async () => {
@@ -103,9 +105,27 @@ describe("screens/SettingsVaultScreen", () => {
         offlineCopy: true,
         onOfflineCopy: async () => true,
       });
-      expect(el.textContent).toContain("On this device");
+      expect(el.textContent).toContain("Copies");
       expect(el.textContent).toContain("Keep an offline copy");
-      expect(el.textContent).toContain("encrypted replica");
+      expect(el.textContent).toContain("Encrypted replica");
+      expect(toggle(el).checked).toBe(true);
+    });
+
+    it("asks before erasing the local copy, and says what goes", async () => {
+      const onOfflineCopy = vi.fn<(next: boolean) => Promise<boolean>>(
+        async () => false
+      );
+      const el = await mount({ offlineCopy: true, onOfflineCopy });
+      await act(async () => {
+        toggle(el).click();
+      });
+      // Nothing is written by the flip itself — the confirm is the act.
+      expect(onOfflineCopy).not.toHaveBeenCalled();
+      expect(el.textContent).toContain("The local copy is erased");
+      await act(async () => {
+        button(el, "Keep it")?.click();
+      });
+      expect(onOfflineCopy).not.toHaveBeenCalled();
       expect(toggle(el).checked).toBe(true);
     });
 
@@ -116,6 +136,9 @@ describe("screens/SettingsVaultScreen", () => {
       const el = await mount({ offlineCopy: true, onOfflineCopy });
       await act(async () => {
         toggle(el).click();
+      });
+      await act(async () => {
+        button(el, "Erase it")?.click();
       });
       expect(onOfflineCopy).toHaveBeenCalledWith(false);
       expect(toggle(el).checked).toBe(false);
@@ -130,6 +153,9 @@ describe("screens/SettingsVaultScreen", () => {
       const el = await mount({ offlineCopy: true, onOfflineCopy });
       await act(async () => {
         toggle(el).click();
+      });
+      await act(async () => {
+        button(el, "Erase it")?.click();
       });
       expect(onOfflineCopy).toHaveBeenCalledWith(false);
       expect(toggle(el).checked).toBe(true);

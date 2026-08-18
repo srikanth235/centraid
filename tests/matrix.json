@@ -3252,7 +3252,7 @@
     },
     {
       "id": "desktop-pending-overlay",
-      "name": "Pending rows survive an offline Electron reload across four apps",
+      "name": "Pending rows survive an offline Electron reload across Tally, Tasks, and Agenda",
       "surface": "desktop",
       "dimension": "offline",
       "tier": "e2e",
@@ -3270,7 +3270,7 @@
     },
     {
       "id": "web-pending-overlay",
-      "name": "PWA routes recover pending rows across four apps while still offline",
+      "name": "PWA routes recover pending rows across Tally, Tasks, and Agenda while still offline",
       "surface": "web",
       "dimension": "offline",
       "tier": "e2e",

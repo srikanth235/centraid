@@ -13,6 +13,7 @@ import { useEffect, useState } from "react";
 
 import { fmtBytes, fmtFull, loadable, typeMeta } from "../format.ts";
 import type { VersionEntry } from "../types.ts";
+import { ActionBtn } from "./Shared.tsx";
 
 import styles from "./History.module.css";
 import shared from "./shared.module.css";
@@ -64,14 +65,13 @@ function VersionPreview({ v }: { v: VersionEntry }) {
       />
     );
   return (
-    <a
-      className={`kit-btn ${shared.detailBtn}`}
+    <ActionBtn
+      icon="open"
+      label="Open in a new tab"
+      className={shared.detailBtn!}
       href={v.content_uri}
-      target="_blank"
-      rel="noopener"
-    >
-      Open in a new tab
-    </a>
+      extra={{ target: "_blank", rel: "noopener" }}
+    />
   );
 }
 
@@ -111,13 +111,12 @@ function VersionRow({
         <div className={styles.versionDetail}>
           <VersionPreview v={v} />
           {!v.current && !readOnly ? (
-            <button
-              type="button"
-              className={`kit-btn ${shared.detailBtn}`}
+            <ActionBtn
+              icon="restore"
+              label="Restore this version"
+              className={shared.detailBtn!}
               onClick={() => onRestore(v.content_id)}
-            >
-              Restore this version
-            </button>
+            />
           ) : null}
         </div>
       ) : null}

@@ -17,6 +17,8 @@ import type { ReactNode } from "react";
 import { CLEAR_FILTERS } from "../drive-copy.ts";
 import { liveAxes, liveOptions } from "../filters.ts";
 import type { DriveFilters } from "../filters.ts";
+import { I } from "../icons.ts";
+import { Icon } from "./Shared.tsx";
 
 import styles from "./FilterRow.module.css";
 
@@ -42,8 +44,12 @@ export function FilterRow({
               <span className={styles.pillLabel}>
                 {current ? `${axis.label}: ${current}` : axis.label}
               </span>
-              <span className={styles.chev} aria-hidden="true">
-                ⌄
+              {/* The catalog's chevron, not the `⌄` character: U+2304 carries
+                  its ink low in its own em box, so centring the box leaves the
+                  glyph sitting below the label it belongs to. A vector aligns
+                  and scales with the control. */}
+              <span className={styles.chev}>
+                <Icon svg={I.chevDown!} />
               </span>
             </summary>
             <div className={styles.menu}>

@@ -9,12 +9,10 @@ import {
   footprintScale,
   footprintSlices,
   formatBytes,
-  presentationFor,
 } from "./localUsageView.js";
 
 import a11y from "../styles/a11y.module.css";
 import controlsCss from "../styles/controls.module.css";
-import buttonCss from "../ui/Button.module.css";
 import gwStyles from "./GatewayScreen.module.css";
 import styles from "./LocalFootprintCard.module.css";
 
@@ -31,17 +29,12 @@ import styles from "./LocalFootprintCard.module.css";
 export interface LocalFootprintCardProps {
   report: LocalUsageReportDTO | null;
   loadError: string | null;
-  /** Full re-walk — an explicit owner action, never a poll. */
-  onRescan?: () => void;
-  rescanning: boolean;
   /**
-   * vaultId → owning person's label (issue #726 P1) — joined client-side from
-   * the owner roster, since the local-usage report only carries what the
-   * gateway can measure honestly (bytes), not who owns what. Empty when the
-   * caller has no owner surface to join against; the vault lines then show
-   * just the vault name, as before.
+   * A full re-walk is in flight. The VERB lives on `StorageScreen`'s section
+   * head (v11) — this card only needs to know so its figures can say they are
+   * being remeasured; it no longer owns the button.
    */
-  ownerLabels?: ReadonlyMap<string, string>;
+  rescanning: boolean;
 }
 
 function OccupancyRail({
@@ -103,78 +96,10 @@ function OccupancyRail({
   );
 }
 
-function VaultBreakdown({
-  report,
-  ownerLabels,
-}: {
-  report: LocalUsageReportDTO;
-  /** vaultId → owning person's label — what hosting this vault costs THEM
-   *  (issue #726 P1). Absent entries render the vault name alone. */
-  ownerLabels: ReadonlyMap<string, string>;
-}): JSX.Element | null {
-  if (report.vaults.length === 0) return null;
-  return (
-    <details className={styles.byVault} data-testid="footprint-by-vault">
-      <summary>By vault</summary>
-      <div className={styles.byVaultBody}>
-        {report.vaults.map((vault) => {
-          const owner = ownerLabels.get(vault.vaultId);
-          return (
-            <div key={vault.vaultId} className={styles.vaultRow}>
-              <div className={styles.vaultHead}>
-                <span className={styles.vaultName}>
-                  {vault.name ?? vault.vaultId.slice(0, 8)}
-                  {owner ? (
-                    <span className={styles.vaultOwner}> ({owner})</span>
-                  ) : null}
-                </span>
-                <span className={styles.figure}>
-                  {formatBytes(vault.bytes)}
-                </span>
-              </div>
-              <div className={styles.vaultParts}>
-                {vault.components
-                  .filter((c) => c.bytes > 0)
-                  .sort((a, b) => b.bytes - a.bytes)
-                  .map((component) => {
-                    // `presentationFor`, never a direct `COMPONENT_PRESENTATION`
-                    // index: a per-vault component id is the same unchecked wire
-                    // value `footprintSlices` guards against (issue #726 finding
-                    // 4) — this row must degrade the same way, not throw.
-                    const presentation = presentationFor(component.component);
-                    return (
-                      <span
-                        key={component.component}
-                        className={styles.vaultPart}
-                      >
-                        <i
-                          className={styles.chip}
-                          style={{ background: presentation.color }}
-                        />
-                        {presentation.label}
-                        <b className={styles.figure}>
-                          {formatBytes(component.bytes)}
-                        </b>
-                      </span>
-                    );
-                  })}
-              </div>
-            </div>
-          );
-        })}
-      </div>
-    </details>
-  );
-}
-
-const NO_OWNER_LABELS: ReadonlyMap<string, string> = new Map();
-
 export default function LocalFootprintCard({
   report,
   loadError,
-  onRescan,
   rescanning,
-  ownerLabels = NO_OWNER_LABELS,
 }: LocalFootprintCardProps): JSX.Element {
   const [expanded, setExpanded] = useState<string | null>(null);
   const slices = useMemo(
@@ -187,26 +112,11 @@ export default function LocalFootprintCard({
       className={cx(gwStyles.panel, styles.card)}
       data-testid="local-footprint-card"
     >
-      <div className={gwStyles.panelHead}>
-        <h2>On this machine</h2>
-        {onRescan ? (
-          <button
-            type="button"
-            className={cx(buttonCss.btn, buttonCss.sm, controlsCss.soft)}
-            disabled={rescanning || !report}
-            onClick={onRescan}
-          >
-            <span
-              className={styles.rescanIcon}
-              data-spin={rescanning || undefined}
-            >
-              <Icon name={rescanning ? "Loader" : "Refresh"} size={13} />
-            </span>
-            <span>{rescanning ? "Measuring…" : "Rescan"}</span>
-          </button>
-        ) : null}
-      </div>
-
+      {/* NO HEAD OF ITS OWN (binding layer v11). "Capacity · 8.2 GB of 512 GB"
+          and the Rescan verb are `StorageScreen`'s section head, above this
+          container: a head inside the border reads as a caption on the card
+          rather than as the name of this stretch of the page, and the figure
+          was being stated twice — once in the head, once as the headline. */}
       <div className={styles.body}>
         {loadError ? (
           <div className={styles.loadError}>
@@ -214,7 +124,15 @@ export default function LocalFootprintCard({
           </div>
         ) : report ? (
           <>
-            <div className={styles.headline} data-status={report.limit.status}>
+            {/* `data-measuring` mutes the figures while a re-walk is in
+                flight: they are the PREVIOUS measurement until it lands, and a
+                number that looks live while it is stale is the one thing this
+                card must never do. */}
+            <div
+              className={styles.headline}
+              data-measuring={rescanning || undefined}
+              data-status={report.limit.status}
+            >
               <span className={styles.headlineFigure}>
                 {formatBytes(report.totalBytes)}
               </span>
@@ -270,8 +188,6 @@ export default function LocalFootprintCard({
                 );
               })}
             </div>
-
-            <VaultBreakdown report={report} ownerLabels={ownerLabels} />
 
             {report.disk ? (
               <div className={styles.diskLine}>

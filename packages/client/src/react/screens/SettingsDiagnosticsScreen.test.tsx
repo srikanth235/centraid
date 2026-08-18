@@ -70,9 +70,12 @@ describe("screens/SettingsDiagnosticsScreen", () => {
           .fn<SettingsDiagnosticsBridgeProps["loadHealth"]>()
           .mockResolvedValue(makeHealth()),
       });
-      expect(el.textContent).toContain("All systems go");
-      expect(el.textContent).toContain("Gateway up 3h 0m");
-      const rows = el.querySelectorAll('[data-testid="diag-component"]');
+      // The HEAD answers the page's question before a row is read - there is
+      // no banner over it saying the same thing in a badge (binding layer v11).
+      expect(el.textContent).toContain("3 · all answering");
+      const rows = el
+        .querySelector('[data-testid="diag-components"]')!
+        .querySelectorAll("fieldset > div");
       expect(rows).toHaveLength(3);
       expect(el.textContent).toContain("Vaults");
       expect(el.textContent).toContain("1 vault mounted");
@@ -114,13 +117,15 @@ describe("screens/SettingsDiagnosticsScreen", () => {
           .fn<SettingsDiagnosticsBridgeProps["loadHealth"]>()
           .mockResolvedValue(health),
       });
-      expect(el.textContent).toContain("Something is failing");
+      expect(el.textContent).toContain("2 · 1 in trouble");
       // The failing row leads with its actionable last error, not the detail.
       expect(el.textContent).toContain("outbox drain failed: ECONNREFUSED");
-      expect(el.textContent).toContain("3 errs");
-      expect(el.querySelectorAll('[data-testid="diag-event"]')).toHaveLength(1);
-      const dot = el.querySelectorAll('[data-health="error"]');
-      expect(dot.length).toBeGreaterThan(0);
+      // The tally is a READING now, not a cell: "3 errs" beside a badge is a
+      // number the reader has to assemble a meaning for.
+      expect(el.textContent).toContain("3 errors since the gateway started");
+      // The row's own word carries its state - no separate health dot.
+      expect(el.textContent).toContain("failing");
+      expect(el.textContent).toContain("1 since the gateway started");
     });
 
     it("re-fetches on Refresh", async () => {
@@ -169,8 +174,10 @@ describe("screens/SettingsDiagnosticsScreen", () => {
           .mockResolvedValue(health),
         onJumpToLogs,
       });
+      // The verb is named for where it GOES; the row it sits on already names
+      // the component, so "View in logs" was saying the row's own subject twice.
       const jumpButtons = [...el.querySelectorAll("button")].filter(
-        (b) => b.textContent === "View in logs"
+        (b) => b.textContent === "Logs"
       );
       expect(jumpButtons).toHaveLength(1); // only the failing row offers it
       const jumpButton = jumpButtons[0]!;
@@ -190,9 +197,7 @@ describe("screens/SettingsDiagnosticsScreen", () => {
           .mockResolvedValue(health),
       });
       expect(
-        [...el.querySelectorAll("button")].some(
-          (b) => b.textContent === "View in logs"
-        )
+        [...el.querySelectorAll("button")].some((b) => b.textContent === "Logs")
       ).toBe(false);
     });
 
@@ -218,9 +223,12 @@ describe("screens/SettingsDiagnosticsScreen", () => {
           .fn<SettingsDiagnosticsBridgeProps["loadHealth"]>()
           .mockResolvedValue(health),
       });
+      // IN FULL, and with no title-attribute fallback behind it. The row used
+      // to ellipsis-clip this and hang the whole string off `title=`, which is
+      // a tooltip on a touch surface that has no hover. The kit's row wraps
+      // instead, so the text on screen IS the detail.
       expect(el.textContent).toContain(longDetail);
-      const sub = el.querySelector("[title]");
-      expect(sub?.getAttribute("title")).toBe(longDetail);
+      expect(el.querySelector(`[title="${longDetail}"]`)).toBeNull();
     });
 
     it("surfaces resource metrics and friendly labels for hardware/load-shed components", async () => {
@@ -277,8 +285,9 @@ describe("screens/SettingsDiagnosticsScreen", () => {
       expect(metrics?.textContent).toContain("200.0 MB");
       expect(metrics?.textContent).toContain("p99 12.5 ms");
       expect(metrics?.textContent).toContain("3.2 ms");
-      expect(metrics?.textContent).toContain("Conserve");
-      expect(metrics?.textContent).toContain("Constrained");
+      // Lower case, like every other meta in the kit: the class is a fact
+      // about the gateway, not a badge shouting over it.
+      expect(metrics?.textContent).toContain("Conserve · constrained");
     });
   });
 
@@ -341,8 +350,16 @@ describe("screens/SettingsDiagnosticsScreen", () => {
       return { el, onRemove, onRename, onTest };
     }
 
-    const rowFor = (el: HTMLElement, id: string): HTMLElement =>
-      el.querySelector<HTMLElement>(`[data-gateway-id="${id}"]`)!;
+    // The shared row block publishes no per-row test attribute, deliberately:
+    // one row component serves every ops page, and a hook for each caller's
+    // domain id would be a kit that knows about gateways. A row is found the
+    // way a reader finds it - by the name it prints.
+    const rowFor = (el: HTMLElement, label: string): HTMLElement =>
+      [
+        ...el.querySelectorAll<HTMLElement>(
+          '[data-testid="diag-connections"] fieldset > div'
+        ),
+      ].find((row) => row.textContent?.startsWith(label))!;
 
     it("is absent entirely when the host exposes no registry", async () => {
       const el = await mount({
@@ -355,12 +372,12 @@ describe("screens/SettingsDiagnosticsScreen", () => {
 
     it("lists each host with its transport and what it serves", async () => {
       const { el } = await mountWithConnections();
-      const local = rowFor(el, "local");
+      const local = rowFor(el, "This Mac");
       expect(local.textContent).toContain("This Mac");
-      expect(local.textContent).toContain("Active");
+      expect(local.textContent).toContain("active");
       // Names, not just a count: the vaults are what the owner recognises.
       expect(local.textContent).toContain("2 vaults · Shared, Personal");
-      const office = rowFor(el, "office");
+      const office = rowFor(el, "Office");
       expect(office.textContent).toContain("iroh");
       // The switcher's status vocabulary, reused rather than reinvented.
       expect(office.textContent).toContain("Offline");
@@ -368,7 +385,7 @@ describe("screens/SettingsDiagnosticsScreen", () => {
 
     it("fires test / rename / remove for the host whose row was clicked", async () => {
       const { el, onTest, onRename, onRemove } = await mountWithConnections();
-      const office = rowFor(el, "office");
+      const office = rowFor(el, "Office");
       const click = (label: string): void => {
         const button = [...office.querySelectorAll("button")].find((b) =>
           b.textContent?.includes(label)
@@ -385,7 +402,7 @@ describe("screens/SettingsDiagnosticsScreen", () => {
 
     it("never offers to remove the primordial local host", async () => {
       const { el } = await mountWithConnections();
-      const labels = [...rowFor(el, "local").querySelectorAll("button")].map(
+      const labels = [...rowFor(el, "This Mac").querySelectorAll("button")].map(
         (b) => b.textContent
       );
       expect(labels.some((l) => l?.includes("Remove"))).toBe(false);

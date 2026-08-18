@@ -1,7 +1,8 @@
 /* Trash's ask panel (Docs spec §4.3).
 
-   The same card idiom the Coming due panel uses — hairline, container radius,
-   elevated paper, four rungs. No `--net` anywhere: an ask is not a failure. */
+   The same card idiom every non-drive panel uses (Blocks.module.css) —
+   hairline, container radius, elevated paper, four rungs. No `--net`
+   anywhere: an ask is not a failure. */
 
 .panel {
   display: flex;
@@ -45,8 +46,8 @@
 }
 .key {
   /* The fact-list key column. `--w-key-col` is a SHELL metric (css.ts) and is
-     not lowered into the blueprint sheet, so this matches the Coming due
-     panel's own key column rather than inventing a third width. */
+     not lowered into the blueprint sheet, so this matches the shared block
+     vocabulary's own key column rather than inventing a third width. */
   flex: 0 0 13em;
   font: var(--t-eyebrow);
   text-transform: uppercase;

@@ -30,23 +30,18 @@ import {
 import { installInlineBlobImages } from "../../blueprints/inline-blob-images.js";
 import { installInlineAsk } from "../../blueprints/kit-ask-inline.js";
 import { seat } from "../../host-platform.js";
-import { useShellActions } from "../actions.js";
 import ErrorBoundary from "../ErrorBoundary.js";
-import { iconSvg } from "../iconSvg.js";
 import type { ShellNav } from "../ShellApp.js";
 import ShellFrame from "../ShellFrame.js";
 import { useAsyncData } from "../useAsyncData.js";
 import { useGatewayStatus } from "../useGatewayRuntime.js";
-import AppSettingsController from "./AppSettingsController.js";
 import { fetchAppKnobValues, pushKnobToInlineRoot } from "./appSettingsData.js";
-import { deleteInlineApp, renameInlineApp } from "./inlineAppFlows.js";
 import { useInlineAppFrame } from "./inlineAppFrame.js";
 import { isDisabledOnSeat } from "./inlineAppSeats.js";
 import { loadAppTemplates } from "./templatesData.js";
 import { scopeSetKey, useAppScopes } from "./useAppScopes.js";
 import type { ResolvedAppScope } from "./useAppScopes.js";
 
-import chrome from "../chrome.module.css";
 import styles from "./InlineAppRoute.module.css";
 
 export interface InlineAppRouteProps {
@@ -250,10 +245,6 @@ export default function InlineAppRoute({
   prefs,
   compact,
 }: InlineAppRouteProps): JSX.Element {
-  const { confirm, showToast } = useShellActions();
-  // Photos owns its toolbar and follows the handoff without the generic shell
-  // settings sheet. Other inline apps retain their management affordance.
-  const appSettingsEnabled = app.id !== "photos";
   // The seat wall (docs/blueprint-seats.md S5): a manifest-declared refusal,
   // not a hard-coded app id, so the next app that needs one (the doc's
   // open follow-up list already has candidates) gets it free. Locker is the
@@ -263,12 +254,6 @@ export default function InlineAppRoute({
   // host-platform.ts's own caveat — this is a UI decision (what to render),
   // never a security boundary; nothing sensitive is denied twice here.
   const refused = isDisabledOnSeat(appId, seat());
-  // Opening the settings panel snapshots the mounted inline root at click
-  // time — an event handler may read the ref, render may not.
-  const [settings, setSettings] = useState<{
-    inlineRoot: HTMLElement | null;
-  } | null>(null);
-  const settingsOpen = settings !== null;
   const [attempt, setAttempt] = useState(0);
   const appRootRef = useRef<HTMLElement | null>(null);
   const askTeardown = useRef<(() => void) | null>(null);
@@ -374,32 +359,15 @@ export default function InlineAppRoute({
     []
   );
 
-  // The FRAME's affordances. They survive whatever the app contributes: they
-  // stand ahead of the app's own actions, so the app's one filled ink control
-  // is still the last thing in the bar.
-  const frameActions = (
-    <span style={{ display: "inline-flex", alignItems: "center", gap: "8px" }}>
-      {appSettingsEnabled ? (
-        <span className={chrome.tbBtnWrap}>
-          <button
-            className={chrome.tbBtn}
-            type="button"
-            aria-label="App settings"
-            aria-haspopup="dialog"
-            data-open={settingsOpen ? "true" : undefined}
-            onClick={() =>
-              setSettings(
-                settingsOpen ? null : { inlineRoot: appRootRef.current }
-              )
-            }
-            // oxlint-disable-next-line react/no-danger -- #639 the complete HTML source is a reviewed local SVG/icon catalog value.
-            dangerouslySetInnerHTML={{ __html: iconSvg("Settings", 15) }}
-          />
-          <span className={chrome.tooltip}>App settings</span>
-        </span>
-      ) : null}
-    </span>
-  );
+  // THE FRAME CONTRIBUTES NOTHING TO THE BAR. It used to add a settings gear
+  // ahead of the app's own actions; every bundled app now draws its bar to a
+  // design handoff, and none of those handoffs has a frame control in it.
+  // What the gear opened — rename, delete, reveal, per-app automations, the
+  // enrichment settings link and the appearance knobs — has no other door and
+  // is unreachable until one is designed. `AppSettingsController.tsx` and
+  // `inlineAppFlows.ts` are kept unmounted for that day rather than deleted,
+  // and `appSettingsData.ts` still runs on every mount: knob VALUES are pushed
+  // to the inline root whether or not anything can edit them.
 
   const cacheKey = `${appId}:${attempt}`;
   // Kick the descriptor chunk import off NOW, so it downloads in parallel with
@@ -451,12 +419,7 @@ export default function InlineAppRoute({
       {...(contributed.count === undefined
         ? {}
         : { appCount: contributed.count })}
-      titlebarRight={
-        <>
-          {frameActions}
-          {contributed.actions}
-        </>
-      }
+      titlebarRight={contributed.actions}
     >
       <div className={styles.view} data-testid="inline-app-view">
         <div className={styles.body}>
@@ -510,45 +473,6 @@ export default function InlineAppRoute({
             </ErrorBoundary>
           )}
         </div>
-        {appSettingsEnabled && settings !== null ? (
-          <AppSettingsController
-            app={app}
-            appId={appId}
-            inlineRoot={settings.inlineRoot}
-            {...(bundled ? { bundled: true } : {})}
-            onClose={() => setSettings(null)}
-            onOpenAutomations={() => {
-              setSettings(null);
-              nav.navigate({ kind: "automations" });
-            }}
-            onOpenEnrichmentSettings={() => {
-              setSettings(null);
-              nav.navigate({ kind: "settings", page: "enrichment" });
-            }}
-            onOpenOrder={(ref) => {
-              setSettings(null);
-              nav.navigate({ kind: "automation-view", automationId: ref });
-            }}
-            onRename={() => {
-              setSettings(null);
-              void renameInlineApp({ app, say: showToast });
-            }}
-            onShare={() => showToast("Sharing isn’t available yet.")}
-            onReveal={() =>
-              void window.CentraidApi.openAppFolder({ id: app.id })
-            }
-            onDelete={() => {
-              setSettings(null);
-              void deleteInlineApp({
-                app,
-                confirm,
-                say: showToast,
-                onDeleted: () => nav.navigate({ kind: "home" }),
-              });
-            }}
-            showToast={showToast}
-          />
-        ) : null}
       </div>
     </ShellFrame>
   );

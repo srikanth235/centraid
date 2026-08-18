@@ -109,11 +109,24 @@ export function popItem(
     disabled = false,
     iconHtml = null,
     dotColor = null,
+    /**
+     * The TRAILING slot at the end of the row — a `✓` on the option a menu of
+     * choices is currently in, or the keyboard shortcut for a verb.
+     *
+     * It is the far edge on purpose. A menu that marks its current choice with
+     * a leading dot indents every OTHER row's text past it, so five options
+     * line up along an edge that only exists because one of them is chosen; a
+     * trailing mark leaves the labels on one edge and answers "which one is
+     * on" at the other. Ticks and shortcuts share the slot because they are
+     * the same thing — what this row is, said after what it does.
+     */
+    trailing = null,
   }: {
     danger?: boolean;
     disabled?: boolean;
     iconHtml?: string | null;
     dotColor?: string | null;
+    trailing?: string | null;
   } = {}
 ): HTMLButtonElement {
   const btn = h("button", {
@@ -128,6 +141,10 @@ export function popItem(
     btn.appendChild(
       h("span", { class: "kit-dotmini", style: `background:${dotColor};` })
     );
-  btn.appendChild(document.createTextNode(label));
+  // The label takes the slack so the trailing slot sits on the far edge; with
+  // no trailing slot it is an ordinary flex child and nothing moves.
+  btn.appendChild(h("span", { class: "kit-popover-label" }, label));
+  if (trailing)
+    btn.appendChild(h("span", { class: "kit-popover-key" }, trailing));
   return btn;
 }

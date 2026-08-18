@@ -4,6 +4,13 @@
 // modules for the shell's client-side query path, alongside changeTables +
 // kitAsk. The `./queries/*` imports live ONLY here so they never reach the
 // served/browser bundle (the gateway refuses to serve node-side handlers).
+//
+// `Root` is currently a WALL (see app-root.tsx): People's desktop UI was
+// removed pending its Binding Layer v11 design handoff. Everything else in this
+// descriptor is live and deliberately untouched — the seven queries still run
+// against the replica, and `kitAsk` below is, for now, the only way a member
+// reaches this app's data from the shell. The rebuild replaces `Root` and
+// restores `CHANGE_TABLES`; nothing else here has to move.
 
 import type { InlineAppModule } from "../inline-types.ts";
 import { Root, CHANGE_TABLES } from "./app-root.tsx";

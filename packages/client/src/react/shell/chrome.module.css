@@ -1045,6 +1045,16 @@
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+/* How long ago the last heartbeat landed. A quieter ink than the sentence it
+   qualifies, and in the numeric register — it is a reading, not a word. */
+.statusStamp {
+  color: var(--text-faint);
+  direction: var(--t-mono-direction);
+  flex: none;
+  font-variant-numeric: var(--t-mono-numeric);
+  unicode-bidi: var(--t-mono-bidi);
+  white-space: nowrap;
+}
 /* Determinate, always: a local-first product knows the size of its own work,
    and a spinner is the one thing it can never honestly say. */
 .statusBar {

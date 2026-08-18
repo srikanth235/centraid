@@ -1,9 +1,9 @@
 // Small shared presentational bits used across the Sidebar, Grid, List,
 // Details and QuickLook components. Pure functions of props — no app state.
-import type { MouseEvent } from "react";
+import type { MouseEvent, ReactNode } from "react";
 
 import { custodyRowMark } from "../format.ts";
-import { I } from "../icons.ts";
+import { ACTION_ICONS, I } from "../icons.ts";
 import type { CustodyTone } from "../types.ts";
 import { OFFLINE_BANNER, OFFLINE_BANNER_ACTION } from "../view-copy.ts";
 
@@ -30,6 +30,62 @@ export function Icon({ svg }: { svg: string }) {
       // oxlint-disable-next-line react/no-danger -- #639 the complete HTML source is a reviewed local SVG/icon catalog value.
       dangerouslySetInnerHTML={{ __html: svg }}
     />
+  );
+}
+
+/**
+ * A `kit-btn` that wears its verb's glyph.
+ *
+ * ONE COMPONENT, so a verb cannot pick up a different shape in a different
+ * region — the mark comes from `ACTION_ICONS` by name, and the name is the
+ * verb. Buttons that are NOT verbs (Done, a tab, a segment) do not use this
+ * and take no glyph: a mark beside every word is the same as a mark beside
+ * none, because nothing stands out.
+ *
+ * `tone` maps onto the kit's own classes rather than inventing a palette:
+ * `primary` is the view's one fill, `quiet` has no outline, `danger` takes the
+ * destructive ink. Anything a caller needs on top of that (an `aria-pressed`,
+ * a `download`) rides in `extra`.
+ */
+export function ActionBtn({
+  icon,
+  label,
+  tone = "",
+  className = "",
+  href,
+  onClick,
+  extra,
+}: {
+  icon: keyof typeof ACTION_ICONS;
+  label: ReactNode;
+  /** Extra kit classes: `primary`, `quiet`, `destructive danger`. */
+  tone?: string;
+  /** The caller's own layout class, where a region pins width or order. */
+  className?: string;
+  /** Present makes it an anchor — a real link keeps the browser's own save
+   *  behaviour and its context menu. */
+  href?: string;
+  onClick?: (event: MouseEvent<HTMLElement>) => void;
+  extra?: Record<string, unknown>;
+}) {
+  const cls = `kit-btn ${tone} ${styles.actBtn} ${className}`.replace(
+    /\s+/gu,
+    " "
+  );
+  const inner = (
+    <>
+      <Icon svg={ACTION_ICONS[icon]} />
+      <span>{label}</span>
+    </>
+  );
+  return href === undefined ? (
+    <button type="button" className={cls} onClick={onClick} {...extra}>
+      {inner}
+    </button>
+  ) : (
+    <a className={cls} href={href} onClick={onClick} {...extra}>
+      {inner}
+    </a>
   );
 }
 
@@ -111,9 +167,7 @@ export function OfflineBanner({ onRetry }: { onRetry: () => void }) {
   return (
     <output className={styles.offline}>
       <p className={styles.offlineText}>{OFFLINE_BANNER}</p>
-      <button type="button" className="kit-btn" onClick={onRetry}>
-        {OFFLINE_BANNER_ACTION}
-      </button>
+      <ActionBtn icon="retry" label={OFFLINE_BANNER_ACTION} onClick={onRetry} />
     </output>
   );
 }

@@ -1,6 +1,6 @@
 # Mobile offline data
 
-Centraid's native Photos and Docs surfaces are vault-free views: they read one device-local projection assembled from every enrolled vault on the current gateway. A focused vault is only the default write target. It is not a read filter and switching it does not tear down or reopen the read plane.
+Centraid's native Photos surface is a vault-free view (Docs was the second such surface until it was removed pending its v11 design handoff; the rebuild inherits this contract unchanged): they read one device-local projection assembled from every enrolled vault on the current gateway. A focused vault is only the default write target. It is not a read filter and switching it does not tear down or reopen the read plane.
 
 ## Mounted read plane
 

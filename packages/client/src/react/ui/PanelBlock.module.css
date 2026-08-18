@@ -34,6 +34,8 @@
 .eyebrow {
   color: var(--text-faint);
   font: var(--t-eyebrow);
+  letter-spacing: var(--t-eyebrow-tracking);
+  text-transform: var(--t-eyebrow-transform);
   margin: 0;
 }
 
@@ -76,6 +78,8 @@
 .figureLabel {
   color: var(--text-faint);
   font: var(--t-eyebrow);
+  letter-spacing: var(--t-eyebrow-tracking);
+  text-transform: var(--t-eyebrow-transform);
   margin: 0;
 }
 
@@ -119,6 +123,8 @@
   color: var(--text-faint);
   flex: none;
   font: var(--t-eyebrow);
+  letter-spacing: var(--t-eyebrow-tracking);
+  text-transform: var(--t-eyebrow-transform);
   inline-size: var(--w-key-col);
 }
 

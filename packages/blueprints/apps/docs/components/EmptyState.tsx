@@ -22,7 +22,9 @@
 // rather than drawing a button into a dead end.
 import type { ReactNode } from "react";
 
+import type { ACTION_ICONS } from "../icons.ts";
 import type { EmptyStateView } from "../view-state.ts";
+import { ActionBtn } from "./Shared.tsx";
 
 import styles from "./EmptyState.module.css";
 
@@ -35,12 +37,22 @@ export function EmptyState({
   runFor: (label: string) => (() => void) | undefined;
 }): ReactNode {
   if (!view.visible) return null;
-  const labels = [view.action, view.action2].filter(
-    (label): label is string => typeof label === "string"
-  );
-  const actions = labels.flatMap((label) => {
-    const run = runFor(label);
-    return run ? [{ label, run }] : [];
+  // The word and its shape travel together out of the copy table, so a copy
+  // edit can never silently drop the mark (`view-copy.ts` `actionIcon`).
+  const offered: { label: string; icon?: keyof typeof ACTION_ICONS }[] = [];
+  if (view.action)
+    offered.push({
+      label: view.action,
+      ...(view.actionIcon ? { icon: view.actionIcon } : {}),
+    });
+  if (view.action2)
+    offered.push({
+      label: view.action2,
+      ...(view.action2Icon ? { icon: view.action2Icon } : {}),
+    });
+  const actions = offered.flatMap((a) => {
+    const run = runFor(a.label);
+    return run ? [{ ...a, run }] : [];
   });
   return (
     <div className={styles.empty} data-variant={view.variant}>
@@ -50,21 +62,30 @@ export function EmptyState({
       <p className={styles.body}>{view.body}</p>
       {actions.length > 0 ? (
         <div className={styles.actions}>
-          {actions.map((action, index) => (
-            <button
-              key={action.label}
-              type="button"
-              // One filled control per view, and only where the empty block IS
-              // the view — the four in-screen variants leave the fill to the
-              // app bar's own verb (§3.1 `emptyBlock`).
-              className={
-                view.display && index === 0 ? "kit-btn primary" : "kit-btn"
-              }
-              onClick={() => action.run()}
-            >
-              {action.label}
-            </button>
-          ))}
+          {actions.map((action, index) => {
+            // One filled control per view, and only where the empty block IS
+            // the view — the four in-screen variants leave the fill to the app
+            // bar's own verb (§3.1 `emptyBlock`).
+            const tone = view.display && index === 0 ? "primary" : "";
+            return action.icon ? (
+              <ActionBtn
+                key={action.label}
+                icon={action.icon}
+                label={action.label}
+                tone={tone}
+                onClick={() => action.run()}
+              />
+            ) : (
+              <button
+                key={action.label}
+                type="button"
+                className={`kit-btn${tone ? ` ${tone}` : ""}`}
+                onClick={() => action.run()}
+              >
+                {action.label}
+              </button>
+            );
+          })}
         </div>
       ) : null}
       {/* §4.6's five-empty-states note used to render here. It described the

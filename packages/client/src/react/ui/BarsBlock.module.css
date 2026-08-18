@@ -41,6 +41,19 @@
   gap: var(--bars-gap);
 }
 
+/* A window still filling. The columns keep the width they would have at full
+   count and pack against the NEWEST end, so a short series reads as marks
+   arriving rather than as a solid block stretched over the plot — and the
+   shape does not jump when the next one lands. */
+.bars[data-partial="true"] .plot {
+  justify-content: flex-end;
+}
+
+.bars[data-partial="true"] .column {
+  flex: 0 0 auto;
+  inline-size: calc((100% - 29 * var(--bars-gap)) / 30);
+}
+
 .column {
   block-size: 100%;
   display: flex;

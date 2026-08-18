@@ -23,11 +23,15 @@
   inset: 0;
   margin: auto;
   padding: 0;
-  width: min(940px, calc(100vw - 48px));
-  height: min(660px, calc(100vh - 72px));
+  /* 900 × 780 (binding layer v11): wide enough for a 248px rail beside a
+     reading measure, tall enough that the Agents page's two lists are one
+     scroll rather than three. */
+  width: min(900px, calc(100vw - 48px));
+  height: min(780px, calc(100vh - 72px));
   max-width: none;
   max-height: none;
   display: flex;
+  flex-direction: column;
   border: 0.5px solid var(--line-strong, var(--line));
   border-radius: var(--r-lg);
   background: var(--bg-elev);
@@ -58,12 +62,58 @@
    rule (#707, invariant 5), which zeroes every animation and transition
    duration. A per-component copy is a second place the policy can drift. */
 
-/* Sits above the content's own scroll, in the dialog's top-right dead space. */
+/* ── Head and foot bars (binding layer v11) ────────────────────────────────
+   The title and the auto-save note lead; the build stamp and any refusal sit
+   at the foot. Both are the MODAL's bars rather than the page's, so neither
+   scrolls away from the control it is about. */
+.settingsHead {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  padding: var(--sp-4) var(--sp-4) var(--sp-3);
+  border-block-end: 1px solid var(--line);
+}
+.settingsTitle {
+  flex: 1;
+  min-inline-size: 0;
+  margin: 0;
+  font-family: var(--font-sans);
+  font-size: var(--t-title-size);
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  color: var(--text);
+}
+.settingsFoot {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  padding: var(--sp-2) var(--sp-4);
+  border-block-start: 1px solid var(--line);
+}
+/* The gateway's own words, unsmoothed. `--net` is the ink for a write that did
+   not land, and the line wraps rather than truncating: a refusal a member
+   cannot read in full is a refusal they cannot act on. */
+.settingsFootNote {
+  flex: 1;
+  min-inline-size: 0;
+  margin: 0;
+  font-size: var(--t-control-size);
+  line-height: 1.45;
+  color: var(--net);
+  text-wrap: pretty;
+}
+.settingsStamp {
+  margin-inline-start: auto;
+  font-family: var(--font-sans);
+  font-size: var(--t-control-size);
+  font-variant-numeric: tabular-nums;
+  color: var(--text-ghost);
+}
+
 .dialogClose {
-  position: absolute;
-  top: 12px;
-  right: 12px;
-  z-index: 2;
+  flex: none;
   display: grid;
   place-items: center;
   width: 28px;
@@ -90,44 +140,17 @@
   min-height: 0;
   overflow: hidden;
   display: grid;
-  grid-template-columns: 232px 1fr;
+  grid-template-columns: 248px 1fr;
 }
 
 .settingsNav {
   display: flex;
   flex-direction: column;
-  padding: 22px 12px 16px 18px;
+  gap: 2px;
+  padding: var(--sp-3) var(--sp-2);
   background: color-mix(in srgb, var(--text) 2.5%, transparent);
   border-right: 0.5px solid var(--line);
   overflow-y: auto;
-}
-.settingsNavHead {
-  padding: 0 8px 12px;
-}
-.settingsNavEyebrow {
-  font-family: var(--font-sans);
-  font-size: var(--t-control-size);
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  color: var(--text-ghost);
-}
-.settingsNavTitle {
-  margin-top: 6px;
-  font-family: var(--font-sans);
-  font-size: var(--t-body-size);
-  font-weight: 600;
-  color: var(--text);
-}
-.settingsNavSection {
-  font-family: var(--font-sans);
-  font-size: var(--t-control-size);
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  color: var(--text-ghost);
-  padding: 14px 10px 4px;
-}
-.settingsNavSection:first-of-type {
-  padding-top: 2px;
 }
 .settingsNavItem {
   position: relative;
@@ -196,41 +219,25 @@
 .settingsNavItem[data-active="true"] svg {
   color: var(--accent);
 }
-/* Version stamp pinned to the bottom of the nav column (vanilla
-   .cd-settings-nav-foot / .cd-settings-nav-ver). */
-.settingsNavFoot {
-  margin-top: auto;
-  padding: 12px 10px 0;
-}
-.settingsNavVer {
-  font-family: var(--font-sans);
-  font-size: var(--t-control-size);
-  color: var(--text-ghost);
-}
 .settingsContent {
   min-width: 0;
   overflow-y: auto;
-  /* Right gutter clears the close button; the rest is dialog-scale, not
-     page-scale. */
-  padding: 28px 40px 40px;
+  padding: var(--sp-4) var(--sp-6) var(--sp-6);
 }
 .settingsContent > * {
   max-width: 640px;
 }
 .settingsPageHead {
-  margin: 0 0 22px;
+  margin: 0 0 var(--sp-4);
 }
-.settingsPageTitlerow {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-}
+/* The page's name under the modal's. It is a heading, not a second title bar:
+   the modal head already carries the display rung, so this sits a step down. */
 .settingsPageTitle {
   margin: 0;
   font-family: var(--font-sans);
   font-weight: 600;
-  font-size: var(--t-title-size);
-  letter-spacing: -0.02em;
+  font-size: var(--t-body-size);
+  letter-spacing: -0.01em;
   color: var(--text);
 }
 .settingsAutosaved {
@@ -256,35 +263,18 @@
     grid-template-rows: auto 1fr;
     overflow-y: auto;
   }
+  /* The rail becomes THE PAGE LIST: full-width rows carrying their subtitles,
+     not a wrapped strip of chips. A chip strip drops the one thing the rail is
+     for — saying where a setting lives before you open the page — exactly
+     where the screen is too narrow to guess from the label alone. */
   .settingsNav {
-    flex-direction: row;
-    flex-wrap: wrap;
-    align-items: center;
-    gap: 4px;
-    padding: 14px 14px 12px;
+    padding: var(--sp-2);
     border-right: 0;
     border-bottom: 0.5px solid var(--line);
     overflow-y: visible;
   }
-  /* The section labels and the version footer are column-layout furniture;
-     as a wrapped row they are noise between the items they used to head. */
-  .settingsNavSection,
-  .settingsNavFoot {
-    display: none;
-  }
-  .settingsNavHead {
-    flex: 1 0 100%;
-    padding: 0 0 8px;
-  }
-  /* `width: 100%` is what makes each item own a row in the column layout; as
-     a wrapped row they must shrink to their own label instead. */
-  .settingsNavItem {
-    flex: 0 0 auto;
-    width: auto;
-    margin-block: 0;
-  }
   .settingsContent {
     overflow-y: visible;
-    padding: 22px 16px 48px;
+    padding: var(--sp-4) var(--sp-3) var(--sp-6);
   }
 }

@@ -18,12 +18,14 @@ import type {
 } from "../../enrich-policy.js";
 import { relativeTime } from "../format.js";
 import type { HarnessCardDTO } from "../screen-contracts.js";
-import { DrawerGroup } from "./settings-controls.js";
+import EmptyBlock from "../ui/EmptyBlock.js";
+import RowsBlock from "../ui/RowsBlock.js";
+import type { RowDef } from "../ui/RowsBlock.js";
+import SectionBlock from "../ui/SectionBlock.js";
 import CapabilityRows from "./SettingsEnrichmentCapabilities.js";
 import EnrichmentRules from "./SettingsEnrichmentRules.js";
 
 import controlsCss from "../styles/controls.module.css";
-import styles from "./SettingsEnrichmentScreen.module.css";
 
 // Settings → Enrichment (issue #807) — the one place the whole enrichment
 // policy is authored, and a PROJECTION of two stores rather than a third one:
@@ -116,17 +118,26 @@ function errorText(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
 }
 
-/** One recorded egress answer — a receipted fact, never a control. */
-function ConsentRow({ row }: { row: EnrichConsentRecord }): JSX.Element {
-  return (
-    <div className={styles.row}>
-      <span className={styles.rowName}>{capabilityLabel(row.capability)}</span>
-      <span className={styles.rowMeta}>
-        {row.decision === "granted" ? "You allowed" : "You declined"} work{" "}
-        {ENRICH_EGRESS_WORDS[row.egress]} · {relativeTime(row.decidedAt)}
-      </span>
-    </div>
-  );
+/**
+ * One recorded egress answer as a row — a receipted fact, never a control.
+ *
+ * `off` is what says so: the row is present, readable and inert, and it carries
+ * no verb, because the answer is on the record and this page cannot rewrite the
+ * record. A declined answer is `net`: the question it answered was whether work
+ * may leave the member's own machines.
+ */
+function consentRow(row: EnrichConsentRecord): RowDef {
+  const declined = row.decision === "declined";
+  return {
+    id: `${row.capability}/${row.egress}`,
+    title: capabilityLabel(row.capability),
+    sub: declined
+      ? "Declined · built-in engine only"
+      : `May send work ${ENRICH_EGRESS_WORDS[row.egress]}`,
+    meta: relativeTime(row.decidedAt),
+    net: declined,
+    off: true,
+  };
 }
 
 export default function SettingsEnrichmentScreen({
@@ -180,11 +191,8 @@ export default function SettingsEnrichmentScreen({
           (profile) => data.effective[profile.capability]?.enabled === true
         ).length;
         return (
-          <DrawerGroup
-            key={domain}
-            label={label}
-            meta={`${on} of ${mine.length} on`}
-          >
+          <div key={domain}>
+            <SectionBlock label={label} meta={`${on} of ${mine.length} on`} />
             <CapabilityRows
               builtIns={mine}
               profiles={data.profiles}
@@ -200,7 +208,7 @@ export default function SettingsEnrichmentScreen({
               showToast={showToast}
               onChanged={refresh}
             />
-          </DrawerGroup>
+          </div>
         );
       })}
 
@@ -211,22 +219,22 @@ export default function SettingsEnrichmentScreen({
         onChanged={refresh}
       />
 
-      <DrawerGroup label="Sharing you’ve been asked about">
-        <div className={controlsCss.note}>
-          Answered once and kept, so nothing asks you twice.
-        </div>
-        <div className={styles.panel}>
-          {data.consent.length === 0 ? (
-            <div className={styles.empty}>
-              Nothing has needed to ask you yet.
-            </div>
-          ) : (
-            data.consent.map((row) => (
-              <ConsentRow key={`${row.capability}/${row.egress}`} row={row} />
-            ))
-          )}
-        </div>
-      </DrawerGroup>
+      <SectionBlock
+        label="Answers on record"
+        meta={data.consent.length ? "asked once, kept" : "none yet"}
+      />
+      {data.consent.length === 0 ? (
+        <EmptyBlock
+          routine
+          title="Nothing has needed to ask yet"
+          body="These are the “may this send work to a provider” questions."
+        />
+      ) : (
+        <RowsBlock
+          ariaLabel="Answers on record"
+          rows={data.consent.map(consentRow)}
+        />
+      )}
     </>
   );
 }

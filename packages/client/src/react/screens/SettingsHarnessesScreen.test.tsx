@@ -162,6 +162,22 @@ describe("SettingsHarnessesScreen suite", () => {
     return container;
   }
 
+  /** Click the button whose visible word is exactly this. */
+  async function press(el: HTMLElement, word: string): Promise<void> {
+    const found = [...el.querySelectorAll("button")].find(
+      (button) => button.textContent?.trim() === word
+    );
+    if (!found) throw new Error(`no button reading "${word}"`);
+    await act(async () => {
+      found.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
+  }
+
+  /** The ladder is behind the Automations lane's own verb (v11). */
+  async function openFallback(el: HTMLElement): Promise<void> {
+    await press(el, "Fallback");
+  }
+
   function sel(el: HTMLElement, label: string): HTMLSelectElement {
     const found = el.querySelector(`select[aria-label="${label}"]`);
     if (!found) throw new Error(`no select labelled "${label}"`);
@@ -181,20 +197,24 @@ describe("SettingsHarnessesScreen suite", () => {
   }
 
   describe(SettingsHarnessesScreen, () => {
-    it("renders a routing lane per subsystem plus the default lane, and the agent inventory", async () => {
+    it("renders the two sections: each agent's own answer, then the lanes", async () => {
       const el = await mount(makeProps());
-      // 1 default lane + 3 routed lanes. Builder has no row — its entry
-      // points are hidden by default (#434), so the control configured a
+      expect(el.textContent).toContain("Harnesses");
+      expect(el.textContent).toContain("Lanes");
+      // The default lane plus three routed lanes. Builder has no row — its
+      // entry points are hidden by default (#434), so the control configured a
       // surface the member cannot open.
-      expect(el.querySelectorAll(".routeRow")).toHaveLength(4);
-      expect(el.querySelector('.routeRow[data-default="true"]')).toBeTruthy();
-      expect(el.textContent).toContain("Routing");
+      expect(sel(el, "Default agent").getAttribute("aria-label")).toBe(
+        "Default agent"
+      );
       for (const label of ["Assistant", "In-app Ask", "Automations"]) {
-        expect(el.textContent).toContain(label);
+        expect(
+          el.querySelector(`[aria-label="Agent for ${label}"]`)
+        ).not.toBeNull();
       }
       expect(el.querySelector('[aria-label="Agent for Builder"]')).toBeNull();
-      // Inventory still lists every detected agent with its default model.
-      expect(el.querySelectorAll(".entry")).toHaveLength(2);
+      // Every detected agent carries its own model, above the lanes.
+      expect(el.querySelectorAll(".glyphTile")).toHaveLength(2);
       expect(sel(el, "Default model for Codex").value).toBe("gpt-5");
       expect(el.querySelectorAll("optgroup").length).toBeGreaterThan(0);
     });
@@ -256,6 +276,7 @@ describe("SettingsHarnessesScreen suite", () => {
           .mockResolvedValue(withSessionReady(makeStatusBothConnected())),
       });
       const el = await mount(props);
+      await openFallback(el);
       await act(async () => {
         await pick(
           sel(el, "Add fallback agent for Automations"),
@@ -271,6 +292,7 @@ describe("SettingsHarnessesScreen suite", () => {
 
     it("offers failover only on the unattended lane", async () => {
       const el = await mount(makeProps());
+      await openFallback(el);
       // Attended lanes recover at the next turn with the member watching, so
       // there is nothing to pre-authorize; only Automations fires unattended.
       expect(el.textContent).not.toContain("Next-turn failover");
@@ -292,6 +314,7 @@ describe("SettingsHarnessesScreen suite", () => {
           .mockResolvedValue(withSessionReady(makeStatusBothConnected())),
       });
       const el = await mount(props);
+      await openFallback(el);
       await pick(sel(el, "Add fallback agent for Automations"), "claude-code");
       await act(async () => {
         await Promise.resolve();
@@ -309,6 +332,7 @@ describe("SettingsHarnessesScreen suite", () => {
           .mockResolvedValue(makeStatusBothConnected()),
       });
       const el = await mount(props);
+      await openFallback(el);
       const add = sel(el, "Add fallback agent for Automations");
       expect(
         [...add.querySelectorAll("option")].map((option) => option.value)
@@ -335,6 +359,7 @@ describe("SettingsHarnessesScreen suite", () => {
           }),
       });
       const el = await mount(props);
+      await openFallback(el);
       expect(el.textContent).toContain(
         "Claude Code: Sign in once before unattended failover"
       );
@@ -377,6 +402,7 @@ describe("SettingsHarnessesScreen suite", () => {
           ),
       });
       const el = await mount(props);
+      await openFallback(el);
       expect(
         el.querySelector(
           '[aria-label="Remove Codex from Automations failover"]'
@@ -394,19 +420,57 @@ describe("SettingsHarnessesScreen suite", () => {
       );
     });
 
-    it('names what an inheriting lane resolves to rather than saying "use default"', async () => {
+    it("states what an inheriting lane resolves to, and offers it no model of its own", async () => {
       const el = await mount(makeProps());
-      // The visible Agent control's inherit option names the default harness…
       const harness = sel(el, "Agent for Assistant");
       expect(harness.value).toBe("");
-      expect(harness.querySelector('option[value=""]')?.textContent).toBe(
-        "Use default · Codex"
+      // A lane with no harness of its own has no model or level to set, so it
+      // renders neither — the caption carries the resolved answer instead.
+      expect(el.querySelector('[aria-label="Model for Assistant"]')).toBeNull();
+      expect(el.textContent).toContain("inherits Codex · GPT-5");
+    });
+
+    it("states the model AND the level every inheriting lane lands on", async () => {
+      // The default row is the one row that decides what every inheriting lane
+      // runs, under a head reading "harness · model · level". It used to name
+      // the agent and a bare model, so the level it thinks at was the one
+      // answer on the page nothing stated. Both come from the harness's own
+      // probe when nothing is pinned, because that is what the runtime uses.
+      const el = await mount(
+        makeProps({
+          loadStatus: vi
+            .fn<SettingsHarnessesBridgeProps["loadStatus"]>()
+            .mockResolvedValue(
+              makeStatus({
+                cards: makeStatus().cards.map((card) =>
+                  card.kind === "codex"
+                    ? {
+                        ...card,
+                        configOptions: [
+                          {
+                            id: "thought",
+                            category: "thought_level",
+                            type: "select",
+                            currentValue: "medium",
+                            values: [
+                              { value: "medium", name: "Medium" },
+                              { value: "high", name: "High" },
+                            ],
+                          },
+                        ],
+                      }
+                    : card
+                ),
+              })
+            ),
+        })
       );
-      // …and the model inherit option names the resolved agent's default model.
-      expect(
-        sel(el, "Model for In-app Ask").querySelector('option[value=""]')
-          ?.textContent
-      ).toBe("Use default · GPT-5");
+      expect(el.textContent).toContain(
+        "Every lane left inheriting lands here · GPT-5 · medium"
+      );
+      // …and each lane repeats the whole triple, so the row and the caption
+      // above it can never disagree about the level.
+      expect(el.textContent).toContain("inherits Codex · GPT-5 · medium");
     });
 
     it("offers the resolved agent's models once a lane overrides the agent", async () => {
@@ -463,7 +527,7 @@ describe("SettingsHarnessesScreen suite", () => {
       });
       const el = await mount(props);
       const [codex, claude] = [
-        ...el.querySelectorAll(".entry"),
+        ...el.querySelectorAll(".usedBy"),
       ] as HTMLElement[];
       // Codex is the default and keeps the three lanes that inherit.
       const codexChips = [
@@ -487,7 +551,7 @@ describe("SettingsHarnessesScreen suite", () => {
             .mockResolvedValue(makeStatusBothConnected()),
         })
       );
-      const claude = [...el.querySelectorAll(".entry")][1] as HTMLElement;
+      const claude = [...el.querySelectorAll(".usedBy")][1] as HTMLElement;
       expect(claude.querySelector(".usedByNone")?.textContent).toBe("Unused");
     });
 
@@ -523,7 +587,11 @@ describe("SettingsHarnessesScreen suite", () => {
       const props = makeProps({
         loadStatus: vi
           .fn<SettingsHarnessesBridgeProps["loadStatus"]>()
-          .mockResolvedValue(withEffort),
+          .mockResolvedValue({
+            ...withEffort,
+            // A lane earns its own model and level by having its own agent.
+            subsystemHarnessByKey: { assistant: "codex" },
+          }),
       });
       const el = await mount(props);
       await pick(sel(el, "Effort for Assistant"), "high");
@@ -547,7 +615,7 @@ describe("SettingsHarnessesScreen suite", () => {
       // rendering a dead control that looks openable.
       const el = await mount(makeProps());
       expect(
-        el.querySelector('[aria-label="Effort for Assistant"]')
+        el.querySelector('[aria-label="Default effort for Codex"]')
       ).toBeNull();
       expect(el.textContent).toContain("no thinking");
       expect(el.querySelectorAll(".inertPick").length).toBeGreaterThan(0);
@@ -673,13 +741,7 @@ describe("SettingsHarnessesScreen suite", () => {
     it("fires the model refresh", async () => {
       const props = makeProps();
       const el = await mount(props);
-      const buttons = [
-        ...el.querySelectorAll(".actionsRow .btn"),
-      ] as HTMLButtonElement[];
-      expect(buttons).toHaveLength(2);
-      await act(async () =>
-        buttons[0]?.dispatchEvent(new MouseEvent("click", { bubbles: true }))
-      );
+      await press(el, "Refresh");
       expect(props.refreshModels).toHaveBeenCalledOnce();
     });
 
@@ -692,10 +754,7 @@ describe("SettingsHarnessesScreen suite", () => {
         expect(tile.querySelector("svg")).toBeTruthy();
       }
       // The unavailable agent's tile is muted rather than dropped.
-      const [, claude] = [...el.querySelectorAll(".entry")] as HTMLElement[];
-      expect(
-        claude?.querySelector('.glyphTile[data-unavail="true"]')
-      ).toBeTruthy();
+      expect(el.querySelector('.glyphTile[data-unavail="true"]')).toBeTruthy();
     });
 
     it("falls back to a generic glyph for a kind this build has no artwork for", async () => {
@@ -722,7 +781,7 @@ describe("SettingsHarnessesScreen suite", () => {
             }),
         })
       );
-      const tile = el.querySelector(".entry .glyphTile");
+      const tile = el.querySelector(".glyphTile");
       expect(tile).toBeTruthy();
       expect(tile?.querySelector("svg")).toBeTruthy();
     });

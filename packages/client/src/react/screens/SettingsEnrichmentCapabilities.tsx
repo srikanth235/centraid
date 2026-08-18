@@ -21,6 +21,7 @@ import type {
 import {
   ConfigSelect,
   ModelSelect,
+  effortLabel,
   modelLabel,
 } from "./SettingsHarnessesSelects.js";
 
@@ -47,6 +48,13 @@ import styles from "./SettingsEnrichmentScreen.module.css";
 // behind one pill beside the switch. Pressing the pill reveals the engine chips
 // and a model/level row that writes the SAME gateway prefs Settings → Agents
 // writes — one pin per (harness, slot), never a second copy of the same answer.
+// The pill is absent on a row that is switched OFF: a row that reads nothing
+// has no "what reads it" to answer yet.
+//
+// THE ROW READS LEFT TO RIGHT AS ITS OWN SENTENCE: what this is, where its work
+// goes, what reads it, and last whether it runs. The switch used to lead, which
+// put the commit ahead of its subject and pushed the description into the
+// middle of the row.
 
 /**
  * The profile id a row's agent choice is stored under — derived, never typed.
@@ -108,13 +116,20 @@ function refusalNote(
   return `Stopped by a stored ceiling: ${ENRICH_CEILING_WORDS[resolved.egressCeiling]}.`;
 }
 
-/** The engine pill's own words: the agent, and the level it will think at. */
+/**
+ * The engine pill's own words: what reads this row. The bundled engine names
+ * itself; an agent names itself and the level it will think at, lowercase,
+ * because the pill is a statement of fact rather than the level control's own
+ * label (that control is the one inside the pill, once it is pressed).
+ */
 function engineSummary(
   card: HarnessCardDTO | undefined,
   effort: string
 ): string {
   if (!card) return "Built in";
-  return effort ? `${card.title} · ${effort}` : card.title;
+  return effort
+    ? `${card.title} · ${effortLabel(card, effort).toLowerCase()}`
+    : card.title;
 }
 
 export default function CapabilityRows({
@@ -204,7 +219,7 @@ export default function CapabilityRows({
   };
 
   return (
-    <div className={styles.panel}>
+    <div className={styles.capList}>
       {builtIns.map((builtIn) => {
         const capability = builtIn.capability;
         const resolved = effective[capability];
@@ -218,58 +233,73 @@ export default function CapabilityRows({
         const card = cards.find((one) => one.kind === harness);
         const refusal = resolved ? refusalNote(builtIn, resolved) : null;
         const note = ENRICH_CAPABILITY_NOTES[capability];
-        const open = openEngine === capability;
         const effort = harness ? (effortByHarness[harness] ?? "") : "";
+        // THE ENGINE IS A CONTROL FOR A ROW THAT IS RUNNING. A row switched off
+        // reads nothing, so what would read it is not a question yet: the pill
+        // is absent rather than offering a choice with no effect until the
+        // switch beside it moves.
+        const engineOpen =
+          builtIn.delegateCapable && resolved?.enabled === true;
+        const open = engineOpen && openEngine === capability;
 
         return (
           <div className={styles.capRow} key={capability}>
-            {resolved ? (
-              <label className={styles.capSwitch}>
-                <input
-                  type="checkbox"
-                  aria-label={capabilityLabel(capability)}
-                  checked={resolved.enabled}
-                  onChange={(event) =>
-                    write(capability, { enabled: event.target.checked })
-                  }
-                />
-              </label>
-            ) : (
-              // A capability the gateway offers and this build has no words
-              // for: stated, never a switch that would write a guess.
-              <span className={styles.capLock}>no vocabulary</span>
-            )}
-
-            <span className={styles.capText}>
-              <span className={styles.capName}>
-                {capabilityLabel(capability)}
+            <div className={styles.capMain}>
+              <span className={styles.capText}>
+                <span className={styles.capName}>
+                  {capabilityLabel(capability)}
+                </span>
+                <span className={styles.capBlurb}>
+                  {ENRICH_CAPABILITY_BLURBS[capability] ??
+                    "Offered by your gateway; this build has no words for it."}
+                  {note ? ` ${note}` : ""}
+                </span>
               </span>
-              <span className={styles.capBlurb}>
-                {ENRICH_CAPABILITY_BLURBS[capability] ??
-                  "Offered by your gateway; this build has no words for it."}
-                {note ? ` ${note}` : ""}
-              </span>
-            </span>
 
-            {/* The computed fact, worn where a control would be if it were a
-                choice. It is not one — see the header. */}
-            {running.egress === "provider" ? (
-              <span className={styles.capWhere} data-egress="provider">
-                {PROVIDER_EGRESS_WORD}
-              </span>
-            ) : null}
+              {/* The computed fact, worn where a control would be if it were a
+                  choice. It is not one — see the header. */}
+              {running.egress === "provider" ? (
+                <span className={styles.capWhere} data-egress="provider">
+                  {PROVIDER_EGRESS_WORD}
+                </span>
+              ) : null}
 
-            {builtIn.delegateCapable && resolved ? (
-              <button
-                type="button"
-                className={styles.capPill}
-                data-open={String(open)}
-                aria-expanded={open}
-                onClick={() => setOpenEngine(open ? null : capability)}
-              >
-                {engineSummary(card, effort)}
-              </button>
-            ) : null}
+              {engineOpen ? (
+                <button
+                  type="button"
+                  className={styles.capPill}
+                  data-open={String(open)}
+                  aria-expanded={open}
+                  onClick={() => setOpenEngine(open ? null : capability)}
+                >
+                  {engineSummary(card, effort)}
+                  <span className={styles.capCaret} aria-hidden="true">
+                    {open ? "⌃" : "⌄"}
+                  </span>
+                </button>
+              ) : null}
+
+              {/* THE SWITCH IS THE ROW'S TRAILING EDGE. It reads last because
+                  everything before it is what the member is deciding about;
+                  leading it put the commit before its own subject. */}
+              {resolved ? (
+                <label className={styles.capSwitch}>
+                  <input
+                    type="checkbox"
+                    aria-label={capabilityLabel(capability)}
+                    checked={resolved.enabled}
+                    onChange={(event) =>
+                      write(capability, { enabled: event.target.checked })
+                    }
+                  />
+                  <span className={styles.capSwitchTrack} aria-hidden="true" />
+                </label>
+              ) : (
+                // A capability the gateway offers and this build has no words
+                // for: stated, never a switch that would write a guess.
+                <span className={styles.capLock}>no vocabulary</span>
+              )}
+            </div>
 
             {refusal ? (
               <span className={styles.capRefusal} role="note">
@@ -277,7 +307,7 @@ export default function CapabilityRows({
               </span>
             ) : null}
 
-            {open && builtIn.delegateCapable ? (
+            {open ? (
               <div className={styles.capEngine}>
                 <span className={styles.capEngineLabel}>Reads with</span>
                 <button
@@ -301,35 +331,41 @@ export default function CapabilityRows({
                     {one.title}
                   </button>
                 ))}
-                {card ? (
-                  <span className={styles.capModelRow}>
-                    <span className={styles.capEngineLabel}>
-                      Model and level
-                    </span>
-                    <ModelSelect
-                      card={card}
-                      saved={modelByHarness[card.kind] ?? ""}
-                      onChange={(next) =>
-                        writeEnginePin("Model", setEngineModel(card.kind, next))
-                      }
-                      emptyLabel={`Use default · ${modelLabel(card, "")}`}
-                      ariaLabel={`Model for ${capabilityLabel(capability)}`}
-                    />
-                    <ConfigSelect
-                      card={card}
-                      category="thought_level"
-                      saved={effort}
-                      onChange={(next) =>
-                        writeEnginePin(
-                          "Level",
-                          setEngineEffort(card.kind, next)
-                        )
-                      }
-                      emptyLabel="Use default · agent level"
-                      ariaLabel={`Level for ${capabilityLabel(capability)}`}
-                    />
+              </div>
+            ) : null}
+
+            {open && card ? (
+              <div className={styles.capModelRow}>
+                <span className={styles.capModelText}>
+                  <span className={styles.capModelLabel}>Model and level</span>
+                  {/* The engine's model IS the Agents page's pin. Stating that
+                      here is what stops a member setting it twice and reading
+                      the second answer as a conflict. */}
+                  <span className={styles.capModelCaption}>
+                    Auto-saved · also the model on Agents
                   </span>
-                ) : null}
+                </span>
+                <span className={styles.capModelPicks}>
+                  <ModelSelect
+                    card={card}
+                    saved={modelByHarness[card.kind] ?? ""}
+                    onChange={(next) =>
+                      writeEnginePin("Model", setEngineModel(card.kind, next))
+                    }
+                    emptyLabel={`Use default · ${modelLabel(card, "")}`}
+                    ariaLabel={`Model for ${capabilityLabel(capability)}`}
+                  />
+                  <ConfigSelect
+                    card={card}
+                    category="thought_level"
+                    saved={effort}
+                    onChange={(next) =>
+                      writeEnginePin("Level", setEngineEffort(card.kind, next))
+                    }
+                    emptyLabel="Use default · agent level"
+                    ariaLabel={`Level for ${capabilityLabel(capability)}`}
+                  />
+                </span>
               </div>
             ) : null}
           </div>

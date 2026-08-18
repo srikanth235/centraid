@@ -9,8 +9,16 @@ import { readFrameEvidence } from "../lib/frame-report.mjs";
 import { runFlow } from "../lib/harness.mjs";
 
 /**
- * Frame-drop probe for the Photos grid and the People directory
- * (issue #659 R3c).
+ * Frame-drop probe for the Photos grid (issue #659 R3c).
+ *
+ * It probed the People directory as a second surface until that native screen
+ * was removed pending its v11 design handoff (apps/mobile/src/apps/people/
+ * PeopleHome.tsx is now a wall with no list on it). The People phase is
+ * EXCISED rather than pointed at a stand-in surface: a frame-drop number is
+ * only meaningful against the volume it was declared for, and no other native
+ * list carries People's 5,000-contact year-3 figure. Restore the phase — the
+ * `people-directory-row-0` handle, the fling, and the four People measurements
+ * below — when the rebuilt directory renders rows again.
  *
  * The first cut of this flow measured scroll-SETTLE wall clock, because React
  * Native exposed no frame timeline to Maestro and the honest number needed an
@@ -56,15 +64,14 @@ import { runFlow } from "../lib/harness.mjs";
  * | Surface | Year-3         | Seeded here |
  * | ------- | -------------- | ----------- |
  * | Photos  | 90,000 assets  | whatever the CI gateway fixture seeded — NOT year-3 |
- * | People  | 5,000 contacts | whatever the CI gateway fixture seeded — NOT year-3 |
+ * | People  | 5,000 contacts | NOT MEASURED — the native directory is gone |
  *
  * The seeded totals are not observable from the device, so this flow does not
- * guess them. What it CAN observe it reports: `people-directory-row-<index>` is
- * positional, so the highest index appearing in any hierarchy during the fling
- * is a real lower bound on the rows scrolled past, published as
- * `people rows observed`. A fling over a directory that turns out to hold 12
- * rows says nothing about a 5,000-row one, and that lower bound is what lets a
- * reader tell the two apart instead of inferring it from seed code.
+ * guess them. While the People phase ran it published what it COULD observe —
+ * `people rows observed`, a real lower bound taken from the positional
+ * `people-directory-row-<index>` handles — because a fling over a directory
+ * that turns out to hold 12 rows says nothing about a 5,000-row one. Photos
+ * has no equivalent positional handle, so no lower bound is claimed for it.
  */
 const OWNER = "tests/agent-e2e-mobile/flows/scroll-frames.mjs";
 const FLINGS = 8;
@@ -75,10 +82,6 @@ const REPO_ROOT = path.resolve(import.meta.dirname, "../../..");
 // (apps/mobile/src/apps/photos/PhotosHome.tsx). Deliberately NOT the "Photos"
 // tab label, which the tab bar draws on every screen.
 const PHOTOS_MARKER = "Search photos and moments";
-// People's list handle (apps/mobile/src/apps/people/PeopleHome.tsx). Positional
-// row ids exist whatever the fixture seeded, and `people-directory-row-0` is
-// People-specific so it cannot pass on another screen.
-const PEOPLE_ROW_ZERO = "people-directory-row-0";
 
 /** Arm the sampler, fling the surface under test, and read the report back. */
 function flingYaml(appId, marker, markerKind, surface) {
@@ -150,33 +153,12 @@ await runFlow("mobile-scroll-frames", async (ctx) => {
   );
   const photos = await readFrameEvidence(ctx.state.runDir, photosStartedAt);
 
-  // ---- People directory ----------------------------------------------------
-  const peopleStartedAt = Date.now();
-  await ctx.run(
-    `appId: ${ctx.state.appId}
----
-- tapOn: "People"
-`,
-    "open-people"
-  );
-  await ctx.run(
-    flingYaml(ctx.state.appId, PEOPLE_ROW_ZERO, "id", "people"),
-    "fling-people"
-  );
-  const people = await readFrameEvidence(ctx.state.runDir, peopleStartedAt);
-
   // A phase that produced no parse is a FAILURE, not a pass with a hole in it.
-  const unparsed = [
-    ["Photos", photos.report],
-    ["People", people.report],
-  ]
+  const unparsed = [["Photos", photos.report]]
     .filter(([, report]) => report === null)
     .map(([surface]) => surface);
 
-  const worstDropped = Math.max(
-    photos.report?.dropped ?? 0,
-    people.report?.dropped ?? 0
-  );
+  const worstDropped = photos.report?.dropped ?? 0;
   const drift = await rigDriftBudget(REPO_ROOT, "scale", OWNER);
   const withinDrift = drift == null || worstDropped <= drift;
   const passed =
@@ -185,7 +167,7 @@ await runFlow("mobile-scroll-frames", async (ctx) => {
   await recordQualityResult(REPO_ROOT, {
     lane: "scale",
     owner: OWNER,
-    name: `Frame drops over ${FLINGS} flings on Photos and People (JS thread only)`,
+    name: `Frame drops over ${FLINGS} flings on Photos (JS thread only)`,
     status: passed ? "passed" : "failed",
     measurements: [
       {
@@ -207,38 +189,21 @@ await runFlow("mobile-scroll-frames", async (ctx) => {
         unit: "Hz",
       },
       { name: "Photos fps", value: photos.report?.fps ?? -1, unit: "fps" },
-      {
-        name: "People dropped frames",
-        value: people.report?.dropped ?? -1,
-        unit: "percent",
-      },
-      {
-        name: "People display refresh rate",
-        value: people.report?.targetHz ?? -1,
-        unit: "Hz",
-      },
-      { name: "People fps", value: people.report?.fps ?? -1, unit: "fps" },
-      {
-        // Observed lower bound on the seeded directory (D6) — the real total is
-        // not visible from the device, so this is what can honestly be claimed.
-        name: "people rows observed (lower bound on seeded volume)",
-        value: people.peopleRowsObserved,
-        unit: "rows",
-      },
+      // The four People measurements and `people rows observed` were recorded
+      // here until the native directory was removed. They are omitted rather
+      // than reported as -1: a sentinel in a scale ledger reads as a device
+      // that failed to answer, not as a surface that is no longer measured.
       { name: "flings per surface", value: FLINGS, unit: "count" },
     ],
   });
 
   ctx.note(
     `Photos ${photos.report?.dropped ?? "unparsed"}% dropped @ ${photos.report?.targetHz ?? "?"} Hz; ` +
-      `People ${people.report?.dropped ?? "unparsed"}% dropped @ ${people.report?.targetHz ?? "?"} Hz ` +
-      `over at least ${people.peopleRowsObserved} rows; ceiling ${ceiling}% ` +
-      `(JS thread only — UI/native-thread jank is invisible to this sampler)`
+      `ceiling ${ceiling}% (JS thread only — UI/native-thread jank is ` +
+      `invisible to this sampler). People NOT MEASURED: the native directory ` +
+      `was removed pending its v11 design handoff`
   );
-  if (
-    photos.report?.parse === "degraded" ||
-    people.report?.parse === "degraded"
-  ) {
+  if (photos.report?.parse === "degraded") {
     ctx.note(
       "frame report was recovered by the DEGRADED parse — the exact line in " +
         "apps/mobile/src/lib/perf/frame-sampler.ts has changed; realign this " +

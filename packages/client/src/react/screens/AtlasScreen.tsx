@@ -398,7 +398,7 @@ export default function AtlasScreen({
         }
         relationsOpen={relationsOpen}
         stamp={censusStamp(censusReadAt)}
-        totalKinds={stats?.totals.kinds ?? kinds.length}
+        totalKinds={kinds.length}
       />
 
       {/* The table browser is part of "What it holds", so it closes with it:

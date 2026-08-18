@@ -7,8 +7,8 @@
 // grammar; it reuses the one the app already has.
 //
 // Rename is a name the member types, so it is a dialog with a field — the
-// idiom `apps/docs/DocsItemActions.tsx` and `apps/photos/AlbumDetail.tsx`
-// already use.
+// idiom `apps/photos/AlbumDetail.tsx` already uses. (Docs' native copy of
+// that dialog went with the app pending its v11 handoff.)
 //
 // Revoke asks twice, and the second ask is the load-bearing one. The gateway
 // refuses (409) to revoke the LAST live device of a vault unless the vault's

@@ -15,7 +15,6 @@ interface NavDeps {
   renderDetails: () => void;
   renderQuick: () => void;
   renderNewMenu: () => void;
-  renderEditor: () => void;
   clearSelection: () => void;
 }
 
@@ -26,7 +25,6 @@ export function createNav({
   renderDetails,
   renderQuick,
   renderNewMenu,
-  renderEditor,
   clearSelection,
 }: NavDeps) {
   function openDetails(id: string) {
@@ -40,26 +38,10 @@ export function createNav({
     renderDetails();
   }
 
-  // The reading view is a ROUTE (§6.1/§1.8): opening it replaces the drive in
-  // the scroll region rather than covering it, and it closes every overlay
-  // that was standing over the drive — a member who navigated is not still
-  // half-inside the thing they navigated away from.
-  function openReading(id: string) {
-    state.readingId = id;
-    state.versionsId = null;
-    state.quickId = null;
-    state.detailsId = null;
-    renderQuick();
-    renderDetails();
-    render();
-  }
-  function closeReading() {
-    state.readingId = null;
-    state.versionsId = null;
-    render();
-  }
-  /** §6.2's version history — the same kind of route, reached from a reading
-   *  view or from the rail's footer. */
+  /** §6.2's version history — a ROUTE: opening it replaces the drive in the
+   *  scroll region rather than covering it, and it closes every overlay that
+   *  was standing over the drive, because a member who navigated is not still
+   *  half-inside the thing they navigated away from. */
   function openVersions(id: string) {
     state.versionsId = id;
     state.quickId = null;
@@ -89,22 +71,6 @@ export function createNav({
     if (next) openQuick(next.document_id);
   }
 
-  // The in-place text editor (issue #352) is its own overlay, stacked above
-  // Details exactly like Quick Look is — opening it closes Details/Quick
-  // Look the same way opening either of those closes the other.
-  function openEditor(id: string) {
-    state.editingId = id;
-    state.detailsId = null;
-    state.quickId = null;
-    renderDetails();
-    renderQuick();
-    renderEditor();
-  }
-  function closeEditor() {
-    state.editingId = null;
-    renderEditor();
-  }
-
   function triggerUpload() {
     state.newMenuOpen = false;
     renderNewMenu();
@@ -126,22 +92,28 @@ export function createNav({
     render();
   }
 
-  // Every navigation inside Docs clears selection and any open menu, search
-  // or editor state (spec §1.1's `dgo`). The drawer's own close is the
+  // Every navigation inside Docs clears selection and any open menu or
+  // search state (spec §1.1's `dgo`). The drawer's own close is the
   // caller's — app-root wraps this so the React drawer state moves with it;
   // this module no longer reaches for `#root`'s class list, which was a write
   // onto the HOST's mount div and had been a no-op since the inline flip.
   function selectShelf(shelf: ShelfId) {
     state.shelf = shelf;
-    // A shelf is a place. Leaving for another one leaves the document routes
+    // A shelf is a place. Leaving for another one leaves the document route
     // behind with everything else that was open over the drive.
-    state.readingId = null;
     state.versionsId = null;
     clearSelection();
     state.detailsId = null;
     state.search = "";
     state.searchResults = null;
-    ($("searchInput") as HTMLInputElement).value = "";
+    state.searchStatus = "resting";
+    // THE FIELD IS NOT CHROME ANY MORE (components/SearchField.tsx): it is
+    // rendered by the Search shelf and by nothing else, so on every other
+    // shelf `#searchInput` is legitimately absent. This used to assert it into
+    // existence with a cast, which turned an ordinary navigation into a
+    // TypeError the moment the field moved.
+    const field = $("searchInput") as HTMLInputElement | null;
+    if (field) field.value = "";
     state.newMenuOpen = false;
     state.creatingFolder = false;
     state.renamingFolderId = null;
@@ -157,15 +129,11 @@ export function createNav({
   return {
     openDetails,
     closeDetails,
-    openReading,
-    closeReading,
     openVersions,
     closeVersions,
     openQuick,
     closeQuick,
     quickStep,
-    openEditor,
-    closeEditor,
     triggerUpload,
     startCreateFolder,
     selectTag,

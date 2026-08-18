@@ -1,9 +1,26 @@
-/* Quick-look overlay (rendered into the static #quickRoot). Authored camelCase;
-   the old `d-quick-*` prefix is replaced by module hashing. The prev/next
-   buttons are kit.css's global .kit-viewer-nav; the close button is kit.css's
-   .kit-icon-btn, so its on-dark override is a compound `.quickIcon:global(.kit-icon-btn)`.
-   `.d-quick-block` (the vestigial document-mock rule) has no JSX referent and
-   stays global in app.css — it is deliberately NOT moved here. */
+/* THE STAGE (Docs spec §7's `docsStage`) — the second tenant of the product's
+   one theater ground.
+
+   `--stage` / `--on-stage` / `--stage-line` / `--stage-sunken` are SHARED
+   ROLES, the same literals in both themes, because a media ground does not
+   follow the theme. This file used to mix its own near-black
+   (`hsl(var(--app-hue) 25% 4%)`) with `--text-inv` ink and a dozen
+   `color-mix(… var(--text-inv) N%)` rungs — one app's private fork of a
+   surface the product already owns. The handoff's own `docsStage` opens with a
+   four-value block — ground, ink, line, sunken — and the four shared roles
+   named above carry those exact values, so the fork bought nothing. (The
+   literals themselves live in `packages/design`, which is where a colour is
+   allowed to be written down; quoting them here would fork the palette a
+   second time in a comment nobody would think to update.)
+
+   FOCUS MUST SURVIVE HERE (§18). The contract's `--focus-ring` opens its inner
+   gap on `--bg` — paper — which is invisible against the stage, so every
+   focusable thing on this surface takes the stage's own ring below: the same
+   `--focus-ring-color` token, gapped on `--stage`. The colour never comes from
+   `currentColor`, which would vanish the moment a control inverted.
+
+   LOGICAL PROPERTIES ONLY (§18). Prev/next, the panel's seam and the bar all
+   mirror under RTL without a second rule. */
 
 .quick {
   position: fixed;
@@ -11,202 +28,591 @@
   z-index: 60;
   display: flex;
   flex-direction: column;
-  /* A theater stage, not a themed surface: the same fixed dark backdrop the
-     photos lightbox uses, in both themes. Hue-parameterized off --app-hue so it
-     belongs to this app rather than being a hardcoded near-black. */
-  --ql-stage: hsl(var(--app-hue) 25% 4%);
-  background: var(--ql-stage);
+  background: var(--stage);
+  color: var(--on-stage);
   animation: kit-fade var(--dur-2) var(--ease-entry);
 }
-.quickTop {
+
+/* One rule, every control on the stage. */
+.quick :focus-visible {
+  outline: none;
+  box-shadow:
+    0 0 0 2px var(--stage),
+    0 0 0 4px var(--focus-ring-color);
+}
+
+/* ------------------------------------------------------------------ bar */
+
+.topbar {
   display: flex;
   align-items: center;
   gap: var(--sp-3);
-  padding: var(--sp-3) var(--sp-4);
-  color: var(--text-inv);
-  flex-shrink: 0;
-  min-width: 0;
+  block-size: 56px;
+  padding-inline: var(--sp-4);
+  flex: none;
+  border-block-end: 1px solid var(--stage-line);
 }
-.quickBadge {
-  width: 28px;
-  height: 28px;
-  border-radius: var(--r-md);
+
+/* Close: a 34px outlined icon button at the leading edge. */
+.close {
+  inline-size: 34px;
+  block-size: 34px;
   display: flex;
   align-items: center;
   justify-content: center;
-  font: var(--t-control);
-  flex-shrink: 0;
+  flex: none;
+  padding: 0;
+  border: 1px solid var(--stage-line);
+  border-radius: var(--r-md);
+  background: transparent;
+  color: var(--on-stage);
 }
-.quickTitle {
+.close:hover {
+  border-color: var(--on-stage);
+}
+
+.heading {
   flex: 1;
-  min-width: 0;
-  font: var(--t-body-strong);
+  min-inline-size: 0;
+}
+.title {
+  font: var(--t-small-strong);
+  /* A fixed-height container line-clamps; it never clips (§18). */
   display: -webkit-box;
-  -webkit-box-orient: vertical;
   -webkit-line-clamp: 1;
   line-clamp: 1;
-  overflow-wrap: anywhere;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
 }
-/* kit.css's `.kit-btn.quiet` owns the shape, the control height, the focus
-   ring and the 7px control radius (a pill is for an avatar or a switch track,
-   not a button). Only the on-dark ink/ground is local, and it is compounded so
-   it outranks `.kit-btn`'s own colour rules regardless of load order. */
-.quickBtn:global(.kit-btn) {
-  border-color: color-mix(in oklab, var(--text-inv) 22%, transparent);
-  background: color-mix(in oklab, var(--text-inv) 8%, transparent);
-  color: var(--text-inv);
+/* Kind · weight · filing. A numeric line, so it is mono and tabular, and it
+   reads in order under RTL because the role isolates itself. */
+.metaLine {
+  font: var(--t-mono);
+  font-variant-numeric: var(--t-mono-numeric);
+  direction: var(--t-mono-direction);
+  unicode-bidi: var(--t-mono-bidi);
+  color: var(--on-stage-soft);
+  display: -webkit-box;
+  -webkit-line-clamp: 1;
+  line-clamp: 1;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+/* THE SPACER DOES NOT FLEX. Beside a `flex: 1` heading a growable spacer
+   splits the slack with it, and the title then truncates with empty space
+   beside it. */
+.spacer {
+  flex: none;
+  inline-size: var(--sp-4);
+}
+
+/* -------------------------------------------------------------- actions */
+
+.actions {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
   flex: none;
 }
-.quickBtn:global(.kit-btn):hover {
-  border-color: color-mix(in oklab, var(--text-inv) 34%, transparent);
-  background: color-mix(in oklab, var(--text-inv) 18%, transparent);
-  color: var(--text-inv);
+
+/* An outlined stage button. Never filled: the bar is all peers, and the one
+   filled ink element in this viewer is nothing in it (§18). */
+.action {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-2);
+  block-size: var(--h-control);
+  padding-inline: var(--sp-3);
+  border: 1px solid var(--stage-line);
+  border-radius: var(--r-md);
+  background: transparent;
+  color: var(--on-stage);
+  font: var(--t-small);
+  text-decoration: none;
+  white-space: nowrap;
 }
-/* Close button: kit.css's .kit-icon-btn, on the quick-look's dark surface —
-   the compound selector bumps specificity above .kit-icon-btn's own
-   color/hover rules so these on-dark colors win regardless of load order. */
-.quickIcon:global(.kit-icon-btn) {
-  color: var(--text-inv);
+.action:hover {
+  border-color: var(--on-stage);
 }
-.quickIcon:global(.kit-icon-btn):hover {
-  background: color-mix(in oklab, var(--text-inv) 14%, transparent);
+.action[aria-pressed="true"] {
+  border-color: var(--on-stage);
+  background: color-mix(in oklab, var(--on-stage) 12%, var(--stage));
 }
-.quickStage {
-  flex: 1;
-  min-height: 0;
+.action:disabled,
+.action[aria-disabled="true"] {
+  /* A recessive state takes its own token on the LEAF, never a container
+     `opacity` (§18). */
+  color: var(--text-disabled);
+  border-color: color-mix(in oklab, var(--stage-line) 60%, var(--stage));
+  cursor: default;
+}
+/* Destructive is an OUTLINED --net button, never a fill (§18). */
+.destructive {
+  color: var(--net);
+  border-color: color-mix(in oklab, var(--net) 55%, var(--stage));
+}
+.destructive:hover {
+  border-color: var(--net);
+}
+.actionLabel {
+  font: var(--t-small);
+}
+
+/* The phone's bottom bar: 56px targets where a thumb is. */
+.bottomBar {
+  display: flex;
+  flex: none;
+  justify-content: space-around;
+  align-items: center;
+  border-block-start: 1px solid var(--stage-line);
+  padding-block-end: env(safe-area-inset-bottom);
+}
+.bottomAction {
+  inline-size: 56px;
+  block-size: 56px;
   display: flex;
   align-items: center;
   justify-content: center;
-  padding-inline: var(--sp-6);
-  padding-block-end: var(--sp-5);
-  position: relative;
+  border: none;
+  background: transparent;
+  color: var(--on-stage);
 }
-/* Prev/next: kit.css's .kit-viewer-nav (+.prev/.next); .quickStage above
-   is already the required `position: relative` ancestor. */
-.quickImage {
-  max-width: min(760px, 90%);
-  max-height: 100%;
+.bottomAction:disabled {
+  color: var(--text-disabled);
+}
+.bottomAction[aria-pressed="true"] {
+  color: var(--on-stage);
+  background: color-mix(in oklab, var(--on-stage) 12%, var(--stage));
+}
+
+/* ---------------------------------------------------------------- stage */
+
+/* The document and its properties panel stand SIDE BY SIDE. The panel is not
+   an overlay: a member reading a document's facts is comparing them against
+   the document, and a sheet covering the thing being described defeats the
+   comparison. */
+.body {
+  flex: 1;
+  min-block-size: 0;
+  display: flex;
+}
+.mediaWrap {
+  position: relative;
+  flex: 1;
+  min-inline-size: 0;
+  min-block-size: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--sp-4) 68px;
+}
+
+/* Prev / next: 44px circles inset 12px, hairline border, MIRRORED under RTL
+   (§18) — which is what the two logical insets below buy. */
+.nav {
+  position: absolute;
+  inset-block-start: 50%;
+  transform: translateY(-50%);
+  inline-size: 44px;
+  block-size: 44px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--stage-line);
+  border-radius: var(--r-pill);
+  background: var(--stage);
+  color: var(--on-stage);
+  z-index: 2;
+}
+.nav:hover {
+  border-color: var(--on-stage);
+}
+.nav:disabled {
+  color: var(--text-disabled);
+  cursor: default;
+}
+.navPrev {
+  inset-inline-start: 12px;
+}
+.navNext {
+  inset-inline-end: 12px;
+}
+/* The chevrons themselves mirror with the writing direction. */
+:global([dir="rtl"]) .nav :global(i) {
+  transform: scaleX(-1);
+}
+
+/* ---------------------------------------------------- what the stage holds */
+
+.image {
+  max-inline-size: 100%;
+  max-block-size: 100%;
   /* Media content, not chrome — stays square. */
   border-radius: var(--r-xs);
   box-shadow: var(--shadow-lg);
   object-fit: contain;
 }
-.quickFrame {
-  width: min(760px, 90%);
-  height: 100%;
+.frame {
+  inline-size: min(760px, 100%);
+  block-size: 100%;
   border: none;
   border-radius: var(--r-xs);
-  background: var(--text-inv);
+  background: var(--on-stage);
   box-shadow: var(--shadow-lg);
 }
-.quickMedia {
-  max-width: min(900px, 90%);
-  max-height: 100%;
+.media {
+  max-inline-size: 100%;
+  max-block-size: 100%;
   border-radius: var(--r-xs);
-  background: var(--ql-stage);
+  background: var(--stage-sunken);
   box-shadow: var(--shadow-lg);
 }
-.quickAudio {
-  width: min(34rem, 90%);
+.audio {
+  inline-size: min(32rem, 90%);
   display: grid;
   justify-items: center;
-  gap: 1.25rem;
-  padding: 2.25rem;
+  gap: var(--sp-5);
+  padding: var(--sp-6);
+  border: 1px solid var(--stage-line);
   border-radius: var(--r-lg);
-  background: color-mix(in oklab, var(--text-inv) 8%, transparent);
+  background: var(--stage-sunken);
 }
-/* The document itself, at the reading measure. A sheet of paper on the
-   theater stage: the app's declared READING register (19/33 serif), 34em of
-   measure, and the page's own scroll — never a mock of a page. */
-.quickRead {
-  width: min(46rem, 96%);
-  max-height: 100%;
+.audio > span {
+  display: grid;
+  place-items: center;
+  inline-size: 5rem;
+  block-size: 5rem;
+  border-radius: var(--r-pill);
+  background: color-mix(in oklab, var(--on-stage) 10%, var(--stage));
+  color: var(--on-stage-soft);
+  font-size: var(--t-display-size);
+}
+.audio audio {
+  inline-size: 100%;
+}
+/* The document itself, at the reading measure. A sheet of paper on the theater
+   stage: the app's declared READING register, 34em of measure, and the page's
+   own scroll — never a mock of a page. */
+.read {
+  inline-size: min(46rem, 100%);
+  max-block-size: 100%;
   overflow: auto;
+  /* PAPER, which follows the theme — the stage under it does not. A member
+     reading in the dark gets a dark sheet, the same one every other reading
+     surface in the product gives them. */
   background: var(--bg);
   color: var(--text);
+  /* The sheet needs an EDGE on this ground. `--shadow-lg` is what lifts the
+     picture and the ruled page off the stage, and a shadow is invisible
+     against near-black in the dark theme — so the sheet carried no boundary at
+     all and stopped reading as a sheet. The stage's own hairline is the rung
+     that is visible on it by construction. */
+  border: 1px solid var(--stage-line);
   /* Content, not chrome — stays square. */
   border-radius: var(--r-xs);
   padding: var(--sp-6) var(--sp-5);
 }
-.quickReadBody {
+.readBody {
   max-inline-size: 34em;
   margin-inline: auto;
   font: var(--t-reading);
-  white-space: pre-wrap;
   overflow-wrap: anywhere;
 }
-
-.quickAudio > span {
-  display: grid;
-  place-items: center;
-  width: 5rem;
-  height: 5rem;
-  border-radius: var(--r-pill);
-  background: color-mix(in oklab, var(--text-inv) 10%, transparent);
-  color: color-mix(in oklab, var(--text-inv) 82%, transparent);
-  font-size: var(--t-display-size);
-}
-.quickAudio audio {
-  width: 100%;
-}
-.quickPage {
-  width: min(520px, 84%);
-  aspect-ratio: 8.5 / 11;
-  background: var(--text-inv);
-  /* A mocked document page — content, not chrome — stays square. */
+/* The handoff's ruled sheet — 1/1.414 paper, for a kind whose bytes this app
+   cannot render. */
+.page {
+  inline-size: min(520px, 100%);
+  aspect-ratio: 1 / 1.414;
+  max-block-size: 100%;
+  background: var(--on-stage);
   border-radius: var(--r-xs);
   box-shadow: var(--shadow-lg);
   padding: 44px 46px;
   overflow: hidden;
 }
-.quickPage > i {
+.page > i {
   display: block;
   border-radius: var(--r-xs);
-  /* Token hairlines, not hand-picked greys — a literal hex here is a fork of
-     the line ramp that never flips with the theme. */
-  background: var(--line);
+  /* THE RULES ARE MIXED FROM THE SHEET'S OWN TWO ROLES, not taken from the
+     page ramp. `--line` FOLLOWS THE THEME, and this sheet does not: its ground
+     is `--on-stage`, a light literal in both themes, so in dark mode the theme
+     line landed as thick black bars across white paper. Mixing the stage into
+     the sheet's own ink gives the same soft rule in both themes — which is
+     what the handoff draws with two hand-picked literals, and what a
+     hand-picked literal here would fork. */
+  background: color-mix(in oklab, var(--stage) 12%, var(--on-stage));
 }
-.quickPageHead {
-  height: 11px;
-  width: 44%;
+.pageHead {
+  block-size: 11px;
+  inline-size: 44%;
   margin-block-end: var(--sp-5);
 }
-.quickPageRule {
-  height: 7px;
+.pageRule {
+  block-size: 7px;
   margin-block-end: var(--sp-3);
 }
-.quickPage > i.quickPageBreak {
-  height: 7px;
-  background: var(--line-strong);
+.page > i.pageBreak {
+  block-size: 7px;
+  background: color-mix(in oklab, var(--stage) 22%, var(--on-stage));
   margin-block-end: var(--sp-6);
 }
-.quickFoot {
-  text-align: center;
-  color: color-mix(in oklab, var(--text-inv) 60%, transparent);
-  font: var(--t-mono);
-  font-variant-numeric: var(--t-mono-numeric);
-  padding-block-end: var(--sp-4);
+
+/* -------------------------------------------------------- properties panel */
+
+/* 320px rail on the trailing edge. It keeps the STAGE's own ground — no
+   background of its own, one hairline seam — because the facts are ON the
+   stage beside the document, not in a drawer bolted to it. */
+.info {
+  flex: none;
+  inline-size: 320px;
+  display: flex;
+  flex-direction: column;
+  min-block-size: 0;
+  border-inline-start: 1px solid var(--stage-line);
+}
+.infoHead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex: none;
+  block-size: 44px;
   padding-inline: var(--sp-4);
+  border-block-end: 1px solid var(--stage-line);
+}
+.infoHeadLabel {
+  font: var(--t-eyebrow);
+  letter-spacing: var(--t-eyebrow-tracking);
+  text-transform: var(--t-eyebrow-transform);
+  color: var(--on-stage-soft);
+}
+.infoClose {
+  display: flex;
+  padding: 0;
+  border: none;
+  background: none;
+  color: var(--on-stage-soft);
+}
+.infoClose:hover {
+  color: var(--on-stage);
+}
+.infoScroll {
+  flex: 1;
+  min-block-size: 0;
+  overflow-y: auto;
+  padding: var(--sp-4);
 }
 
-/* ---------- Narrow (phone) ---------- */
-/* The stage's inline padding reserved room for the prev/next controls, which
-   on a phone leaves the content a sliver; the controls overlay the edges
-   instead. The Download label collapses to its glyph so the title keeps the
-   row. */
-.quick[data-narrow="true"] .quickStage {
-  padding-inline: var(--sp-2);
+/* The MEANING rows: a key, a value, and what the value means. */
+.meanings {
+  margin: 0;
+  display: flex;
+  flex-direction: column;
 }
-.quick[data-narrow="true"] .quickBtnLabel {
-  /* Visually collapsed, still the control's accessible name — no
-     `position: absolute`, which would escape the button's own box. */
-  width: 1px;
-  height: 1px;
-  overflow: hidden;
-  clip-path: inset(50%);
+.meaning {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-1);
+  padding-block: var(--sp-3);
+}
+.meaning + .meaning {
+  border-block-start: 1px solid var(--stage-line);
+}
+.meaningKey {
+  font: var(--t-eyebrow);
+  letter-spacing: var(--t-eyebrow-tracking);
+  text-transform: var(--t-eyebrow-transform);
+  color: var(--on-stage-soft);
+}
+.meaningValue {
+  margin: 0;
+  font: var(--t-body);
+  color: var(--on-stage);
+  text-wrap: pretty;
+  overflow-wrap: anywhere;
+}
+.meaningNote {
+  margin: 0;
+  font: var(--t-mono);
+  font-variant-numeric: var(--t-mono-numeric);
+  direction: var(--t-mono-direction);
+  unicode-bidi: var(--t-mono-bidi);
+  color: var(--on-stage-soft);
+  text-wrap: pretty;
+}
+/* A value that is itself the control that edits it: a DASHED rule, which is
+   how this product says "editable in place" without a pencil on every row. */
+.editable {
+  font: var(--t-body);
+  color: var(--on-stage);
+  background: none;
+  border: none;
+  border-block-end: 1px dashed var(--stage-line);
+  border-radius: var(--r-xs);
+  padding: 0 0 2px;
+  text-align: start;
+}
+.editable:hover {
+  border-block-end-color: var(--on-stage);
+}
+
+/* Chips: 24px, pill, hairline — the same chip Photos' info rail draws. */
+.chipRow {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-2);
+}
+.chip {
+  block-size: 24px;
+  display: inline-flex;
+  align-items: center;
+  padding-inline: var(--sp-3);
+  border: 1px solid var(--stage-line);
+  border-radius: var(--r-pill);
+  color: var(--on-stage);
+  font: var(--t-control);
   white-space: nowrap;
 }
-.quick[data-narrow="true"] .quickRead {
-  width: 100%;
+
+/* The FACTS: a flat ledger, no notes. */
+.factsHead {
+  margin: var(--sp-2) 0 0;
+  padding-block: var(--sp-5) var(--sp-1);
+  border-block-start: 1px solid var(--stage-line);
+  font: var(--t-eyebrow);
+  letter-spacing: var(--t-eyebrow-tracking);
+  text-transform: var(--t-eyebrow-transform);
+  color: var(--on-stage-soft);
+}
+.facts {
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+}
+.fact {
+  display: flex;
+  align-items: baseline;
+  gap: var(--sp-3);
+  padding-block: 5px;
+}
+.factKey {
+  flex: none;
+  inline-size: 96px;
+  font: var(--t-eyebrow);
+  letter-spacing: var(--t-eyebrow-tracking);
+  text-transform: var(--t-eyebrow-transform);
+  color: var(--on-stage-soft);
+}
+.factValue {
+  flex: 1;
+  min-inline-size: 0;
+  margin: 0;
+  font: var(--t-mono);
+  font-variant-numeric: var(--t-mono-numeric);
+  direction: var(--t-mono-direction);
+  unicode-bidi: var(--t-mono-bidi);
+  color: var(--on-stage);
+  overflow-wrap: anywhere;
+}
+.origin {
+  margin: var(--sp-4) 0 0;
+  padding-block-start: var(--sp-4);
+  border-block-start: 1px solid var(--stage-line);
+  font: var(--t-mono);
+  font-variant-numeric: var(--t-mono-numeric);
+  direction: var(--t-mono-direction);
+  unicode-bidi: var(--t-mono-bidi);
+  color: var(--on-stage-soft);
+  text-wrap: pretty;
+}
+
+/* ---------------------------------------------------------- status, share */
+
+/* What the sheet said, once, where the member left it. */
+.shareStatus {
+  flex: none;
+  padding: var(--sp-2) var(--sp-4);
+  border-block-start: 1px solid var(--stage-line);
+  font: var(--t-small);
+  color: var(--on-stage-soft);
+}
+
+/* The stage's own status line: a dot and a sentence, on the stage's trailing
+   rule — the same shape the shell's status line takes, so "where is this"
+   reads the same way inside the viewer as it does outside it. */
+.status {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  margin: 0;
+  block-size: 32px;
+  padding-inline: var(--sp-4);
+  border-block-start: 1px solid var(--stage-line);
+}
+.statusDot {
+  flex: none;
+  inline-size: 5px;
+  block-size: 5px;
+  border-radius: var(--r-pill);
+  background: var(--on-stage-soft);
+}
+.statusText {
+  flex: 1;
+  min-inline-size: 0;
+  font: var(--t-mono);
+  font-variant-numeric: var(--t-mono-numeric);
+  direction: var(--t-mono-direction);
+  unicode-bidi: var(--t-mono-bidi);
+  color: var(--on-stage-soft);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* --------------------------------------------------------------- narrow */
+
+/* The stage's inline padding reserved room for the prev/next circles, which on
+   a phone leaves the document a sliver; the circles overlay the edges instead. */
+.quick[data-narrow="true"] .mediaWrap {
+  padding-inline: var(--sp-2);
+}
+.quick[data-narrow="true"] .read {
+  inline-size: 100%;
   padding: var(--sp-4);
+}
+/* The panel takes the whole pane on a phone: there is no width to stand it
+   beside the document, and standing it there anyway leaves neither legible. */
+.quick[data-narrow="true"] .info {
+  inline-size: 100%;
+}
+.quick[data-narrow="true"] .body:has(.info) .mediaWrap {
+  display: none;
+}
+
+/* The reading sheet's own blocks (§6.1). A heading and a paragraph are the two
+   shapes the spec names, and the sheet sets both in the app's declared reading
+   register — the measure is `.readBody`'s. */
+.readHead {
+  margin: var(--sp-6) 0 var(--sp-2);
+  font: var(--t-title);
+  color: var(--text);
+}
+.readPara {
+  margin: 0 0 var(--sp-4);
+  font: var(--t-reading);
+  color: var(--text);
+  text-wrap: pretty;
+}
+.readStatus {
+  margin: 0;
+  font: var(--t-small);
+  color: var(--text-faint);
+}
+/* A refusal, not a blank page: the bytes are somewhere this surface could not
+   reach, and the member is owed that sentence rather than an empty measure
+   they read as an empty document. */
+.readFailed {
+  margin: 0;
+  font: var(--t-small);
+  color: var(--net);
 }

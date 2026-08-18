@@ -8,33 +8,42 @@ import type {
 } from "../../gateway-client-local-storage.js";
 import { cx } from "../ui/cx.js";
 import Icon from "../ui/Icon.js";
-import { budgetSummary, formatBytes, parseBytes } from "./localUsageView.js";
+import RowsBlock from "../ui/RowsBlock.js";
+import type { RowDef } from "../ui/RowsBlock.js";
+import { formatBytes, parseBytes } from "./localUsageView.js";
 
 import controlsCss from "../styles/controls.module.css";
 import buttonCss from "../ui/Button.module.css";
-import gwStyles from "./GatewayScreen.module.css";
 import styles from "./StorageLimitsPanel.module.css";
 
-// Storage → Limits (issue #544). Two controls that do DIFFERENT things, and
-// the copy says which is which up front — a limits screen where one number
-// warns and the other acts is exactly where a user assumes the wrong one.
+// Capacity → the ledger limit (issue #544).
 //
-//   Disk budget  — warn-only. Nothing is ever blocked; the gateway degrades a
-//                  health component and this page turns amber, then red.
-//   Ledger limit — actuating, and safe to be: it makes conversation/audit
-//                  archival run early and reach further back. Archival seals
-//                  cold rows into the content-addressed store; the delete half
-//                  is already gated behind proven custody (issue #438). It
-//                  never reaches inside the last 7 days.
+// ONE LIMIT, because only one of them is a limit. The panel used to offer two
+// side by side, in identical form, with the copy carrying the whole difference:
+//
+//   Disk budget  — warn-only. Nothing was ever blocked; setting it degraded a
+//                  health component and turned this page amber, then red.
+//   Ledger limit — actuating. It makes conversation/audit archival run early
+//                  and reach further back. Archival seals cold rows into the
+//                  content-addressed store; the delete half is already gated
+//                  behind proven custody (issue #438), and it never reaches
+//                  inside the last 7 days.
+//
+// A control that looks exactly like a ceiling and is not one is worse than no
+// control: a member who sets "30 GB" and reads the form has every reason to
+// believe the vault will stop at 30 GB, and it will not. The disk budget is
+// gone from this surface for that reason. Its ROW survives on exactly one
+// condition — a budget is already stored — because removing the last control
+// that can unset a stored value is a one-way door, and a warning threshold
+// somebody set once and can no longer clear is worse again.
+//
+// NO SECTION OF ITS OWN. "Limits" was a second head under Capacity restating
+// the same subject — how much room there is, and where the line is — as though
+// it were a different question, and on a read-only seat it was a whole bordered
+// card whose entire content was the word "Off" twice.
 
-/** Presets, in bytes. Chosen to be recognisable ("30 GB") rather than round
- *  in binary — the owner is thinking about their laptop, not about powers. */
-const BUDGET_PRESETS: readonly { label: string; bytes: number }[] = [
-  { label: "10 GB", bytes: 10 * 1024 ** 3 },
-  { label: "30 GB", bytes: 30 * 1024 ** 3 },
-  { label: "100 GB", bytes: 100 * 1024 ** 3 },
-];
-
+/** Presets, in bytes. Chosen to be recognisable rather than round in binary —
+ *  the owner is thinking about their ledger, not about powers. */
 const LEDGER_PRESETS: readonly { label: string; bytes: number }[] = [
   { label: "256 MB", bytes: 256 * 1024 ** 2 },
   { label: "1 GB", bytes: 1024 ** 3 },
@@ -46,6 +55,10 @@ export interface StorageLimitsPanelProps {
   /** Live footprint — powers the "you are here" line under each control. */
   report: LocalUsageReportDTO | null;
   onSave: (patch: StorageLimitsPatchDTO) => Promise<void>;
+  /** A read-only seat withholds the verb. The row then says WHERE the limit is
+   *  changed instead — a control that is simply missing reads as a limit that
+   *  cannot be configured at all, which is not what is true. */
+  gatewayLabel?: string;
   readOnly?: boolean;
 }
 
@@ -53,7 +66,6 @@ interface LimitControlProps {
   id: string;
   title: string;
   icon: "Gauge" | "Journal";
-  description: string;
   /** What this limit currently is, in bytes; `null` when off. */
   value: number | null;
   presets: readonly { label: string; bytes: number }[];
@@ -69,7 +81,6 @@ function LimitControl({
   id,
   title,
   icon,
-  description,
   value,
   presets,
   hereNow,
@@ -128,23 +139,12 @@ function LimitControl({
 
   return (
     <div className={styles.control} data-testid={`limit-control-${id}`}>
-      <div className={styles.controlHead}>
+      {/* NO HEAD: the row above this IS the head — it carries the title, the
+          description and the current value, and this is the control it opened. */}
+      <div className={styles.controlRow}>
         <span className={styles.controlIcon} aria-hidden="true">
           <Icon name={icon} size={14} />
         </span>
-        <div className={styles.controlTitles}>
-          <h3>{title}</h3>
-          <p>{description}</p>
-        </div>
-        <span
-          className={styles.controlState}
-          data-on={value !== null || undefined}
-        >
-          {value === null ? "Off" : formatBytes(value)}
-        </span>
-      </div>
-
-      <div className={styles.controlRow}>
         <div className={styles.presets}>
           {presets.map((preset) => (
             <button
@@ -221,68 +221,81 @@ export default function StorageLimitsPanel({
   limits,
   report,
   onSave,
+  gatewayLabel,
   readOnly,
-}: StorageLimitsPanelProps): JSX.Element {
+}: StorageLimitsPanelProps): JSX.Element | null {
   const ledger = ledgerBytes(report);
+  // One at a time: two open editors under two rows is a form, and neither of
+  // these is a field of the other.
+  const [open, setOpen] = useState<"budget" | "ledger" | null>(null);
+
+  if (limits === null) return null;
+  // The legacy row, present only to be turned off (see the file header).
+  const strandedBudget = limits.totalLimitBytes !== null;
+
+  const row = (
+    id: "budget" | "ledger",
+    title: string,
+    sub: string,
+    value: number | null,
+    control: JSX.Element
+  ): RowDef => ({
+    id,
+    // The VALUE is the meta, because "where is the line" is the question the
+    // row answers at a glance; changing it is the verb beside it.
+    meta: value === null ? "off" : formatBytes(value),
+    // A withheld verb is explained where it is withheld. Without this the row
+    // reads as a limit nobody can set, rather than one set on another machine.
+    sub:
+      readOnly && gatewayLabel
+        ? `${sub} · set in Centraid on ${gatewayLabel}`
+        : sub,
+    title,
+    ...(readOnly
+      ? {}
+      : {
+          action: {
+            hint: `Change the ${title.toLowerCase()}`,
+            label: open === id ? "Close" : "Change",
+            onClick: () => setOpen(open === id ? null : id),
+          },
+        }),
+    ...(open === id && !readOnly ? { children: control } : {}),
+  });
 
   return (
-    <section
-      className={cx(gwStyles.panel, styles.card)}
-      data-testid="storage-limits-panel"
-    >
-      <div className={gwStyles.panelHead}>
-        <h2>Limits</h2>
-      </div>
-      <div className={styles.body}>
-        {limits === null ? (
-          <div className={gwStyles.panelEmpty}>Reading your limits…</div>
-        ) : readOnly ? (
-          <dl data-testid="storage-limits-read-only">
-            <div>
-              <dt>Disk budget</dt>
-              <dd>
-                {limits.totalLimitBytes === null
-                  ? "Off"
-                  : formatBytes(limits.totalLimitBytes)}
-              </dd>
-            </div>
-            <div>
-              <dt>Ledger limit</dt>
-              <dd>
-                {limits.journalLimitBytes === null
-                  ? "Off"
-                  : formatBytes(limits.journalLimitBytes)}
-              </dd>
-            </div>
-            {report ? <div>{budgetSummary(report, limits)}</div> : null}
-          </dl>
-        ) : (
-          <>
-            <LimitControl
-              id="budget"
-              title="Disk budget"
-              icon="Gauge"
-              description="How much of this machine Centraid may use."
-              value={limits.totalLimitBytes}
-              presets={BUDGET_PRESETS}
-              floorBytes={256 * 1024 ** 2}
-              floorLabel="budget"
-              hereNow={
-                report
-                  ? `Using ${formatBytes(report.totalBytes)} today` +
-                    (limits.totalLimitBytes === null
-                      ? "."
-                      : ` — you’ll see a warning past ${limits.warnAtPercent}%.`)
-                  : null
-              }
-              onCommit={(bytes) => onSave({ totalLimitBytes: bytes })}
-            />
-
+    <div data-testid="storage-limits-panel">
+      <RowsBlock
+        ariaLabel="Limits"
+        rows={[
+          ...(strandedBudget
+            ? [
+                {
+                  id: "budget",
+                  meta: formatBytes(limits.totalLimitBytes ?? 0),
+                  sub: "a warning at this figure, never a block — Centraid does not stop at it, so it is no longer offered",
+                  title: "Disk budget (no longer enforced)",
+                  ...(readOnly
+                    ? {}
+                    : {
+                        action: {
+                          hint: "Clear the stored disk budget",
+                          label: "Turn off",
+                          onClick: () => void onSave({ totalLimitBytes: null }),
+                        },
+                      }),
+                } satisfies RowDef,
+              ]
+            : []),
+          row(
+            "ledger",
+            "Ledger limit",
+            "Past this size, rows older than the last 7 days seal into the store early",
+            limits.journalLimitBytes,
             <LimitControl
               id="ledger"
               title="Ledger limit"
               icon="Journal"
-              description="Past this size, rows older than the last 7 days seal into the store early."
               value={limits.journalLimitBytes}
               presets={LEDGER_PRESETS}
               floorBytes={64 * 1024 ** 2}
@@ -294,9 +307,9 @@ export default function StorageLimitsPanel({
               }
               onCommit={(bytes) => onSave({ journalLimitBytes: bytes })}
             />
-          </>
-        )}
-      </div>
-    </section>
+          ),
+        ]}
+      />
+    </div>
   );
 }

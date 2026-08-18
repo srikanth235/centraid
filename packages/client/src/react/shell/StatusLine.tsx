@@ -1,11 +1,13 @@
-import { useSyncExternalStore } from "react";
+import { useEffect, useState, useSyncExternalStore } from "react";
 import type { CSSProperties, JSX } from "react";
 
+import { syncedStamp } from "./ambientStatus.js";
 import {
   readRouteHealth,
   readStatus,
   subscribeStatus,
 } from "./statusChannel.js";
+import { useGatewayCheck } from "./useGatewayRuntime.js";
 
 import chrome from "./chrome.module.css";
 
@@ -36,6 +38,32 @@ import chrome from "./chrome.module.css";
 /** Counts are numerics, so they are mono and tabular — and grouped, because
  *  "1904" and "1,904" are not equally readable at 11.5px. */
 const count = (n: number): string => n.toLocaleString();
+
+/**
+ * How long ago the last heartbeat landed, appended to the STANDING sentence.
+ *
+ * "Synced" with no age on it reads the same one second after a probe and ten
+ * minutes after the machine went to sleep — the state that most needs to be
+ * visible looked exactly like the state that is fine. The stamp lives in its
+ * own leaf component with its own subscription and its own ticker, so the
+ * shell root above it still does not re-render on the heartbeat (issue #659).
+ *
+ * It draws nothing unless the gateway is answering: an unreachable gateway is
+ * already the offline banner's subject, and "synced 4 min ago" under it would
+ * be a second, softer account of the same thing.
+ */
+function SyncedStamp(): JSX.Element | null {
+  const { status, lastCheckAt } = useGatewayCheck();
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    const id = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(id);
+  }, []);
+  if (status !== "up") return null;
+  const stamp = syncedStamp(lastCheckAt, now);
+  if (stamp === undefined) return null;
+  return <span className={chrome.statusStamp}>{stamp}</span>;
+}
 
 export interface StatusLineProps {
   /** The standing sentence when nothing transient is showing. */
@@ -79,6 +107,9 @@ export default function StatusLine({
     >
       <span className={chrome.statusDot} aria-hidden="true" />
       <span className={chrome.statusText}>{text}</span>
+      {/* Only under the STANDING sentence: a note is news about a moment, and
+          stamping it with the heartbeat's age would date the wrong thing. */}
+      {offline || standing ? null : <SyncedStamp />}
       {progress ? (
         <>
           {/* Determinate, always. A local operation knows its own size, and a

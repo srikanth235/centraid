@@ -1,70 +1,92 @@
 import { useState } from "react";
-import type { CSSProperties, JSX } from "react";
+import type { JSX } from "react";
 
 import type {
   HarnessCardDTO,
   HarnessKind,
   ModelSubsystem,
 } from "../screen-contracts.js";
-import { openConfirm } from "../shell/confirm.js";
 import {
   ConfigSelect,
   ModelSelect,
   Select,
+  effortLabel,
   modelLabel,
 } from "./SettingsHarnessesSelects.js";
+import HarnessLadder from "./SettingsHarnessLadder.js";
+import PickRow from "./SettingsPickRow.js";
 
-import styles from "./SettingsHarnessesScreen.module.css";
-
-// Settings → Agents, THE ROUTING LANES. Split out of the screen (which sits at
-// the repo's file-size cap) so the lane's own machinery — inherit options that
-// name what they resolve to, and the unattended-failover ladder with its
-// consent confirm — is read in one place. The screen still owns every write and
-// every rollback: this file renders picks and calls back.
+// Settings → Agents, THE LANES (binding layer v11).
+//
+// A lane is harness · model · level, resolved independently. AN INHERITING LANE
+// HAS NO MODEL OR LEVEL OF ITS OWN, so it offers no control for one: it shows a
+// single pick, and its caption states what it currently inherits, down to the
+// level. Setting a harness is what earns the other two picks. The previous
+// shape offered all three always, with "Use default · Sonnet 4.5" inside each
+// menu — three controls where two of them wrote nothing until the first
+// changed, and the resolved answer readable only by opening a menu.
+//
+// The screen still owns every write and every rollback: this file renders picks
+// and calls back.
 
 /**
- * The routing lanes. Each resolves independently to a (harness, model) pair —
- * a lane left unset inherits the default lane. Before per-subsystem harnesses
- * these were model-only overrides hanging off one globally-active harness.
+ * The routing lanes. Each resolves independently to a (harness, model, level)
+ * triple — a lane left unset inherits the default lane.
  */
 export const ALL_SUBSYSTEM_ROWS: ReadonlyArray<{
   key: ModelSubsystem;
   label: string;
   hint: string;
 }> = [
-  {
-    key: "assistant",
-    label: "Assistant",
-    hint: "Global Ask across your vault.",
-  },
-  { key: "ask", label: "In-app Ask", hint: "The Ask panel inside each app." },
-  { key: "builder", label: "Builder", hint: "The app-building agent." },
+  { key: "assistant", label: "Assistant", hint: "The global Ask" },
+  { key: "ask", label: "In-app Ask", hint: "Asking inside an app" },
+  { key: "builder", label: "Builder", hint: "The app-building agent" },
   {
     key: "automations",
     label: "Automations",
-    hint: "Background automations & enrichers.",
+    hint: "Background work and enrichers",
   },
 ];
 
 /**
- * The lanes that get a routing row. Builder is withheld: every builder entry
- * point is hidden by default (#434), so a routing control for a surface the
- * member cannot open is configuration for nothing.
+ * The lanes that get a row. Builder is withheld: every builder entry point is
+ * hidden by default (#434), so a routing control for a surface the member
+ * cannot open is configuration for nothing.
  *
  * It stays in `ALL_SUBSYSTEM_ROWS` on purpose, because that list also feeds the
- * inventory's "used by" chips. A stored builder pin keeps resolving, and
+ * inventory's "used by" reading. A stored builder pin keeps resolving, and
  * hiding the row must not also hide the fact that a harness is carrying that
- * lane — invisible-but-active routing is what group D was about.
+ * lane.
  */
 export const ROUTING_ROWS = ALL_SUBSYSTEM_ROWS.filter(
   (row) => row.key !== "builder"
 );
 
 /**
- * One routing lane. `harness === ''` means inherit the default lane, and the
- * inherit option names what it resolves to — "Use default model" alone told you
- * nothing about what would actually run, and with agents inheriting too that
- * ambiguity would have doubled.
+ * What a lane inherits, in one clause: agent, model, level.
+ *
+ * THE LEVEL IS PART OF THE SENTENCE, NOT AN EXTRA. A lane with no harness of
+ * its own renders one pick, so this caption is the ONLY place the level it will
+ * think at is stated — dropping it would leave the section head promising
+ * "harness · model · level" over rows that name two of the three. It reads
+ * lowercase because it is prose here, not the pick's own label.
+ */
+export function inheritedClause(
+  card: HarnessCardDTO | undefined,
+  model: string,
+  effort: string
+): string {
+  return `${card?.title ?? "the default agent"} · ${modelLabel(
+    card,
+    model
+  )} · ${effortLabel(card, effort).toLowerCase()}`;
+}
+
+/**
+ * One lane. `harness === ''` means inherit the default lane, and the caption
+ * names what that resolves to — "Use default model" alone told you nothing
+ * about what would actually run, and with agents inheriting too that ambiguity
+ * would have doubled.
  */
 export default function RouteRow({
   label,
@@ -83,6 +105,7 @@ export default function RouteRow({
   onSetEffort,
   onSetLadder,
   unattended,
+  first,
 }: {
   label: string;
   hint: string;
@@ -101,185 +124,85 @@ export default function RouteRow({
   onSetEffort: (v: string) => void;
   onSetLadder: (v: HarnessKind[]) => void;
   unattended: boolean;
+  first?: boolean;
 }): JSX.Element {
-  const [fallbackPick, setFallbackPick] = useState("");
-  const [fallbackFeedback, setFallbackFeedback] = useState<string | null>(null);
-  // D13: ladder membership IS the consent record, so the row shows exactly what
-  // is stored — including a member that currently resolves as this lane's
-  // primary. Hiding it made the UI disagree with the consent the gateway holds.
-  const activeLadder = ladder.filter(
-    (kind, index) => ladder.indexOf(kind) === index
-  );
-  // Unattended failover runs with no one watching, so a fallback must be past
-  // its session preflight — `connected` alone admits a harness that will stop
-  // and ask for auth mid-run.
-  const availableFallbacks = cards.filter(
-    (card) =>
-      card.sessionReady &&
-      card.kind !== resolvedCard?.kind &&
-      !activeLadder.includes(card.kind)
+  const [ladderOpen, setLadderOpen] = useState(false);
+  const inheriting = !harness;
+  const caption = inheriting
+    ? `${hint} · inherits ${inheritedClause(
+        defaultCard,
+        resolvedHarnessDefault,
+        resolvedHarnessDefaultEffort
+      )}`
+    : hint;
+  const harnessPick = (
+    <Select
+      value={harness}
+      onChange={onSetHarness}
+      inherited={inheriting}
+      ariaLabel={`Agent for ${label}`}
+    >
+      <option value="">Inherit the default</option>
+      {harness && !cards.some((card) => card.kind === harness) ? (
+        <option value={harness}>{harness} · existing hidden pin</option>
+      ) : null}
+      {cards.map((c) => (
+        <option key={c.kind} value={c.kind} disabled={!c.connected}>
+          {c.connected ? c.title : `${c.title} · unavailable`}
+        </option>
+      ))}
+    </Select>
   );
   return (
-    <div
-      className={styles.routeRow}
-      style={{ "--route-accent": resolvedCard?.accent } as CSSProperties}
+    <PickRow
+      label={label}
+      caption={caption}
+      first={first}
+      {...(unattended
+        ? {
+            action: {
+              label: ladderOpen ? "Hide" : "Fallback",
+              onClick: () => setLadderOpen((open) => !open),
+              hint: `Failover order for ${label}`,
+            },
+          }
+        : {})}
+      {...(unattended && ladderOpen
+        ? {
+            detail: (
+              <HarnessLadder
+                label={label}
+                cards={cards}
+                ladder={ladder}
+                resolvedCard={resolvedCard}
+                onSetLadder={onSetLadder}
+              />
+            ),
+          }
+        : {})}
     >
-      <div className={styles.routeMeta}>
-        <div className={styles.routeName}>
-          <span className={styles.routeDot} />
-          {label}
-        </div>
-        <span className={styles.routeHint}>{hint}</span>
-      </div>
-      <div className={styles.routeControls}>
-        <Select
-          value={harness}
-          onChange={onSetHarness}
-          inherited={!harness}
-          ariaLabel={`Agent for ${label}`}
-        >
-          <option value="">
-            {defaultCard ? `Use default · ${defaultCard.title}` : "Use default"}
-          </option>
-          {harness && !cards.some((card) => card.kind === harness) ? (
-            <option value={harness}>{harness} · existing hidden pin</option>
-          ) : null}
-          {cards.map((c) => (
-            <option key={c.kind} value={c.kind} disabled={!c.connected}>
-              {c.connected ? c.title : `${c.title} · unavailable`}
-            </option>
-          ))}
-        </Select>
-        {resolvedCard ? (
-          <>
-            <ModelSelect
-              card={resolvedCard}
-              saved={model}
-              onChange={onSetModel}
-              emptyLabel={`Use default · ${modelLabel(resolvedCard, resolvedHarnessDefault)}`}
-              ariaLabel={`Model for ${label}`}
-            />
-            <ConfigSelect
-              card={resolvedCard}
-              category="thought_level"
-              saved={effort}
-              onChange={onSetEffort}
-              emptyLabel={`Use default · ${resolvedHarnessDefaultEffort || "agent effort"}`}
-              ariaLabel={`Effort for ${label}`}
-            />
-          </>
-        ) : (
-          <span className={styles.routeHint}>—</span>
-        )}
-      </div>
-      {/* Failover is configurable only for the unattended lane. Attended lanes
-          recover at the next turn with the member right there to see it and
-          pick differently, so a stored ladder mostly served to hand the
-          conversation to another provider without being asked. Automations
-          fire with nobody watching, which is the case that needs a ladder. An
-          attended lane's existing ladder is left stored and still honoured. */}
-      {unattended ? (
-        <div className={styles.ladderRow}>
-          <span className={styles.routeHint}>In-fire failover</span>
-          {activeLadder.length === 0 ? (
-            <span className={styles.routeHint}>None</span>
-          ) : (
-            activeLadder.map((kind, index) => {
-              const card = cards.find((candidate) => candidate.kind === kind);
-              return (
-                <span className={styles.ladderMember} key={kind}>
-                  {card?.title ?? kind}
-                  <button
-                    type="button"
-                    aria-label={`Move ${card?.title ?? kind} earlier for ${label}`}
-                    disabled={index === 0}
-                    onClick={() => {
-                      const next = [...activeLadder];
-                      [next[index - 1], next[index]] = [
-                        next[index]!,
-                        next[index - 1]!,
-                      ];
-                      onSetLadder(next);
-                    }}
-                  >
-                    ↑
-                  </button>
-                  <button
-                    type="button"
-                    aria-label={`Move ${card?.title ?? kind} later for ${label}`}
-                    disabled={index === activeLadder.length - 1}
-                    onClick={() => {
-                      const next = [...activeLadder];
-                      [next[index], next[index + 1]] = [
-                        next[index + 1]!,
-                        next[index]!,
-                      ];
-                      onSetLadder(next);
-                    }}
-                  >
-                    ↓
-                  </button>
-                  <button
-                    type="button"
-                    aria-label={`Remove ${card?.title ?? kind} from ${label} failover`}
-                    onClick={() =>
-                      onSetLadder(
-                        activeLadder.filter((entry) => entry !== kind)
-                      )
-                    }
-                  >
-                    ×
-                  </button>
-                </span>
-              );
-            })
-          )}
-          <select
-            className={styles.ladderAdd}
-            aria-label={`Add fallback agent for ${label}`}
-            value={fallbackPick}
-            disabled={availableFallbacks.length === 0}
-            onChange={(event) => {
-              const kind = event.target.value as HarnessKind;
-              if (!kind) return;
-              setFallbackPick(kind);
-              setFallbackFeedback(null);
-              const title =
-                cards.find((card) => card.kind === kind)?.title ?? kind;
-              void openConfirm({
-                confirmLabel: "Add fallback",
-                title: `Add ${title} to ${label} failover?`,
-                message: `If earlier agents fail, Centraid may send the conversation handoff, attachments, and vault-derived context to ${title} without another prompt. A later manual switch remains separately confirm-gated.`,
-              }).then((approved) => {
-                if (approved) {
-                  onSetLadder([...activeLadder, kind]);
-                  setFallbackFeedback(`${title} added`);
-                } else {
-                  setFallbackFeedback(`${title} was not added`);
-                }
-                setFallbackPick("");
-              });
-            }}
-          >
-            <option value="">Add fallback…</option>
-            {availableFallbacks.map((card) => (
-              <option key={card.kind} value={card.kind}>
-                {card.title}
-              </option>
-            ))}
-          </select>
-          {fallbackFeedback ? (
-            <span className={styles.routeHint}>{fallbackFeedback}</span>
-          ) : null}
-          {cards
-            .filter((card) => card.connected && !card.sessionReady)
-            .map((card) => (
-              <span className={styles.routeHint} key={card.kind}>
-                {card.title}: {card.fallbackBlockedReason}
-              </span>
-            ))}
-        </div>
+      {harnessPick}
+      {/* A lane that inherits has no model or level of its own — see the head
+          of this file. The caption above already states what it resolves to. */}
+      {!inheriting && resolvedCard ? (
+        <>
+          <ModelSelect
+            card={resolvedCard}
+            saved={model}
+            onChange={onSetModel}
+            emptyLabel={`Use default · ${modelLabel(resolvedCard, resolvedHarnessDefault)}`}
+            ariaLabel={`Model for ${label}`}
+          />
+          <ConfigSelect
+            card={resolvedCard}
+            category="thought_level"
+            saved={effort}
+            onChange={onSetEffort}
+            emptyLabel={`Use default · ${effortLabel(resolvedCard, resolvedHarnessDefaultEffort)}`}
+            ariaLabel={`Effort for ${label}`}
+          />
+        </>
       ) : null}
-    </div>
+    </PickRow>
   );
 }

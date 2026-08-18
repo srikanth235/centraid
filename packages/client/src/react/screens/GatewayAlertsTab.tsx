@@ -6,15 +6,31 @@ import {
   thresholdLabel,
 } from "../shell/routes/gatewayData.js";
 import type { GatewayRuntimeSnapshot } from "../shell/routes/gatewayData.js";
-import { cx } from "../ui/cx.js";
-import AlertHistoryPanel from "./AlertHistoryPanel.js";
+import ChipsBlock from "../ui/ChipsBlock.js";
+import EmptyBlock from "../ui/EmptyBlock.js";
+import NoteBlock from "../ui/NoteBlock.js";
+import RowsBlock from "../ui/RowsBlock.js";
+import type { RowDef } from "../ui/RowsBlock.js";
+import SectionBlock from "../ui/SectionBlock.js";
 
 import styles from "./GatewayScreen.module.css";
 
-// Gateway → Alerts tab, extracted verbatim from GatewayScreen (issue #528
-// Phase F) so the Overview wiring can grow without pushing GatewayScreen past
-// the 500-line cap. Behaviour-identical: the down-alert threshold form, the
-// launch-at-login switch, and the alert history panel.
+// System → Alert history (binding layer v11). Two statements, in the order
+// they are asked: what this gateway has already raised, and when it should
+// raise the next one.
+//
+// IT WAS THREE BORDERED CARDS with their heads inside them — a Down alert card
+// carrying a bespoke switch and a preset ladder, a Launch-at-login card
+// carrying a second copy of the same switch, and an Alert history card whose
+// rows were a coloured dot, a clock and a run-on sentence. In v11 the heads sit
+// above their containers, the ladder is the kit's chip picker, the history is
+// rows whose meta is the alert's own state, and each switch is a row that
+// STATES what it is doing and offers the one verb that changes it. A row
+// reading "Alert when unreachable · on · [Turn off]" says in the reading order
+// what a track-and-knob says only to someone who already knows the convention.
+//
+// The prototype's own note is kept: a thing that keeps clearing itself is a
+// pattern, and the pattern is the finding.
 
 export interface GatewayAlertsTabProps {
   snapshot: GatewayRuntimeSnapshot;
@@ -38,125 +54,122 @@ export default function GatewayAlertsTab(
   const hasPreset = ALERT_PRESETS.some(
     (p) => p.seconds === alert.thresholdSeconds
   );
-  const alertHistoryRows = buildAlertHistoryRows(snapshot);
+  const rows = buildAlertHistoryRows(snapshot);
+  const cleared = rows.filter((row) => row.kind === "recovered").length;
+  const launchAtLogin = props.launchAtLogin ?? false;
+
+  // WHEN, not what: the history head counts what is on record, and how much of
+  // it resolved without anyone doing anything.
+  const historyMeta =
+    rows.length === 0
+      ? "nothing raised yet"
+      : cleared === 0
+        ? `${rows.length} · none cleared themselves`
+        : `${rows.length} · ${cleared} cleared themselves`;
+
+  const settings: RowDef[] = [
+    {
+      id: "down-alert",
+      meta: alert.enabled ? "on" : "off",
+      sub: "One system notification per outage, and one when the gateway comes back.",
+      title: "Alert when unreachable",
+      ...(props.readOnly
+        ? {}
+        : {
+            action: {
+              hint: "Turn the down alert on or off",
+              label: alert.enabled ? "Turn off" : "Turn on",
+              onClick: () => props.onAlertsEnabledChange?.(!alert.enabled),
+              ...(props.savingAlert ? { off: true } : {}),
+            },
+          }),
+    },
+  ];
+  if (!props.readOnly)
+    settings.push({
+      id: "launch-at-login",
+      meta: launchAtLogin ? "on" : "off",
+      sub: "Keeps your gateway available without having to open Centraid by hand.",
+      title: "Start Centraid at login",
+      action: {
+        hint: "Start Centraid when you log in",
+        label: launchAtLogin ? "Turn off" : "Turn on",
+        onClick: () => props.onLaunchAtLoginChange?.(!launchAtLogin),
+        ...(props.savingLaunchAtLogin ? { off: true } : {}),
+      },
+    });
 
   return (
-    <div className={cx(styles.tabPane, styles.tabPaneForm)}>
-      {/* Down alert — the configurable notification threshold. */}
-      {props.readOnly ? (
-        <section className={styles.panel}>
-          <div className={styles.panelHead}>
-            <h2>Down alert</h2>
-          </div>
-          <div className={styles.panelEmpty}>
-            {alert.enabled
-              ? `Alerts after ${thresholdLabel(alert.thresholdSeconds)} unreachable.`
-              : "Down alerts are off."}
-          </div>
-        </section>
+    <div className={styles.tabPane}>
+      <SectionBlock label="Alert history" meta={historyMeta} />
+      {rows.length === 0 ? (
+        <EmptyBlock
+          routine
+          title="No alerts yet."
+          body="Outages, recoveries, component errors and version mismatches land here, and stay across restarts."
+        />
       ) : (
-        <section className={styles.panel}>
-          <div className={styles.panelHead}>
-            <h2>Down alert</h2>
-            <span className={styles.panelMeta}>default 2m</span>
-          </div>
-          <div className={styles.alertBody}>
-            <div className={styles.alertToggleRow}>
-              <div>
-                <div className={styles.alertToggleLabel}>
-                  Alert when unreachable
-                </div>
-                <div className={styles.alertToggleSub}>
-                  One system notification per outage, and one when the gateway
-                  recovers.
-                </div>
-              </div>
-              <button
-                type="button"
-                role="switch"
-                aria-checked={alert.enabled}
-                aria-label="Alert when unreachable"
-                className={styles.switch}
-                data-on={alert.enabled || undefined}
-                disabled={props.savingAlert}
-                onClick={() => props.onAlertsEnabledChange?.(!alert.enabled)}
-              >
-                <span className={styles.switchThumb} />
-              </button>
-            </div>
-            <div
-              className={styles.alertAfter}
-              data-disabled={!alert.enabled || undefined}
-            >
-              <div className={styles.alertAfterLabel}>
-                after unreachable for
-              </div>
-              <div className={styles.presets}>
-                {ALERT_PRESETS.map((p) => (
-                  <button
-                    key={p.seconds}
-                    type="button"
-                    className={cx(
-                      styles.preset,
-                      p.seconds === alert.thresholdSeconds &&
-                        styles.presetActive
-                    )}
-                    disabled={props.savingAlert || !alert.enabled}
-                    onClick={() => props.onAlertSecondsChange?.(p.seconds)}
-                  >
-                    {p.label}
-                  </button>
-                ))}
-                {hasPreset ? null : (
-                  <span className={cx(styles.preset, styles.presetActive)}>
-                    {thresholdLabel(alert.thresholdSeconds)}
-                  </span>
-                )}
-              </div>
-            </div>
-          </div>
-        </section>
+        <div data-testid="alert-history-panel">
+          <RowsBlock
+            ariaLabel="Alert history"
+            rows={rows.map((row) => ({
+              id: row.id,
+              meta: row.previousSession ? "earlier session" : row.kindLabel,
+              sub: [
+                `raised ${row.timeLabel}`,
+                row.detail,
+                row.durationLabel ? `lasted ${row.durationLabel}` : undefined,
+              ]
+                .filter(Boolean)
+                .join(" · "),
+              title: row.kindLabel,
+              ...(row.kind === "down" || row.kind === "component-error"
+                ? { net: true }
+                : {}),
+            }))}
+          />
+        </div>
       )}
+      <NoteBlock>
+        An alert that cleared itself is kept, because a thing that keeps
+        clearing itself is a pattern and the pattern is the finding.
+      </NoteBlock>
 
-      {/* Launch at login — the cheap 80% fix for "always-on" (no OS
-          scheduler keeps the desktop-hosted gateway up once the app quits,
-          but this brings the app itself back after a reboot/login). */}
-      {props.readOnly ? null : (
-        <section className={styles.panel}>
-          <div className={styles.panelHead}>
-            <h2>Launch at login</h2>
-          </div>
-          <div className={styles.alertBody}>
-            <div className={styles.alertToggleRow}>
-              <div>
-                <div className={styles.alertToggleLabel}>
-                  Start Centraid at login
-                </div>
-                <div className={styles.alertToggleSub}>
-                  Keeps your gateway available without having to open Centraid
-                  by hand.
-                </div>
-              </div>
-              <button
-                type="button"
-                role="switch"
-                aria-checked={props.launchAtLogin ?? false}
-                aria-label="Start Centraid at login"
-                className={styles.switch}
-                data-on={props.launchAtLogin || undefined}
-                disabled={props.savingLaunchAtLogin}
-                onClick={() =>
-                  props.onLaunchAtLoginChange?.(!(props.launchAtLogin ?? false))
-                }
-              >
-                <span className={styles.switchThumb} />
-              </button>
-            </div>
-          </div>
-        </section>
-      )}
-
-      <AlertHistoryPanel rows={alertHistoryRows} />
+      <SectionBlock
+        label="When to tell you"
+        meta={
+          alert.enabled
+            ? `after ${thresholdLabel(alert.thresholdSeconds)} unreachable`
+            : "down alerts are off"
+        }
+      />
+      <RowsBlock ariaLabel="When to tell you" rows={settings} />
+      {/* The ladder is a picker, so it is the kit's chip group rather than a
+          row of bespoke buttons. Absent while the alert is off: a threshold
+          for a notification nobody will get is a control that does nothing. */}
+      {!props.readOnly && alert.enabled ? (
+        <ChipsBlock
+          ariaLabel="Alert after unreachable for"
+          chips={[
+            ...ALERT_PRESETS.map((preset) => ({
+              id: String(preset.seconds),
+              label: preset.label,
+              on: preset.seconds === alert.thresholdSeconds,
+            })),
+            ...(hasPreset
+              ? []
+              : [
+                  {
+                    id: String(alert.thresholdSeconds),
+                    label: thresholdLabel(alert.thresholdSeconds),
+                    on: true,
+                  },
+                ]),
+          ]}
+          mono
+          onPick={(id) => props.onAlertSecondsChange?.(Number(id))}
+        />
+      ) : null}
     </div>
   );
 }

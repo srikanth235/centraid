@@ -93,7 +93,7 @@ test("Docs uploads a real file and its bytes survive an Electron reload", async 
       buffer: Buffer.from(DOC_BODY, "utf8"),
     });
     await expect(
-      page.getByRole("button", { name: `Open ${DOC_TITLE} details` })
+      page.getByRole("button", { name: `Select ${DOC_TITLE}` })
     ).toBeVisible({ timeout: 30_000 });
 
     // The document is a vault row on the local gateway, not renderer state:
@@ -101,7 +101,7 @@ test("Docs uploads a real file and its bytes survive an Electron reload", async 
     await page.reload({ waitUntil: "domcontentloaded" });
     await openFirstParty(page, "Docs");
     await expect(
-      page.getByRole("button", { name: `Open ${DOC_TITLE} details` })
+      page.getByRole("button", { name: `Select ${DOC_TITLE}` })
     ).toBeVisible({ timeout: 30_000 });
 
     // Byte-bearing proof: the exact uploaded bytes come back on demand
@@ -163,7 +163,7 @@ test("Docs uploads a real file and its bytes survive an Electron reload", async 
     );
     await mkdir(evidenceDir, { recursive: true });
     await page.screenshot({
-      path: path.join(evidenceDir, "issue-794-docs-body-paint.png"),
+      path: path.join(evidenceDir, "issue-819-docs-drive.png"),
       fullPage: true,
     });
   } finally {

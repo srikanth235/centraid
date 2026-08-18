@@ -7,28 +7,58 @@
    `.docs.is-narrow` state class glue toggles on the static #root — travel with
    these rules via `:global(...)`. */
 
+/* Each column head is the sort control for its own column (List.tsx). Geometry
+   comes from `kit-plain-btn`'s button reset; this rule keeps the eyebrow role
+   the heads have always had, so pressing one is the only thing that changed. */
 .col {
   font: var(--t-eyebrow);
   letter-spacing: var(--t-eyebrow-tracking);
   text-transform: var(--t-eyebrow-transform);
   color: var(--text-faint);
+  /* Column widths below are exact, so a head must never grow past its own
+     cell — the arrow appends to the label rather than reflowing the row. */
+  white-space: nowrap;
+}
+/* The ACTIVE column takes full ink. There is no second mark and no underline:
+   the arrow beside the word already says which one it is, and the ink step is
+   what makes it findable without reading every head. */
+.col[data-active="true"] {
+  color: var(--text);
 }
 .col.name {
   flex: 1;
+  text-align: start;
 }
-.col.where {
-  width: 120px;
+.col.owner {
+  width: 96px;
+  text-align: start;
 }
 .col.size {
   width: 70px;
   text-align: end;
 }
-.col.added {
+.col.changed {
   width: 88px;
   text-align: end;
 }
 .col.end {
   width: 40px;
+  display: flex;
+  justify-content: flex-end;
+}
+/* The named-orders button. It sits in the head's trailing cell, over the same
+   40px each row's kebab occupies, so the two controls stack in one column. */
+.sortMenu {
+  width: 28px;
+  height: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-faint);
+  border-radius: var(--r-xs);
+}
+.sortMenu:hover {
+  color: var(--text);
 }
 
 .check {
@@ -51,14 +81,26 @@
 }
 
 .row {
-  /* Containing block for the .rowOpen overlay button. Vertical rhythm reads
-     off the density tier (docs is comfortable) rather than a hardcoded
-     pixel pad. */
+  /* Containing block for the .rowOpen overlay button.
+
+     A ROW IS A HEIGHT, NOT A PADDING. This read `padding: var(--density-pad)`
+     — 16px above and below — and `--density-pad` is the tier's CONTENT pad,
+     the inset a panel puts around its contents. Spent on a row's vertical
+     rhythm it added 32px to a 34px mark and set every record to 67px, two
+     thirds taller than the handoff's own (`docRowsBlock`: `min-height:40px`,
+     `padding:0`, no vertical pad anywhere). A drive is a set you scan; at 67px
+     a laptop shows nine records where it should show fifteen.
+
+     `--density-row` is the tier's row rung and is what a row reads — the
+     Tasks and Notes lists already read it, so Docs was the one list in the
+     app answering the density tier with the wrong token. The mark, the title
+     and the cells all sit under 44px, so the rung is the height. */
   position: relative;
   display: flex;
   align-items: center;
   gap: var(--sp-3);
-  padding: var(--density-pad) 14px;
+  min-height: var(--density-row);
+  padding: 0 14px;
   border-bottom: 1px solid var(--line);
   transition: background var(--dur-1) var(--ease);
 }
@@ -89,18 +131,28 @@
   align-items: center;
   justify-content: center;
   border: none;
-  /* Holds a thumbnail image or kind glyph — content/media, stays square. */
-  border-radius: var(--r-xs);
-  overflow: hidden;
-}
-.badge img {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-}
-.badge span {
-  font: var(--t-control);
-  letter-spacing: 0.04em;
+  /* A GLYPH HAS NO GROUND. The tint and the radius here were for the other
+     branch of a fork that no longer exists — they kept a pale photograph from
+     reading as a hole in the row. Every mark is ink now, and the handoff draws
+     ink on nothing (`docRowsBlock`'s `iconCss` is a colour and a display mode:
+     no background, no radius). */
+  background: none;
+  /* THE APP'S OWN HUE, not a colour per kind. `--kind-*` still tints the
+     Details hero and the grid card, where there is room for a colour to mean
+     something; a column of six differently-coloured glyphs down the leading
+     edge of a list is a legend nobody was given. The handoff makes the same
+     call — every row glyph is `hueText('teal')`.
+
+     THIS MARK IS NOW THE ONLY KIND ON THE ROW besides the extension the
+     member typed at the end of the title — the Kind column is gone (see
+     List.tsx) — so it carries the fact rather than announcing it twice.
+
+     `--c-teal-text` is the SOLVED rung, not the raw hue: teal as `color:` on
+     paper is below 4.5:1, which is the whole reason the design package solves
+     a text rung per hue. `--accent-text` would have been the shell's accent,
+     which on this host is the neutral ink — teal in the launcher tile and
+     white in the row, which is how the identity goes missing. */
+  color: var(--c-teal-text);
 }
 .rowMain {
   flex: 1;
@@ -136,9 +188,34 @@
   line-clamp: 1;
   overflow-wrap: anywhere;
 }
-.cell.where {
-  width: 120px;
+/* Owner: a disc carrying the initial, then the name. The disc is what makes
+   the column scannable — on a drive holding two people's documents the eye
+   sorts them by the mark, not by reading every row. */
+.cell.owner {
+  width: 96px;
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+}
+.ownerDisc {
+  flex: none;
+  width: 18px;
+  height: 18px;
+  border-radius: var(--r-pill);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font: var(--t-eyebrow);
+  letter-spacing: var(--t-eyebrow-tracking);
+  background: var(--accent-soft);
+  color: var(--accent-text);
+}
+.ownerName {
+  min-width: 0;
   font: var(--t-small);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .cell.size {
   width: 70px;
@@ -146,16 +223,19 @@
   font-variant-numeric: var(--t-mono-numeric);
   text-align: end;
 }
-.cell.added {
+.cell.changed {
   width: 88px;
   font: var(--t-mono);
   font-variant-numeric: var(--t-mono-numeric);
-  /* Flex (not the shared .cell's plain nowrap+ellipsis) so the trailing
-     custody dot (issue #352 phase 4) sits beside the date instead of
-     getting clipped by the cell's own text-overflow. */
+  /* THE DATE, AND ONLY THE DATE. The row's state mark used to share this cell,
+     which is 88px wide: a mark that is a phrase rather than a glyph took the
+     whole width and left `Aug 18` wrapping one character per line. The mark
+     lives under the name now (List.tsx), so this cell holds one nowrap
+     string and cannot be squeezed by anything. */
   display: flex;
   align-items: center;
   justify-content: flex-end;
+  white-space: nowrap;
   gap: var(--sp-1);
 }
 .cell.purge {
@@ -182,9 +262,19 @@
    The head has no narrow rule at all any more: it is not rendered on the
    compact form factor, so a rule that hid its columns was describing a state
    that could not occur. */
-.row[data-narrow="true"] .cell.where,
+/* THE COMPACT FORM FACTOR TAKES ITS PAD BACK. The three trailing columns fold
+   into the snippet line below the title, so the row carries two lines instead
+   of one and cannot be a single rung tall. The handoff makes the same split —
+   `min-height:52px; padding:8px` on touch against `40px; padding:0` under a
+   pointer — because the height is set by what the row holds, not by the
+   surface. */
+.row[data-narrow="true"] {
+  min-height: 52px;
+  padding-block: var(--sp-2);
+}
+.row[data-narrow="true"] .cell.owner,
 .row[data-narrow="true"] .cell.size,
-.row[data-narrow="true"] .cell.added {
+.row[data-narrow="true"] .cell.changed {
   display: none;
 }
 

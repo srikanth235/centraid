@@ -48,7 +48,6 @@ function render(r: LocalUsageReportDTO | null): string {
     createElement(LocalFootprintCard, {
       report: r,
       loadError: null,
-      onRescan: () => undefined,
       rescanning: false,
     })
   );

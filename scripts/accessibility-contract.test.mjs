@@ -99,8 +99,12 @@ test("every mobile Pressable screen names an accessibility contract and keeps Dy
 });
 
 test("long native surfaces remain virtualized and photo cells keep bounded image caches", async () => {
+  // Docs' native drive was the fourth surface here until it was removed
+  // pending the v11 design handoff (apps/mobile/src/apps/docs/DocsHome.tsx is
+  // now a wall). Put it back on this list the moment the rebuilt drive renders
+  // a list of unbounded length — a virtualization gate is only meaningful over
+  // a surface that can actually grow.
   const files = [
-    "apps/mobile/src/apps/docs/DocsHome.tsx",
     "apps/mobile/src/apps/agenda/AgendaHome.tsx",
     "apps/mobile/src/apps/photos/FaceReview.tsx",
     "apps/mobile/src/apps/assistant/Assistant.tsx",

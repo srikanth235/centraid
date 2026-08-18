@@ -161,10 +161,14 @@ function control(el: HTMLElement, label: string): HTMLElement {
   return found as HTMLElement;
 }
 
-/** The engine pill of one row, by the words it currently states. */
+/**
+ * The engine pill of one row, by the words it currently states. Matched on the
+ * prefix: the pill's last child is its disclosure caret, which is decoration
+ * the member reads as part of the control rather than part of the sentence.
+ */
 function pill(el: HTMLElement, label: string): HTMLButtonElement {
-  const found = [...el.querySelectorAll("button")].find(
-    (button) => button.textContent === label
+  const found = [...el.querySelectorAll("button")].find((button) =>
+    button.textContent?.startsWith(label)
   );
   if (!found) throw new Error(`no pill reading "${label}"`);
   return found;
@@ -205,9 +209,9 @@ describe(SettingsEnrichmentScreen, () => {
     expect(el.textContent).toContain("receipts, signs, whiteboards");
     // The head states how many of its own rows are on.
     expect(el.textContent).toContain("2 of 2 on");
-    // The recorded answer reads as a sentence about the member, not a decision
-    // enum beside an egress class.
-    expect(el.textContent).toContain("You declined");
+    // The recorded answer reads as a sentence about what may happen, not a
+    // decision enum beside an egress class.
+    expect(el.textContent).toContain("Declined · built-in engine only");
   });
 
   it("offers no ceiling control — where enrichment runs is not a member's choice", async () => {
@@ -308,6 +312,29 @@ describe(SettingsEnrichmentScreen, () => {
       profile: null,
       trigger: null,
     });
+  });
+
+  it("offers no engine on a row that is switched off — nothing reads it yet", async () => {
+    const el = await mount(
+      makeProps({
+        load: vi.fn<SettingsEnrichmentScreenProps["load"]>().mockResolvedValue(
+          makeData({
+            effective: {
+              ...makeData().effective,
+              ocr: {
+                capability: "ocr",
+                enabled: false,
+                profileId: "built-in",
+                trigger: "on-view",
+                egressCeiling: "on-device",
+              },
+            },
+          })
+        ),
+      })
+    );
+    expect(el.querySelector("[aria-expanded]")).toBeNull();
+    expect(el.textContent).not.toContain("Built in");
   });
 
   it("offers faces no engine to pick, and carries its reassurance in its own description", async () => {

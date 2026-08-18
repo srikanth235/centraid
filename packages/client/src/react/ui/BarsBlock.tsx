@@ -57,6 +57,18 @@ export interface BarsBlockProps {
   legend?: { ok: string; fail: string };
   /** Shorter plot and tighter columns for the compact form factor. */
   compact?: boolean;
+  /**
+   * The series has not filled its window yet (#765 follow-up).
+   *
+   * Columns are `flex: 1` by default, which is right for a window that is
+   * FULL — thirty days of spend really are thirty columns across the plot. A
+   * series still accumulating is a different picture: ten probes stretched
+   * across the same width draw ten slabs, which reads as a solid block rather
+   * than as ten marks, and makes a two-minute-old session look like a
+   * saturated chart. Capped columns, packed against the newest end, let the
+   * strip say "this much so far" and grow into the plot as it earns it.
+   */
+  partial?: boolean;
   className?: string;
 }
 
@@ -68,6 +80,7 @@ export default function BarsBlock({
   note,
   legend,
   compact,
+  partial,
   className,
 }: BarsBlockProps): JSX.Element {
   return (
@@ -75,6 +88,7 @@ export default function BarsBlock({
       className={cx(styles.bars, className)}
       data-compact={compact ? "true" : undefined}
       data-dense={bars.length > DENSE_COLUMNS ? "true" : undefined}
+      data-partial={partial && bars.length < DENSE_COLUMNS ? "true" : undefined}
     >
       {/* oxlint-disable-next-line jsx-a11y/prefer-tag-over-role -- #765 an
           `<img>` cannot BE the chart: the columns are DOM elements drawn from

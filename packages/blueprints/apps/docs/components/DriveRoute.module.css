@@ -6,7 +6,6 @@
    about rather than floating over it. */
 .caption {
   margin: var(--sp-2) 0 0;
-  padding-inline: var(--sp-4);
   max-inline-size: 72ch;
   font: var(--t-small);
   color: var(--text-soft);

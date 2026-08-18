@@ -202,22 +202,19 @@ describe("Tally consumes the placement engine with zero engine edits (A6)", () =
 });
 
 describe("Docs shares its actual folder container", () => {
-  it("web and native pass docs.folder plus the selected folder id", () => {
+  // The native half of this pair asserted the same two facts about
+  // `apps/mobile/src/apps/docs/DocsHome.tsx` until that screen was removed
+  // pending its v11 design handoff. It is dropped rather than softened to a
+  // conditional read: a test that skips itself when its subject is missing
+  // passes for the wrong reason, and would go on passing if the rebuilt drive
+  // shared the wrong container. Restore it with the screen.
+  it("web passes docs.folder plus the selected folder id", () => {
     const web = readFileSync(
       path.join(APPS_DIR, "docs", "app-root.tsx"),
       "utf8"
     );
     expect(web).toContain('itemType="docs.folder"');
     expect(web).toContain("shareFolder.folder_id");
-    const native = readFileSync(
-      path.resolve(
-        PACKAGE_ROOT,
-        "../../apps/mobile/src/apps/docs/DocsHome.tsx"
-      ),
-      "utf8"
-    );
-    expect(native).toContain('itemType="docs.folder"');
-    expect(native).toContain("parent.rawId ?? parent.id");
   });
 });
 
@@ -331,16 +328,12 @@ describe("Save to my vault is gated by exact Commons residency", () => {
       ),
       path.resolve(
         PACKAGE_ROOT,
-        "../../apps/mobile/src/apps/docs/DocumentViewer.tsx"
-      ),
-      path.resolve(
-        PACKAGE_ROOT,
         "../../apps/mobile/src/apps/photos/AlbumDetail.tsx"
       ),
-      path.resolve(
-        PACKAGE_ROOT,
-        "../../apps/mobile/src/apps/docs/DocsHome.tsx"
-      ),
+      // The two native Docs surfaces (DocumentViewer.tsx, DocsHome.tsx) were in
+      // this list until they were removed pending the v11 design handoff. The
+      // rebuilt drive must rejoin it: the exact-residency gate is what stops
+      // "Save to my vault" appearing over an item that was never in Commons.
     ];
     for (const file of files) {
       const source = readFileSync(file, "utf8");

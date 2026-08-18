@@ -1,0 +1,96 @@
+/* The upload queue panel (components/UploadQueue.tsx).
+
+   Same card idiom as Blocks.module.css's panel — hairline, container radius,
+   elevated paper — but its own file because it holds a LIST OF FILES rather
+   than a list of facts, and the two rows are different shapes. */
+
+.panel {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-3);
+  margin: var(--sp-3) var(--sp-4) 0;
+  padding: var(--sp-4);
+  border: 1px solid var(--line);
+  border-radius: var(--r-lg);
+  background: var(--bg-elev);
+}
+/* The edge turns only when the run has FINISHED with a refusal in it. A run in
+   flight has not failed yet, and colouring it while it works reads as an alarm
+   about something that is going fine. */
+.panel[data-net="true"] {
+  border-color: var(--net);
+}
+
+.head {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--sp-3);
+}
+.headText {
+  flex: 1;
+  min-width: 0;
+}
+.eyebrow {
+  margin: 0;
+  font: var(--t-eyebrow);
+  letter-spacing: var(--t-eyebrow-tracking);
+  text-transform: var(--t-eyebrow-transform);
+  color: var(--text-faint);
+}
+.title {
+  margin: 2px 0 0;
+  font: var(--t-title);
+  color: var(--text);
+}
+
+.rows {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+}
+.row {
+  display: flex;
+  align-items: baseline;
+  gap: var(--sp-3);
+  padding: var(--sp-2) 0;
+}
+.row + .row {
+  border-top: 1px solid var(--line);
+}
+.name {
+  flex: 1;
+  min-width: 0;
+  font: var(--t-body);
+  color: var(--text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.row[data-net="true"] .name {
+  color: var(--net);
+}
+/* A file still in flight is the one the eye should find, so it keeps full ink
+   while its neighbours recede. */
+.row[data-state="running"] .name {
+  font: var(--t-body-strong);
+}
+.state {
+  flex: none;
+  max-inline-size: 34ch;
+  font: var(--t-small);
+  color: var(--text-faint);
+  text-align: end;
+}
+.row[data-net="true"] .state {
+  color: var(--net);
+}
+
+.foot {
+  margin: 0;
+  max-inline-size: 62ch;
+  font: var(--t-small);
+  color: var(--text-soft);
+  text-wrap: pretty;
+}

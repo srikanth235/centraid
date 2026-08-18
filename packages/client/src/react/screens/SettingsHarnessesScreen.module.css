@@ -1,182 +1,32 @@
-/* ── Shared card shell — the routing table and the harness inventory are the
-   same object visually, so they share one row idiom. ───────────────────── */
-.panel {
-  border: 1px solid var(--line);
-  border-radius: var(--r-lg);
-  background: var(--bg-elev);
-  overflow: hidden;
-  /* The panel — not the viewport — is what the lanes have to fit into: this
-     screen sits inside the settings content column, which is itself already a
-     container (`settings-shell`), so a viewport media query mis-reports the
-     available width by the sidebar + nav (a 1200px window can hand this panel
-     600px). Same idiom as DevicesCard. */
-  container: providers-panel / inline-size;
+/* Settings → Agents (binding layer v11).
+
+   Harnesses and Lanes are pick rows under a section head — hairlines between
+   them and nothing around them. The bordered `routeRow` table this screen used
+   to draw put an edge between a head and the rows it counts, which is the one
+   thing a section head already does. `SettingsPickRow.module.css` owns the row
+   itself; what is left here is this screen's own machinery: the selects, the
+   identity tile, the used-by chips and the failover ladder. */
+
+.rows {
+  display: flex;
+  flex-direction: column;
+  margin-block-end: var(--sp-5);
 }
 
-/* ── Routing ───────────────────────────────────────────────────────────────
-   Each subsystem is a lane resolving to a (harness, model) pair. The default
-   is the first lane, not a separate switch: it is the fallback every unset
-   lane inherits, so it belongs in the same table rather than above it. */
-/* The label column carries a real minimum. `minmax(0, 1fr)` had none, so the
-   selects' intrinsic width (a <select> is as wide as its widest option) ate
-   the row and left the name + hint a ~100px gutter that wrapped one word per
-   line. The controls track is `auto`, i.e. never narrower than its own
-   min-content, so the two columns can no longer starve each other; when they
-   stop fitting the container query below stacks them. */
-.routeRow {
-  display: grid;
-  grid-template-columns: minmax(210px, 1fr) auto;
-  gap: 10px 14px;
-  align-items: center;
-  padding: 12px 16px;
-}
-.routeControls,
-.harnessControls {
-  display: flex;
-  flex-wrap: wrap;
-  justify-content: flex-end;
-  align-items: center;
-  gap: 8px;
-  min-width: 0;
-  /* Past this the selects wrap onto a second line inside the controls column
-     rather than shrinking into "Use default · Code…". */
-  max-width: 520px;
-}
-/* Every select in this screen, routing lane or inventory row. Width first,
-   ellipsis only after: the basis is a legible model name, growth fills a
-   stacked row, and the cap stops one long option id from claiming the row. */
+/* Every select on this screen — a harness's model, a lane's level, a config
+   pin. Width first, ellipsis only after: the basis is a legible model name,
+   growth fills a stacked row, and the cap stops one long option id from
+   claiming the row. */
 .selectField {
   flex: 1 1 160px;
-  min-width: 0;
-  max-width: 260px;
+  max-inline-size: 260px;
+  min-inline-size: 0;
 }
+
 /* Graceful ellipsis is the last resort, after the sizing above has given the
    control every pixel it can have. */
 .selectField select {
   text-overflow: ellipsis;
-}
-.routeRow + .routeRow {
-  border-top: 1px solid var(--line);
-}
-.routeRow[data-default="true"] {
-  background: color-mix(in oklab, var(--text) 3%, transparent);
-  border-bottom: 1px solid var(--line-strong);
-}
-.routeMeta {
-  min-width: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-}
-/* `align-items: flex-start`, not `center`: a wrapped label ("In-app Ask" over
-   two lines) used to centre the dot against the whole block, parking it beside
-   the second line. The dot belongs to the first line. */
-.routeName {
-  font: var(--t-small);
-  font-weight: 600;
-  color: var(--text);
-  display: flex;
-  align-items: flex-start;
-  gap: 7px;
-}
-/* Raw px, not `font: var(--t-control)`: the --t-* tokens are `font` shorthands
-   (css.ts:88-95) and --t-control carries weight 500 — too heavy for a hint. */
-.routeHint {
-  font-size: var(--t-control-size);
-  line-height: 1.45;
-  color: var(--text-faint);
-}
-.routeDot {
-  width: 7px;
-  height: 7px;
-  /* Optically centres the dot on the first line box (an empty span has no
-     baseline to align to). */
-  margin-top: 0.42em;
-  border-radius: var(--r-pill);
-  flex: none;
-  background: var(--route-accent, var(--accent));
-}
-
-.ladderRow {
-  grid-column: 1 / -1;
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  justify-content: flex-end;
-  gap: 6px;
-}
-
-/* Narrow PANEL (not narrow window). The controls drop to their own line under
-   the label and spread across the full width instead of being squeezed beside
-   it — 720px is where a 210px label plus three legible selects stops fitting.
-   Declared after the rules they override: container queries add no
-   specificity. */
-@container providers-panel (max-width: 720px) {
-  .routeRow {
-    grid-template-columns: minmax(0, 1fr);
-  }
-  .routeControls,
-  .harnessControls,
-  .ladderRow {
-    justify-content: flex-start;
-    max-width: none;
-  }
-  /* Line the stacked controls up under the text column, past the glyph. */
-  .harnessControls {
-    flex-basis: 100%;
-    padding-left: 42px;
-  }
-  .row {
-    flex-wrap: wrap;
-  }
-}
-
-/* Very narrow panel: two selects side by side is a pair of truncated stubs,
-   so give each one the whole line. */
-@container providers-panel (max-width: 440px) {
-  .selectField {
-    flex-basis: 100%;
-    max-width: none;
-  }
-  .harnessControls {
-    padding-left: 0;
-  }
-}
-
-.ladderMember {
-  display: inline-flex;
-  align-items: center;
-  gap: 3px;
-  padding: 3px 5px 3px 8px;
-  border: 1px solid var(--line);
-  /* `--r-pill` is a BLUEPRINT-contract token; the shell's radius scale stops
-     at `--r-lg` and composes the pill inline (radii.ts). */
-  border-radius: var(--r-pill);
-  color: var(--text-soft);
-  font: var(--t-control);
-}
-
-.ladderMember button {
-  appearance: none;
-  border: 0;
-  background: transparent;
-  color: var(--text-faint);
-  cursor: pointer;
-  padding: 1px 3px;
-}
-
-.ladderMember button:disabled {
-  opacity: var(--o-disabled);
-  cursor: default;
-}
-
-.ladderAdd {
-  border: 1px solid var(--line);
-  border-radius: var(--r-md);
-  background: var(--bg-elev);
-  color: var(--text-soft);
-  font: var(--t-control);
-  padding: 4px 24px 4px 8px;
 }
 
 /* The select shell/chevron comes from the shared `styles/select.module.css`.
@@ -191,135 +41,145 @@
    states that in place of the control: dashed edge, no chevron, no pointer —
    an inert affordance is stated as text, never styled as a button. */
 .inertPick {
-  display: inline-flex;
   align-items: center;
-  min-height: var(--h-control);
-  padding-inline: var(--sp-3);
   border: 1px dashed var(--line-strong);
   border-radius: var(--r-lg);
-  font-size: var(--t-control-size);
   color: var(--text-faint);
+  display: inline-flex;
+  font-size: var(--t-control-size);
+  min-block-size: var(--h-control);
+  padding-inline: var(--sp-3);
   white-space: nowrap;
 }
 
-/* ── Harness inventory ─────────────────────────────────────────────────── */
-.entry + .entry {
-  border-top: 1px solid var(--line);
+/* A stated fact standing where a control is not one — the default lane's
+   resolved model. Raw size, not `font: var(--t-control)`: the --t-* tokens are
+   `font` shorthands and --t-control carries weight 500, too heavy for a hint. */
+.routeHint {
+  color: var(--text-faint);
+  font-size: var(--t-control-size);
+  line-height: 1.45;
 }
-.row {
-  position: relative;
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  padding: 14px 16px;
-}
-/* Container opacity would fade every descendant (rowName's bold text,
-   usedBy chips, the live model/effort selects) and silently invalidate
-   their individual contrast — the leaf itself owns its dimmed state
-   instead (glyphTile below, rowName here; chips/selects carry their own
-   informational or interactive weight regardless of connection status). */
-.row[data-unavail="true"] .rowName {
-  color: var(--text-disabled);
-}
-/* Identity chip: a rounded square tinted by the harness's accent, holding the
-   vendored `currentColor` glyph. Replaces the old bare accent dot — same
-   `--row-accent` mechanism, more identity. The glyph itself inherits the tint
-   from `HarnessGlyph`'s inline `color`; here we only tint the tile's fill/ring. */
+
+/* ── The harness's own mark ────────────────────────────────────────────────
+   A rounded square tinted by the harness's accent, holding the vendored
+   `currentColor` glyph. The glyph inherits its tint from `HarnessGlyph`'s
+   inline `color`; here we only tint the tile's fill and ring. */
 .glyphTile {
-  flex: none;
-  display: flex;
   align-items: center;
-  justify-content: center;
-  width: 30px;
-  height: 30px;
-  border-radius: var(--r-md);
   background: color-mix(
     in oklab,
     var(--row-accent, var(--accent)) 12%,
     transparent
   );
+  block-size: 30px;
+  border-radius: var(--r-md);
   box-shadow: 0 0 0 1px
     color-mix(in oklab, var(--row-accent, var(--accent)) 30%, transparent);
+  display: flex;
+  flex: none;
+  inline-size: 30px;
+  justify-content: center;
 }
 .glyphTile svg {
-  width: 18px;
-  height: 18px;
+  block-size: 18px;
+  inline-size: 18px;
 }
-/* Muted when the harness is unavailable: fall off the accent onto neutral ink,
-   matching the row's own dimmed state. */
+/* Muted when the harness is unavailable: off the accent onto neutral ink. The
+   recession is on this leaf rather than an opacity on the row, which would
+   fade the live selects with it and silently invalidate their contrast. */
 .glyphTile[data-unavail="true"] {
   background: color-mix(in oklab, var(--text) 6%, transparent);
   box-shadow: 0 0 0 1px color-mix(in oklab, var(--text) 12%, transparent);
 }
-.rowMeta {
-  flex: 1;
-  min-width: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 3px;
-}
-.rowName {
-  font-family: var(--font-sans);
-  font-size: var(--t-small-size);
-  font-weight: 600;
-  letter-spacing: -0.01em;
-}
-.rowSub {
-  font-family: var(--font-sans);
-  font-size: var(--t-control-size);
-  color: var(--text-faint);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
 
-/* Used-by chips replace the old "Active" pill. Under one global harness
-   "Active" was the useful fact; once every lane routes independently, the
-   useful fact is which lanes land here — it answers what breaks if this
-   harness goes away. */
+/* ── Used-by chips ─────────────────────────────────────────────────────────
+   Under one global harness "Active" was the useful fact; once every lane
+   routes independently, the useful fact is which lanes land here — it answers
+   what breaks if this harness goes away. */
 .usedBy {
+  align-items: center;
   display: flex;
   flex-wrap: wrap;
-  align-items: center;
-  gap: 4px;
-  margin-top: 2px;
+  gap: var(--sp-hair);
+  margin-block-start: 2px;
 }
 .usedByChip {
-  font-size: var(--t-control-size);
-  font-weight: 600;
-  letter-spacing: 0.05em;
-  text-transform: uppercase;
-  font-family: var(--font-sans);
-  color: var(--row-accent, var(--accent));
   background: color-mix(
     in oklab,
     var(--row-accent, var(--accent)) 14%,
     transparent
   );
   border-radius: var(--r-sm);
+  color: var(--row-accent, var(--accent));
+  font-family: var(--font-sans);
+  font-size: var(--t-control-size);
+  font-weight: 600;
+  letter-spacing: 0.05em;
   padding: 2px 6px;
+  text-transform: uppercase;
 }
 .usedByChip[data-default="true"] {
-  color: var(--text-soft);
   background: color-mix(in oklab, var(--text) 10%, transparent);
+  color: var(--text-soft);
 }
 .usedByChip[data-warn="true"] {
-  color: var(--c-amber-text);
   background: color-mix(in oklab, var(--c-amber) 16%, transparent);
+  color: var(--c-amber-text);
 }
 .usedByNone {
+  color: var(--text-ghost);
+  font-family: var(--font-sans);
   font-size: var(--t-control-size);
   font-weight: 600;
   letter-spacing: 0.05em;
   text-transform: uppercase;
-  font-family: var(--font-sans);
-  color: var(--text-ghost);
 }
-/* Action row under the harness inventory — Refresh models. */
-.actionsRow {
-  display: flex;
+
+/* ── The failover ladder ───────────────────────────────────────────────────
+   Disclosed by the Automations lane's own verb, so it sits inside that row's
+   block rather than hanging off every lane's second line. */
+.ladderRow {
   align-items: center;
-  justify-content: flex-end;
-  gap: 8px;
-  margin-top: 22px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-2);
+}
+
+.ladderMember {
+  align-items: center;
+  border: 1px solid var(--line);
+  /* `--r-pill` is a BLUEPRINT-contract token; the shell's radius scale stops
+     at `--r-lg` and composes the pill inline (radii.ts). */
+  border-radius: var(--r-pill);
+  color: var(--text-soft);
+  display: inline-flex;
+  font: var(--t-control);
+  gap: 3px;
+  padding-block: 3px;
+  padding-inline: var(--sp-2) 5px;
+}
+
+.ladderMember button {
+  appearance: none;
+  background: transparent;
+  border: 0;
+  color: var(--text-faint);
+  cursor: pointer;
+  padding: 1px 3px;
+}
+
+.ladderMember button:disabled {
+  cursor: default;
+  opacity: var(--o-disabled);
+}
+
+.ladderAdd {
+  background: var(--bg-elev);
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+  color: var(--text-soft);
+  font: var(--t-control);
+  padding-block: var(--sp-hair);
+  padding-inline: var(--sp-2) var(--sp-5);
 }

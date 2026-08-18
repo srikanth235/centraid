@@ -50,39 +50,100 @@ export function purgeCountdown(iso: string | null | undefined): string {
   return `purges in ${days} days`;
 }
 
-export function typeMeta(mediaType: string | null | undefined): TypeMeta {
-  const t = String(mediaType ?? "").toLowerCase();
-  if (t === "application/pdf")
-    return { label: "PDF", name: "PDF document", cat: "pdf", cv: "--kind-pdf" };
-  if (t.startsWith("video/"))
-    return { label: "VID", name: "Video", cat: "media", cv: "--kind-media" };
-  if (t.startsWith("audio/"))
-    return { label: "AUD", name: "Audio", cat: "media", cv: "--kind-media" };
-  if (t.startsWith("image/"))
-    return { label: "IMG", name: "Image", cat: "image", cv: "--kind-image" };
+/**
+ * THE KIND TABLE. One entry per kind the drive names, and each one carries the
+ * shape it wears (`glyph`).
+ *
+ * FOUR SHAPES ACROSS EIGHT KINDS, which is the handoff's own arithmetic — its
+ * `DKIND` gives `pdf`, `md`, `txt` and `word` the SAME page glyph, `sheet` and
+ * `deck` the same table, and keeps a distinct mark only for a picture and for
+ * time-based media. A member is being told "page", "picture", "table",
+ * "plays"; the exact format is what the Kind column is for, one field to the
+ * right, and duplicating it as eight lookalike outlines would make the leading
+ * edge of the row harder to scan rather than easier.
+ */
+const KINDS = {
+  pdf: {
+    label: "PDF",
+    name: "PDF",
+    cat: "pdf",
+    cv: "--kind-pdf",
+    glyph: "doc",
+  },
+  image: {
+    label: "IMG",
+    name: "Image",
+    cat: "image",
+    cv: "--kind-image",
+    glyph: "image",
+  },
+  video: {
+    label: "VID",
+    name: "Video",
+    cat: "media",
+    cv: "--kind-media",
+    glyph: "media",
+  },
+  audio: {
+    label: "AUD",
+    name: "Audio",
+    cat: "media",
+    cv: "--kind-media",
+    glyph: "media",
+  },
+  sheet: {
+    label: "XLS",
+    name: "Spreadsheet",
+    cat: "sheet",
+    cv: "--kind-sheet",
+    glyph: "sheet",
+  },
+  slide: {
+    label: "PPT",
+    name: "Presentation",
+    cat: "slide",
+    cv: "--kind-slide",
+    // A deck is a table of contents more than it is a page — the handoff maps
+    // its own `deck` to the sheet glyph for the same reason.
+    glyph: "sheet",
+  },
+  doc: {
+    label: "DOC",
+    name: "Document",
+    cat: "doc",
+    cv: "--kind-doc",
+    glyph: "doc",
+  },
+  other: {
+    label: "FILE",
+    name: "File",
+    cat: "other",
+    cv: "--text-faint",
+    glyph: "other",
+  },
+} as const satisfies Record<string, TypeMeta>;
+
+type KindId = keyof typeof KINDS;
+
+/** What the MEDIA TYPE says, when it says anything. */
+function kindFromMediaType(t: string): KindId | null {
+  if (t === "application/pdf") return "pdf";
+  if (t.startsWith("video/")) return "video";
+  if (t.startsWith("audio/")) return "audio";
+  if (t.startsWith("image/")) return "image";
   if (
     t.includes("spreadsheet") ||
     t === "application/vnd.ms-excel" ||
     t === "text/csv" ||
     t === "application/vnd.oasis.opendocument.spreadsheet"
   )
-    return {
-      label: "XLS",
-      name: "Spreadsheet",
-      cat: "sheet",
-      cv: "--kind-sheet",
-    };
+    return "sheet";
   if (
     t.includes("presentation") ||
     t === "application/vnd.ms-powerpoint" ||
     t === "application/vnd.oasis.opendocument.presentation"
   )
-    return {
-      label: "PPT",
-      name: "Presentation",
-      cat: "slide",
-      cv: "--kind-slide",
-    };
+    return "slide";
   if (
     t.includes("word") ||
     t === "application/msword" ||
@@ -90,8 +151,101 @@ export function typeMeta(mediaType: string | null | undefined): TypeMeta {
     t === "application/rtf" ||
     t.startsWith("text/")
   )
-    return { label: "DOC", name: "Document", cat: "doc", cv: "--kind-doc" };
-  return { label: "FILE", name: "File", cat: "other", cv: "--text-faint" };
+    return "doc";
+  return null;
+}
+
+/**
+ * WHAT THE FILENAME SAYS, which is the answer whenever the media type has none.
+ *
+ * This is not belt-and-braces, it is the common case for a whole family of
+ * kinds. An Office file is a ZIP container: a gateway that types bytes by
+ * sniffing them stores `application/octet-stream` for every `.xlsx`, `.docx`
+ * and `.pptx` that arrives — so the drive called them all "File" and drew the
+ * page glyph on every one, which is exactly the sameness a per-kind mark
+ * exists to break. The member named the file; the extension is their own
+ * statement of what it is, and it is the only one on hand.
+ */
+const KIND_BY_EXTENSION: Readonly<Record<string, KindId>> = {
+  pdf: "pdf",
+  jpg: "image",
+  jpeg: "image",
+  png: "image",
+  gif: "image",
+  webp: "image",
+  avif: "image",
+  heic: "image",
+  heif: "image",
+  tif: "image",
+  tiff: "image",
+  bmp: "image",
+  svg: "image",
+  mp4: "video",
+  mov: "video",
+  m4v: "video",
+  webm: "video",
+  avi: "video",
+  mkv: "video",
+  mp3: "audio",
+  m4a: "audio",
+  wav: "audio",
+  aac: "audio",
+  flac: "audio",
+  ogg: "audio",
+  oga: "audio",
+  opus: "audio",
+  xlsx: "sheet",
+  xls: "sheet",
+  xlsm: "sheet",
+  ods: "sheet",
+  csv: "sheet",
+  tsv: "sheet",
+  numbers: "sheet",
+  pptx: "slide",
+  ppt: "slide",
+  odp: "slide",
+  key: "slide",
+  docx: "doc",
+  doc: "doc",
+  odt: "doc",
+  rtf: "doc",
+  pages: "doc",
+  md: "doc",
+  markdown: "doc",
+  txt: "doc",
+  text: "doc",
+  log: "doc",
+  json: "doc",
+  xml: "doc",
+};
+
+function kindFromName(name: string): KindId | null {
+  const dot = name.lastIndexOf(".");
+  if (dot <= 0 || dot >= name.length - 1) return null;
+  return KIND_BY_EXTENSION[name.slice(dot + 1).toLowerCase()] ?? null;
+}
+
+/**
+ * What a document IS.
+ *
+ * `name` is the KIND'S OWN WORD — what the Kind column, the rail's Facts row
+ * and the stage's meta line all print. It is a noun a member would use, so
+ * "PDF", not "PDF document": the thing it is describing is already known to be
+ * a document, and the column has 96px.
+ *
+ * The MEDIA TYPE is asked first and the FILENAME second, never the other way
+ * round: a stored type is what the vault knows, an extension is what somebody
+ * typed. The filename only ever answers a question the type left open.
+ */
+export function typeMeta(
+  mediaType: string | null | undefined,
+  /** The document's own title. Pass it wherever there is one. */
+  name?: string | null
+): TypeMeta {
+  const t = String(mediaType ?? "").toLowerCase();
+  const kind =
+    kindFromMediaType(t) ?? kindFromName(String(name ?? "")) ?? "other";
+  return KINDS[kind];
 }
 
 // The vault's own edit_document precondition (media_type LIKE 'text/%',
@@ -99,12 +253,12 @@ export function typeMeta(mediaType: string | null | undefined): TypeMeta {
 // Edit affordance only ever shows where the command would actually accept
 // it. Anything else (including a scanned PDF or an image) takes the
 // Replace-file door instead.
-export function isTextEditable(doc: DocFields): boolean {
+export function isTextKind(doc: DocFields): boolean {
   return /^text\//iu.test(String(doc.media_type ?? ""));
 }
 
 // Decode a data: URI's text payload directly, without a network round trip.
-// The in-place editor (components/Editor.tsx) needs this for any document
+// The stage's paper sheet (components/QuickLookText.tsx) needs this for any document
 // whose bytes stayed inline (issue #296: small text bodies never rewrite to
 // a blob: route) — `fetch()`-ing a data: URI is blocked by the app's own
 // CSP (`connect-src` inherits `default-src 'self'`; only `img-src`
@@ -144,7 +298,7 @@ export function decodeDataUri(uri: string | null | undefined): string | null {
  * `blob:` route (that needs an async fetch, which the editor owns).
  */
 export function inlineText(doc: DocFields): string | null {
-  if (!isTextEditable(doc)) return null;
+  if (!isTextKind(doc)) return null;
   const text = decodeDataUri(doc.content_uri);
   return text && text.trim() ? text : null;
 }
@@ -211,7 +365,7 @@ export function isMedia(doc: DocFields): boolean {
  * the one telling a member their document is unopenable.
  */
 export function canRender(doc: DocFields): boolean {
-  const { cat } = typeMeta(doc.media_type);
+  const { cat } = typeMeta(doc.media_type, doc.title);
   if (cat === "sheet" || cat === "slide") return false;
   if (cat !== "doc") return cat !== "other";
   // The `doc` category holds both text kinds (which render) and the binary
@@ -339,5 +493,5 @@ export function extOf(doc: DocFields): string {
   const dot = t.lastIndexOf(".");
   if (dot > 0 && dot < t.length - 1)
     return `.${t.slice(dot + 1).toLowerCase()}`;
-  return typeMeta(doc.media_type).label.toLowerCase();
+  return typeMeta(doc.media_type, doc.title).label.toLowerCase();
 }

@@ -3,11 +3,11 @@
 //   RootStack (native stack, springboard model)
 //   ├─ Home          → HomeScreen                      (launcher, root)
 //   ├─ Photos        → PhotosStack  (timeline, lightbox, library/search/sharing)
-//   ├─ Docs          → DocsStack    (drive, viewer)
+//   ├─ Docs          → DocsHome     (blank, awaiting its design handoff)
 //   ├─ Agenda        → AgendaStack  (calendar, event)
 //   ├─ Locker        → LockerHome   (native authenticated secrets cover)
 //   ├─ Tasks         → TasksHome    (native offline task organizer)
-//   ├─ People        → PeopleHome   (native offline contact organizer)
+//   ├─ People        → PeopleHome   (blank, awaiting its design handoff)
 //   ├─ Notes         → NotesHome    (native CommonMark + linked-data editor)
 //   ├─ Tally         → TallyHome    (native offline shared ledger)
 //   ├─ Assistant     → AssistantScreen (chat with the gateway assistant)
@@ -112,11 +112,6 @@ export type PhotosStackParamList = {
     | { mode: "person"; partyId: string; personName: string };
 };
 
-export type DocsStackParamList = {
-  DocsHome: { folderId?: string } | undefined;
-  DocumentViewer: { documentId: string };
-};
-
 export type AgendaStackParamList = {
   AgendaHome: undefined;
   // `instanceKey` renders the tapped occurrence of a recurring series (its
@@ -152,7 +147,10 @@ export type RootStackParamList = {
       }
     | undefined;
   Photos: NavigatorScreenParams<PhotosStackParamList>;
-  Docs: NavigatorScreenParams<DocsStackParamList>;
+  // Docs lost its stack when the native drive was removed pending the v11
+  // handoff (see src/apps/docs/DocsHome.tsx). It is a plain cover again, and
+  // becomes a stack again only when the rebuild has a second screen to push.
+  Docs: undefined;
   Agenda: NavigatorScreenParams<AgendaStackParamList>;
   Locker: undefined;
   Tasks: undefined;
@@ -192,6 +190,7 @@ export type ScanScreenProps = RootScreenProps<"Scan">;
 export type LockerScreenProps = RootScreenProps<"Locker">;
 export type TasksScreenProps = RootScreenProps<"Tasks">;
 export type PeopleScreenProps = RootScreenProps<"People">;
+export type DocsScreenProps = RootScreenProps<"Docs">;
 export type NotesScreenProps = RootScreenProps<"Notes">;
 export type TallyScreenProps = RootScreenProps<"Tally">;
 export type AssistantScreenProps = RootScreenProps<"Assistant">;
@@ -225,9 +224,6 @@ export type PhotosShellNavigation = CompositeNavigationProp<
   NativeStackNavigationProp<PhotosStackParamList>,
   NativeStackNavigationProp<RootStackParamList>
 >;
-
-export type DocsScreenProps<T extends keyof DocsStackParamList> =
-  CompositeScreenProps<NativeStackScreenProps<DocsStackParamList, T>, Root>;
 
 export type AgendaScreenProps<T extends keyof AgendaStackParamList> =
   CompositeScreenProps<NativeStackScreenProps<AgendaStackParamList, T>, Root>;

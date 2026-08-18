@@ -32,6 +32,8 @@
 .headCell {
   color: var(--text-faint);
   font: var(--t-eyebrow);
+  letter-spacing: var(--t-eyebrow-tracking);
+  text-transform: var(--t-eyebrow-transform);
 }
 
 .headCell.record {

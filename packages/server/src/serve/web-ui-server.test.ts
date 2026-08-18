@@ -57,7 +57,7 @@ describe("web-ui-server", () => {
     await expect(response.text()).resolves.toContain('id="root"');
     const csp = response.headers.get("content-security-policy") ?? "";
     expect(csp).toContain("connect-src 'self' http://127.0.0.1:8765");
-    expect(csp).toContain("frame-src 'self' data: http://127.0.0.1:8765");
+    expect(csp).toContain("frame-src 'self' data: blob: http://127.0.0.1:8765");
     expect(csp).toContain("frame-ancestors 'none'");
     expect(response.headers.get("cache-control")).toBe("no-store");
   });
@@ -75,7 +75,7 @@ describe("web-ui-server", () => {
       "connect-src 'self' http://127.0.0.1:8765 https: wss:"
     );
     // Iroh-mode apps use a sandboxed data document; direct HTTP retains its API origin.
-    expect(csp).toContain("frame-src 'self' data: http://127.0.0.1:8765");
+    expect(csp).toContain("frame-src 'self' data: blob: http://127.0.0.1:8765");
     const nonce =
       /<meta name="centraid-csp-nonce" content="(?<nonce>[^"]+)">/u.exec(
         html

@@ -61,7 +61,7 @@ export function PropsTab({
   onAddTag: (doc: DriveDoc, label: string) => void;
   onRemoveTag: (doc: DriveDoc, tagId: string) => void;
 }): ReactNode {
-  const kind = typeMeta(doc.media_type);
+  const kind = typeMeta(doc.media_type, doc.title);
   const custody = custodyMeta(doc.custody_state);
   return (
     <>
@@ -114,7 +114,7 @@ export function FactsTab({
     };
   }, [doc.document_id, loadHistory]);
 
-  const kind = typeMeta(doc.media_type);
+  const kind = typeMeta(doc.media_type, doc.title);
   const custody = custodyMeta(doc.custody_state);
   return (
     <dl className={styles.facts}>

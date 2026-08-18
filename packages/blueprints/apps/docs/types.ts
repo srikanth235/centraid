@@ -1,3 +1,5 @@
+import type { SearchStatus } from "../_shared/search-scaffold.ts";
+import type { DriveFilters } from "./filters.ts";
 // Shared page-side shapes for the docs app (TS conversion). Type-only — no
 // runtime members — so every importer uses `import type`, which esbuild strips
 // at serve time (a value import of this module would 404). Grounded in the
@@ -6,7 +8,7 @@
 // search, `snippet` present only on a search hit); `Folder` is the folders-scheme
 // concept projected as a nav row; `VersionEntry`/`ActivityEvent` are what the
 // `history`/`activity` reads hand the History/Activity panels.
-import type { DriveFilters } from "./filters.ts";
+import type { KIND_ICONS } from "./icons.ts";
 import type { ShelfId } from "./shelves.ts";
 
 /** One free-form label on a document (core.tag_item over the shared Tags scheme). */
@@ -39,6 +41,47 @@ export interface DriveDoc {
   snippet?: string;
   tags: DocTag[];
   custody_state: string | null;
+}
+
+/**
+ * What the drive may be ordered by — one key per sortable column in the row
+ * set's head (§4.1), because the head IS the sort control and a key with no
+ * column would be an order nobody can see or reverse.
+ *
+ * `changed`, not `added`: the drive's default is last change, newest first,
+ * and Recently changed is a shelf over the same fact. Nothing in the product
+ * records when a document was OPENED, so that is not offered.
+ */
+export type SortKey = "changed" | "kind" | "name" | "owner" | "size";
+
+/**
+ * One named order in the sort menu (§4.1's `DSORTS`) — a key AND a direction,
+ * because "Date changed" is two orders and a member picking from a list is
+ * picking one of them, not a column to press twice.
+ */
+export interface SortOption {
+  key: SortKey;
+  dir: 1 | -1;
+  /** The property being ordered — "Date changed". */
+  name: string;
+  /** Which way — "newest first". */
+  sub: string;
+}
+
+/**
+ * One file in the upload queue (§4.4's `bulk`).
+ *
+ * FOUR STATES, NOT A PERCENTAGE. The handoff draws a determinate bar per file,
+ * which is honest where the transport reports bytes sent; this one stages a
+ * whole file and then commits it, so the only truthful readings are "not
+ * started", "in flight", "landed" and "did not land". A bar creeping to 62% on
+ * a number nobody measured is worse than a word that is true.
+ */
+export interface UploadItem {
+  name: string;
+  state: "waiting" | "running" | "landed" | "parked" | "failed";
+  /** Why it did not land, in the member's words. Only on `failed`. */
+  reason?: string;
 }
 
 /** A folder — a folders-scheme SKOS concept, projected as a nav row. */
@@ -86,6 +129,10 @@ export interface TypeMeta {
   name: string;
   cat: string;
   cv: string;
+  /** Which of `KIND_ICONS` (icons.ts) this kind wears in a row. Derived from
+   *  `cat` at the one place `cat` is decided, so a new kind cannot be added
+   *  with a colour and a word but no shape. */
+  glyph: keyof typeof KIND_ICONS;
 }
 
 /**
@@ -122,26 +169,44 @@ export interface AppState {
    * home (`filtersActive`).
    */
   filters: DriveFilters;
-  sortKey: "added" | "name" | "size";
+  sortKey: SortKey;
   sortDir: 1 | -1;
+  /**
+   * SELECTION IS A MODE, entered by the app bar's `Select` (§4.1's `showBox`).
+   * A checkbox on every row of every drive, forever, is a control the member
+   * did not ask for occupying the leading edge of the one thing they came to
+   * read. Leaving the mode clears `selected` — a selection nobody can see is a
+   * selection that will surprise the next command.
+   */
+  selecting: boolean;
+  /**
+   * The upload queue, per file (§4.4's `bulk`). Empty while nothing is in
+   * flight and nothing has failed — a queue that has finished cleanly clears
+   * itself, and one that has NOT stays on screen until the member dismisses
+   * it, because "three did not land" is the sentence a disappearing toast
+   * loses.
+   */
+  uploadQueue: UploadItem[];
   tag: string;
   search: string;
   searchResults: DriveDoc[] | null;
+  /**
+   * Which of the four honest states the Search shelf is in
+   * (`_shared/search-scaffold.ts`). READ, never inferred: a failed reach and
+   * an empty result set are different sentences, and collapsing them is
+   * exactly what the handoff forbids — "search will not pretend to have
+   * looked". `applySearch` sets this from what the read actually did.
+   */
+  searchStatus: SearchStatus;
   searchSeq: number;
   selected: Set<string>;
   anchorIndex: number | null;
   detailsId: string | null;
+  /** The document open on the STAGE (§7) — the one viewer, for every kind:
+   *  media on the theater ground, text on paper standing on it. */
   quickId: string | null;
-  /**
-   * The document open in the READING view (§6.1) — a route, not an overlay:
-   * text renders on paper at a 34em measure, and paper is a screen. Quick Look
-   * (`quickId`) stays the interim viewer for the kinds that belong on the
-   * stage, which has not landed yet.
-   */
-  readingId: string | null;
   /** The document whose version history (§6.2) is open, as its own route. */
   versionsId: string | null;
-  editingId: string | null;
   newMenuOpen: boolean;
   creatingFolder: boolean;
   renamingFolderId: string | null;

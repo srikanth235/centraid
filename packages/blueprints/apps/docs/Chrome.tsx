@@ -1,9 +1,24 @@
 // The Docs chrome as JSX — a ROUTE INSIDE THE FRAME (issue #505 inline path,
-// Docs spec §1). The sidebar (brand, New menu, folders, storage), the topbar
-// (hamburger, search, grid/list toggle, [data-ask-mount]), the consent/notice
-// banners, the shelf strip, the toolbar, the bulk bar and the scroll host,
+// Docs spec §1). The sidebar (brand, New menu, folders, storage), the
+// consent/notice banners, the shelf strip and the scroll host,
 // expressed as one React tree so app-inline.tsx renders one tree instead of
-// fourteen imperative roots. Classes come from Chrome.module.css (scoped
+// fourteen imperative roots.
+//
+// THE TOPBAR IS GONE and the handoff's TOOLBAR ROW is in its place. The old
+// row was `kit-app-topbar` — 66px, a full-width search field, a rule — chrome
+// pretending to be a header. The field is now the Search shelf's own first
+// block (`components/SearchField.tsx`), reached from the app bar's Search
+// control beside Select and from the compact band's Search tab. What is left
+// is what the handoff draws above the strip: a 34px row of controls carrying
+// the List/Grid pair at its trailing edge (`components/ViewToggle.tsx`), on
+// the shape Photos' own toolbar row uses.
+//
+// THE TOOLBAR ROW IS GONE, and so are the hamburger and the inline Ask button.
+// None of the three is in the handoff, and each restated something the screen
+// already says better: the tag rail and compact sort button duplicated the
+// filter pills and the column heads, the hamburger opened a sidebar this seat
+// renders `display: none` at every width, and Ask is the shell's own affordance
+// sitting in the corner of the same window. Classes come from Chrome.module.css (scoped
 // chrome) + the global kit-* vocabulary (kit.css, loaded once by the host).
 //
 // TRAP #5 IS CLOSED HERE. This root used to stamp a GLOBAL `docs` /
@@ -21,16 +36,27 @@
 // `photos/Chrome.tsx` uses. The chrome owns geometry; what stands in each
 // region is the orchestrator's decision, so the two can be reasoned about —
 // and re-carved for the routes still to land — independently.
-import type { KeyboardEvent, ReactNode } from "react";
+import type { ReactNode } from "react";
 
 import { VaultAccessButton } from "../_shared/VaultAccessButton.tsx";
-import type { AppState } from "./types.ts";
 
 import styles from "./Chrome.module.css";
 
 /** Everything the chrome DRAWS but does not decide. One region per slot, and
  *  a `null` slot renders nothing at all rather than an empty container. */
 export interface ChromeSlots {
+  /**
+   * The toolbar row above the strip (the handoff's `barRow`) — ONE ROW WITH
+   * TWO STATES, exactly as `barNormal: !sel, selOn: !!sel` says: the List/Grid
+   * pair while nothing is picked, the selection bar's count and verbs while
+   * something is. The caller decides which; this row only draws it.
+   *
+   * The selection bar used to have a region of its own below the shelf strip.
+   * Null wherever the row would carry nothing. AN EMPTY BAND IS CHROME:
+   * Photos' own toolbar returns null rather than draw a rule with nothing in
+   * it (`toolbarCarriesSomething`).
+   */
+  toolbar: ReactNode;
   /** The shelf strip (§1.7). Null on the compact form factor whose band claim
    *  was honoured — the band carries the shelves there — and on the routes
    *  §1.7 excludes. */
@@ -40,11 +66,17 @@ export interface ChromeSlots {
   storage: ReactNode;
   /** The "+ New" dropdown's contents, or null while it is closed. */
   newMenu: ReactNode;
-  tagChips: ReactNode;
-  /** The selection action bar, or null while nothing is selected. */
-  bulkBar: ReactNode;
   /** The current route's body (components/DriveRoute, FoldersRoute, …). */
   scroll: ReactNode;
+  /** The DOCKED details rail (§8), or null while it is closed — a column
+   *  BESIDE the set, never over it. The handoff's `docsRail` is a flex
+   *  sibling of the scroller inside `contentStyle`, which is what makes
+   *  "select another row and the rail follows it" a usable sentence: a modal
+   *  drawer over a scrim covers the set it is describing, so the next row
+   *  cannot be reached without dismissing the description first. On the
+   *  compact form factor this stays null and the rail keeps its drawer form
+   *  (Details.tsx) — 308px beside 390 is not a column. */
+  rail: ReactNode;
   /** Details / Quick Look / Editor / the share sheet. */
   overlays: ReactNode;
   /** The compact band's overflow sheet (§1.5), or null while it is closed. */
@@ -55,27 +87,17 @@ export interface ChromeProps {
   narrow: boolean;
   ready: boolean;
   sideOpen: boolean;
-  view: AppState["view"];
   newMenuOpen: boolean;
   consent: { message: string } | null;
-  activeTitle: string;
-  activeSub: string;
-  sortLabel: string;
-  /** The grid/list toggle and the filter chips mean nothing off the drive
-   *  (§1.7), so the toolbar's tools stand down rather than sitting there
-   *  inert over a shelf they cannot filter. */
-  showDriveTools: boolean;
+  /** Something is picked, so the toolbar row is carrying the SELECTION bar
+   *  rather than the arrangement pair. Carried as a prop and stamped on this
+   *  row, never read off a global state class another module owns (trap #5). */
+  selecting: boolean;
   dropVisible: boolean;
   dropTarget: string;
-  onOpenSide: () => void;
   onCloseSide: () => void;
   onToggleNewMenu: (event: { stopPropagation: () => void }) => void;
-  onSelectView: (view: AppState["view"]) => void;
-  onSort: () => void;
-  onSearchInput: () => void;
-  onSearchKeyDown: (event: KeyboardEvent<HTMLInputElement>) => void;
   onUploadChange: () => void;
-  searchRef: (el: HTMLInputElement | null) => void;
   uploadRef: (el: HTMLInputElement | null) => void;
   slots: ChromeSlots;
 }
@@ -84,7 +106,7 @@ export function Chrome(props: ChromeProps): ReactNode {
   // Callback refs come off `props` first: a ref read from the props object taints
   // every later `props.*` read for the React compiler ("cannot access refs during
   // render"), so they are destructured into plain locals here (#573).
-  const { searchRef, uploadRef } = props;
+  const { uploadRef } = props;
 
   // Module-scoped only. The global `docs`/`is-narrow`/`side-open` trio that
   // used to be mirrored here is gone (see the trap #5 note at the top).
@@ -228,108 +250,32 @@ export function Chrome(props: ChromeProps): ReactNode {
       />
 
       <main className={styles.main}>
-        <div className={styles.topbar}>
-          <button
-            type="button"
-            className={styles.hamburger}
-            aria-label="Open menu"
-            onClick={props.onOpenSide}
+        {/* THE TOOLBAR ROW (the handoff's `barRow`, above the strip). Controls
+            and nothing else — no rule, no title, no count of its own: those are
+            the frame's app bar. It carries the List/Grid pair at its trailing
+            edge, and while a set is picked it carries the SELECTION BAR in the
+            same slot instead (`barNormal: !sel, selOn: !!sel`).
+
+            `aria-label` follows what the row is currently for, because a row
+            of five destructive-adjacent verbs announced as "View" is the label
+            describing the furniture rather than the contents.
+
+            THIS IS NOT THE OLD TOPBAR. That row was `kit-app-topbar` — 66px,
+            a search field and a border-bottom, chrome pretending to be a
+            header. The field became the Search shelf's own block
+            (components/SearchField.tsx); what is left is the row the handoff
+            actually draws, at the height it actually draws it, and it renders
+            only where it carries something. */}
+        {props.slots.toolbar ? (
+          <div
+            className={styles.toolbar}
+            data-selecting={String(props.selecting)}
+            role="toolbar"
+            aria-label={props.selecting ? "Selection actions" : "View"}
           >
-            <svg
-              aria-hidden="true"
-              width="19"
-              height="19"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="1.75"
-              strokeLinecap="round"
-            >
-              <path d="M4 7h16M4 12h16M4 17h16" />
-            </svg>
-          </button>
-          <label className={`kit-search ${styles.search}`}>
-            <svg
-              width="17"
-              height="17"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="1.75"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              aria-hidden="true"
-            >
-              <circle cx="11" cy="11" r="7" />
-              <path d="m21 21-4.3-4.3" />
-            </svg>
-            <input
-              ref={searchRef}
-              id="searchInput"
-              type="search"
-              placeholder="Search documents, contents, people…"
-              aria-label="Search documents by title or contents"
-              autoComplete="off"
-              onInput={props.onSearchInput}
-              onKeyDown={props.onSearchKeyDown}
-            />
-          </label>
-          <div className={styles.topbarTools}>
-            {/* Grid or list is a view of the DRIVE. Off it there are no rows
-                to lay out either way, so the toggle stands down with the
-                filters rather than pretending to change something. */}
-            <fieldset
-              className="kit-seg"
-              aria-label="View"
-              hidden={!props.showDriveTools}
-            >
-              <button
-                type="button"
-                aria-label="Grid view"
-                aria-pressed={props.view === "grid"}
-                onClick={() => props.onSelectView("grid")}
-              >
-                <svg
-                  aria-hidden="true"
-                  width="17"
-                  height="17"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="1.75"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                >
-                  <rect x="3" y="3" width="7" height="7" rx="1" />
-                  <rect x="14" y="3" width="7" height="7" rx="1" />
-                  <rect x="3" y="14" width="7" height="7" rx="1" />
-                  <rect x="14" y="14" width="7" height="7" rx="1" />
-                </svg>
-              </button>
-              <button
-                type="button"
-                aria-label="List view"
-                aria-pressed={props.view === "list"}
-                onClick={() => props.onSelectView("list")}
-              >
-                <svg
-                  aria-hidden="true"
-                  width="17"
-                  height="17"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="1.75"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                >
-                  <path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01" />
-                </svg>
-              </button>
-            </fieldset>
-            <div className={styles.askMount} data-ask-mount />
+            {props.slots.toolbar}
           </div>
-        </div>
+        ) : null}
 
         {props.consent ? (
           // `id="consentBanner"` is the shared hook kit's onFocusRefresh reads to
@@ -357,49 +303,27 @@ export function Chrome(props: ChromeProps): ReactNode {
             routes that carry no strip at all. */}
         {props.slots.shelfStrip}
 
-        <div className={styles.toolbar}>
-          <div className={styles.toolbarTitle}>
-            <div className={styles.title}>{props.activeTitle}</div>
-            <div className={styles.sub}>{props.activeSub}</div>
-          </div>
-          {/* The filters, the view toggle and the sort belong to the DRIVE.
-              Off it (Folders, Coming due) there is nothing to filter or sort,
-              and a row of inert controls is worse than none. */}
-          <div className={styles.toolbarTools} hidden={!props.showDriveTools}>
-            <fieldset className={styles.chips} aria-label="Filter by tag">
-              {props.slots.tagChips}
-            </fieldset>
-            <span className={styles.toolbarDiv} aria-hidden="true" />
-            <button type="button" className="kit-btn" onClick={props.onSort}>
-              <svg
-                aria-hidden="true"
-                width="15"
-                height="15"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="1.6"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              >
-                <path d="M7 4v16m0 0-3-3m3 3 3-3M17 20V4m0 0-3 3m3-3 3 3" />
-              </svg>
-              <span>{props.sortLabel}</span>
-            </button>
-          </div>
+        {/* THE PLACE IS NAMED ONCE, and this row is where it kept saying it a
+            second and third time. It opened with a display-serif "All
+            documents" over a count while the frame's app bar already said
+            "Docs · 3 documents" and the breadcrumb already said
+            "Docs / All documents"; that title went first. What replaced it —
+            a tag-chip rail and a compact sort button — is not in the handoff
+            either, and the things it carried have homes that are: the column
+            heads and their `≡` menu ARE the sort (components/List.tsx), and
+            the filter pills under the breadcrumb are where a set is narrowed
+            (components/FilterRow.tsx). A row that only restates other rows is
+            the thing this screen keeps deleting. */}
+
+        {/* THE CONTENT ROW: the scroller and the details rail, side by side
+            (the handoff's `contentStyle`, `display: flex`). The scroller was
+            the only child of `main` while the rail was a fixed overlay; the
+            rail is furniture now, so the two share the row and the set
+            reflows to the width that is left rather than being covered. */}
+        <div className={styles.content}>
+          <div className={styles.scroll}>{props.slots.scroll}</div>
+          {props.slots.rail}
         </div>
-
-        {props.slots.bulkBar ? (
-          <div
-            className={styles.bulk}
-            role="toolbar"
-            aria-label="Selection actions"
-          >
-            {props.slots.bulkBar}
-          </div>
-        ) : null}
-
-        <div className={styles.scroll}>{props.slots.scroll}</div>
       </main>
 
       {props.slots.overlays}

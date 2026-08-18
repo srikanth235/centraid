@@ -9,6 +9,7 @@ import {
   loadDefaultCronTimeZone,
   saveDefaultCronTimeZone,
 } from "../shell/routes/settingsCronTimezoneData.js";
+import NoteBlock from "../ui/NoteBlock.js";
 import { DrawerGroup, DrawerRow, Segmented } from "./settings-controls.js";
 
 import sc from "./settings-controls.module.css";
@@ -72,9 +73,12 @@ export default function SettingsAppearanceScreen({
 
   return (
     <>
-      <DrawerGroup label="Theme">
+      {/* THIS DEVICE, not the household: the theme is what this browser paints
+          and the zone is what a schedule with none of its own fires in. The
+          name and colour above are what everyone else sees. */}
+      <DrawerGroup label="This device" meta="theme and time">
         <DrawerRow
-          label="Appearance"
+          label="Theme"
           hint="Centraid Light, Centraid Dark, or your OS setting."
         >
           <Segmented
@@ -94,18 +98,16 @@ export default function SettingsAppearanceScreen({
             <p className={sc.rowHint}>Follows the system as it changes</p>
           ) : null}
         </DrawerRow>
-      </DrawerGroup>
-      {/* The time zone belongs to YOU: it is the zone a schedule with none of
+        {/* The time zone belongs to YOU: it is the zone a schedule with none of
           its own fires in, which is a fact about the member's day rather than
           about the automation. It stays gated on the same capability the
           Automations route is — a default for a feature this gateway does not
           run is a setting whose effect the owner can never see. */}
-      {automations ? (
-        <>
-          <DrawerGroup label="Automations">
+        {automations ? (
+          <>
             <DrawerRow
-              label="Default cron timezone"
-              hint="IANA zone used when a schedule omits its own timezone. Empty keeps the host clock (pre-#570 behavior)."
+              label="Time zone for automations"
+              hint="For crons with no zone of their own; empty keeps the host clock."
             >
               <input
                 className={sc.input}
@@ -143,29 +145,34 @@ export default function SettingsAppearanceScreen({
                 {cronTzError}
               </p>
             ) : null}
-          </DrawerGroup>
-          {/* Each suggestion carries its zone as text, not just as `value`: a
+            {/* Each suggestion carries its zone as text, not just as `value`: a
               value-only <option> has no accessible name, so a screen reader
               announces an unlabelled list. Label and value are identical, which
               is what the picker already showed. Inside the gate with its input
               — a datalist no field lists is markup nothing can reach. */}
-          <datalist id="centraid-cron-timezones">
-            <option value="UTC">UTC</option>
-            <option value="America/New_York">America/New_York</option>
-            <option value="America/Chicago">America/Chicago</option>
-            <option value="America/Denver">America/Denver</option>
-            <option value="America/Los_Angeles">America/Los_Angeles</option>
-            <option value="America/Sao_Paulo">America/Sao_Paulo</option>
-            <option value="Europe/London">Europe/London</option>
-            <option value="Europe/Paris">Europe/Paris</option>
-            <option value="Europe/Berlin">Europe/Berlin</option>
-            <option value="Asia/Kolkata">Asia/Kolkata</option>
-            <option value="Asia/Tokyo">Asia/Tokyo</option>
-            <option value="Asia/Shanghai">Asia/Shanghai</option>
-            <option value="Australia/Sydney">Australia/Sydney</option>
-          </datalist>
-        </>
-      ) : null}
+            <datalist id="centraid-cron-timezones">
+              <option value="UTC">UTC</option>
+              <option value="America/New_York">America/New_York</option>
+              <option value="America/Chicago">America/Chicago</option>
+              <option value="America/Denver">America/Denver</option>
+              <option value="America/Los_Angeles">America/Los_Angeles</option>
+              <option value="America/Sao_Paulo">America/Sao_Paulo</option>
+              <option value="Europe/London">Europe/London</option>
+              <option value="Europe/Paris">Europe/Paris</option>
+              <option value="Europe/Berlin">Europe/Berlin</option>
+              <option value="Asia/Kolkata">Asia/Kolkata</option>
+              <option value="Asia/Tokyo">Asia/Tokyo</option>
+              <option value="Asia/Shanghai">Asia/Shanghai</option>
+              <option value="Australia/Sydney">Australia/Sydney</option>
+            </datalist>
+          </>
+        ) : null}
+      </DrawerGroup>
+      {/* Where the two acts that are NOT settings live. Both were pages on this
+          rail once, and both are things you do rather than things you set. */}
+      <NoteBlock>
+        Pairing a phone is in the account menu. Gateway health is on System.
+      </NoteBlock>
     </>
   );
 }

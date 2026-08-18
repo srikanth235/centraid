@@ -55,6 +55,25 @@ const ORIGIN_BG = "blobOriginBg";
 /** `scanTree`'s selector for a background sink — pending OR already swapped. */
 const BG_SELECTOR = '[style*="_vault/blobs"], [data-blob-origin-bg]';
 
+/**
+ * THE OTHER SRC-BEARING SINKS: an embedded document and time-based media.
+ *
+ * This module used to watch `<img>` and CSS backgrounds only, which was every
+ * blob surface the photos grid had. It is not every blob surface the product
+ * has: Docs' stage renders a PDF in an `<iframe>` and sound and video in
+ * `<video>`/`<audio>`, all three pointed at the same relative
+ * `/centraid/_vault/blobs/<id>` path. Un-authorized, that path resolves to the
+ * SPA's own index.html — so the PDF frame painted a BLANK WHITE PAGE and the
+ * players failed silently, which reads as "the file is empty" rather than
+ * "nobody asked for it with a credential".
+ *
+ * They take the same swap as an `<img>`'s `src`, minus the staged-prefetch
+ * dance: there is no lazy grid behind them, so the whole reference lands in
+ * `src` at once. A `<video poster>` is deliberately NOT covered — the poster is
+ * decoration over bytes this module now authorizes properly.
+ */
+const FRAMED_SELECTOR = "iframe, video, audio";
+
 // The claim stamp, and the other half of the ordering contract with the apps.
 //
 // Stamping an origin is not enough on its own: the browser begins loading a
@@ -247,6 +266,20 @@ export function installInlineBlobImages(root: HTMLElement): () => void {
       authorize(img, prefetchMap, ORIGIN_PREFETCH, origin, setPrefetch(img));
   };
 
+  const scanFramed = (el: HTMLElement): void => {
+    const set = (url: string): void => el.setAttribute("src", url);
+    const src = el.getAttribute("src");
+    if (src?.startsWith(BLOB_PREFIX)) {
+      authorize(el, srcMap, ORIGIN_SRC, src, set);
+      return;
+    }
+    // Recovery, same contract as an image's: a `blob:` URL a previous install
+    // revoked is dead bytes, and the stamp says where to fetch them again.
+    if (!isStaleObjectUrl(src)) return;
+    const origin = el.dataset[ORIGIN_SRC];
+    if (origin) authorize(el, srcMap, ORIGIN_SRC, origin, set);
+  };
+
   const scanBackground = (el: HTMLElement): void => {
     const set = (url: string): void => {
       el.style.backgroundImage = `url("${url}")`;
@@ -266,6 +299,7 @@ export function installInlineBlobImages(root: HTMLElement): () => void {
   const scanEl = (el: Element): void => {
     if (el instanceof HTMLImageElement) scanImg(el);
     if (!(el instanceof HTMLElement)) return;
+    if (el.matches(FRAMED_SELECTOR)) scanFramed(el);
     // The stamp keeps an ALREADY-swapped cover in scope: its inline style now
     // reads `url("blob:…")`, which no longer mentions the vault prefix.
     if (
@@ -282,6 +316,8 @@ export function installInlineBlobImages(root: HTMLElement): () => void {
     scanEl(node);
     for (const img of node.querySelectorAll<HTMLImageElement>("img"))
       scanImg(img);
+    for (const el of node.querySelectorAll<HTMLElement>(FRAMED_SELECTOR))
+      scanFramed(el);
     for (const el of node.querySelectorAll<HTMLElement>(BG_SELECTOR)) {
       scanBackground(el);
     }

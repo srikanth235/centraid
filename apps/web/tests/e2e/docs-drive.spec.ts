@@ -161,7 +161,7 @@ test("Docs uploads a real file and its bytes survive a PWA reload", async ({
     buffer: Buffer.from(DOC_BODY, "utf8"),
   });
   await expect(
-    page.getByRole("button", { name: `Open ${DOC_TITLE} details` })
+    page.getByRole("button", { name: `Select ${DOC_TITLE}` })
   ).toBeVisible({ timeout: 30_000 });
 
   // The document is a vault row, not browser state: it must come back after
@@ -170,7 +170,7 @@ test("Docs uploads a real file and its bytes survive a PWA reload", async ({
   await page.locator('nav[aria-label="Apps"]').waitFor({ state: "visible" });
   await openFirstParty(page, "Docs");
   await expect(
-    page.getByRole("button", { name: `Open ${DOC_TITLE} details` })
+    page.getByRole("button", { name: `Select ${DOC_TITLE}` })
   ).toBeVisible({ timeout: 30_000 });
 
   // Byte-bearing proof: the exact uploaded bytes come back down on demand

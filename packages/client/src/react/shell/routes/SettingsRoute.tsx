@@ -1,4 +1,4 @@
-import { Fragment, useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { JSX } from "react";
 
 import type { IconName } from "@centraid/design";
@@ -11,6 +11,7 @@ import SettingsHarnessesScreen from "../../screens/SettingsHarnessesScreen.js";
 import SettingsProfileScreen from "../../screens/SettingsProfileScreen.js";
 import SettingsVaultScreen from "../../screens/SettingsVaultScreen.js";
 import Icon from "../../ui/Icon.js";
+import PanelBlock from "../../ui/PanelBlock.js";
 import { useShellActions } from "../actions.js";
 import { disconnectConfirmCopy } from "../gatewayRegistry.js";
 import { openPrompt } from "../prompt.js";
@@ -63,7 +64,6 @@ export type SettingsPageId =
 interface PageDef {
   id: SettingsPageId;
   label: string;
-  section: string;
   icon: IconName;
   /**
    * Three words, carried by the NAV ROW rather than the page head. A rail
@@ -97,28 +97,24 @@ const PAGES: readonly PageDef[] = [
   {
     id: "appearance",
     label: "You",
-    section: "Account",
     icon: "User",
     subtitle: "Name, colour, theme",
   },
   {
     id: "vault",
     label: "Vault",
-    section: "Account",
     icon: "Database",
     subtitle: "Name, colour, copies",
   },
   {
     id: "harnesses",
     label: "Agents",
-    section: "Models",
     icon: "Cpu",
     subtitle: "Harnesses and lanes",
   },
   {
     id: "enrichment",
     label: "Enrichment",
-    section: "Models",
     icon: "Sparkle",
     subtitle: "What is read, and where",
   },
@@ -142,13 +138,12 @@ const PAGES: readonly PageDef[] = [
 // land on the page that holds what they asked for. That emptied the Workspace
 // section, so its header went with it.
 
-// Pages whose every EDIT writes on its own: picks save on the pick, text
-// fields on blur or Enter. The badge is a claim about the whole page, so it
-// belongs only where nothing is left waiting on a Save button — both of these
-// dropped theirs. Destructive acts (erase, disconnect) are not edits and keep
-// their explicit buttons and confirms; they do not disqualify a page.
-const AUTO_SAVE = new Set<SettingsPageId>(["appearance", "vault"]);
-const SECTIONS = ["Account", "Models"];
+// EVERY PAGE AUTO-SAVES, so the note is the modal's, not a per-page badge.
+// Picks save on the pick, text fields on blur or Enter, switches on the flip —
+// on all four pages. Destructive acts (erase, disconnect) are not edits: they
+// keep their explicit verbs and their confirms, and they do not make the note
+// untrue about the edits it is about.
+const AUTO_SAVED_NOTE = "Auto-saved";
 
 function isSettingsPageId(id: string | undefined): id is SettingsPageId {
   return PAGES.some((p) => p.id === id);
@@ -192,6 +187,8 @@ export default function SettingsRoute({
   const [page, setPage] = useState<SettingsPageId>(() =>
     resolveSettingsPage(initialPage)
   );
+  /** What the gateway said when it refused a write — carried in the foot. */
+  const [footNote, setFootNote] = useState("");
   const dialogRef = useRef<HTMLDialogElement>(null);
   const capabilities = useShellCapabilities();
 
@@ -353,67 +350,52 @@ export default function SettingsRoute({
         aria-label="Settings"
         data-testid="settings-dialog"
       >
-        <button
-          type="button"
-          className={styles.dialogClose}
-          aria-label="Close settings"
-          onClick={() => onClose?.()}
-        >
-          <Icon name="X" size={15} />
-        </button>
+        {/* HEAD — the modal's title, the note that every edit on it saves
+            itself, and the way out. It is the modal's own bar rather than a
+            heading inside the scrolling page, so the note stays readable while
+            a long page is scrolled and the close target never scrolls away. */}
+        <header className={styles.settingsHead}>
+          <h1 className={styles.settingsTitle}>Settings</h1>
+          <span className={styles.settingsAutosaved}>
+            <Icon name="Check" size={10} strokeWidth={2.5} />
+            <span>{AUTO_SAVED_NOTE}</span>
+          </span>
+          <button
+            type="button"
+            className={styles.dialogClose}
+            aria-label="Close settings"
+            onClick={() => onClose?.()}
+          >
+            <Icon name="X" size={15} />
+          </button>
+        </header>
         <div className={styles.settingsMain}>
           <aside className={styles.settingsNav} data-testid="settings-nav">
-            <div className={styles.settingsNavHead}>
-              <div className={styles.settingsNavEyebrow}>Settings</div>
-              <div className={styles.settingsNavTitle}>Personal</div>
-            </div>
-            {SECTIONS.map((section) => (
-              // Fragment, not a wrapping div: the section label and its nav
-              // items must be flat siblings inside <aside>, matching the
-              // vanilla DOM (app-settings.ts innerNav.append(...) flat list).
-              // A wrapping div here previously made the mono-font section-label
-              // style cascade onto the nav item buttons via `font: inherit`.
-              <Fragment key={section}>
-                <div className={styles.settingsNavSection}>{section}</div>
-                {PAGES.filter((p) => p.section === section).map((p) => (
-                  <button
-                    key={p.id}
-                    type="button"
-                    className={styles.settingsNavItem}
-                    data-active={String(p.id === page)}
-                    onClick={() => setPage(p.id)}
-                  >
-                    <Icon name={p.icon} size={15} />
-                    <span className={styles.settingsNavText}>
-                      <span className={styles.settingsNavLabel}>{p.label}</span>
-                      <span className={styles.settingsNavSub}>
-                        {p.subtitle}
-                      </span>
-                    </span>
-                  </button>
-                ))}
-              </Fragment>
+            {/* Four entries, flat. The two section labels this rail carried
+                ("Account", "Models") named groups of two over a list of four:
+                a taxonomy the member has to read past to reach the page. */}
+            {PAGES.map((p) => (
+              <button
+                key={p.id}
+                type="button"
+                className={styles.settingsNavItem}
+                data-active={String(p.id === page)}
+                onClick={() => setPage(p.id)}
+              >
+                <Icon name={p.icon} size={15} />
+                <span className={styles.settingsNavText}>
+                  <span className={styles.settingsNavLabel}>{p.label}</span>
+                  <span className={styles.settingsNavSub}>{p.subtitle}</span>
+                </span>
+              </button>
             ))}
-            <div className={styles.settingsNavFoot}>
-              <span className={styles.settingsNavVer}>
-                {stamp.status === "ready" ? stamp.data : "Centraid"}
-              </span>
-            </div>
           </aside>
 
           <section className={styles.settingsContent}>
             <header className={styles.settingsPageHead}>
-              <div className={styles.settingsPageTitlerow}>
-                <h1 className={styles.settingsPageTitle}>
-                  {def?.label ?? "Settings"}
-                </h1>
-                {AUTO_SAVE.has(page) ? (
-                  <span className={styles.settingsAutosaved}>
-                    <Icon name="Check" size={10} strokeWidth={2.5} />
-                    <span>Auto-saved</span>
-                  </span>
-                ) : null}
-              </div>
+              <h2 className={styles.settingsPageTitle}>
+                {def?.label ?? "Settings"}
+              </h2>
             </header>
 
             <div className={styles.settingsPage} data-testid="settings-page">
@@ -432,7 +414,15 @@ export default function SettingsRoute({
                       onSave={saveProfile}
                     />
                   ) : (
-                    <PageEmpty message="This connection doesn’t expose a household roster, so there is no name or color to edit here." />
+                    // The page still works: the theme and the automation zone
+                    // are this device's, and a connection with no roster loses
+                    // the profile group rather than the page.
+                    <PanelBlock
+                      wide
+                      eyebrow="No household roster"
+                      title="This connection has no roster"
+                      body="Your name and colour live there, so there is nothing to change here."
+                    />
                   )}
                   <SettingsAppearanceScreen
                     themeMode={prefs.themeMode}
@@ -451,7 +441,7 @@ export default function SettingsRoute({
                   setSubsystemConfigPin={setSubsystemConfigPin}
                   setSubsystemHarness={setSubsystemHarness}
                   setSubsystemHarnessLadder={setSubsystemHarnessLadder}
-                  showToast={showToast}
+                  showToast={setFootNote}
                 />
               ) : page === "enrichment" ? (
                 <SettingsEnrichmentScreen
@@ -466,7 +456,7 @@ export default function SettingsRoute({
                   }
                   setRule={writeEnrichRule}
                   deleteRule={dropEnrichRule}
-                  showToast={showToast}
+                  showToast={setFootNote}
                 />
               ) : page === "vault" ? (
                 activeVault.status === "loading" ? (
@@ -501,6 +491,20 @@ export default function SettingsRoute({
             </div>
           </section>
         </div>
+        {/* FOOT — the build this is, and any write the gateway refused, in the
+            gateway's own words. A refusal here is about the control the member
+            just touched, so it belongs to the modal rather than the shell's
+            toast, which would carry it away from the switch it is about. */}
+        <footer className={styles.settingsFoot}>
+          {footNote ? (
+            <p className={styles.settingsFootNote} role="alert">
+              {footNote}
+            </p>
+          ) : null}
+          <span className={styles.settingsStamp}>
+            {stamp.status === "ready" ? stamp.data : "Centraid"}
+          </span>
+        </footer>
       </dialog>
     </>
   );

@@ -1,13 +1,64 @@
-/* Bulk-selection action bar contents rendered into the static #bulkBar (whose
-   pill frame `.d-bulk` stays global in app.css). Authored camelCase. */
+/* The selection bar's contents. It renders into the CHROME'S TOOLBAR ROW —
+   the same slot the List/Grid pair occupies while nothing is picked — so this
+   file owns no frame of its own: no pill, no ground, no margin. It used to
+   have all three, as an accent pill in a region below the shelf strip, which
+   is why the screen carried two bars at once.
+
+   THE COUNT IN TWO RUNGS, the handoff's own (`selCountStyle` is `var(--title)`
+   with tabular figures, `selCountLabelStyle` is `var(--body)` at the soft ink):
+   the NUMBER is the fact and "selected" is the word around it, and setting the
+   whole phrase in one mono rung made the row read as a status line rather than
+   as the thing that had just happened. */
 
 .bulkCount {
-  font: var(--t-mono);
-  font-variant-numeric: var(--t-mono-numeric);
+  display: inline-flex;
+  align-items: baseline;
+  gap: var(--sp-1);
+}
+.bulkNum {
+  font: var(--t-title);
+  font-variant-numeric: tabular-nums;
   color: var(--text);
+}
+.bulkWord {
+  font: var(--t-body);
+  color: var(--text-soft);
 }
 .bulkActions {
   margin-inline-start: auto;
   display: flex;
   gap: var(--sp-2);
+}
+
+/* One action. `kit-btn` owns the outline, the height and the radius; this adds
+   the glyph/label row inside it and the gap between them. */
+.act {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-1);
+}
+
+/* THE WORD GOES, THE GLYPH STAYS. Below the handoff's own labels-off width the
+   labels are hidden and each button's `title` carries them.
+
+   VISUALLY HIDDEN, NOT `display: none`: what a screen reader announces must
+   not change with the width of the pane. These are `kit-sr-only`'s rules
+   written out rather than composed, because `composes` is only legal on a
+   single local class selector and this is a compound one. */
+.bulkActions[data-narrow="true"] .actLabel {
+  position: absolute;
+  inline-size: 1px;
+  block-size: 1px;
+  margin: -1px;
+  padding: 0;
+  border: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+/* Leaving the selection is not one of the verbs: it keeps its word at every
+   width, and never takes a glyph beside them. */
+.done {
+  margin-inline-start: var(--sp-1);
 }
