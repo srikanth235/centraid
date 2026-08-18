@@ -73,7 +73,7 @@
     "typecheck": "tsc -p tsconfig.test.json --noEmit"
   },
   "dependencies": {
-    "@fontsource/instrument-sans": "5.2.5"
+    "@fontsource/instrument-sans": "5.3.0"
   },
   "devDependencies": {
     "@centraid/test-kit": "workspace:*",
