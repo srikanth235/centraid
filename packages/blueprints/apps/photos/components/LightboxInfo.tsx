@@ -30,6 +30,14 @@
 // where the original currently lives, which is the only place in the app that
 // question is answered in prose.
 //
+// WHERE IT WAS TAKEN IS A PHRASE, NOT A NUMBER — and it is a file of its own,
+// `LightboxLocation.tsx`: the Place row, the thumbnail map beneath it and the
+// single "exact location" action are one question the panel asks once, and they
+// left together when this file crossed the 625-line hygiene ceiling (#816). The
+// rule they carry with them is the one worth repeating here: never the
+// coordinate, because a coordinate in a name slot looks like an answer and is
+// not one.
+//
 // The storage noun never reaches a user-visible string. What a member reads
 // for a vault is `scope.label` — the shell owns it and the owner may rename
 // it — and what it MEANS comes from whether that scope is the member's own
@@ -42,7 +50,6 @@ import { mountedScopes } from "../../_shared/scope-kit.ts";
 import { buildActivity } from "../activity.ts";
 import { renderFaces } from "../faces.ts";
 import { assetBytes, custodyMeta, toLocalInputValue } from "../format.ts";
-import { CloseIcon } from "../icons.tsx";
 // Every command on this panel edits the OPEN asset, so each is addressed at
 // the scope that asset is shown from (issue #599) rather than the chip
 // selection — including the album/tag/place ones, whose collection ids are
@@ -54,6 +61,7 @@ import {
   originParagraph,
   scopeMeaning,
 } from "../viewer.ts";
+import { LightboxLocation } from "./LightboxLocation.tsx";
 
 import styles from "./LightboxInfo.module.css";
 
@@ -123,7 +131,6 @@ export function LightboxInfo({
   const facesHostRef = useRef<HTMLDivElement | null>(null);
   const facesNoteRef = useRef<HTMLParagraphElement | null>(null);
   const [refusal, setRefusal] = useState<Refusal | null>(null);
-  const [placeEditorOpen, setPlaceEditorOpen] = useState(false);
   const [addingTag, setAddingTag] = useState(false);
   const [tagText, setTagText] = useState("");
 
@@ -211,75 +218,17 @@ export function LightboxInfo({
         {localZone()} · {captureSource(asset)}
       </p>
 
-      {/* Place — the value, plus who put it there and how to take it off. */}
-      <div className={styles.rowLabel}>Place</div>
-      {placeEditorOpen ? (
-        <div className={styles.placeEditor}>
-          <select
-            className="kit-input"
-            aria-label="Set place"
-            defaultValue={asset.place?.place_id ?? ""}
-            onChange={async (e) => {
-              const placeId = e.currentTarget.value;
-              setPlaceEditorOpen(false);
-              await write(
-                "set that place",
-                "set-place",
-                placeId
-                  ? { asset_id: asset.asset_id, place_id: placeId }
-                  : { asset_id: asset.asset_id }
-              );
-            }}
-          >
-            <option value="">No place</option>
-            {places.map((p) => (
-              <option key={p.place_id} value={p.place_id}>
-                {p.name}
-              </option>
-            ))}
-          </select>
-          <button
-            type="button"
-            className="kit-icon-btn"
-            aria-label="Cancel"
-            onClick={() => setPlaceEditorOpen(false)}
-          >
-            <CloseIcon size={14} />
-          </button>
-          {places.length === 0 ? (
-            <p className={styles.rowNote}>
-              No known places yet — a place is linked automatically from where a
-              photograph says it was taken.
-            </p>
-          ) : null}
-        </div>
-      ) : (
-        <p className={styles.rowValue}>
-          <button
-            type="button"
-            className={styles.editable}
-            onClick={() => setPlaceEditorOpen(true)}
-          >
-            {asset.place?.name ?? "Add a place"}
-          </button>
-          {asset.place ? (
-            <span className={styles.rowNote}>
-              {" set by you · "}
-              <button
-                type="button"
-                className={styles.inlineAction}
-                onClick={() =>
-                  void write("remove that place", "set-place", {
-                    asset_id: asset.asset_id,
-                  })
-                }
-              >
-                remove
-              </button>
-            </span>
-          ) : null}
-        </p>
-      )}
+      {/* Where it was taken: the Place row, the thumbnail map, and the one
+          action that spells a coordinate out — LightboxLocation.tsx, which owns
+          the phrase ladder and the picker's own open/closed state. The write
+          trampoline is handed over, so a refused place edit surfaces in the
+          SAME refusal region as every other row on this panel. */}
+      <LightboxLocation
+        asset={asset}
+        places={places}
+        refresh={refresh}
+        write={write}
+      />
 
       {/* Tags — 24px chips at a pill radius, with `+ add`. */}
       <div className={styles.rowLabel}>Tags</div>

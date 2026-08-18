@@ -37,6 +37,24 @@
 // assert every rule directly (the same posture `photos-collections.ts` and
 // `duplicate-clusters.ts` both take).
 
+// WHAT A TRIP IS CALLED is not decided here either (issue #816). The vault's
+// hint is `"3-day trip"`, a measurement; the phrase ladder in
+// `@centraid/blueprints/apps/photos/trips` turns it into "Weekend in South Lake
+// Tahoe, CA" and hands back the route to sketch. Deep subpath, the established
+// pattern for shared Photos arithmetic (see `places-model.ts`): the phone and
+// the web strip run the SAME title function, so a trip cannot be called two
+// different things on two of the member's own screens.
+import { gazetteerNameFrom } from "@centraid/blueprints/apps/photos/place-phrase";
+import {
+  resolveHomeKey,
+  tripFacts,
+} from "@centraid/blueprints/apps/photos/trips";
+import type {
+  TripMember,
+  TripPlace,
+  TripRoutePoint,
+} from "@centraid/blueprints/apps/photos/trips";
+
 import type { PhotoAsset } from "./timeline-model";
 
 /** One year's worth of on-this-day photographs, newest year first among the
@@ -55,10 +73,26 @@ export interface OnThisDayMemory {
 export interface TripMemory {
   memoryId: string;
   placeId: string | null;
-  /** Resolved from the caller's own place rows — this module does no I/O. */
+  /**
+   * The place the title names, or null when no place the trip visited has a
+   * name worth printing. Read from the places its own MEMBERS were photographed
+   * at (issue #816) rather than looked up from the row's `place_id` alone: a
+   * coordinate-shaped label is not a name, and the gazetteer's settlement name
+   * is the rung below it. Still no I/O — the caller passes the rows in.
+   */
   placeName: string | null;
   /** e.g. "3-day trip" — straight off `media_memory.title_hint`. */
   titleHint: string | null;
+  /**
+   * What the block is HEADED (issue #816): the phrase ladder's answer over the
+   * trip's own members — "Weekend in South Lake Tahoe, CA" — falling back to
+   * the vault's bare hint when no place the trip visited has a name worth
+   * printing. Never a coordinate and never relative to home; see `trips.ts`.
+   */
+  title: string;
+  /** The trip's stops in capture order, for the route sketch. Empty when no
+   *  member carried a usable coordinate. */
+  route: TripRoutePoint[];
   startedAt: string | null;
   endedAt: string | null;
   assets: PhotoAsset[];
@@ -80,6 +114,88 @@ export interface MemoriesModel {
 export type RawMemoryRow = Readonly<Record<string, unknown>>;
 /** A raw `media.memory_member` row. */
 export type RawMemoryMemberRow = Readonly<Record<string, unknown>>;
+/** A raw `core.place` row, as the replica hands it over. */
+export type RawPlaceRow = Readonly<Record<string, unknown>>;
+
+/** A place a trip visited, plus whether it is the one the member calls home. */
+export interface MemoryPlace extends TripPlace {
+  isHome?: boolean;
+}
+
+/**
+ * A coordinate is a NUMBER column or it is nothing — the same guard
+ * `places-model.ts` applies, and for the same reason: an explicit NULL, a
+ * string, or any other type is dropped by type rather than coerced and caught
+ * as NaN inside the projection.
+ */
+function coordOf(value: unknown): number | null {
+  return typeof value === "number" && Number.isFinite(value) ? value : null;
+}
+
+/**
+ * The place facts a trip's title and route need, keyed by `place_id`.
+ *
+ * Column contract (#787): `core_place` ships `geo_lat`/`geo_lng`
+ * (packages/vault/src/schema/core.ts) and the phone reads replica rows RAW —
+ * only the web handler renames them — so the physical columns are read first
+ * with `latitude`/`lat` kept as fixture fallbacks, the same chain
+ * `places-model.ts#placePoints` reads. The gazetteer name is dug out of
+ * `address_json` by the shared reader, so the phone and the web see rung 2 of
+ * the ladder identically or not at all.
+ */
+export function memoryPlacesById(
+  rows: readonly RawPlaceRow[]
+): Map<string, MemoryPlace> {
+  const byId = new Map<string, MemoryPlace>();
+  for (const row of rows) {
+    const key = String(row.place_id ?? "");
+    if (key === "") continue;
+    byId.set(key, {
+      key,
+      name: row.name == null ? null : String(row.name),
+      gazetteer: gazetteerNameFrom(
+        row.address_json == null ? null : String(row.address_json)
+      ),
+      lat: coordOf(row.geo_lat ?? row.latitude ?? row.lat),
+      lng: coordOf(row.geo_lng ?? row.longitude ?? row.lng),
+      isHome: row.kind === "home",
+    });
+  }
+  return byId;
+}
+
+/** One asset as `trips.ts` wants a trip member: when, in whose zone, where. */
+function tripMemberOf(
+  asset: PhotoAsset,
+  places: ReadonlyMap<string, MemoryPlace>
+): TripMember {
+  return {
+    capturedAt: asset.capturedAt ?? null,
+    tzOffsetMin: asset.tzOffsetMin ?? null,
+    place: asset.placeId ? (places.get(asset.placeId) ?? null) : null,
+  };
+}
+
+/**
+ * The member's home place, resolved over the WHOLE loaded library.
+ *
+ * Not over one trip's members: the modal place of a trip is where the member
+ * went, and calling that home would read every away day as a day at home. The
+ * `kind = 'home'` tag wins when a row carries one, which is the vault's own
+ * rule (`resolveHomePlace` in enrich/memories.ts).
+ */
+export function homePlaceKey(
+  assets: readonly PhotoAsset[],
+  places: ReadonlyMap<string, MemoryPlace>
+): string | null {
+  const tagged = [...places.values()]
+    .filter((place) => place.isHome === true)
+    .map((place) => place.key);
+  return resolveHomeKey(
+    assets.map((asset) => tripMemberOf(asset, places)),
+    tagged
+  );
+}
 
 function textOf(row: RawMemoryRow, column: string): string | null {
   const value = row[column];
@@ -194,16 +310,20 @@ export function buildOnThisDayMemory(
 
 /**
  * Every 'trip' memory with at least one resolvable, live member — newest
- * trip first. `places` resolves `place_id` to a display name; a trip whose
- * place is not (yet) in the caller's own place rows still renders with
- * `placeName: null` rather than being dropped, since the photographs
- * themselves are the point of the shelf.
+ * trip first. `places` carries the place facts the title and the route are
+ * built from; a trip whose place is not (yet) in the caller's own place rows
+ * still renders, titled by the vault's hint, rather than being dropped, since
+ * the photographs themselves are the point of the shelf.
+ *
+ * `homeKey` is the member's home place (`homePlaceKey` over the whole library),
+ * used only to keep home out of the title and out of the away-day count.
  */
 export function buildTripMemories(
   rawMemories: readonly RawMemoryRow[],
   rawMembers: readonly RawMemoryMemberRow[],
   assetsById: ReadonlyMap<string, PhotoAsset>,
-  places: ReadonlyMap<string, string>
+  places: ReadonlyMap<string, MemoryPlace>,
+  homeKey: string | null = null
 ): TripMemory[] {
   const membersByMemory = memberIdsByMemory(rawMembers);
   const trips: TripMemory[] = [];
@@ -213,11 +333,22 @@ export function buildTripMemories(
     const assets = resolveMembers(membersByMemory.get(memoryId), assetsById);
     if (assets.length === 0) continue;
     const placeId = textOf(row, "place_id");
+    const titleHint = textOf(row, "title_hint");
+    const facts = tripFacts({
+      members: assets.map((asset) => tripMemberOf(asset, places)),
+      homePlaceKey: homeKey,
+      titleHint,
+      placeKey: placeId,
+    });
     trips.push({
       memoryId,
       placeId,
-      placeName: placeId ? (places.get(placeId) ?? null) : null,
-      titleHint: textOf(row, "title_hint"),
+      placeName: facts.placeName,
+      titleHint,
+      // "Away from home" is the last resort it always was: a trip with neither
+      // a named place nor a day count has nothing truer to say.
+      title: facts.title ?? "Away from home",
+      route: facts.route,
       startedAt: textOf(row, "started_at"),
       endedAt: textOf(row, "ended_at"),
       assets,
@@ -257,13 +388,22 @@ export function buildMemoriesModel(
   rawMemories: readonly RawMemoryRow[],
   rawMembers: readonly RawMemoryMemberRow[],
   assets: readonly PhotoAsset[],
-  places: ReadonlyMap<string, string>,
+  places: ReadonlyMap<string, MemoryPlace>,
   now: Date
 ): MemoriesModel {
   const assetsById = indexAssetsById(assets);
+  // Resolved once over the whole library, then handed down — see
+  // `homePlaceKey` for why a trip's own members are the wrong evidence.
+  const homeKey = homePlaceKey(assets, places);
   return {
     onThisDay: buildOnThisDayMemory(rawMemories, rawMembers, assetsById, now),
-    trips: buildTripMemories(rawMemories, rawMembers, assetsById, places),
+    trips: buildTripMemories(
+      rawMemories,
+      rawMembers,
+      assetsById,
+      places,
+      homeKey
+    ),
     similar: buildSimilarMemories(rawMemories, rawMembers, assetsById),
   };
 }

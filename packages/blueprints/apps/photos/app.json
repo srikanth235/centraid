@@ -40,6 +40,7 @@
       { "schema": "media", "table": "answer_face_proposal", "verbs": "act" },
       { "schema": "core", "table": "place", "verbs": "read" },
       { "schema": "media", "table": "set_asset_place", "verbs": "act" },
+      { "schema": "media", "table": "name_place", "verbs": "act" },
       { "schema": "core", "table": "tag_item", "verbs": "act" },
       { "schema": "core", "table": "untag_item", "verbs": "act" },
       { "schema": "enrich", "table": "policy", "verbs": "read" },
@@ -400,6 +401,33 @@
           "place_id": { "type": "string", "minLength": 1 }
         },
         "required": ["asset_id"],
+        "additionalProperties": false
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "status": { "type": "string" },
+          "output": { "type": "object" },
+          "reason": { "type": "string" }
+        }
+      },
+      "writes": []
+    },
+    {
+      "name": "name-place",
+      "description": "Name a place through media.name_place (issue #816) — the member's own name for somewhere the vault knows only as a coordinate, plus an optional kind ('home' is what anchors a relative phrase elsewhere). Writes core.place.name only; the gazetteer's derived address survives a rename.",
+      "confirmation": "none",
+      "input": {
+        "type": "object",
+        "properties": {
+          "place_id": { "type": "string", "minLength": 1 },
+          "name": { "type": "string", "minLength": 1, "maxLength": 120 },
+          "kind": {
+            "type": "string",
+            "enum": ["home", "work", "venue", "city", "region", "other"]
+          }
+        },
+        "required": ["place_id", "name"],
         "additionalProperties": false
       },
       "output": {

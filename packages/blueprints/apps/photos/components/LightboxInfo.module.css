@@ -98,6 +98,19 @@
   min-inline-size: 0;
 }
 
+/* The panel's own map: the Places projection at thumbnail size, with the
+   member's "exact location" action under it. Capped rather than fluid — the
+   figure answers "roughly whereabouts", and one that grew with the rail would
+   start competing with the photograph the panel is describing. */
+.mapSlot {
+  display: flex;
+  flex-direction: column;
+  align-items: start;
+  gap: var(--sp-2);
+  max-inline-size: 280px;
+  margin-block-start: var(--sp-3);
+}
+
 /* Chips: 24px, 999px radius, hairline (§7.2). Tags and People share them, and
    so do the album chips — a chip is a chip. */
 .chipRow {

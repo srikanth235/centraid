@@ -29,7 +29,7 @@ import { borders, radii, spacing, t, useTheme } from "../../kit/theme";
 import type { ThemeColors } from "../../kit/theme";
 import type { PhotosScreenProps } from "../../navigation";
 import PhotosScreen from "./PhotosScreen";
-import { placeCards } from "./places-model";
+import { noLocationCard, placeCards } from "./places-model";
 import { tileGround } from "./tile-overlays";
 import { usePhotoTimeline } from "./timeline-source";
 
@@ -53,6 +53,14 @@ export default function PlacesView({
     () => placeCards(assets, places.rows),
     [assets, places.rows]
   );
+  // THE TRAILING CARD (issue #816): the photographs that carry no place at all.
+  // It is a card so the set is reachable — it was in the library and on no
+  // shelf — but it is NOT counted as a place in the head above, because it is
+  // not one: it is the absence of one.
+  const shelf = useMemo(() => {
+    const bucket = noLocationCard(assets);
+    return bucket ? [...cards, bucket] : cards;
+  }, [assets, cards]);
 
   return (
     // The band, via the shell (issue #712 P8). This screen used to draw a bare
@@ -85,7 +93,7 @@ export default function PlacesView({
       </View>
       <ReplicaStatusBar />
       <FlatList
-        data={cards}
+        data={shelf}
         keyExtractor={(item) => item.id}
         numColumns={2}
         contentContainerStyle={styles.grid}

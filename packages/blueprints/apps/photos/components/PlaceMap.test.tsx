@@ -85,6 +85,22 @@ describe("the Places map", () => {
     expect(html).toContain("N ↑");
   });
 
+  it("says what a pin stands for at the scale it drew", () => {
+    // The legend beside the scale bar names the tier that decided the merge,
+    // so the drawing cannot describe a grouping it did not perform. A trip
+    // across California is a map of regions; two places on one street is a
+    // map of spots. The phone prints the same word off the same ladder.
+    expect(render()).toContain(">Countries<");
+    expect(
+      render({
+        points: [
+          { key: "n", lat: 39.0018, lng: -120, count: 2, name: "North" },
+          { key: "s", lat: 39, lng: -120, count: 1, name: "South" },
+        ],
+      })
+    ).toContain(">Spots<");
+  });
+
   // THE LEGIBILITY REGRESSION THIS FILE EXISTS TO CATCH, alongside the egress
   // one below. The first version of this map printed degrees down both
   // margins; a member does not know where they were from "39.0°N", and the

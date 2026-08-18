@@ -92,6 +92,11 @@ const EXIF_LABELS: Record<string, string> = {
  * the always-available dimensions/size/captured-time/type every asset row
  * carries regardless of EXIF. Degrades to an empty array when nothing is
  * known — the panel then shows its own "nothing to show" copy.
+ *
+ * WHERE it was taken is not among these rows and must not be added back: a
+ * location is a phrase (`place-phrase.ts`), rendered by the info panel, and a
+ * coordinate is only ever spelled out behind the member's own "exact
+ * location" action.
  */
 export function exifRows(asset: Asset): ExifRow[] {
   const rows: ExifRow[] = [];
@@ -136,17 +141,13 @@ export function exifRows(asset: Asset): ExifRow[] {
       if (FOLDED.has(key)) continue;
       if (exif[key] != null) rows.push({ label, value: String(exif[key]) });
     }
-    if (exif.has_location && exif.latitude != null && exif.longitude != null) {
-      const lat = Number(exif.latitude).toFixed(5);
-      const lon = Number(exif.longitude).toFixed(5);
-      rows.push({
-        label: "Location",
-        value: `${lat}, ${lon}`,
-        href: `https://www.openstreetmap.org/?mlat=${lat}&mlon=${lon}#map=15/${lat}/${lon}`,
-      });
-    } else if (exif.has_location) {
-      rows.push({ label: "Location", value: "recorded, not shared" });
-    }
+    // NO Location row, and no coordinate. Where a photograph was taken is a
+    // phrase, not a fact in a details grid — `place-phrase.ts` resolves it and
+    // the info panel renders it, with the digits behind an explicit "exact
+    // location" action. This row used to print "37.44190, -122.14300" as a link
+    // to a public map host, which handed a third party the exact coordinates of
+    // somebody's photographs to answer a question the app can answer on the
+    // device.
   }
   if (asset.width && asset.height) {
     rows.push({

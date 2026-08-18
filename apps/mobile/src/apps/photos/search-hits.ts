@@ -50,6 +50,24 @@
 import { groupSearchHits } from "@centraid/blueprints/apps/_shared/search-scaffold";
 import type { SearchEntity } from "@centraid/blueprints/apps/_shared/search-scaffold";
 
+import {
+  NO_LOCATION_KEY,
+  NO_LOCATION_NAME,
+  assetsWithNoPlace,
+} from "./places-model";
+// WHICH WORDS STAND FOR A PLACE, and what it is called once found, live in
+// their own leaf (issue #816) — the deepest readers of a raw `core.place` row,
+// and the one part of this file that both clients' phrase ladder decides.
+// `rowText` comes back out of it because it is the reader every row shape here
+// shares; see that module's header.
+import {
+  homeAnchor,
+  namedPlaceAnchors,
+  noLocationAsked,
+  placeLabel,
+  placeVocabulary,
+  rowText,
+} from "./search-place-vocabulary";
 import type { PhotoAsset } from "./timeline-model";
 
 /** A replica row, as the query hooks hand it over. */
@@ -79,6 +97,10 @@ export type SearchHitTarget =
       params: { mode: "person"; partyId: string; personName: string };
     }
   | { screen: "PlacesMap" }
+  | {
+      screen: "PlaceDetail";
+      params: { placeKey: string; placeName: string };
+    }
   | { screen: "AlbumDetail"; params: { albumId: string } }
   | { screen: "PhotoLightbox"; params: { assetId: string } };
 
@@ -214,14 +236,6 @@ function plural(count: number): string {
   return `${count} photograph${count === 1 ? "" : "s"}`;
 }
 
-function text(row: Row, ...keys: string[]): string | undefined {
-  for (const key of keys) {
-    const value = row[key];
-    if (value != null && String(value).trim()) return String(value);
-  }
-  return undefined;
-}
-
 /** `SearchHitSources` plus the one value the person entity needs that is
  *  cheaper to compute once than per-entity: which assets are already among
  *  the loaded hits. */
@@ -326,9 +340,9 @@ function personHits(
 
   return sources.parties
     .flatMap((party) => {
-      const id = text(party, "party_id");
+      const id = rowText(party, "party_id");
       if (!id) return [];
-      const name = text(party, "display_name", "name");
+      const name = rowText(party, "display_name", "name");
       if (!name || !matchesTokens(name, tokens)) return [];
       const seen = total.get(id);
       const count = seen?.size ?? 0;
@@ -375,19 +389,26 @@ function placeHits(
     here.set(asset.placeId, (here.get(asset.placeId) ?? 0) + 1);
   }
 
-  return sources.places
+  // Which words this query could match, and what a match is called: both are
+  // `search-place-vocabulary.ts`'s answers (issue #816), so a place is findable
+  // by its gazetteer name or by "near home" and is still titled with the
+  // member's own name for it.
+  const anchors = namedPlaceAnchors(sources.places);
+  const home = homeAnchor(anchors);
+
+  const named = sources.places
     .flatMap((place) => {
-      const id = text(place, "place_id");
+      const id = rowText(place, "place_id");
       if (!id) return [];
-      const name = text(place, "name", "label");
-      if (!name || !matchesTokens(name, tokens)) return [];
+      const words = placeVocabulary(place, home);
+      if (!words.some((word) => matchesTokens(word, tokens))) return [];
       const count = total.get(id) ?? 0;
       if (count === 0) return [];
       return [
         {
           key: `place:${id}`,
           kind: "place" as const,
-          label: name,
+          label: placeLabel(place, anchors),
           sub: `place · ${plural(count)}`,
           meta: `${here.get(id) ?? 0} here`,
           assetIds: reachable.get(id) ?? [],
@@ -400,6 +421,46 @@ function placeHits(
       ];
     })
     .sort((a, b) => a.label.localeCompare(b.label));
+
+  // The bucket goes LAST, after the named places: it is the widest place answer
+  // there is, and a member who typed a name wants the name first.
+  return [...named, ...noLocationHits(sources, tokens)];
+}
+
+/**
+ * THE NO-LOCATION BUCKET as a search answer (issue #816): the photographs that
+ * carry no place at all, reachable by the words a member would actually type for
+ * them. Before this the set was findable only by scrolling the whole timeline.
+ *
+ * Which words ask for it is `noLocationAsked`'s answer, matched as a phrase
+ * rather than by token — see that function.
+ */
+function noLocationHits(
+  sources: SearchHitSources,
+  tokens: readonly string[]
+): SearchHit[] {
+  if (tokens.length === 0 || !noLocationAsked(sources.query)) return [];
+  const placeless = assetsWithNoPlace(sources.assets);
+  if (placeless.length === 0) return [];
+  const here = assetsWithNoPlace(sources.matches).length;
+  return [
+    {
+      key: `place:${NO_LOCATION_KEY}`,
+      kind: "place",
+      label: NO_LOCATION_NAME,
+      sub: `place · ${plural(placeless.length)}`,
+      meta: `${here} here`,
+      assetIds: placeless.flatMap((asset) =>
+        asset.assetId ? [asset.assetId] : []
+      ),
+      // The same card `PlacesView` puts at the end of the shelf, opened by the
+      // same reserved key — one destination for one set.
+      target: {
+        screen: "PlaceDetail",
+        params: { placeKey: NO_LOCATION_KEY, placeName: NO_LOCATION_NAME },
+      },
+    },
+  ];
 }
 
 function albumHits(
@@ -412,10 +473,10 @@ function albumHits(
   // for the grid to show for it.
   const members = new Map<string, string[]>();
   for (const entry of sources.entries) {
-    const id = text(entry, "collection_id");
+    const id = rowText(entry, "collection_id");
     if (!id) continue;
     sizes.set(id, (sizes.get(id) ?? 0) + 1);
-    const target = text(entry, "target_id");
+    const target = rowText(entry, "target_id");
     if (!target) continue;
     const ids = members.get(id) ?? [];
     ids.push(target);
@@ -424,9 +485,9 @@ function albumHits(
 
   return sources.collections
     .flatMap((collection) => {
-      const id = text(collection, "collection_id");
+      const id = rowText(collection, "collection_id");
       if (!id) return [];
-      const name = text(collection, "name", "title");
+      const name = rowText(collection, "name", "title");
       if (!name || !matchesTokens(name, tokens)) return [];
       return [
         {

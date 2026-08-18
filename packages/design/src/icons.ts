@@ -499,6 +499,13 @@ const ICON_DATA = {
     { d: "M12 21s7-7.58 7-12a7 7 0 0 0-14 0c0 4.42 7 12 7 12z" },
     { d: "M12 11.5a2.5 2.5 0 1 0 0-5 2.5 2.5 0 0 0 0 5z" },
   ],
+  // Catalog automations use the Lucide name (`place-names` in index.json).
+  // Same pin as `place` — not Lucide's zero-length-dot MapPin, which
+  // react-native-svg may drop (see the `place` comment above).
+  MapPin: [
+    { d: "M12 21s7-7.58 7-12a7 7 0 0 0-14 0c0 4.42 7 12 7 12z" },
+    { d: "M12 11.5a2.5 2.5 0 1 0 0-5 2.5 2.5 0 0 0 0 5z" },
+  ],
   person: [
     { d: "M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8z" },
     { d: "M4.5 20.5a7.5 7.5 0 0 1 15 0" },

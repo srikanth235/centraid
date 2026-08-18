@@ -16,6 +16,13 @@
 // empty shelves — the same law `photos-collections.ts`'s Memories shelf has
 // always kept, extended to cover Trips and Similar moments too.
 
+// A TRIP IS NAMED AND SKETCHED (issue #816). The block used to be headed by
+// the place row's raw name — which is the coordinate `findOrCreatePlaceTx`
+// minted until somebody renames it — or by "Away from home" when even that was
+// missing. It is now headed by the phrase ladder's own sentence, computed in
+// `trips.ts` and therefore identical to the web strip's, and it carries a small
+// route sketch drawn from `projectPlaces`: the same arithmetic the Places map
+// runs, with no basemap, no tile request and no URL of any kind in it.
 import React, { useMemo } from "react";
 import {
   Pressable,
@@ -24,18 +31,23 @@ import {
   useWindowDimensions,
   View,
 } from "react-native";
+import Svg, { Circle, Polyline } from "react-native-svg";
+
+import { projectPlaces } from "@centraid/blueprints/apps/photos/place-map";
+import type { TripRoutePoint } from "@centraid/blueprints/apps/photos/trips";
 
 import Icon from "../../kit/components/Icon";
 import { Text } from "../../kit/components/NativeText";
 import { useReplicaQuery } from "../../kit/hooks/useReplicaQuery";
 import ReplicaStatusBar from "../../kit/replica/ReplicaStatusBar";
-import { spacing, t, useTheme } from "../../kit/theme";
+import { radii, spacing, t, useTheme } from "../../kit/theme";
 import type { ThemeColors } from "../../kit/theme";
 import type { PhotosScreenProps } from "../../navigation";
 import { justify } from "./justify";
 import {
   buildMemoriesModel,
   hasNoMemories,
+  memoryPlacesById,
   tripDateLabel,
   yearsAgo,
 } from "./memories-model";
@@ -43,6 +55,7 @@ import type {
   MemoryYearGroup,
   RawMemoryMemberRow,
   RawMemoryRow,
+  RawPlaceRow,
   SimilarMemory,
   TripMemory,
 } from "./memories-model";
@@ -140,22 +153,101 @@ function OnThisDayYearBlock({
   );
 }
 
+/** The sketch's drawing box. Small on purpose — it situates the trip beside
+ *  its own name, it is not a map to be read. */
+const SKETCH_WIDTH = 96;
+const SKETCH_HEIGHT = 56;
+
+/**
+ * WHERE THE TRIP WENT, as a line.
+ *
+ * `projectPlaces` is the same arithmetic `PlacesMap.tsx` draws the whole map
+ * with, so the sketch and the map agree about the shape of a trip because they
+ * run one projection rather than because somebody kept two in step. Drawn with
+ * `react-native-svg` for the same reason that screen is: a projection is
+ * arithmetic and needs no map vendor, and asking one would tell it where the
+ * member has been.
+ *
+ * A single-stop trip draws its dot and no line — a polyline through one point
+ * is not a route, and stretching it into one would invent travel.
+ */
+function RouteSketch({
+  route,
+  colors,
+  styles,
+}: {
+  route: readonly TripRoutePoint[];
+  colors: ThemeColors;
+  styles: Styles;
+}): React.JSX.Element | null {
+  const { pins } = projectPlaces(route, {
+    width: SKETCH_WIDTH,
+    height: SKETCH_HEIGHT,
+    // Clear of the plate's edge by a dot's radius and a hair; no merging,
+    // because two stops the eye cannot separate at this size are still two
+    // stops the LINE has to pass through.
+    padding: 7,
+    mergeDistance: 0,
+  });
+  // Back into the trip's own order: `projectPlaces` sorts by count for its
+  // merge pass, and the line follows the trip, not the tally.
+  const stops = route.flatMap((point) => {
+    const pin = pins.find((candidate) => candidate.key === point.key);
+    return pin ? [pin] : [];
+  });
+  if (stops.length === 0) return null;
+  return (
+    <View style={styles.sketch}>
+      <Svg width={SKETCH_WIDTH} height={SKETCH_HEIGHT}>
+        {stops.length > 1 ? (
+          <Polyline
+            points={stops.map((pin) => `${pin.x},${pin.y}`).join(" ")}
+            fill="none"
+            stroke={colors.textFaint}
+            strokeWidth={1}
+          />
+        ) : null}
+        {stops.map((pin) => (
+          <Circle
+            key={pin.key}
+            cx={pin.x}
+            cy={pin.y}
+            r={2.5}
+            fill={colors.textSoft}
+          />
+        ))}
+      </Svg>
+    </View>
+  );
+}
+
 function TripBlock({
   trip,
+  colors,
   onOpen,
   styles,
 }: {
   trip: TripMemory;
+  colors: ThemeColors;
   onOpen: (asset: PhotoAsset) => void;
   styles: Styles;
 }): React.JSX.Element {
   const dateLabel = tripDateLabel(trip);
   return (
     <View style={styles.block}>
-      <Text style={styles.blockTitle} numberOfLines={1}>
-        {trip.placeName ?? "Away from home"}
-      </Text>
-      {dateLabel ? <Text style={styles.blockMeta}>{dateLabel}</Text> : null}
+      <View style={styles.tripHead}>
+        <View style={styles.tripWords}>
+          {/* The ladder's sentence, never a coordinate and never a bearing
+              from home — see `trips.ts`. */}
+          <Text style={styles.blockTitle} numberOfLines={1}>
+            {trip.title}
+          </Text>
+          {dateLabel ? <Text style={styles.blockMeta}>{dateLabel}</Text> : null}
+        </View>
+        {trip.route.length > 0 ? (
+          <RouteSketch route={trip.route} colors={colors} styles={styles} />
+        ) : null}
+      </View>
       <TileRail assets={trip.assets} onOpen={onOpen} />
     </View>
   );
@@ -200,14 +292,10 @@ export default function MemoriesView({
     useMemo(() => ({ entity: "core.place" }), [])
   );
 
-  const placeNames = useMemo(
-    () =>
-      new Map(
-        places.rows.map((row) => [
-          String(row.place_id),
-          String(row.name ?? "Place"),
-        ])
-      ),
+  // The place FACTS, not just the names: a trip's title reads the member's own
+  // name then the gazetteer's, and its route needs the coordinates (#816).
+  const placeFacts = useMemo(
+    () => memoryPlacesById(places.rows as readonly RawPlaceRow[]),
     [places.rows]
   );
 
@@ -222,10 +310,10 @@ export default function MemoriesView({
         memoryRows.rows as readonly RawMemoryRow[],
         memberRows.rows as readonly RawMemoryMemberRow[],
         assets,
-        placeNames,
+        placeFacts,
         now
       ),
-    [memoryRows.rows, memberRows.rows, assets, placeNames, now]
+    [memoryRows.rows, memberRows.rows, assets, placeFacts, now]
   );
 
   const open = (asset: PhotoAsset): void => {
@@ -275,6 +363,7 @@ export default function MemoriesView({
                   <TripBlock
                     key={trip.memoryId}
                     trip={trip}
+                    colors={colors}
                     onOpen={open}
                     styles={styles}
                   />
@@ -338,6 +427,14 @@ const makeStyles = (colors: ThemeColors) =>
       paddingHorizontal: spacing[4],
     },
     section: { marginTop: spacing[4] },
+    // A sunken plate, like every other plan view in this app — something
+    // looked INTO rather than a card lying on the page.
+    sketch: {
+      backgroundColor: colors.bgSunken,
+      borderRadius: radii.md,
+      marginEnd: spacing[4],
+      overflow: "hidden",
+    },
     sectionTitle: {
       ...t("title"),
       color: colors.text,
@@ -345,4 +442,8 @@ const makeStyles = (colors: ThemeColors) =>
       paddingHorizontal: spacing[4],
     },
     title: { ...t("bodyStrong"), color: colors.text, flex: 1 },
+    // The words take the room the sketch does not: a long place name shortens
+    // rather than pushing the sketch off the screen.
+    tripHead: { alignItems: "center", flexDirection: "row" },
+    tripWords: { flex: 1 },
   });

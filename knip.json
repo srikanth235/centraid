@@ -119,11 +119,7 @@
     "apps/mobile": {
       "entry": ["index.ts", "App.tsx", "scripts/*.mjs"],
       "project": ["src/**/*.{ts,tsx}", "lazy-screens.tsx", "scripts/*.mjs"],
-      "ignoreDependencies": [
-        "@babel/core",
-        "expo-system-ui",
-        "react-native-maps"
-      ]
+      "ignoreDependencies": ["@babel/core", "expo-system-ui"]
     },
     "apps/oauth-worker": {
       "entry": ["src/worker.ts"],

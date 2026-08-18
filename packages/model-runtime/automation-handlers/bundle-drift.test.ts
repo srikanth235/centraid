@@ -35,6 +35,7 @@ const BUNDLE_IDS = [
   "embed-image",
   "embed-text",
   "faces",
+  "place-names",
   "transcript",
 ] as const;
 

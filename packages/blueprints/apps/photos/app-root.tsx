@@ -67,7 +67,11 @@ import { MoreSheet } from "./components/MoreSheet.tsx";
 import { OfflineBanner } from "./components/OfflineBanner.tsx";
 import { PeopleShelf } from "./components/People.tsx";
 import { PermissionScreen } from "./components/Permission.tsx";
-import { PlacesShelf, placeSections } from "./components/Places.tsx";
+import {
+  PlacesShelf,
+  placeSectionsWithNoLocation,
+} from "./components/Places.tsx";
+import type { placeSections } from "./components/Places.tsx";
 import { SearchShelf } from "./components/SearchShelf.tsx";
 import { ShelfStrip } from "./components/ShelfStrip.tsx";
 import { StorageView, storageFacts } from "./components/Storage.tsx";
@@ -568,7 +572,10 @@ export function Root({
      *  reason albums are (a place id minted in one scope means nothing in
      *  another). */
     function sections(): ReturnType<typeof placeSections> {
-      return placeSections(ownAssets);
+      // The places, then the no-location bucket (issue #816) — the shelf as it
+      // is drawn, so the search groups over it and the lightbox's walk order
+      // read the same list the member is looking at.
+      return placeSectionsWithNoLocation(ownAssets);
     }
 
     const { visibleAssets, findAsset } = createVisibility({
@@ -1269,6 +1276,7 @@ export function Root({
           selectMode={selection.isActive()}
           selectedIds={selection.keys}
           vaultOf={vaultOf}
+          refresh={refresh}
           onOpen={handleOpenLightbox}
           onToggleSelect={handleToggleSelect}
           onEnterSelectMode={handleEnterSelect}

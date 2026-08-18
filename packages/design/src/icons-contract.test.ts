@@ -240,6 +240,9 @@ describe("Photos v4 handoff icon keys", () => {
     expect(icons.heart.map((p) => p.d)).toStrictEqual(
       icons.Heart.map((p) => p.d)
     );
+    expect(icons.MapPin.map((p) => p.d)).toStrictEqual(
+      icons.place.map((p) => p.d)
+    );
   });
 
   test("every key follows the single-tone stroke contract: no baked colour, fill:none", () => {

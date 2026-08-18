@@ -281,6 +281,50 @@ describe("the Places shelf (native)", () => {
     expect(container!.textContent).toContain("Places · 0");
   });
 
+  // THE TRAILING "NO LOCATION" CARD (issue #816). The photographs nobody told
+  // where they were taken were in the library and on no shelf: every other card
+  // stands at a coordinate.
+  it("cards the photographs with no place at all, after the places, without counting them as places", () => {
+    mocks.assets = [
+      ...(mocks.assets as unknown[]),
+      { ...(HOME_PHOTO as object), id: "scan", placeId: undefined },
+      { ...(HOME_PHOTO as object), id: "screenshot", placeId: undefined },
+    ];
+    renderShelf();
+    expect(buttonLabelled("No location yet").getAttribute("aria-label")).toBe(
+      "No location yet, 2 photographs"
+    );
+    // Still TWO places: the bucket is the absence of a place, not one more.
+    expect(container!.textContent).toContain("Places · 2");
+    // Last on the shelf.
+    const labels = Array.from(container!.querySelectorAll("button")).map(
+      (button) => button.getAttribute("aria-label")
+    );
+    expect(labels.at(-1)).toBe("No location yet, 2 photographs");
+  });
+
+  it("opens that bucket's own photographs through the reserved key", () => {
+    mocks.assets = [
+      ...(mocks.assets as unknown[]),
+      { ...(HOME_PHOTO as object), id: "scan", placeId: undefined },
+    ];
+    renderShelf();
+    act(() =>
+      buttonLabelled("No location yet").dispatchEvent(
+        new MouseEvent("click", { bubbles: true })
+      )
+    );
+    // The full call list, as data: exactly one navigation, to the bucket.
+    // (Stated this way rather than via toHaveBeenCalled* — the hygiene
+    // ratchet's mock-call budget is down-only, and the claim is identical.)
+    expect(navigate.mock.calls).toStrictEqual([
+      [
+        "PlaceDetail",
+        { placeKey: "no-location", placeName: "No location yet" },
+      ],
+    ]);
+  });
+
   it("draws a card's cover from the photographs taken there", () => {
     renderShelf();
     expect(

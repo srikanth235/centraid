@@ -39,6 +39,33 @@ interface RawPlace {
   name: string;
   geo_lat?: number | null;
   geo_lng?: number | null;
+  kind?: string | null;
+  address_json?: string | null;
+}
+
+/**
+ * The settlement name the opt-in gazetteer automation writes into a place's
+ * `address_json`, or null.
+ *
+ * Nothing writes it yet, so every branch here is the absent one today — which
+ * is exactly why it has to tolerate absence, blank, malformed JSON and a
+ * non-object payload without throwing. A place list that refuses to load
+ * because one row's address blob is unparseable would take the whole shelf
+ * down over a field nobody asked for.
+ */
+function gazetteerOf(addressJson: string | null | undefined): string | null {
+  if (typeof addressJson !== "string" || addressJson === "") return null;
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(addressJson);
+  } catch {
+    return null;
+  }
+  if (parsed === null || typeof parsed !== "object") return null;
+  const gazetteer = (parsed as { gazetteer?: unknown }).gazetteer;
+  if (gazetteer === null || typeof gazetteer !== "object") return null;
+  const name = (gazetteer as { name?: unknown }).name;
+  return typeof name === "string" && name.trim() !== "" ? name.trim() : null;
 }
 
 interface SchemeRow {
@@ -108,11 +135,17 @@ export async function readPlaces({
   // — a place list without them can only be a list. They stay `null` for a
   // place that has no geography at all (a room, a venue someone typed), which
   // the map filters rather than plotting at 0°,0° off the coast of Africa.
+  // `kind` and the gazetteer name ride along because a location is a PHRASE
+  // before it is a pin (place-phrase.ts): the ladder needs to know which place
+  // is home to say "3.4 km NE of Home", and a settlement name outranks any
+  // phrase derived from geometry.
   const rows = ((result.rows ?? []) as unknown as RawPlace[]).map((p) => ({
     place_id: p.place_id,
     name: p.name,
     lat: typeof p.geo_lat === "number" ? p.geo_lat : null,
     lng: typeof p.geo_lng === "number" ? p.geo_lng : null,
+    kind: p.kind ?? null,
+    gazetteer: gazetteerOf(p.address_json),
   }));
   return { rows, byId: new Map(rows.map((p) => [p.place_id, p] as const)) };
 }

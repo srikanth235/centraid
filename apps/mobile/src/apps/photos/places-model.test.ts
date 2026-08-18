@@ -18,12 +18,18 @@ import { PLACE_UNNAMED } from "@centraid/blueprints/apps/photos/shared-copy";
 import { makePhotosFixture } from "./photos-fixtures";
 import {
   assetsAtPlace,
+  assetsWithNoPlace,
+  NO_LOCATION_KEY,
+  NO_LOCATION_NAME,
+  noLocationCard,
   PIN_MIN,
   pinLabel,
   pinSize,
   placeCardKey,
   placeCards,
+  placeNameAt,
   placePoints,
+  unnamedPlaceAt,
 } from "./places-model";
 import type { PlaceRow } from "./places-model";
 import type { PhotoAsset } from "./timeline-model";
@@ -138,6 +144,90 @@ describe("the Places shelf's cards", () => {
     expect(placeCards([photo("a", "place-room")], [roomOnly])).toStrictEqual(
       []
     );
+  });
+});
+
+// A place minted from GPS is labelled with its own coordinate until a member
+// names it. Both halves of that fact are this block's subject: the label is
+// never printed as a name, and it is exactly the case the ask exists for.
+describe("naming a place (issue #816)", () => {
+  const COORD: PlaceRow = {
+    place_id: "place-coord",
+    name: "39.0968, -120.0324",
+    geo_lat: 39.096_8,
+    geo_lng: -120.032_4,
+  };
+  const COORD_KEY = "39.1:-120.0";
+
+  it("cards a coordinate-labelled place as unnamed, never as its digits", () => {
+    const cards = placeCards([photo("a", "place-coord")], [COORD]);
+    expect(cards.map((card) => card.name)).toStrictEqual([PLACE_UNNAMED]);
+  });
+
+  it("offers the coordinate-labelled row as the one to name", () => {
+    expect(
+      unnamedPlaceAt([photo("a", "place-coord")], [COORD], COORD_KEY)
+    ).toBe("place-coord");
+  });
+
+  it("offers a row with no name at all as the one to name", () => {
+    const nameless: PlaceRow = {
+      place_id: "place-bare",
+      name: "",
+      geo_lat: 39.096_8,
+      geo_lng: -120.032_4,
+    };
+    expect(
+      unnamedPlaceAt([photo("a", "place-bare")], [nameless], COORD_KEY)
+    ).toBe("place-bare");
+  });
+
+  it("asks nothing of a place the member already named", () => {
+    expect(
+      unnamedPlaceAt([photo("a", "place-tahoe")], [TAHOE], COORD_KEY)
+    ).toBeNull();
+  });
+
+  it("names the row the card took its title from, not a neighbour in the cell", () => {
+    // Two rows in one 0.1° cell: the card is titled from the NEWEST
+    // photograph's row, so the ask must be about that same row — otherwise a
+    // member answers a question about a name they were never shown.
+    const assets = [
+      photo("newest", "place-coord"),
+      photo("older", "place-cabin"),
+    ];
+    const cards = placeCards(assets, [COORD, TAHOE_CABIN]);
+    expect(cards[0]!.name).toBe(PLACE_UNNAMED);
+    expect(unnamedPlaceAt(assets, [COORD, TAHOE_CABIN], cards[0]!.id)).toBe(
+      "place-coord"
+    );
+  });
+
+  it("ignores a trashed photograph when deciding what to ask about", () => {
+    const assets = [
+      photo("trashed", "place-coord", { deleted: true }),
+      photo("kept", "place-tahoe"),
+    ];
+    expect(unnamedPlaceAt(assets, [COORD, TAHOE], COORD_KEY)).toBeNull();
+  });
+
+  it("prints no name for a coordinate-labelled row, so a caller falls back", () => {
+    expect(
+      placeNameAt([photo("a", "place-coord")], [COORD], COORD_KEY)
+    ).toBeNull();
+  });
+
+  it("prints the member's own name once the row carries one", () => {
+    const named: PlaceRow = { ...COORD, name: "Grandma's house" };
+    expect(placeNameAt([photo("a", "place-coord")], [named], COORD_KEY)).toBe(
+      "Grandma's house"
+    );
+  });
+
+  it("asks nothing when no photograph at that key exists", () => {
+    expect(
+      unnamedPlaceAt([photo("a", "place-home")], [HOME], "0.0:0.0")
+    ).toBeNull();
   });
 });
 
@@ -373,5 +463,75 @@ describe("what a pin says and how big it is", () => {
         places: 1,
       })
     ).toBe("an unnamed place, 2 photographs");
+  });
+});
+
+// THE NO-LOCATION BUCKET (issue #816). The photographs nobody told where they
+// were taken were in the library and on no shelf: every card on Places stands
+// at a coordinate, so the whole set was reachable only by scrolling the
+// timeline. It is a card at the end of the shelf now, and the same reserved key
+// resolves it wherever a surface asks — which is what makes the card's count and
+// the screen it opens one number rather than two.
+describe("the photographs that carry no place at all", () => {
+  it("is exactly the rows with no place id, trash excluded", () => {
+    const assets = [
+      photo("scan", undefined),
+      photo("screenshot", undefined),
+      photo("binned", undefined, { deleted: true }),
+      photo("placed", "place-home"),
+    ];
+    expect(assetsWithNoPlace(assets).map((asset) => asset.id)).toStrictEqual([
+      "scan",
+      "screenshot",
+    ]);
+  });
+
+  it("keeps a photograph at a coordinate-less place OUT of the bucket — it has a place", () => {
+    // "The kitchen" is unplottable, not unknown. Calling it "no location"
+    // would be a false sentence about the photograph.
+    const roomOnly: PlaceRow = { place_id: "place-room", name: "The kitchen" };
+    expect(placeCardKey(roomOnly)).toBeNull();
+    expect(assetsWithNoPlace([photo("a", "place-room")])).toStrictEqual([]);
+  });
+
+  it("cards the bucket with its own honest name, its count and a cover", () => {
+    const card = noLocationCard([
+      photo("scan", undefined),
+      photo("placed", "place-home"),
+      photo("screenshot", undefined),
+    ]);
+    expect(card).toStrictEqual({
+      id: NO_LOCATION_KEY,
+      name: NO_LOCATION_NAME,
+      count: 2,
+      coverUri: "https://fixture.invalid/thumb/scan",
+    });
+    // The name is a name, not the unnamed-place fallback and not a coordinate.
+    expect(card?.name).toBe("No location yet");
+  });
+
+  it("draws no card when every photograph carries a place", () => {
+    expect(noLocationCard([photo("a", "place-home")])).toBeNull();
+  });
+
+  it("opens the same set the card counted, through the reserved key", () => {
+    // The law this file exists for, extended to the bucket: one key, two
+    // readers, one number.
+    const assets = [
+      photo("scan", undefined),
+      photo("screenshot", undefined),
+      photo("placed", "place-home"),
+    ];
+    const card = noLocationCard(assets)!;
+    expect(assetsAtPlace(assets, [HOME], card.id)).toHaveLength(card.count);
+    expect(
+      assetsAtPlace(assets, [HOME], NO_LOCATION_KEY).map((asset) => asset.id)
+    ).toStrictEqual(["scan", "screenshot"]);
+  });
+
+  it("does not answer for the bucket's key with a real place's photographs", () => {
+    expect(
+      assetsAtPlace([photo("a", "place-home")], [HOME], NO_LOCATION_KEY)
+    ).toStrictEqual([]);
   });
 });

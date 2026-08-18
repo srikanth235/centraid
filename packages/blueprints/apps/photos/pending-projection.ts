@@ -59,6 +59,11 @@ export const photosPendingProjection = definePendingProjection({
     "answer-face": ({ input }) =>
       pendingPatch("media.face_region", input.region_id, input),
     "set-place": ({ input }) => asset(input),
+    "name-place": {
+      excluded: true,
+      reason:
+        "A name lands on the core.place row, not an asset; no tile or grid cell projects a pending place row, and every surface re-phrases from the row itself when the write settles.",
+    },
     "tag-asset": ({ input }) => asset(input),
     "untag-asset": {
       excluded: true,

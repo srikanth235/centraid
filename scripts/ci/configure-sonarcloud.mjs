@@ -58,6 +58,7 @@ const SOURCE_EXCLUSIONS = [
   "packages/blueprints/automations/embed-image/automations/embed-image/handler.js",
   "packages/blueprints/automations/embed-text/automations/embed-text/handler.js",
   "packages/blueprints/automations/faces/automations/faces/handler.js",
+  "packages/blueprints/automations/place-names/automations/place-names/handler.js",
   "packages/blueprints/automations/transcript/automations/transcript/handler.js",
   "packages/test-kit/**",
   "apps/web/src/generated/**",

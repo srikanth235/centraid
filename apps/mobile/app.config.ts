@@ -162,6 +162,22 @@ export default function createExpoConfig({
         },
       ],
       "expo-video",
+      // Photos' real map (#816). MapKit on iOS through `expo-maps`, MapLibre
+      // over OpenFreeMap's vector tiles on Android — the split exists because
+      // `expo-maps`' Android side is Google Maps, which would mean an API key
+      // and Play Services. Neither plugin is given `requestLocationPermission`:
+      // this map answers "where have I been", never "where am I", so the app
+      // asks for no location grant to draw it.
+      "expo-maps",
+      [
+        "@maplibre/maplibre-react-native",
+        {
+          // The plugin's own default, stated rather than inherited: `google`
+          // would pull Play Services back in through the location engine and
+          // undo the reason MapLibre is here at all.
+          android: { locationEngine: "default" },
+        },
+      ],
       "react-native-quick-crypto",
       "./plugins/withCentraidUploadService.cjs",
     ],

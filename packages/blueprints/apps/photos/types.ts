@@ -9,6 +9,7 @@
 // forward-compatible columns (`bytes`, `size_bytes`, EXIF keys) this app does
 // not otherwise name — the index signature keeps those honest as `unknown`
 // without an `any`.
+import type { TripRoutePoint } from "./trips.ts";
 
 /** A free-form label on an asset (core.tag_item, issue #352). */
 export interface AssetTag {
@@ -24,6 +25,13 @@ export interface Place {
    *  a place with no geography (a room, a venue someone simply named). */
   lat?: number | null;
   lng?: number | null;
+  /** `core_place.kind` — `'home'` is the one value the phrase ladder reads,
+   *  because "3.4 km NE of Home" needs to know which place is home. */
+  kind?: string | null;
+  /** A settlement name from the opt-in gazetteer automation, lifted out of
+   *  `core_place.address_json`. Null until that automation writes one — the
+   *  ladder simply skips the rung. */
+  gazetteer?: string | null;
 }
 
 /** One decorated library/search/trash row (queries/library.js `join()`). */
@@ -53,6 +61,14 @@ export interface Asset {
   kind?: string | null;
   taken_at?: string | null;
   captured_at?: string | null;
+  /**
+   * Minutes the camera's clock ran ahead of UTC when it recorded an offset
+   * (`media_asset.tz_offset_min`). Read by the trip display layer (`trips.ts`)
+   * so a trip's calendar days are counted in the camera's zone, the same rule
+   * the vault's own trip detection uses — absent for a row whose query does not
+   * project the column, and an absent offset is not an offset of zero.
+   */
+  tz_offset_min?: number | null;
   /**
    * Edit lineage (issue #711): the asset this one was derived from, when it
    * was — the editor saves a crop as a new photograph and stamps the original
@@ -103,6 +119,14 @@ export interface MemoryCard {
   coverScopeId?: string | null;
   newestAt: string;
   onOpen: () => void;
+  /**
+   * A trip card's route, in capture order — the places the trip passed
+   * through, ready for `projectPlaces` (issue #816). Present only on a 'trip'
+   * card that had at least one located member; the sketch drawn from it is
+   * arithmetic over coordinates the vault already holds, so a card carries a
+   * map of the trip with no tile request and no remote URL anywhere in it.
+   */
+  route?: TripRoutePoint[];
 }
 
 /** Vault-derived memory projection rows; clients render but never recompute. */
@@ -127,7 +151,9 @@ export interface MemoryMemberRow {
 export interface ExifRow {
   label: string;
   value: string;
-  href?: string;
+  // No `href`: the only row that ever carried one was Location, linking out to
+  // a public map with the coordinate in the query string. A detail row is a
+  // fact, not a departure.
 }
 
 /** One honest Activity row (activity.js `buildActivity`). */
