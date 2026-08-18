@@ -59,8 +59,8 @@ export function ScanRoute({
         title="Docs cannot drive the camera here"
         body={
           narrow
-            ? "Finding the page edges, straightening what it sees and laying several captures down as one PDF is work this seat cannot do. Your phone can already do it, and Docs takes the result."
-            : "Scanning is a phone's job — there is no camera to drive at a desk. The ways a scan reaches this drive are below."
+            ? "Finding the page edges and laying captures into one PDF is work this seat cannot do — your phone can, and Docs takes it."
+            : "Scanning is a phone's job: there is no camera to drive at a desk, and the ways a scan reaches this drive are below."
         }
         facts={[
           { k: "what is missing", v: "a capture path in this seat", net: true },

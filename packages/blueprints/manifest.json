@@ -885,6 +885,7 @@
         "shelves.ts",
         "types.ts",
         "upload.ts",
+        "uploads.ts",
         "versions.ts",
         "view-copy.ts",
         "view-state.ts"

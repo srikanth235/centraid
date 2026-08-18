@@ -61,7 +61,7 @@ export function CapabilitiesRoute(): ReactNode {
       <Panel
         eyebrow="Consent · reading the contents"
         title="Read the contents of your scanned documents?"
-        body="Reading turns a photographed or scanned document into words, so search can look inside it. It writes a contents column beside each document and files nothing."
+        body="Reading turns a scan into words so search can look inside it, writing a contents column and filing nothing."
         facts={[
           { k: "where it would run", v: "on this device" },
           { k: "what leaves the device", v: "nothing" },
@@ -90,7 +90,7 @@ export function CapabilitiesRoute(): ReactNode {
         net
         eyebrow="The other option"
         title="Read on a cloud helper"
-        body="Faster, and the documents leave this device. A separate consent with its own receipt — and the copy that leaves is the whole document."
+        body="Faster, and the documents leave this device under a separate consent — the copy that leaves is the whole document."
         facts={[
           { k: "where it would run", v: "a cloud helper you have named" },
           {

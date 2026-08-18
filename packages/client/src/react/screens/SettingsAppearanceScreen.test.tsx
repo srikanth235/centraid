@@ -88,7 +88,7 @@ describe("screens/SettingsAppearanceScreen", () => {
       // zone are the same subject — what this device does — and two heads over
       // one control each is a taxonomy the page does not need.
       expect(
-        [...el.querySelectorAll(".label")].map((n) => n.textContent)
+        [...el.querySelectorAll(".groupLabel")].map((n) => n.textContent)
       ).toStrictEqual(["This device"]);
       expect(el.textContent).toContain("Time zone for automations");
       expect(el.querySelector('[aria-label="Show sidebar"]')).toBeNull();

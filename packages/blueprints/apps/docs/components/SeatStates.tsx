@@ -66,7 +66,7 @@ export function PermissionPanel(): ReactNode {
         net
         eyebrow="No grant"
         title="Docs cannot reach these documents"
-        body="The grant that let Docs read this vault has been revoked. The documents still belong to their owner, and the app goes dark rather than show you a stale copy."
+        body="The grant that let Docs read this vault has been revoked, so the app goes dark rather than show a stale copy."
         facts={[
           {
             k: "what is true right now",

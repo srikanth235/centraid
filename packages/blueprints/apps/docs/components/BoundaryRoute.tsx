@@ -42,8 +42,8 @@ export function LockerBoundaryRoute(): ReactNode {
     <Screen label="Docs and Locker">
       <Panel
         eyebrow="The boundary"
-        title="The scan is a document. The number is a credential."
-        body="A passport has two things in it. The photographed page is a document: bytes, versions, a folder, a purge date. The number is a credential — a short secret with an expiry, held in Locker, never previewed."
+        title="The scan is a document; the number is a credential"
+        body="The photographed page is a document — bytes, versions, a folder — and the number is a short secret in Locker."
         facts={[
           {
             k: "in docs",

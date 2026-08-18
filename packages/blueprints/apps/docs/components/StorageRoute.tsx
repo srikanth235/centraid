@@ -80,7 +80,7 @@ export function StorageRoute({
         title={`${fmtBytes(bytes)} in documents`}
         body={
           truncated
-            ? "This drive stopped reading at its window, so the figure below is what has been fetched — not what the library holds. Search reaches the rest."
+            ? "This drive stopped at its window, so the figure below is what has been fetched — not what the library holds."
             : "Counted across every document this drive has read, trashed ones included: they occupy the disk until their purge date."
         }
         facts={[
@@ -115,7 +115,7 @@ export function StorageRoute({
         net
         eyebrow="The rule"
         title="Nothing real is discarded to make space"
-        body="When there is no room, incoming documents stop being written and the queue holds. The queue is intact — nothing in it is dropped, and nothing already in the vault is deleted to fit something new."
+        body="When there is no room, incoming documents stop being written and the queue holds — nothing already stored is deleted."
         facts={[
           {
             k: "what stops",

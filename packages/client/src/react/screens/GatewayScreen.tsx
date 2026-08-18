@@ -250,8 +250,8 @@ export default function GatewayScreen(props: GatewayScreenProps): JSX.Element {
   const heroBody = props.readOnly
     ? `Runs on ${snapshot.gatewayLabel}, and this browser cannot reach it. What the rest of this page shows is the last replica that machine sent.`
     : snapshot.gatewayKind === "local"
-      ? "The bytes are on this machine's disk; what stopped is the daemon that reads them. This gateway runs inside Centraid, so your phone and other devices cannot reach the vault either."
-      : "The bytes are on the machine's disk. What is unreachable is the daemon that reads them, which is a different and smaller problem.";
+      ? "The bytes are on this machine's disk; what stopped is the daemon that reads them, so other devices cannot reach it."
+      : "The bytes are on the machine's disk; what is unreachable is the daemon that reads them, a smaller problem.";
 
   const heroFacts: PanelFact[] = [
     {

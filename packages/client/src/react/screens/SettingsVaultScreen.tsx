@@ -352,7 +352,7 @@ export default function SettingsVaultScreen({
               tone="net"
               eyebrow="Stop keeping a copy"
               title="The local copy is erased"
-              body="The encrypted replica, any queued changes and the cached previews go. The pairing stays."
+              body="The encrypted replica, any queued changes and the cached previews go — the pairing stays."
               action={{
                 label: "Erase it",
                 dangerous: true,

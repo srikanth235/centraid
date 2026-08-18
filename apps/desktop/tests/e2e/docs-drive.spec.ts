@@ -163,7 +163,7 @@ test("Docs uploads a real file and its bytes survive an Electron reload", async 
     );
     await mkdir(evidenceDir, { recursive: true });
     await page.screenshot({
-      path: path.join(evidenceDir, "issue-794-docs-body-paint.png"),
+      path: path.join(evidenceDir, "issue-819-docs-drive.png"),
       fullPage: true,
     });
   } finally {

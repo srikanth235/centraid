@@ -426,7 +426,7 @@ export default function LogsScreen({
         The stream reads oldest first and takes a focus query, so a failing
         component can hand this page its own name.
         {onExportDiagnostics
-          ? " Export diagnostics gathers this window and the component list into one file you can send."
+          ? " Export diagnostics gathers this window and the component list into one file."
           : ""}
       </NoteBlock>
     </div>

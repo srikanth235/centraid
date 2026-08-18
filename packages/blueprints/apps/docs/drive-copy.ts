@@ -292,7 +292,7 @@ export const SEARCH_COPY = {
   resting: {
     eyebrow: "Nothing typed",
     title: "Search titles and contents, across the whole library",
-    body: "Not the page that happens to be loaded. Try one of these.",
+    body: "Not the page that happens to be loaded — try one of these.",
   },
   searching: {
     lead: "Searching titles and contents.",

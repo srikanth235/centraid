@@ -250,7 +250,7 @@ the same thing. The WORDING stays in `ambientStatus.ts` (`SYNCED`,
 
 ### The web seat remembers its own heartbeats
 
-`apps/web/src/web-health.ts` (+138) is a fifth defect fix, and it is what makes
+`apps/web/src/web-health.ts` (+138) and `apps/web/src/web-health.test.ts` are a fifth defect fix, and they are what make
 the System page honest on that seat. Every field on `CentraidGatewayRuntime`
 describing a WINDOW rather than an instant — `checksTotal`, `checksFailed`,
 `samples`, `outages`, `statusSince`, `trackingSince` — was rebuilt from nothing
@@ -368,6 +368,7 @@ complete set, so nothing rides along unnamed. Deletions included.
 - `apps/mobile/src/screens/devices/DeviceActions.tsx`
 - `apps/mobile/src/screens/devices/Devices.styles.ts`
 - `apps/web/src/web-health.ts`
+- `apps/web/src/web-health.test.ts`
 - `docs/blueprint-seats.md`
 - `docs/decisions.md`
 - `docs/design-divergences.md`
@@ -556,6 +557,8 @@ complete set, so nothing rides along unnamed. Deletions included.
 - `packages/client/src/react/shell/routes/InlineAppRoute.tsx`
 - `packages/client/src/react/shell/routes/SettingsRoute.module.css`
 - `packages/client/src/react/shell/routes/SettingsRoute.tsx`
+- `packages/client/src/react/shell/routes/gatewayStorageData.test.ts`
+- `packages/client/src/react/shell/routes/inlineAppFlows.test.ts`
 - `packages/client/src/react/shell/useGatewayRuntime.ts`
 - `packages/client/src/react/ui/BarsBlock.module.css`
 - `packages/client/src/react/ui/BarsBlock.tsx`
@@ -573,6 +576,10 @@ complete set, so nothing rides along unnamed. Deletions included.
 - `receipts/issue-819-binding-layer-v11-docs-system-holdbacks.md`
 - `scripts/accessibility-contract.test.mjs`
 - `tests/agent-e2e-mobile/flows/scroll-frames.mjs`
+- `tests/design-gallery/baselines/sh-c-dark.png`
+- `tests/design-gallery/baselines/sh-c-light.png`
+- `tests/design-gallery/baselines/sh-dark.png`
+- `tests/design-gallery/baselines/sh-light.png`
 - `tests/quality/copy-allowlist.json`
 
 ### Where each checked item lands
@@ -673,6 +680,19 @@ Named so the omissions are not read as oversights.
   collection failure.** It fails identically on a stashed clean tree and no file
   here is in its import graph.
 
+## User impact
+
+First-run: the existing chooser and identity path are unchanged. After Home, Docs
+opens on the v11 drive — 44px rows, a 32px head band, and an info button that
+docks the details rail beside the set. System is one scrolling overview. Mobile
+Docs and People, and desktop People, each land on a wall with the place's own
+frame and a way out; the frame no longer contributes a settings gear to any
+inline app.
+
+Evidence: `artifacts/e2e/ui-impact/issue-819-docs-drive.png`, emitted by
+`apps/desktop/tests/e2e/docs-drive.spec.ts` after the uploaded document is on
+the drive.
+
 ## Verification
 
 ```
@@ -698,7 +718,7 @@ the handoff, measured rather than eyeballed: row height 67 → 44px, set box
 577 → 386px, head band 41 → 32px, info button at `[1105,1139]` against the view
 toggle at `[1151,1258]`, and the rail retargeting on selection.
 
-Design-gallery baselines shift with this change and regenerate in **CI only**.
+Design-gallery baselines shift with this change. The shell captures (`tests/design-gallery/baselines/sh-light.png`, `tests/design-gallery/baselines/sh-dark.png`, `tests/design-gallery/baselines/sh-c-light.png`, `tests/design-gallery/baselines/sh-c-dark.png`) are refreshed here; the BI/MO lowering sheets stay as CI last verified them.
 
 ## Session
 
@@ -709,6 +729,7 @@ Design-gallery baselines shift with this change and regenerate in **CI only**.
 | date | harness | session |
 | --- | --- | --- |
 | 2026-08-18 | claude-code | e0283c51-4de9-4ea2-ac86-f474c7c86a31 |
+| 2026-08-18 | codex | 01a0146f-e42c-7cf3-9d2a-8afb8a7d3fcd |
 
 ## Audit
 

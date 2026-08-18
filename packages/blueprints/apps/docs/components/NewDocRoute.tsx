@@ -87,7 +87,7 @@ export function NewDocRoute({
       <Panel
         eyebrow="Byte-identical"
         title="Keeping both is free, and never blocked"
-        body="When the bytes you bring in are already in the vault under another name, Docs says so at the moment you add it — and then keeps both if you want both."
+        body="If those bytes are already in the vault under another name, Docs says so — and keeps both if you want both."
         facts={[
           { k: "what matched", v: "the bytes, exactly" },
           {
