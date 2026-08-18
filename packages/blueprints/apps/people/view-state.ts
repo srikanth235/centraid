@@ -10,8 +10,9 @@ import type { AppData, AppState } from "./types.ts";
 /**
  * The cadence a new person opens on — the middle chip of `CADENCE_CHIPS`
  * (people-copy.ts), named here rather than typed as a bare 30 at the call
- * site. THERE IS NO ZERO: `app.json` types `cadence_days` as an integer with a
- * minimum of 1, so "never reach out" is not a value this contract can hold.
+ * site. ZERO IS A VALUE THIS CONTRACT HOLDS (the `Never` chip), and it is
+ * deliberately not the default: a person added with no cadence would never
+ * reach the Reconnect shelf, which is the shelf the app is for.
  */
 export const DEFAULT_CADENCE = 30;
 
@@ -43,6 +44,10 @@ export function makeData(): AppData {
   return {
     people: [],
     truncated: false,
+    // Nothing has been read, so the sharing plane has not answered either.
+    // False draws exactly the link-free roster, which is the honest first
+    // paint: a ring on every avatar before the first read would be a claim.
+    linksAvailable: false,
     person: null,
     dashboard: null,
     trash: [],

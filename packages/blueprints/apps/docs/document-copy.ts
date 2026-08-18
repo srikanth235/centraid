@@ -52,6 +52,35 @@ export const RAIL_NOTES = {
   footer: "Select another row and the rail follows it.",
 } as const;
 
+/**
+ * §8's sharing row (issue #821) — the key, and the note that qualifies one
+ * share's value.
+ *
+ * THE ROW IS ABSENT, NEVER NEGATIVE. A document nobody has shared says nothing
+ * here, and so does one whose share reads were denied: "Not shared" would be
+ * this rail asserting a fact in the one place a wrong answer costs the most.
+ *
+ * `through <folder>` is the whole point of carrying `via`. A member who shared
+ * a folder did not share this document, and a rail that said they did would
+ * send them looking for a share they never made when they came to undo one.
+ */
+export const SHARED_WITH_KEY = "Shared with";
+
+export function sharedWithNote({
+  viaFolder,
+  pending,
+}: {
+  /** The folder the grant actually names, when the share came from above. */
+  viaFolder?: string | null;
+  /** How many members have not accepted yet. */
+  pending?: number;
+}): string | undefined {
+  const parts: string[] = [];
+  if (viaFolder) parts.push(`through ${viaFolder}`);
+  if (pending && pending > 0) parts.push(`${pending} waiting to accept`);
+  return parts.length > 0 ? parts.join(" · ") : undefined;
+}
+
 /** §8's trailing row for a kind Docs cannot show (§10.1's `render` column). */
 export function cannotRenderFact(kindName: string): string {
   return `Docs cannot render ${kindName}`;

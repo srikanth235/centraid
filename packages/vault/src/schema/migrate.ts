@@ -1,19 +1,20 @@
-// The schema ladder for vault.db and journal.db. Pre-release v0 has no
-// backward compatibility (see docs/decisions.md): there is exactly one
-// baseline rung, composed of every owner table's DDL in dependency order,
-// including what issue #726's forward rename and issue #731's Commons
-// control plane used to ship as separate rungs — a database written by an
-// older shape is erased and re-created, never migrated in place, so there is
-// nothing left for a second rung to upgrade. `migrate()` still applies rungs
-// transactionally and stamps `PRAGMA user_version`, because that version
-// number is load-bearing beyond this file: it is the downgrade guard
+// The schema ladder for vault.db and journal.db. Rung one is the baseline,
+// composed of every owner table's DDL in dependency order, including what
+// issue #726's forward rename and issue #731's Commons control plane used to
+// ship as separate rungs. Rung two (issue #821) is the first genuine upgrade
+// rung: relaxing a CHECK in the baseline text reaches new files only, so
+// vaults already stamped v1 need a vault-preserving rebuild to get there.
+// `migrate()` applies rungs transactionally and stamps `PRAGMA user_version`,
+// and that version number is load-bearing beyond this file: it is the
+// downgrade guard
 // (`VaultSchemaAheadError`, thrown when a file's version exceeds what this
 // build's ladder knows how to reach) and it is the "schema version this
 // build understands" reported by the gateway's backup/recovery provenance
 // (`packages/server/src/backup/backup-service.ts`,
 // `packages/server/src/backup/recover-internals.ts` read
-// `VAULT_MIGRATIONS.length`). The ladder mechanism earns its keep even at
-// one rung; the next post-release migration is a second array element away.
+// `VAULT_MIGRATIONS.length`). A fresh file walks BOTH rungs (rung two is a
+// faithful re-creation on a table that already has the relaxed CHECK), so the
+// two paths land on the same shape and the same version.
 
 import type { DatabaseSync } from "node:sqlite";
 
@@ -39,7 +40,11 @@ import {
   LOCKER_AUTH_DDL,
   LOCKER_DDL,
 } from "./domains-locker.js";
-import { PEOPLE_DDL, PEOPLE_PROFILE_LIFECYCLE_DDL } from "./domains-people.js";
+import {
+  PEOPLE_DDL,
+  PEOPLE_PROFILE_CADENCE_FLOOR_DDL,
+  PEOPLE_PROFILE_LIFECYCLE_DDL,
+} from "./domains-people.js";
 import {
   SOCIAL_DDL,
   KNOWLEDGE_DDL,
@@ -137,6 +142,11 @@ export const VAULT_MIGRATIONS: readonly string[] = [
     SHARE_COMMONS_DDL,
     COMMONS_RESILIENCE_DDL,
   ].join("\n"),
+  // Rung two (issue #821): the vault-preserving people_profile rebuild that
+  // carries the relaxed `cadence_days >= 0` CHECK to files created before it.
+  // See `PEOPLE_PROFILE_CADENCE_FLOOR_DDL` for why a rebuild, and for how the
+  // rung handles foreign keys inside the runner's transaction.
+  PEOPLE_PROFILE_CADENCE_FLOOR_DDL,
 ];
 
 export const JOURNAL_MIGRATIONS: readonly string[] = [JOURNAL_DDL];

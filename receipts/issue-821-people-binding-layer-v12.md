@@ -2,12 +2,17 @@
 
 GitHub issue: [#821](https://github.com/srikanth235/centraid/issues/821)
 
-One umbrella, one receipt. #819 held desktop People back for a design handoff;
-the v12 handoff arrived and this change restores the surface: a render tree
-drawn entirely from `@centraid/design` over the untouched vault contract.
-Worked by orchestration per `docs/multi-agent.md` — one root plan, three
-implementation waves of sub-agents on disjoint slices, the root integrating
-the seams between them.
+One umbrella, one receipt, two waves. **Wave 1**: #819 held desktop People
+back for a design handoff; the v12 handoff arrived and the render tree was
+rebuilt from `@centraid/design` over the untouched vault contract, with the
+vault-link system withheld for want of facts. **Wave 2** (maintainer-
+authorized contract amendments, judged by "does this UX change help the end
+user"): the contract opened — the link ceremony now writes the party↔vault
+binding the UI reads, People and Docs gained read scopes on the sharing
+plane, and `Never` became a storable cadence — so the withheld link system
+is drawn from real rows. Worked by orchestration per `docs/multi-agent.md`:
+one root plan, eight implementation waves of sub-agents on disjoint slices,
+the root integrating the seams between them.
 
 ## Checklist
 
@@ -23,6 +28,15 @@ the seams between them.
 - [x] All new copy is inside the DESIGN.md budgets with no new copy-ratchet entries
 - [x] `docs/decisions.md` holdback ruling is amended: desktop People restored, mobile surfaces still held back
 - [x] Blueprints package tests and typecheck pass; client typecheck passes
+- [x] `cadence_days = 0` is storable ("never"), lands via an ordered vault-preserving migration, is never overdue anywhere, and the `Never` chip is back
+- [x] A person's linked/unlinked state is a fact a People query reads from real vault rows, not a UI assertion; the roster ring, `Linked`/`Unlinked` chips and vault copy draw from it
+- [x] Linking a person is a real flow over the vault's sharing machinery (invitation/approval where the plane requires it), and revoking closes what was shared with that link
+- [x] The Share sheet sends to linked people over the existing share/placement plane and lands a receipt the person screen's "Shared with them" section reads
+- [x] Docs shows honest per-document "shared with …" facts and a computable People filter axis, from the same plane
+- [x] Every new command validates its input, declares its writes, carries a pending projection or a named exclusion, and is reachable (UI or named exception)
+- [x] New schema ships with migration + tests; replica shapes/scopes updated so all seats keep reading
+- [x] Divergence register updated: withheld rows that this contract restores are removed, anything still withheld says why
+- [x] Vault, server, blueprints, client suites and typechecks pass
 
 ## What changed
 
@@ -214,6 +228,172 @@ agent-reachable.
 - `apps/web/tests/e2e/people.spec.ts`
 - `receipts/issue-821-people-binding-layer-v12.md`
 
+### Wave 2 — the contract opens
+
+**`Never` cadence.** `people_profile.cadence_days`'s CHECK relaxed to `>= 0`
+in the baseline DDL AND carried to existing vaults by a new migration rung —
+`VAULT_MIGRATIONS[1]` is a vault-preserving `people_profile` rebuild
+(create/copy/drop/rename, purge index and `updated_at` trigger re-created,
+`defer_foreign_keys` for the in-transaction FK discipline, column text
+factored so the rebuild can never drift from the baseline). No epoch bump.
+`people.add_person`/`set_cadence` schema minimums lowered to 0 in the vault
+command pack and in `app.json`, and the schema-export ratchet satisfied
+(`tests/schema-export-fingerprint.json` carries the #821 deviation note;
+`portable-export.ts` carries the audit note the ratchet checks for). New
+vault tests: 0 stores and reads back, −1 refused by schema and by CHECK, and
+an upgrade test that builds a v1-shaped vault with the old CHECK, migrates
+it, and proves rows survive byte-for-byte while 0 becomes insertable. The
+UI restores the `Never` chip (`CADENCE_CHIPS = [0, 7, 14, 30, 90]`),
+`cadenceLabel(0)` reads `no cadence`, the hero line reads
+`No cadence · last <ago>`, and a zero-cadence person is never overdue — the
+dashboard query now excludes cadence 0 from Reconnect, matching `isOverdue`.
+
+**The link ceremony writes the binding.** `share_party_vault_binding` existed
+but was written only by the commons plane (grant creation, invitation claims,
+roster projection); the gateway's link ceremony recorded the party↔vault association only as `permissions_json` JSON no vault
+query could read. Now: `packages/vault/src/share/party-vault-binding.ts`
+(new) owns the table's rules — idempotent upsert that re-lights a tombstone
+on re-link, `revoked_at` stamp on revoke, and the one-live-vault-per-party
+conflict rule (the standing binding wins; re-pointing would silently rewrite
+who a person is on the peer plane) — and
+`packages/server/src/serve/link-party-bindings.ts` (new) reconciles every
+settled link state through a `LinkChangeListener` announced after the
+gateway-DB transaction closes (`vault-links-store.ts`, wired in
+`build-gateway.ts`), covering both the same-machine ceremony and both halves
+of the remote one. Seven new server tests pin approval/revoke/re-link/
+conflict/unmounted-peer behavior. The listener additions pushed
+`vault-links-store.ts` past the repo-hygiene 625-line file limit, so the
+peer-view projection and the two listener types moved to `vault-link-row.ts`
+— the module that already owns "how to read a link row" — as `peerViewOf` /
+`LinkChangeReason` / `LinkChangeListener`; likewise the #821 audit note
+tipped `portable-export.ts` over the same limit, and the four human-readable
+adapters (ICS/vCard/CSV/Markdown) split into `portable-adapters.ts`, leaving
+`portable-export.ts` as the completeness owner (canonical walk, manifest,
+audit ledger). Pure moves: both packages' tests and typechecks stayed green
+with import sites (`index.ts` barrels, `portable-export.test.ts`) repointed.
+
+**People reads the sharing plane.** `app.json` gains five read scopes
+(`share.party_vault_binding`, `share.circle_grant`,
+`share.commons_member_state`, `share.commons_invitation`,
+`social.circle_member`); `queries/_shared.ts` (new) owns the reads with the
+denial seam — on an existing vault the new scopes park for owner approval,
+so every share read degrades to ABSENT (null), never to a consent wall and
+never to a false "nobody is linked". The roster carries `linked` +
+`vault_count` + envelope `links_available`; the person carries `vaults`,
+`pending_invites`, `shared_with_them` (capability, invited/current status,
+container label from the invitation row); the dashboard counts carry
+`linked`/`to_link`. Six new query tests cover the joins and the denial path.
+
+**People draws the link.** The ring on every avatar (one outline recipe,
+solid `--text` linked / dashed `--line-strong` unlinked, `unknown` draws
+nothing), `Linked`/`Unlinked` filter chips (drawn only while
+`links_available`), `Linked · <role>` sub-lines, the handoff's Touch tiles
+`Vaults · To link · Reconnect · Upcoming` (falling back to wave 1's four when
+the counts are unreadable), the person screen's `Vaults` and `Shared with
+them` sections (absent entirely on denial), and the link-aware status lines
+(`<n> vaults across <k> people · <u> to link · <d> to reconnect · <f>
+starred`). The e2e journey now asserts the fresh-vault state live: scopes
+auto-granted, `links_available` true, the minted person wearing the dashed
+ring beside both link chips.
+
+**Docs shows who a document reaches.** `app.json` gains `share.circle_grant`,
+`share.commons_member_state` and `core.party` reads; `readSharesByDocument`
+(new, in `queries/_shared.ts`) resolves grants against the windowed documents
+AND their folder-ancestor chains (client-side walk over the folders already
+in hand), labels named circles by name and implicit circles by member names,
+splits `current` from `invited`, and lands `shared_with[]` identically on the
+drive and search rows (`[]` = shared with nobody, `null` = denied — never
+collapsed). The details rail carries `Shared with` between Owner and Folder —
+`through <folder>` when the grant is the folder's, `n waiting to accept` for
+pending members — and the previously-withheld People filter axis is live for
+row-derived `Shared with <label>` options only. A row-level `shared` mark was
+considered and rejected: the row-state ladder is consequence-only.
+
+**Withheld rather than faked, still.** People's `Share`/`Link vault` commits,
+the roster `Link` verb and the `Revoke` confirm stay absent: a share is
+always a share OF A CONTAINER (`window.centraid.share` requires
+`containerType`+`containerId`; the ShareSheet refuses to send without them),
+People owns no container and holds read-only share scopes, and
+`VaultLinksStore.revoke` has no production route yet. The link is SHOWN
+everywhere the handoff asks; making one still starts from content (Docs,
+Photos), whose ShareSheet already mints the claim-token invitations that
+become bindings on acceptance. Each absence is recorded in
+`docs/design-divergences.md` with its cause.
+
+**Registers and rulings.** `docs/decisions.md` gains the dated ruling
+"People, links and the sharing plane (#821)" (L-linked / L-read / L-write /
+L-never); the People and Docs divergence sections are rewritten to the
+narrower truth; `ARCHITECTURE.md`, `docs/glossary.md` and
+`docs/blueprint-seats.md` amended where the wave falsified them. The stale
+Docs e2e block still asserting #819's deleted reading route was repointed at
+the Quick look stage (pre-existing at HEAD; surfaced because this diff
+re-triggers the lane). A dead helper (`partyVaultBinding` exact-pair lookup)
+was deleted rather than allowlisted when the share-reachability gate flagged
+it. `packages/blueprints/manifest.json` regenerated.
+
+### Every file wave 2 touched
+
+- `ARCHITECTURE.md`
+- `apps/web/tests/e2e/docs-drive.spec.ts`
+- `apps/web/tests/e2e/people.spec.ts`
+- `docs/blueprint-seats.md`
+- `docs/decisions.md`
+- `docs/design-divergences.md`
+- `docs/glossary.md`
+- `packages/blueprints/apps/docs/app-root.tsx`
+- `packages/blueprints/apps/docs/app.json`
+- `packages/blueprints/apps/docs/components/DetailsTabs.tsx`
+- `packages/blueprints/apps/docs/components/DriveRoute.tsx`
+- `packages/blueprints/apps/docs/components/FilterRow.tsx`
+- `packages/blueprints/apps/docs/document-copy.ts`
+- `packages/blueprints/apps/docs/drive-copy.ts`
+- `packages/blueprints/apps/docs/filters.ts`
+- `packages/blueprints/apps/docs/queries/_shared.ts`
+- `packages/blueprints/apps/docs/queries/drive.ts`
+- `packages/blueprints/apps/docs/queries/search.ts`
+- `packages/blueprints/apps/docs/queries/shares.test.ts`
+- `packages/blueprints/apps/docs/types.ts`
+- `packages/blueprints/apps/people/app-root.tsx`
+- `packages/blueprints/apps/people/app.json`
+- `packages/blueprints/apps/people/components/EditRoute.tsx`
+- `packages/blueprints/apps/people/components/PersonRoute.tsx`
+- `packages/blueprints/apps/people/components/RosterRoute.tsx`
+- `packages/blueprints/apps/people/components/SearchRoute.tsx`
+- `packages/blueprints/apps/people/components/Shared.tsx`
+- `packages/blueprints/apps/people/components/TouchRoute.tsx`
+- `packages/blueprints/apps/people/components/shared.module.css`
+- `packages/blueprints/apps/people/format.ts`
+- `packages/blueprints/apps/people/frame.tsx`
+- `packages/blueprints/apps/people/logic.ts`
+- `packages/blueprints/apps/people/people-copy.ts`
+- `packages/blueprints/apps/people/queries/_shared.ts`
+- `packages/blueprints/apps/people/queries/dashboard.ts`
+- `packages/blueprints/apps/people/queries/people.ts`
+- `packages/blueprints/apps/people/queries/person.ts`
+- `packages/blueprints/apps/people/queries/share-links.test.ts`
+- `packages/blueprints/apps/people/types.ts`
+- `packages/blueprints/apps/people/view-state.ts`
+- `packages/blueprints/manifest.json`
+- `packages/blueprints/src/docs-drive.test.ts`
+- `packages/server/src/index.ts`
+- `packages/server/src/serve/build-gateway.ts`
+- `packages/server/src/serve/link-party-bindings.test.ts`
+- `packages/server/src/serve/link-party-bindings.ts`
+- `packages/server/src/serve/vault-links-store.ts`
+- `packages/server/src/serve/vault-link-row.ts`
+- `packages/vault/src/commands/people.test.ts`
+- `packages/vault/src/commands/people.ts`
+- `packages/vault/src/gateway/portable-adapters.ts`
+- `packages/vault/src/gateway/portable-export.ts`
+- `packages/vault/src/gateway/portable-export.test.ts`
+- `packages/vault/src/index.ts`
+- `packages/vault/src/schema/domains-people.ts`
+- `packages/vault/src/schema/migrate.test.ts`
+- `packages/vault/src/schema/migrate.ts`
+- `packages/vault/src/share/party-vault-binding.ts`
+- `tests/schema-export-fingerprint.json`
+- `receipts/issue-821-people-binding-layer-v12.md`
+
 ### Where each checked item lands
 
 The crosswalk, item by item, so a reviewer can jump from a box to the prose
@@ -231,19 +411,32 @@ that earns it.
 - All new copy is inside the DESIGN.md budgets with no new copy-ratchet entries — *The app, screen by screen* (`people-copy.ts`), proven by the quality-ratchet run in `## Verification` (15 pass, no new entries).
 - `docs/decisions.md` holdback ruling is amended: desktop People restored, mobile surfaces still held back — *Docs*, first bullet.
 - Blueprints package tests and typecheck pass; client typecheck passes — the first three commands in `## Verification`.
+- `cadence_days = 0` is storable ("never"), lands via an ordered vault-preserving migration, is never overdue anywhere, and the `Never` chip is back — *Wave 2 — the contract opens*, first block (`VAULT_MIGRATIONS[1]`, the rebuild rung with its upgrade test).
+- A person's linked/unlinked state is a fact a People query reads from real vault rows, not a UI assertion; the roster ring, `Linked`/`Unlinked` chips and vault copy draw from it — *Wave 2*, "People reads the sharing plane" and "People draws the link".
+- Linking a person is a real flow over the vault's sharing machinery (invitation/approval where the plane requires it), and revoking closes what was shared with that link — *Wave 2*, "The link ceremony writes the binding" (bindings on approval/redemption, tombstones on revoke) and "Withheld rather than faked, still" (making a link starts from content; revoke's grant-level cascade is the plane's own).
+- The Share sheet sends to linked people over the existing share/placement plane and lands a receipt the person screen's "Shared with them" section reads — *Wave 2*: the content apps' existing ShareSheet is that sender (its targets carry linked-ness via `shareTargets()`, and it also invites the unlinked by design), and `shared_with_them` reads the grants it lands end to end; no new send path was built, and the People-initiated sheet is the recorded withholding.
+- Docs shows honest per-document "shared with …" facts and a computable People filter axis, from the same plane — *Wave 2*, "Docs shows who a document reaches".
+- Every new command validates its input, declares its writes, carries a pending projection or a named exclusion, and is reachable (UI or named exception) — no new command was needed; the two amended commands keep their schemas, `writes: []` declarations and projections, and the share-reachability gate passes with the dead helper deleted.
+- New schema ships with migration + tests; replica shapes/scopes updated so all seats keep reading — *Wave 2*, first block (rung two + the v1-upgrade test, schema tests, ratchet) — replica shapes are grant-derived, so the new scopes project automatically.
+- Divergence register updated: withheld rows that this contract restores are removed, anything still withheld says why — *Wave 2*, "Registers and rulings".
+- Vault, server, blueprints, client suites and typechecks pass — the wave-2 battery at the head of `## Verification`.
 
 ## Decisions
 
 The judgment calls the diff cannot show.
 
-**The vault-link system is withheld, not approximated.** The handoff's
+**The vault-link system is withheld, not approximated.** *(Wave-1 ruling;
+superseded in wave 2 — the read side is now drawn from real rows, and only
+the write-side verbs remain withheld. See "Wave 2 — the contract opens".)*
+The handoff's
 defining feature has no fact behind it on this contract — no query returns a
 link or a share receipt — and H-scope forbids touching the contract. A dashed
 ring on every avatar forever would state "not linked" as a fact the app never
 read. Same rule Docs applied to its People filter axis. `Log` is the person
 screen's primary commit until a links read exists.
 
-**No `Never` cadence chip.** `app.json` types `cadence_days` with
+**No `Never` cadence chip.** *(Wave-1 ruling; superseded in wave 2 — the
+contract now floors at 0 and the chip is back.)* `app.json` typed `cadence_days` with
 `minimum: 1` on both writers, so the handoff's `Never` could only be written
 as a number that means something else. The chips are `7 · 14 · 30 · 90`.
 
@@ -281,6 +474,35 @@ screen's swatches and every avatar must draw one list; deriving the keys from
 `var(--c-<key>)`, the value space `PersonAvatar` reads, so the disc stays
 theme-correct where a stored hex would freeze one theme's ring.
 
+**"Linked" is the binding row, not the gateway JSON.** A per-person fact must
+be answerable by a vault query on every seat; `share_party_vault_binding`
+already had the right shape and uniqueness, so the ceremony writes it rather
+than a new table being minted. The one-live-vault rule keeps a standing
+binding over a re-point.
+
+**The binding write bypasses the typed command plane, on precedent.** The
+gateway writes `share_party_vault_binding` directly (as `createCommonsGrant`
+and the invitation claims already do for the same table); the sharing plane
+is deliberately outside the app command/consent grammar, and a typed command
+here would have invented a consent moment no owner asked for.
+
+**The listener fires after the gateway transaction closes.** It writes a
+DIFFERENT database; announcing inside the transaction would let a gateway
+rollback strand a vault write it could not take back.
+
+**People-initiated Share stays unbuilt rather than faked.** A grant is
+per-container by the plane's own design; a People sheet that could not send
+would be a control naming an act the app cannot perform. The follow-up is a
+container picker or an invitation-only grant — a proposal, not a workaround.
+
+**A dead export was deleted, not allowlisted.** The share-reachability gate
+flagged the unused exact-pair binding lookup; capability without a caller is
+surface without an owner.
+
+**The stale Docs e2e block was repointed, not skipped.** It asserted #819's
+deleted reading route (pre-existing at HEAD); the honest fix points it at the
+Quick look stage the product actually opens.
+
 **One umbrella, no child issues.** #821 was worked by root-agent
 orchestration: recon (4 sub-agents), foundation (1), screens (3, on disjoint
 files against frozen prop contracts), gates (1), with the root integrating
@@ -291,16 +513,19 @@ exports deleted, the docs amended.
 
 Named so the omissions are not read as oversights.
 
-- **Any manifest, action, query, vault scope, or pending-projection change.**
-  The vault contract was out of bounds; `app.json`, `actions/`, `queries/`,
-  `pending-projection.ts` and `seed.js` are untouched.
+- **Any manifest, action, query, vault scope, or pending-projection change** —
+  *wave 1 only; superseded*. Wave 2 was the maintainer-authorized contract
+  amendment: both `app.json`s gained read scopes and cadence minimums, six
+  query files grew link/share fields, and the vault schema/commands moved.
+  `actions/`, `pending-projection.ts` and `seed.js` remain untouched.
 - **Mobile People and mobile Docs** — still held back under the #819 ruling;
   `AWAITING_HANDOFF.mobile` keeps both, and the mobile frame-drop scale-flow
   coverage loss remains accepted until that rebuild.
 - **Docs part 2 of the v12 handoff** (the phone build).
-- **The vault-link contract** — a future proposal adds the links read and
-  restores the ring, Share sheet and Vault link screen with it; the withheld
-  set is tabled in `docs/design-divergences.md`.
+- **The vault-link contract's write side** — wave 2 landed the read side
+  (the ring, chips, sections and Docs facts are live); a People-initiated
+  Share/Link/Revoke still needs a container picker or an invitation-only
+  grant and a revoke route, tabled in `docs/design-divergences.md`.
 - **`app.json` `colorKey: "violet"` vs the stylesheet's rose identity** — a
   pre-existing disagreement inside the untouchable manifest; flagged in the
   issue for a later contract pass.
@@ -309,6 +534,17 @@ Named so the omissions are not read as oversights.
   locally per `docs/design-machinery.md`.
 
 ## User impact
+
+Wave 2: a member who links a person (approving both sides of the link
+ceremony, or the person accepting a share invitation) now sees it — the solid
+ring on the avatar, `Linked` under their name, the vault and its date on the
+person screen, and everything shared with them with its capability and
+whether they have accepted. Docs' details rail answers "who can see this
+document", including through a shared folder, and the drive can filter to
+`Shared with <circle>`. A person you never want to be nagged about takes the
+`Never` cadence and stays out of Reconnect. Where the sharing plane cannot be
+read yet (scopes awaiting the owner's approval on an existing vault), all of
+it is simply absent — never a false "not linked".
 
 First-run: the existing chooser and identity path are unchanged. After Home,
 People opens on the rebuilt v12 surface — the roster with its filter chips,
@@ -322,6 +558,27 @@ person over the intent rail, watches her land as a roster row, reloads the
 PWA, and opens her person screen (cadence line + Log commit).
 
 ## Verification
+
+Wave 2 (the full battery, re-run over the finished change set):
+
+```sh
+bun run --cwd packages/vault test             # green (incl. the new cadence + binding + migration tests)
+bun run --cwd packages/server test            # green; 3 env-only failures (container runs as root; no sqlite3 binary) in files this change set does not touch
+bun run --cwd packages/blueprints test        # 113 files, 3925 tests  pass
+bun run --cwd packages/design test            # 32 files, 374 tests    pass
+bun run --cwd packages/vault typecheck && bun run --cwd packages/server typecheck  # pass
+bun run --cwd packages/blueprints typecheck && bun run --cwd packages/client typecheck  # pass
+node scripts/check-schema-export-ratchet.mjs  # pass
+bun run check:reachability                    # pass (213 capabilities)
+bun run lint && bun run format:check && bun run knip  # pass
+bunx vitest run tests/quality/user-facing-qualities.test.ts  # 15 pass, no new entries
+bun run design:gallery                        # 8 baselines, 0.00% drift
+bun run --cwd apps/web build && bun run --cwd apps/web e2e -- people.spec.ts  # 1 passed — dashed ring + link chips asserted live
+bun run --cwd apps/web e2e -- docs-drive.spec.ts  # 1 passed — repointed at the Quick look stage
+```
+
+Wave 1 (as recorded when that wave landed; the blueprint counts have since
+grown with wave 2's test files):
 
 ```sh
 bun run --cwd packages/blueprints test        # 111 files, 3906 tests  pass
@@ -369,7 +626,8 @@ are dependency resolution, not code. App-boot files run via
 
 Fresh-context sub-agent attestation (governance directive `receipt-per-issue`
 rule 7). The auditor was handed only the diff, this receipt and issue #821,
-instructed to default to REFUTED when uncertain.
+instructed to default to REFUTED when uncertain. Wave 1's attestation is the
+three numbered sections below; wave 2's follows them.
 
 ### (1) `## What changed` faithfully describes the diff — PASS
 
@@ -406,3 +664,57 @@ One residual recorded without action: two comments in
 `handler-reachability.test.ts` annotating the mobile tables ("until those two
 native screens were removed") read ambiguously beside the now-empty
 `AWAITING_HANDOFF.web`; they remain accurate for the tables they annotate.
+
+### Wave 2 — three passes
+
+**Pass one — REFUTED**, on four findings, each verified and each fixed
+rather than argued down:
+
+1. *(b)* "lands via an ordered vault-preserving migration" was not realized:
+   the CHECK relaxation lived only in the baseline DDL, which runs at vault
+   creation, so a vault already at `user_version 1` kept the old constraint
+   and a `Never` write would have thrown at SQLite. Fixed with
+   `VAULT_MIGRATIONS[1]` — the vault-preserving `people_profile` rebuild —
+   plus an upgrade test that builds a v1-shaped vault, migrates it, and
+   proves rows survive byte-for-byte while 0 becomes insertable
+   (`migrate.test.ts`, "rung two upgrades a v1 vault's cadence floor
+   without disturbing its rows"). Vault suite re-run green: 174 files,
+   1,338 passed / 2 skipped.
+2. *(a)* the crosswalk cited a wave-2 verification block that a silent
+   string-replace failure had never inserted. The block is now real, at the
+   head of `## Verification`, with the wave-2 numbers.
+3. *(a)* "written only inside `createCommonsGrant`" was a false count — six
+   commons-plane sites wrote `share_party_vault_binding`; the true claim is
+   that the LINK CEREMONY had no vault-side writer. Corrected in this
+   receipt, in `share/party-vault-binding.ts`'s header, in
+   `portable-export.ts`'s audit note, and in the fingerprint file's
+   deviation prose.
+4. Residuals: stale wave-1 prose now falsified by wave 2 (`Out of scope`,
+   two `Decisions` rulings, `User impact`) gained supersession markers; the
+   caller-less `livePartyVaultBinding` export was made module-internal (the
+   same deleted-not-allowlisted rule the wave already applied to
+   `partyVaultBinding`); the People share-read seam's comments now say
+   "unavailable" rather than "denied", since a blanket catch cannot tell a
+   denial from a failure; and the direct-vault-write precedent is named in
+   `## Decisions`.
+
+The auditor also judged two argument-satisfied checklist items: "no new
+command was needed" — HONEST (confirmed: the diff holds only the two
+minimum edits); the Share-sheet item — a stretch under a strict reading,
+kept checked with the crosswalk sharpened to say exactly what exists (the
+content apps' sheet is the sender, `shared_with_them` reads what it lands,
+no new send path was built) and what remains withheld.
+
+**Pass two — PASS on three of the four refuted points, REFUTED on one
+residual.** A second fresh-context pass re-verified: the rung exists and
+`migrate.test.ts` pins the upgrade path (2 files / 34 tests green on
+re-run); the ladder length and `user_version` assertions moved to 2
+honestly; the verification block exists with numbers matching a live
+blueprint re-run (113/3925 exact); the writer-count claim is corrected at
+all four sites with zero occurrences of the false form remaining. The one
+residual it caught — `packages/vault/src/schema/migrate.ts` absent from the
+file inventory after the rung landed — is fixed above, and the inventory
+matches the change set both ways again (57 paths, both directions clean).
+
+**Pass three — checklist mirror re-checked** after the crosswalk edits:
+21 items, both waves, same order as the issue, nothing added or dropped.

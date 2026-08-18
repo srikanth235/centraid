@@ -35,6 +35,8 @@ import {
   upsertRouteRow,
 } from "./vault-directory-store.js";
 import type {
+  LinkChangeListener,
+  LinkChangeReason,
   LinkedPeer,
   LinkRedemption,
   LinkRoute,
@@ -43,7 +45,7 @@ import type {
   VaultLink,
   VaultLinkRow,
 } from "./vault-link-row.js";
-import { pairOf, sideOf, toLink } from "./vault-link-row.js";
+import { pairOf, peerViewOf, sideOf, toLink } from "./vault-link-row.js";
 
 function databaseFor(source: string | GatewayDatabase): GatewayDatabase {
   if (source instanceof GatewayDatabase) return source;
@@ -53,15 +55,32 @@ function databaseFor(source: string | GatewayDatabase): GatewayDatabase {
 export class VaultLinksStore {
   readonly gatewayDatabase: GatewayDatabase;
   readonly tickets: PeerLinkTicketStore;
+  private readonly onLinkChanged: LinkChangeListener | undefined;
 
-  constructor(gatewayDatabase: GatewayDatabase) {
+  constructor(
+    gatewayDatabase: GatewayDatabase,
+    onLinkChanged?: LinkChangeListener
+  ) {
     this.gatewayDatabase = gatewayDatabase;
     this.tickets = new PeerLinkTicketStore(gatewayDatabase);
+    this.onLinkChanged = onLinkChanged;
   }
 
   /** For hosts holding a data-dir path rather than an open handle. */
-  static open(source: string | GatewayDatabase): VaultLinksStore {
-    return new VaultLinksStore(databaseFor(source));
+  static open(
+    source: string | GatewayDatabase,
+    onLinkChanged?: LinkChangeListener
+  ): VaultLinksStore {
+    return new VaultLinksStore(databaseFor(source), onLinkChanged);
+  }
+
+  /** Announce a settled link, and return it unchanged for chaining. */
+  private announce<T extends VaultLink | undefined>(
+    link: T,
+    reason: LinkChangeReason
+  ): T {
+    if (link) this.onLinkChanged?.(link, reason);
+    return link;
   }
 
   private row(sql: string, ...params: SQLInputValue[]): VaultLink | undefined {
@@ -157,41 +176,12 @@ export class VaultLinksStore {
     upsertRouteRow(this.gatewayDatabase, vaultId, route);
   }
 
-  /** The link as `localVaultId` sees it — `undefined` unless the far side is routed. */
+  /** `peerViewOf` (vault-link-row.ts) against this store's lookups. */
   private peerView(
     link: VaultLink,
     localVaultId: string
   ): LinkedPeer | undefined {
-    const mine = sideOf(link, localVaultId);
-    if (mine === undefined) return undefined;
-    const peerVaultId = mine === "a" ? link.vaultB : link.vaultA;
-    // A peer view is a view of a vault elsewhere; a local pair has no far side.
-    const route = this.routeFor(peerVaultId);
-    if (!route) return undefined;
-    const peer = this.directoryEntry(peerVaultId);
-    if (!peer) return undefined;
-    const mineEntry = this.directoryEntry(localVaultId);
-    const partyIds =
-      typeof link.permissions["commonsPartyIds"] === "object" &&
-      link.permissions["commonsPartyIds"] !== null
-        ? (link.permissions["commonsPartyIds"] as Record<string, unknown>)
-        : {};
-    return {
-      linkId: link.linkId,
-      localVaultId,
-      peerVaultId,
-      peerPublicKey: peer.publicKey,
-      ...(typeof partyIds[peerVaultId] === "string"
-        ? { peerPartyId: partyIds[peerVaultId] }
-        : {}),
-      ...(typeof partyIds[localVaultId] === "string"
-        ? { localPartyId: partyIds[localVaultId] }
-        : {}),
-      peerLabel: peer.label,
-      myLabel: mineEntry?.label ?? null,
-      route,
-      permissions: link.permissions,
-    };
+    return peerViewOf(link, localVaultId, this);
   }
 
   /** `peerView` by link id — for callers holding a durable `link_id` row. */
@@ -231,7 +221,7 @@ export class VaultLinksStore {
     const fromIsA = input.fromVaultId === a;
     const linkId = randomUUID();
     const createdAt = new Date((input.now ?? Date.now)()).toISOString();
-    return this.gatewayDatabase.transaction(() => {
+    const proposed = this.gatewayDatabase.transaction(() => {
       // Both identities land in the directory; neither vault gets a route
       // row, because both are here (#750: no route row IS "local").
       this.upsertDirectory(
@@ -273,6 +263,7 @@ export class VaultLinksStore {
       );
       return this.get(linkId)!;
     });
+    return this.announce(proposed, "proposed");
   }
 
   /**
@@ -299,7 +290,7 @@ export class VaultLinksStore {
         linkId
       );
     }
-    return this.get(linkId)!;
+    return this.announce(this.get(linkId)!, "approved");
   }
 
   /**
@@ -317,9 +308,14 @@ export class VaultLinksStore {
       peer: string;
     }
   ): LinkedPeer | undefined {
-    return this.gatewayDatabase.transaction(() =>
+    const peer = this.gatewayDatabase.transaction(() =>
       this.writePeer(input, approvals)
     );
+    this.announce(
+      this.findPair(input.localVaultId, input.peerVaultId),
+      "linked"
+    );
+    return peer;
   }
 
   /** `recordPeer`'s body, callable inside an already-open transaction
@@ -400,6 +396,7 @@ export class VaultLinksStore {
       JSON.stringify(permissions),
       link.linkId
     );
+    this.announce(this.get(link.linkId), "parties");
     return this.peerForVault(input.peerVaultId, input.localVaultId);
   }
 
@@ -412,7 +409,7 @@ export class VaultLinksStore {
    * whatever the vault holds by redemption time.
    */
   redeem(input: LinkRedemption): LinkedPeer | undefined {
-    return this.gatewayDatabase.transaction(() => {
+    const peer = this.gatewayDatabase.transaction(() => {
       const claimed = this.tickets.claim(input.ticketId, input.secret);
       if (!claimed) return undefined;
       return this.writePeer(
@@ -433,6 +430,12 @@ export class VaultLinksStore {
         { local: claimed.createdAt, peer: new Date().toISOString() }
       );
     });
+    if (peer)
+      this.announce(
+        this.findPair(peer.localVaultId, peer.peerVaultId),
+        "linked"
+      );
+    return peer;
   }
 
   /** The live link a proved EndpointId currently routes to. */
@@ -590,10 +593,11 @@ export class VaultLinksStore {
 
   /** Tombstone a link. The row stays so a revoked peer stays recognisable. */
   revoke(linkId: string): boolean {
-    return (
+    const changed =
       this.gatewayDatabase.db
         .prepare("UPDATE vault_links SET revoked = 1 WHERE link_id = ?")
-        .run(linkId).changes > 0
-    );
+        .run(linkId).changes > 0;
+    if (changed) this.announce(this.get(linkId), "revoked");
+    return changed;
   }
 }

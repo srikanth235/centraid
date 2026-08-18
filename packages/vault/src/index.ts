@@ -113,6 +113,13 @@ export {
   type CommonsRouteResolution,
 } from "./share/commons-routing.js";
 export {
+  bindPartyToVault,
+  revokePartyVaultBinding,
+  type PartyVaultBindOutcome,
+  type PartyVaultBindingRow,
+  type PartyVaultRevokeOutcome,
+} from "./share/party-vault-binding.js";
+export {
   createCommonsGrant,
   ensureCommonsParty,
   readCommonsGrant,
@@ -874,14 +881,16 @@ export {
   exportPortableVault,
   importPortableVault,
   verifyPortableVault,
-  exportIcs,
-  exportVcards,
-  exportTransactionsCsv,
-  exportMarkdownDirectory,
   type PortableExport,
   type PortableManifest,
   type PortableManifestFile,
 } from "./gateway/portable-export.js";
+export {
+  exportIcs,
+  exportVcards,
+  exportTransactionsCsv,
+  exportMarkdownDirectory,
+} from "./gateway/portable-adapters.js";
 export type { ViewDefinition, ViewJoin, ViewResult } from "./gateway/views.js";
 export {
   backupVault,

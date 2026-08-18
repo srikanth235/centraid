@@ -39,8 +39,48 @@ export interface PersonRow {
   list_id: string | null;
   starred: boolean;
   reminders: ReminderRef[];
+  /**
+   * Is this person linked to a vault of their own? A TRI-STATE, and the third
+   * value carries as much as the first two: `null` means the sharing plane
+   * could not be read (People's `share.*` scopes parked for approval), and
+   * ABSENT means the query never asked — `queries/search.ts` returns rows
+   * without link facts. Both draw as unknown (`format.ts` linkState).
+   */
+  linked?: boolean | null;
+  /** How many live bindings this person holds; 0 when unlinked or unknown. */
+  vault_count?: number;
   /** The vault's FTS hit passage — present only on a search result. */
   snippet?: string;
+}
+
+/** One live party↔vault binding. It carries no vault NAME — the binding stores
+ *  a `vault_id`, and an id is not a name, so nothing prints one. */
+export interface VaultBinding {
+  binding_id: string;
+  vault_id: string;
+  linked_at: string;
+}
+
+/** What a grant lets its member do. The words are the vault's own. */
+export type ShareCapability = "read" | "read+write";
+
+/** An invitation sent to this person that they have not answered yet. */
+export interface PendingInvite {
+  invitation_id: string;
+  container_label: string | null;
+  capability: ShareCapability;
+  created_at: string;
+}
+
+/** One thing the owner has shared with this person. */
+export interface SharedContainer {
+  grant_id: string;
+  container_type: string;
+  container_id: string;
+  container_label: string | null;
+  capability: ShareCapability;
+  status: "invited" | "current" | "refused";
+  since: string;
 }
 
 /** One contact channel on the person screen. `legacy` marks a row projected
@@ -97,6 +137,15 @@ export interface PersonDetail {
   dates: ImportantDate[];
   notes: PersonNote[];
   interactions: Interaction[];
+  /**
+   * The sharing plane, all three of it. NULL IS NOT AN EMPTY LIST: it means
+   * the reads were denied, and the person screen then draws no vault section
+   * at all rather than an empty one claiming nothing is shared
+   * (`queries/_shared.ts` returns the three together for exactly this reason).
+   */
+  vaults: VaultBinding[] | null;
+  pending_invites: PendingInvite[] | null;
+  shared_with_them: SharedContainer[] | null;
 }
 
 /** The card every dashboard list is built out of. The cadence pair is not the
@@ -132,6 +181,11 @@ export interface TouchCounts {
   reconnect: number;
   upcoming: number;
   starred: number;
+  /** How many of these people hold a vault, and how many do not. Null when
+   *  the sharing plane could not be read — the tiles then fall back to the
+   *  four the roster alone can answer. */
+  linked: number | null;
+  to_link: number | null;
 }
 
 export interface DashboardData {
@@ -149,12 +203,18 @@ export interface TrashedPerson {
   purge_at: string | null;
 }
 
-/** The roster's filter chips. `linked`/`unlinked` are absent: no query
- *  answers them (people-copy.ts). */
-export type RosterFilter = "all" | "starred" | "due";
+/** The roster's filter chips. `linked`/`unlinked` are DRAWN only while the
+ *  sharing plane can be read (`people-copy.ts` filterChips). */
+export type RosterFilter = "all" | "linked" | "unlinked" | "starred" | "due";
 
-/** The Touch screen's four count tiles. Each navigates or filters. */
-export type TouchTile = "all" | "reconnect" | "upcoming" | "starred";
+/** The Touch screen's count tiles across both sets. Each navigates or filters. */
+export type TouchTile =
+  | "all"
+  | "reconnect"
+  | "upcoming"
+  | "starred"
+  | "linked"
+  | "to_link";
 
 /** Which section of the person screen an inline composer is open in. Adding
  *  is a field where the row will be, never a new screen (handoff deviation 3). */
@@ -222,6 +282,9 @@ export interface AppState {
 export interface AppData {
   people: PersonRow[];
   truncated: boolean;
+  /** The roster envelope's `links_available`: whether the sharing plane
+   *  answered at all. False draws the link-free app, ring and chips included. */
+  linksAvailable: boolean;
   person: PersonDetail | null;
   dashboard: DashboardData | null;
   trash: TrashedPerson[];
@@ -243,6 +306,8 @@ export interface RouteBase {
 
 export interface RosterRouteProps extends RouteBase {
   people: readonly PersonRow[];
+  /** Whether the link ring and the two link chips may be drawn at all. */
+  linksAvailable: boolean;
   filter: RosterFilter;
   onSelectFilter: (filter: RosterFilter) => void;
   onOpenPerson: (partyId: string) => void;

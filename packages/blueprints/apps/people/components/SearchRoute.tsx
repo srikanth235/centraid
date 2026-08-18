@@ -17,7 +17,7 @@ import type { ReactNode } from "react";
 
 import { LoadingSkeleton } from "../../_shared/LoadingSkeleton.tsx";
 import { agoLabel, daysSinceContact, isOverdue } from "../format.ts";
-import { EMPTY, FIELDS, FILTER_CHIPS, VERBS } from "../people-copy.ts";
+import { EMPTY, FIELDS, VERBS, filterChips } from "../people-copy.ts";
 import type { RosterFilter, SearchRouteProps } from "../types.ts";
 import { EmptyState } from "./EmptyState.tsx";
 import { applyRosterFilter } from "./RosterRoute.tsx";
@@ -25,8 +25,19 @@ import { ChipRow, Row, SkeletonBlock, StarButton, Verb } from "./Shared.tsx";
 
 import styles from "./shared.module.css";
 
+// THIS SHELF HAS NO LINK FACTS. `queries/search.ts` answers the FTS index and
+// nothing from the sharing plane, so its rows carry no `linked` at all: the
+// two link chips are not drawn here (they would filter every result away), no
+// avatar takes a ring, and a link filter carried in from the roster reads as
+// `All` rather than as a shelf that silently found nothing.
+const SEARCH_CHIPS = filterChips(false);
+
 export function SearchRoute(props: SearchRouteProps): ReactNode {
-  const rows = applyRosterFilter(props.results, props.filter);
+  const filter: RosterFilter =
+    props.filter === "linked" || props.filter === "unlinked"
+      ? "all"
+      : props.filter;
+  const rows = applyRosterFilter(props.results, filter);
 
   let results: ReactNode = null;
   if (props.status === "resting") {
@@ -101,8 +112,8 @@ export function SearchRoute(props: SearchRouteProps): ReactNode {
       </div>
       <ChipRow
         label="Filter"
-        options={FILTER_CHIPS}
-        active={props.filter}
+        options={SEARCH_CHIPS}
+        active={filter}
         onSelect={(id) => props.onSelectFilter(id as RosterFilter)}
       />
       {results}

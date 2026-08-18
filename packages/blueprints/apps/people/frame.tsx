@@ -42,6 +42,11 @@ export interface AppBarState extends AppBarBase {
   onTrash?: () => void;
   /** Edit the open person. Only the person screen has it. */
   onEdit?: () => void;
+  /** `<k> of <m> linked` — the roster's meta on a pointer surface, present
+   *  only while the sharing plane answered. It REPLACES the people count
+   *  rather than standing beside it: the bar carries one meta, and the linked
+   *  pair already names the total. */
+  linkedMeta?: string;
 }
 
 /** The bar's title for a shelf. */
@@ -59,6 +64,7 @@ export function barTitle(state: AppBarState): string {
 /** The bar's count, in the words the product uses. `null` contributes nothing
  *  rather than a zero the view had to invent. */
 export function barCount(state: AppBarState): ReactNode {
+  if (state.linkedMeta) return state.linkedMeta;
   if (state.count === null) return undefined;
   return countLabel(state.count, "people");
 }

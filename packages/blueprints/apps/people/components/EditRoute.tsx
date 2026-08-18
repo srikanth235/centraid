@@ -5,10 +5,14 @@
 // for a draft with no `party_id` would be two forms to keep in step.
 //
 // THE HANDOFF'S `Vaults` SECTION IS ABSENT, along with its composer and its
-// empty line: no People query returns a vault link, so there is nothing here to
-// list or to write (people-copy.ts holds the whole withheld set). The handoff's
-// `Never` cadence chip is absent for the reason CADENCE_CHIPS gives: the vault
-// types `cadence_days` with a minimum of 1.
+// empty line: People READS the sharing plane and writes none of it, so this
+// form has nothing to write there (people-copy.ts holds the whole withheld
+// set). The vault link is drawn where it is read — the roster's ring and the
+// person screen's two sections.
+//
+// THE `Never` CHIP IS THE ZERO, and it writes the zero: the vault floors
+// `cadence_days` at 0 and both commands type it with a minimum of 0, so the
+// chip and the row agree about what "never" means.
 //
 // THE SWATCHES WRITE WHAT THE AVATAR READS. `PersonAvatar` resolves a person
 // with no stored colour to `var(--c-<hue>)`, so a chosen swatch stores that
@@ -24,7 +28,13 @@ import type { ColorKey } from "@centraid/design";
 
 import { LoadingSkeleton } from "../../_shared/LoadingSkeleton.tsx";
 import { agoLabel } from "../format.ts";
-import { CADENCE_CHIPS, FIELDS, LABELS, VERBS } from "../people-copy.ts";
+import {
+  CADENCE_CHIPS,
+  CADENCE_NEVER,
+  FIELDS,
+  LABELS,
+  VERBS,
+} from "../people-copy.ts";
 import type { EditRouteProps } from "../types.ts";
 import { ChipRow, Commits, Field, SkeletonBlock } from "./Shared.tsx";
 
@@ -41,11 +51,12 @@ function hueValue(key: ColorKey): string {
   return `var(--c-${key})`;
 }
 
-/** `7 days` · `14 days` · … — the chip labels come from `format.ts`, so the
- *  cadence reads the same word here as it does on the person screen. */
+/** `Never` · `7 days` · `14 days` · … — every chip past the zero takes its
+ *  label from `format.ts`, so the cadence reads the same word here as it does
+ *  on the person screen. */
 const CADENCE_OPTIONS = CADENCE_CHIPS.map((days) => ({
   id: String(days),
-  label: agoLabel(days),
+  label: days === 0 ? CADENCE_NEVER : agoLabel(days),
 }));
 
 export function EditRoute(props: EditRouteProps): ReactNode {

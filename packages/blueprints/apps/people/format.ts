@@ -49,8 +49,10 @@ export function daysSinceContact(
   return daysSince(person.last_contacted_at ?? person.created_at, now);
 }
 
-/** Is this person past their cadence? Cadence is at least 1 in the vault's own
- *  schema, so there is no "never" case to exempt here. */
+/** Is this person past their cadence? ZERO IS `Never` and is never overdue —
+ *  the vault floors `cadence_days` at 0 and the dashboard query exempts the
+ *  same number, so the guard below is the contract's own, not a defensive
+ *  clamp. */
 export function isOverdue(
   person: {
     cadence_days?: number | null;
@@ -70,9 +72,11 @@ export function agoLabel(days: number): string {
   return `${days} ${days === 1 ? "day" : "days"}`;
 }
 
-/** `every 30 days`, for a sub-line that already opened with a name. */
+/** `every 30 days` — or `no cadence` at zero, which is what the `Never` chip
+ *  writes. For a sub-line that already opened with a name. */
 export function cadenceLabel(cadenceDays: number): string {
-  const days = Math.max(1, Math.round(cadenceDays));
+  const days = Math.max(0, Math.round(cadenceDays));
+  if (days === 0) return "no cadence";
   return `every ${days} ${days === 1 ? "day" : "days"}`;
 }
 
@@ -115,18 +119,36 @@ export function whenLabel(iso: string | null | undefined, now = Date.now()) {
 }
 
 /** `Every 30 days · last 41 days ago` — the hero's cadence line, in the
- *  handoff's own words. The `last` half is lower-case because it continues the
- *  sentence the first half opened. */
+ *  handoff's own words, and `No cadence · last 41 days ago` at zero. The
+ *  `last` half is lower-case because it continues the sentence the first half
+ *  opened. */
 export function cadenceLineLabel(
   cadenceDays: number,
   person: { last_contacted_at?: string | null; created_at?: string | null },
   now = Date.now()
 ): string {
-  const days = Math.max(1, Math.round(cadenceDays));
+  const days = Math.max(0, Math.round(cadenceDays));
   const since = daysSinceContact(person, now);
   const ago =
     since <= 0 ? "today" : since === 1 ? "yesterday" : `${agoLabel(since)} ago`;
-  return `Every ${days} ${days === 1 ? "day" : "days"} · last ${ago}`;
+  const every =
+    days === 0 ? "No cadence" : `Every ${days} ${days === 1 ? "day" : "days"}`;
+  return `${every} · last ${ago}`;
+}
+
+/**
+ * WHAT THE SHARING PLANE SAYS ABOUT ONE PERSON, as the three states the ring
+ * draws. `linked` is a tri-state on purpose (`queries/people.ts`): true and
+ * false are the plane's answer, null is a denial, and `undefined` is a query
+ * that never asked — the search shelf's rows carry no link facts at all. The
+ * last two are the SAME state to a reader: unknown, which draws nothing.
+ */
+export function linkState(person: {
+  linked?: boolean | null;
+}): "linked" | "unlinked" | "unknown" {
+  if (person.linked === true) return "linked";
+  if (person.linked === false) return "unlinked";
+  return "unknown";
 }
 
 /** Days left before a trashed person is purged; never negative. */

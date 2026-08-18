@@ -171,6 +171,21 @@ test("People renders a person, survives a reload, and opens the person screen", 
     .toBe(true);
   await expect(rosterRow.first()).toBeVisible();
 
+  // THE VAULT LINK, DRAWN. This harness vault is created with the app, so
+  // People's `share.*` scopes are granted at install rather than parked for
+  // approval: the roster's `links_available` is true, and Ana — minted through
+  // `add-person`, holding no binding — carries the DASHED ring rather than the
+  // solid one and rather than none.
+  await expect(page.locator('[data-link="unlinked"]').first()).toBeVisible();
+  // The ring and the two link chips are ONE fact: whatever draws one draws the
+  // other, so a roster with rings but no chips is the incoherence this catches.
+  await expect(
+    page.getByRole("button", { name: "Linked", exact: true })
+  ).toBeVisible();
+  await expect(
+    page.getByRole("button", { name: "Unlinked", exact: true })
+  ).toBeVisible();
+
   // The #821 UI-impact evidence: the rebuilt roster, drawn from tokens.
   const evidenceDir = path.join(
     import.meta.dirname,

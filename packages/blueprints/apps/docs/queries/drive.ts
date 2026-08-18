@@ -22,6 +22,9 @@
  * labels over the shared "Tags" scheme, core.tag_item/untag_item) and
  * `custody_state` (the blob custody projection, local-only/replicated/
  * remote-only/missing/absent) keyed off each row's current_content_id.
+ * Issue #821 adds a third: `shared_with`, the live commons grants over each
+ * document and over the folders above it — decoration over the same window,
+ * `null` where the share reads are denied rather than a failed drive.
  *
  * TS conversion note: the vault read surface returns `Record<string, unknown>`
  * rows (see HandlerCtx.vault), so each raw row set is cast once to a typed
@@ -29,7 +32,11 @@
  * byte-for-byte the pre-conversion JS.
  */
 
-import { readCustodyByContent, readLabelsByDocument } from "./_shared.ts";
+import {
+  readCustodyByContent,
+  readLabelsByDocument,
+  readSharesByDocument,
+} from "./_shared.ts";
 import type { ConceptRow, SchemeRow, TagRow } from "./_shared.ts";
 
 const FOLDER_SCHEME_URI = "https://centraid.dev/schemes/folders";
@@ -136,8 +143,13 @@ export default async function driveHandler({ input, ctx }: HandlerArgs) {
     // The wrapper join is `in`-bounded by the windowed tags — only the
     // documents in the window ever ride the RPC, never every wrapper in the
     // vault. Free-form labels (issue #352 phase 4) ride the same window.
+    // Shares (issue #821) ride the same window: the grants over these
+    // documents and over the folders above them, decorating rows that were
+    // already selected. A denial comes back as `null` rather than an error —
+    // the scopes are new, so on an existing vault they park for approval and
+    // the drive must still answer (./_shared.ts).
     const windowedIds = [...folderByDoc.keys()];
-    const [documentsRes, starTags, tagsByDoc] = await Promise.all([
+    const [documentsRes, starTags, tagsByDoc, sharesByDoc] = await Promise.all([
       ctx.vault.read({
         entity: "core.document",
         where: [{ column: "document_id", op: "in", value: windowedIds }],
@@ -164,6 +176,13 @@ export default async function driveHandler({ input, ctx }: HandlerArgs) {
         documentIds: windowedIds,
         schemes: schemeRows,
         concepts: conceptRows,
+      }),
+      readSharesByDocument({
+        ctx,
+        purpose,
+        documentIds: windowedIds,
+        folderByDoc,
+        folderConcepts: schemeConcepts,
       }),
     ]);
     const starredIds = new Set(
@@ -231,6 +250,12 @@ export default async function driveHandler({ input, ctx }: HandlerArgs) {
           purge_at: d.purge_at ?? null,
           tags: tagsByDoc.get(d.document_id) ?? [],
           custody_state: custodyByContent.get(d.current_content_id) ?? null,
+          // `null` is "the share reads were denied", which the rail words
+          // differently from `[]`, "shared with nobody".
+          shared_with:
+            sharesByDoc === null
+              ? null
+              : (sharesByDoc.get(d.document_id) ?? []),
         };
       })
       .toSorted((a, b) =>

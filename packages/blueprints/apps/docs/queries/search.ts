@@ -16,7 +16,7 @@
  * Phase 4 (issue #352) decorates matches with the same `tags`/`custody_state`
  * joins drive.ts makes (factored into ./_shared.ts) — so a tag filter or a
  * custody badge reads identically whether the row arrived via browse or
- * search.
+ * search. Issue #821 adds `shared_with` on the same terms, denial included.
  *
  * TS conversion note: the vault read/search surface returns
  * `Record<string, unknown>` rows (see HandlerCtx.vault), so each raw row set
@@ -24,7 +24,11 @@
  * byte-for-byte the pre-conversion JS.
  */
 
-import { readCustodyByContent, readLabelsByDocument } from "./_shared.ts";
+import {
+  readCustodyByContent,
+  readLabelsByDocument,
+  readSharesByDocument,
+} from "./_shared.ts";
 import type { ConceptRow, SchemeRow, TagRow } from "./_shared.ts";
 
 const FOLDER_SCHEME_URI = "https://centraid.dev/schemes/folders";
@@ -123,7 +127,7 @@ export default async function searchHandler({ input, ctx }: HandlerArgs) {
     // The current content join, bounded by the matched wrappers' own
     // current_content_id set. Custody (issue #352 phase 4) rides the same set.
     const contentIds = [...new Set(hits.map((d) => d.current_content_id))];
-    const [contents, custodyByContent] = await Promise.all([
+    const [contents, custodyByContent, sharesByDoc] = await Promise.all([
       contentIds.length > 0
         ? ctx.vault.read({
             entity: "core.content_item",
@@ -132,6 +136,16 @@ export default async function searchHandler({ input, ctx }: HandlerArgs) {
           })
         : { rows: [] as Record<string, unknown>[] },
       readCustodyByContent({ ctx, purpose, contentIds }),
+      // Shares (issue #821) are bounded by the matched wrappers that are
+      // actually documents — the same join drive.ts makes, so a "shared with"
+      // fact reads identically whether the row arrived via browse or search.
+      readSharesByDocument({
+        ctx,
+        purpose,
+        documentIds: [...folderByDoc.keys()],
+        folderByDoc,
+        folderConcepts: schemeConcepts,
+      }),
     ]);
     const contentById = new Map(
       ((contents.rows ?? []) as unknown as ContentRow[]).map((c) => [
@@ -173,6 +187,10 @@ export default async function searchHandler({ input, ctx }: HandlerArgs) {
           snippet: typeof d._snippet === "string" ? d._snippet : "",
           tags: tagsByDoc.get(d.document_id) ?? [],
           custody_state: custodyByContent.get(d.current_content_id) ?? null,
+          shared_with:
+            sharesByDoc === null
+              ? null
+              : (sharesByDoc.get(d.document_id) ?? []),
         };
       });
     return { documents };

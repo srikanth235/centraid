@@ -23,8 +23,15 @@ import {
   monthDayLabel,
   whenLabel,
 } from "../format.ts";
-import { EMPTY, LABELS, SECTIONS, TOUCH_TILES, VERBS } from "../people-copy.ts";
-import type { TouchRouteProps, TouchTile } from "../types.ts";
+import {
+  EMPTY,
+  LABELS,
+  LINK_TOUCH_TILES,
+  SECTIONS,
+  TOUCH_TILES,
+  VERBS,
+} from "../people-copy.ts";
+import type { TouchCounts, TouchRouteProps, TouchTile } from "../types.ts";
 import { EmptyState } from "./EmptyState.tsx";
 import { CountTiles, Row, Section, SkeletonBlock, Verb } from "./Shared.tsx";
 
@@ -41,12 +48,33 @@ export function TouchRoute(props: TouchRouteProps): ReactNode {
     );
   }
 
-  const tiles = TOUCH_TILES.map((tile) => ({
-    id: tile.id,
-    label: tile.label,
-    count: dashboard.counts[tile.id],
-    net: tile.net,
-  }));
+  // TWO TILE SETS, ONE ROW. While the sharing plane answers, the tiles are the
+  // handoff's own — Vaults · To link · Reconnect · Upcoming — and `Starred`
+  // gives up its slot, because the star already has a chip on the roster.
+  // While it does not, the four the roster alone can answer stand instead: a
+  // `Vaults` tile reading 0 over a denied read would be a count nobody took.
+  const counts = dashboard.counts;
+  const linked = counts.linked;
+  const toLink = counts.to_link;
+  const tiles =
+    linked === null || toLink === null
+      ? TOUCH_TILES.map((tile) => ({
+          id: tile.id,
+          label: tile.label,
+          count: counts[tile.id as keyof TouchCounts] ?? 0,
+          net: tile.net,
+        }))
+      : LINK_TOUCH_TILES.map((tile) => ({
+          id: tile.id,
+          label: tile.label,
+          count:
+            tile.id === "linked"
+              ? linked
+              : tile.id === "to_link"
+                ? toLink
+                : (counts[tile.id as keyof TouchCounts] ?? 0),
+          net: tile.net,
+        }));
 
   return (
     <>

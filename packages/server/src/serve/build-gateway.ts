@@ -286,6 +286,7 @@ import {
 import { HealthRegistry } from "./health-registry.js";
 import { kitlessHostIdentity } from "./host-identity.js";
 import { probeHostLimits } from "./host-limits.js";
+import { reconcileLinkBindings } from "./link-party-bindings.js";
 import { LocalUsageScanner } from "./local-usage.js";
 import {
   enrichRefusalNotice,
@@ -1653,7 +1654,22 @@ export async function buildGateway(
   const enrollmentStore =
     options.devicePairing?.enrollments ?? EnrollmentStore.open(gatewayDatabase);
   // The same-machine link ceremony a cross-owner edge needs (#726 P2 §3).
-  const vaultLinksStore = new VaultLinksStore(gatewayDatabase);
+  // The listener is what makes a link answerable from a VAULT query (#821):
+  // every settled link reconciles `share_party_vault_binding` in whichever
+  // side of it is mounted here. `vaultLinksStore` is captured by the closure
+  // rather than passed in, because the directory lookups it needs are the
+  // store's own — the binding is assigned on the next line.
+  const vaultLinksStore: VaultLinksStore = new VaultLinksStore(
+    gatewayDatabase,
+    (link) =>
+      reconcileLinkBindings(link, {
+        vaultFor: (vaultId) => vaultRegistry.get(vaultId)?.db,
+        publicKeyFor: (vaultId) =>
+          vaultLinksStore.directoryEntry(vaultId)?.publicKey,
+        labelFor: (vaultId) =>
+          vaultLinksStore.directoryEntry(vaultId)?.label ?? undefined,
+      })
+  );
   /*
    * The host's own device identity. A gateway the owner runs on their own
    * box is reachable over loopback with no iroh pairing, so it needs a

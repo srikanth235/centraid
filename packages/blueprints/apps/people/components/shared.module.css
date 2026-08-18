@@ -40,6 +40,40 @@
   }
 }
 
+/* ---------- The link ring ---------- */
+
+/* THE VAULT LINK, DECLARED ONCE. Every avatar in the app carries this wrapper,
+   so the ring is one rule rather than one per screen.
+
+   It is an OUTLINE, never a border: an outline sits outside the box, so it
+   neither moves the disc nor grows the 34/30px avatar the row is measured on.
+   Dashed reads as incomplete without ever reading as an error, which is why
+   "not linked" is the same geometry in a different stroke rather than a
+   different colour.
+
+   `unknown` — the sharing plane denied, or a query that never asked — draws
+   NOTHING. A dashed ring on everybody would be this app claiming a fact it
+   could not see. */
+.avatarRing {
+  flex: none;
+  display: inline-flex;
+  border-radius: var(--r-pill);
+}
+.avatarRing[data-link="linked"] {
+  outline: 1.5px solid var(--text);
+  outline-offset: 2px;
+}
+.avatarRing[data-link="unlinked"] {
+  outline: 1.5px dashed var(--line-strong);
+  outline-offset: 2px;
+}
+/* The hero's rung: the same two rules, one weight heavier and one step out. */
+.hero .avatarRing[data-link="linked"],
+.hero .avatarRing[data-link="unlinked"] {
+  outline-width: 2px;
+  outline-offset: 3px;
+}
+
 /* The row's own body is a button: the whole name/sub block opens the person,
    so the target is the text rather than a chevron beside it. */
 .rowMain {

@@ -31,6 +31,9 @@ export interface AvatarSubject {
   avatar_color?: string | null;
 }
 
+/** The three states the link ring draws: solid, dashed, and nothing at all. */
+export type LinkState = "linked" | "unlinked" | "unknown";
+
 /**
  * A person's disc.
  *
@@ -42,16 +45,32 @@ export interface AvatarSubject {
  * A stored `avatar_color` is honoured verbatim — it is the member's own choice
  * — and a person who has never been given one takes their place on the shared
  * identity wheel, keyed by `party_id` so a rename never moves them.
+ *
+ * THE LINK RING IS DECLARED ONCE, on the wrapper's own recipe
+ * (`shared.module.css` `.avatarRing`), and it is an OUTLINE rather than a
+ * border, so it neither moves the disc nor grows the 34/30px avatar box. The
+ * hero's heavier rung is the same rule read under `.hero` — one geometry, two
+ * weights, no second definition. `unknown` draws nothing at all: an app that
+ * cannot see the sharing plane must not paint a dashed ring on everybody and
+ * call it "not linked".
  */
-export function PersonAvatar({ person }: { person: AvatarSubject }): ReactNode {
+export function PersonAvatar({
+  person,
+  link = "unknown",
+}: {
+  person: AvatarSubject;
+  link?: LinkState;
+}): ReactNode {
   const fill =
     person.avatar_color ?? `var(--c-${identityHueKey(person.party_id)})`;
   return (
-    <Avatar
-      name={displayText(person.name)}
-      color={fill}
-      size="var(--pe-avatar-size)"
-    />
+    <span className={styles.avatarRing} data-link={link}>
+      <Avatar
+        name={displayText(person.name)}
+        color={fill}
+        size="var(--pe-avatar-size)"
+      />
+    </span>
   );
 }
 
@@ -99,6 +118,8 @@ export function StarButton({
 export interface RowProps {
   /** Drawn when the row is about a person; omitted where it is not. */
   avatar?: AvatarSubject;
+  /** The link ring the avatar carries. Defaults to `unknown` — nothing. */
+  avatarLink?: LinkState;
   name: string;
   /** The name in its strong rung — the same size, so nothing reflows. */
   strong?: boolean;
@@ -141,7 +162,12 @@ export function Row(props: RowProps): ReactNode {
   );
   return (
     <div className={styles.row}>
-      {props.avatar ? <PersonAvatar person={props.avatar} /> : null}
+      {props.avatar ? (
+        <PersonAvatar
+          person={props.avatar}
+          link={props.avatarLink ?? "unknown"}
+        />
+      ) : null}
       {props.onOpen ? (
         <button
           type="button"

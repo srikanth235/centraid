@@ -202,6 +202,19 @@ Amended 2026-08-18 by [#821](https://github.com/srikanth235/centraid/issues/821)
 
 Restoring a surface is the last step of its rebuild: delete its id from `AWAITING_HANDOFF`, put its rows back on the lists above, and the gates come back on by themselves.
 
+## People, links and the sharing plane (#821)
+
+Ruled 2026-08-18 by [#821](https://github.com/srikanth235/centraid/issues/821). The v12 People rebuild needed facts the contract did not answer, so the contract was **amended** — maintainer-authorized, in the same wave — rather than the screens being drawn over a guess. What each surface may say about a link, and who may make one, are separate answers.
+
+| Id | Current decision |
+| --- | --- |
+| **L-linked** | A person is **linked** exactly when a live `share_party_vault_binding` row names their party. The link ceremony writes it: approving a same-machine link, and redeeming a link ticket, both reconcile the binding into whichever side's vault is mounted here (`packages/server/src/serve/link-party-bindings.ts` over `VaultLinksStore`'s change listener). One party holds **at most one live binding** — on conflict the standing binding wins and the loser carries `revoked_at`, so "linked people" and "live bindings" are the same count by construction. |
+| **L-read** | People and Docs hold **read-only** scopes on the sharing plane (`share.party_vault_binding`, `share.circle_grant`, `share.commons_member_state`, `share.commons_invitation`, plus `social.circle_member` and `core.party`). Every share read degrades to **absent, not empty**, on denial: the query answers `null`, and the surface draws nothing rather than a zero. A scope may legitimately be parked on an existing vault, so "nobody is linked" must never be rendered from "we could not look". |
+| **L-write** | A share or a link is always made **from a container**. `window.centraid.share` requires `containerType` + `containerId` by contract, so the content apps make links and People **surfaces standing** — it shows who is linked and what is shared with them, and offers no `Share`, `Link vault`, `Link` or `Revoke` of its own. A People-initiated share waits on either a container picker or an invitation-only grant; neither is faked in the meantime, and no read-only surface grows a control naming an act it cannot perform. |
+| **L-never** | `cadence_days = 0` means **never**, and is stored verbatim — the vault `CHECK` floors at 0 and `people.add_person` / `people.set_cadence` type a minimum of 0. A person on zero is never overdue and is excluded from Reconnect outright; no stand-in number, and no sentinel. |
+
+What each surface consequently draws and withholds, screen by screen, is [design-divergences.md](design-divergences.md) — the [People](design-divergences.md#people--v12-parity-state-and-sanctioned-withholdings) and [Docs](design-divergences.md#docs--parity-state-and-sanctioned-withholdings) sections. The share-plane mechanics themselves are unchanged and live in [ARCHITECTURE.md](../ARCHITECTURE.md#circle-backed-commons-731).
+
 ## Performance and Rust byte plane
 
 Node remains the gateway runtime until Bun supports `node:sqlite` and passes the same durability suite. Five performance designs — dependency-aware read cache, compiled consent decisions, incremental materializations, verified boot snapshot, and lazy vault mount — are evidence-gated, not adopted; mounting stays eager because a missed automation wakeup is a correctness failure. The Rust data plane moves bounded bytes only and never owns identity, consent, journal, replica, agent, or automation decisions. Budgets, profiles, and the full boundary live in [ARCHITECTURE.md](../ARCHITECTURE.md#performance-and-byte-plane-boundary); settled in [#456](https://github.com/srikanth235/centraid/issues/456).

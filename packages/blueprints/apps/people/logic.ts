@@ -15,7 +15,7 @@
 // size where nobody read it.
 import { debounce, readFailed } from "@centraid/design/elements";
 
-import { isOverdue } from "./format.ts";
+import { isOverdue, linkState } from "./format.ts";
 import { STATUS } from "./people-copy.ts";
 import { EDIT, LOG, MERGE, PERSON, SEARCH, TOUCH, TRASH } from "./shelves.ts";
 import type { ShelfId } from "./shelves.ts";
@@ -94,7 +94,11 @@ export function createLogic({
    *  use for the dashboard, and asking for it anyway is a read nobody sees. */
   async function refresh(): Promise<void> {
     const roster = await read<
-      DeniedRead & { people?: PersonRow[]; truncated?: boolean }
+      DeniedRead & {
+        people?: PersonRow[];
+        truncated?: boolean;
+        links_available?: boolean;
+      }
     >("people", { limit: ROSTER_WINDOW });
     if (!roster) return;
     if (failed) {
@@ -111,6 +115,10 @@ export function createLogic({
     }
     data.people = roster.people ?? [];
     data.truncated = Boolean(roster.truncated);
+    // THE SHARING PLANE'S OWN FLAG, never inferred from the rows. A window
+    // where nobody happens to be linked is not a window where the link facts
+    // are missing, and the two draw differently everywhere.
+    data.linksAvailable = Boolean(roster.links_available);
 
     if (state.shelf === TOUCH) {
       const dashboard = await read<DeniedRead & Partial<DashboardData>>(
@@ -142,6 +150,10 @@ export function createLogic({
               reconnect: 0,
               upcoming: 0,
               starred: 0,
+              // Null, not zero: a dashboard that never answered has not said
+              // that nobody is linked (`components/TouchRoute.tsx`).
+              linked: null,
+              to_link: null,
             },
           }
         : null;
@@ -256,13 +268,27 @@ export function createLogic({
 
   // ---------- Derivations ----------
 
-  /** The three numbers the roster's status line and app bar are made of. */
-  function rosterCounts(): { people: number; due: number; starred: number } {
+  /** The numbers the roster's status line and app bar are made of. `linked`
+   *  and `toLink` are counted over the SAME window as the rest — the rows in
+   *  hand — so the status line and the chips can never disagree about how
+   *  many people are linked. They are zero while the link facts are absent,
+   *  which is why every reader gates on `data.linksAvailable` first. */
+  function rosterCounts(): {
+    people: number;
+    due: number;
+    starred: number;
+    linked: number;
+    toLink: number;
+  } {
     const now = Date.now();
     return {
       people: data.people.length,
       due: data.people.filter((person) => isOverdue(person, now)).length,
       starred: data.people.filter((person) => person.starred).length,
+      linked: data.people.filter((person) => linkState(person) === "linked")
+        .length,
+      toLink: data.people.filter((person) => linkState(person) === "unlinked")
+        .length,
     };
   }
 
@@ -298,7 +324,11 @@ export function createLogic({
    */
   function ambientStatus(): string | null {
     const counts = rosterCounts();
-    if (state.shelf === TOUCH) return STATUS.touch(counts.people, counts.due);
+    const links = data.linksAvailable;
+    if (state.shelf === TOUCH)
+      return links
+        ? STATUS.touchLinked(counts.linked, counts.toLink, counts.due)
+        : STATUS.touch(counts.people, counts.due);
     if (state.shelf === SEARCH) {
       if (state.searchStatus === "unreachable") return STATUS.searchUnreachable;
       if (!state.search.trim()) return STATUS.searchResting;
@@ -312,7 +342,15 @@ export function createLogic({
     if (state.shelf === EDIT) return STATUS.editing;
     if (state.shelf === MERGE) return null;
     if (state.shelf === PERSON) return null;
-    return STATUS.roster(counts.people, counts.due, counts.starred);
+    return links
+      ? STATUS.rosterLinked(
+          counts.linked,
+          counts.people,
+          counts.toLink,
+          counts.due,
+          counts.starred
+        )
+      : STATUS.roster(counts.people, counts.due, counts.starred);
   }
 
   return {

@@ -7,14 +7,20 @@
 // screens live in `components/`; the recipes they are built from live in
 // `components/shared.module.css`, declared exactly once.
 //
-// WHAT THIS APP DOES NOT DRAW, and why it is absence rather than omission: the
-// vault-link system (the avatar's link ring, linked/unlinked filters, the
-// `Link` verb, the Share sheet, the Vault link screen, vault tags) and the
-// six record sections the handoff excludes (lists, journal, tasks, gifts,
-// debts, typed relationships, edit history). Nothing in `queries/*` returns a
-// vault link or a share receipt — a design handoff redraws screens, it does
-// not redesign the vault contract — and the excluded sections are excluded by
-// the handoff itself. See `people-copy.ts` for the copy that went with them.
+// THE VAULT LINK IS DRAWN, as far as the contract lets it be. `queries/*` now
+// answer the sharing plane (`queries/_shared.ts`), so the ring, the two filter
+// chips, the vault-counting tiles and status lines, and the person screen's
+// `Vaults` + `Shared with them` sections are all here — and all of them fall
+// back to wave 1's link-free rendering when `links_available` is false, which
+// is what a parked `share.*` scope looks like from in here.
+//
+// WHAT IS STILL ABSENT, and why it is absence rather than omission: the
+// `Share` / `Link vault` commits, the roster's trailing `Link` verb and every
+// `Revoke`. All four are WRITES on the sharing plane and People holds only
+// reads on it; a share is additionally always a share of a container, which
+// People does not own (`_shared/ShareSheet.tsx`, `people-copy.ts`). Also
+// absent are the six record sections the handoff itself excludes (lists,
+// journal, tasks, gifts, debts, typed relationships, edit history).
 import {
   useCallback,
   useEffect,
@@ -46,6 +52,7 @@ import { TouchRoute } from "./components/TouchRoute.tsx";
 import { TrashRoute } from "./components/TrashRoute.tsx";
 import { appBar, bandClaim } from "./frame.tsx";
 import { createLogic } from "./logic.ts";
+import { STATUS } from "./people-copy.ts";
 import {
   EDIT,
   LOG,
@@ -319,8 +326,13 @@ export function Root({
         loading={!loaded}
         dashboard={data.dashboard}
         onSelectTile={(tile) => {
+          // Every tile lands on the roster under the filter it names — the
+          // two link tiles included, which is what makes `Vaults` and
+          // `To link` navigations rather than badges.
           if (tile === "starred") selectFilter("starred");
           else if (tile === "reconnect") selectFilter("due");
+          else if (tile === "linked") selectFilter("linked");
+          else if (tile === "to_link") selectFilter("unlinked");
           else selectFilter("all");
           navigate(null);
         }}
@@ -463,6 +475,7 @@ export function Root({
         {...base}
         loading={!loaded}
         people={data.people}
+        linksAvailable={data.linksAvailable}
         filter={state.filter}
         onSelectFilter={selectFilter}
         onOpenPerson={openPerson}
@@ -518,12 +531,20 @@ export function Root({
           ? (state.searchResults?.length ?? 0)
           : null;
   const handedOff = narrow;
+  // The roster's bar carries `<k> of <m> linked` on a pointer surface, where
+  // there is room for the pair. On the compact surface the plain people count
+  // stands — the handoff gives the phone the shorter meta.
+  const linkedMeta =
+    state.shelf === null && data.linksAvailable && !handedOff
+      ? STATUS.barLinked(counts.linked, counts.people)
+      : null;
   useEffect(() => {
     frame.setAppBar(
       appBar({
         shelf: state.shelf,
         count: barCountValue,
         compact: handedOff,
+        ...(linkedMeta ? { linkedMeta } : {}),
         ...(data.person ? { personName: data.person.name } : {}),
         ...(state.shelf === null
           ? { onAdd: openNew, onTrash: () => navigate(TRASH) }
@@ -536,6 +557,7 @@ export function Root({
     state.shelf,
     barCountValue,
     handedOff,
+    linkedMeta,
     data.person,
     openNew,
     openEdit,
@@ -568,6 +590,9 @@ export function Root({
     counts.people,
     counts.due,
     counts.starred,
+    counts.linked,
+    counts.toLink,
+    data.linksAvailable,
   ]);
 
   // Hand the bar, the band and the line back when People stops being the route.

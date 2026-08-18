@@ -1181,6 +1181,10 @@ export function Root({
         trashed={trashed}
         offline={offline}
         filters={state.filters}
+        // Unfiltered, and the SAME set the current screen draws from: search
+        // results while a query is live, the whole drive otherwise. The People
+        // axis offers the audiences these rows actually name.
+        filterRows={searching ? (state.searchResults ?? []) : data.documents}
         onSelectFilter={selectFilter}
         onClearFilters={clearFilters}
         caption={captionFor(state.shelf, {

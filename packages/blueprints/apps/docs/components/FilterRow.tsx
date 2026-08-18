@@ -10,28 +10,35 @@
 // year" cannot both be true of the same set.
 //
 // WHICH PILLS EXIST IS A DATA QUESTION, not a layout one (`liveAxes`): §4.2
-// names four properties, and this drive can only answer three of them. See
-// filters.ts for why an unanswerable pill is worse than a missing one.
+// names four properties, and this drive can answer three of them outright and
+// the People axis only where the rows carry real shares. See filters.ts for why
+// an unanswerable pill is worse than a missing one — and why `rows` has to be
+// the drive's whole set rather than the filtered one.
 import type { ReactNode } from "react";
 
 import { CLEAR_FILTERS } from "../drive-copy.ts";
 import { liveAxes, liveOptions } from "../filters.ts";
 import type { DriveFilters } from "../filters.ts";
 import { I } from "../icons.ts";
+import type { DriveDoc } from "../types.ts";
 import { Icon } from "./Shared.tsx";
 
 import styles from "./FilterRow.module.css";
 
 export function FilterRow({
   filters,
+  rows,
   onSelect,
   onClear,
 }: {
   filters: DriveFilters;
+  /** The drive's own rows BEFORE the filters narrow them — the People axis'
+   *  options are derived from what they are shared with. */
+  rows: readonly DriveDoc[];
   onSelect: (axis: keyof DriveFilters, option: string | null) => void;
   onClear: () => void;
 }): ReactNode {
-  const axes = liveAxes();
+  const axes = liveAxes(rows);
   const anySet = Object.values(filters).some((value) => value !== null);
   return (
     <div className={styles.row}>
@@ -55,7 +62,7 @@ export function FilterRow({
             <div className={styles.menu}>
               <fieldset className={styles.options}>
                 <legend className="kit-sr-only">{axis.label}</legend>
-                {liveOptions(axis).map((option) => (
+                {liveOptions(axis, rows).map((option) => (
                   <label key={option} className={styles.option}>
                     <input
                       type="radio"

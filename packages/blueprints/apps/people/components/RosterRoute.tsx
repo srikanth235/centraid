@@ -6,22 +6,29 @@
 // they all come from `Shared.tsx` and `shared.module.css`, which is what keeps
 // the app to a single row definition.
 //
-// THE ROW'S SECOND LINE IS THE ROLE, and its meta slot carries `<n> days` in
-// the consequence tone exactly while the person is overdue. The handoff leads
-// that line with vault copy and gates the meta on "linked AND overdue"; no
-// query returns a link, so the line is the role and the gate is the cadence
-// alone (see people-copy.ts for the whole withheld set).
+// THE VAULT LINK LEADS THE ROW'S SECOND LINE where there is one: a linked
+// person reads `Linked · architect`, an unlinked person reads the role alone.
+// The handoff leads that line with the vault's NAME and label; a binding
+// carries only a `vault_id` and an id is not a name, so the word `Linked`
+// stands where the name would (people-copy.ts LINK).
+//
+// The meta slot carries `<n> days` in the consequence tone exactly while the
+// person is overdue. The handoff gates that on "linked AND overdue"; being
+// overdue is a fact about the cadence alone, and hiding it from an unlinked
+// person would hide the thing this app is for.
 import type { ReactNode } from "react";
 
 import { LoadingSkeleton } from "../../_shared/LoadingSkeleton.tsx";
-import { agoLabel, daysSinceContact, isOverdue } from "../format.ts";
-import { EMPTY, FILTER_CHIPS, FIRST_RUN } from "../people-copy.ts";
+import { agoLabel, daysSinceContact, isOverdue, linkState } from "../format.ts";
+import { EMPTY, FIRST_RUN, LINK, filterChips } from "../people-copy.ts";
 import type { PersonRow, RosterFilter, RosterRouteProps } from "../types.ts";
 import { EmptyState } from "./EmptyState.tsx";
 import { Row, SkeletonBlock, StarButton, ChipRow } from "./Shared.tsx";
 
 /** The chips narrow the SAME set — a filter is a view of the roster, never a
- *  second read — so this is a pure predicate over the rows already in hand. */
+ *  second read — so this is a pure predicate over the rows already in hand.
+ *  A row whose link fact is unknown answers NEITHER link chip: unknown is not
+ *  "unlinked", and a shelf that quietly counted it as one would be guessing. */
 export function applyRosterFilter(
   people: readonly PersonRow[],
   filter: RosterFilter,
@@ -30,7 +37,16 @@ export function applyRosterFilter(
   if (filter === "starred") return people.filter((person) => person.starred);
   if (filter === "due")
     return people.filter((person) => isOverdue(person, now));
+  if (filter === "linked" || filter === "unlinked")
+    return people.filter((person) => linkState(person) === filter);
   return [...people];
+}
+
+/** `Linked · architect`, or the role alone. Absent entirely for an unlinked
+ *  person with no role — an empty separator is not a second line. */
+export function rosterSub(person: PersonRow): string {
+  if (linkState(person) !== "linked") return person.role;
+  return person.role ? `${LINK.linked} · ${person.role}` : LINK.linked;
 }
 
 export function RosterRoute(props: RosterRouteProps): ReactNode {
@@ -66,7 +82,7 @@ export function RosterRoute(props: RosterRouteProps): ReactNode {
     <>
       <ChipRow
         label="Filter"
-        options={FILTER_CHIPS}
+        options={filterChips(props.linksAvailable)}
         active={props.filter}
         onSelect={(id) => props.onSelectFilter(id as RosterFilter)}
       />
@@ -75,13 +91,15 @@ export function RosterRoute(props: RosterRouteProps): ReactNode {
       ) : (
         rows.map((person) => {
           const overdue = isOverdue(person);
+          const sub = rosterSub(person);
           return (
             <Row
               key={person.party_id}
               avatar={person}
+              avatarLink={linkState(person)}
               name={person.name}
               strong
-              {...(person.role ? { sub: person.role } : {})}
+              {...(sub ? { sub } : {})}
               {...(overdue
                 ? {
                     meta: agoLabel(daysSinceContact(person)),

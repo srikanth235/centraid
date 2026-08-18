@@ -5,12 +5,18 @@
 // they all come from `Shared.tsx` and `shared.module.css`, so this screen and
 // the roster cannot disagree about what a 44px line looks like.
 //
-// WHAT THE HANDOFF DRAWS AND THIS SCREEN DOES NOT: the vault-link system —
-// the avatar's link ring, the vault tag row, the `Share` commit, the `Vaults`
-// section with its three-part composer, and `Shared with them`. No query
-// returns a vault link or a share receipt (`app-root.tsx`, `people-copy.ts`),
-// so the hero carries a single-tone avatar, the commits are `Log` + `Edit`,
-// and the sections are the three the vault can answer.
+// THE VAULT LINK IS DRAWN HERE IN FULL, and its two sections are ABSENT
+// ENTIRELY when the sharing plane could not be read: `vaults`,
+// `pending_invites` and `shared_with_them` are null together, and an empty
+// `Not linked yet.` over a denied read would be this screen answering a
+// question nobody could ask (`queries/_shared.ts`).
+//
+// WHAT THE HANDOFF DRAWS AND THIS SCREEN STILL DOES NOT: the `Share` /
+// `Link vault` commits and the per-row `Revoke`. Both are WRITES on the
+// sharing plane, and People holds only reads on it (`app.json` grants
+// `share.*` as `read`); a share is additionally always a share of a container,
+// which People does not own (`people-copy.ts` head). So the commits are `Log`
+// + `Edit` — the two acts this screen can actually perform.
 //
 // ADDING IS A FIELD WHERE THE ROW WILL BE, never a new screen (handoff
 // deviation 3). The composer's state lives in `app-root.tsx`; this screen only
@@ -26,10 +32,13 @@ import {
   whenLabel,
 } from "../format.ts";
 import {
+  CONTAINER_FALLBACK,
+  CONTAINER_WORDS,
   EMPTY,
   FIELDS,
   FRAGMENTS,
   LABELS,
+  LINK,
   SECTIONS,
   VERBS,
 } from "../people-copy.ts";
@@ -37,6 +46,8 @@ import type {
   ComposerKey,
   ContactChannel,
   PersonRouteProps,
+  ShareCapability,
+  SharedContainer,
 } from "../types.ts";
 import { EmptyState } from "./EmptyState.tsx";
 import {
@@ -62,6 +73,20 @@ const CHANNEL_KINDS: readonly ContactChannel["kind"][] = [
   "email",
   "handle",
 ];
+
+/** The two capabilities in the handoff's own words — `read` and `read + write`
+ *  — rather than the vault's `read+write`, which is a stored value, not copy. */
+function capabilityWord(capability: ShareCapability): string {
+  return capability === "read+write" ? LINK.readWrite : LINK.read;
+}
+
+/** What a shared container is called. The invitation's own label wins; without
+ *  one the container TYPE is worded, because a container id names nothing a
+ *  member would recognise. */
+function sharedName(container: SharedContainer): string {
+  if (container.container_label) return container.container_label;
+  return CONTAINER_WORDS[container.container_type] ?? CONTAINER_FALLBACK;
+}
 
 /** `phone · work · preferred` — the channel row's second line. A label the
  *  vault never stored is absent rather than drawn as an empty separator. */
@@ -108,10 +133,22 @@ export function PersonRoute(props: PersonRouteProps): ReactNode {
   const composer = props.composer;
   const overdue = isOverdue(person);
 
+  // The sharing plane answers all three or none of them, so one flag gates
+  // both sections and the hero's ring. `linked` is a fact about the bindings
+  // in hand, not a second read.
+  const vaults = person.vaults;
+  const invites = person.pending_invites;
+  const sharedItems = person.shared_with_them;
+  const linksAvailable = vaults !== null;
+  const linked = (vaults?.length ?? 0) > 0;
+
   return (
     <section aria-label="Person">
       <div className={shared.hero}>
-        <PersonAvatar person={person} />
+        <PersonAvatar
+          person={person}
+          link={linksAvailable ? (linked ? "linked" : "unlinked") : "unknown"}
+        />
         <div className={shared.heroText}>
           <div className={shared.heroName}>{displayText(person.name)}</div>
           {person.role ? (
@@ -148,6 +185,76 @@ export function PersonRoute(props: PersonRouteProps): ReactNode {
           {VERBS.edit}
         </button>
       </Commits>
+
+      {/* THE VAULTS SECTION IS ALWAYS OPEN and never collapses: it is the one
+          fact this app is built around, and a member should not be able to
+          fold it away. It lists the live bindings, then the invitations still
+          waiting for an answer — an invitation is not a link, so it keeps its
+          own row rather than being counted as one. */}
+      {linksAvailable ? (
+        <Section
+          title={SECTIONS.vaults}
+          count={(vaults?.length ?? 0) + (invites?.length ?? 0)}
+        >
+          {(vaults?.length ?? 0) === 0 && (invites?.length ?? 0) === 0 ? (
+            <EmptyState title={EMPTY.vaults} />
+          ) : (
+            <>
+              {(vaults ?? []).map((binding) => (
+                <Row
+                  key={binding.binding_id}
+                  name={LINK.vaultRow}
+                  strong
+                  sub={LINK.linkedWhen(whenLabel(binding.linked_at))}
+                  subNumeric
+                />
+              ))}
+              {(invites ?? []).map((invite) => (
+                <Row
+                  key={invite.invitation_id}
+                  name={LINK.inviteRow}
+                  strong
+                  sub={invite.container_label ?? LINK.inviteWaiting}
+                />
+              ))}
+            </>
+          )}
+        </Section>
+      ) : null}
+
+      {/* SHARED WITH THEM opens by default exactly while the person is linked
+          — an unlinked person's section says what to do about it instead of
+          standing open and empty. `waiting` in the meta slot is the member's
+          own end of an invitation: shared, not yet accepted. */}
+      {linksAvailable ? (
+        <Section
+          title={SECTIONS.shared}
+          count={sharedItems?.length ?? 0}
+          collapsible
+          open={"shared" in props.collapsed ? !props.collapsed.shared : linked}
+          onToggle={() => props.onToggleSection("shared")}
+        >
+          {(sharedItems?.length ?? 0) === 0 ? (
+            <EmptyState title={linked ? EMPTY.shared : EMPTY.sharedUnlinked} />
+          ) : (
+            (sharedItems ?? []).map((container) => (
+              <Row
+                key={container.grant_id}
+                name={sharedName(container)}
+                strong
+                sub={LINK.sharedSince(
+                  capabilityWord(container.capability),
+                  whenLabel(container.since)
+                )}
+                subNumeric
+                {...(container.status === "invited"
+                  ? { meta: LINK.waiting, metaNet: true }
+                  : {})}
+              />
+            ))
+          )}
+        </Section>
+      ) : null}
 
       <Section
         title={SECTIONS.channels}

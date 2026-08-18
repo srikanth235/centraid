@@ -217,15 +217,16 @@ test("Docs uploads a real file and its bytes survive a PWA reload", async ({
   }, contentUri!);
   expect(roundTrip).toBe(DOC_BODY);
 
-  // Opening the document routes to the reading view and paints the exact body
-  // through the inline shell's authenticated blob primitive.
+  // Opening the document lands on the Quick look stage — Docs' only viewer
+  // since #819 deleted the reading route — and paints the exact body through
+  // the inline shell's authenticated blob primitive.
   await page
     .getByRole("button", { name: `Preview ${DOC_TITLE}` })
     .first()
     .click();
-  const reading = page.getByRole("article", { name: DOC_TITLE });
-  await expect(reading).toBeVisible({ timeout: 30_000 });
-  await expect(reading.getByRole("heading", { name: DOC_TITLE })).toBeVisible();
-  await expect(reading.getByText(DOC_BODY.split("\n\n")[0]!)).toBeVisible();
-  await expect(reading.getByText(DOC_BODY.split("\n\n")[1]!)).toBeVisible();
+  const stage = page.getByRole("dialog", { name: "Quick look" });
+  await expect(stage).toBeVisible({ timeout: 30_000 });
+  await expect(stage.getByText(DOC_TITLE).first()).toBeVisible();
+  await expect(stage.getByText(DOC_BODY.split("\n\n")[0]!)).toBeVisible();
+  await expect(stage.getByText(DOC_BODY.split("\n\n")[1]!)).toBeVisible();
 });

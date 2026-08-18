@@ -11,6 +11,34 @@ import type { DriveFilters } from "./filters.ts";
 import type { KIND_ICONS } from "./icons.ts";
 import type { ShelfId } from "./shelves.ts";
 
+/** One person a share reaches (queries/_shared.ts `readSharesByDocument`). */
+export interface SharedMember {
+  party_id: string;
+  label: string;
+  capability: "read" | "read+write";
+  /** `invited` until their own vault accepts. A member who refused is absent. */
+  status: "invited" | "current";
+}
+
+/**
+ * One live share a document sits inside — a commons grant over the document
+ * itself or over a folder above it (issue #821).
+ */
+export interface SharedWith {
+  grant_id: string;
+  circle_id: string;
+  /** The circle's own name, or — for an implicit circle, whose stored name is
+   *  a machine string — the recipients' names. */
+  label: string;
+  via: "document" | "folder";
+  /** The granted container: the folder whose name the rail prints under
+   *  `via: "folder"`, and the document's own id otherwise. */
+  container_id: string;
+  members: SharedMember[];
+  member_count: number;
+  pending_count: number;
+}
+
 /** One free-form label on a document (core.tag_item over the shared Tags scheme). */
 export interface DocTag {
   tag_id: string;
@@ -41,6 +69,13 @@ export interface DriveDoc {
   snippet?: string;
   tags: DocTag[];
   custody_state: string | null;
+  /**
+   * The live shares this document sits inside (issue #821). `[]` is "shared
+   * with nobody"; `null` is "the share reads were denied", which the details
+   * rail and the People filter axis both treat as UNKNOWN — the fact is absent
+   * rather than negative, so nothing on screen says "not shared".
+   */
+  shared_with: SharedWith[] | null;
 }
 
 /**

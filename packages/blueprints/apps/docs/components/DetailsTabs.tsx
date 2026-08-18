@@ -14,7 +14,12 @@ import type { ReactNode } from "react";
 
 import { displayText } from "../../_shared/untrusted.ts";
 import { capabilityOn } from "../capabilities.ts";
-import { RAIL_NOTES, cannotRenderFact } from "../document-copy.ts";
+import {
+  RAIL_NOTES,
+  SHARED_WITH_KEY,
+  cannotRenderFact,
+  sharedWithNote,
+} from "../document-copy.ts";
 import {
   canRender,
   custodyMeta,
@@ -67,6 +72,25 @@ export function PropsTab({
     <>
       <dl className={styles.facts}>
         <Fact k="Owner" v="you" note={RAIL_NOTES.owner} />
+        {/* WHO ELSE CAN REACH THIS, from the vault's own grants — one row per
+            live share, and no row at all when there is none or when the share
+            reads were denied (`shared_with: null`). A share that came from a
+            folder says which folder, because that is the thing the member
+            would have to change. */}
+        {(doc.shared_with ?? []).map((share) => (
+          <Fact
+            key={share.grant_id}
+            k={SHARED_WITH_KEY}
+            v={displayText(share.label)}
+            note={sharedWithNote({
+              viaFolder:
+                share.via === "folder"
+                  ? displayText(folderName(share.container_id))
+                  : null,
+              pending: share.pending_count,
+            })}
+          />
+        ))}
         <Fact
           k={doc.trashed ? "Was filed under" : "Folder"}
           v={displayText(folderName(doc.folder_id))}

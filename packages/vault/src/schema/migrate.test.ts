@@ -14,6 +14,7 @@ import {
   VaultSchemaAheadError,
 } from "./migrate.js";
 import { listVaultEntities, resolveEntity } from "./tables.js";
+import { touchUpdatedAt } from "./updated-at.js";
 
 function userVersionOf(file: string): number {
   const raw = new DatabaseSync(file);
@@ -143,9 +144,9 @@ describe("schema/migrate", () => {
 
   test("migrations are idempotent via user_version", () => {
     const db = openVaultDb();
-    // openVaultDb already migrated; user_version must land exactly on the
-    // single baseline rung, and re-running migrate() against an
-    // already-migrated handle must be a no-op (proven directly below).
+    // openVaultDb already migrated; user_version must land exactly on the top
+    // of the ladder, and re-running migrate() against an already-migrated
+    // handle must be a no-op (proven directly below).
     const version = db.vault.prepare("PRAGMA user_version").get() as {
       user_version: number;
     };
@@ -174,13 +175,13 @@ describe("schema/migrate", () => {
     db.close();
   });
 
-  test("fresh vaults apply the single composed baseline rung", () => {
-    expect(VAULT_MIGRATIONS).toHaveLength(1);
+  test("fresh vaults apply the composed baseline plus the cadence rung", () => {
+    expect(VAULT_MIGRATIONS).toHaveLength(2);
     const db = openVaultDb();
     const version = db.vault.prepare("PRAGMA user_version").get() as {
       user_version: number;
     };
-    expect(version.user_version).toBe(1);
+    expect(version.user_version).toBe(2);
     for (const table of [
       "locker_auth_credential",
       "core_entity_revision",
@@ -237,6 +238,150 @@ describe("schema/migrate", () => {
         )
         .get()
     ).toBeTruthy();
+    db.close();
+  });
+
+  // Issue #821 rung two. The v1 shape is spelled out here verbatim rather than
+  // reconstructed from the current DDL: the point of the test is a file this
+  // build did NOT create, and the runner is left untouched so the rung is
+  // exercised exactly as a real upgrade would exercise it. Only the two tables
+  // the rung touches are needed — `migrate()` starts at user_version 1, so the
+  // baseline rung (which needs openVaultDb's custom SQL functions) never runs.
+  const V1_PEOPLE_DDL = `
+CREATE TABLE core_party (
+  party_id     TEXT PRIMARY KEY,
+  kind         TEXT NOT NULL,
+  display_name TEXT NOT NULL
+) STRICT;
+CREATE TABLE people_profile (
+  profile_id        TEXT PRIMARY KEY,
+  party_id          TEXT NOT NULL UNIQUE REFERENCES core_party(party_id),
+  role              TEXT,
+  avatar_color      TEXT,
+  cadence_days      INTEGER NOT NULL CHECK (cadence_days > 0),
+  last_contacted_at TEXT,
+  met               TEXT,
+  created_at        TEXT NOT NULL,
+  updated_at        TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  deleted_at        TEXT,
+  purge_at          TEXT CHECK (purge_at IS NULL OR deleted_at IS NOT NULL)
+) STRICT;
+CREATE INDEX people_profile_purge_idx ON people_profile(purge_at);
+${touchUpdatedAt("people_profile", "profile_id")}
+`;
+
+  test("rung two upgrades a v1 vault's cadence floor without disturbing its rows", () => {
+    const db = new DatabaseSync(":memory:");
+    db.exec("PRAGMA foreign_keys = ON");
+    db.exec(V1_PEOPLE_DDL);
+    db.exec("PRAGMA user_version = 1");
+    db.exec(
+      `INSERT INTO core_party (party_id, kind, display_name)
+       VALUES ('party-live', 'person', 'Live'), ('party-trashed', 'person', 'Trashed')`
+    );
+    db.exec(
+      `INSERT INTO people_profile
+         (profile_id, party_id, role, avatar_color, cadence_days,
+          last_contacted_at, met, created_at, updated_at, deleted_at, purge_at)
+       VALUES
+         ('profile-live', 'party-live', 'friend', 'hue-3', 30,
+          '2024-05-01T00:00:00.000Z', 'conference',
+          '2024-01-01T00:00:00.000Z', '2024-02-02T00:00:00.000Z', NULL, NULL),
+         ('profile-trashed', 'party-trashed', NULL, NULL, 7,
+          NULL, NULL,
+          '2024-01-03T00:00:00.000Z', '2024-02-04T00:00:00.000Z',
+          '2024-06-01T00:00:00.000Z', '2024-07-01T00:00:00.000Z')`
+    );
+    // The old floor really is the old floor.
+    expect(() =>
+      db.exec(
+        `INSERT INTO people_profile (profile_id, party_id, cadence_days, created_at)
+         VALUES ('profile-zero-pre', 'party-live', 0, '2024-01-01T00:00:00.000Z')`
+      )
+    ).toThrow(/CHECK/u);
+
+    const readAll = (): unknown[] =>
+      db
+        .prepare(`SELECT * FROM people_profile ORDER BY profile_id`)
+        .all() as unknown[];
+    const before = readAll();
+
+    migrate(db, VAULT_MIGRATIONS);
+
+    expect(
+      (db.prepare("PRAGMA user_version").get() as { user_version: number })
+        .user_version
+    ).toBe(2);
+    // Every column of every pre-existing row survives the rebuild unchanged,
+    // trash pair included.
+    expect(readAll()).toStrictEqual(before);
+
+    // The relaxed floor is now real, and negatives are still refused.
+    db.exec(
+      `INSERT INTO core_party (party_id, kind, display_name)
+       VALUES ('party-never', 'person', 'Never')`
+    );
+    db.exec(
+      `INSERT INTO people_profile (profile_id, party_id, cadence_days, created_at)
+       VALUES ('profile-never', 'party-never', 0, '2024-01-01T00:00:00.000Z')`
+    );
+    expect(
+      (
+        db
+          .prepare(
+            `SELECT cadence_days FROM people_profile WHERE profile_id = 'profile-never'`
+          )
+          .get() as { cadence_days: number }
+      ).cadence_days
+    ).toBe(0);
+    db.exec(
+      `INSERT INTO core_party (party_id, kind, display_name)
+       VALUES ('party-bad', 'person', 'Bad')`
+    );
+    expect(() =>
+      db.exec(
+        `INSERT INTO people_profile (profile_id, party_id, cadence_days, created_at)
+         VALUES ('profile-bad', 'party-bad', -1, '2024-01-01T00:00:00.000Z')`
+      )
+    ).toThrow(/CHECK/u);
+
+    // The rebuild restored the trigger the DROP took with it…
+    db.exec(
+      `UPDATE people_profile SET role = 'colleague' WHERE profile_id = 'profile-live'`
+    );
+    expect(
+      (
+        db
+          .prepare(
+            `SELECT updated_at FROM people_profile WHERE profile_id = 'profile-live'`
+          )
+          .get() as { updated_at: string }
+      ).updated_at
+    ).not.toBe("2024-02-02T00:00:00.000Z");
+    // …the purge index…
+    expect(
+      db
+        .prepare(
+          `SELECT 1 FROM sqlite_master
+           WHERE type = 'index' AND name = 'people_profile_purge_idx'`
+        )
+        .get()
+    ).toBeTruthy();
+    // …and the foreign key onto the party spine.
+    expect(() =>
+      db.exec(
+        `INSERT INTO people_profile (profile_id, party_id, cadence_days, created_at)
+         VALUES ('profile-orphan', 'party-missing', 1, '2024-01-01T00:00:00.000Z')`
+      )
+    ).toThrow(/FOREIGN KEY/u);
+    // No scaffolding table left behind.
+    expect(
+      db
+        .prepare(
+          `SELECT 1 FROM sqlite_master WHERE name = 'people_profile_new'`
+        )
+        .get()
+    ).toBeUndefined();
     db.close();
   });
 
@@ -334,6 +479,35 @@ describe("schema/migrate", () => {
         )
         .run()
     ).toThrow(/CHECK/u);
+    // people_profile.cadence_days floors at 0, not 1 (issue #821): zero is the
+    // storable "never reach out", negative days are still refused.
+    const now = new Date().toISOString();
+    db.vault
+      .prepare(
+        `INSERT INTO core_party (party_id, kind, display_name, created_at, updated_at, ontology_version)
+         VALUES ('cad-party', 'person', 'Never', ?, ?, ?)`
+      )
+      .run(now, now, ONTOLOGY_VERSION);
+    const insertCadence = (profileId: string, days: number): void => {
+      db.vault
+        .prepare(
+          `INSERT INTO people_profile
+             (profile_id, party_id, cadence_days, created_at, updated_at)
+           VALUES (?, 'cad-party', ?, ?, ?)`
+        )
+        .run(profileId, days, now, now);
+    };
+    expect(() => insertCadence("cad-negative", -1)).toThrow(/CHECK/u);
+    insertCadence("cad-zero", 0);
+    expect(
+      (
+        db.vault
+          .prepare(
+            `SELECT cadence_days FROM people_profile WHERE profile_id = 'cad-zero'`
+          )
+          .get() as { cadence_days: number }
+      ).cadence_days
+    ).toBe(0);
     db.close();
   });
 
