@@ -9,15 +9,6 @@ const read = (relative: string): string =>
   readFileSync(path.resolve(appsRoot, relative), "utf8");
 
 describe("blueprint state honesty", () => {
-  // People is absent from all three lists below, and from `app-boot/`. Its
-  // desktop surface was removed pending the Binding Layer v11 design handoff
-  // (apps/people/app-root.tsx), so it reads nothing, can be denied nothing,
-  // and offers no way forward — there is no skeleton to paint before a read
-  // that never happens, no denial to hand a `VaultAccessButton`, and no CTA
-  // that would be honest under `kit-empty`. Its manifest, actions and queries
-  // are untouched, so nothing here is being excused: these rows describe
-  // RENDERING, and People does not render yet. Put it back on all three the
-  // moment the rebuilt app reads its first row.
   test.each(["agenda", "locker", "notes", "tasks"])(
     "%s paints a skeleton until its first read settles",
     (app) => {
@@ -25,6 +16,43 @@ describe("blueprint state honesty", () => {
       expect(read(`${app}/app-root.tsx`)).toMatch(/loading=\{!.*loaded\}/u);
     }
   );
+
+  // People is not on that row, for the reason Docs is not on the one below it:
+  // the row asserts ONE skeleton in the chrome, and People's chrome draws no
+  // content at all — it owns geometry and hands the scroll host a route
+  // (apps/people/Chrome.tsx). Every screen therefore paints its OWN skeleton,
+  // sized to the rows that screen is about. So the requirement is asserted per
+  // ROUTE here instead, and is stronger than the generic row: not "the string
+  // appears somewhere in the chrome" but "every one of the eight routes gates
+  // on `loading` before it draws, and the orchestrator hands every one of them
+  // the same `!loaded` gate" — a route added without a skeleton, or wired to a
+  // gate of its own invention, fails here.
+  test("people gates every route on its own skeleton", () => {
+    // Route → the pending-read condition its skeleton stands behind. Seven
+    // screens wait on the roster read; Search waits on its OWN read instead
+    // (`status === "searching"`), because blanking the field while an
+    // unrelated read settles would take away the one control that screen is.
+    const routes: Array<[string, string]> = [
+      ["EditRoute", "props.loading"],
+      ["LogRoute", "props.loading"],
+      ["MergeRoute", "props.loading"],
+      ["PersonRoute", "props.loading"],
+      ["RosterRoute", "props.loading"],
+      ["SearchRoute", 'props.status === "searching"'],
+      ["TouchRoute", "props.loading"],
+      ["TrashRoute", "props.loading"],
+    ];
+    for (const [route, gate] of routes) {
+      const source = read(`people/components/${route}.tsx`);
+      expect(source, route).toContain("LoadingSkeleton");
+      expect(source, route).toContain(gate);
+    }
+    // …and the orchestrator hands all eight the same `!loaded` gate, so no
+    // screen can invent a second answer to "has a read landed".
+    const root = read("people/app-root.tsx");
+    for (const [route] of routes) expect(root, route).toContain(`<${route}`);
+    expect(root.match(/loading=\{!loaded\}/gu)).toHaveLength(routes.length);
+  });
 
   // The file that carries the recovery action, per app. It is the chrome for
   // every app that renders a denial as a banner inside its own shell; Photos
@@ -39,6 +67,7 @@ describe("blueprint state honesty", () => {
     ["docs", "docs/Chrome.tsx"],
     ["tally", "tally/Chrome.tsx"],
     ["photos", "photos/components/Permission.tsx"],
+    ["people", "people/Chrome.tsx"],
   ])("%s gives denied reads a direct vault-access action", (_app, file) => {
     expect(read(file)).toContain("VaultAccessButton");
   });
@@ -49,6 +78,7 @@ describe("blueprint state honesty", () => {
     ["notes", "notes/components/Wall.tsx"],
     ["tasks", "tasks/components/Board.tsx"],
     ["tally", "tally/components/Ledger.tsx"],
+    ["people", "people/components/EmptyState.tsx"],
   ])("%s primary empty state uses kit vocabulary with a CTA", (_app, file) => {
     const source = read(file);
     expect(source).toContain("kit-empty");

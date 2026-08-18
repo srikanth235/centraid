@@ -1,63 +1,596 @@
-// PEOPLE ON THE DESKTOP — deliberately empty, awaiting its design handoff.
+// People, rebuilt from the Binding Layer v12 handoff: the orchestrator.
 //
-// This file held the app's whole orchestration: a roster in list and grid, a
-// per-person detail pane with contact channels, cadence, relationships, gifts,
-// debts and a journal, a smart-nav sidebar, bulk selection, a trash card and
-// an activity feed. All of it was drawn before the Binding Layer v11 handoff,
-// so it answers a grammar the rebuild is going to replace. It is REMOVED
-// rather than left in place, because a surface that is wrong still has to be
-// maintained, tested and explained — and every hour spent doing that buys
-// nothing the rebuild will keep.
+// This file wires the app and draws none of it. It owns the two mutable bags
+// (`state`, `data`), builds the read factory (`logic.ts`) and the write
+// factory (`writes.ts`) once, feeds the frame (title, count, verbs, band,
+// status line), and hands each screen the props `types.ts` freezes. The
+// screens live in `components/`; the recipes they are built from live in
+// `components/shared.module.css`, declared exactly once.
 //
-// WHAT WAS NOT TOUCHED, and why: the twenty-eight `./actions/*`, the seven
-// `./queries/*`, `app.json`'s vault scopes and `pending-projection.ts`. A
-// design handoff redraws screens; it does not redesign the vault contract, the
-// consent grant or the receipt trail. Those are still live — the assistant
-// still invokes every people action through the manifest, and the Ask panel
-// (`app-inline.tsx`'s `kitAsk`) still runs the queries — so the app is not
-// dark, it is unrendered. That distinction is the whole reason this file
-// exists at all instead of the app being deleted.
-//
-// The phone is in the same state: `apps/mobile/src/apps/people/PeopleHome.tsx`.
-//
-// The wall spends no verb. `kit-empty` is the kit's notice card and it is
-// normally paired with a `kit-btn` CTA — `src/state-honesty.test.ts` asserts
-// exactly that pairing for every app that draws a primary empty state, and
-// People has been taken OFF that list on purpose. A CTA is a way forward, and
-// there is nothing here to go forward to; a button that only restates the
-// sentence above it is worse than no button.
+// WHAT THIS APP DOES NOT DRAW, and why it is absence rather than omission: the
+// vault-link system (the avatar's link ring, linked/unlinked filters, the
+// `Link` verb, the Share sheet, the Vault link screen, vault tags) and the
+// six record sections the handoff excludes (lists, journal, tasks, gifts,
+// debts, typed relationships, edit history). Nothing in `queries/*` returns a
+// vault link or a share receipt — a design handoff redraws screens, it does
+// not redesign the vault contract — and the excluded sections are excluded by
+// the handoff itself. See `people-copy.ts` for the copy that went with them.
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useReducer,
+  useRef,
+  useState,
+} from "react";
+import type { ReactElement, ReactNode } from "react";
 
-import type { ReactElement } from "react";
+import {
+  observeWidth,
+  onDataChange,
+  onFocusRefresh,
+} from "@centraid/design/elements";
 
+import { publishOutcome } from "../_shared/app-frame.tsx";
+import { libraryReachability } from "../_shared/view-state-kit.ts";
 import type { InlineAppProps } from "../inline-types.ts";
-
-import styles from "./Chrome.module.css";
+import { Chrome } from "./Chrome.tsx";
+import { ConfirmHost } from "./components/ConfirmHost.tsx";
+import { EditRoute } from "./components/EditRoute.tsx";
+import { LogRoute } from "./components/LogRoute.tsx";
+import { MergeRoute } from "./components/MergeRoute.tsx";
+import { PersonRoute } from "./components/PersonRoute.tsx";
+import { RosterRoute } from "./components/RosterRoute.tsx";
+import { SearchRoute } from "./components/SearchRoute.tsx";
+import { TouchRoute } from "./components/TouchRoute.tsx";
+import { TrashRoute } from "./components/TrashRoute.tsx";
+import { appBar, bandClaim } from "./frame.tsx";
+import { createLogic } from "./logic.ts";
+import {
+  EDIT,
+  LOG,
+  MERGE,
+  PERSON,
+  SEARCH,
+  TOUCH,
+  TRASH,
+  shelfFromSegment,
+} from "./shelves.ts";
+import type {
+  AppData,
+  AppState,
+  ComposerKey,
+  ComposerState,
+  LogDraft,
+  PersonDraft,
+  RosterFilter,
+} from "./types.ts";
+import { DEFAULT_CADENCE, makeData, makeState } from "./view-state.ts";
+import { createWrites } from "./writes.ts";
 
 /**
- * Nothing is read, so nothing is subscribed. The shell uses this list to decide
- * which replica changes should re-run the app's queries; an empty UI declaring
- * fourteen tables would wake the route on every unrelated write and render the
- * same wall again.
- *
- * The retired list, so the rebuild restores it rather than rediscovering it:
- * people.profile, people.important_date, tally.obligation, schedule.task,
- * core.party, core.activity, core.link, core.content_item,
- * core.party_identifier, social.contact_channel, core.tag, core.concept,
- * knowledge.note, knowledge.annotation.
+ * Vault entities this app's queries read — the doorbell filter. Restored in
+ * full from the list the wall preserved: an app that declared fewer would
+ * sleep through a change it renders, and one that declared more would wake on
+ * every unrelated write.
  */
-export const CHANGE_TABLES: string[] = [];
+export const CHANGE_TABLES = [
+  "people.profile",
+  "people.important_date",
+  "tally.obligation",
+  "schedule.task",
+  "core.party",
+  "core.activity",
+  "core.link",
+  "core.content_item",
+  "core.party_identifier",
+  "social.contact_channel",
+  "core.tag",
+  "core.concept",
+  "knowledge.note",
+  "knowledge.annotation",
+];
 
-export function Root({ rootRef }: InlineAppProps): ReactElement {
+interface Core {
+  logic: ReturnType<typeof createLogic>;
+  writes: ReturnType<typeof createWrites>;
+}
+
+export function Root({
+  rootRef,
+  frame,
+  compact = false,
+}: InlineAppProps): ReactElement {
+  const [, bump] = useReducer((n: number) => n + 1, 0);
+  const [narrow, setNarrow] = useState(false);
+  const [loaded, setLoaded] = useState(false);
+  const [readFailedState, setReadFailedState] = useState(false);
+  const [consent, setConsent] = useState<{ message: string } | null>(null);
+
+  const rootElRef = useRef<HTMLDivElement | null>(null);
+  const searchInputRef = useRef<HTMLInputElement | null>(null);
+  const stateRef = useRef<AppState>(makeState());
+  const dataRef = useRef<AppData>(makeData());
+  const coreRef = useRef<Core | null>(null);
+  /** The status line is carrying a write's OUTCOME, so the ambient sentence
+   *  stays out of the way until the member navigates. */
+  const outcomeHeld = useRef(false);
+
+  if (!coreRef.current) {
+    const state = stateRef.current;
+    const data = dataRef.current;
+    const render = (): void => bump();
+    const logic = createLogic({
+      state,
+      data,
+      render,
+      setLoaded,
+      setConsent,
+      setReadFailed: setReadFailedState,
+    });
+    const writes = createWrites({
+      frame,
+      refresh: logic.refresh,
+      hold: () => {
+        outcomeHeld.current = true;
+      },
+      notice: logic.notice,
+    });
+    coreRef.current = { logic, writes };
+  }
+
+  const core = coreRef.current;
+  const { logic } = core;
+  const { writes } = core;
+  const state = stateRef.current;
+  const data = dataRef.current;
+
+  // Seed the compact layout BEFORE the first paint. `observeWidth` in the
+  // mount effect below only fires post-paint, so without this the phone form
+  // factor would paint at desktop metrics for one frame.
+  useLayoutEffect(() => {
+    const element = rootElRef.current;
+    if (!element) return;
+    const isNarrow =
+      element.dataset.appWidth === "narrow" ||
+      compact ||
+      element.clientWidth < 860;
+    if (isNarrow !== stateRef.current.narrow) {
+      stateRef.current.narrow = isNarrow;
+      setNarrow(isNarrow);
+    }
+  }, [compact]);
+
+  useEffect(() => {
+    const stopDoorbell = onDataChange(
+      CHANGE_TABLES,
+      () => void logic.refresh(),
+      {
+        debounceMs: 200,
+      }
+    );
+    const stopFocus = onFocusRefresh(() => void logic.refresh());
+    const stopWidth = rootElRef.current
+      ? observeWidth(rootElRef.current, 860, (isNarrow: boolean) => {
+          stateRef.current.narrow = isNarrow;
+          setNarrow(isNarrow);
+        })
+      : () => {};
+    void logic.refresh();
+    return () => {
+      stopDoorbell();
+      stopFocus();
+      stopWidth();
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- mount-once wiring, stable deps via refs (#505)
+  }, []);
+
+  // OFFLINE IS READ, NEVER INVENTED (`_shared/view-state-kit.ts`): the host's
+  // own knob first, then the evidence of a read that actually came back failed.
+  const offline =
+    libraryReachability({
+      hostStatus: rootElRef.current?.dataset.gatewayStatus ?? null,
+      readFailed: readFailedState,
+    }) === "unreachable";
+
+  // ---- navigation + screen handlers ----
+
+  const navigate = useCallback(
+    (shelf: typeof state.shelf, personId?: string | null) => {
+      outcomeHeld.current = false;
+      logic.go(shelf, personId);
+    },
+    [logic]
+  );
+
+  // The screens take handlers by name, so the few that are `logic`'s own
+  // functions are bound here rather than passed through raw — one naming
+  // convention for every callback a route receives.
+  const handleTermChange = logic.setSearch;
+  const handleClearSearch = logic.clearSearch;
+  const handleToggleSection = logic.toggleSection;
+  const handleBack = logic.goBack;
+
+  const openPerson = useCallback(
+    (partyId: string) => navigate(PERSON, partyId),
+    [navigate]
+  );
+
+  const openLog = useCallback(
+    (partyId: string) => {
+      state.log = { party_id: partyId, kind: "Message", text: "" };
+      navigate(LOG, partyId);
+    },
+    [navigate, state]
+  );
+
+  const openEdit = useCallback(() => {
+    const person = data.person;
+    state.draft = {
+      party_id: person?.party_id ?? null,
+      name: person?.name ?? "",
+      role: person?.role ?? "",
+      avatar_color: person?.avatar_color ?? null,
+      cadence_days: person?.cadence_days ?? DEFAULT_CADENCE,
+    };
+    navigate(EDIT);
+  }, [data, navigate, state]);
+
+  const openNew = useCallback(() => {
+    state.draft = {
+      party_id: null,
+      name: "",
+      role: "",
+      avatar_color: null,
+      cadence_days: DEFAULT_CADENCE,
+    };
+    navigate(EDIT, null);
+  }, [navigate, state]);
+
+  const selectFilter = useCallback(
+    (filter: RosterFilter) => {
+      state.filter = filter;
+      bump();
+    },
+    [state]
+  );
+
+  const composerChange = useCallback(
+    (patch: Partial<ComposerState>) => {
+      if (!state.composer) return;
+      state.composer = { ...state.composer, ...patch };
+      bump();
+    },
+    [state]
+  );
+
+  const composerSave = useCallback(() => {
+    const composer = state.composer;
+    const person = data.person;
+    if (!composer || !person) return;
+    state.composer = null;
+    bump();
+    if (composer.key === "notes")
+      void writes.addNote(person.party_id, composer.value, person.name);
+    else if (composer.key === "dates")
+      void writes.addImportantDate(
+        person.party_id,
+        composer.label,
+        composer.monthDay,
+        person.name
+      );
+    else
+      void writes.saveChannel(person.party_id, {
+        kind: composer.kind,
+        value: composer.value,
+        ...(composer.label ? { label: composer.label } : {}),
+      });
+  }, [data, state, writes]);
+
+  const draftChange = useCallback(
+    (patch: Partial<PersonDraft>) => {
+      if (!state.draft) return;
+      state.draft = { ...state.draft, ...patch };
+      bump();
+    },
+    [state]
+  );
+
+  const logChange = useCallback(
+    (patch: Partial<LogDraft>) => {
+      if (!state.log) return;
+      state.log = { ...state.log, ...patch };
+      bump();
+    },
+    [state]
+  );
+
+  // ---- the route ----
+
+  // `loading` is passed at every call site rather than folded into `base`:
+  // "a read has not landed yet" is the gate every empty state in the app sits
+  // behind, and the honesty test for it reads the JSX (`src/state-honesty.test.ts`).
+  const base = { offline, narrow };
+  let routeBody: ReactNode;
+  if (state.shelf === TOUCH) {
+    routeBody = (
+      <TouchRoute
+        {...base}
+        loading={!loaded}
+        dashboard={data.dashboard}
+        onSelectTile={(tile) => {
+          if (tile === "starred") selectFilter("starred");
+          else if (tile === "reconnect") selectFilter("due");
+          else selectFilter("all");
+          navigate(null);
+        }}
+        onOpenPerson={openPerson}
+        onLog={openLog}
+      />
+    );
+  } else if (state.shelf === SEARCH) {
+    routeBody = (
+      <SearchRoute
+        {...base}
+        loading={!loaded}
+        term={state.search}
+        status={state.searchStatus}
+        results={state.searchResults ?? []}
+        filter={state.filter}
+        onTermChange={handleTermChange}
+        onClear={handleClearSearch}
+        onSelectFilter={selectFilter}
+        onOpenPerson={openPerson}
+        onToggleStar={(person) => void writes.toggleStar(person)}
+        inputRef={(el) => {
+          searchInputRef.current = el;
+        }}
+      />
+    );
+  } else if (state.shelf === PERSON) {
+    routeBody = (
+      <PersonRoute
+        {...base}
+        loading={!loaded}
+        person={data.person}
+        collapsed={state.collapsed}
+        composer={state.composer}
+        onToggleSection={handleToggleSection}
+        onOpenComposer={(key: ComposerKey) => {
+          state.composer = {
+            key,
+            value: "",
+            label: "",
+            kind: "phone",
+            monthDay: "01-01",
+          };
+          bump();
+        }}
+        onComposerChange={composerChange}
+        onComposerSave={composerSave}
+        onComposerCancel={() => {
+          state.composer = null;
+          bump();
+        }}
+        onLog={() => data.person && openLog(data.person.party_id)}
+        onEdit={openEdit}
+        onToggleStar={() => data.person && void writes.toggleStar(data.person)}
+        onToggleReminder={(dateId, label) => {
+          const date = data.person?.dates.find((d) => d.date_id === dateId);
+          void writes.toggleReminder(dateId, label, date?.reminder_on ?? false);
+        }}
+        onDeleteChannel={(channel) => void writes.deleteChannel(channel)}
+        onTrash={() => {
+          if (!data.person) return;
+          state.confirm = { kind: "trash", party_id: data.person.party_id };
+          bump();
+        }}
+        onMerge={() => navigate(MERGE, state.personId)}
+      />
+    );
+  } else if (state.shelf === LOG) {
+    routeBody = (
+      <LogRoute
+        {...base}
+        loading={!loaded}
+        person={data.person ?? logic.personRow(state.personId)}
+        draft={state.log}
+        onChange={logChange}
+        onSave={() => {
+          const draft = state.log;
+          const name = data.person?.name ?? "";
+          if (!draft) return;
+          void writes.logTouch(draft, name);
+          handleBack();
+        }}
+        onCancel={handleBack}
+      />
+    );
+  } else if (state.shelf === EDIT) {
+    routeBody = (
+      <EditRoute
+        {...base}
+        loading={!loaded}
+        draft={state.draft}
+        mode={state.draft?.party_id ? "edit" : "new"}
+        onChange={draftChange}
+        onSave={() => {
+          const draft = state.draft;
+          if (!draft) return;
+          void writes.savePerson(draft, data.person);
+          handleBack();
+        }}
+        onCancel={handleBack}
+      />
+    );
+  } else if (state.shelf === TRASH) {
+    routeBody = (
+      <TrashRoute
+        {...base}
+        loading={!loaded}
+        people={data.trash}
+        onRestore={(person) => void writes.restorePerson(person)}
+      />
+    );
+  } else if (state.shelf === MERGE) {
+    routeBody = (
+      <MergeRoute
+        {...base}
+        loading={!loaded}
+        keep={data.person}
+        candidates={logic.mergeCandidates()}
+        source={logic.personRow(state.mergeSourceId)}
+        merged={state.merged}
+        onPickSource={(partyId) => {
+          state.mergeSourceId = partyId;
+          bump();
+        }}
+        onMerge={() => {
+          if (!data.person || !state.mergeSourceId) return;
+          state.confirm = {
+            kind: "merge",
+            party_id: data.person.party_id,
+            source_party_id: state.mergeSourceId,
+          };
+          bump();
+        }}
+        onCancel={handleBack}
+      />
+    );
+  } else {
+    routeBody = (
+      <RosterRoute
+        {...base}
+        loading={!loaded}
+        people={data.people}
+        filter={state.filter}
+        onSelectFilter={selectFilter}
+        onOpenPerson={openPerson}
+        onToggleStar={(person) => void writes.toggleStar(person)}
+        onAddPerson={openNew}
+      />
+    );
+  }
+
+  // ---- the two modal confirms ----
+
+  const confirm = state.confirm;
+  const confirmSubject = logic.personRow(confirm?.party_id ?? null);
+  const confirmSource = logic.personRow(confirm?.source_party_id ?? null);
+  const overlays = (
+    <ConfirmHost
+      confirm={confirm}
+      subjectName={confirmSubject?.name ?? null}
+      sourceName={confirmSource?.name ?? null}
+      onCancel={() => {
+        state.confirm = null;
+        bump();
+      }}
+      onConfirm={() => {
+        state.confirm = null;
+        bump();
+        if (!confirm || !confirmSubject) return;
+        if (confirm.kind === "trash") {
+          void writes.trashPerson(confirmSubject);
+          navigate(null, null);
+          return;
+        }
+        if (!confirmSource) return;
+        void writes.mergePeople(confirmSource, confirmSubject).then((ok) => {
+          if (ok) {
+            state.merged = true;
+            bump();
+          }
+        });
+      }}
+    />
+  );
+
+  // ---- the frame ----
+
+  const counts = logic.rosterCounts();
+  const barCountValue =
+    state.shelf === null
+      ? counts.people
+      : state.shelf === TRASH
+        ? data.trash.length
+        : state.shelf === SEARCH
+          ? (state.searchResults?.length ?? 0)
+          : null;
+  const handedOff = narrow;
+  useEffect(() => {
+    frame.setAppBar(
+      appBar({
+        shelf: state.shelf,
+        count: barCountValue,
+        compact: handedOff,
+        ...(data.person ? { personName: data.person.name } : {}),
+        ...(state.shelf === null
+          ? { onAdd: openNew, onTrash: () => navigate(TRASH) }
+          : {}),
+        ...(state.shelf === PERSON ? { onEdit: openEdit } : {}),
+      })
+    );
+  }, [
+    frame,
+    state.shelf,
+    barCountValue,
+    handedOff,
+    data.person,
+    openNew,
+    openEdit,
+    navigate,
+    state,
+    data,
+  ]);
+
+  useEffect(() => {
+    if (!narrow) {
+      frame.claimBand(null);
+      return;
+    }
+    frame.claimBand(
+      bandClaim(state.shelf, (segment) => navigate(shelfFromSegment(segment)))
+    );
+  }, [frame, state.shelf, narrow, navigate, state]);
+
+  // The AMBIENT sentence, replaced in place by any write's own outcome until
+  // the member navigates (`writes.ts` holds the line; `navigate` releases it).
+  useEffect(() => {
+    if (outcomeHeld.current) return;
+    const text = logic.ambientStatus();
+    publishOutcome(frame, text ? { text } : null);
+  }, [
+    frame,
+    logic,
+    state.shelf,
+    state.search,
+    counts.people,
+    counts.due,
+    counts.starred,
+  ]);
+
+  // Hand the bar, the band and the line back when People stops being the route.
+  useEffect(() => {
+    return () => {
+      frame.setAppBar(null);
+      frame.claimBand(null);
+      frame.clearStatus();
+    };
+  }, [frame]);
+
   return (
-    <div className={styles.appRoot} ref={rootRef}>
-      <div className={styles.main}>
-        <div className="kit-empty">
-          <div className="kit-empty-title">Not here yet</div>
-          <div className="kit-empty-sub">
-            People is being rebuilt from its design handoff.
-          </div>
-        </div>
-      </div>
-    </div>
+    <Chrome
+      shelf={state.shelf}
+      narrow={narrow}
+      bandOwned={handedOff}
+      consent={consent}
+      onSelectShelf={(shelf) => navigate(shelf)}
+      rootRef={(el) => {
+        rootElRef.current = el;
+        rootRef(el);
+      }}
+      slots={{ scroll: routeBody, overlays }}
+    />
   );
 }

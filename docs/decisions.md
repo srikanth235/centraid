@@ -190,6 +190,8 @@ The eight bundled system apps are inline React routes in the shared shell. Their
 
 Ruled 2026-08-18. Three surfaces were **removed rather than carried**, and none of them are deprecations: mobile Docs, mobile People, and desktop People. Each was drawn before the Binding Layer v11 handoff and answers an earlier grammar, so keeping it would have meant maintaining, testing and explaining screens the rebuild is going to replace. A surface that is wrong costs more than a surface that is absent.
 
+Amended 2026-08-18 by [#821](https://github.com/srikanth235/centraid/issues/821): **desktop/web People is restored** — rebuilt to the Binding Layer v12 handoff over the untouched contract, with `people` deleted from `AWAITING_HANDOFF.web` and its gate rows back on ([design-divergences.md](design-divergences.md#people--v12-parity-state-and-sanctioned-withholdings) records what the rebuild withholds and why). **Mobile Docs and mobile People remain held back** under this ruling, and the H-loss row's second loss (the People phase of the mobile frame-drop scale flow) remains accepted until the mobile rebuild; the first loss — People's adversarial untrusted-string rendering — is closed by the restored web renderer.
+
 | Id | Current decision |
 | --- | --- |
 | **H-scope** | Only the RENDER TREE goes. Manifests, `./actions/*`, `./queries/*`, vault scopes, pending projections and receipts are untouched on all three. A design handoff redraws screens; it does not redesign a contract. The apps are **unrendered, not dark** — the assistant still invokes every handler, and desktop People's Ask panel still runs its seven queries. |

@@ -1,0 +1,556 @@
+/* THE APP'S RECIPES, DECLARED ONCE.
+   Every People screen is built out of the rules in this file: one row, one
+   section, one chip, one tile, one field, one small verb and one confirm
+   panel. A screen that wrote its own row would be the second definition of a
+   44px line with an avatar in it, and the two would drift the first time a
+   metric moved — which is exactly what the rebuild is retiring.
+
+   Only tokens. No hex, no rgb(), no font-family, and no reserved custom
+   property: the app-local names all carry the `--pe-` prefix and only ever
+   READ the design system's own (`src/token-purity.test.ts`).
+
+   Type is `font: var(--t-…)` and nothing else. The ladder steps itself on
+   touch inside `packages/design`, so nothing here branches on pointer for a
+   SIZE — the two `@media (pointer: fine)` blocks below are METRICS (an avatar
+   box and a head height the handoff gives two rungs), not type.
+
+   Logical properties throughout, so every row mirrors under RTL. */
+
+/* ---------- The row ---------- */
+
+/* The app's single row recipe: avatar, main, meta, verbs, star.
+   `--density-row` is the product's row rhythm (44 on both surfaces, which is
+   what the handoff asks for); `--density-pad` is a PADDING scale and using it
+   here is how a row ends up 44px on one screen and 52 on another. */
+.row {
+  --pe-avatar-size: 34px;
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  min-block-size: var(--density-row);
+  padding-block: var(--sp-1);
+  border-block-end: 1px solid var(--line);
+}
+.row:last-child {
+  border-block-end: none;
+}
+@media (pointer: fine) {
+  .row {
+    --pe-avatar-size: 30px;
+  }
+}
+
+/* The row's own body is a button: the whole name/sub block opens the person,
+   so the target is the text rather than a chevron beside it. */
+.rowMain {
+  flex: 1;
+  min-inline-size: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  text-align: start;
+  border: none;
+  background: none;
+  padding: 0;
+  cursor: pointer;
+}
+.rowMain:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
+  border-radius: var(--r-sm);
+}
+
+.rowName {
+  font: var(--t-body);
+  color: var(--text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+/* STRONG IS A WEIGHT, NOT A SIZE. `--t-label-on` is `--t-body`'s 600 twin at
+   the same size and leading, so a name that becomes strong cannot reflow the
+   row it sits in. */
+.rowName[data-strong="true"] {
+  font: var(--t-label-on);
+}
+
+.rowSub {
+  font: var(--t-annot-label);
+  color: var(--text-faint);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+/* Numerics take the numeric register — tabular, isolated, left-to-right — so
+   a column of days cannot jitter and cannot reorder under RTL. */
+.rowSub[data-numeric="true"],
+.rowMeta {
+  font: var(--t-mono);
+  font-variant-numeric: var(--t-mono-numeric);
+  direction: var(--t-mono-direction);
+  unicode-bidi: var(--t-mono-bidi);
+}
+
+/* The meta slot: one fact, in the consequence tone when it IS one. */
+.rowMeta {
+  flex: none;
+  color: var(--text-faint);
+}
+.rowMeta[data-net="true"] {
+  color: var(--net);
+}
+
+/* The star. 44×44 on both surfaces even though the mark is 17px — an icon-only
+   control is a target before it is a glyph. */
+.star {
+  flex: none;
+  inline-size: var(--target-min);
+  block-size: var(--target-min);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  background: none;
+  border-radius: var(--r-md);
+  color: var(--text-faint);
+  cursor: pointer;
+  transition: color var(--dur-1) var(--ease);
+}
+.star[data-on="true"] {
+  color: var(--text);
+}
+.star:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
+}
+
+/* ---------- Verbs ---------- */
+
+/* The handoff's `small` and `smallQuiet` recipes. `kit-btn` is the app's
+   ordinary control (its own min-height already resolves 34/44); these two are
+   the TRAILING verbs inside a row, which the handoff draws a rung shorter so
+   a row does not grow around its own button. Declared here once and composed
+   everywhere, the way Docs declares its own row atoms. */
+.verb {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--sp-1);
+  block-size: 36px;
+  padding-inline: var(--sp-2);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--r-md);
+  background: none;
+  color: var(--text);
+  font: var(--t-small-strong);
+  white-space: nowrap;
+  cursor: pointer;
+  transition:
+    color var(--dur-1) var(--ease),
+    border-color var(--dur-1) var(--ease);
+}
+.verbQuiet {
+  border-color: transparent;
+  color: var(--text-soft);
+  font: var(--t-annot-label);
+}
+.verb:hover {
+  border-color: var(--line-strong);
+  color: var(--text);
+}
+.verb:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
+}
+.verb:disabled {
+  color: var(--text-disabled);
+  border-color: var(--line);
+  cursor: default;
+}
+@media (pointer: fine) {
+  .verb {
+    block-size: 28px;
+  }
+}
+
+/* ---------- Sections ---------- */
+
+.section {
+  display: block;
+  margin-block-start: var(--sp-4);
+}
+/* A rule with air above it — the handoff's 16px margin and 8px padding — so
+   two sections read as two rather than as one long list. */
+.section[data-ruled="true"] {
+  border-block-start: 1px solid var(--line);
+  padding-block-start: var(--sp-2);
+}
+
+.sectionHead {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  min-block-size: var(--density-row);
+  inline-size: 100%;
+  color: var(--text);
+}
+@media (pointer: fine) {
+  .sectionHead {
+    min-block-size: 32px;
+  }
+}
+
+/* The collapse target is the TITLE, not the whole head: the head also carries
+   an `Add`, and a button inside a button is neither valid nor operable. */
+.sectionHeadBtn {
+  flex: 1;
+  min-inline-size: 0;
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  border: none;
+  background: none;
+  padding: 0;
+  text-align: start;
+  color: inherit;
+  cursor: pointer;
+}
+.sectionHeadBtn:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
+  border-radius: var(--r-sm);
+}
+
+.sectionTitle {
+  font: var(--t-small-strong);
+  color: var(--text);
+}
+.sectionMeta {
+  font: var(--t-mono);
+  font-variant-numeric: var(--t-mono-numeric);
+  direction: var(--t-mono-direction);
+  unicode-bidi: var(--t-mono-bidi);
+  color: var(--text-faint);
+}
+/* The collapse mark is a text glyph: `+` and `−` are lighter than any icon
+   that could stand for them, and the head carries `aria-expanded` regardless. */
+.caret {
+  margin-inline-start: auto;
+  font: var(--t-body);
+  color: var(--text-faint);
+}
+.sectionAdd {
+  margin-inline-start: auto;
+}
+/* When both a caret and an Add are present, only the first claims the slack. */
+.caret + .sectionAdd {
+  margin-inline-start: var(--sp-2);
+}
+
+/* ---------- Chips ---------- */
+
+/* A native `<fieldset>` (Shared.tsx) — so the browser's own chrome for one is
+   reset here rather than worked around at the call site. */
+.chipRow {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sp-2);
+  padding: var(--sp-2) 0;
+  margin: 0;
+  border: none;
+  min-inline-size: 0;
+}
+
+/* THE WEIGHT MOVES AND THE LEADING IS HELD (`--t-body` → `--t-label-on`, the
+   same size and line box), so choosing a chip cannot reflow the row. */
+.chip {
+  display: inline-flex;
+  align-items: center;
+  block-size: 32px;
+  padding-inline: var(--sp-3);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--r-pill);
+  background: none;
+  color: var(--text);
+  font: var(--t-body);
+  white-space: nowrap;
+  cursor: pointer;
+  transition:
+    color var(--dur-1) var(--ease),
+    background var(--dur-1) var(--ease),
+    border-color var(--dur-1) var(--ease);
+}
+.chip[aria-pressed="true"] {
+  background: var(--accent-deep);
+  border-color: transparent;
+  color: var(--text-inv);
+  font: var(--t-label-on);
+}
+.chip:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
+}
+@media (pointer: fine) {
+  .chip {
+    block-size: 24px;
+  }
+}
+
+/* ---------- Count tiles ---------- */
+
+.tiles {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-2);
+  padding-block: var(--sp-3);
+}
+.tile {
+  flex: 1 1 120px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: var(--sp-3);
+  border: 1px solid var(--line);
+  border-radius: var(--r-lg);
+  background: var(--bg-elev);
+  text-align: start;
+  cursor: pointer;
+  transition: border-color var(--dur-1) var(--ease);
+}
+.tile:hover {
+  border-color: var(--line-strong);
+}
+.tile:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
+}
+/* Two-up on a phone canvas, four-up on a pointer surface — the handoff's own
+   flex basis, carried on the CONTAINER's state rather than a viewport query,
+   because this pane can be narrower than the window it sits in. */
+.tiles[data-narrow="true"] .tile {
+  flex: 1 1 calc(50% - var(--sp-1));
+  min-inline-size: calc(50% - var(--sp-1));
+}
+
+.tileNumber {
+  font: var(--t-display);
+  letter-spacing: var(--t-display-tracking);
+  font-variant-numeric: var(--t-mono-numeric);
+  direction: var(--t-mono-direction);
+  unicode-bidi: var(--t-mono-bidi);
+  color: var(--text);
+}
+/* A count is in the consequence tone only when it is a call to action, and
+   only while it is above zero — "0 to reconnect" is good news, not a warning. */
+.tileNumber[data-net="true"] {
+  color: var(--net);
+}
+.tileLabel {
+  font: var(--t-annot-label);
+  color: var(--text-soft);
+}
+
+/* ---------- Fields ---------- */
+
+.fieldRow {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  padding-block: var(--sp-2);
+}
+.field {
+  flex: 1;
+  min-inline-size: 0;
+  block-size: var(--h-control);
+  padding-inline: var(--sp-3);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--r-md);
+  background: none;
+  color: var(--text);
+  font: var(--t-body);
+}
+.field::placeholder {
+  color: var(--text-faint);
+}
+.field:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
+}
+.fieldLabel {
+  display: block;
+  font: var(--t-eyebrow);
+  letter-spacing: var(--t-eyebrow-tracking);
+  text-transform: var(--t-eyebrow-transform);
+  color: var(--text-faint);
+  padding-block-start: var(--sp-3);
+}
+
+/* ---------- Blocks ---------- */
+
+/* The generic column every screen stacks its blocks in. */
+.stack {
+  display: flex;
+  flex-direction: column;
+}
+
+/* A commit row: the screen's one filled control and its quiet neighbour. On
+   the compact surface both grow to fill the row; on a pointer surface they
+   take intrinsic width. */
+.commits {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  padding-block: var(--sp-3);
+}
+.commits[data-narrow="true"] > * {
+  flex: 1;
+}
+
+/* A wrapped body of member-written text — a note. Line-clamped rather than
+   cropped by `overflow: hidden`, so the last visible line ends in an ellipsis
+   instead of a guillotined letter. */
+.wrapText {
+  font: var(--t-body);
+  color: var(--text);
+  text-wrap: pretty;
+  white-space: normal;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+  line-clamp: 3;
+  overflow-wrap: anywhere;
+}
+
+/* The person hero. The avatar box is the one metric that steps by pointer. */
+.hero {
+  --pe-avatar-size: 52px;
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  padding-block: var(--sp-4);
+}
+@media (pointer: fine) {
+  .hero {
+    --pe-avatar-size: 46px;
+  }
+}
+.heroText {
+  flex: 1;
+  min-inline-size: 0;
+}
+.heroName {
+  font: var(--t-title);
+  letter-spacing: var(--t-title-tracking);
+  color: var(--text);
+}
+.heroRole {
+  font: var(--t-body);
+  color: var(--text-soft);
+}
+/* The cadence line: `Every 30 days · last 41 days ago`, in the consequence
+   tone exactly while the person is overdue. */
+.cadenceLine {
+  font: var(--t-mono);
+  font-variant-numeric: var(--t-mono-numeric);
+  direction: var(--t-mono-direction);
+  unicode-bidi: var(--t-mono-bidi);
+  color: var(--text-soft);
+  padding-block-end: var(--sp-2);
+}
+.cadenceLine[data-net="true"] {
+  color: var(--net);
+}
+
+/* A closing note under a shelf — the trash's purge sentence, a section's own
+   caption. One sentence, never a paragraph. */
+.caption {
+  font: var(--t-annot-label);
+  color: var(--text-faint);
+  padding-block: var(--sp-3);
+}
+
+/* ---------- The confirm ---------- */
+
+/* THREE ACTS ARE MODAL and the rest report on the status line with Undo. The
+   panel is a bottom sheet on the phone and a 420px card on a pointer surface,
+   over a scrim, entering on the settle curve. */
+.confirmScrim {
+  position: absolute;
+  inset: 0;
+  z-index: 88;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  background: var(--scrim);
+}
+@media (pointer: fine) {
+  .confirmScrim {
+    align-items: center;
+  }
+}
+/* The dismiss-on-outside-press target is a real button, laid under the panel,
+   so the same gesture is reachable from a keyboard. */
+.confirmDismiss {
+  position: absolute;
+  inset: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: none;
+  cursor: default;
+}
+/* A native `<dialog open>`, laid inside this app's own scrim rather than the
+   top layer, so its default margin and border are reset here. */
+.confirmPanel {
+  position: relative;
+  inline-size: 100%;
+  max-inline-size: 100%;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+  padding: var(--sp-4);
+  background: var(--bg-elev);
+  border: 1px solid var(--line-strong);
+  border-start-start-radius: var(--r-lg);
+  border-start-end-radius: var(--r-lg);
+  animation: kit-rise var(--dur-2) var(--ease-entry);
+}
+@media (pointer: fine) {
+  .confirmPanel {
+    inline-size: 420px;
+    border-radius: var(--r-lg);
+  }
+}
+.confirmTitle {
+  margin: 0;
+  font: var(--t-title);
+  letter-spacing: var(--t-title-tracking);
+  color: var(--text);
+}
+.confirmBody {
+  margin: 0;
+  font: var(--t-body);
+  color: var(--text-soft);
+}
+.confirmActions {
+  display: flex;
+  gap: var(--sp-2);
+  padding-block-start: var(--sp-2);
+}
+.confirmActions > * {
+  flex: 1;
+}
+
+/* ---------- Skeleton ---------- */
+
+/* The first read's placeholder rows stand where the set will be, at the set's
+   own rhythm, so nothing jumps when the rows arrive. */
+.skeleton {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+  padding-block: var(--sp-3);
+}

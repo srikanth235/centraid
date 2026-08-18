@@ -1,6 +1,6 @@
-# Design divergences — Docs and Photos
+# Design divergences — Docs, People and Photos
 
-This is the shared register of sanctioned per-app divergences from the v9 design briefs. It exists so a reviewer does not "fix" an honest withholding or a deliberate copy/control choice. Change a row here only when the current decision changes; implementation history belongs in the linked issue and receipt.
+This is the shared register of sanctioned per-app divergences from the design briefs. It exists so a reviewer does not "fix" an honest withholding or a deliberate copy/control choice. Change a row here only when the current decision changes; implementation history belongs in the linked issue and receipt.
 
 ## Docs — parity state and sanctioned withholdings
 
@@ -220,6 +220,29 @@ The current scope has no folder-tree rail, standalone Activity screen, duplicate
 
 - **The drive's write outcomes do not use the frame's status line.** `logic.ts` narrates trash / restore / rename / move through the kit's own `statusLine()` DOM host, while save-to-my-vault and share decisions go through `publishOutcome` to the frame's one line. Photos routes _everything_ through one sink (`apps/photos/outcomes.ts` → `setStatusSink` → `publishOutcome`). Docs wants the same module; `view-copy.ts` `actionStatus()` already carries the copy for it.
 - **`components/ShelfStrip.tsx` and `components/MoreSheet.tsx` are near-duplicates of Photos'.** They were left per-app deliberately: their CSS modules genuinely diverge (the mono-numeric token trio and the `.tabCount` Photos has no counts for; Docs' `meta`/`footer` rows against Photos' bare `count`; and the strip's inline padding, where Docs insets by `calc(--content-margin - --sp-3)` so the first tab's LABEL lands on the margin the rows below align to, while Photos still insets by the margin itself and pushes its first label 12px right of everything under it), and the repo's shared-component pattern is one shared component with one shared CSS module (`apps/_shared/SearchScaffold.tsx`). Merging them changes rendered output on one surface or the other and needs the gallery baselines regenerated — a separate PR, not a drive-by.
+
+## People — v12 parity state and sanctioned withholdings
+
+People is rebuilt to the Binding Layer **v12** handoff ([#821](https://github.com/srikanth235/centraid/issues/821)) on the inline desktop/web surface. One row recipe and one section recipe (`apps/people/components/Shared.tsx` + `shared.module.css`) draw every screen; nothing below introduces a token. The mobile seat stays a wall under the [#819 holdback ruling](decisions.md#surfaces-held-back-for-a-design-handoff).
+
+**Withheld, and why.** The handoff's defining feature — the vault link — is drawn nowhere, because no People query returns a vault link or a share receipt, and a design handoff redraws screens rather than redesigning a vault contract. Same rule as Docs' People filter axis: a mark that silently states a fact the projection cannot read is worse than no mark. What that removes, as one set:
+
+| Withheld | Handoff site | Why |
+| --- | --- | --- |
+| The avatar link ring (solid/dashed) | every avatar | A ring asserts linked-or-not; the contract holds neither fact. |
+| `Linked` / `Unlinked` filter chips, the `Link` row verb, vault copy on the row's second line | roster rows | Same missing fact. The chips are `All · ★ · Overdue`; the second line is the role. |
+| The Share sheet and the `Share` commit | person screen, §6 | Nothing supplies share targets or receipts on this contract. `Log` is the primary commit, `Edit` the secondary. |
+| The Vault link screen (§7), vault tag pills, the vault composer, the `Revoke` confirm | person, edit | Nothing to link, tag, compose, or revoke. Two modal confirms remain: Trash and Merge. |
+| The Touch screen's `Vaults` / `To link` tiles | §2 count tiles | Replaced by contract-honest `People · Reconnect · Upcoming · Starred`, `--net` on Reconnect/Upcoming above zero — the dashboard query's own counts. |
+
+**Excluded by the handoff itself, and kept unrendered**: lists, journal, tasks, gifts, debts, typed relationships, edit history. The queries return this data and the handlers stay agent-reachable (named `WEB_EXCEPTIONS` in `src/handler-reachability.test.ts`); the handoff bans placeholders for them and none are drawn.
+
+**Two departures inside the drawn set:**
+
+- **No `Never` cadence chip.** The handoff offers `Never · 7 · 14 · 30 · 90`; the contract types `cadence_days` as an integer with a minimum of 1 on both `add-person` and `set-cadence`, so "never" is not a value this contract can hold and a chip that wrote a stand-in number would lie. The chips are `7 · 14 · 30 · 90`.
+- **Overdue is `daysSince − cadence ≥ 0`**, the dashboard query's own arithmetic, not the handoff's strict `>` — the roster and Touch must not disagree by one day, every day.
+
+**Undo is offered only where a true reverse write exists** — star↔unstar, trash→restore, edit-person back, set-cadence back. The handoff's "every non-destructive act reports with Undo" assumes a prototype whose undo is a state patch; over a real contract, an act with no reverse write (log a touch, add a note or date, toggle a reminder, remove a channel, merge) reports its outcome on the status line and stops. A fake Undo that could not restore the row is the defect this register exists to prevent.
 
 ## Photos — sanctioned design divergences
 
