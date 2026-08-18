@@ -47,6 +47,15 @@ keeps the Preview article assertions and now also emits
 `CHANGELOG.md` Unreleased/Fixed names the member-visible reading sheet and
 the CI repair.
 
+**Desktop e2e locators.** #819 unmounted the frame App-settings gear and
+made Settings a modal whose h1 is always "Settings".
+`apps/desktop/tests/e2e/delete-app.spec.ts` and
+`apps/desktop/tests/e2e/onboarding-home.spec.ts` pin the missing gear
+(eight cases, floor unchanged).
+`apps/desktop/tests/e2e/settings-enrichment.spec.ts` expects the shipped
+"Declined · built-in engine only" copy.
+`apps/desktop/tests/e2e/settings-gateways.spec.ts` finds the Agents h2.
+
 ## User impact
 
 Opening a text document in Docs shows the file title on the reading paper
@@ -60,7 +69,7 @@ Evidence: `artifacts/e2e/ui-impact/issue-822-docs-drive.png`, emitted by
 
 ## Out of scope
 
-- `desktop-e2e` `pdfjs-dist` extract flake (retry on the landed SHA).
+- Restoring the v11-unmounted App-settings gear.
 - Nightly / scheduled workflows.
 
 ## Verification

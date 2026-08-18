@@ -197,11 +197,12 @@ test("12.4 — the Agents (providers) settings page renders", async () => {
       .getByTestId("settings-nav")
       .getByRole("button", { name: "Agents" })
       .click();
-    // Scoped to the settings surface: it is an overlay now (#634), so the
-    // page underneath keeps its own <h1> mounted behind the dialog.
+    // The modal's h1 is always "Settings"; the selected page is the h2.
     await expect(
-      page.getByTestId("settings-dialog").getByRole("heading", { level: 1 })
-    ).toHaveText("Agents");
+      page
+        .getByTestId("settings-dialog")
+        .getByRole("heading", { name: "Agents" })
+    ).toBeVisible();
     // Realigned: the exclusive "active agent" switch no longer exists. Per
     // SettingsHarnessesScreen.tsx:103-113 the exclusive radio was retired by
     // per-subsystem harnesses and became the *default* lane of the Routing
