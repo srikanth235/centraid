@@ -58,7 +58,7 @@ Web's `TileMediaState` (`pending | bytes | gateway | failed`) is the **paint pip
 | **Notes** | Apple Notes | Folder hierarchy (not labels). Offline-first editing on every seat with background merge; mobile origin acts: quick capture, voice. |
 | **Agenda** | Google Calendar | Full replica on all seats; offline read + queued writes; notifications are a mobile-seat act. |
 | **Tasks** | Todoist / Apple Reminders | Same shape as Agenda: tiny payloads, all seats equal, write queue. |
-| **People** | Google Contacts | Full replica; mobile wants OS-contacts import and share-sheet in/out. Desktop/web draws the v12 screen ([#821](https://github.com/srikanth235/centraid/issues/821)); mobile is still a wall awaiting its rebuild. |
+| **People** | Google Contacts | Full replica; mobile wants OS-contacts import and share-sheet in/out. Every seat draws the v12 screens ([#821](https://github.com/srikanth235/centraid/issues/821)): desktop/web inline, mobile native over replica entity reads. |
 | **Locker** | 1Password | Biometric unlock + OS autofill on mobile. **Disabled on the PWA seat for now** — a shared browser is the risky seat; revisit post-v0 with a re-auth-per-open design. |
 | **Tally** | Splitwise | Shared expense splitting: multi-party balances ("who owes whom"), naturally at home in a shared/household vault. Record-only; mobile origin act: receipt photo (byte-bearing only at that edge). |
 

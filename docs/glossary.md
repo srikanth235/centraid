@@ -83,7 +83,7 @@ Schema names follow the same one-axis rule: **a table never repeats its schema n
 | --- | --- |
 | **desktop** | Electron host; controls the detached local gateway by default and exposes an in-process test path; thin React renderer. `apps/desktop` |
 | **web / PWA** | Installable Vite client; it does not host a gateway, and connects through a gateway-served origin or ticket-only Iroh/WASM. `apps/web` |
-| **mobile** | Expo client; HTTP/tunnel to a gateway; native Photos/Agenda over replica. Docs and People are walls awaiting their v11 design handoffs. `apps/mobile` |
+| **mobile** | Expo client; HTTP/tunnel to a gateway; native Photos/Agenda/Docs/People over replica (Docs and People rebuilt to the v12 handoff, #821). `apps/mobile` |
 | **client package** | Shared React shell + browser-safe HTTP. `packages/client` |
 | **daemon** | Standalone `centraid-gateway` process under a `dataDir`. |
 

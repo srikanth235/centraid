@@ -64,7 +64,7 @@ const WEBVIEW_APPS = new Set(["notes"]);
 const AWAITING_HANDOFF: Readonly<Record<"web" | "mobile", readonly string[]>> =
   {
     web: [],
-    mobile: ["docs", "people"],
+    mobile: [],
   };
 
 const AWAITING_HANDOFF_RATIONALE =
@@ -84,7 +84,7 @@ const WEB_EXCEPTIONS: Readonly<Record<string, ReachabilityException>> = {
   "docs.action.edit": {
     kind: "agent-only",
     rationale:
-      "Docs holds, versions and files a document; it does not open one to type into. The v11 drive has no editor on any seat (docs/design-divergences.md), so this write is the assistant's alone.",
+      "The WEB drive holds, versions and files a document; it does not open one to type into (docs/design-divergences.md). The v12 phone build is different by design — the handoff's Part 2 draws an editor there, and the mobile scan finds this write itself.",
   },
   "locker.query.watchtower": {
     kind: "agent-only",
@@ -182,11 +182,17 @@ const WEB_EXCEPTIONS: Readonly<Record<string, ReachabilityException>> = {
 };
 
 // Native covers that DO render, and the queries their screens answer directly.
-// `docs` and `people` were here until those two native screens were removed
-// (AWAITING_HANDOFF above); their rows are gone rather than kept as a shopping
-// list, so this table never describes a screen that is not on the phone.
+// `docs` and `people` returned with their v12 phone rebuilds (#821). Neither
+// dispatches a NAMED query on the phone: both read consent-shaped replica
+// entities and re-state the web query emitters' joins in their own projection
+// modules (`docs-projection.ts`, `people-model.ts`), so the rows below name
+// the queries whose ANSWERS those screens draw — the read is native, the
+// contract is the same. Docs' `history` is the version chain the replica's
+// `core.link` revises edges carry (`docs-versions.ts`).
 const NATIVE_QUERY_UI: Readonly<Record<string, readonly string[]>> = {
   agenda: ["upcoming", "parties", "search"],
+  docs: ["drive", "search", "history"],
+  people: ["people", "person", "dashboard", "search", "trash"],
   locker: ["auth", "items", "item"],
   photos: [
     "library",
@@ -207,6 +213,7 @@ const NATIVE_QUERY_UI: Readonly<Record<string, readonly string[]>> = {
 
 const NATIVE_FALLBACK: Readonly<Record<string, readonly string[]>> = {
   agenda: ["action.attach", "action.detach"],
+  docs: ["action.tag", "action.untag", "action.replace", "query.activity"],
   locker: [
     "action.add-item",
     "action.edit-item",
@@ -246,10 +253,6 @@ const NATIVE_FALLBACK: Readonly<Record<string, readonly string[]>> = {
   ],
 };
 
-// `docs` and `people` had entries here too - the actions their native covers
-// deferred to the assistant. Both apps are now excused wholesale by
-// AWAITING_HANDOFF, and a per-action list beside that would be two records of
-// one fact, the finer one already false.
 const MOBILE_EXCEPTION_RATIONALE =
   "The native cover links to the always-available Assistant surface, which invokes this manifested handler with the same consent and receipt contract.";
 

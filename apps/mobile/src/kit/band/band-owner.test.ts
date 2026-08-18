@@ -114,8 +114,13 @@ describe("the band-owner latch", () => {
   it("names the claiming apps the settings list offers", () => {
     // A limitation stated rather than hidden: mobile has no channel a frame
     // could ask "who has claimed", so the roster is hand-maintained. This
-    // fails the moment it drifts from one row without someone deciding to.
-    expect(BAND_CLAIMING_APPS.map((app) => app.id)).toStrictEqual(["photos"]);
+    // fails the moment it drifts without someone deciding to — Docs and
+    // People joined when their v12 phone builds landed their bands (#821).
+    expect(BAND_CLAIMING_APPS.map((app) => app.id)).toStrictEqual([
+      "photos",
+      "docs",
+      "people",
+    ]);
     for (const app of BAND_CLAIMING_APPS) {
       expect(app.name.length).toBeGreaterThan(0);
       expect(bandOwnerKey(app.id)).toContain("shell.bandOwner.");
