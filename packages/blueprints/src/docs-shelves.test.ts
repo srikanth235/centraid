@@ -50,7 +50,6 @@ const shelves = (await import(app("shelves.ts"))) as {
   FOLDERS: string;
   RECENT: string;
   STARRED: string;
-  DUE: string;
   TRASH: string;
   SEARCH: string;
   STORAGE: string;
@@ -164,7 +163,6 @@ describe("docs shelves", () => {
       "Folders",
       "Recently changed",
       "Starred",
-      "Coming due",
       "Trash",
     ]);
     // All is the app's own root, with no segment: `docs` IS All.
@@ -187,7 +185,6 @@ describe("docs shelves", () => {
       shelves.FOLDERS,
       shelves.RECENT,
       shelves.STARRED,
-      shelves.DUE,
       shelves.TRASH,
       shelves.SEARCH,
       shelves.STORAGE,
@@ -206,18 +203,20 @@ describe("docs shelves", () => {
     expect(shelves.shelfFromSegment("nonsense")).toBeNull();
   });
 
-  it("claims four band destinations plus More", () => {
+  it("claims its band destinations plus More", () => {
+    // Three, not four. The frame enforces a cap and no floor; Coming due was
+    // removed and no tab was promoted to fill the hole, because a band tab is
+    // a claim about where a member goes most.
     expect(shelves.BAND_DESTINATIONS.map((d) => d.label)).toStrictEqual([
       "All",
       "Folders",
-      "Coming due",
       "Search",
     ]);
   });
 
   it("lights no band tab for a shelf that has none", () => {
     expect(shelves.bandActiveId(null)).toBe("list");
-    expect(shelves.bandActiveId(shelves.DUE)).toBe("due");
+    expect(shelves.bandActiveId(shelves.FOLDERS)).toBe("folders");
     // Trash is a strip tab and a More row — never a band tab, so the band
     // lights nothing rather than the wrong thing.
     expect(shelves.bandActiveId(shelves.TRASH)).toBeUndefined();
@@ -238,8 +237,11 @@ describe("docs shelves", () => {
     expect(shelves.showsDrive(shelves.TRASH)).toBe(true);
     expect(shelves.showsDrive(shelves.folderShelf("f7"))).toBe(true);
     expect(shelves.showsDrive(shelves.FOLDERS)).toBe(false);
-    expect(shelves.showsDrive(shelves.DUE)).toBe(false);
-    expect(shelves.showsViewToggle(shelves.FOLDERS)).toBe(false);
+    expect(shelves.showsDrive(shelves.STORAGE)).toBe(false);
+    // The toggle is WIDER than the drive: Folders draws a set too, and both
+    // arrangements say something true about it.
+    expect(shelves.showsViewToggle(shelves.FOLDERS)).toBe(true);
+    expect(shelves.showsViewToggle(shelves.STORAGE)).toBe(false);
     // Trash keeps selection: the bar's trash swap (Restore) is what makes it
     // work, exactly as it does in Photos.
     expect(shelves.allowsSelection(shelves.TRASH)).toBe(true);
@@ -261,7 +263,7 @@ describe("docs view copy", () => {
       unit: "documents",
     });
     expect(copy.shelfCopy(shelves.STARRED).title).toBe("Starred");
-    expect(copy.shelfCopy(shelves.DUE).unit).toBe("obligations");
+    expect(copy.shelfCopy(shelves.SEARCH).unit).toBe("results");
     expect(copy.shelfCopy(shelves.folderShelf("f7"), "Property").title).toBe(
       "Property"
     );
@@ -329,7 +331,6 @@ describe("docs view copy", () => {
   it("keeps each shelf empty on its own terms", () => {
     expect(copy.emptyCopy(shelves.TRASH).title).toBe("Trash is empty");
     expect(copy.emptyCopy(shelves.STARRED).body).toContain("Photos");
-    expect(copy.emptyCopy(shelves.DUE).body).toContain("switched off");
   });
 
   describe("the row state slot", () => {
@@ -404,6 +405,9 @@ describe("docs view copy", () => {
     expect(copy.MORE_FOOTER).toBe(
       "Everything Docs can show — the vault mark goes back to the rest of Centraid."
     );
+    // The order is the sheet's own reading order: the three shelves the strip
+    // dropped, then the two ways a document arrives, then the four consent
+    // destinations, then the one withholding, then Storage.
     expect(copy.MORE_ROWS.map((r) => r.label)).toStrictEqual([
       "Recently changed",
       "Starred",
@@ -411,6 +415,9 @@ describe("docs view copy", () => {
       "Add a document",
       "Scan a document",
       "What Docs may read",
+      "Proposed filing",
+      "Who your documents name",
+      "Docs and Locker",
       "Kind and sort",
       "Storage",
     ]);
@@ -547,10 +554,10 @@ describe("docs frame contribution", () => {
       frame.barCount({ shelf: shelves.FOLDERS, count: 4, compact: false })
     ).toBe("4 folders");
     expect(
-      frame.barCount({ shelf: shelves.DUE, count: 3, compact: false })
-    ).toBe("3 obligations");
+      frame.barCount({ shelf: shelves.SEARCH, count: 3, compact: false })
+    ).toBe("3 results");
     expect(
-      frame.barCount({ shelf: shelves.DUE, count: null, compact: false })
+      frame.barCount({ shelf: shelves.SEARCH, count: null, compact: false })
     ).toBeUndefined();
   });
 

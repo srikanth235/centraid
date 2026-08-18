@@ -1,0 +1,91 @@
+/* The pick row (binding layer v11). Hairline above, never a box: these stack
+   under one section head and a border per subject would draw a card around
+   every line of one list. */
+
+.shell {
+  border-block-start: 1px solid var(--line);
+  container: pick-row / inline-size;
+}
+
+/* A rule directly under a section head is a second head. */
+.shell[data-first="true"] {
+  border-block-start: 0;
+}
+
+.row {
+  align-items: center;
+  display: flex;
+  gap: var(--sp-4);
+  min-block-size: var(--h-row);
+  padding-block: var(--sp-2);
+}
+
+.text {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: var(--sp-hair);
+  min-inline-size: 0;
+}
+
+.label {
+  color: var(--text);
+  font: var(--t-body);
+  text-wrap: pretty;
+}
+
+.caption {
+  color: var(--text-faint);
+  font-size: var(--t-control-size);
+  line-height: 1.45;
+  text-wrap: pretty;
+}
+
+/* The one chromatic ink, on the caption only: an agent this gateway cannot
+   reach is a statement about the row, not a recolouring of its name. */
+.caption[data-net="true"] {
+  color: var(--net);
+}
+
+.picks {
+  align-items: center;
+  display: flex;
+  flex: none;
+  flex-wrap: wrap;
+  gap: var(--sp-2);
+  justify-content: flex-end;
+  /* Past this the picks wrap onto a second line inside their own column
+     rather than shrinking into "Use default · Code…". */
+  max-inline-size: 520px;
+  min-inline-size: 0;
+}
+
+.action {
+  flex: none;
+  white-space: nowrap;
+}
+
+/* The row's own expansion — the failover ladder, an engine's model and level.
+   Inside the row's block, above its hairline, so the disclosure and what it
+   discloses read as one entry. */
+.detail {
+  padding-block-end: var(--sp-3);
+}
+
+/* Narrow pane: the picks take their own line under the name instead of
+   squeezing it to two words. Declared after the rules it overrides — a
+   container query adds no specificity. */
+@container pick-row (max-width: 560px) {
+  .row {
+    align-items: flex-start;
+    flex-wrap: wrap;
+    row-gap: var(--sp-2);
+  }
+  .text {
+    flex-basis: 100%;
+  }
+  .picks {
+    justify-content: flex-start;
+    max-inline-size: none;
+  }
+}

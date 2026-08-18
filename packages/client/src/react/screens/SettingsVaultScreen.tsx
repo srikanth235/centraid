@@ -5,8 +5,11 @@ import type { IconName } from "@centraid/design";
 
 import type { ActiveVaultData } from "../shell/routes/settingsAccountData.js";
 import { PROFILE_COLORS, PROFILE_ICONS } from "../shell/routes/VaultModal.js";
-import { cx } from "../ui/cx.js";
 import { Icon } from "../ui/index.js";
+import PanelBlock from "../ui/PanelBlock.js";
+import RowsBlock from "../ui/RowsBlock.js";
+import type { RowDef } from "../ui/RowsBlock.js";
+import SectionBlock from "../ui/SectionBlock.js";
 
 // Reuses VaultModal's field vocabulary (`.prof*`) directly — same precedent
 // GatewayModal.tsx / ConnectFlowModal.tsx / RenameGatewayModal.tsx set for
@@ -117,6 +120,8 @@ export default function SettingsVaultScreen({
   // them on the next render.
   const [offlineOverride, setOfflineOverride] = useState<boolean | null>(null);
   const [offlineBusy, setOfflineBusy] = useState(false);
+  /** The confirm that stands between the switch and an erased local copy. */
+  const [erasing, setErasing] = useState(false);
   const offlineOn = offlineOverride ?? offlineCopy === true;
   const flipOffline = (next: boolean): void => {
     if (!onOfflineCopy) return;
@@ -195,6 +200,35 @@ export default function SettingsVaultScreen({
   /** Blur or Enter on a text field: the point at which typing is finished. A
    *  vault with no name is not a state to write, so an emptied field is put
    *  back rather than saved. */
+  // LEAVING — the two acts that end this device's relationship with the vault,
+  // or the vault. Both keep the confirms the route already owns: disconnect
+  // names every sibling vault on the connection, erase asks for the name typed
+  // back. Erase is absent for a last vault rather than offered and refused.
+  const leaving: RowDef[] = [
+    ...(onDisconnect
+      ? [
+          {
+            id: "disconnect",
+            title: "Disconnect from this device",
+            sub: "Connection-wide · the vault stays on its host",
+            dangerous: true,
+            action: { label: "Disconnect", onClick: onDisconnect },
+          } satisfies RowDef,
+        ]
+      : []),
+    ...(onDelete
+      ? [
+          {
+            id: "erase",
+            title: "Erase this vault",
+            sub: "Everywhere · never for your last vault",
+            dangerous: true,
+            action: { label: "Erase", onClick: onDelete },
+          } satisfies RowDef,
+        ]
+      : []),
+  ];
+
   const commitText = (): void => {
     if (name.trim().length === 0) {
       setName(sent.name);
@@ -207,11 +241,8 @@ export default function SettingsVaultScreen({
 
   return (
     <div className={drawerGroupCss.group}>
+      <SectionBlock label="This vault" meta="the active one" />
       <div className={drawerGroupCss.groupBody}>
-        <div className={controlsCss.note}>
-          This vault holds its own apps, conversations, and data.
-        </div>
-
         <div className={vaultModalStyles.profModalPreview}>
           <span>
             <Avatar icon={icon} color={color} size={46} />
@@ -308,74 +339,69 @@ export default function SettingsVaultScreen({
         </label>
       </div>
 
-      {onOfflineCopy || onDisconnect ? (
-        <div className={drawerGroupCss.group}>
-          <div className={drawerGroupCss.groupLabel}>On this device</div>
-          <div className={drawerGroupCss.groupBody}>
-            {onOfflineCopy ? (
-              <label className={styles.offlineRow} data-on={offlineOn}>
-                <input
-                  type="checkbox"
-                  aria-label="Keep an offline copy"
-                  checked={offlineOn}
-                  disabled={offlineBusy}
-                  onChange={(event) => flipOffline(event.target.checked)}
-                />
-                <span>
-                  <strong>Keep an offline copy</strong>
-                  <small>
-                    An encrypted replica, queued changes, and cached previews
-                    stay on this device, so it keeps working on a bad
-                    connection. Turning this off erases them here and leaves
-                    only the pairing.
-                  </small>
-                </span>
-              </label>
-            ) : null}
-            {onDisconnect ? (
-              <>
-                <div className={controlsCss.note}>
-                  Stop reaching this vault from this device — it stays intact on
-                  its host.
-                </div>
-                <button
-                  type="button"
-                  className={cx(
-                    controlsCss.chip,
-                    vaultModalStyles.profModalDelete
-                  )}
-                  onClick={onDisconnect}
-                >
-                  <Icon name="Plug" size={12} />
-                  Disconnect from this device
-                </button>
-              </>
-            ) : null}
-          </div>
-        </div>
+      {onOfflineCopy ? (
+        <>
+          <SectionBlock label="Copies" meta="on this browser" />
+          {/* TURNING IT OFF ERASES SOMETHING, so it asks first, in the words of
+              what goes. The switch itself never optimistically flips: it shows
+              what the device is actually in, and `flipOffline` resolves with
+              the value that took effect. */}
+          {erasing ? (
+            <PanelBlock
+              wide
+              tone="net"
+              eyebrow="Stop keeping a copy"
+              title="The local copy is erased"
+              body="The encrypted replica, any queued changes and the cached previews go. The pairing stays."
+              action={{
+                label: "Erase it",
+                dangerous: true,
+                onClick: () => {
+                  setErasing(false);
+                  flipOffline(false);
+                },
+              }}
+              action2={{ label: "Keep it", onClick: () => setErasing(false) }}
+            />
+          ) : null}
+          <label className={styles.offlineRow} data-on={offlineOn}>
+            <input
+              type="checkbox"
+              aria-label="Keep an offline copy"
+              checked={offlineOn}
+              disabled={offlineBusy}
+              onChange={(event) => {
+                if (event.target.checked) flipOffline(true);
+                else setErasing(true);
+              }}
+            />
+            <span>
+              <strong>Keep an offline copy</strong>
+              <small>
+                {offlineOn
+                  ? "Encrypted replica, queued changes, cached previews."
+                  : "Nothing is held locally."}
+              </small>
+            </span>
+          </label>
+        </>
       ) : null}
 
-      {onDelete ? (
-        <div className={drawerGroupCss.group}>
-          <div className={drawerGroupCss.groupLabel}>Danger zone</div>
-          <div className={drawerGroupCss.groupBody}>
-            <div className={controlsCss.note}>
-              Erase this vault and everything in it, everywhere — not just on
-              this device. This can’t be undone.
-            </div>
-            <button
-              type="button"
-              className={cx(controlsCss.chip, vaultModalStyles.profModalDelete)}
-              onClick={onDelete}
-            >
-              <Icon name="Trash" size={12} />
-              Erase this vault
-            </button>
-          </div>
-        </div>
-      ) : (
+      {leaving.length > 0 ? (
+        <>
+          <SectionBlock
+            label="Leaving"
+            meta={leaving.length > 1 ? "both irreversible" : "irreversible"}
+          />
+          <RowsBlock ariaLabel="Leaving" rows={leaving} />
+        </>
+      ) : null}
+      {onDelete ? null : (
+        // Never offered for the last vault — and said, rather than silently
+        // absent, because a member looking for it needs to know why it is not
+        // there.
         <div className={controlsCss.note}>
-          This is your only vault here, so it can’t be deleted from this page.
+          This is your only vault here, so it cannot be erased from this page.
         </div>
       )}
     </div>

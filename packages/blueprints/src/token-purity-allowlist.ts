@@ -53,12 +53,6 @@ export const TOKEN_PURITY_ALLOWLIST: Readonly<
     fontFamily: 0,
     customProps: ["--app-hue", "--app-identity"],
   },
-  "docs/components/QuickLook.module.css": {
-    hex: 0,
-    functional: 1,
-    fontFamily: 0,
-    customProps: [],
-  },
   "people/Chrome.module.css": {
     hex: 0,
     functional: 0,

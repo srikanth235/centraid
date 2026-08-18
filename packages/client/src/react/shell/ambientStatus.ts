@@ -142,6 +142,34 @@ export function ambientSignalFor(input: AmbientSignalInput): AmbientSignal {
   };
 }
 
+/**
+ * The reachable sentence, and the stamp that says how fresh it is.
+ *
+ * "Synced" alone is a claim with no age on it: a line that read the same at
+ * the moment of the last probe and ten minutes after the machine went to
+ * sleep. The stamp is rendered by `StatusLine` rather than folded in here,
+ * because the age changes every second and the shell root deliberately does
+ * not re-render on the heartbeat (issue #659) — but the WORDING stays in this
+ * file, which is the one place the line's sentences are written.
+ */
+export const SYNCED = "Synced";
+
+export function syncedStamp(
+  lastCheckAt: number | undefined,
+  now: number
+): string | undefined {
+  if (lastCheckAt === undefined) return undefined;
+  const seconds = Math.max(0, Math.round((now - lastCheckAt) / 1000));
+  if (seconds < 5) return "just now";
+  if (seconds < 60) return `${seconds}s ago`;
+  const minutes = Math.floor(seconds / 60);
+  if (minutes < 60) return `${minutes} min ago`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `${hours}h ago`;
+  const days = Math.floor(hours / 24);
+  return `${days} ${days === 1 ? "day" : "days"} ago`;
+}
+
 export interface AmbientStatusInput {
   /** The heartbeat monitor's verdict; `undefined` before the first read. */
   gatewayStatus: "unknown" | "up" | "down" | undefined;
@@ -163,7 +191,7 @@ export function ambientStatusFor(input: AmbientStatusInput): string {
   if (blockingCount > 0)
     return `${blockingCount} ${blockingCount === 1 ? "decision" : "decisions"} waiting on you`;
   if (hasUnreadNotices) return "New notices to read";
-  if (gatewayStatus === "up") return "Synced";
+  if (gatewayStatus === "up") return SYNCED;
   // The same sentence the offline banner and a refused commit control carry —
   // one condition, one explanation.
   if (gatewayStatus === "down") return OFFLINE_COMMIT_REASON;

@@ -20,20 +20,11 @@ import { SAVED_TO_MY_VAULT } from "../../_shared/shared-copy.ts";
 import { ShareSheet } from "../../_shared/ShareSheet.tsx";
 import { RAIL_NOTES, RAIL_TABS } from "../document-copy.ts";
 import type { RailTabId } from "../document-copy.ts";
-import {
-  custodyMeta,
-  extOf,
-  fmtBytes,
-  isImage,
-  isVideo,
-  isTextEditable,
-  tintBg,
-  typeMeta,
-} from "../format.ts";
-import { I, RENAME_ICON } from "../icons.ts";
+import { custodyMeta, extOf, fmtBytes, tintBg, typeMeta } from "../format.ts";
+import { I, KIND_ICONS_LG } from "../icons.ts";
 import type { CustodyTone, DriveDoc, VersionEntry } from "../types.ts";
 import { FactsTab, NamesTab, PropsTab } from "./DetailsTabs.tsx";
-import { Icon } from "./Shared.tsx";
+import { ActionBtn, Icon } from "./Shared.tsx";
 
 import styles from "./Details.module.css";
 import shared from "./shared.module.css";
@@ -61,13 +52,13 @@ function ReplaceButton({
   const inputRef = useRef<HTMLInputElement>(null);
   return (
     <>
-      <button
-        type="button"
-        className={`kit-btn quiet ${shared.detailBtn}`}
+      <ActionBtn
+        icon="replace"
+        label="Replace file…"
+        tone="quiet"
+        className={shared.detailBtn!}
         onClick={() => inputRef.current?.click()}
-      >
-        Replace file…
-      </button>
+      />
       {/* Opened programmatically by the button above; `hidden` already keeps it
           out of the a11y tree, so it carries no aria-hidden on top of that. */}
       <input
@@ -87,6 +78,7 @@ function ReplaceButton({
 
 export function Details({
   doc,
+  docked,
   folderName,
   onClose,
   onOpenQuick,
@@ -94,7 +86,6 @@ export function Details({
   onMove,
   onTrash,
   onRestore,
-  onEdit,
   onReplace,
   loadHistory,
   onOpenVersions,
@@ -102,6 +93,13 @@ export function Details({
   onRemoveTag,
 }: {
   doc: DriveDoc;
+  /** DOCKED, not drawn over the drive. At a desk the rail is a column beside
+   *  the set (Chrome.tsx's content row) and the set stays reachable behind
+   *  no scrim at all — which is the only way §8's own closing sentence works:
+   *  the rail follows the selection, so the selection has to be clickable
+   *  while it is open. The compact form factor keeps the modal drawer, where
+   *  a 308px column beside a 390px set is not a column. */
+  docked: boolean;
   folderName: (id: string | null | undefined) => string;
   onClose: () => void;
   onOpenQuick: (id: string) => void;
@@ -109,7 +107,6 @@ export function Details({
   onMove: (anchor: HTMLElement, docs: DriveDoc[]) => void;
   onTrash: (doc: DriveDoc) => void;
   onRestore: (doc: DriveDoc) => void;
-  onEdit: (doc: DriveDoc) => void;
   onReplace: (doc: DriveDoc, file: File) => void;
   loadHistory: (
     documentId: string
@@ -120,7 +117,7 @@ export function Details({
   onAddTag: (doc: DriveDoc, label: string) => void;
   onRemoveTag: (doc: DriveDoc, tagId: string) => void;
 }) {
-  const m = typeMeta(doc.media_type);
+  const m = typeMeta(doc.media_type, doc.title);
   const trashed = doc.trashed;
   const [tab, setTab] = useState<RailTabId>("props");
   // Documents use the same ceremony-free commons sheet as every container.
@@ -180,10 +177,221 @@ export function Details({
   // nothing rather than a guess.
   const custody = custodyMeta(doc.custody_state);
 
-  return (
+  // ONE BODY, TWO HOUSINGS. The rail's contents do not change with the form
+  // factor — the same head, tabs, facts and verbs — so the fork is the box
+  // around them and nothing else. Docked it is a plain landmark in the
+  // content row; as a drawer it is a modal dialog over a scrim, and only that
+  // form gets a backdrop, because only that form takes the screen.
+  const body = (
+    <>
+      <div className={styles.detailsHead}>
+        <span className={styles.lbl}>Details</span>
+        <button
+          type="button"
+          className={`kit-icon-btn ${styles.railClose}`}
+          aria-label="Close details"
+          onClick={onClose}
+        >
+          <Icon svg={I.closeSm!} />
+        </button>
+      </div>
+      <div className={styles.detailsBody}>
+        <div className={styles.hero} style={{ background: tintBg(m.cv, 12) }}>
+          {/* The kind glyph, the same one the rows and the cards wear, for
+                every kind including a picture — never a thumbnail (the rail
+                is a fact sheet, not a viewer; Open puts the document on the
+                stage), and never `DOC` / `PDF` / `XLS`, which is the filename
+                extension wearing a badge two lines above where the rail
+                prints it. */}
+          <span className={styles.heroGlyph}>
+            <Icon svg={KIND_ICONS_LG[m.glyph]} />
+          </span>
+        </div>
+        <div className={styles.detailName}>{doc.title ?? "Untitled"}</div>
+        <div className={styles.detailExt}>
+          {extOf(doc)} · {fmtBytes(doc.byte_size)}
+        </div>
+        {custody ? (
+          <div className={styles.detailCustody}>
+            <span
+              className={`kit-chip ${styles.custodyChip} ${CUSTODY_CHIP_TONE[custody.tone]}`}
+              title="Backup status"
+            >
+              {custody.label}
+            </span>
+          </div>
+        ) : null}
+        <div className={shared.detailActions}>
+          {/* Exactly one primary in this sheet (DESIGN.md: at most one
+                filled ink element per view) — opening the document is the
+                drawer's reason to exist; everything beside it is `quiet`,
+                which has no fill, so the six actions stop reading as six
+                equals. */}
+          <ActionBtn
+            icon="open"
+            label="Open"
+            tone="primary"
+            className={shared.detailBtn!}
+            onClick={() => onOpenQuick(doc.document_id)}
+          />
+          <ActionBtn
+            icon="download"
+            label="Download"
+            tone="quiet"
+            className={shared.detailBtn!}
+            href={doc.content_uri ?? undefined}
+            extra={{ download: doc.title ?? "file" }}
+          />
+          {/* THE STAR LOSES ITS ★ AND KEEPS ITS GLYPH. It used to draw a
+                filled/hollow star character beside the word while every other
+                verb in this rail drew nothing — one region, two vocabularies.
+                The line glyph is the same shape the row menu, the selection bar
+                and the stage give this verb; whether it is ON is `aria-pressed`
+                and the word, which is where a state belongs. */}
+          {trashed ? null : (
+            <ActionBtn
+              icon="star"
+              label={doc.starred ? "Starred" : "Star"}
+              tone="quiet"
+              className={shared.detailBtn!}
+              onClick={() => onToggleStar(doc)}
+              extra={{ "aria-pressed": Boolean(doc.starred) }}
+            />
+          )}
+          {/* NO IN-PLACE EDIT, for any kind. Docs holds, versions and files
+                a document; it does not open one to type into. A new version
+                arrives as a whole FILE through Replace, which is the same
+                door an upload comes through and the same version chain
+                History reads — one write path instead of two. */}
+          {trashed ? null : <ReplaceButton doc={doc} onReplace={onReplace} />}
+        </div>
+        {trashed ? null : (
+          <>
+            {commonsResident ? (
+              <ActionBtn
+                icon="save"
+                label="Save to my vault"
+                tone="quiet"
+                className={shared.detailBtn!}
+                onClick={() => void saveToMyVault()}
+              />
+            ) : null}
+            <ActionBtn
+              icon="share"
+              label="Share document"
+              tone="quiet"
+              className={shared.detailBtn!}
+              onClick={() => setShareOpen(true)}
+            />
+            <ShareSheet
+              open={shareOpen}
+              onClose={() => setShareOpen(false)}
+              sourceScopeId={mountedScopes()[0]?.id ?? ""}
+              scopes={mountedScopes()}
+              itemType="core.document"
+              itemIds={[doc.document_id]}
+              appLabel="Docs"
+              onDone={(outcome) => setShareStatus(outcome.message)}
+            />
+            {shareStatus ? (
+              <output className={styles.shareStatus} aria-live="polite">
+                {shareStatus}
+              </output>
+            ) : null}
+          </>
+        )}
+        {/* §8's tab strip. Three tabs, one underline — the same 2px ink
+              bar the shelf strip uses, so "which of these am I looking at"
+              means the same thing everywhere in the app. */}
+        <div className={styles.tabs} role="tablist" aria-label="Details">
+          {RAIL_TABS.map((entry) => (
+            <button
+              key={entry.id}
+              type="button"
+              role="tab"
+              aria-selected={tab === entry.id}
+              className={styles.tab}
+              data-current={String(tab === entry.id)}
+              onClick={() => setTab(entry.id)}
+            >
+              {entry.label}
+            </button>
+          ))}
+        </div>
+        {tab === "props" ? (
+          <PropsTab
+            doc={doc}
+            folderName={folderName}
+            onAddTag={onAddTag}
+            onRemoveTag={onRemoveTag}
+          />
+        ) : tab === "facts" ? (
+          <FactsTab doc={doc} loadHistory={loadHistory} />
+        ) : (
+          <NamesTab doc={doc} />
+        )}
+        <ActionBtn
+          icon="history"
+          label="Version history"
+          tone="quiet"
+          className={shared.detailBtn!}
+          onClick={() => onOpenVersions(doc.document_id)}
+        />
+        {/* §8's own closing sentence: the rail is about ONE row, and it
+              follows the selection rather than pinning itself to a document
+              the member has moved on from. */}
+        <p className={styles.railFoot}>{RAIL_NOTES.footer}</p>
+      </div>
+      <div className={styles.detailsFoot}>
+        {trashed ? (
+          <ActionBtn
+            icon="restore"
+            label="Restore"
+            className={shared.detailBtn!}
+            onClick={() => onRestore(doc)}
+          />
+        ) : (
+          <>
+            <ActionBtn
+              icon="move"
+              label="Move"
+              className={shared.detailBtn!}
+              onClick={(e) => onMove(e.currentTarget, [doc])}
+            />
+            <ActionBtn
+              icon="trash"
+              label="Trash"
+              tone="destructive danger"
+              className={shared.detailBtn!}
+              onClick={(e) => {
+                if (
+                  !armConfirm(e.currentTarget as HTMLElement, {
+                    armedLabel: "Trash — sure?",
+                  })
+                )
+                  return;
+                onTrash(doc);
+              }}
+            />
+          </>
+        )}
+      </div>
+    </>
+  );
+
+  return docked ? (
+    // A LANDMARK, NOT A DIALOG. Docked, this takes no focus trap, no
+    // `aria-modal` and no backdrop: nothing behind it is inert, which is the
+    // point — the member is meant to keep picking rows while it is open.
+    // `<aside>` because it is content beside the set and about the set.
+    <aside className={styles.railDock} aria-label="Document details">
+      {body}
+    </aside>
+  ) : (
     <>
       {/* Dismiss-on-outside-click as a real button, so the same gesture has a
-          keyboard equivalent. */}
+          keyboard equivalent. Only the drawer has one: a docked column takes
+          nothing away, so there is nothing for an outside click to dismiss. */}
       <button
         type="button"
         className={`kit-plain-btn ${styles.detailsBackdrop}`}
@@ -196,207 +404,7 @@ export function Details({
         aria-modal="true"
         aria-label="Document details"
       >
-        <div className={styles.detailsHead}>
-          <span className={styles.lbl}>Details</span>
-          <button
-            type="button"
-            className="kit-icon-btn"
-            aria-label="Close details"
-            onClick={onClose}
-          >
-            <Icon svg={I.close!} />
-          </button>
-        </div>
-        <div className={styles.detailsBody}>
-          <div className={styles.hero} style={{ background: tintBg(m.cv, 12) }}>
-            {isImage(doc) ? (
-              <img src={doc.content_uri} alt="" />
-            ) : isVideo(doc) && doc.poster_uri ? (
-              <>
-                <img
-                  src={doc.poster_uri}
-                  alt=""
-                  onError={(e) => e.currentTarget.remove()}
-                />
-                <span className={shared.mediaPlay} aria-hidden="true">
-                  ▶
-                </span>
-              </>
-            ) : (
-              <span style={{ color: `var(${m.cv})` }}>{m.label}</span>
-            )}
-          </div>
-          <div className={styles.detailName}>{doc.title ?? "Untitled"}</div>
-          <div className={styles.detailExt}>
-            {extOf(doc)} · {fmtBytes(doc.byte_size)}
-          </div>
-          {custody ? (
-            <div className={styles.detailCustody}>
-              <span
-                className={`kit-chip ${styles.custodyChip} ${CUSTODY_CHIP_TONE[custody.tone]}`}
-                title="Backup status"
-              >
-                {custody.label}
-              </span>
-            </div>
-          ) : null}
-          <div className={shared.detailActions}>
-            {/* Exactly one primary in this sheet (DESIGN.md: at most one
-                filled ink element per view) — opening the document is the
-                drawer's reason to exist; everything beside it is `quiet`,
-                which has no fill, so the six actions stop reading as six
-                equals. */}
-            <button
-              type="button"
-              className={`kit-btn primary ${shared.detailBtn}`}
-              onClick={() => onOpenQuick(doc.document_id)}
-            >
-              Open
-            </button>
-            <a
-              className={`kit-btn quiet ${shared.detailBtn}`}
-              href={doc.content_uri}
-              download={doc.title ?? "file"}
-            >
-              Download
-            </a>
-            {trashed ? null : (
-              <button
-                type="button"
-                className={`kit-btn quiet ${shared.detailBtn}`}
-                aria-pressed={Boolean(doc.starred)}
-                onClick={() => onToggleStar(doc)}
-              >
-                <span aria-hidden="true">{doc.starred ? "★" : "☆"}</span>
-                {doc.starred ? "Starred" : "Star"}
-              </button>
-            )}
-            {trashed ? null : isTextEditable(doc) ? (
-              <button
-                type="button"
-                className={`kit-btn quiet ${shared.detailBtn}`}
-                onClick={() => onEdit(doc)}
-              >
-                <Icon svg={RENAME_ICON} />
-                Edit
-              </button>
-            ) : (
-              <ReplaceButton doc={doc} onReplace={onReplace} />
-            )}
-          </div>
-          {trashed ? null : (
-            <>
-              {commonsResident ? (
-                <button
-                  type="button"
-                  className={`kit-btn quiet ${shared.detailBtn}`}
-                  onClick={() => void saveToMyVault()}
-                >
-                  Save to my vault
-                </button>
-              ) : null}
-              <button
-                type="button"
-                className={`kit-btn quiet ${shared.detailBtn}`}
-                onClick={() => setShareOpen(true)}
-              >
-                Share document
-              </button>
-              <ShareSheet
-                open={shareOpen}
-                onClose={() => setShareOpen(false)}
-                sourceScopeId={mountedScopes()[0]?.id ?? ""}
-                scopes={mountedScopes()}
-                itemType="core.document"
-                itemIds={[doc.document_id]}
-                appLabel="Docs"
-                onDone={(outcome) => setShareStatus(outcome.message)}
-              />
-              {shareStatus ? (
-                <output className={styles.shareStatus} aria-live="polite">
-                  {shareStatus}
-                </output>
-              ) : null}
-            </>
-          )}
-          {/* §8's tab strip. Three tabs, one underline — the same 2px ink
-              bar the shelf strip uses, so "which of these am I looking at"
-              means the same thing everywhere in the app. */}
-          <div className={styles.tabs} role="tablist" aria-label="Details">
-            {RAIL_TABS.map((entry) => (
-              <button
-                key={entry.id}
-                type="button"
-                role="tab"
-                aria-selected={tab === entry.id}
-                className={styles.tab}
-                data-current={String(tab === entry.id)}
-                onClick={() => setTab(entry.id)}
-              >
-                {entry.label}
-              </button>
-            ))}
-          </div>
-          {tab === "props" ? (
-            <PropsTab
-              doc={doc}
-              folderName={folderName}
-              onAddTag={onAddTag}
-              onRemoveTag={onRemoveTag}
-            />
-          ) : tab === "facts" ? (
-            <FactsTab doc={doc} loadHistory={loadHistory} />
-          ) : (
-            <NamesTab doc={doc} />
-          )}
-          <button
-            type="button"
-            className={`kit-btn quiet ${shared.detailBtn}`}
-            onClick={() => onOpenVersions(doc.document_id)}
-          >
-            Version history
-          </button>
-          {/* §8's own closing sentence: the rail is about ONE row, and it
-              follows the selection rather than pinning itself to a document
-              the member has moved on from. */}
-          <p className={styles.railFoot}>{RAIL_NOTES.footer}</p>
-        </div>
-        <div className={styles.detailsFoot}>
-          {trashed ? (
-            <button
-              type="button"
-              className={`kit-btn ${shared.detailBtn}`}
-              onClick={() => onRestore(doc)}
-            >
-              Restore
-            </button>
-          ) : (
-            <>
-              <button
-                type="button"
-                className={`kit-btn ${shared.detailBtn}`}
-                onClick={(e) => onMove(e.currentTarget, [doc])}
-              >
-                Move
-              </button>
-              <button
-                type="button"
-                className={`kit-btn destructive danger ${shared.detailBtn}`}
-                onClick={(e) => {
-                  if (
-                    !armConfirm(e.currentTarget, {
-                      armedLabel: "Trash — sure?",
-                    })
-                  )
-                    return;
-                  onTrash(doc);
-                }}
-              >
-                Trash
-              </button>
-            </>
-          )}
-        </div>
+        {body}
       </dialog>
     </>
   );

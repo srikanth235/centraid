@@ -9,7 +9,9 @@ import {
   loadDefaultCronTimeZone,
   saveDefaultCronTimeZone,
 } from "../shell/routes/settingsCronTimezoneData.js";
-import { DrawerGroup, DrawerRow, Segmented } from "./settings-controls.js";
+import NoteBlock from "../ui/NoteBlock.js";
+import SectionBlock from "../ui/SectionBlock.js";
+import { DrawerRow, Segmented } from "./settings-controls.js";
 
 import sc from "./settings-controls.module.css";
 
@@ -72,29 +74,31 @@ export default function SettingsAppearanceScreen({
 
   return (
     <>
-      <DrawerGroup label="Theme">
-        <DrawerRow
-          label="Appearance"
-          hint="Centraid Light, Centraid Dark, or your OS setting."
-        >
-          <Segmented
-            ariaLabel="Appearance"
-            labels={THEME_MODE_LABELS}
-            options={THEME_MODES}
-            selected={curMode}
-            onSelect={(next) => {
-              setCurMode(next);
-              onSetThemeMode(next);
-            }}
-          />
-          {/* Match is a standing MODE, not a one-shot snap to whatever the OS
+      {/* THIS DEVICE, not the household: the theme is what this browser paints
+          and the zone is what a schedule with none of its own fires in. The
+          name and colour above are what everyone else sees. */}
+      <SectionBlock label="This device" meta="theme and time" />
+      <DrawerRow
+        label="Theme"
+        hint="Centraid Light, Centraid Dark, or your OS setting."
+      >
+        <Segmented
+          ariaLabel="Appearance"
+          labels={THEME_MODE_LABELS}
+          options={THEME_MODES}
+          selected={curMode}
+          onSelect={(next) => {
+            setCurMode(next);
+            onSetThemeMode(next);
+          }}
+        />
+        {/* Match is a standing MODE, not a one-shot snap to whatever the OS
               says right now, and the caption is where that difference is
               stated — the segment alone reads as a third theme. */}
-          {curMode === "system" ? (
-            <p className={sc.rowHint}>Follows the system as it changes</p>
-          ) : null}
-        </DrawerRow>
-      </DrawerGroup>
+        {curMode === "system" ? (
+          <p className={sc.rowHint}>Follows the system as it changes</p>
+        ) : null}
+      </DrawerRow>
       {/* The time zone belongs to YOU: it is the zone a schedule with none of
           its own fires in, which is a fact about the member's day rather than
           about the automation. It stays gated on the same capability the
@@ -102,48 +106,43 @@ export default function SettingsAppearanceScreen({
           run is a setting whose effect the owner can never see. */}
       {automations ? (
         <>
-          <DrawerGroup label="Automations">
-            <DrawerRow
-              label="Default cron timezone"
-              hint="IANA zone used when a schedule omits its own timezone. Empty keeps the host clock (pre-#570 behavior)."
-            >
-              <input
-                className={sc.input}
-                type="text"
-                value={cronTz}
-                disabled={!cronTzLoaded}
-                placeholder="Host local"
-                list="centraid-cron-timezones"
-                spellCheck={false}
-                aria-label="Default cron timezone"
-                data-testid="settings-default-cron-timezone"
-                onChange={(event) => {
-                  setCronTz(event.target.value);
-                  setCronTzError(null);
-                }}
-                onBlur={() => {
-                  // A refused zone leaves the field where the gateway has it,
-                  // and the error names that value rather than the typo.
-                  void saveDefaultCronTimeZone(cronTz, lastGood).then((err) => {
-                    setCronTzError(err);
-                    if (err) setCronTz(lastGood);
-                    else {
-                      setCronTz(cronTz.trim());
-                      setLastGood(cronTz.trim());
-                    }
-                  });
-                }}
-              />
-            </DrawerRow>
-            {cronTzError ? (
-              <p
-                role="alert"
-                data-testid="settings-default-cron-timezone-error"
-              >
-                {cronTzError}
-              </p>
-            ) : null}
-          </DrawerGroup>
+          <DrawerRow
+            label="Time zone for automations"
+            hint="For crons with no zone of their own. Empty keeps the host clock."
+          >
+            <input
+              className={sc.input}
+              type="text"
+              value={cronTz}
+              disabled={!cronTzLoaded}
+              placeholder="Host local"
+              list="centraid-cron-timezones"
+              spellCheck={false}
+              aria-label="Default cron timezone"
+              data-testid="settings-default-cron-timezone"
+              onChange={(event) => {
+                setCronTz(event.target.value);
+                setCronTzError(null);
+              }}
+              onBlur={() => {
+                // A refused zone leaves the field where the gateway has it,
+                // and the error names that value rather than the typo.
+                void saveDefaultCronTimeZone(cronTz, lastGood).then((err) => {
+                  setCronTzError(err);
+                  if (err) setCronTz(lastGood);
+                  else {
+                    setCronTz(cronTz.trim());
+                    setLastGood(cronTz.trim());
+                  }
+                });
+              }}
+            />
+          </DrawerRow>
+          {cronTzError ? (
+            <p role="alert" data-testid="settings-default-cron-timezone-error">
+              {cronTzError}
+            </p>
+          ) : null}
           {/* Each suggestion carries its zone as text, not just as `value`: a
               value-only <option> has no accessible name, so a screen reader
               announces an unlabelled list. Label and value are identical, which
@@ -166,6 +165,11 @@ export default function SettingsAppearanceScreen({
           </datalist>
         </>
       ) : null}
+      {/* Where the two acts that are NOT settings live. Both were pages on this
+          rail once, and both are things you do rather than things you set. */}
+      <NoteBlock>
+        Pairing a phone is in the account menu. Gateway health is on System.
+      </NoteBlock>
     </>
   );
 }

@@ -19,7 +19,6 @@ import { EventDrawer } from "../apps/agenda/components/EventDrawer.tsx";
 import { ListRow as DocsRow } from "../apps/docs/components/List.tsx";
 import { LockerList } from "../apps/locker/components/List.tsx";
 import { Card as NoteCard } from "../apps/notes/components/Card.tsx";
-import { TrashCard as PersonCard } from "../apps/people/components/TrashCard.tsx";
 import { MemoriesStrip } from "../apps/photos/components/Memories.tsx";
 import { ExpenseRow } from "../apps/tally/components/ExpenseRow.tsx";
 import { Row as TaskRow } from "../apps/tasks/components/Row.tsx";
@@ -91,9 +90,16 @@ const RENDERERS: Record<string, Renderer> = {
         },
         index: 0,
         selectedIds: new Set(),
+        // Selection is a mode, and the owner disc is member-supplied text on
+        // the row - both are fed the vector rather than stubbed away, since a
+        // display name is exactly the kind of string that reaches the DOM
+        // without ever having been typed by the member reading it.
+        selecting: true,
+        owner: { name: value, initial: value },
         narrow: false,
         search: "",
         trashed: false,
+        offline: false,
         folderName: () => value,
         onOpenDetails: noop,
         onOpenQuick: noop,
@@ -139,13 +145,12 @@ const RENDERERS: Record<string, Renderer> = {
         onTogglePin: noop,
       })
     ),
-  people: (value) =>
-    renderToStaticMarkup(
-      createElement(PersonCard, {
-        person: { party_id: "party-1", name: value, role: value },
-        onRestore: noop,
-      })
-    ),
+  // People rendered its trash card here until the desktop app's whole render
+  // tree was removed pending the v11 design handoff (apps/people/app-root.tsx).
+  // This is a REAL loss of adversarial coverage, not a tidy-up: the rebuilt
+  // People must land back in this table on the same day it draws its first
+  // untrusted string, because every field it shows — name, role, note, channel
+  // — is member-supplied and reaches the DOM.
   photos: (value) =>
     renderToStaticMarkup(
       createElement(MemoriesStrip, {

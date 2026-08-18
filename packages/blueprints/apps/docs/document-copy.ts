@@ -1,184 +1,18 @@
-// What ONE DOCUMENT's own screens say (Docs spec §6.1, §6.2, §6.3, §8): the
-// seven write outcomes, the reading view's rows, the version screen's fold,
-// and the details rail's tabs and notes.
+// What ONE DOCUMENT's own screens say (Docs spec §6.2, §7, §8): the version
+// screen's fold, the details rail's tabs and notes, and the stage's actions
+// and properties panel.
 //
 // The third copy module, split from `view-copy.ts` on the same axis the app is
 // split on: a shelf is a set of rows, and these screens are about one row.
 // Nothing here knows what a shelf is.
-
-// ---------------------------------------------------------------------------
-// The seven write outcomes (§6.3 `DSAVE`)
-// ---------------------------------------------------------------------------
-
-/**
- * "A write has SEVEN visible outcomes. The editor is where all seven land, and
- * knowing which one you are in is the whole design problem there."
- * (§6.3, prototype line 2330, verbatim.)
- *
- * The table is here rather than in the editor for the reason every other table
- * in this file is: seven outcomes expressed as conditions inside a save
- * handler is seven chances for two of them to read as one. `commit` is the
- * LABEL only — whether the control may be pressed is `commits`, and a control
- * that may not be pressed is not filled ("A filled control that cannot be
- * pressed stops being filled", §6.3, verbatim).
- */
-export type SaveOutcomeId =
-  | "unsaved"
-  | "saving"
-  | "saved"
-  | "nochange"
-  | "approval"
-  | "queued"
-  | "refused";
-
-export interface SaveOutcome {
-  id: SaveOutcomeId;
-  label: string;
-  /** The state row's sentence. */
-  status: string;
-  /** The paragraph under it — never longer than 56ch on screen. */
-  note: string;
-  /** The commit button's label. */
-  commit: string;
-  /** May the commit be pressed — and therefore be filled — in this state? */
-  commits: boolean;
-  /** The `net` role: a refusal, or a write that is not going anywhere yet. */
-  net: boolean;
-  /** The inline text action beside the state sentence, where there is one. */
-  action?: string;
-}
-
-export const DSAVE: Readonly<Record<SaveOutcomeId, SaveOutcome>> = {
-  unsaved: {
-    id: "unsaved",
-    label: "unsaved changes",
-    status: "Unsaved changes on this device · nothing has been committed",
-    note: "Closing now keeps the draft here and commits nothing.",
-    commit: "Save",
-    commits: true,
-    net: false,
-  },
-  saving: {
-    id: "saving",
-    label: "saving",
-    status: "Saving · one command in flight",
-    note: "The command has left this device and has not been acknowledged.",
-    commit: "Saving…",
-    commits: false,
-    net: false,
-  },
-  saved: {
-    id: "saved",
-    label: "saved",
-    status: "Saved",
-    note: "Committed as a new version; the receipt is in this document's history.",
-    commit: "Saved",
-    commits: false,
-    net: false,
-    action: "Open the receipt",
-  },
-  nochange: {
-    id: "nochange",
-    label: "nothing changed",
-    status: "Nothing changed · no new version, no receipt",
-    note: "Byte-identical to the last version — nothing written, no new entry.",
-    commit: "Save",
-    commits: true,
-    net: false,
-  },
-  approval: {
-    id: "approval",
-    label: "waiting for approval",
-    status: "Waiting for the owner's approval · held, not refused",
-    note: "Held in Notifications until the owner consents; it commits the moment they do.",
-    commit: "Save",
-    commits: false,
-    net: false,
-    action: "Show it in Notifications",
-  },
-  queued: {
-    id: "queued",
-    label: "queued on this device",
-    status: "Queued on this device · the gateway is unreachable",
-    note: "On this device, in order; it goes the moment the gateway is back.",
-    commit: "Save",
-    commits: false,
-    net: true,
-  },
-  refused: {
-    id: "refused",
-    label: "refused",
-    status: "Refused",
-    note: "The rule refused it: a body can only be set on a text document.",
-    commit: "Save",
-    commits: true,
-    net: true,
-  },
-};
-
-/**
- * The `saved` state's status line carries LIVE numbers — "Saved · version 7 ·
- * 14:02" in the spec is that sample drive's version and clock. A caller that
- * knows neither prints neither rather than a number it invented.
- */
-export function savedStatus({
-  version,
-  at,
-}: { version?: number | null; at?: string | null } = {}): string {
-  const parts = ["Saved"];
-  if (typeof version === "number") parts.push(`version ${version}`);
-  if (at) parts.push(at);
-  return parts.join(" · ");
-}
-
-/** The `refused` state names the RULE. The vault hands back its own reason;
- *  where it does not, the spec's own sentence stands. */
-export function refusedStatus(reason?: string | null): string {
-  return `Refused · ${reason?.trim() || "this document is not text"}`;
-}
-
-// ---------------------------------------------------------------------------
-// The reading view (§6.1)
-// ---------------------------------------------------------------------------
-
-/** The eyebrow over the machine summary — said EVERY time, because the whole
- *  point of the box is that a member never mistakes it for their own words. */
-export const MACHINE_SUMMARY_EYEBROW = "Read by a machine, not written by you";
-
-/** §6.1's panel for a document opened while the read capability is off. */
-export const READ_OFF = {
-  eyebrow: "Switched off",
-  title: "Three capabilities are switched off",
-  body: "A summary, the people named and the dates inside each need a capability that is off.",
-  action: "What Docs may read →",
-} as const;
-
-/** §6.1's "This document" rows, in the spec's order and words. `sub` for the
- *  two rows that carry a live number is supplied by the caller. */
-export const THIS_DOCUMENT = {
-  head: "This document",
-  edit: {
-    label: "Edit",
-    sub: "title and body, in place. Every save is a version",
-    action: "Edit",
-  },
-  versions: {
-    label: "Version history",
-    sub: "preview and restore any of them",
-    action: "History",
-  },
-  names: {
-    label: "Who this document names",
-    subOff: "switched off",
-    note: "Docs has not looked. One consent, running on this device",
-    action: "Open",
-  },
-  details: {
-    label: "Details",
-    sub: "filing, purge date, size, backup and custody",
-    action: "Details",
-  },
-} as const;
+//
+// TWO SECTIONS LEFT THIS FILE WITH THE SCREENS THEY SPOKE FOR. §6.3's seven
+// write outcomes (`DSAVE`) and §6.1's reading-view rows (`READ_OFF`,
+// `THIS_DOCUMENT`, `MACHINE_SUMMARY_EYEBROW`) were the copy of the in-place
+// EDITOR and the reading ROUTE. Docs no longer edits a document of any kind —
+// a new version arrives as a whole file through Replace — and text is read on
+// the stage's paper sheet, so both screens are gone and their words with
+// them.
 
 // ---------------------------------------------------------------------------
 // Versions (§6.2) and the details rail (§8)
@@ -222,3 +56,80 @@ export const RAIL_NOTES = {
 export function cannotRenderFact(kindName: string): string {
   return `Docs cannot render ${kindName}`;
 }
+
+// ---------------------------------------------------------------------------
+// The stage (§7's `docsStage`)
+// ---------------------------------------------------------------------------
+
+/**
+ * The stage's action names, in the handoff's own order: Star, Download,
+ * Print, Place…, Properties, More. They are named here rather than inline so
+ * the bar and the phone's bottom row cannot drift on what a verb is called —
+ * the same rule Photos' `ACTION_LABELS` keeps for the same two arrangements.
+ *
+ * `Place…` carries its ellipsis because it opens a sheet and asks; every other
+ * name is a verb that fires. `More` is NOT in the table: the handoff's mobile
+ * bar draws it over a dead handler, and this stage gives the phone the five
+ * actions in a bottom bar instead of hiding them behind a menu that would then
+ * have to be built.
+ */
+export const STAGE_ACTIONS = {
+  star: "Star",
+  starred: "Starred",
+  download: "Download",
+  print: "Print",
+  place: "Place…",
+  properties: "Properties",
+  trash: "Trash",
+  close: "Close",
+} as const;
+
+/**
+ * Why Print cannot fire, per kind — on the control, never in a toast (§6).
+ *
+ * PRINTING IS A LAYOUT, AND THE QUESTION IS WHO DOES IT. A picture and text are
+ * laid onto a sheet by Docs, so Docs prints both. A PDF is laid out by the
+ * browser's own viewer inside the stage's frame, and that viewer carries its
+ * own print control — so the outer button says whose job it is instead of
+ * drawing a second one that could not drive the inner document. Sound and
+ * moving pictures have no sheet at all.
+ */
+export const PRINT_REFUSALS = {
+  embeddedViewer:
+    "A PDF opens in its own viewer here, and that viewer owns its printing.",
+  timeBased: "Sound and moving pictures do not print.",
+  unrendered:
+    "Docs cannot render this kind on this device, so it cannot lay it onto a sheet.",
+} as const;
+
+/**
+ * The stage's properties panel (§7's `vMeaning`). Each note is the handoff's
+ * own sentence — a note explains what the value MEANS, which is the whole
+ * reason the panel is not just the facts list twice.
+ *
+ * THREE OF THE HANDOFF'S ROWS ARE NOT DRAWN, and each is withheld because the
+ * read behind it does not exist on this surface:
+ *   * `Who this document names` — no read on this seat returns the people a
+ *     document mentions; the details rail's Names tab already says Docs has
+ *     not looked, and a second copy of that sentence on the stage would be a
+ *     panel apologising twice.
+ *   * `Where it is` — the drive projection carries no scope, so the panel
+ *     cannot name the space a document is in or who can reach it.
+ *   * `A refused write` — the stage has no write that can be refused. The
+ *     row appears in the editor, which is where the seven outcomes land.
+ */
+export const STAGE_PROPS = {
+  head: "Properties",
+  title: "Title",
+  titleHint: "rename this document",
+  folder: "Folder",
+  folderNote: "a label on this document · move it and nothing else changes",
+  tags: "Tags",
+  tagsEmpty: "none yet",
+  device: "On this device",
+  deviceNote: "where the bytes are, as the vault last swept them",
+  deviceUnknown: "not swept yet",
+  facts: "Facts",
+  origin:
+    "The document is identity; the bytes are content, deduplicated on the vault. Another document may hold these same bytes, so releasing this copy would not remove them.",
+} as const;

@@ -1,0 +1,43 @@
+/* The Search shelf's field. A 34px field capped at 520px — the handoff's
+   `fieldBlock` geometry (`height: C.h`, `max-width: 520px`), and the same
+   two numbers `photos/components/SearchShelf.module.css` uses, so the two
+   apps' fields are one field in two places.
+
+   The pill/ground/hairline come from kit.css's `.kit-search`; this module
+   carries only what is this field's own. */
+
+.field {
+  max-inline-size: 520px;
+  inline-size: 100%;
+  min-block-size: var(--h-control);
+  margin-block: var(--sp-3);
+}
+
+.input {
+  flex: 1;
+  min-inline-size: 0;
+  border: none;
+  background: none;
+  color: inherit;
+  font: var(--t-body);
+}
+.input:focus {
+  outline: none;
+}
+
+/* The clear control — mono, underlined TEXT beside the field, not an icon
+   button (handoff `clearCss`), matching Photos' `.clearBtn` exactly. */
+.clearBtn {
+  margin: 0;
+  padding: 0;
+  border: none;
+  background: none;
+  color: var(--text-soft);
+  font: var(--t-mono);
+  text-decoration: underline;
+  text-underline-offset: 0.15em;
+  cursor: pointer;
+}
+.clearBtn:hover {
+  color: var(--text);
+}

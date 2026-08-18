@@ -43,10 +43,10 @@ export function filtersActive(filters: DriveFilters): boolean {
 // The `Type` axis, by the label the member reads. `cat` is `typeMeta`'s own
 // category, so this table can never drift from what the row's kind badge says.
 const TYPE_PREDICATE: Readonly<Record<string, (doc: DriveDoc) => boolean>> = {
-  PDF: (doc) => typeMeta(doc.media_type).cat === "pdf",
-  Image: (doc) => typeMeta(doc.media_type).cat === "image",
-  Word: (doc) => typeMeta(doc.media_type).cat === "doc",
-  Spreadsheet: (doc) => typeMeta(doc.media_type).cat === "sheet",
+  PDF: (doc) => typeMeta(doc.media_type, doc.title).cat === "pdf",
+  Image: (doc) => typeMeta(doc.media_type, doc.title).cat === "image",
+  Word: (doc) => typeMeta(doc.media_type, doc.title).cat === "doc",
+  Spreadsheet: (doc) => typeMeta(doc.media_type, doc.title).cat === "sheet",
   Markdown: (doc) => String(doc.media_type ?? "").startsWith("text/markdown"),
   Text: (doc) => String(doc.media_type ?? "") === "text/plain",
   Audio: (doc) => String(doc.media_type ?? "").startsWith("audio/"),

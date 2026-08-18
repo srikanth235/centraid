@@ -12,7 +12,11 @@ import path from "node:path";
 import { describe, expect, test } from "vitest";
 
 type Kind = "action" | "query";
-type ExceptionKind = "agent-only" | "extension-only" | "platform-fallback";
+type ExceptionKind =
+  | "agent-only"
+  | "extension-only"
+  | "platform-fallback"
+  | "awaiting-handoff";
 
 interface ManifestHandler {
   name: string;
@@ -36,6 +40,36 @@ const MOBILE_APPS_ROOT = path.join(REPO_ROOT, "apps/mobile/src/apps");
 
 const WEBVIEW_APPS = new Set(["notes"]);
 
+/**
+ * Apps whose UI on a given surface has been REMOVED pending its Binding Layer
+ * v11 design handoff, and which therefore dispatch nothing there.
+ *
+ * This is the one exception in this file that is not about a capability - it is
+ * about a surface. The other three say "this handler is reached another way";
+ * this one says "there is no screen here at all yet". Recording it per app
+ * rather than per handler is deliberate: enumerating ~35 People handlers as
+ * individually-excused would read as thirty-five decisions when it is one, and
+ * the day the rebuild lands the fix is to delete an app id, not to audit a
+ * list.
+ *
+ * What was NOT removed, and so is not excused: the manifests, `./actions/*`,
+ * `./queries/*` and the vault scopes. The assistant still invokes every one of
+ * these handlers. The gate is suspended over the UI that is gone, not over the
+ * contract that stayed.
+ *
+ * Removing an app id here is the last step of its rebuild. The justification
+ * test below fails on an id that is not a real manifest, so an entry cannot
+ * outlive the app it names.
+ */
+const AWAITING_HANDOFF: Readonly<Record<"web" | "mobile", readonly string[]>> =
+  {
+    web: ["people"],
+    mobile: ["docs", "people"],
+  };
+
+const AWAITING_HANDOFF_RATIONALE =
+  "The surface was removed pending its Binding Layer v11 design handoff; the manifest, actions, queries and vault scopes are untouched and the assistant still reaches every handler.";
+
 const WEB_EXCEPTIONS: Readonly<Record<string, ReachabilityException>> = {
   "locker.query.autofill-candidates": {
     kind: "extension-only",
@@ -47,6 +81,11 @@ const WEB_EXCEPTIONS: Readonly<Record<string, ReachabilityException>> = {
     rationale:
       "The browser extension calls this per-origin reveal endpoint after user selection.",
   },
+  "docs.action.edit": {
+    kind: "agent-only",
+    rationale:
+      "Docs holds, versions and files a document; it does not open one to type into. The v11 drive has no editor on any seat (docs/design-divergences.md), so this write is the assistant's alone.",
+  },
   "locker.query.watchtower": {
     kind: "agent-only",
     rationale:
@@ -54,11 +93,13 @@ const WEB_EXCEPTIONS: Readonly<Record<string, ReachabilityException>> = {
   },
 };
 
+// Native covers that DO render, and the queries their screens answer directly.
+// `docs` and `people` were here until those two native screens were removed
+// (AWAITING_HANDOFF above); their rows are gone rather than kept as a shopping
+// list, so this table never describes a screen that is not on the phone.
 const NATIVE_QUERY_UI: Readonly<Record<string, readonly string[]>> = {
   agenda: ["upcoming", "parties", "search"],
-  docs: ["drive", "search"],
   locker: ["auth", "items", "item"],
-  people: ["people", "person"],
   photos: [
     "library",
     "faces",
@@ -78,20 +119,6 @@ const NATIVE_QUERY_UI: Readonly<Record<string, readonly string[]>> = {
 
 const NATIVE_FALLBACK: Readonly<Record<string, readonly string[]>> = {
   agenda: ["action.attach", "action.detach"],
-  docs: [
-    "action.upload",
-    "action.rename",
-    "action.restore",
-    "action.tag",
-    "action.untag",
-    "action.edit",
-    "action.replace",
-    "action.restore-version",
-    "action.rename-folder",
-    "action.delete-folder",
-    "query.history",
-    "query.activity",
-  ],
   locker: [
     "action.add-item",
     "action.edit-item",
@@ -102,36 +129,6 @@ const NATIVE_FALLBACK: Readonly<Record<string, readonly string[]>> = {
     "action.unstar-item",
     "query.search",
     "query.trash",
-  ],
-  people: [
-    "action.edit-person",
-    "action.set-cadence",
-    "action.trash-person",
-    "action.restore-person",
-    "action.undo-person",
-    "action.log-interaction",
-    "action.star-person",
-    "action.unstar-person",
-    "action.move-person",
-    "action.add-note",
-    "action.add-task",
-    "action.toggle-task",
-    "action.add-important-date",
-    "action.toggle-reminder",
-    "action.add-relationship",
-    "action.add-gift",
-    "action.toggle-gift",
-    "action.add-debt",
-    "action.settle-debt",
-    "action.create-list",
-    "action.rename-list",
-    "action.delete-list",
-    "action.add-journal-entry",
-    "query.search",
-    "query.journal",
-    "query.dashboard",
-    "query.trash",
-    "query.history",
   ],
   photos: ["action.restore-album", "action.tag-asset", "action.untag-asset"],
   tally: [
@@ -161,10 +158,27 @@ const NATIVE_FALLBACK: Readonly<Record<string, readonly string[]>> = {
   ],
 };
 
+// `docs` and `people` had entries here too - the actions their native covers
+// deferred to the assistant. Both apps are now excused wholesale by
+// AWAITING_HANDOFF, and a per-action list beside that would be two records of
+// one fact, the finer one already false.
 const MOBILE_EXCEPTION_RATIONALE =
   "The native cover links to the always-available Assistant surface, which invokes this manifested handler with the same consent and receipt contract.";
 
-function sourceTree(root: string, skipHandlers: boolean): string {
+/**
+ * A blueprint app's source, for the "is this name called anywhere" scan.
+ *
+ * `skipFiles` exists for the suspension check below. A file that DECLARES every
+ * action by name — `pending-projection.ts` is the whole set, `app-inline.tsx`
+ * the query map — would make any app look like it dispatches everything, which
+ * is harmless for the normal scan (a false pass there is caught by the app
+ * actually having a UI) but fatal for an assertion that the UI is GONE.
+ */
+function sourceTree(
+  root: string,
+  skipHandlers: boolean,
+  skipFiles: ReadonlySet<string> = new Set()
+): string {
   if (!existsSync(root)) return "";
   return readdirSync(root, { withFileTypes: true })
     .flatMap((entry) => {
@@ -176,16 +190,24 @@ function sourceTree(root: string, skipHandlers: boolean): string {
       )
         return [];
       const target = path.join(root, entry.name);
-      if (entry.isDirectory()) return [sourceTree(target, skipHandlers)];
+      if (entry.isDirectory())
+        return [sourceTree(target, skipHandlers, skipFiles)];
       if (
         !/\.(?:js|jsx|ts|tsx)$/u.test(entry.name) ||
-        /\.test\.(?:ts|tsx)$/u.test(entry.name)
+        /\.test\.(?:ts|tsx)$/u.test(entry.name) ||
+        skipFiles.has(entry.name)
       )
         return [];
       return [readFileSync(target, "utf8")];
     })
     .join("\n");
 }
+
+/** The two files that name handlers without calling them. */
+const DECLARATION_FILES: ReadonlySet<string> = new Set([
+  "pending-projection.ts",
+  "app-inline.tsx",
+]);
 
 /** Drop line/block comments so a name only in a comment cannot pass. */
 function withoutComments(source: string): string {
@@ -227,6 +249,15 @@ function manifests(): AppManifest[] {
     });
 }
 
+function awaitingHandoff(
+  surface: "web" | "mobile",
+  appId: string
+): ReachabilityException | undefined {
+  return AWAITING_HANDOFF[surface].includes(appId)
+    ? { kind: "awaiting-handoff", rationale: AWAITING_HANDOFF_RATIONALE }
+    : undefined;
+}
+
 function mobileException(
   appId: string,
   kind: Kind,
@@ -264,8 +295,23 @@ describe("manifest handler reachability", () => {
         : ""
     );
 
-    test("every web handler is dispatched or explicitly marked", () => {
-      const missing = handlers(manifest).filter(({ kind, name }) => {
+    // ONE assertion, two questions, chosen by whether this surface is
+    // suspended. A suspended app is asserted ABSENT rather than skipped: the
+    // moment a rebuild starts dispatching again this fails, and the
+    // AWAITING_HANDOFF entry has to come out. Skipping would let a half-rebuilt
+    // surface sit here unexamined.
+    const webUnexpected = (): Array<{ kind: Kind; name: string }> => {
+      if (awaitingHandoff("web", manifest.id)) {
+        const rendered = sourceTree(
+          path.join(APPS_ROOT, manifest.id),
+          true,
+          DECLARATION_FILES
+        );
+        return handlers(manifest).filter(({ name }) =>
+          hasLiteral(rendered, name)
+        );
+      }
+      return handlers(manifest).filter(({ kind, name }) => {
         if (WEB_EXCEPTIONS[`${manifest.id}.${kind}.${name}`]) return false;
         if (hasLiteral(webSource, name)) return false;
         // The shared file-staging helper dispatches the manifest's conventional
@@ -276,11 +322,18 @@ describe("manifest handler reachability", () => {
           webSource.includes("wireAttachInput")
         );
       });
-      expect(missing).toStrictEqual([]);
+    };
+
+    test("every web handler is dispatched or explicitly marked", () => {
+      expect(webUnexpected()).toStrictEqual([]);
     });
 
-    test("every mobile handler is dispatched or explicitly marked", () => {
-      const missing = handlers(manifest).filter(({ kind, name }) => {
+    const mobileUnexpected = (): Array<{ kind: Kind; name: string }> => {
+      if (awaitingHandoff("mobile", manifest.id))
+        return handlers(manifest).filter(({ name }) =>
+          hasLiteral(mobileSource, name)
+        );
+      return handlers(manifest).filter(({ kind, name }) => {
         if (WEBVIEW_APPS.has(manifest.id))
           return (
             !hasLiteral(webSource, name) &&
@@ -299,7 +352,10 @@ describe("manifest handler reachability", () => {
           return false;
         return !mobileException(manifest.id, kind, name);
       });
-      expect(missing).toStrictEqual([]);
+    };
+
+    test("every mobile handler is dispatched or explicitly marked", () => {
+      expect(mobileUnexpected()).toStrictEqual([]);
     });
   });
 
@@ -322,5 +378,11 @@ describe("manifest handler reachability", () => {
         expect(MOBILE_EXCEPTION_RATIONALE.length).toBeGreaterThan(20);
       }
     }
+    // A suspended surface must name a REAL app, so the entry dies with the
+    // rebuild instead of quietly excusing an app id that no longer exists.
+    const appIds = new Set(manifests().map((manifest) => manifest.id));
+    for (const ids of Object.values(AWAITING_HANDOFF))
+      for (const id of ids) expect(appIds.has(id), id).toBe(true);
+    expect(AWAITING_HANDOFF_RATIONALE.length).toBeGreaterThan(20);
   });
 });

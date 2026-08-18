@@ -1,72 +1,90 @@
-/* The Folders shelf (Docs spec §4.3). A bordered card of rows, the repo's
-   card idiom: 1px hairline, container radius, elevated paper. Nothing here is
-   a tree — no indent rail, no disclosure triangle, no second scroll column. */
+/* The Folders shelf (Docs spec §4.3) — ONLY what is folder-shaped.
 
-.wrap {
-  display: flex;
-  flex-direction: column;
-  gap: var(--sp-3);
-  padding: var(--sp-4);
+   The container, the head band, the row, the badge slot, the title, the cell
+   and the trailing 40px all come from the drive's own stylesheets
+   (Chrome.module.css `.listwrap`/`.listHead`, List.module.css) and the closing
+   sentence from DriveRoute.module.css `.caption`. This file used to re-author
+   every one of them a few pixels off, which is how one app grew two list
+   idioms. What is left here is the two column widths, the one row that is not
+   a folder, and the sentence the shelf owes a member it just moved. */
+
+/* The columns. `Name` takes the slack exactly as the drive's does; `Documents`
+   is a fixed end-aligned column on the drive's own 88px, so a folder count and
+   a document's Changed date sit in one vertical band across the two screens. */
+.colName {
+  flex: 1;
+  text-align: start;
+}
+.colCount {
+  width: 88px;
+  text-align: end;
+}
+.count {
+  width: 88px;
+  font: var(--t-mono);
+  font-variant-numeric: var(--t-mono-numeric);
+  text-align: end;
+  white-space: nowrap;
+}
+
+/* THE CARD'S PREVIEW. A document card tints its thumb with the kind's own
+   fill; a folder has no kind, so it takes the APP's identity hue instead —
+   Docs is teal (Chrome.module.css), the same hue the row glyphs are inked in.
+   Borrowing one of the six `--kind-*` colours would have said "this folder is
+   a spreadsheet".
+
+   `pointer-events: none` because `Grid.module.css` `.thumb` is authored for a
+   BUTTON (the document card's own preview target) and is raised above the
+   stretch overlay; here the card has one verb and the preview must let the
+   overlay have the click. */
+.folderThumb {
+  pointer-events: none;
+  background: color-mix(in oklab, var(--c-teal) 12%, transparent);
+}
+/* Unfiled: a card that does not open, so it does not light up as though it
+   would, and its preview stands empty rather than wearing a folder's mark.
+   Doubled class for the same cross-module ordering reason as `.staticRow` —
+   `Grid.module.css` `.card:hover` lives in another module and this has to win
+   whichever sheet the bundler emits first. */
+.staticCard.staticCard:hover {
+  border-color: var(--line);
+}
+.emptyThumb {
+  background: none;
+}
+
+/* THE MARK KEEPS THE DRIVE'S OWN BOX. This file used to release the badge's
+   height (`block-size: auto`) because a 34px mark beside a 19px line of text
+   was setting the folder row to 67px — but the mark was never what held the
+   row open. `List.module.css` `.row` was spending `--density-pad` on its
+   vertical rhythm, and the fix belonged there, on both screens at once. With
+   the row on its own rung the 34px mark sits inside it, and a folder's mark
+   and a document's mark are once again the same square in the same column. */
+
+/* Everything in a folder row that is NOT the row's own click target. The
+   drive's `.badge` / `.rowTitle` / `.rowEnd` are raised above the stretch
+   overlay because there they are controls in their own right; here the row
+   has exactly one verb, so its contents must let the overlay have the click
+   rather than swallowing it. */
+.inert {
+  pointer-events: none;
+}
+
+/* Unfiled: a row that does not open, so it does not light up as though it
+   would. The doubled class is deliberate — `.row:hover` lives in another
+   module and this has to win regardless of which sheet the bundler emits
+   first. */
+.staticRow.staticRow:hover {
+  background: none;
 }
 
 /* The sentence the shelf owes a member it just moved (view-state.ts rule 2).
-   Prose in the reading register, not a banner: nothing went wrong, and a
-   strip with a border would say otherwise. */
+   Prose in the reading register, not a banner: nothing went wrong, and a strip
+   with a border would say otherwise. It sits ABOVE the set because it is about
+   how the member arrived, where the caption below is about what they are
+   looking at. */
 .gone {
-  margin: 0;
-  max-inline-size: 60ch;
-  font: var(--t-small);
-  color: var(--text-soft);
-}
-
-.rows {
-  display: flex;
-  flex-direction: column;
-  border: 1px solid var(--line);
-  border-radius: var(--r-lg);
-  background: var(--bg-elev);
-  overflow: hidden;
-}
-
-.row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--sp-3);
-  min-block-size: var(--h-row);
-  padding-inline: var(--sp-4);
-  border: none;
-  background: none;
-  color: inherit;
-  text-align: start;
-}
-.row + .row {
-  border-block-start: 1px solid var(--line);
-}
-.row:hover:not([data-static="true"]) {
-  background: var(--bg-sunken);
-}
-.row:focus-visible {
-  outline: none;
-  box-shadow: var(--focus-ring);
-}
-
-.label {
-  font: var(--t-body);
-  color: var(--text);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.meta {
-  font: var(--t-small);
-  font-variant-numeric: tabular-nums;
-  color: var(--text-faint);
-  white-space: nowrap;
-}
-
-.note {
-  margin: 0;
+  margin: 0 0 var(--sp-3);
   max-inline-size: 60ch;
   font: var(--t-small);
   color: var(--text-soft);

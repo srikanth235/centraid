@@ -33,25 +33,25 @@
   position: relative;
   /* Above the .cardOpen overlay, so the preview click still reaches it. */
   z-index: 1;
+  /* A <button> SHRINK-WRAPS whatever is inside it — form controls size to
+     fit-content whatever `display` they are given — so the thumb was only ever
+     as wide as its contents. That went unnoticed while the fallback was a wide
+     tinted word; a 30px kind glyph made it obvious, by parking the mark at the
+     card's leading edge instead of the middle of the thumb. */
+  inline-size: 100%;
   height: 104px;
   display: flex;
   align-items: center;
   justify-content: center;
   overflow: hidden;
 }
-.thumb img {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-}
-/* No `opacity` here. This label is `color: var(--kind-*)`, a rung solved to a
-   measured floor against the tint behind it; a 0.9 fade is an unmeasured 0.6
-   off that ratio, applied after the fact and invisible to the token layer. If
-   the label needs to recede, the rung is the place to say so. */
-.thumbLabel {
-  font: var(--t-body-strong);
-  font-family: var(--font-sans);
-  letter-spacing: var(--t-eyebrow-tracking);
+/* The kind mark. `--c-teal-text` is the app's own hue at the rung solved for
+   text on a surface — the SAME colour the list row's mark takes, because the
+   handoff draws every kind in the app hue rather than a colour per kind. No
+   `opacity`: if the mark needs to recede, the rung is the place to say so. */
+.thumbGlyph {
+  display: flex;
+  color: var(--c-teal-text);
 }
 /* The document's own opening words, set in the app's declared READING
    register — the surface where a reader meets the document should show the
@@ -133,7 +133,14 @@
   line-clamp: 2;
   overflow-wrap: anywhere;
 }
+/* Size · date, then the row's one state slot. A FLEX ROW with a gap, because
+   the slot is a separate fact and not a continuation of the sentence: run
+   inline with no separator it read as "1.5 KB · Aug 18cannot be shown". */
 .cardMeta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--sp-2);
   font: var(--t-mono);
   font-variant-numeric: var(--t-mono-numeric);
   color: var(--text-faint);

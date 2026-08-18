@@ -1,12 +1,12 @@
 import type { JSX, ReactNode } from "react";
 
 import { ATLAS_EXPORT_ROW, ATLAS_KINDS_NOTE } from "../../data-copy.js";
+import MeterRows from "../ui/MeterRows.js";
+import type { MeterRowDef } from "../ui/MeterRows.js";
 import NoteBlock from "../ui/NoteBlock.js";
 import RowsBlock from "../ui/RowsBlock.js";
 import type { RowDef } from "../ui/RowsBlock.js";
 import SectionBlock from "../ui/SectionBlock.js";
-import AtlasMeterRows from "./AtlasMeterRows.js";
-import type { MeterRowDef } from "./AtlasMeterRows.js";
 import {
   kindCount,
   kindMeta,
@@ -39,7 +39,16 @@ import type { KindRow } from "./atlasScreenModel.js";
 export interface AtlasKindsSectionProps {
   /** The kinds to show — already filtered by the chips. */
   kinds: readonly KindRow[];
-  /** Every kind the schema defines, written or not: the caption's "of M". */
+  /**
+   * The caption's "of M" — how many kinds are in THIS LIST before the chips
+   * filtered it, never a census total from elsewhere.
+   *
+   * It used to be `totals.kinds`, which counts blueprint kinds only while the
+   * list itself carries blueprint AND machinery packs. On a real vault that
+   * printed "131 of 79 kinds" — a numerator larger than its own denominator,
+   * which is not a number a member can do anything with. The head still states
+   * the census's own "N of M written"; this caption is about the rows below it.
+   */
   totalKinds: number;
   /** The head's own sentence: "25 of 31 kinds written · 41,208 records". */
   meta: string;
@@ -94,7 +103,7 @@ export default function AtlasKindsSection({
     share: meterShare(kind, largest),
     when: kindMeta(kind),
     // Absent, not disabled: the row states "Nothing to browse" instead.
-    ...(kindWritten(kind) ? { onBrowse: () => onBrowse(kind.logical) } : {}),
+    ...(kindWritten(kind) ? { onOpen: () => onBrowse(kind.logical) } : {}),
   }));
 
   // The census is a snapshot, and a snapshot with no timestamp reads as live.
@@ -136,7 +145,7 @@ export default function AtlasKindsSection({
       {collapsed ? null : (
         <>
           {chips}
-          <AtlasMeterRows ariaLabel="Kinds" caption={caption} rows={rows} />
+          <MeterRows ariaLabel="Kinds" caption={caption} rows={rows} />
           <RowsBlock rows={verbs} stacked={relationsOpen} />
           {relationsOpen ? relations : null}
           <NoteBlock>{ATLAS_KINDS_NOTE}</NoteBlock>

@@ -170,6 +170,20 @@ The per-surface sentence budgets (button, toast, status line, empty state, banne
 
 The eight bundled system apps are inline React routes in the shared shell. Their reads, subscriptions, and writes use `ReplicaShellSession`; writes carry `intentId`, and the apps render from the replica offline. There is no second render path: the served-iframe plane, its bridge and blueprint CSP, the postMessage settings path, and the gateway's UI-byte serving were retired end to end on 2026-08-15 by [#799](https://github.com/srikanth235/centraid/issues/799). The app-scoped RPC surface is `/centraid/<app>/actions|queries/<name>`; the former shared admin token plane is retired in favor of revocable owner enrollment. Full render-path details live in [ARCHITECTURE.md](../ARCHITECTURE.md#app-render-path). Settled by [#505](https://github.com/srikanth235/centraid/issues/505) and narrowed to one path by [#799](https://github.com/srikanth235/centraid/issues/799).
 
+## Surfaces held back for a design handoff
+
+Ruled 2026-08-18. Three surfaces were **removed rather than carried**, and none of them are deprecations: mobile Docs, mobile People, and desktop People. Each was drawn before the Binding Layer v11 handoff and answers an earlier grammar, so keeping it would have meant maintaining, testing and explaining screens the rebuild is going to replace. A surface that is wrong costs more than a surface that is absent.
+
+| Id | Current decision |
+| --- | --- |
+| **H-scope** | Only the RENDER TREE goes. Manifests, `./actions/*`, `./queries/*`, vault scopes, pending projections and receipts are untouched on all three. A design handoff redraws screens; it does not redesign a contract. The apps are **unrendered, not dark** — the assistant still invokes every handler, and desktop People's Ask panel still runs its seven queries. |
+| **H-wall** | Each removed surface leaves a wall carrying the place's own frame — its title and the way out — not a blank screen, a spinner, or a 404. Deliberately not the switched-off-place wall (`FeatureOffPlace`), which states a different fact (the gateway disabled something) with a different remedy. The wall spends no CTA: there is nothing to go forward to. |
+| **H-shape** | Docs on mobile loses its stack and is a plain cover again; `docs/:documentId` is gone from the deep-link table rather than silently resolving to the drive. People was already a single cover on both seats. |
+| **H-gates** | Gates are suspended over the missing UI by NAME, never softened. `handler-reachability.test.ts` gains one `awaiting-handoff` exception keyed per app per surface, whose justification test fails on an id that is not a real manifest; People comes off the three `state-honesty.test.ts` rendering lists; the native Docs assertions leave `placement-registry.test.ts` and the People renderer leaves `untrusted-rendering.test.ts` rather than being made conditional. Every removal names what the rebuild must restore. |
+| **H-loss** | Two coverage losses are accepted and recorded, not papered over: People's adversarial untrusted-string rendering, and the People phase of the mobile frame-drop scale flow (no other native list carries its 5,000-contact year-3 volume, so it is excised rather than pointed at a stand-in). |
+
+Restoring a surface is the last step of its rebuild: delete its id from `AWAITING_HANDOFF`, put its rows back on the lists above, and the gates come back on by themselves.
+
 ## Performance and Rust byte plane
 
 Node remains the gateway runtime until Bun supports `node:sqlite` and passes the same durability suite. Five performance designs — dependency-aware read cache, compiled consent decisions, incremental materializations, verified boot snapshot, and lazy vault mount — are evidence-gated, not adopted; mounting stays eager because a missed automation wakeup is a correctness failure. The Rust data plane moves bounded bytes only and never owns identity, consent, journal, replica, agent, or automation decisions. Budgets, profiles, and the full boundary live in [ARCHITECTURE.md](../ARCHITECTURE.md#performance-and-byte-plane-boundary); settled in [#456](https://github.com/srikanth235/centraid/issues/456).

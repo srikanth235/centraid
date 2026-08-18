@@ -179,9 +179,20 @@ export async function startWebUiServer(
         //     The shell itself retains nonce-only inline execution; it never
         //     admits `unsafe-inline`. `${apiOrigin}` stays for naturally
         //     cross-origin direct-HTTP mode.
+        //   - `blob:` in `frame-src`, so an inline app can EMBED a document it
+        //     already holds. A bundled app renders a PDF in an `<iframe>`
+        //     pointed at a vault blob, and off the gateway origin that
+        //     reference is rewritten to a `blob:` object URL by the shell's
+        //     authorizer (inline-blob-images.ts) — bytes THIS document already
+        //     fetched with its own credential, handed to a frame. Without the
+        //     token the frame is blocked and the viewer paints a blank white
+        //     page. This is not a widening of what the page may reach: it is
+        //     the same trust `img-src`, `media-src` and `object-src` already
+        //     place in the identical URLs. A `blob:` URL is unforgeable and
+        //     unguessable from outside this document.
         res.setHeader(
           "content-security-policy",
-          `default-src 'self'; script-src 'self' 'nonce-${scriptNonce}' blob: 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; media-src 'self' data: blob:; font-src 'self' data: blob:; connect-src 'self' ${apiOrigin} https: wss:; frame-src 'self' data: ${apiOrigin}; object-src blob:; base-uri 'self'; frame-ancestors 'none'`
+          `default-src 'self'; script-src 'self' 'nonce-${scriptNonce}' blob: 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; media-src 'self' data: blob:; font-src 'self' data: blob:; connect-src 'self' ${apiOrigin} https: wss:; frame-src 'self' data: blob: ${apiOrigin}; object-src blob:; base-uri 'self'; frame-ancestors 'none'`
         );
       }
       res.writeHead(200);

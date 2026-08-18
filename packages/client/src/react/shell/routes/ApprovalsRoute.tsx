@@ -165,7 +165,7 @@ export default function ApprovalsRoute(): JSX.Element {
   }, [reload]);
 
   // The frame's two verbs. "History" is the durable alert record, which lives
-  // on the Gateway page's Alerts tab (`AlertHistoryPanel`) — one implementation,
+  // on System's Alert history drill-in (`GatewayAlertsTab`) — one implementation,
   // reached from both places, rather than a second copy of it here.
   useEffect(() => {
     publishRouteVerbs("approvals", {

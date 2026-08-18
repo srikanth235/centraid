@@ -13,7 +13,12 @@
   display: flex;
   align-items: stretch;
   gap: var(--sp-1);
-  padding-inline: var(--sp-4);
+  /* The strip is a sibling of the scroll host, not a child, so it insets
+     itself. It insets by the margin LESS the tab's own padding, so what lands
+     on `--content-margin` is the first tab's LABEL — the thing the breadcrumb
+     and the rows below align their text to — rather than its hit area, which
+     would push every label 12px right of everything else on the screen. */
+  padding-inline: calc(var(--content-margin) - var(--sp-3));
   border-block-end: 1px solid var(--line);
   flex-shrink: 0;
   overflow-x: auto;

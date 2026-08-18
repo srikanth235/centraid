@@ -2,22 +2,14 @@ import { useCallback, useEffect, useState } from "react";
 import type { JSX } from "react";
 
 import {
-  confirmGatewayRecoveryKit,
-  getGatewayBackupStatus,
   getUserPrefs,
   getLocalStorageUsage,
-  listGatewayDevices,
   listGatewayOwners,
   pauseBackgroundWork,
   resumeBackgroundWork,
-  runGatewayBackupNow,
   saveUserPrefs,
-  streamStorageCustody,
   streamGatewayLogs,
-  updateGatewayBackupPolicy,
   updateStorageLimits,
-  verifyGatewayBackupBucket,
-  verifyGatewayBackupsNow,
 } from "../../../gateway-client.js";
 import { seat } from "../../host-platform.js";
 import GatewayScreen from "../../screens/GatewayScreen.js";
@@ -39,7 +31,6 @@ import PageScroll from "../PageScroll.js";
 import { PageLoading } from "../status.js";
 import { useGatewayHealth } from "../useGatewayHealth.js";
 import { useGatewayRuntime } from "../useGatewayRuntime.js";
-import { loadStorageUsageAggregate } from "./gatewayStorageData.js";
 import {
   loadConnectionRows,
   loadDiagnosticsData,
@@ -70,7 +61,13 @@ export default function GatewayRoute({
   cause,
   connections,
 }: {
-  initialTab?: "overview" | "components" | "storage" | "logs" | "alerts";
+  initialTab?:
+    | "overview"
+    | "components"
+    | "storage"
+    | "logs"
+    | "alerts"
+    | "restart";
   focus?: "backups" | "capacity";
   cause?: "backup-alert";
   /** Host plumbing for the Components tab's Connections section (issue #665).
@@ -79,7 +76,7 @@ export default function GatewayRoute({
    *  them; `refreshKey` is bumped once one commits so the list re-reads. */
   connections?: GatewayConnectionsProps;
 } = {}): JSX.Element {
-  const { showToast } = useShellActions();
+  const { navigate, showToast } = useShellActions();
   const snapshot = useGatewayRuntime();
   const { health, refresh: refreshHealth } = useGatewayHealth();
   const [saving, setSaving] = useState(false);
@@ -179,10 +176,20 @@ export default function GatewayRoute({
     refreshHealth();
     return res;
   }, [refreshHealth]);
-  const streamBackupCustody = useCallback(
-    (onChange: () => void, signal: AbortSignal) =>
-      streamStorageCustody(onChange, signal),
-    []
+  // A DRILL-IN IS A HISTORY ENTRY. System's pages used to be local state with a
+  // "‹ System · Back" row drawn at the top of each one — a second back control
+  // sitting under the frame's own back arrow and pointing at the same place.
+  // Routing them means the arrow already works, and a page can be deep-linked.
+  // `routeKey` keys gateway routes by tab, so each is a distinct entry rather
+  // than a repeat of the one before it.
+  const openTab = useCallback(
+    (
+      tab: "overview" | "components" | "storage" | "logs" | "alerts" | "restart"
+    ) =>
+      navigate(
+        tab === "overview" ? { kind: "gateway" } : { kind: "gateway", tab }
+      ),
+    [navigate]
   );
 
   if (!snapshot) {
@@ -195,6 +202,12 @@ export default function GatewayRoute({
 
   return (
     <PageScroll>
+      {/* NO `backup` PROP, so System draws no Backups section. Offsite backup
+          is not part of v0, and a section that states "no backup has ever run
+          · nothing has been copied off this machine" on every gateway is an
+          alarm about a feature that has not shipped. `BackupCard` and its
+          gateway calls are intact; restoring the section is restoring one
+          prop. */}
       <GatewayScreen
         snapshot={snapshot}
         now={now}
@@ -232,24 +245,8 @@ export default function GatewayRoute({
         onResumeBackgroundWork={resumeBackground}
         loadKnobPrefs={loadKnobPrefs}
         saveKnobPrefs={saveKnobPrefs}
-        backup={{
-          loadStatus: getGatewayBackupStatus,
-          loadUsage: loadStorageUsageAggregate,
-          streamCustody: streamBackupCustody,
-          onRunNow: runGatewayBackupNow,
-          onVerifyNow: verifyGatewayBackupsNow,
-          onUpdatePolicy: updateGatewayBackupPolicy,
-          onVerifyBucket: verifyGatewayBackupBucket,
-          onExportRecoveryKit: (input) =>
-            window.CentraidApi.exportGatewayRecoveryKit(input),
-          onConfirmRecoveryKit: confirmGatewayRecoveryKit,
-          loadDevices: listGatewayDevices,
-          // No client-side restore flow exists yet (issue #708 A2 seam) —
-          // restore is still a gateway-side/CLI recovery act. Omitting
-          // `onRestore` renders the control disabled with that reason
-          // instead of hiding it.
-        }}
         initialTab={initialTab}
+        onOpenTab={openTab}
         focus={focus}
         cause={cause}
         loadLocalUsage={getLocalStorageUsage}

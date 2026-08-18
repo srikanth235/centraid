@@ -5,7 +5,14 @@ import { relativeTime } from "../format.js";
 import { gatewayStatusCopy, railStatus } from "../shell/gatewayRegistry.js";
 import type { GatewayRow } from "../shell/gatewayRegistry.js";
 import { cx } from "../ui/cx.js";
+import EmptyBlock from "../ui/EmptyBlock.js";
 import { Icon } from "../ui/index.js";
+import NoteBlock from "../ui/NoteBlock.js";
+import PanelBlock from "../ui/PanelBlock.js";
+import type { PanelFact } from "../ui/PanelBlock.js";
+import RowsBlock from "../ui/RowsBlock.js";
+import type { RowDef } from "../ui/RowsBlock.js";
+import SectionBlock from "../ui/SectionBlock.js";
 import type {
   BackgroundPauseDTO,
   PowerContextState,
@@ -13,7 +20,6 @@ import type {
 } from "./resource-summary.js";
 
 import controlsCss from "../styles/controls.module.css";
-import buttonCss from "../ui/Button.module.css";
 import styles from "./SettingsDiagnosticsScreen.module.css";
 
 // Gateway → Components: the owner surface over the gateway's
@@ -23,7 +29,25 @@ import styles from "./SettingsDiagnosticsScreen.module.css";
 // the gateway's recent structured warn/error tail. Prop-driven like
 // SettingsHarnessesScreen: this file owns the view + load/refresh state,
 // the gateway I/O lives in `routes/settingsDiagnosticsData.ts`. Mounted from
-// the Gateway page's Components tab (GatewayScreen.tsx), not Settings.
+// the Gateway page's Components drill-in (GatewayScreen.tsx), not Settings.
+//
+// BUILT FROM THE BLOCK KIT (binding layer v11). It used to be a page of its
+// own furniture: a status bar with an inline Refresh, four uppercase metric
+// tiles, one bespoke row per component carrying a coloured dot AND an
+// uppercase HEALTHY/DEGRADED badge, and two uppercase `<div>` sub-heads over
+// two more bespoke panels. Six components read as six shouted words with the
+// actual sentence — WHAT stopped, and WHEN — set smaller than the badge.
+//
+// In v11 the page is the same four statements said in the shared vocabulary:
+// the count and the Refresh verb are the SECTION HEAD, the gateway's coarse
+// figures are a fact panel, every component is a row whose meta is its status
+// in lower case, and the two sub-lists get real heads. The dot is gone — a
+// row that says "degraded" in its meta and carries `net` does not also need a
+// colour swatch to say it a third time.
+//
+// The drill-ins repeat at the foot, as the prototype has them: a member who
+// got here from an alert should not have to go back to the overview to read
+// the lines that alert came from.
 
 export type HealthStatus = "ok" | "degraded" | "error";
 
@@ -112,18 +136,22 @@ export interface DiagnosticsConnectionsProps {
 
 export interface SettingsDiagnosticsBridgeProps {
   loadHealth: () => Promise<GatewayHealthDTO>;
-  /** Jump into the Logs tab, focused on this component's lines — omitted
+  /** Jump into the Logs drill-in, focused on this component's lines — omitted
    *  when the caller has nowhere to send the click (only wired from the
-   *  Gateway page, where Logs is a sibling tab). */
+   *  Gateway page, where Logs is a sibling drill-in). */
   onJumpToLogs?: (component: string) => void;
+  /** Open the Alert history drill-in — the second half of the foot rows. */
+  onOpenAlerts?: () => void;
   /** Host plumbing. Absent on hosts with no gateway registry. */
   connections?: DiagnosticsConnectionsProps;
 }
 
-const STATUS_LABEL: Record<HealthStatus, string> = {
-  ok: "All systems go",
-  degraded: "Degraded",
-  error: "Something is failing",
+/** The row's own meta word. LOWER CASE, like every other meta in the kit: the
+ *  status is a fact about the row, not a badge shouting over its name. */
+const STATUS_WORD: Record<HealthStatus, string> = {
+  ok: "healthy",
+  degraded: "degraded",
+  error: "failing",
 };
 
 const COMPONENT_LABEL: Record<string, string> = {
@@ -212,100 +240,82 @@ function eventClock(iso: string): string {
   });
 }
 
-function ComponentRow({
-  row,
-  onJumpToLogs,
-}: {
-  row: HealthComponentDTO;
-  onJumpToLogs?: (component: string) => void;
-}): JSX.Element {
-  // The sub-line reads the most useful thing per state: a failing
-  // component shows its LAST ERROR (the actionable bit); a healthy one
-  // shows its probe detail ("2 vaults mounted") or last-ok recency.
-  const sub =
+/** One component as a row. The sub-line reads the most useful thing per state:
+ *  a failing component shows its LAST ERROR (the actionable bit); a healthy one
+ *  shows its probe detail ("2 vaults mounted") or last-ok recency. */
+function componentRow(
+  row: HealthComponentDTO,
+  onJumpToLogs?: (component: string) => void
+): RowDef {
+  const detail =
     row.status === "ok"
       ? (row.detail ??
         (row.lastOkAt ? `last ok ${relativeTime(row.lastOkAt)}` : undefined))
       : (row.lastError ?? row.detail);
-  return (
-    <div className={styles.row} data-testid="diag-component">
-      <span className={styles.dot} data-health={row.status} />
-      <div className={styles.rowMeta}>
-        <div className={styles.rowName}>{componentLabel(row.component)}</div>
-        {sub ? (
-          <div className={styles.rowSub} title={sub}>
-            {sub}
-          </div>
-        ) : null}
-      </div>
-      {row.errorCount > 0 ? (
-        <span className={styles.errCount} title="Errors since gateway start">
-          {row.errorCount} err{row.errorCount === 1 ? "" : "s"}
-        </span>
-      ) : null}
-      {row.status !== "ok" && onJumpToLogs ? (
-        <button
-          type="button"
-          className={styles.jumpToLogs}
-          onClick={() => onJumpToLogs(row.component)}
-        >
-          View in logs
-        </button>
-      ) : null}
-      <span className={styles.healthLabel} data-health={row.status}>
-        {row.status === "ok"
-          ? "Healthy"
-          : row.status === "degraded"
-            ? "Degraded"
-            : "Failing"}
-      </span>
-    </div>
-  );
+  // The error tally used to be its own cell. It belongs in the sentence: "12
+  // errors since it last answered" is a reading; "12 errs" beside a badge is a
+  // number the reader has to assemble a meaning for.
+  const tally =
+    row.errorCount > 0
+      ? `${row.errorCount} error${row.errorCount === 1 ? "" : "s"} since the gateway started`
+      : undefined;
+  const sub = [detail, tally].filter(Boolean).join(" · ");
+  return {
+    id: `component-${row.component}`,
+    meta: STATUS_WORD[row.status],
+    title: componentLabel(row.component),
+    ...(sub ? { sub } : {}),
+    ...(row.status === "ok" ? {} : { net: true }),
+    ...(row.status !== "ok" && onJumpToLogs
+      ? {
+          action: {
+            hint: "The stream, filtered to this component",
+            label: "Logs",
+            onClick: () => onJumpToLogs(row.component),
+          },
+        }
+      : {}),
+  };
 }
 
-function MetricsPanel({ metrics }: { metrics: HealthMetricsDTO }): JSX.Element {
-  const lag =
-    metrics.eventLoopLagP99Ms === undefined
-      ? "—"
-      : `p99 ${metrics.eventLoopLagP99Ms.toFixed(1)} ms`;
-  const fsync =
-    metrics.storageFsyncMs === undefined
-      ? "—"
-      : `${metrics.storageFsyncMs.toFixed(1)} ms`;
-  return (
-    <div className={styles.metrics} data-testid="diag-metrics">
-      <div className={styles.metric}>
-        <div className={styles.metricLabel}>Memory</div>
-        <div className={styles.metricValue}>{formatRss(metrics.rssBytes)}</div>
-      </div>
-      <div className={styles.metric}>
-        <div className={styles.metricLabel}>Event-loop lag</div>
-        <div className={styles.metricValue}>{lag}</div>
-      </div>
-      <div className={styles.metric}>
-        <div className={styles.metricLabel}>Storage fsync</div>
-        <div className={styles.metricValue}>{fsync}</div>
-      </div>
-      <div className={styles.metric}>
-        <div className={styles.metricLabel}>Resource mode</div>
-        <div className={styles.metricValue}>
-          {resourceModeWord(metrics.resourceMode)}
-        </div>
-        <div className={styles.metricSub}>
-          {hardwareClassWord(metrics.hardwareProfileClass)}
-        </div>
-      </div>
-    </div>
-  );
+/** The gateway's coarse figures, as facts rather than as a tile grid. */
+function metricFacts(metrics: HealthMetricsDTO): PanelFact[] {
+  return [
+    { key: "up for", mono: true, value: formatUptime(metrics.uptimeMs) },
+    { key: "memory", mono: true, value: formatRss(metrics.rssBytes) },
+    {
+      key: "event-loop lag",
+      mono: true,
+      value:
+        metrics.eventLoopLagP99Ms === undefined
+          ? "——"
+          : `p99 ${metrics.eventLoopLagP99Ms.toFixed(1)} ms`,
+    },
+    {
+      key: "storage fsync",
+      mono: true,
+      value:
+        metrics.storageFsyncMs === undefined
+          ? "——"
+          : `${metrics.storageFsyncMs.toFixed(1)} ms`,
+    },
+    {
+      key: "resource mode",
+      mono: true,
+      value: `${resourceModeWord(metrics.resourceMode)} · ${hardwareClassWord(
+        metrics.hardwareProfileClass
+      ).toLowerCase()}`,
+    },
+  ];
 }
 
-/** Reachability in the health dot's vocabulary — a still-probing host has no
- *  verdict yet, so it gets the dot's neutral default rather than a colour. */
-function connectionHealth(row: GatewayRow): HealthStatus | undefined {
+/** Reachability as the row's own word — a still-probing host has no verdict
+ *  yet, so it says so rather than borrowing a healthy one. */
+function connectionWord(row: GatewayRow): string {
   const rail = railStatus(row);
-  if (rail === "ready") return "ok";
-  if (rail === "error") return "error";
-  return undefined;
+  if (rail === "ready") return "reachable";
+  if (rail === "error") return "unreachable";
+  return "checking";
 }
 
 /** What one host is currently serving, in the fewest words that still say it. */
@@ -341,76 +351,84 @@ function ConnectionsPanel({
     };
   }, [loadConnections, refreshKey]);
 
+  // THREE ACTS, so they go UNDER the row rather than into its one trailing
+  // slot (`RowDef.children`). Prove it works, relabel it, stop talking to it —
+  // rare and deliberate, and each one is about this host in particular, so
+  // none of them can be promoted to a section verb without losing its subject.
+  const rowsFor = (list: GatewayRow[]): RowDef[] =>
+    list.map((row) => ({
+      id: row.gatewayId,
+      meta: connectionWord(row),
+      sub: connectionSummary(row),
+      title: `${row.gatewayLabel} · ${row.transportBadge}${row.isActive ? " · active" : ""}`,
+      ...(railStatus(row) === "error" ? { net: true } : {}),
+      ...(onTest || onRename || onRemove
+        ? {
+            children: (
+              <div className={styles.connActions}>
+                {onTest ? (
+                  <button
+                    type="button"
+                    className={controlsCss.chip}
+                    onClick={() => onTest(row.gatewayId, row.gatewayLabel)}
+                  >
+                    <Icon name="Wifi" size={12} />
+                    Test connection
+                  </button>
+                ) : null}
+                {onRename ? (
+                  <button
+                    type="button"
+                    className={controlsCss.chip}
+                    onClick={() => onRename(row.gatewayId, row.gatewayLabel)}
+                  >
+                    <Icon name="Pencil" size={12} />
+                    Rename
+                  </button>
+                ) : null}
+                {row.canRemove && onRemove ? (
+                  <button
+                    type="button"
+                    className={cx(controlsCss.chip, controlsCss.chipDanger)}
+                    onClick={() => onRemove(row.gatewayId, row.gatewayLabel)}
+                  >
+                    <Icon name="Trash" size={12} />
+                    Remove
+                  </button>
+                ) : null}
+              </div>
+            ),
+          }
+        : {}),
+    }));
+
   return (
     <>
-      <div className={styles.eventsHead}>Connections</div>
-      <div className={styles.panel} data-testid="diag-connections">
-        {rows === null ? (
-          <div className={styles.empty}>Checking connections…</div>
-        ) : rows.length === 0 ? (
-          <div className={styles.empty}>
-            No hosts are registered on this device.
-          </div>
-        ) : (
-          rows.map((row) => (
-            <div
-              className={styles.connRow}
-              key={row.gatewayId}
-              data-testid="diag-connection"
-              data-gateway-id={row.gatewayId}
-            >
-              <span
-                className={styles.dot}
-                data-health={connectionHealth(row)}
-              />
-              <div className={styles.rowMeta}>
-                <div className={styles.rowName}>
-                  {row.gatewayLabel}
-                  <span className={styles.connBadge}>{row.transportBadge}</span>
-                  {row.isActive ? (
-                    <span className={styles.connBadge}>Active</span>
-                  ) : null}
-                </div>
-                <div className={styles.rowSub}>{connectionSummary(row)}</div>
-              </div>
-              {onTest || onRename || onRemove ? (
-                <div className={styles.connActions}>
-                  {onTest ? (
-                    <button
-                      type="button"
-                      className={controlsCss.chip}
-                      onClick={() => onTest(row.gatewayId, row.gatewayLabel)}
-                    >
-                      <Icon name="Wifi" size={12} />
-                      Test connection
-                    </button>
-                  ) : null}
-                  {onRename ? (
-                    <button
-                      type="button"
-                      className={controlsCss.chip}
-                      onClick={() => onRename(row.gatewayId, row.gatewayLabel)}
-                    >
-                      <Icon name="Pencil" size={12} />
-                      Rename
-                    </button>
-                  ) : null}
-                  {row.canRemove && onRemove ? (
-                    <button
-                      type="button"
-                      className={cx(controlsCss.chip, controlsCss.chipDanger)}
-                      onClick={() => onRemove(row.gatewayId, row.gatewayLabel)}
-                    >
-                      <Icon name="Trash" size={12} />
-                      Remove
-                    </button>
-                  ) : null}
-                </div>
-              ) : null}
-            </div>
-          ))
-        )}
-      </div>
+      <SectionBlock
+        label="Connections"
+        meta={
+          rows === null
+            ? "checking"
+            : `${rows.length} host${rows.length === 1 ? "" : "s"}`
+        }
+      />
+      {rows === null ? (
+        <EmptyBlock
+          routine
+          title="Checking connections…"
+          body="Asking each registered host whether it answers."
+        />
+      ) : rows.length === 0 ? (
+        <EmptyBlock
+          routine
+          title="No hosts are registered on this device."
+          body="A host is added when you pair with one; this device has paired with none."
+        />
+      ) : (
+        <div data-testid="diag-connections">
+          <RowsBlock ariaLabel="Connections" rows={rowsFor(rows)} />
+        </div>
+      )}
     </>
   );
 }
@@ -418,6 +436,7 @@ function ConnectionsPanel({
 export default function SettingsDiagnosticsScreen({
   loadHealth,
   onJumpToLogs,
+  onOpenAlerts,
   connections,
 }: SettingsDiagnosticsBridgeProps): JSX.Element {
   const [health, setHealth] = useState<GatewayHealthDTO | null>(null);
@@ -461,73 +480,120 @@ export default function SettingsDiagnosticsScreen({
     return <div className={styles.loading}>Checking gateway health…</div>;
   }
 
+  const troubled = health.components.filter((row) => row.status !== "ok");
+  // The head answers the page's own question before a single row is read.
+  const componentsMeta =
+    health.components.length === 0
+      ? "none reporting"
+      : troubled.length === 0
+        ? `${health.components.length} · all answering`
+        : `${health.components.length} · ${troubled.length} in trouble`;
+
+  // The two drill-ins repeat at the foot, as the prototype has them. The Logs
+  // row names the component it will focus on, because a link that says "Logs"
+  // and lands on an unfiltered stream has not taken the reader anywhere.
+  const firstTroubled = troubled[0];
+  const foot: RowDef[] = [];
+  if (onJumpToLogs)
+    foot.push({
+      action: {
+        label: "Open",
+        onClick: () => onJumpToLogs(firstTroubled?.component ?? ""),
+      },
+      id: "foot-logs",
+      sub: firstTroubled
+        ? `the stream, filtered to ${componentLabel(firstTroubled.component)}`
+        : "the stream, with a focus query",
+      title: firstTroubled
+        ? `Logs for ${componentLabel(firstTroubled.component)}`
+        : "Logs",
+    });
+  if (onOpenAlerts)
+    foot.push({
+      action: { label: "Open", onClick: onOpenAlerts },
+      id: "foot-alerts",
+      sub: "every alert this gateway has raised, and what cleared it",
+      title: "Alert history",
+    });
+
   return (
     <div className={styles.wrap}>
-      <div className={styles.overall} data-health={health.status}>
-        <span className={styles.dot} data-health={health.status} />
-        <div className={styles.overallMeta}>
-          <div className={styles.overallTitle}>
-            {STATUS_LABEL[health.status]}
-          </div>
-          <div className={styles.overallSub}>
-            Gateway up {formatUptime(health.uptimeMs)} · since{" "}
-            {new Date(health.startedAt).toLocaleString()}
-          </div>
+      <SectionBlock
+        action={{
+          hint: "Ask every component again",
+          label: busy ? "Checking…" : "Refresh",
+          onClick: refresh,
+          ...(busy ? { off: true } : {}),
+        }}
+        label="Components"
+        meta={componentsMeta}
+      />
+
+      {health.metrics ? (
+        <div data-testid="diag-metrics">
+          <PanelBlock
+            eyebrow="This gateway"
+            facts={metricFacts(health.metrics)}
+            wide
+          />
         </div>
-        <button
-          type="button"
-          className={cx(buttonCss.btn, buttonCss.sm, controlsCss.soft)}
-          disabled={busy}
-          onClick={refresh}
-        >
-          <Icon name="Refresh" size={13} />
-          <span>{busy ? "Checking…" : "Refresh"}</span>
-        </button>
-      </div>
+      ) : null}
 
-      {health.metrics ? <MetricsPanel metrics={health.metrics} /> : null}
+      {health.components.length === 0 ? (
+        <EmptyBlock
+          routine
+          title="No components have reported yet."
+          body="The health probe has answered, but no subsystem has said anything about itself."
+        />
+      ) : (
+        <div data-testid="diag-components">
+          <RowsBlock
+            ariaLabel="Components"
+            rows={health.components.map((row) =>
+              componentRow(row, onJumpToLogs)
+            )}
+          />
+        </div>
+      )}
 
-      <div className={styles.panel}>
-        {health.components.length === 0 ? (
-          <div className={styles.empty}>No components have reported yet.</div>
-        ) : (
-          health.components.map((row) => (
-            <ComponentRow
-              key={row.component}
-              row={row}
-              onJumpToLogs={onJumpToLogs}
-            />
-          ))
-        )}
-      </div>
+      <NoteBlock>
+        A component is a subsystem of the gateway, not an app. Nothing on this
+        page can touch your records — the worst it can do is ask a subsystem to
+        start again.
+      </NoteBlock>
 
       {connections ? <ConnectionsPanel {...connections} /> : null}
 
-      <div className={styles.eventsHead}>Recent warnings &amp; errors</div>
-      <div className={styles.panel}>
-        {health.recentEvents.length === 0 ? (
-          <div className={styles.empty}>
-            Nothing logged since the gateway started.
-          </div>
-        ) : (
-          health.recentEvents.map((ev, i) => (
-            <div
-              className={styles.eventRow}
-              key={`${ev.at}-${i}`}
-              data-testid="diag-event"
-            >
-              <span className={styles.eventTime}>{eventClock(ev.at)}</span>
-              <span className={styles.eventLevel} data-level={ev.level}>
-                {ev.level}
-              </span>
-              <span className={styles.eventComponent}>
-                {componentLabel(ev.component)}
-              </span>
-              <span className={styles.eventMessage}>{ev.message}</span>
-            </div>
-          ))
-        )}
-      </div>
+      <SectionBlock
+        label="Recent warnings"
+        meta={
+          health.recentEvents.length === 0
+            ? "nothing logged"
+            : `${health.recentEvents.length} since the gateway started`
+        }
+      />
+      {health.recentEvents.length === 0 ? (
+        <EmptyBlock
+          routine
+          title="Nothing logged since the gateway started."
+          body="Warnings and errors land here as they happen; an empty list is the good outcome."
+        />
+      ) : (
+        <RowsBlock
+          ariaLabel="Recent warnings"
+          rows={health.recentEvents.map((ev, i) => ({
+            id: `event-${ev.at}-${i}`,
+            meta: ev.level,
+            sub: ev.message,
+            title: `${eventClock(ev.at)} · ${componentLabel(ev.component)}`,
+            ...(ev.level === "error" ? { net: true } : {}),
+          }))}
+        />
+      )}
+
+      {foot.length > 0 ? (
+        <RowsBlock ariaLabel="Look closer" rows={foot} />
+      ) : null}
     </div>
   );
 }

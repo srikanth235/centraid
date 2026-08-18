@@ -1,290 +1,39 @@
+/* System → Components.
+
+   FOUR CLASSES (binding layer v11). This file used to carry the page's whole
+   anatomy — an overall banner, a metric tile grid, a component row with a
+   health dot and an uppercase badge, an event row, a connection row, two
+   uppercase sub-heads and a bordered panel to put them all in. Every one of
+   those is now a block from the kit, which owns its own geometry, so what is
+   left here is the page column, the two pre-load states, and the one thing the
+   kit has no shape for: three chips under a connection row. */
+
 .wrap {
   display: flex;
   flex-direction: column;
-  gap: 14px;
+  /* The tight step, because a section head sits directly over its own block
+     and draws the hairline between them — the same measure StorageScreen uses. */
+  gap: var(--sp-2);
+  min-inline-size: 0;
 }
 
 .loading,
 .loadError {
-  padding: 20px 4px;
-  font-size: var(--t-control-size);
   color: var(--text-faint);
+  font: var(--t-small);
+  padding: var(--sp-5) var(--sp-1);
 }
+
 .loadError {
   color: var(--danger);
 }
 
-/* Overall banner — one glance answers "is anything wrong". */
-.overall {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  padding: 14px 16px;
-  border: 1px solid var(--line);
-  border-radius: var(--r-lg);
-  background: var(--bg-elev);
-}
-.overallMeta {
-  flex: 1;
-  min-width: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-}
-.overallTitle {
-  font-family: var(--font-sans);
-  font-size: var(--t-small-size);
-  font-weight: 600;
-  letter-spacing: -0.01em;
-}
-.overallSub {
-  font-family: var(--font-sans);
-  font-size: var(--t-control-size);
-  color: var(--text-faint);
-}
-
-/* Resource metrics strip (var(--text)) — plain-language pressure read. */
-.metrics {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
-  gap: 10px;
-}
-.metric {
-  border: 1px solid var(--line);
-  border-radius: var(--r-lg);
-  background: var(--bg-elev);
-  padding: 12px 14px;
-  min-width: 0;
-}
-.metricLabel {
-  font-family: var(--font-sans);
-  font-size: var(--t-control-size);
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  color: var(--text-ghost);
-  margin-bottom: 6px;
-}
-.metricValue {
-  font-family: var(--font-sans);
-  font-weight: 600;
-  font-size: var(--t-body-size);
-  color: var(--text);
-  font-variant-numeric: tabular-nums;
-}
-.metricSub {
-  margin-top: 3px;
-  font-family: var(--font-sans);
-  font-size: var(--t-control-size);
-  color: var(--text-ghost);
-}
-
-.panel {
-  border: 1px solid var(--line);
-  border-radius: var(--r-lg);
-  background: var(--bg-elev);
-  overflow: hidden;
-}
-.row {
-  display: flex;
-  /* flex-start rather than center: a long, wrapped `detail` (the `disk`/
-     `vaults` components can bake several items into one string) shouldn't
-     pull the dot/badges away from the row's top line. */
-  align-items: flex-start;
-  gap: 12px;
-  padding: 12px 16px;
-}
-.row + .row {
-  border-top: 1px solid var(--line);
-}
-
-/* Health dot — same three-state read as SettingsConnectionsScreen's rows
-   (--success / --c-amber / --danger), keyed off data-health. */
-.dot {
-  width: 9px;
-  height: 9px;
-  border-radius: var(--r-pill);
-  flex: none;
-  background: var(--diag-health, var(--text-faint));
-  box-shadow: 0 0 0 3px
-    color-mix(in oklab, var(--diag-health, var(--text-faint)) 16%, transparent);
-}
-/* `.row` switched to `align-items: flex-start` so a long, wrapped detail
-   doesn't pull the dot toward vertical center — nudge it back to the
-   row's top line. Scoped to `.row` so the `.overall` banner's dot (still
-   `align-items: center`) is unaffected. */
-.row > .dot {
-  margin-top: 3px;
-}
-.dot[data-health="ok"] {
-  --diag-health: var(--success);
-}
-.dot[data-health="degraded"] {
-  --diag-health: var(--c-amber);
-}
-.dot[data-health="error"] {
-  --diag-health: var(--danger);
-}
-
-.rowMeta {
-  flex: 1;
-  min-width: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-}
-.rowName {
-  font-family: var(--font-sans);
-  font-size: var(--t-small-size);
-  font-weight: 600;
-  letter-spacing: -0.01em;
-}
-.rowSub {
-  font-family: var(--font-sans);
-  font-size: var(--t-control-size);
-  color: var(--text-faint);
-  /* `disk`/`vaults` (and any long lastError) can bake several items into
-     one detail string — wrap instead of the single-line ellipsis this used
-     to be, so the full text stays readable rather than clipped. */
-  white-space: normal;
-  overflow-wrap: anywhere;
-  line-height: 1.45;
-}
-
-.errCount {
-  flex: none;
-  font-family: var(--font-sans);
-  font-size: var(--t-control-size);
-  color: var(--text-faint);
-}
-
-.jumpToLogs {
-  flex: none;
-  font-family: var(--font-sans);
-  font-size: var(--t-control-size);
-  color: var(--accent-deep, var(--accent));
-  background: none;
-  border: none;
-  padding: 0;
-  cursor: pointer;
-  text-decoration: underline dotted;
-  text-underline-offset: 2px;
-}
-.jumpToLogs:hover {
-  color: var(--accent);
-}
-
-.healthLabel {
-  flex: none;
-  font-family: var(--font-sans);
-  font-size: var(--t-control-size);
-  font-weight: 600;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  color: var(--diag-health, var(--text-faint));
-}
-.healthLabel[data-health="ok"] {
-  --diag-health: var(--success);
-}
-/* `.dot` above keeps the FILL; this label is 9.5px mono type. */
-.healthLabel[data-health="degraded"] {
-  --diag-health: var(--c-amber-text);
-}
-.healthLabel[data-health="error"] {
-  --diag-health: var(--danger);
-}
-
-.eventsHead {
-  margin-top: 4px;
-  font-family: var(--font-sans);
-  font-size: var(--t-control-size);
-  font-weight: 600;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  color: var(--text-faint);
-}
-
-.eventRow {
-  display: flex;
-  align-items: baseline;
-  gap: 10px;
-  padding: 8px 16px;
-  font-family: var(--font-sans);
-  font-size: var(--t-control-size);
-}
-.eventRow + .eventRow {
-  border-top: 1px solid var(--line);
-}
-.eventTime {
-  flex: none;
-  color: var(--text-faint);
-}
-.eventLevel {
-  flex: none;
-  font-weight: 600;
-  text-transform: uppercase;
-  font-size: var(--t-control-size);
-  letter-spacing: 0.06em;
-}
-.eventLevel[data-level="warn"] {
-  color: var(--c-amber-text);
-}
-.eventLevel[data-level="error"] {
-  color: var(--danger);
-}
-.eventComponent {
-  flex: none;
-  color: var(--text-soft);
-}
-.eventMessage {
-  flex: 1;
-  min-width: 0;
-  color: var(--text);
-  overflow-wrap: anywhere;
-}
-
-.empty {
-  padding: 20px 16px;
-  font-size: var(--t-control-size);
-  color: var(--text-faint);
-  font-style: italic;
-}
-
-/* Connections — host plumbing (issue #665). Deliberately the same row anatomy
-   as the component rows above (dot · meta · trailing controls) so the one
-   place a host is still a host reads as part of this page rather than as a
-   manager bolted onto it. */
-.connRow {
-  display: flex;
-  align-items: flex-start;
-  gap: 12px;
-  padding: 12px 16px;
-  flex-wrap: wrap;
-}
-.connRow + .connRow {
-  border-top: 1px solid var(--line);
-}
-.connRow > .dot {
-  margin-top: 4px;
-}
-
-.connBadge {
-  margin-left: 6px;
-  font-family: var(--font-sans);
-  font-size: var(--t-control-size);
-  font-weight: 600;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-  color: var(--text-ghost);
-  padding: 1px 5px;
-  border-radius: var(--r-pill);
-  background: color-mix(in srgb, var(--text) 7%, transparent);
-  vertical-align: middle;
-}
-
+/* Prove it works, relabel it, stop talking to it — three rare, deliberate acts
+   against ONE host, so they sit under the row (`RowDef.children`) rather than
+   competing for its single trailing verb. */
 .connActions {
-  flex: none;
-  display: flex;
   align-items: center;
-  gap: 6px;
+  display: flex;
   flex-wrap: wrap;
+  gap: var(--sp-1);
 }

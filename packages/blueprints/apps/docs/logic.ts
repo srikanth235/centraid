@@ -11,25 +11,23 @@
 // roots). Everything returned here is then wired into app.tsx's render
 // functions as props/callbacks, exactly like any other value flowing down.
 import {
-  isPendingOffsite,
   outcomeMessage,
   runBulk as runBulkBase,
   statusLine,
 } from "@centraid/design/elements";
 
 import { applyFilters } from "./filters.ts";
-import { fmtBytes } from "./format.ts";
+import { typeMeta } from "./format.ts";
 import { createMetadata } from "./metadata.ts";
 import { createPopovers } from "./popovers.ts";
 import { FOLDERS, RECENT, STARRED, TRASH, folderIdFrom } from "./shelves.ts";
 import type { AppData, AppState, DriveDoc, Folder } from "./types.ts";
-import { stageDocumentFile } from "./upload.ts";
+import { createUploads } from "./uploads.ts";
 import { createVersions } from "./versions.ts";
 
 const $ = (id: string) => document.querySelector<HTMLElement>(`#${id}`)!;
 // Bytes stream to the blob staging route (issue #296) — no base64 through
 // command JSON — so big documents fit; the route itself caps at 512 MB.
-const MAX_UPLOAD_BYTES = 512 * 1024 * 1024;
 
 // The vault speaks in predicates; the drive speaks in plain language. The
 // gateway's contract checker (packages/vault/src/gateway/contract.ts) always
@@ -58,6 +56,10 @@ interface LogicDeps {
   render: () => void;
   refresh: () => Promise<void> | void;
   openQuick: (id: string) => void;
+  /** The row menu names Details and Version history among its verbs, so the
+   *  routes behind them are passed in the same way Quick Look already is. */
+  openDetails: (id: string) => void;
+  openVersions: (id: string) => void;
 }
 
 export function createLogic({
@@ -66,6 +68,8 @@ export function createLogic({
   render,
   refresh,
   openQuick,
+  openDetails,
+  openVersions,
 }: LogicDeps) {
   function notice(text?: string) {
     const b = $("noticeBanner");
@@ -130,6 +134,9 @@ export function createLogic({
     return data.documents.filter((f) => f.trashed);
   }
 
+  // One comparator per sortable column head (`SortKey`). `changed` reads
+  // `updated_at`, which is the date the row PRINTS — a set ordered by one date
+  // while showing another is the sort lying about itself.
   function compareDocs(a: DriveDoc, b: DriveDoc): number {
     let r = 0;
     if (state.sortKey === "size") r = (a.byte_size ?? 0) - (b.byte_size ?? 0);
@@ -142,8 +149,22 @@ export function createLogic({
           sensitivity: "base",
         }
       );
+    // Owner is a stable no-op while this drive projects ONE vault: every row
+    // belongs to the member, so nothing reorders. It is the comparator the day
+    // a shared space puts somebody else's documents in the same set, and
+    // leaving it out would make the column the one head that cannot be pressed.
+    else if (state.sortKey === "owner") r = 0;
+    else if (state.sortKey === "kind")
+      // The word in the column, not the raw media type: "PDF" and "Image" are
+      // what the member is grouping by, and two media types that print the
+      // same word must land together.
+      r = typeMeta(a.media_type, a.title).name.localeCompare(
+        typeMeta(b.media_type, b.title).name,
+        undefined,
+        { sensitivity: "base" }
+      );
     else
-      r = String(a.created_at ?? "").localeCompare(String(b.created_at ?? ""));
+      r = String(a.updated_at ?? "").localeCompare(String(b.updated_at ?? ""));
     return r * state.sortDir;
   }
 
@@ -339,6 +360,34 @@ export function createLogic({
   function moveSelected(anchor: HTMLElement) {
     openMovePopover(anchor, selectedDocs());
   }
+  /**
+   * Star the selection — or unstar it, when every picked document already
+   * carries a star.
+   *
+   * ONE VERB FOR THE WHOLE SET, decided before anything is written: a bar that
+   * toggled each row independently would leave a mixed selection exactly as
+   * mixed as it found it, which is not what pressing one button once means.
+   * Mixed becomes starred, which is the reading of "Star" that adds rather
+   * than removes.
+   */
+  function starSelected() {
+    const docs = selectedDocs();
+    const unstar = docs.length > 0 && docs.every((d) => d.starred);
+    return runBulk(
+      docs.map((d) => d.document_id),
+      (id) => act(unstar ? "unstar" : "star", { document_id: id }),
+      {
+        progress: unstar ? "Removing stars" : "Starring",
+        done: unstar ? "Star removed" : "Starred",
+      }
+    );
+  }
+  /** Is every picked document already starred? The bar reads this to name its
+   *  own verb, so the label and what the press does cannot disagree. */
+  function selectionAllStarred(): boolean {
+    const docs = selectedDocs();
+    return docs.length > 0 && docs.every((d) => d.starred);
+  }
   function clearSelected() {
     clearSelection();
     render();
@@ -392,83 +441,30 @@ export function createLogic({
   }
 
   // ---------- Upload (picker + drag-and-drop) ----------
-
-  // Each file's bytes stage into the vault's CAS via kit stageFileBytes
-  // (issue #296); the upload action claims the returned sha — that claim is
-  // the receipt.
-  async function uploadFiles(fileList: FileList | File[]) {
-    if (state.uploading) return;
-    const files = [...fileList];
-    if (files.length === 0) return;
-    const folderId = folderIdFrom(state.shelf);
-    const skipped = files.filter((f) => f.size > MAX_UPLOAD_BYTES);
-    const accepted = files.filter((f) => f.size <= MAX_UPLOAD_BYTES);
-    const failures: string[] = [];
-    if (skipped.length === 1)
-      failures.push(
-        `“${skipped[0]!.name}” is ${fmtBytes(skipped[0]!.size)} — files up to 512 MB travel well.`
-      );
-    else if (skipped.length > 1)
-      failures.push(`Skipped ${skipped.length} files over 512 MB.`);
-
-    state.uploading = true;
-    let ok = 0;
-    let parked = 0;
-    let pendingOffsite = 0;
-    // The visible progress and consent outcomes are a user-selected sequence;
-    // stage and commit each file before moving to the next.
-    const uploadNext = async (i: number): Promise<void> => {
-      if (i >= accepted.length) return;
-      const file = accepted[i]!;
-      notice(`Uploading ${i + 1} of ${accepted.length}…`);
-      let staged;
-      try {
-        staged = await stageDocumentFile(file);
-      } catch {
-        failures.push(`Could not read “${file.name}”.`);
-        return uploadNext(i + 1);
-      }
-      const outcome = await act("upload", {
-        staged_sha: staged.sha256,
-        title: file.name,
-        ...(folderId == null ? {} : { folder_id: folderId }),
-      });
-      if (outcome?.status === "executed") {
-        if (isPendingOffsite(staged)) pendingOffsite += 1;
-        else ok += 1;
-      } else if (outcome?.status === "parked") parked += 1;
-      else
-        failures.push(
-          `“${file.name}”: ${friendlyOutcome(outcome) ?? "the upload failed"}`
-        );
-      return uploadNext(i + 1);
-    };
-    await uploadNext(0);
-    state.uploading = false;
-    notice(failures.join(" "));
-    if (accepted.length > 0) {
-      const parts = [`Uploaded ${ok} of ${accepted.length} · receipted.`];
-      if (parked > 0) parts.push(`${parked} waiting for approval.`);
-      if (pendingOffsite > 0)
-        parts.push(`${pendingOffsite} attached locally · pending offsite.`);
-      statusLine(parts.join(" "));
-    }
-    await refresh();
-  }
+  // A separate module for the same reason versions.ts and metadata.ts are:
+  // file-size hygiene on a seam that is real. It closes over this factory's
+  // own state/act/notice/render/refresh, so the queue and every refusal still
+  // speak in this app's voice.
+  const { uploadFiles } = createUploads({
+    state,
+    render,
+    refresh,
+    act,
+    friendlyOutcome,
+    notice,
+  });
 
   // ---------- Content lifecycle (edit / replace / version history) ----------
   // A separate module purely for file-size hygiene — see versions.ts's own
   // header for why. It closes over this factory's own act/narrate/notice
   // rather than re-implementing them, so every outcome still narrates in
   // this app's voice.
-  const { editDocument, replaceDocument, restoreVersion, loadHistory } =
-    createVersions({
-      data,
-      refresh,
-      act,
-      narrate,
-      notice,
-    });
+  const { replaceDocument, restoreVersion, loadHistory } = createVersions({
+    refresh,
+    act,
+    narrate,
+    notice,
+  });
 
   // ---------- Metadata (tags + real activity) ----------
   // Another file-size split (metadata.ts) — closes over this factory's own
@@ -486,10 +482,13 @@ export function createLogic({
   const { openMovePopover, openDocMenu } = createPopovers({
     data,
     openQuick,
+    openDetails,
+    openVersions,
     moveDocs,
     startRenameDoc,
     toggleStar,
     trashDoc,
+    restoreDoc,
   });
 
   return {
@@ -517,6 +516,8 @@ export function createLogic({
     restoreSelected,
     trashSelected,
     moveSelected,
+    starSelected,
+    selectionAllStarred,
     clearSelected,
     createFolder,
     renameFolder,
@@ -525,7 +526,6 @@ export function createLogic({
     cancelCreateFolder,
     cancelRenameFolder,
     uploadFiles,
-    editDocument,
     replaceDocument,
     restoreVersion,
     loadHistory,

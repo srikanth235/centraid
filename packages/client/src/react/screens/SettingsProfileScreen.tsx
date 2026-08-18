@@ -4,6 +4,7 @@ import type { CSSProperties, JSX } from "react";
 import { IDENTITY_COLORS, identityInitials } from "@centraid/design";
 
 import type { SelfProfile } from "../shell/routes/profileData.js";
+import SectionBlock from "../ui/SectionBlock.js";
 
 import a11y from "../styles/a11y.module.css";
 import drawerGroupCss from "../styles/drawerGroup.module.css";
@@ -100,9 +101,10 @@ export default function SettingsProfileScreen({
       className={drawerGroupCss.group}
       style={{ "--profile-accent": avatarColor } as CSSProperties}
     >
-      {/* Labelled because this is no longer the whole page: it sits above the
-          theme group on Settings → You, so it names which group it is. */}
-      <div className={drawerGroupCss.groupLabel}>Profile</div>
+      {/* WHAT THE HOUSEHOLD SEES is the head, because that is the difference
+          between this group and the device group below it: these two fields
+          leave this browser, and the theme does not. */}
+      <SectionBlock label="You" meta="what the household sees" />
       <div className={drawerGroupCss.groupBody}>
         <div className={styles.identity}>
           <span className={styles.avatarWrap}>
@@ -128,7 +130,7 @@ export default function SettingsProfileScreen({
         </div>
 
         <label className={styles.field}>
-          <span className={styles.fieldLabel}>Display name</span>
+          <span className={styles.fieldLabel}>Name</span>
           <input
             className={styles.input}
             type="text"
@@ -157,7 +159,7 @@ export default function SettingsProfileScreen({
 
         <div className={styles.field}>
           <span className={styles.fieldLabel} id="cd-profile-color">
-            Color
+            Your colour
           </span>
           <div
             className={styles.swatches}

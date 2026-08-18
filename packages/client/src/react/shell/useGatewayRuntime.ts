@@ -52,20 +52,68 @@ export function useGatewayStatus():
   return status;
 }
 
+/**
+ * When the last heartbeat landed, and whether it answered — the two fields the
+ * status line's freshness stamp needs, and nothing else.
+ *
+ * Same narrowing discipline as {@link useGatewayStatus}: the caller is a single
+ * `<span>` at the foot of the frame, so it re-renders on the poll while the
+ * shell root above it does not (issue #659).
+ */
+export function useGatewayCheck(): {
+  status: GatewayRuntimeSnapshot["status"] | undefined;
+  lastCheckAt: number | undefined;
+} {
+  const [check, setCheck] = useState<{
+    status: GatewayRuntimeSnapshot["status"] | undefined;
+    lastCheckAt: number | undefined;
+  }>({ lastCheckAt: undefined, status: undefined });
+  useEffect(() => {
+    let alive = true;
+    const observe = (snapshot: GatewayRuntimeSnapshot): void => {
+      if (!alive) return;
+      setCheck((prev) =>
+        prev.status === snapshot.status &&
+        prev.lastCheckAt === snapshot.lastCheckAt
+          ? prev
+          : { lastCheckAt: snapshot.lastCheckAt, status: snapshot.status }
+      );
+    };
+    // Optional-chained THREE deep, and each one is load-bearing:
+    // `CentraidApi` itself is absent in a test harness and on the web seat
+    // before boot; the method is absent on a host that does not expose the
+    // runtime; and the CALL's result is absent whenever the method is. Chaining
+    // only the method — which is what this did — threw a TypeError out of an
+    // effect on every surface that lacks the bridge.
+    void window.CentraidApi?.getGatewayRuntime?.()
+      ?.then(observe)
+      .catch(() => {
+        /* first read racing app boot — the push stream covers us */
+      });
+    const off = window.CentraidApi?.onGatewayRuntime?.(observe);
+    return () => {
+      alive = false;
+      off?.();
+    };
+  }, []);
+  return check;
+}
+
 export function useGatewayRuntime(): GatewayRuntimeSnapshot | null {
   const [snapshot, setSnapshot] = useState<GatewayRuntimeSnapshot | null>(null);
   useEffect(() => {
     let alive = true;
-    // Optional-chained like onGatewayChanged in App.tsx — test harnesses
-    // stub CentraidApi partially.
-    window.CentraidApi.getGatewayRuntime?.()
-      .then((s) => {
+    // Optional-chained like onGatewayChanged in App.tsx — test harnesses stub
+    // CentraidApi partially, and some do not define it at all. See
+    // `useGatewayCheck` above for why all three links in the chain matter.
+    void window.CentraidApi?.getGatewayRuntime?.()
+      ?.then((s) => {
         if (alive) setSnapshot(s);
       })
       .catch(() => {
         /* first read racing app boot — the push stream covers us */
       });
-    const off = window.CentraidApi.onGatewayRuntime?.((s) => setSnapshot(s));
+    const off = window.CentraidApi?.onGatewayRuntime?.((s) => setSnapshot(s));
     return () => {
       alive = false;
       off?.();

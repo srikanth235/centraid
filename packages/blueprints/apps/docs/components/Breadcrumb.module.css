@@ -5,9 +5,12 @@
    full ink rung — every crumb before it is soft, which is what makes the
    chain read as "you are here, and here is the way back". */
 
+/* NO INLINE PADDING. The scroll host supplies `--content-margin`; a block
+   that adds its own sits at a different left edge from the row set beneath it,
+   which is exactly what it did. The handoff's `breadBlock` is `padding: 12px 0
+   8px` for the same reason. */
 .bread {
-  padding-inline: var(--sp-4);
-  padding-block: var(--sp-3) 0;
+  padding-block: var(--sp-3) var(--sp-2);
 }
 
 .list {
@@ -27,13 +30,15 @@
   min-inline-size: 0;
 }
 
+/* The tertiary ink, not the ghost: a separator that has faded below the
+   tertiary rung stops reading as punctuation and starts reading as damage. */
 .sep {
-  font: var(--t-small);
-  color: var(--text-ghost);
+  font: var(--t-body);
+  color: var(--text-faint);
 }
 
 .link {
-  font: var(--t-small);
+  font: var(--t-body);
   color: var(--text-soft);
   text-decoration: none;
 }
@@ -47,10 +52,43 @@
   border-radius: var(--r-sm);
 }
 
+/* THE TRAILING CRUMB IS THE HELD PAIR'S ON SIDE. Every crumb before it is
+   `--t-body`; this one is `--t-label-on` — 600 at the same 13/19, so the trail
+   states where you are by WEIGHT and not only by colour, and adding a crumb
+   never re-flows the line. Colour alone was carrying it, which is the one
+   signal a member with low contrast vision may not have. */
 .here {
-  font: var(--t-small);
+  font: var(--t-label-on);
   color: var(--text);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+/* As a button (the place's menu) it keeps exactly the same treatment: this
+   crumb is still where you are, and dressing it as a control would make the
+   trail read as though the last step were somewhere else to go. The caret is
+   the whole difference. */
+/* The button form is a flex row so the chevron centres on the label rather
+   than hanging off its baseline. `vertical-align` could not do this: it aligns
+   to the x-height, which leaves a 15px glyph sitting about a pixel low beside
+   a 16px line. The span form is untouched and keeps its own ellipsis. */
+.hereBtn {
+  display: inline-flex;
+  align-items: center;
+  min-inline-size: 0;
+}
+.hereLabel {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.caret {
+  display: flex;
+  margin-inline-start: 2px;
+  color: var(--text-faint);
+}
+.here:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
+  border-radius: var(--r-sm);
 }

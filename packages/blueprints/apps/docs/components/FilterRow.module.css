@@ -1,16 +1,30 @@
 /* The filter row (Docs spec §4.2).
 
-   Pills are CONTROLS, so they take the control radius and the control height;
-   a set pill is marked by ink weight and a stronger hairline, never by a fill
-   — the view's one filled element belongs to its commit. */
+   A FILTER PILL IS A PILL, not a small button. It takes `--r-pill` and sits on
+   nothing — transparent ground, one control-strength hairline — so a row of
+   four unset axes reads as four outlines rather than four raised chips
+   competing with the rows beneath them. The border is `--line-strong` (the
+   handoff's `line`: control borders) rather than `--line`, which is the
+   hairline that separates rows.
+
+   A SET PILL CHANGES WEIGHT, NOT SIZE. The label rides the held pair
+   `--t-body` → `--t-label-on`: 400 and 600 at the SAME 13/19, so a pill that
+   becomes active does not re-flow the row beside it. That is the whole reason
+   the pair exists in typography.ts, and it is why the row may mark selection
+   with ink weight at all. The ground goes to `--bg-sunken` and the hairline to
+   full ink — recessed and outlined, never filled: the view's one filled
+   element belongs to its commit. */
 
 .row {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
   gap: var(--sp-2);
-  padding-inline: var(--sp-4);
-  padding-block: var(--sp-3) 0;
+  /* The scroll host owns the inline margin (Chrome.module.css). The handoff's
+     `filterBlock` is `padding: 8px 0 12px` — no inline padding — so the first
+     pill's border box lands on the same edge as the crumb above it and the
+     first row below it. */
+  padding-block: var(--sp-2) var(--sp-3);
 }
 
 .pill {
@@ -23,10 +37,10 @@
   gap: var(--sp-1);
   min-block-size: var(--h-control);
   padding-inline: var(--sp-3);
-  border: 1px solid var(--line);
-  border-radius: var(--r-md);
-  background: var(--bg-elev);
-  font: var(--t-control);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--r-pill);
+  background: transparent;
+  font: var(--t-body);
   color: var(--text-soft);
   cursor: pointer;
   list-style: none;
@@ -42,7 +56,12 @@
   box-shadow: var(--focus-ring);
 }
 .summary[data-set="true"] {
-  border-color: var(--line-strong);
+  background: var(--bg-sunken);
+  border-color: var(--text);
+  color: var(--text);
+  font: var(--t-label-on);
+}
+.summary[data-set="true"] .chev {
   color: var(--text);
 }
 
@@ -52,7 +71,12 @@
   white-space: nowrap;
   max-inline-size: 24ch;
 }
+/* A flex box, not an inline span: the chevron is an SVG now, and an inline
+   SVG sits on the text baseline and carries the line box's descender space
+   with it — the same off-centre look the `⌄` character had. */
 .chev {
+  display: flex;
+  align-items: center;
   color: var(--text-faint);
 }
 

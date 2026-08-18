@@ -82,14 +82,40 @@ function modelOptions(card: HarnessCardDTO): JSX.Element[] {
   return out;
 }
 
-/** Human label for a model id, for use inside an inherited-option label. */
+/**
+ * Human label for a model id, for use inside an inherited-option label.
+ *
+ * WITH NO PIN IT NAMES THE MODEL THAT WILL ACTUALLY RUN. It used to answer
+ * "agent default", which is the name of the *rule* rather than the answer: a
+ * lane caption reading "inherits Codex · agent default · xhigh" tells a member
+ * nothing they did not already know. The harness's own probe marks one model
+ * `default`, so that is the model named; a harness whose probe has reported
+ * nothing yet has no name to give and keeps the words.
+ */
 export function modelLabel(
   card: HarnessCardDTO | undefined,
   id: string
 ): string {
-  if (!id) return "agent default";
-  const m = card?.models.find((x) => x.id === id);
-  return m?.name ?? id;
+  if (id) return card?.models.find((x) => x.id === id)?.name ?? id;
+  const fallback = card?.models.find((m) => m.default) ?? card?.models[0];
+  if (!fallback) return "agent default";
+  return fallback.name ?? fallback.id;
+}
+
+/**
+ * How a level reads in the harness's own vocabulary. A harness that offers no
+ * `thought_level` at all has no level to state, which is what "no thinking"
+ * says — the same words `NoThinkingPick` renders where the control would be.
+ */
+export function effortLabel(
+  card: HarnessCardDTO | undefined,
+  value: string
+): string {
+  if (!value) return "no thinking";
+  const option = card?.configOptions?.find(
+    (entry) => entry.category === "thought_level"
+  );
+  return option?.values.find((entry) => entry.value === value)?.name ?? value;
 }
 
 export function ModelSelect({

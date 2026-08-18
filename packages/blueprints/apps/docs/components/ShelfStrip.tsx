@@ -1,5 +1,5 @@
 // The shelf strip (Docs spec §1.7): six tabs under the frame's app bar —
-// All · Folders · Recently changed · Starred · Coming due · Trash.
+// All · Folders · Recently changed · Starred · Trash.
 //
 // The current tab is carried by a 2px INK bar plus 500 weight — not a fill,
 // and never the app's hue. Docs' teal is a mark and a content accent; it never
@@ -13,7 +13,7 @@
 //
 // This replaces the sidebar's `SmartNav` (All / Recent / Starred). Two
 // navigations for one set of shelves is what the restructure retires: the
-// strip is the one that also carries Folders, Coming due and Trash, and it
+// strip is the one that also carries Folders, Starred and Trash, and it
 // sits where the member is already looking.
 import { DSHELVES, stripShelf } from "../shelves.ts";
 import type { Shelf, ShelfId } from "../shelves.ts";

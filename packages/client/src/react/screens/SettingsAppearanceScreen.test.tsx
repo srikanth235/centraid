@@ -84,9 +84,13 @@ describe("screens/SettingsAppearanceScreen", () => {
       expect(el.querySelector('.seg[aria-label="Treatment"]')).toBeNull();
       expect(el.querySelector('.seg[aria-label="Cards"]')).toBeNull();
       expect(el.textContent).not.toContain("Surface");
+      // One section head over both rows (v11): the theme and the automation
+      // zone are the same subject — what this device does — and two heads over
+      // one control each is a taxonomy the page does not need.
       expect(
-        [...el.querySelectorAll(".groupLabel")].map((n) => n.textContent)
-      ).toStrictEqual(["Theme", "Automations"]);
+        [...el.querySelectorAll(".label")].map((n) => n.textContent)
+      ).toStrictEqual(["This device"]);
+      expect(el.textContent).toContain("Time zone for automations");
       expect(el.querySelector('[aria-label="Show sidebar"]')).toBeNull();
     });
 
@@ -165,9 +169,7 @@ describe("screens/SettingsAppearanceScreen", () => {
         el.querySelector('[data-testid="settings-default-cron-timezone"]')
       ).toBeNull();
       expect(el.querySelector("#centraid-cron-timezones")).toBeNull();
-      expect(
-        [...el.querySelectorAll(".groupLabel")].map((n) => n.textContent)
-      ).toStrictEqual(["Theme"]);
+      expect(el.textContent).not.toContain("Time zone for automations");
     });
 
     it("offers no surface-temperature control at all", () => {

@@ -9,22 +9,12 @@
   ],
   "copyRatchet": {
     "_comment": "U4 copy-density ratchet (#805). Every entry is a user-facing string literal the walk in tests/quality/user-facing-qualities.test.ts flags as over 120 chars, two or more sentences, or carrying banned filler. Seeded green on day one so the gate lands without rewriting copy; TIGHTEN-ONLY from here. Audit slices D1..D5 rewrite the copy, DELETE the entry, and lower maxEntries by the same count; the gate fails on any entry that no longer matches a real string, so seeds cannot outlive the copy they excuse. maxEntries is capped in turn by COPY_SEED_CEILING in the owning test, which may only ever fall.",
-    "maxEntries": 31,
+    "maxEntries": 29,
     "entries": [
-      {
-        "file": "apps/mobile/src/apps/docs/DocsItemActions.tsx",
-        "literal": "Only an empty folder can be deleted. Documents, trashed items, and subfolders are never removed with it.",
-        "reason": "destructive confirm — folder delete states what is and is not removed"
-      },
       {
         "file": "apps/mobile/src/apps/locker/LockerUnlockScreen.tsx",
         "literal": "Create a primary passphrase of at least 12 characters. It never leaves this online authentication request.",
         "reason": "security — Locker passphrase creation discloses where the passphrase goes"
-      },
-      {
-        "file": "apps/mobile/src/apps/people/PeopleHome.tsx",
-        "literal": "This folds every reference into the survivor and deletes the duplicate. It cannot be undone.",
-        "reason": "destructive confirm — people merge states the fold is irreversible"
       },
       {
         "file": "apps/mobile/src/apps/photos/DuplicatesShelf.tsx",

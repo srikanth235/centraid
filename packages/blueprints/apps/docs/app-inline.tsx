@@ -26,16 +26,6 @@ const docsInlineApp: InlineAppModule = {
     activity: { default: activityQuery },
     history: { default: historyQuery },
   } as unknown as InlineAppModule["queries"],
-  kitAsk: {
-    scope: "docs",
-    placeholder: "Ask your docs…",
-    intro: "Ask me to find a file, upload one, or file it away.",
-    suggest: [
-      "Find my lease",
-      "File the June receipts",
-      "What did I upload this week?",
-    ],
-  },
   Root,
 };
 

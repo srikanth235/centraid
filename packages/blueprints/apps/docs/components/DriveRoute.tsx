@@ -27,17 +27,19 @@
 // server render in a test.
 import type { ReactNode } from "react";
 
+import { PLACE_MENU } from "../drive-copy.ts";
 import type { Crumb } from "../drive-copy.ts";
 import type { DriveFilters } from "../filters.ts";
 import { isTrash } from "../shelves.ts";
 import type { ShelfId } from "../shelves.ts";
-import type { DriveDoc } from "../types.ts";
+import type { DriveDoc, SortKey } from "../types.ts";
 import type { EmptyStateView } from "../view-state.ts";
 import { Breadcrumb } from "./Breadcrumb.tsx";
 import { EmptyState } from "./EmptyState.tsx";
 import { FilterRow } from "./FilterRow.tsx";
 import { GridCard } from "./Grid.tsx";
 import { ListHead, ListRow, WindowFoot } from "./List.tsx";
+import type { DriveOwner } from "./List.tsx";
 import { TrashAsk } from "./TrashAsk.tsx";
 
 import styles from "../Chrome.module.css";
@@ -82,6 +84,16 @@ export interface DriveRouteProps {
   onOpenMenu: (anchor: HTMLElement, doc: DriveDoc) => void;
   onRestore: (doc: DriveDoc) => void;
   onShowMore: () => void;
+  /** The drive's order, and the head that sets it — the column heads ARE the
+   *  sort control (List.tsx `ListHead`). */
+  sortKey: SortKey;
+  sortDir: 1 | -1;
+  onSortBy: (key: SortKey) => void;
+  onOpenSortMenu: (anchor: HTMLElement) => void;
+  /** Selection is a MODE, entered by the app bar's Select (§4.1). */
+  selecting: boolean;
+  /** Who the rows belong to, as this drive can answer it. */
+  owner: DriveOwner;
 }
 
 function DriveBody(props: DriveRouteProps): ReactNode {
@@ -109,6 +121,7 @@ function DriveBody(props: DriveRouteProps): ReactNode {
               offline={props.offline}
               trashed={props.trashed}
               selectedIds={props.selectedIds}
+              selecting={props.selecting}
               onOpenDetails={props.onOpenDetails}
               onOpenQuick={props.onOpenQuick}
               onToggleSelect={props.onToggleSelect}
@@ -131,7 +144,12 @@ function DriveBody(props: DriveRouteProps): ReactNode {
             <ListHead
               rows={props.rows}
               selectedIds={props.selectedIds}
+              selecting={props.selecting}
               onToggleAll={props.onToggleAll}
+              sortKey={props.sortKey}
+              sortDir={props.sortDir}
+              onSortBy={props.onSortBy}
+              onOpenSortMenu={props.onOpenSortMenu}
             />
           </div>
         )}
@@ -142,6 +160,8 @@ function DriveBody(props: DriveRouteProps): ReactNode {
               doc={d}
               index={i}
               selectedIds={props.selectedIds}
+              selecting={props.selecting}
+              owner={props.owner}
               narrow={props.narrow}
               search={props.search}
               trashed={props.trashed}
@@ -164,7 +184,11 @@ function DriveBody(props: DriveRouteProps): ReactNode {
 export function DriveRoute(props: DriveRouteProps): ReactNode {
   return (
     <>
-      <Breadcrumb crumbs={props.crumbs} onSelectShelf={props.onSelectShelf} />
+      <Breadcrumb
+        crumbs={props.crumbs}
+        menu={PLACE_MENU}
+        onSelectShelf={props.onSelectShelf}
+      />
       {/* Nothing to filter while the set is empty for a reason the filters did
           not cause — a first-run drive or an empty shelf. */}
       {props.empty.visible && props.empty.variant !== "filter" ? null : (

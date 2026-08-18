@@ -5,7 +5,7 @@
 // column's rhythm, the docked health line's clearance, and the one dialog this
 // screen owns (rename, and the typed-name confirm a last-device revocation
 // needs), whose anatomy is the app's existing modal idiom
-// (`apps/docs/DocsItemActions.tsx`, `apps/photos/AlbumDetail.tsx`).
+// (`apps/photos/AlbumDetail.tsx`).
 
 import { StyleSheet } from "react-native";
 

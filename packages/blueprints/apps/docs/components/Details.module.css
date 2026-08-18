@@ -50,6 +50,38 @@
   flex-direction: column;
   animation: slideR var(--dur-2) var(--ease-entry);
 }
+/* THE DOCKED FORM (the handoff's `infoRailStyle`): a column in the content
+   row, not a sheet over it. Everything the drawer needs to sit above the app
+   — `position: fixed`, a z-index, a shadow, a slide-in from off-screen —
+   comes off, because none of it describes a thing that is simply beside
+   something else. What stays is the width, the ground and the leading edge.
+
+   308px is the handoff's own figure. It is a fixed column rather than a
+   fraction: the rail holds a key/value list whose keys are a fixed width, so
+   a rail that narrowed with the window would wrap its values before the set
+   beside it gained anything worth having.
+
+   It rises rather than sliding, and only the once — `kit-rise` is what the
+   toolbar's own two states use, and a column that flew in from the edge every
+   time a member pressed the toggle would animate the furniture. */
+.railDock {
+  flex: none;
+  inline-size: 308px;
+  display: flex;
+  flex-direction: column;
+  min-block-size: 0;
+  background: var(--bg-elev);
+  border-inline-start: 1px solid var(--line);
+  animation: kit-rise var(--dur-2) var(--ease-entry);
+}
+/* The docked rail is inside the content row, which has its own scroll
+   discipline: the head and foot pin, the body scrolls. Same as the drawer —
+   stated here because the drawer got it from `position: fixed` + `inset` and
+   this box gets it from the row. */
+.railDock .detailsBody {
+  min-block-size: 0;
+}
+
 .detailsHead {
   display: flex;
   align-items: center;
@@ -59,14 +91,33 @@
   flex-shrink: 0;
 }
 /* The eyebrow role whole, from the ramp — caps and tracking travel beside the
-   `font` shorthand as their own tokens, so a local pair is a second copy. */
+   `font` shorthand as their own tokens, so a local pair is a second copy.
+
+   `flex: 1` is what puts the dismiss at the TRAILING EDGE. The head was a
+   label and a close button shoulder to shoulder at the leading edge with 10px
+   between them, which reads as a chip — as though the X belonged to the word
+   "Details" and would dismiss it. A rail's dismiss belongs at the far end of
+   its own head, where every other closable surface in the product puts one. */
 .detailsHead .lbl {
+  flex: 1;
   font: var(--t-eyebrow);
   letter-spacing: var(--t-eyebrow-tracking);
   text-transform: var(--t-eyebrow-transform);
   color: var(--text-faint);
 }
-/* Close button: kit.css's .kit-icon-btn. */
+/* Close: kit.css's `.kit-icon-btn`, dialled down through its own size knob.
+   A full 34px target with full ink is what a VERB gets; this one dismisses a
+   panel the member can bring straight back from the toolbar, so it takes the
+   handoff's own 26px at the faint rung (`infoCloseStyle`: 26px, `ink3`) and
+   comes up to full ink under the pointer. */
+.railClose {
+  --icon-button-size: 26px;
+  flex: none;
+  color: var(--text-faint);
+}
+.railClose:hover {
+  color: var(--text);
+}
 .detailsBody {
   flex: 1;
   overflow: auto;
@@ -81,15 +132,12 @@
   justify-content: center;
   overflow: hidden;
 }
-.hero img {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-}
-.hero span {
-  font: var(--t-title);
-  font-family: var(--font-sans);
-  letter-spacing: var(--t-eyebrow-tracking);
+/* The kind mark, in the app's own hue at the text rung — the same colour the
+   list row and the grid card give it, because the handoff draws every kind in
+   the app hue rather than a colour per kind. */
+.heroGlyph {
+  display: flex;
+  color: var(--c-teal-text);
 }
 .detailName {
   font: var(--t-title);

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import type { CSSProperties, JSX } from "react";
+import type { JSX } from "react";
 
 import type {
   HarnessCardDTO,
@@ -8,22 +8,33 @@ import type {
   ModelSubsystem,
   SettingsHarnessesBridgeProps,
 } from "../screen-contracts.js";
-import Button from "../ui/Button.js";
-import { DrawerGroup } from "./settings-controls.js";
+import NoteBlock from "../ui/NoteBlock.js";
+import RowsBlock from "../ui/RowsBlock.js";
+import type { RowDef } from "../ui/RowsBlock.js";
+import SectionBlock from "../ui/SectionBlock.js";
 import HarnessEntry from "./SettingsHarnessEntries.js";
-import { Select, clampEffort, modelLabel } from "./SettingsHarnessesSelects.js";
+import {
+  ConfigSelect,
+  Select,
+  clampEffort,
+  effortLabel,
+  modelLabel,
+} from "./SettingsHarnessesSelects.js";
 import RouteRow, {
   ALL_SUBSYSTEM_ROWS,
   ROUTING_ROWS,
 } from "./SettingsHarnessLanes.js";
+import PickRow from "./SettingsPickRow.js";
 
 import controlsCss from "../styles/controls.module.css";
 import styles from "./SettingsHarnessesScreen.module.css";
 
 const POLL_MS = 800;
 const POLL_WINDOW_MS = 30_000;
-/** How long the "Diagnostics copied" acknowledgement stays on the button. */
+/** How long the "Copied" acknowledgement stays on the row's verb. */
 const COPIED_ACK_MS = 2000;
+/** The level pin, which every row sets beside its model rather than in pins. */
+const LEVEL = "thought_level";
 
 /**
  * The status poll's self-rescheduling timer. It lives at module scope, taking
@@ -57,17 +68,29 @@ function clearTimers(
   }
 }
 
+/** The semantic config categories a harness offers besides its level. */
+function pinCategories(card: HarnessCardDTO): string[] {
+  return (card.configOptions ?? [])
+    .filter((option) => option.category !== LEVEL && option.values.length > 0)
+    .map((option) => option.category);
+}
+
+/** A category id as a member reads it: `approval_policy` → `approval policy`. */
+function categoryWords(category: string): string {
+  return category.replaceAll("_", " ");
+}
+
 /**
- * Settings → Agents. Two sections, and the split is the point: **Routing** is
- * where every decision lives (each subsystem resolves to its own harness and
- * model), **Agents** is inventory — what is installed, what it exposes, and
- * which lanes land on it.
+ * Settings → Agents (binding layer v11). Two sections, and the split is the one
+ * a member actually asks in: **Harnesses** is each agent's own answer — its
+ * model and the level it thinks at — and **Lanes** is which agent each surface
+ * reaches for, with the model and level it overrides that answer with.
  *
  * The page previously led with an exclusive Codex/Claude-Code radio, because
- * exactly one harness could be active. Per-subsystem harnesses retire that
- * premise: there is no "active" harness any more, only a *default* one that
- * unset lanes fall back to — so it became the first lane of the same table
- * rather than a separate control above it.
+ * exactly one harness could be active. Per-subsystem harnesses retired that
+ * premise: there is no "active" harness any more, only a DEFAULT one that
+ * inheriting lanes fall back to — so it is the first row of Lanes rather than
+ * a separate switch above them.
  */
 export default function SettingsHarnessesScreen({
   loadStatus,
@@ -100,6 +123,7 @@ export default function SettingsHarnessesScreen({
     Partial<Record<ModelSubsystem, HarnessKind[]>>
   >({});
   const [busyModels, setBusyModels] = useState(false);
+  const [pinsOpen, setPinsOpen] = useState(false);
   const [diagnosticsCopied, setDiagnosticsCopied] = useState(false);
   const deadlineRef = useRef(0);
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -195,9 +219,9 @@ export default function SettingsHarnessesScreen({
    */
   const clampHarnessEffort = (kind: HarnessKind): void => {
     const card = cardFor(kind);
-    const saved = defaultConfigByKind[kind]?.thought_level ?? "";
+    const saved = defaultConfigByKind[kind]?.[LEVEL] ?? "";
     if (!card || !saved || clampEffort(card, saved) === saved) return;
-    onSetHarnessConfig(kind, "thought_level", "");
+    onSetHarnessConfig(kind, LEVEL, "");
   };
 
   const clampSubsystemEffort = (
@@ -205,9 +229,9 @@ export default function SettingsHarnessesScreen({
     subsystem: ModelSubsystem
   ): void => {
     const card = cardFor(kind);
-    const saved = subsystemConfigByKind[kind]?.[subsystem]?.thought_level ?? "";
+    const saved = subsystemConfigByKind[kind]?.[subsystem]?.[LEVEL] ?? "";
     if (!card || !saved || clampEffort(card, saved) === saved) return;
-    onSetSubsystemConfig(kind, subsystem, "thought_level", "");
+    onSetSubsystemConfig(kind, subsystem, LEVEL, "");
   };
 
   const applySubsystemModel = (
@@ -284,8 +308,10 @@ export default function SettingsHarnessesScreen({
   ): void => {
     const prev = defaultConfigByKind[kind]?.[category] ?? "";
     applyHarnessConfig(kind, category, value);
-    settle("Level", setHarnessConfigPin(kind, category, value), () =>
-      applyHarnessConfig(kind, category, prev)
+    settle(
+      category === LEVEL ? "Level" : categoryWords(category),
+      setHarnessConfigPin(kind, category, value),
+      () => applyHarnessConfig(kind, category, prev)
     );
   };
 
@@ -334,155 +360,216 @@ export default function SettingsHarnessesScreen({
     ALL_SUBSYSTEM_ROWS.filter((r) => resolvedKind(r.key) === kind).map(
       (r) => r.label
     );
+  /**
+   * A harness's own level: its pin, else what its live probe currently holds.
+   * The probe's value is what the runtime will actually use when nothing is
+   * pinned, so a caption that read the pin alone would say "no thinking" about
+   * a harness that thinks.
+   */
+  const harnessLevel = (kind: HarnessKind): string =>
+    defaultConfigByKind[kind]?.[LEVEL] ??
+    cardFor(kind)?.configOptions?.find((option) => option.category === LEVEL)
+      ?.currentValue ??
+    "";
+  /** The model and level every inheriting lane lands on, as prose. */
+  const defaultAnswer = `${modelLabel(
+    defaultCard,
+    savedByKind[defaultKind] ?? ""
+  )} · ${effortLabel(defaultCard, harnessLevel(defaultKind)).toLowerCase()}`;
+
+  // CONFIGURATION PINS — every semantic session option a harness offers that is
+  // not its level, which each row already sets beside its model. Cards with
+  // none contribute nothing: the row states what the probes actually reported,
+  // so a gateway whose agents offer no further options says so rather than
+  // opening an empty drawer.
+  const pinnable = cards
+    .map((card) => ({ card, categories: pinCategories(card) }))
+    .filter((entry) => entry.categories.length > 0);
+  const pinnedCount = pinnable.reduce(
+    (total, entry) =>
+      total +
+      entry.categories.filter(
+        (category) => defaultConfigByKind[entry.card.kind]?.[category]
+      ).length,
+    0
+  );
+  const pinWords = [
+    ...new Set(pinnable.flatMap((entry) => entry.categories)),
+  ].map(categoryWords);
+
+  const rows: RowDef[] = [
+    {
+      id: "pins",
+      title: "Configuration pins",
+      sub: pinWords.length
+        ? pinWords.join(" · ")
+        : "These agents offer no options beyond their level",
+      meta: pinnable.length ? `${pinnedCount} pinned` : "none offered",
+      ...(pinnable.length
+        ? {
+            action: {
+              label: pinsOpen ? "Hide" : "Open",
+              onClick: () => setPinsOpen((open) => !open),
+            },
+          }
+        : {}),
+      ...(pinsOpen && pinnable.length
+        ? {
+            children: pinnable.flatMap((entry) =>
+              entry.categories.map((category, index) => (
+                <PickRow
+                  key={`${entry.card.kind}/${category}`}
+                  first={index === 0}
+                  label={`${entry.card.title} · ${categoryWords(category)}`}
+                  caption={
+                    entry.card.connected
+                      ? undefined
+                      : "Not connected — the pin is stored, not applied"
+                  }
+                  captionNet={!entry.card.connected}
+                >
+                  <ConfigSelect
+                    card={entry.card}
+                    category={category}
+                    saved={
+                      defaultConfigByKind[entry.card.kind]?.[category] ?? ""
+                    }
+                    onChange={(v) =>
+                      onSetHarnessConfig(entry.card.kind, category, v)
+                    }
+                    emptyLabel="Agent default"
+                    ariaLabel={`${categoryWords(category)} for ${entry.card.title}`}
+                  />
+                </PickRow>
+              ))
+            ),
+          }
+        : {}),
+    },
+    {
+      id: "diagnostics",
+      title: "Copy diagnostics",
+      sub: "Versions, lanes, capability evidence",
+      ...(status
+        ? {
+            action: {
+              label: diagnosticsCopied ? "Copied" : "Copy",
+              onClick: () => {
+                void navigator.clipboard?.writeText(status.diagnosticsJson);
+                setDiagnosticsCopied(true);
+                // The label is an acknowledgement, not a state — without this
+                // the row reads "Copied" for the rest of the session.
+                if (copiedTimerRef.current)
+                  clearTimeout(copiedTimerRef.current);
+                copiedTimerRef.current = setTimeout(
+                  () => setDiagnosticsCopied(false),
+                  COPIED_ACK_MS
+                );
+              },
+            },
+          }
+        : {}),
+    },
+  ];
 
   return (
     <>
-      <DrawerGroup label="Routing">
-        <div className={controlsCss.note}>
-          Each surface picks its own agent and model; a lane left on “Use
-          default” follows the default lane below.
+      <SectionBlock
+        label="Harnesses"
+        meta="model · reasoning level"
+        action={{
+          label: "Refresh",
+          hint: "Re-read every agent's models and capabilities",
+          onClick: () => doRefresh(refreshModels, setBusyModels),
+          ...(busyModels ? { off: true } : {}),
+        }}
+      />
+      {status === null ? (
+        <div className={controlsCss.note}>Reading agent status…</div>
+      ) : (
+        <div className={styles.rows}>
+          {cards.map((card, index) => (
+            <HarnessEntry
+              key={card.kind}
+              card={card}
+              first={index === 0}
+              usedBy={usedBy(card.kind)}
+              isDefault={card.kind === defaultKind}
+              saved={savedByKind[card.kind] ?? ""}
+              effort={defaultConfigByKind[card.kind]?.[LEVEL] ?? ""}
+              onSetModel={(v) => onSetModel(card.kind, v)}
+              onSetEffort={(v) => onSetHarnessConfig(card.kind, LEVEL, v)}
+            />
+          ))}
         </div>
-        {status === null ? (
-          <div className={controlsCss.note}>Reading agent status…</div>
-        ) : (
-          <div className={styles.panel}>
-            <div
-              className={styles.routeRow}
-              data-default="true"
-              style={{ "--route-accent": defaultCard?.accent } as CSSProperties}
+      )}
+      <RowsBlock ariaLabel="Agent machinery" rows={rows} />
+
+      <SectionBlock label="Lanes" meta="harness · model · level" />
+      {status === null ? null : (
+        <div className={styles.rows}>
+          <PickRow
+            first
+            label="Default"
+            /* THE ROW STATES ITS MODEL AND ITS LEVEL, like every lane under it.
+               It used to carry the agent's name and a bare model hint, so the
+               one row that decides what every inheriting lane runs was also the
+               only row on the page that never said what it would think at —
+               under a head reading "harness · model · level". Both halves are
+               the harness's own answer, set once in Harnesses above, so they
+               are stated here rather than offered a second control. */
+            caption={`Every lane left inheriting lands here · ${defaultAnswer}`}
+          >
+            <Select
+              value={defaultKind}
+              onChange={onSetDefault}
+              ariaLabel="Default agent"
             >
-              <div className={styles.routeMeta}>
-                <div className={styles.routeName}>
-                  <span className={styles.routeDot} />
-                  Default
-                </div>
-                <span className={styles.routeHint}>
-                  Every lane set to “Use default” lands here.
-                </span>
-              </div>
-              <div className={styles.routeControls}>
-                <Select
-                  value={defaultKind}
-                  onChange={onSetDefault}
-                  ariaLabel="Default agent"
-                >
-                  {cards.some((card) => card.kind === defaultKind) ? null : (
-                    <option value={defaultKind}>
-                      {defaultKind} · existing hidden pin
-                    </option>
-                  )}
-                  {cards.map((c) => (
-                    <option key={c.kind} value={c.kind} disabled={!c.connected}>
-                      {c.connected ? c.title : `${c.title} · unavailable`}
-                    </option>
-                  ))}
-                </Select>
-                <span className={styles.routeHint}>
-                  {defaultCard
-                    ? `${modelLabel(defaultCard, savedByKind[defaultKind] ?? "")} — set per agent below`
-                    : "—"}
-                </span>
-              </div>
-            </div>
-            {ROUTING_ROWS.map((row) => {
-              const kind = resolvedKind(row.key);
-              const card = cardFor(kind);
-              return (
-                <RouteRow
-                  key={row.key}
-                  label={row.label}
-                  hint={row.hint}
-                  cards={cards}
-                  harness={harnessBySubsystem[row.key] ?? ""}
-                  model={subsystemByKind[kind]?.[row.key] ?? ""}
-                  effort={
-                    subsystemConfigByKind[kind]?.[row.key]?.thought_level ?? ""
-                  }
-                  resolvedCard={card}
-                  resolvedHarnessDefault={savedByKind[kind] ?? ""}
-                  resolvedHarnessDefaultEffort={
-                    defaultConfigByKind[kind]?.thought_level ??
-                    card?.configOptions?.find(
-                      (option) => option.category === "thought_level"
-                    )?.currentValue ??
-                    ""
-                  }
-                  defaultCard={defaultCard}
-                  ladder={harnessLadders[row.key] ?? []}
-                  onSetHarness={(v) => onSetSubsystemHarness(row.key, v)}
-                  onSetModel={(v) => onSetSubsystemModel(kind, row.key, v)}
-                  onSetEffort={(v) =>
-                    onSetSubsystemConfig(kind, row.key, "thought_level", v)
-                  }
-                  onSetLadder={(v) => onSetSubsystemHarnessLadder(row.key, v)}
-                  unattended={row.key === "automations"}
-                />
-              );
-            })}
-          </div>
-        )}
-      </DrawerGroup>
-      <DrawerGroup label="Agents">
-        <div className={controlsCss.note}>
-          Detected on this gateway. Detection is CLI-only — the gateway ran
-          `&lt;bin&gt; --version`; Centraid doesn’t inspect how each agent
-          authenticates. Each agent’s default model is what its lanes fall back
-          to.
-        </div>
-        <div className={styles.panel}>
-          {status === null ? (
-            <div className={controlsCss.note}>Reading credential status…</div>
-          ) : (
-            cards.map((card) => (
-              <HarnessEntry
-                key={card.kind}
-                card={card}
-                usedBy={usedBy(card.kind)}
-                isDefault={card.kind === defaultKind}
-                saved={savedByKind[card.kind] ?? ""}
-                effort={defaultConfigByKind[card.kind]?.thought_level ?? ""}
-                onSetModel={(v) => onSetModel(card.kind, v)}
+              {cards.some((card) => card.kind === defaultKind) ? null : (
+                <option value={defaultKind}>
+                  {defaultKind} · existing hidden pin
+                </option>
+              )}
+              {cards.map((c) => (
+                <option key={c.kind} value={c.kind} disabled={!c.connected}>
+                  {c.connected ? c.title : `${c.title} · unavailable`}
+                </option>
+              ))}
+            </Select>
+          </PickRow>
+          {ROUTING_ROWS.map((row) => {
+            const kind = resolvedKind(row.key);
+            const card = cardFor(kind);
+            return (
+              <RouteRow
+                key={row.key}
+                label={row.label}
+                hint={row.hint}
+                cards={cards}
+                harness={harnessBySubsystem[row.key] ?? ""}
+                model={subsystemByKind[kind]?.[row.key] ?? ""}
+                effort={subsystemConfigByKind[kind]?.[row.key]?.[LEVEL] ?? ""}
+                resolvedCard={card}
+                resolvedHarnessDefault={savedByKind[kind] ?? ""}
+                resolvedHarnessDefaultEffort={harnessLevel(kind)}
+                defaultCard={defaultCard}
+                ladder={harnessLadders[row.key] ?? []}
+                onSetHarness={(v) => onSetSubsystemHarness(row.key, v)}
+                onSetModel={(v) => onSetSubsystemModel(kind, row.key, v)}
                 onSetEffort={(v) =>
-                  onSetHarnessConfig(card.kind, "thought_level", v)
+                  onSetSubsystemConfig(kind, row.key, LEVEL, v)
                 }
+                onSetLadder={(v) => onSetSubsystemHarnessLadder(row.key, v)}
+                unattended={row.key === "automations"}
               />
-            ))
-          )}
+            );
+          })}
         </div>
-        <div className={styles.actionsRow}>
-          <Button
-            variant="secondary"
-            size="sm"
-            icon="Reset"
-            disabled={busyModels}
-            label="Refresh models & capabilities"
-            onClick={() => doRefresh(refreshModels, setBusyModels)}
-          />
-          <Button
-            variant="quiet"
-            size="sm"
-            icon="Copy"
-            label={
-              diagnosticsCopied
-                ? "Diagnostics copied"
-                : "Copy capability diagnostics"
-            }
-            disabled={!status}
-            onClick={() => {
-              if (!status) return;
-              void navigator.clipboard?.writeText(status.diagnosticsJson);
-              setDiagnosticsCopied(true);
-              // The label is an acknowledgement, not a state — without this the
-              // button reads "Diagnostics copied" for the rest of the session.
-              if (copiedTimerRef.current) clearTimeout(copiedTimerRef.current);
-              copiedTimerRef.current = setTimeout(
-                () => setDiagnosticsCopied(false),
-                COPIED_ACK_MS
-              );
-            }}
-          />
-        </div>
-      </DrawerGroup>
+      )}
+      <NoteBlock>
+        The Builder lane is withheld while builder entry points are hidden. Your
+        pick stays while it commits.
+      </NoteBlock>
     </>
   );
 }

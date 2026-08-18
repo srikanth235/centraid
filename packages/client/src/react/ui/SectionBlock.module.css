@@ -11,12 +11,22 @@
 }
 
 /* `--t-eyebrow` IS the brief's `micro` rung: 11/15 600, uppercase, .06em
-   tracking — the transform and the tracking come with the role, so this rule
-   never restates them. */
+   tracking.
+
+   ALL THREE DECLARATIONS ARE REQUIRED. This rule used to set the `font`
+   shorthand alone, on the stated belief that "the transform and the tracking
+   come with the role" — they do not. CSS's `font` shorthand carries family,
+   size, weight, style and line-height and NOTHING else: it neither sets nor
+   inherits `letter-spacing` or `text-transform`. So every section head on
+   every page rendered as sentence case with default tracking, which is the
+   `body` treatment at the `micro` size rather than the micro role at all.
+   `DecideBlock` had it right; this is the same three-line idiom. */
 .label {
   color: var(--text);
   flex: none;
   font: var(--t-eyebrow);
+  letter-spacing: var(--t-eyebrow-tracking);
+  text-transform: var(--t-eyebrow-transform);
   margin: 0;
   white-space: nowrap;
 }

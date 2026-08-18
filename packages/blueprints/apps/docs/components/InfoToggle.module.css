@@ -1,0 +1,43 @@
+/* The rail toggle (components/InfoToggle.tsx) — the handoff's `infoBtnStyle`,
+   in the system's own tokens: a control-height square, the control radius, a
+   hairline, and the app's ink.
+
+   It is NOT a `kit-icon-btn`. That recipe is a borderless glyph target for a
+   verb (the kebab, the close X) and carries no resting outline; this control
+   has to read as a switch with an off state and an on state before it is
+   pressed, which is what the border is for. It sits beside a bordered
+   segmented track and must look like it belongs to the same row. */
+.info {
+  flex: none;
+  /* NO AUTO MARGIN HERE. `ViewToggle.module.css` `.track` already claims one
+     to push the pair to the trailing edge, and a SECOND auto margin does not
+     push harder — flexbox splits the free space between them, which stranded
+     this button in the middle of an empty row with the track still at the
+     edge. One control owns the push; this one follows it. */
+  inline-size: var(--h-control);
+  block-size: var(--h-control);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+  background: transparent;
+  color: var(--text);
+  cursor: pointer;
+  transition:
+    background var(--dur-1) var(--ease),
+    border-color var(--dur-1) var(--ease);
+}
+.info:hover {
+  background: var(--bg-sunken);
+}
+/* PRESSED IS A GROUND AND A DARKER EDGE, not a fill. The handoff's own on
+   state is `background: sunken; border-color: ink` — a recessed switch rather
+   than a lit one, because the rail beside it is a surface being shown and not
+   an action being taken. A filled accent here would rank this control above
+   the primary verb in the app bar. */
+.info[aria-pressed="true"] {
+  background: var(--bg-sunken);
+  border-color: var(--text);
+}

@@ -3,9 +3,9 @@
 //
 // THIS WAVE IS THE MODEL ONLY — there is no capabilities screen, no toggle and
 // no runner yet, and this file deliberately ships none of them. It exists so
-// that every surface which has to say something about a capability (the Coming
-// due shelf's "it is switched off" panel, the More sheet's row, the search
-// shelf's "what could not be searched" panel) reads the SAME record, and so
+// that every surface which has to say something about a capability (the
+// `capabilities` screen's rows, the More sheet's row, the search shelf's
+// "what could not be searched" panel) reads the SAME record, and so
 // that the day a capability is switched on there is one place that already
 // knows what it promised.
 //
@@ -61,6 +61,10 @@ export const DCAPS: readonly Capability[] = [
     writes: "a link to a People record, with the quoted passage",
   },
   {
+    // THE SHELF THIS ONE WOULD HAVE FILLED IS GONE; the capability is not.
+    // What it writes is an Agenda event — Agenda owns it — so what Docs lost
+    // was a second place to look at somebody else's records, not the offer
+    // itself. The consent still stands on its own on this screen.
     id: "due",
     name: "Find dates that fall due",
     what: "Read expiries, renewals and deadlines out of a document and stage them as tentative appointments.",

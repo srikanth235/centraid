@@ -21,8 +21,10 @@
 //      spec's own words about the drive, never interpolated with a scope.
 import {
   CAPABILITIES,
-  DUE,
+  FILING,
   FOLDERS,
+  LOCKER,
+  NAMES,
   NEWDOC,
   RECENT,
   SCAN,
@@ -33,6 +35,9 @@ import {
   folderIdFrom,
 } from "./shelves.ts";
 import type { ShelfId } from "./shelves.ts";
+
+/** A verb's shape, by name, from the app's one table. */
+type ActionIcon = keyof typeof import("./icons.ts").ACTION_ICONS;
 
 /** What a shelf calls itself in the frame's app bar, and what its count
  *  counts. `unit` is plural; frame.tsx singularises it for a count of one. */
@@ -47,13 +52,15 @@ const SHELF_COPY: Readonly<Record<string, ShelfCopy>> = {
   [FOLDERS]: { title: "Docs", unit: "folders" },
   [RECENT]: { title: "Docs", unit: "documents" },
   [STARRED]: { title: "Starred", unit: "documents" },
-  [DUE]: { title: "Coming due", unit: "obligations" },
   [TRASH]: { title: "Docs", unit: "documents" },
   [SEARCH]: { title: "Search", unit: "results" },
   [STORAGE]: { title: "Storage", unit: "documents" },
   [NEWDOC]: { title: "Add to Docs", unit: "documents" },
   [SCAN]: { title: "Scan a document", unit: "pages" },
   [CAPABILITIES]: { title: "What Docs may read", unit: "capabilities" },
+  [FILING]: { title: "Proposed filing", unit: "proposals" },
+  [NAMES]: { title: "Who your documents name", unit: "people" },
+  [LOCKER]: { title: "Docs and Locker", unit: "documents" },
 };
 
 const ALL_COPY: ShelfCopy = { title: "Docs", unit: "documents" };
@@ -77,7 +84,6 @@ export const SHELF_LABELS: Readonly<Record<string, string>> = {
   [FOLDERS]: "Folders",
   [RECENT]: "Recently changed",
   [STARRED]: "Starred",
-  [DUE]: "Coming due",
   [TRASH]: "Trash",
   [SEARCH]: "Search",
   [STORAGE]: "Storage",
@@ -176,6 +182,12 @@ export interface EmptyCopy {
    *  filled control already lives in the app bar (§3.1 `emptyBlock`). */
   action?: string;
   action2?: string;
+  /** Each way forward's SHAPE, from the app's one verb table (`icons.ts`
+   *  `ACTION_ICONS`). The word and the mark are kept in one place, together,
+   *  rather than a component looking a glyph up by matching the display
+   *  string — a copy edit would silently drop the mark. */
+  actionIcon?: ActionIcon;
+  action2Icon?: ActionIcon;
 }
 
 const DRIVE_EMPTY: EmptyCopy = {
@@ -184,7 +196,9 @@ const DRIVE_EMPTY: EmptyCopy = {
   title: "Nothing here yet",
   body: "Documents you bring in are held in this vault.",
   action: "Upload documents",
+  actionIcon: "replace",
   action2: "Scan a document",
+  action2Icon: "open",
 };
 
 /** How each shelf is empty ON ITS OWN TERMS (§2's Note column, verbatim). A
@@ -215,12 +229,6 @@ const SHELF_EMPTY: Readonly<Record<string, EmptyCopy>> = {
     title: "No folders yet",
     body: "A folder is a label on the document, not a place it sits.",
   },
-  [DUE]: {
-    variant: "shelf",
-    display: false,
-    title: "Nothing has been read out of your documents yet",
-    body: "Reading dates out of documents is switched off, so nothing is staged here.",
-  },
 };
 
 /** §4.3's empty-folder panel — "a different thing to say from an empty
@@ -232,7 +240,9 @@ export function folderEmpty(name: string): EmptyCopy {
     title: `Nothing is filed under ‘${name}’ yet`,
     body: "Anything moved here keeps its star, its tags and its history.",
     action: "Move documents here",
+    actionIcon: "move",
     action2: "Delete this folder",
+    action2Icon: "trash",
   };
 }
 
@@ -246,6 +256,7 @@ export function searchEmpty(query: string): EmptyCopy {
     title: `Nothing matches ‘${query}’`,
     body: "Nothing in titles, contents, folders or tags.",
     action: "Clear the query",
+    actionIcon: "dismiss",
   };
 }
 
@@ -258,6 +269,7 @@ export const FILTER_EMPTY: EmptyCopy = {
   title: "Nothing matches these filters",
   body: "Filters compose, so each one narrows what the last one left.",
   action: "Clear filters",
+  actionIcon: "dismiss",
 };
 
 /**
@@ -407,21 +419,44 @@ export const MORE_ROWS: readonly (MoreRow & { live: boolean })[] = [
   { shelf: RECENT, label: "Recently changed", live: true },
   { shelf: STARRED, label: "Starred", meta: "shared", live: true },
   { shelf: TRASH, label: "Trash", meta: "purged in 30 days", live: true },
-  { shelf: NEWDOC, label: "Add a document", meta: "four ways in", live: false },
-  { shelf: SCAN, label: "Scan a document", meta: "camera", live: false },
+  { shelf: NEWDOC, label: "Add a document", meta: "the ways in", live: true },
+  {
+    shelf: SCAN,
+    label: "Scan a document",
+    meta: "how a scan arrives",
+    live: true,
+  },
   {
     shelf: CAPABILITIES,
     label: "What Docs may read",
     meta: "each a separate consent",
-    live: false,
+    live: true,
   },
+  { shelf: FILING, label: "Proposed filing", meta: "off", live: true },
+  { shelf: NAMES, label: "Who your documents name", meta: "off", live: true },
+  {
+    shelf: LOCKER,
+    label: "Docs and Locker",
+    meta: "where the line is",
+    live: true,
+  },
+  // KIND AND SORT stays withheld, and it is the only row that does. The sheet
+  // would be a compact restatement of the column heads and the filter pills,
+  // both of which the compact form factor already reaches — the sort through
+  // its own button, the filters through their own row. A second surface over
+  // the same two controls is what §1.5 calls "two menus", said once.
   {
     shelf: null,
     label: "Kind and sort",
     meta: "one sheet, not two menus",
     live: false,
   },
-  { shelf: STORAGE, label: "Storage", live: false },
+  {
+    shelf: STORAGE,
+    label: "Storage",
+    meta: "what the drive weighs",
+    live: true,
+  },
 ];
 
 // ---------------------------------------------------------------------------
@@ -431,8 +466,7 @@ export const MORE_ROWS: readonly (MoreRow & { live: boolean })[] = [
 /** §11's offline banner, compressed to the banner budget (DESIGN.md → Copy):
  *  one sentence, the state plus its one consequence, and one action. The
  *  spec's paragraph also promised that queued writes survive; that promise
- *  belongs where the write is made (`document-copy.ts` DSAVE.queued), not on
- *  every screen. */
+ *  belongs where the write is made, not on every screen. */
 export const OFFLINE_BANNER =
   "Gateway unreachable — filing works from this device, opening and search do not.";
 export const OFFLINE_BANNER_ACTION = "Retry";

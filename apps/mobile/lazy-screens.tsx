@@ -57,9 +57,6 @@ export const AutomationsScreen = lazyScreen(
   () => import("./src/apps/automations/Automations")
 );
 export const DocsHome = lazyScreen(() => import("./src/apps/docs/DocsHome"));
-export const DocumentViewer = lazyScreen(
-  () => import("./src/apps/docs/DocumentViewer")
-);
 export const InsightsScreen = lazyScreen(
   () => import("./src/apps/insights/Insights")
 );

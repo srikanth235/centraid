@@ -224,7 +224,7 @@ export default function HomeScreen({
           navigation.navigate("Photos", { screen: "PhotosHome" });
           break;
         case "docs":
-          navigation.navigate("Docs", { screen: "DocsHome" });
+          navigation.navigate("Docs");
           break;
         case "agenda":
           navigation.navigate("Agenda", { screen: "AgendaHome" });

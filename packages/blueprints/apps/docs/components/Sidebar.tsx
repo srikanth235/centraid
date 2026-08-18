@@ -17,7 +17,7 @@ import { DELETE_ICON, I, RENAME_ICON, SHARE_ICON } from "../icons.ts";
 import { folderIdFrom, folderShelf } from "../shelves.ts";
 import type { ShelfId } from "../shelves.ts";
 import type { DriveDoc, Folder } from "../types.ts";
-import { Icon } from "./Shared.tsx";
+import { ActionBtn, Icon } from "./Shared.tsx";
 
 import styles from "./Sidebar.module.css";
 
@@ -86,9 +86,7 @@ function FolderCreateEdit({
           if (e.key === "Escape") onCancel();
         }}
       />
-      <button type="button" className="kit-btn" onClick={commit}>
-        Create
-      </button>
+      <ActionBtn icon="newFolder" label="Create" onClick={commit} />
     </div>
   );
 }
@@ -131,9 +129,7 @@ function FolderRenameEdit({
           if (e.key === "Escape") onCancel();
         }}
       />
-      <button type="button" className="kit-btn" onClick={commit}>
-        Save
-      </button>
+      <ActionBtn icon="confirm" label="Save" onClick={commit} />
     </div>
   );
 }

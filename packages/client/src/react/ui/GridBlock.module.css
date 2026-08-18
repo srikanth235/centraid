@@ -50,6 +50,8 @@
   color: var(--text-faint);
   display: flex;
   font: var(--t-eyebrow);
+  letter-spacing: var(--t-eyebrow-tracking);
+  text-transform: var(--t-eyebrow-transform);
   gap: var(--sp-1);
   inline-size: 100%;
   padding-inline: var(--sp-3);

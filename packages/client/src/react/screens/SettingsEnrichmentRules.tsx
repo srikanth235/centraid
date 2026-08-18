@@ -2,11 +2,10 @@ import type { JSX } from "react";
 
 import { ENRICH_TRIGGER_WORDS, capabilityLabel } from "../../enrich-policy.js";
 import type { EnrichPolicyRule, EnrichScopeType } from "../../enrich-policy.js";
-import Button from "../ui/Button.js";
-import { DrawerGroup } from "./settings-controls.js";
-
-import controlsCss from "../styles/controls.module.css";
-import styles from "./SettingsEnrichmentScreen.module.css";
+import NoteBlock from "../ui/NoteBlock.js";
+import RowsBlock from "../ui/RowsBlock.js";
+import type { RowDef } from "../ui/RowsBlock.js";
+import SectionBlock from "../ui/SectionBlock.js";
 
 // Settings → Enrichment, EXCEPTIONS (issue #807).
 //
@@ -56,50 +55,46 @@ export default function EnrichmentRules({
   onChanged,
 }: EnrichmentRulesProps): JSX.Element | null {
   const exceptions = rules.filter((rule) => rule.scope.type !== "vault");
-  // No group at all rather than an empty one: a heading over "nothing here" is
-  // a concept the member has to learn before finding out it does not apply.
+  // No section at all rather than an empty one: a heading over "nothing here"
+  // is a concept the member has to learn before finding out it does not apply.
   if (exceptions.length === 0) return null;
 
+  // THE SCOPE IS THE ROW'S SUBJECT, not the capability: an exception is a
+  // decision taken at an album or a folder, and the member is looking for the
+  // place they took it. The capability and what it decides are the second line.
+  const rows: RowDef[] = exceptions.map((rule) => ({
+    id: `${rule.scope.type}:${rule.scope.ref}/${rule.capability}`,
+    title: rule.scope.ref
+      ? `${rule.scope.type} · ${rule.scope.ref}`
+      : rule.scope.type,
+    sub: `${capabilityLabel(rule.capability)} · ${ruleSummary(rule)}`,
+    dangerous: true,
+    action: {
+      label: "Remove",
+      hint: `Remove the ${capabilityLabel(rule.capability)} exception on ${rule.scope.ref || rule.scope.type}`,
+      onClick: () => {
+        void deleteRule(rule.scope.type, rule.scope.ref, rule.capability)
+          .then(onChanged)
+          .catch((error: unknown) =>
+            showToast(
+              `Couldn’t remove that exception: ${error instanceof Error ? error.message : String(error)}`
+            )
+          );
+      },
+    },
+  }));
+
   return (
-    <DrawerGroup label="Exceptions">
-      <div className={controlsCss.note}>
-        Places where you answered differently from the defaults above.
-      </div>
-      <div className={styles.panel}>
-        {exceptions.map((rule) => (
-          <div
-            className={styles.row}
-            key={`${rule.scope.type}:${rule.scope.ref}/${rule.capability}`}
-          >
-            <span className={styles.rowName}>
-              {capabilityLabel(rule.capability)}
-            </span>
-            <span className={styles.rowMeta}>
-              {rule.scope.type}
-              {rule.scope.ref ? ` · ${rule.scope.ref}` : ""} ·{" "}
-              {ruleSummary(rule)}
-            </span>
-            <Button
-              variant="quiet"
-              size="sm"
-              label="Remove"
-              onClick={() => {
-                void deleteRule(
-                  rule.scope.type,
-                  rule.scope.ref,
-                  rule.capability
-                )
-                  .then(onChanged)
-                  .catch((error: unknown) =>
-                    showToast(
-                      `Couldn’t remove that exception: ${error instanceof Error ? error.message : String(error)}`
-                    )
-                  );
-              }}
-            />
-          </div>
-        ))}
-      </div>
-    </DrawerGroup>
+    <>
+      <SectionBlock
+        label="Exceptions"
+        meta={`${exceptions.length} set deeper in`}
+      />
+      <RowsBlock ariaLabel="Exceptions" rows={rows} />
+      <NoteBlock>
+        Removing one returns that scope to inheritance. New ones are written on
+        the album or folder itself.
+      </NoteBlock>
+    </>
   );
 }

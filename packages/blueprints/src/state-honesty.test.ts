@@ -9,7 +9,16 @@ const read = (relative: string): string =>
   readFileSync(path.resolve(appsRoot, relative), "utf8");
 
 describe("blueprint state honesty", () => {
-  test.each(["agenda", "locker", "notes", "people", "tasks"])(
+  // People is absent from all three lists below, and from `app-boot/`. Its
+  // desktop surface was removed pending the Binding Layer v11 design handoff
+  // (apps/people/app-root.tsx), so it reads nothing, can be denied nothing,
+  // and offers no way forward — there is no skeleton to paint before a read
+  // that never happens, no denial to hand a `VaultAccessButton`, and no CTA
+  // that would be honest under `kit-empty`. Its manifest, actions and queries
+  // are untouched, so nothing here is being excused: these rows describe
+  // RENDERING, and People does not render yet. Put it back on all three the
+  // moment the rebuilt app reads its first row.
+  test.each(["agenda", "locker", "notes", "tasks"])(
     "%s paints a skeleton until its first read settles",
     (app) => {
       expect(read(`${app}/Chrome.tsx`)).toContain("LoadingSkeleton");
@@ -26,7 +35,6 @@ describe("blueprint state honesty", () => {
     ["agenda", "agenda/Chrome.tsx"],
     ["locker", "locker/Chrome.tsx"],
     ["notes", "notes/Chrome.tsx"],
-    ["people", "people/Chrome.tsx"],
     ["tasks", "tasks/Chrome.tsx"],
     ["docs", "docs/Chrome.tsx"],
     ["tally", "tally/Chrome.tsx"],
@@ -39,7 +47,6 @@ describe("blueprint state honesty", () => {
     ["agenda", "agenda/components/ScheduleView.tsx"],
     ["locker", "locker/components/List.tsx"],
     ["notes", "notes/components/Wall.tsx"],
-    ["people", "people/app-root.tsx"],
     ["tasks", "tasks/components/Board.tsx"],
     ["tally", "tally/components/Ledger.tsx"],
   ])("%s primary empty state uses kit vocabulary with a CTA", (_app, file) => {

@@ -1,66 +1,19 @@
 .wrap {
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  /* The tight step: a section head sits directly over its own block and draws
+     the hairline between them. */
+  gap: var(--sp-2);
+  min-inline-size: 0;
 }
 
+/* The query and the two verbs that act on the PANE below. The stream's own
+   status, its line count and the export verb are the section head's now. */
 .toolbar {
-  display: flex;
   align-items: center;
-  gap: 8px;
+  display: flex;
   flex-wrap: wrap;
-}
-
-/* Live/reconnecting status — same three-state dot read as the
-   Connections rows, at toolbar scale. */
-.statusDot {
-  width: 9px;
-  height: 9px;
-  border-radius: var(--r-pill);
-  flex: none;
-  background: var(--log-status, var(--text-faint));
-  box-shadow: 0 0 0 3px
-    color-mix(in oklab, var(--log-status, var(--text-faint)) 16%, transparent);
-}
-.statusDot[data-status="live"] {
-  --log-status: var(--success);
-}
-.statusDot[data-status="connecting"],
-.statusDot[data-status="reconnecting"] {
-  --log-status: var(--c-amber);
-}
-.statusLabel {
-  font-family: var(--font-sans);
-  font-size: var(--t-control-size);
-  font-weight: 600;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  color: var(--log-status, var(--text-faint));
-}
-.statusLabel[data-status="live"] {
-  --log-status: var(--success);
-}
-/* The dot above keeps the FILL; this label is 9.5px mono type, so its copy of
-   `--log-status` takes the ink rung. */
-.statusLabel[data-status="connecting"],
-.statusLabel[data-status="reconnecting"] {
-  --log-status: var(--c-amber-text);
-}
-.countLabel {
-  font-family: var(--font-sans);
-  font-size: var(--t-control-size);
-  color: var(--text-faint);
-  margin-right: auto;
-}
-
-.filters {
-  display: inline-flex;
-  gap: 6px;
-}
-.chipActive {
-  background: color-mix(in oklab, var(--text) 10%, transparent);
-  color: var(--text);
-  border-color: transparent;
+  gap: var(--sp-2);
 }
 
 .search {

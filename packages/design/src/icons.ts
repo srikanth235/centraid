@@ -1,3 +1,4 @@
+// governance: allow-repo-hygiene file-size-limit — one flat glyph registry, on the same ground roles.ts is waived: it is a normative TABLE, and every consumer (desktop renderer, mobile <Path>, the icon resolver) reads the whole map. A split would put half the product's marks in a second file with no rule for which half, and a mark landing in the wrong half is a lookup that silently returns nothing.
 // Lucide-style icons as raw SVG path data, viewBox 24x24.
 // Each entry is an ordered list of `<path>` definitions. Consumers either
 // wrap them in an SVG string (desktop renderer) or a react-native-svg
@@ -399,6 +400,40 @@ const ICON_DATA = {
     { d: "M8 9h.01" },
   ],
   Grid: [{ d: "M3 3h7v7H3zM14 3h7v7h-7zM3 14h7v7H3zM14 14h7v7h-7z" }],
+  // A PRINTER: the paper going in above, the machine, the sheet coming out.
+  // Three subpaths and no fill, so it reads at 18px on the stage's near-black
+  // the same way it reads at 15px in a menu on paper.
+  Print: [
+    { d: "M7 8V4a1 1 0 0 1 1-1h8a1 1 0 0 1 1 1v4" },
+    {
+      d: "M7 18H5a2 2 0 0 1-2-2v-4a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v4a2 2 0 0 1-2 2h-2",
+    },
+    { d: "M7 14h10v6a1 1 0 0 1-1 1H8a1 1 0 0 1-1-1z" },
+  ],
+  // A PAGE WITH ITS CORNER TURNED, and a table. The two glyphs a file browser
+  // needs to say what a row holds without spelling the kind out in three
+  // capital letters. `Archive` is a box and `Grid` is four detached squares —
+  // neither reads as a document or as a sheet at 18px, which is why these are
+  // their own entries rather than a reuse.
+  FileText: [
+    { d: "M6 3h7l5 5v13a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1z" },
+    { d: "M13 3v5h5" },
+  ],
+  Table: [{ d: "M4 4h16v16H4z" }, { d: "M4 10h16M4 15h16M10 4v16" }],
+  // The row menu's remaining three. A drive's kebab names Open, Details and
+  // Tag among its verbs, and a menu where some items wear a glyph and others
+  // wear a gap reads as a menu with something missing.
+  OpenExternal: [
+    { d: "M14 4h6v6" },
+    { d: "M20 4 11 13" },
+    { d: "M18 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h5" },
+  ],
+  Tag: [{ d: "M4 11 11 4h8v8l-7 7z" }, { d: "M15.5 8.5h.01" }],
+  Info: [
+    { d: "M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0z" },
+    { d: "M12 11v5" },
+    { d: "M12 8h.01" },
+  ],
   Layers: [{ d: "m12 3 9 5-9 5-9-5 9-5zM3 12l9 5 9-5M3 16l9 5 9-5" }],
   Maximize: [{ d: "M8 3H3v5M16 3h5v5M8 21H3v-5M21 16v5h-5" }],
   List: [{ d: "M4 6h16M4 12h16M4 18h16" }],

@@ -18,7 +18,6 @@ import type {
 import {
   BAND_DESTINATIONS,
   CAPABILITIES,
-  DUE,
   FOLDERS,
   NEWDOC,
   SCAN,
@@ -46,7 +45,6 @@ const NO_PRIMARY: ReadonlySet<string> = new Set([
   // announces, so a trash cannot be emptied"), so the bar offers nothing
   // rather than a control that would refuse — the shelf's caption says why.
   TRASH,
-  DUE,
   SEARCH,
   STORAGE,
   CAPABILITIES,
@@ -74,6 +72,15 @@ export interface AppBarState extends AppBarBase {
   onPrimary?: () => void;
   /** Why the primary cannot fire, when it cannot. */
   primaryDisabledReason?: string;
+  /**
+   * Enter or leave SELECTION MODE (§4.1's `showBox`). Omitted where selection
+   * means nothing — a shelf that paints no rows has nothing to select — so the
+   * bar simply does not carry the verb there rather than carrying a dead one.
+   */
+  onToggleSelecting?: () => void;
+  /** Whether the mode is on, which is the whole difference between the two
+   *  words the verb can say. */
+  selecting?: boolean;
 }
 
 /**
@@ -93,21 +100,37 @@ export function barTitle(state: AppBarState): string {
 }
 
 /**
- * The app bar contribution. Search first (quiet), the shelf's primary last
- * (filled) — the frame's own affordances stand beside these, never displaced
- * by them.
+ * The app bar contribution. Search first (quiet), then Select (quiet), then the
+ * shelf's primary last (filled) — the frame's own affordances stand beside
+ * these, never displaced by them.
+ *
+ * ONE FILLED CONTROL. Select is an outline whatever mode it is in: entering
+ * selection is not the commit, it is the thing you do before deciding what the
+ * commit is, and the selection bar that appears underneath carries the verbs
+ * that actually change something.
  */
 export function appBar(state: AppBarState): InlineAppBarContribution {
   const label = primaryLabel(state.shelf);
   const disabled = state.primaryDisabledReason !== undefined;
   const handlePrimary = state.onPrimary;
   const handleSearch = state.onSearch;
+  const handleSelecting = state.onToggleSelecting;
   const actions: ReactNode = (
     <>
       {!state.compact && handleSearch ? (
         // The bar's own way to Search, desktop/PWA only. Outlined, never
         // filled: the shelf's own verb stays the one filled element in the view.
         <SearchBarButton label="Search documents" onSearch={handleSearch} />
+      ) : null}
+      {handleSelecting ? (
+        <button
+          type="button"
+          className="kit-btn"
+          aria-pressed={state.selecting === true}
+          onClick={handleSelecting}
+        >
+          {state.selecting === true ? "Done" : "Select"}
+        </button>
       ) : null}
       {label && handlePrimary ? (
         // A disabled commit takes the plain outline, never the fill.

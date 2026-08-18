@@ -21,7 +21,6 @@ export type { Shelf, ShelfId } from "../_shared/shelves.ts";
 export const FOLDERS = "built-in:folders";
 export const RECENT = "built-in:recent";
 export const STARRED = "built-in:starred";
-export const DUE = "built-in:due";
 export const TRASH = "built-in:trash";
 /** Search is a shelf (§4.3), reached from the band and the frame — not a field
  *  in a header the app draws for itself. */
@@ -35,6 +34,12 @@ export const NEWDOC = "built-in:newdoc";
 export const SCAN = "built-in:scan";
 /** What Docs may read — four capabilities, four separate consents (§10.8). */
 export const CAPABILITIES = "built-in:capabilities";
+/** What Docs would propose about where a new document belongs (§10.7 `filing`). */
+export const FILING = "built-in:filing";
+/** The people a document names (§10.7 `names`) — Docs' first cross-app link. */
+export const NAMES = "built-in:names";
+/** Where a document ends and a credential begins (§14). */
+export const LOCKER = "built-in:locker";
 
 /** One folder's own sub-state of the Folders shelf: the same drive under a
  *  filter, exactly as one person's timeline is in Photos. */
@@ -60,7 +65,6 @@ export const DSHELVES: readonly Shelf[] = [
   { id: FOLDERS, label: "Folders", segment: "folders" },
   { id: RECENT, label: "Recently changed", segment: "recent" },
   { id: STARRED, label: "Starred", segment: "starred" },
-  { id: DUE, label: "Coming due", segment: "due" },
   { id: TRASH, label: "Trash", segment: "trash" },
 ];
 
@@ -72,6 +76,9 @@ const ROUTED: readonly Shelf[] = [
   { id: NEWDOC, label: "Add a document", segment: "newdoc" },
   { id: SCAN, label: "Scan a document", segment: "scan" },
   { id: CAPABILITIES, label: "What Docs may read", segment: "capabilities" },
+  { id: FILING, label: "Proposed filing", segment: "filing" },
+  { id: NAMES, label: "Who your documents name", segment: "names" },
+  { id: LOCKER, label: "Docs and Locker", segment: "locker" },
 ];
 
 /**
@@ -83,9 +90,11 @@ const ROUTED: readonly Shelf[] = [
 const ALL_ID = "list";
 
 /**
- * The compact band Docs claims (§1.4): four destinations plus More. The frame
- * supplies the home capsule outside this group and enforces the cap; the app
- * only says what its own tabs are.
+ * The compact band Docs claims (§1.4), plus More. The frame supplies the home
+ * capsule outside this group and enforces the CAP; there is no floor, which is
+ * why removing Coming due left three tabs rather than promoting a fourth. A
+ * band tab is a claim about where a member goes most, and inventing one to
+ * fill a hole is how a band ends up naming a place nobody asked for.
  *
  * `grid` is NOT here: the grid is a view of All, a sub-state of the same
  * shelf, and a second band tab for the same set would be one place in two.
@@ -93,7 +102,6 @@ const ALL_ID = "list";
 export const BAND_DESTINATIONS: readonly BandDestination[] = [
   { id: ALL_ID, label: "All" },
   { id: "folders", label: "Folders" },
-  { id: "due", label: "Coming due" },
   { id: "search", label: "Search" },
 ];
 
@@ -131,17 +139,19 @@ export function stripShelf(id: ShelfId): ShelfId {
 
 /**
  * The shelves that paint the DRIVE — the document row set (or its grid) under
- * a filter. Folders paints folder rows, Due paints obligations, and the sheet
- * destinations paint their own screens, so none of them takes the drive's
- * filters, its sort, or its view toggle.
+ * a filter. Folders paints folder rows and the sheet destinations paint their
+ * own screens, so none of them takes the drive's filters, its sort, or its
+ * view toggle.
  */
 const NON_DRIVE: ReadonlySet<string> = new Set([
   FOLDERS,
-  DUE,
   STORAGE,
   NEWDOC,
   SCAN,
   CAPABILITIES,
+  FILING,
+  NAMES,
+  LOCKER,
 ]);
 
 /** Does this shelf paint the document row set? One folder does — it is the
@@ -151,9 +161,19 @@ export function showsDrive(id: ShelfId): boolean {
   return id === null || !NON_DRIVE.has(id);
 }
 
-/** May the grid/list toggle mean anything here? Only where rows are drawn. */
+/**
+ * May the grid/list toggle mean anything here?
+ *
+ * Wherever a SET is drawn — every drive shelf, and Folders. This used to
+ * delegate to `showsDrive`, which answers the narrower question "does this
+ * paint the DOCUMENT row set", and that was the wrong question: Folders paints
+ * a set whose every row has a name, a count and a way in, and both
+ * arrangements say something true about it. A strip that offered the pair on
+ * five tabs and withdrew it on the sixth was changing the furniture under the
+ * member for a reason only the code knew.
+ */
 export function showsViewToggle(id: ShelfId): boolean {
-  return showsDrive(id);
+  return showsDrive(id) || id === FOLDERS;
 }
 
 /** May `Select` be entered here? Every drive shelf, Trash included — the

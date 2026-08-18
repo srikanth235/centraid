@@ -37,7 +37,6 @@ import {
   AssistantFullScreen,
   AutomationsScreen,
   DocsHome,
-  DocumentViewer,
   InsightsScreen,
   LockerHome,
   NotesHome,
@@ -102,7 +101,6 @@ import { useUploadReconciliation } from "./src/lib/upload/boot";
 import { rootNavigationRef } from "./src/navigation";
 import type {
   AgendaStackParamList,
-  DocsStackParamList,
   PhotosStackParamList,
   RootStackParamList,
   SettingsStackParamList,
@@ -134,7 +132,6 @@ Notifications.setNotificationHandler({
 
 const RootStack = createNativeStackNavigator<RootStackParamList>();
 const PhotosStack = createNativeStackNavigator<PhotosStackParamList>();
-const DocsStack = createNativeStackNavigator<DocsStackParamList>();
 const AgendaStack = createNativeStackNavigator<AgendaStackParamList>();
 const SettingsStack = createNativeStackNavigator<SettingsStackParamList>();
 
@@ -186,21 +183,6 @@ function PhotosNavigator(): React.JSX.Element {
       <PhotosStack.Screen name="PhotoPicker" component={PhotoPicker} />
       <PhotosStack.Screen name="PhotoStateView" component={PhotoStateView} />
     </PhotosStack.Navigator>
-  );
-}
-
-function DocsNavigator(): React.JSX.Element {
-  const { colors } = useTheme();
-  return (
-    <DocsStack.Navigator
-      screenOptions={{
-        contentStyle: { backgroundColor: colors.bg },
-        headerShown: false,
-      }}
-    >
-      <DocsStack.Screen name="DocsHome" component={DocsHome} />
-      <DocsStack.Screen name="DocumentViewer" component={DocumentViewer} />
-    </DocsStack.Navigator>
   );
 }
 
@@ -475,7 +457,7 @@ export default function App(): React.JSX.Element | null {
                             />
                             <RootStack.Screen
                               name="Docs"
-                              component={DocsNavigator}
+                              component={DocsHome}
                               options={COVER_OPTIONS}
                             />
                             <RootStack.Screen

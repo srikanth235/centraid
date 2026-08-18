@@ -48,6 +48,12 @@
 .headline[data-status="error"] {
   --tone: var(--danger);
 }
+/* A re-walk is in flight, so every figure below is the PREVIOUS measurement.
+   Muting them is the honest state: the reading is still true, and it is about
+   to be replaced. */
+.headline[data-measuring] {
+  opacity: 0.55;
+}
 .headlineFigure {
   font-family: var(--font-sans);
   font-size: var(--t-display-size);
@@ -214,63 +220,6 @@
   color: var(--text);
 }
 
-/* ── Per-vault disclosure ───────────────────────────────────────────────── */
-
-.byVault > summary {
-  cursor: pointer;
-  font-size: var(--t-control-size);
-  color: var(--text-faint);
-  padding: 4px 0;
-}
-.byVault > summary:hover {
-  color: var(--text);
-}
-.byVaultBody {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-  padding-top: 8px;
-}
-.vaultRow {
-  border: 1px solid var(--line);
-  border-radius: var(--r-sm);
-  padding: 10px 12px;
-  display: flex;
-  flex-direction: column;
-  gap: 7px;
-}
-.vaultHead {
-  display: flex;
-  justify-content: space-between;
-  align-items: baseline;
-  gap: 12px;
-}
-.vaultName {
-  font-size: var(--t-small-size);
-  font-weight: 600;
-  color: var(--text);
-}
-.vaultOwner {
-  font-weight: 400;
-  color: var(--text-faint);
-}
-.vaultParts {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px 14px;
-}
-.vaultPart {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  font-size: var(--t-control-size);
-  color: var(--text-faint);
-}
-.vaultPart b {
-  font-weight: 600;
-  color: var(--text-soft);
-}
-
 /* ── Disk line ──────────────────────────────────────────────────────────── */
 
 .diskLine {
@@ -279,16 +228,4 @@
   gap: 7px;
   font-size: var(--t-control-size);
   color: var(--text-faint);
-}
-
-.rescanIcon {
-  display: inline-flex;
-}
-.rescanIcon[data-spin] {
-  animation: rescanSpin 900ms linear infinite;
-}
-@keyframes rescanSpin {
-  to {
-    transform: rotate(360deg);
-  }
 }

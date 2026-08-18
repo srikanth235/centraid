@@ -133,7 +133,9 @@ describe("screens/BackupCard", () => {
           .mockResolvedValue({ configured: false, vaults: [] }),
         onRunNow: neverRun,
       });
-      expect(el.textContent).toContain("Not backed up offsite yet");
+      // The head's own meta says it, in the place a reader looks first - no
+      // banner underneath repeating it in a sentence (binding layer v11).
+      expect(el.textContent).toContain("no copies yet");
       expect(el.textContent).toContain(
         "Backup isn’t configured on this gateway"
       );

@@ -219,46 +219,11 @@ describe("the breadcrumb (§1.6)", () => {
   });
 });
 
-describe("the seven write outcomes (§6.3)", () => {
-  it("has exactly seven, each with its own sentence", () => {
-    const ids = Object.keys(docCopy.DSAVE);
-    expect(ids).toHaveLength(7);
-    expect(
-      new Set(Object.values(docCopy.DSAVE).map((o) => o.status)).size
-    ).toBe(7);
-  });
-
-  it("keeps 'held for a person' and 'held for a gateway' apart", () => {
-    expect(docCopy.DSAVE["approval"]!.status).toContain("approval");
-    // The two held states are told apart by what holds them — a person in
-    // Notifications, or an unreachable gateway — not by a sentence denying
-    // the other one.
-    expect(docCopy.DSAVE["approval"]!.note).toContain("Notifications");
-    expect(docCopy.DSAVE["queued"]!.note).toContain("gateway is back");
-    expect(docCopy.DSAVE["queued"]!.status).toContain("gateway is unreachable");
-  });
-
-  it("only lets a commit be pressed where there is something to commit", () => {
-    const pressable = Object.values(docCopy.DSAVE)
-      .filter((o) => o.commits)
-      .map((o) => o.id)
-      .sort();
-    // "A filled control that cannot be pressed stops being filled" (§6.3):
-    // saving, saved and the two held states offer no press.
-    expect(pressable).toStrictEqual(["nochange", "refused", "unsaved"]);
-  });
-
-  it("prints live numbers only when it has them", () => {
-    expect(docCopy.savedStatus()).toBe("Saved");
-    expect(docCopy.savedStatus({ version: 7, at: "14:02" })).toBe(
-      "Saved · version 7 · 14:02"
-    );
-    expect(docCopy.refusedStatus()).toBe("Refused · this document is not text");
-    expect(
-      docCopy.refusedStatus("a body can only be set on a text document")
-    ).toBe("Refused · a body can only be set on a text document");
-  });
-});
+// §6.3's seven write outcomes were the EDITOR's save states, and the editor
+// is deleted (docs/design-divergences.md): Docs holds, versions and files a
+// document; it does not open one to type into. `DSAVE` went with it, so the
+// block that policed its seven sentences is gone rather than kept asserting
+// against an export that no longer exists.
 
 describe("what Docs can show (§10.1) and what it asks for (§4.3)", () => {
   it("loads an inline-shell document through the authenticated blob primitive", async () => {

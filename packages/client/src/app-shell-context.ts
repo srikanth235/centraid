@@ -59,7 +59,19 @@ export type ShellRoute =
   | { kind: "approvals" }
   | {
       kind: "gateway";
-      tab?: "overview" | "components" | "storage" | "logs" | "alerts";
+      /**
+       * Which of System's pages. The drill-ins are ROUTES rather than local
+       * state so the frame's own back arrow returns to the overview — the page
+       * used to carry a "‹ System" row of its own, which was a second back
+       * control competing with the one in the chrome.
+       */
+      tab?:
+        | "overview"
+        | "components"
+        | "storage"
+        | "logs"
+        | "alerts"
+        | "restart";
       focus?: "backups" | "capacity";
       cause?: "backup-alert";
     }
