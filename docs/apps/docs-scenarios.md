@@ -13,6 +13,7 @@ Instance of [docs/app-scenario-layer-template.md](../app-scenario-layer-template
 | Docs scenario | U | C | E | Owner / evidence |
 | --- | --- | --- | --- | --- |
 | upload a file; the document and its bytes survive a reload | — | — | ✅ | `docs-drive.spec.ts` (desktop + web): real staged-blob upload through the visible control, reload, reopen, byte-exact round-trip through the authed transport, and member-visible body paint through the authenticated blob primitive |
+| Preview opens a reading sheet named for the file | ✅ | — | — | `packages/blueprints/src/docs-reading-surface.test.ts` drives shipped `QuickLookText`: `article` labelled by the title, heading, both body paragraphs. The north-star journeys keep the same assertions after Preview. |
 | drive window: folders, newest-filed-first, bounded window | ✅ | — | — | `packages/blueprints/src/docs-drive.test.ts` (filter axes, breadcrumb, window truncation) |
 | shelf strip routing and band tabs | ✅ | — | — | `packages/blueprints/src/docs-shelves.test.ts` |
 | custody mark: annotate the exception, never the norm | ✅ | — | — | `packages/blueprints/apps/docs/custody-row-mark.test.ts` |

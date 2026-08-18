@@ -1,3 +1,6 @@
+import { mkdir } from "node:fs/promises";
+import path from "node:path";
+
 import { expect, test } from "@playwright/test";
 import type { Page } from "@playwright/test";
 
@@ -75,9 +78,9 @@ async function connectPwa(page: Page): Promise<void> {
     },
   ]);
   const enrolledVault = await page.evaluate(async (apiUrl) => {
-    const path = encodeURIComponent("/centraid/_vault/vaults");
+    const vaultsPath = encodeURIComponent("/centraid/_vault/vaults");
     const response = await fetch(
-      `${apiUrl}/centraid/_web/control?path=${path}`,
+      `${apiUrl}/centraid/_web/control?path=${vaultsPath}`,
       {
         credentials: "include",
       }
@@ -228,4 +231,13 @@ test("Docs uploads a real file and its bytes survive a PWA reload", async ({
   await expect(reading.getByRole("heading", { name: DOC_TITLE })).toBeVisible();
   await expect(reading.getByText(DOC_BODY.split("\n\n")[0]!)).toBeVisible();
   await expect(reading.getByText(DOC_BODY.split("\n\n")[1]!)).toBeVisible();
+  const evidenceDir = path.join(
+    import.meta.dirname,
+    "../../../../artifacts/e2e/ui-impact"
+  );
+  await mkdir(evidenceDir, { recursive: true });
+  await page.screenshot({
+    path: path.join(evidenceDir, "issue-822-docs-drive.png"),
+    fullPage: true,
+  });
 });
