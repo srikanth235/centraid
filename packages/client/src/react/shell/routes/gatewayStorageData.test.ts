@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import type * as GatewayClient from "../../../gateway-client.js";
+import type { StorageConnectionUsageDTO } from "../../../gateway-client.js";
 import { loadStorageUsageAggregate } from "./gatewayStorageData.js";
 
 const { getStorageUsage } = vi.hoisted(() => ({
@@ -22,19 +23,19 @@ describe(loadStorageUsageAggregate, () => {
   it("sums every home connection into one usage input", async () => {
     getStorageUsage.mockResolvedValue([
       {
-        id: "a",
+        connectionId: "a",
         providerReported: {
           backup: { bytesStored: 10, quotaBytes: 100 },
           cas: { bytesStored: 4, quotaBytes: null },
         },
       },
       {
-        id: "b",
+        connectionId: "b",
         providerReported: {
           backup: { bytesStored: 5, quotaBytes: 80 },
         },
       },
-    ] as Awaited<ReturnType<typeof GatewayClient.getStorageUsage>>);
+    ] as StorageConnectionUsageDTO[]);
     await expect(loadStorageUsageAggregate()).resolves.toStrictEqual({
       backup: { bytesStored: 15, quotaBytes: 100 },
       cas: { bytesStored: 4, quotaBytes: null },

@@ -204,11 +204,13 @@ describe("SettingsHarnessesScreen suite", () => {
       // The default lane plus three routed lanes. Builder has no row — its
       // entry points are hidden by default (#434), so the control configured a
       // surface the member cannot open.
-      expect(sel(el, "Default agent")).toBeTruthy();
+      expect(sel(el, "Default agent").getAttribute("aria-label")).toBe(
+        "Default agent"
+      );
       for (const label of ["Assistant", "In-app Ask", "Automations"]) {
         expect(
           el.querySelector(`[aria-label="Agent for ${label}"]`)
-        ).toBeTruthy();
+        ).not.toBeNull();
       }
       expect(el.querySelector('[aria-label="Agent for Builder"]')).toBeNull();
       // Every detected agent carries its own model, above the lanes.

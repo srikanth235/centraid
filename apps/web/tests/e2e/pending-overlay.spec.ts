@@ -238,7 +238,7 @@ async function prepareAgenda(page: Page): Promise<void> {
   expect(outcome.status).toBe("executed");
 }
 
-test("production PWA routes recover Tally, Tasks, People, and Agenda pending rows while still offline", async ({
+test("production PWA routes recover Tally, Tasks, and Agenda pending rows while still offline", async ({
   page,
 }) => {
   test.setTimeout(180_000);
@@ -304,24 +304,13 @@ test("production PWA routes recover Tally, Tasks, People, and Agenda pending row
   await page.getByRole("button", { name: "Add", exact: true }).click();
   await expect(page.getByText("Offline task", { exact: true })).toBeVisible();
 
-  // People shares the same replica ⊃ outbox rails: an offline add-person
-  // projects pending core.party/people.profile rows (people/
-  // pending-projection.ts). The modal deliberately stays open on a queued
-  // outcome (narrate() only closes on `executed`), so dismiss it and assert
-  // the projected person is already in the list.
+  // People is held at the Binding Layer v11 wall: the roster is unrendered
+  // until the design handoff ships, so there is no New / Add person control
+  // to drive. The wall is the observable outcome of opening that route.
   await openFirstParty(page, "People");
-  await page.getByRole("button", { name: "New", exact: true }).click();
-  await page.getByRole("menuitem", { name: "Add person" }).click();
-  await page.getByRole("textbox", { name: "Name" }).fill("Offline Neighbor");
-  const addPersonModal = page.locator(".kit-modal");
-  await addPersonModal
-    .getByRole("button", { name: "Add person", exact: true })
-    .click();
-  await addPersonModal
-    .getByRole("button", { name: "Cancel", exact: true })
-    .click();
+  await expect(page.getByText("Not here yet", { exact: true })).toBeVisible();
   await expect(
-    page.getByText("Offline Neighbor", { exact: true }).first()
+    page.getByText("People is being rebuilt from its design handoff.")
   ).toBeVisible();
 
   await openFirstParty(page, "Tally");
@@ -365,11 +354,10 @@ test("production PWA routes recover Tally, Tasks, People, and Agenda pending row
   await expect(page.getByText("Offline task", { exact: true })).toBeVisible();
   await expect(page.locator(".kit-pending-chip")).toHaveText("queued");
 
-  // The People pending person also came back from the durable outbox.
+  // The People wall is a static holdback, so a reload cannot recover a
+  // roster that the route does not draw.
   await openFirstParty(page, "People");
-  await expect(
-    page.getByText("Offline Neighbor", { exact: true }).first()
-  ).toBeVisible();
+  await expect(page.getByText("Not here yet", { exact: true })).toBeVisible();
 
   await openFirstParty(page, "Tally");
   await page.getByText("Offline Journey", { exact: true }).first().click();

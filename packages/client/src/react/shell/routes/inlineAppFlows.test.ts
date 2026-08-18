@@ -29,33 +29,54 @@ describe("inlineAppFlows", () => {
 
   it("renames through the prompt and reports the new name", async () => {
     openPrompt.mockResolvedValue("Journal");
-    updateAppMeta.mockResolvedValue(undefined);
-    const say = vi.fn<ShellActions["showToast"]>();
-    await renameInlineApp({ app, say });
-    expect(updateAppMeta).toHaveBeenCalledWith({
-      id: "notes",
-      name: "Journal",
+    const updates: Array<{ id: string; name?: string }> = [];
+    updateAppMeta.mockImplementation(async (input) => {
+      updates.push(input);
+      return { ok: true };
     });
-    expect(say).toHaveBeenCalledWith('Renamed to "Journal"');
+    const spoken: string[] = [];
+    const say: ShellActions["showToast"] = (message) => {
+      spoken.push(message);
+    };
+    await renameInlineApp({ app, say });
+    expect(updates).toStrictEqual([{ id: "notes", name: "Journal" }]);
+    expect(spoken).toStrictEqual(['Renamed to "Journal"']);
   });
 
   it("leaves the app alone when the rename prompt is cancelled", async () => {
     openPrompt.mockResolvedValue(null);
-    const say = vi.fn<ShellActions["showToast"]>();
+    const spoken: string[] = [];
+    const say: ShellActions["showToast"] = (message) => {
+      spoken.push(message);
+    };
     await renameInlineApp({ app, say });
     expect(updateAppMeta).not.toHaveBeenCalled();
-    expect(say).not.toHaveBeenCalled();
+    expect(spoken).toStrictEqual([]);
   });
 
   it("deletes after confirmation and then hands control back", async () => {
     const confirm = vi.fn<ShellActions["confirm"]>().mockResolvedValue(true);
-    const say = vi.fn<ShellActions["showToast"]>();
-    const onDeleted = vi.fn<() => void>();
-    deleteApp.mockResolvedValue(undefined);
-    await deleteInlineApp({ app, confirm, say, onDeleted });
-    expect(deleteApp).toHaveBeenCalledWith({ id: "notes" });
-    expect(say).toHaveBeenCalledWith('Deleted "Notes"');
-    expect(onDeleted).toHaveBeenCalledOnce();
+    const spoken: string[] = [];
+    const say: ShellActions["showToast"] = (message) => {
+      spoken.push(message);
+    };
+    const deleted: string[] = [];
+    const deletes: Array<{ id: string }> = [];
+    deleteApp.mockImplementation(async (input) => {
+      deletes.push(input);
+      return { ok: true };
+    });
+    await deleteInlineApp({
+      app,
+      confirm,
+      say,
+      onDeleted: () => {
+        deleted.push(app.id);
+      },
+    });
+    expect(deletes).toStrictEqual([{ id: "notes" }]);
+    expect(spoken).toStrictEqual(['Deleted "Notes"']);
+    expect(deleted).toStrictEqual(["notes"]);
   });
 
   it("does not delete when the confirmation is refused", async () => {

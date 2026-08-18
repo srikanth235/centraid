@@ -895,3 +895,29 @@ Two cosmetic trims remain and change no assertion: AC 1 drops ", not a copy" and
 AC 3 drops "in `docs/design-divergences.md`" (the divergences file is named in
 the crosswalk and in `## What changed` instead). AC 2, 4, 5, 8, 9, 10 and 11 are
 verbatim or near-verbatim.
+
+## PR #820 CI follow-up
+
+The first `ci` run on `3529890` failed `static` (`@centraid/client` typecheck on
+the new gateway-storage / inline-app-flow tests), `gates` (hygiene +1
+`toBeTruthy` / +5 `toHaveBeenCalled*`), `design-gallery` (four Linux `sh-*`
+shots past 1%), and `client-e2e / web-e2e` (Docs list button renamed to
+`Select ${title}`; People journey still clicked `New` against the holdback
+wall). Desktop e2e carries the same two journeys.
+
+Files in this follow-up:
+
+- `packages/client/src/react/shell/routes/gatewayStorageData.test.ts`
+- `packages/client/src/react/shell/routes/inlineAppFlows.test.ts`
+- `packages/client/src/react/screens/SettingsHarnessesScreen.test.tsx`
+- `tests/hygiene-budgets.json` (`toBeTruthyFalsy` 379 → 378)
+- `tests/design-gallery/baselines/sh-light.png`
+- `tests/design-gallery/baselines/sh-c-light.png`
+- `tests/design-gallery/baselines/sh-dark.png`
+- `tests/design-gallery/baselines/sh-c-dark.png`
+- `apps/web/tests/e2e/docs-drive.spec.ts`
+- `apps/desktop/tests/e2e/docs-drive.spec.ts`
+- `apps/web/tests/e2e/pending-overlay.spec.ts`
+- `apps/desktop/tests/e2e/pending-overlay.spec.ts`
+- `apps/desktop/tests/e2e/SCENARIOS.md`
+- `tests/matrix.json` (`desktop-pending-overlay`, `web-pending-overlay` names)
