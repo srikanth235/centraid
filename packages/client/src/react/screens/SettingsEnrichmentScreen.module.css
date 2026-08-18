@@ -97,6 +97,8 @@
 .capSwitchTrack {
   position: absolute;
   inset: 0;
+  /* Skin only — clicks must reach the input underneath. */
+  pointer-events: none;
   border: 1px solid var(--line-strong, var(--line));
   border-radius: var(--r-pill);
   background: transparent;

@@ -55,6 +55,9 @@ made Settings a modal whose h1 is always "Settings".
 `apps/desktop/tests/e2e/settings-enrichment.spec.ts` expects the shipped
 "Declined · built-in engine only" copy.
 `apps/desktop/tests/e2e/settings-gateways.spec.ts` finds the Agents h2.
+The Enrichment Faces switch track in
+`packages/client/src/react/screens/SettingsEnrichmentScreen.module.css`
+no longer intercepts the input underneath it.
 
 ## User impact
 
