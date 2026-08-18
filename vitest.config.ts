@@ -44,7 +44,7 @@ export const coverageInclude = [
   // The hand-authored connector/enricher handlers published under
   // packages/blueprints/automations (#781). Only the `handler.js` files are
   // product runtime; app.json/automation.json are manifests and the tree's
-  // `.ts` files are its suites and their harness. The five GENERATED
+  // `.ts` files are its suites and their harness. The six GENERATED
   // recognition bundles are excluded below — their source is instrumented
   // and floored under packages/model-runtime/automation-handlers, and
   // bundle-drift.test.ts proves the published copies are the same program,
@@ -72,7 +72,7 @@ export const coverageExclude = [
   // Generated recognition bundles: source-floored upstream (see the
   // packages/blueprints/automations include note above). The id list matches
   // packages/model-runtime/build-automation-handlers.ts.
-  "packages/blueprints/automations/{embed-image,embed-text,faces,photo-ocr,transcript}/**",
+  "packages/blueprints/automations/{embed-image,embed-text,faces,photo-ocr,place-names,transcript}/**",
 ];
 
 // Root config: aggregates every package as a Vitest project so `vitest run`

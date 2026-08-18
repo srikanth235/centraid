@@ -192,7 +192,7 @@ Every file this branch touches, so a reviewer can see the surface without leavin
 
 **Docs and ledgers** — `QUALITY.md`, `TESTING.md`, `docs/decisions.md`, `docs/photos/places.md`, `docs/recognition-automations.md`
 
-**Repo and toolchain** — `bun.lock`, `knip.json`, `oxlint.config.ts`, `packages/blueprints/manifest.json`, `tests/agent-e2e-mobile/flows/photos-viewer.md`, `tests/agent-e2e-mobile/flows/photos-viewer.mjs`
+**Repo and toolchain** — `bun.lock`, `knip.json`, `oxlint.config.ts`, `packages/blueprints/manifest.json`, `scripts/ci/configure-sonarcloud.mjs`, `tests/agent-e2e-mobile/flows/photos-viewer.md`, `tests/agent-e2e-mobile/flows/photos-viewer.mjs`, `vitest.config.ts`
 
 ## Audit
 
