@@ -29,7 +29,7 @@ import type { DocsScreenProps } from "../../navigation";
 
 export default function DocsHome({
   navigation,
-}: DocsScreenProps): React.JSX.Element {
+}: DocsScreenProps<"DocsHome">): React.JSX.Element {
   const { colors } = useTheme();
   const ink = useMemo(() => ({ backgroundColor: colors.bg }), [colors]);
   const leave = useCallback(() => navigation.goBack(), [navigation]);

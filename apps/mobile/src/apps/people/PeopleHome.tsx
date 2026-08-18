@@ -24,7 +24,7 @@ import type { PeopleScreenProps } from "../../navigation";
 
 export default function PeopleHome({
   navigation,
-}: PeopleScreenProps): React.JSX.Element {
+}: PeopleScreenProps<"PeopleHome">): React.JSX.Element {
   const { colors } = useTheme();
   const ink = useMemo(() => ({ backgroundColor: colors.bg }), [colors]);
   const leave = useCallback(() => navigation.goBack(), [navigation]);

@@ -58,13 +58,20 @@ export const LINKING: LinkingOptions<RootStackParamList> = {
           PhotoLightbox: "photos/:assetId",
         },
       },
-      // `docs/:documentId` went with the native viewer (pending the v11
-      // handoff). A link to a single document has nowhere to land on this
-      // phone, so the row is gone rather than silently resolving to the drive.
-      Docs: "docs",
+      Docs: {
+        screens: {
+          DocsHome: "docs",
+          DocumentRead: "docs/:documentId",
+        },
+      },
       Locker: "locker",
       Tasks: "apps/tasks",
-      People: "apps/people",
+      People: {
+        screens: {
+          PeopleHome: "apps/people",
+          Person: "apps/people/:personId",
+        },
+      },
       Notes: "apps/notes",
       Tally: "apps/tally",
       Assistant: "assistant",

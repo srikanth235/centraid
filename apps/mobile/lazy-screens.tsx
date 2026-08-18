@@ -57,6 +57,48 @@ export const AutomationsScreen = lazyScreen(
   () => import("./src/apps/automations/Automations")
 );
 export const DocsHome = lazyScreen(() => import("./src/apps/docs/DocsHome"));
+export const DocsFolder = lazyScreen(
+  () => import("./src/apps/docs/FolderView")
+);
+export const DocumentRead = lazyScreen(
+  () => import("./src/apps/docs/DocumentRead")
+);
+export const DocumentViewer = lazyScreen(
+  () => import("./src/apps/docs/DocumentViewer")
+);
+export const DocumentEditor = lazyScreen(
+  () => import("./src/apps/docs/DocumentEditor")
+);
+export const DocumentVersions = lazyScreen(
+  () => import("./src/apps/docs/DocumentVersions")
+);
+export const DocumentProperties = lazyScreen(
+  () => import("./src/apps/docs/DocumentProperties")
+);
+export const DocsCapabilities = lazyScreen(
+  () => import("./src/apps/docs/DocsCapabilities")
+);
+export const DocsProposedFiling = lazyScreen(
+  () => import("./src/apps/docs/ProposedFiling")
+);
+export const DocumentNames = lazyScreen(
+  () => import("./src/apps/docs/DocumentNames")
+);
+export const DocsAdd = lazyScreen(() => import("./src/apps/docs/AddToDocs"));
+export const DocsUpload = lazyScreen(
+  () => import("./src/apps/docs/BulkUpload")
+);
+export const DocsScan = lazyScreen(() => import("./src/apps/docs/DocsScan"));
+export const DocsRecent = lazyScreen(
+  () => import("./src/apps/docs/RecentlyChanged")
+);
+export const DocsStarred = lazyScreen(
+  () => import("./src/apps/docs/DocsStarred")
+);
+export const DocsTrash = lazyScreen(() => import("./src/apps/docs/DocsTrash"));
+export const DocsStorage = lazyScreen(
+  () => import("./src/apps/docs/DocsStorage")
+);
 export const InsightsScreen = lazyScreen(
   () => import("./src/apps/insights/Insights")
 );
@@ -66,6 +108,22 @@ export const LockerHome = lazyScreen(
 export const NotesHome = lazyScreen(() => import("./src/apps/notes/NotesHome"));
 export const PeopleHome = lazyScreen(
   () => import("./src/apps/people/PeopleHome")
+);
+export const PersonView = lazyScreen(
+  () => import("./src/apps/people/PersonView")
+);
+export const PersonLog = lazyScreen(() => import("./src/apps/people/LogTouch"));
+export const PersonEditor = lazyScreen(
+  () => import("./src/apps/people/PersonEditor")
+);
+export const PersonLink = lazyScreen(
+  () => import("./src/apps/people/VaultLink")
+);
+export const PersonMerge = lazyScreen(
+  () => import("./src/apps/people/MergeView")
+);
+export const PeopleTrash = lazyScreen(
+  () => import("./src/apps/people/PeopleTrash")
 );
 export const AlbumDetail = lazyScreen(
   () => import("./src/apps/photos/AlbumDetail")

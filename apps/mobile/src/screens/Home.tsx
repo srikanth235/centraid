@@ -224,7 +224,7 @@ export default function HomeScreen({
           navigation.navigate("Photos", { screen: "PhotosHome" });
           break;
         case "docs":
-          navigation.navigate("Docs");
+          navigation.navigate("Docs", { screen: "DocsHome" });
           break;
         case "agenda":
           navigation.navigate("Agenda", { screen: "AgendaHome" });
@@ -236,7 +236,7 @@ export default function HomeScreen({
           navigation.navigate("Tasks");
           break;
         case "people":
-          navigation.navigate("People");
+          navigation.navigate("People", { screen: "PeopleHome" });
           break;
         case "notes":
           navigation.navigate("Notes");

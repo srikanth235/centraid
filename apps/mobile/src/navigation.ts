@@ -3,11 +3,11 @@
 //   RootStack (native stack, springboard model)
 //   ├─ Home          → HomeScreen                      (launcher, root)
 //   ├─ Photos        → PhotosStack  (timeline, lightbox, library/search/sharing)
-//   ├─ Docs          → DocsHome     (blank, awaiting its design handoff)
+//   ├─ Docs          → DocsStack    (drive, folders, coming due, document screens)
 //   ├─ Agenda        → AgendaStack  (calendar, event)
 //   ├─ Locker        → LockerHome   (native authenticated secrets cover)
 //   ├─ Tasks         → TasksHome    (native offline task organizer)
-//   ├─ People        → PeopleHome   (blank, awaiting its design handoff)
+//   ├─ People        → PeopleStack  (roster/touch/search, person, log/edit/link/merge)
 //   ├─ Notes         → NotesHome    (native CommonMark + linked-data editor)
 //   ├─ Tally         → TallyHome    (native offline shared ledger)
 //   ├─ Assistant     → AssistantScreen (chat with the gateway assistant)
@@ -112,6 +112,59 @@ export type PhotosStackParamList = {
     | { mode: "person"; partyId: string; personName: string };
 };
 
+export type DocsStackParamList = {
+  // `destination` names which of the claimed band's shelves to land on — the
+  // same shape as `PhotosHome.destination`, and for the same reason: the four
+  // shelf destinations (`all` · `folders` · `due` · `search`) all live on this
+  // one screen, so a band tap from a pushed route navigates here with the
+  // shelf named rather than pushing a second copy. `more` never reaches it:
+  // More is a sheet, not a route. Written out longhand rather than imported
+  // from `apps/docs/docs-band.ts` — the frame may not import an app
+  // (`scripts/check-import-boundaries.ts`); `DocsScreen.tsx`'s band handler
+  // pins the two together at its own typecheck.
+  DocsHome: { destination?: "all" | "folders" | "due" | "search" } | undefined;
+  // Inside one label. The name rides along because the folder row already
+  // holds it and the screen's app bar must not wait a replica round-trip to
+  // title itself.
+  DocsFolder: { folderId: string; folderName: string };
+  // One route for the read surface: the component renders the reading view
+  // for kinds Docs can set and the facts panel for kinds it cannot — the
+  // fork is a fact about the document, not two places.
+  DocumentRead: { documentId: string };
+  DocumentViewer: { documentId: string };
+  DocumentEditor: { documentId: string };
+  DocumentVersions: { documentId: string };
+  DocumentProperties: { documentId: string };
+  // The consent surface and the two screens its capabilities produce.
+  DocsCapabilities: undefined;
+  DocsProposedFiling: undefined;
+  DocumentNames: { documentId: string };
+  // Four ways in, and bulk upload as its own surface with per-file honesty.
+  DocsAdd: undefined;
+  DocsUpload: undefined;
+  DocsScan: undefined;
+  // The More sheet's shelves.
+  DocsRecent: undefined;
+  DocsStarred: undefined;
+  DocsTrash: undefined;
+  DocsStorage: undefined;
+};
+
+export type PeopleStackParamList = {
+  // The three band destinations (`people` · `touch` · `search`) live on this
+  // one screen — same shape and reasoning as `DocsHome.destination` above.
+  PeopleHome: { destination?: "people" | "touch" | "search" } | undefined;
+  Person: { personId: string };
+  // Log a touch: reachable from the person screen and from a Reconnect row.
+  PersonLog: { personId: string };
+  // One editor for edit and new: no `personId` means a new person.
+  PersonEditor: { personId?: string } | undefined;
+  // The vault-link setup screen — a rare act, so it gets room.
+  PersonLink: { personId: string };
+  PersonMerge: { personId: string };
+  PeopleTrash: undefined;
+};
+
 export type AgendaStackParamList = {
   AgendaHome: undefined;
   // `instanceKey` renders the tapped occurrence of a recurring series (its
@@ -147,14 +200,11 @@ export type RootStackParamList = {
       }
     | undefined;
   Photos: NavigatorScreenParams<PhotosStackParamList>;
-  // Docs lost its stack when the native drive was removed pending the v11
-  // handoff (see src/apps/docs/DocsHome.tsx). It is a plain cover again, and
-  // becomes a stack again only when the rebuild has a second screen to push.
-  Docs: undefined;
+  Docs: NavigatorScreenParams<DocsStackParamList>;
   Agenda: NavigatorScreenParams<AgendaStackParamList>;
   Locker: undefined;
   Tasks: undefined;
-  People: undefined;
+  People: NavigatorScreenParams<PeopleStackParamList>;
   Notes: undefined;
   Tally: undefined;
   Assistant: undefined;
@@ -189,8 +239,6 @@ export type CaptureScreenProps = RootScreenProps<"Capture">;
 export type ScanScreenProps = RootScreenProps<"Scan">;
 export type LockerScreenProps = RootScreenProps<"Locker">;
 export type TasksScreenProps = RootScreenProps<"Tasks">;
-export type PeopleScreenProps = RootScreenProps<"People">;
-export type DocsScreenProps = RootScreenProps<"Docs">;
 export type NotesScreenProps = RootScreenProps<"Notes">;
 export type TallyScreenProps = RootScreenProps<"Tally">;
 export type AssistantScreenProps = RootScreenProps<"Assistant">;
@@ -227,6 +275,29 @@ export type PhotosShellNavigation = CompositeNavigationProp<
 
 export type AgendaScreenProps<T extends keyof AgendaStackParamList> =
   CompositeScreenProps<NativeStackScreenProps<AgendaStackParamList, T>, Root>;
+
+export type DocsScreenProps<T extends keyof DocsStackParamList> =
+  CompositeScreenProps<NativeStackScreenProps<DocsStackParamList, T>, Root>;
+
+/**
+ * What the Docs shell (`apps/docs/DocsScreen.tsx`) needs — the Docs stack for
+ * the band's four shelf destinations and the More sheet's rows, composed with
+ * the root stack for the band capsule's one tap to Home. Read through
+ * `useNavigation()`, same reasoning as `PhotosShellNavigation` above.
+ */
+export type DocsShellNavigation = CompositeNavigationProp<
+  NativeStackNavigationProp<DocsStackParamList>,
+  NativeStackNavigationProp<RootStackParamList>
+>;
+
+export type PeopleScreenProps<T extends keyof PeopleStackParamList> =
+  CompositeScreenProps<NativeStackScreenProps<PeopleStackParamList, T>, Root>;
+
+/** The People shell's composite navigation — see `PhotosShellNavigation`. */
+export type PeopleShellNavigation = CompositeNavigationProp<
+  NativeStackNavigationProp<PeopleStackParamList>,
+  NativeStackNavigationProp<RootStackParamList>
+>;
 
 // The Settings cover's screens are intentionally NOT composed with the root
 // stack: the root route that presents this cover is itself named `Settings`, so

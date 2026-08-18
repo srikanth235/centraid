@@ -31,46 +31,29 @@ import {
 // navigator, and each one's module body is evaluated on first navigation
 // rather than at app start — see `lazy-screens.tsx` for why.
 import {
-  AgendaEvent,
-  AgendaHome,
   AssistantScreen,
   AssistantFullScreen,
   AutomationsScreen,
-  DocsHome,
   InsightsScreen,
   LockerHome,
   NotesHome,
-  PeopleHome,
-  AlbumDetail,
-  DuplicateReview,
-  DuplicatesShelf,
-  FaceReview,
-  MemoriesView,
-  PhotosPeopleView,
-  PhotoPicker,
-  PhotoLightbox,
-  PhotosHome,
-  PhotosLibrary,
-  PhotosSearch,
-  PhotoStateView,
-  PlacesMap,
-  PlacesView,
-  PlaceDetail,
   TallyHome,
   TasksHome,
-  ApprovalsScreen,
-  BackupHealthScreen,
   CaptureScreen,
   ConnectorsScreen,
   DataScreen,
   DevicesScreen,
-  PhoneStorageScreen,
   ScanScreen,
   SignalNotificationScreen,
-  SettingsScreen,
-  SharingScreen,
   SystemOnPhoneScreen,
 } from "./lazy-screens";
+import {
+  AgendaNavigator,
+  DocsNavigator,
+  PeopleNavigator,
+  PhotosNavigator,
+  SettingsNavigator,
+} from "./navigators";
 import { configurePhotoImageCache } from "./src/apps/photos/image-cache";
 import { LINKING } from "./src/deep-links";
 import ErrorBoundary from "./src/ErrorBoundary";
@@ -99,12 +82,7 @@ import { hydrateProfile, isOnboarded } from "./src/lib/profile";
 import { MOBILE_COMPATIBILITY_WALL_COPY } from "./src/lib/replica/mobile-gateway-compatibility-core";
 import { useUploadReconciliation } from "./src/lib/upload/boot";
 import { rootNavigationRef } from "./src/navigation";
-import type {
-  AgendaStackParamList,
-  PhotosStackParamList,
-  RootStackParamList,
-  SettingsStackParamList,
-} from "./src/navigation";
+import type { RootStackParamList } from "./src/navigation";
 // Only the two screens that can be on screen at first paint are imported
 // eagerly: Home is the initial route of the root stack, Onboarding is what the
 // tree renders instead when the profile says the user has not been through it.
@@ -131,9 +109,6 @@ Notifications.setNotificationHandler({
 });
 
 const RootStack = createNativeStackNavigator<RootStackParamList>();
-const PhotosStack = createNativeStackNavigator<PhotosStackParamList>();
-const AgendaStack = createNativeStackNavigator<AgendaStackParamList>();
-const SettingsStack = createNativeStackNavigator<SettingsStackParamList>();
 
 // Presenting an app cover: an edge-to-edge full-screen modal that cross-fades in
 // (`fade`). `fullScreenModal` (not `modal`) so the cover truly covers the screen —
@@ -152,78 +127,6 @@ function UploadReconciliation(): null {
   const { session } = useReplica();
   useUploadReconciliation(session);
   return null;
-}
-
-function PhotosNavigator(): React.JSX.Element {
-  const { colors } = useTheme();
-  return (
-    <PhotosStack.Navigator
-      screenOptions={{
-        contentStyle: { backgroundColor: colors.bg },
-        headerShown: false,
-      }}
-    >
-      <PhotosStack.Screen name="PhotosHome" component={PhotosHome} />
-      <PhotosStack.Screen
-        name="PhotoLightbox"
-        component={PhotoLightbox}
-        options={{ animation: "fade_from_bottom", gestureEnabled: false }}
-      />
-      <PhotosStack.Screen name="PhotosLibrary" component={PhotosLibrary} />
-      <PhotosStack.Screen name="PhotosSearch" component={PhotosSearch} />
-      <PhotosStack.Screen name="PlacesView" component={PlacesView} />
-      <PhotosStack.Screen name="PlacesMap" component={PlacesMap} />
-      <PhotosStack.Screen name="PlaceDetail" component={PlaceDetail} />
-      <PhotosStack.Screen name="FaceReview" component={FaceReview} />
-      <PhotosStack.Screen name="PhotosPeople" component={PhotosPeopleView} />
-      <PhotosStack.Screen name="DuplicatesShelf" component={DuplicatesShelf} />
-      <PhotosStack.Screen name="DuplicateReview" component={DuplicateReview} />
-      <PhotosStack.Screen name="PhotosMemories" component={MemoriesView} />
-      <PhotosStack.Screen name="AlbumDetail" component={AlbumDetail} />
-      <PhotosStack.Screen name="PhotoPicker" component={PhotoPicker} />
-      <PhotosStack.Screen name="PhotoStateView" component={PhotoStateView} />
-    </PhotosStack.Navigator>
-  );
-}
-
-function AgendaNavigator(): React.JSX.Element {
-  const { colors } = useTheme();
-  return (
-    <AgendaStack.Navigator
-      screenOptions={{
-        contentStyle: { backgroundColor: colors.bg },
-        headerShown: false,
-      }}
-    >
-      <AgendaStack.Screen name="AgendaHome" component={AgendaHome} />
-      <AgendaStack.Screen name="AgendaEvent" component={AgendaEvent} />
-    </AgendaStack.Navigator>
-  );
-}
-
-function SettingsNavigator(): React.JSX.Element {
-  const { colors } = useTheme();
-  return (
-    <SettingsStack.Navigator
-      screenOptions={{
-        animation: "slide_from_right",
-        contentStyle: { backgroundColor: colors.bg },
-        headerShown: false,
-      }}
-    >
-      <SettingsStack.Screen name="Settings" component={SettingsScreen} />
-      <SettingsStack.Screen name="Approvals" component={ApprovalsScreen} />
-      <SettingsStack.Screen name="Sharing" component={SharingScreen} />
-      <SettingsStack.Screen
-        name="PhoneStorage"
-        component={PhoneStorageScreen}
-      />
-      <SettingsStack.Screen
-        name="BackupHealth"
-        component={BackupHealthScreen}
-      />
-    </SettingsStack.Navigator>
-  );
 }
 
 /**
@@ -457,7 +360,7 @@ export default function App(): React.JSX.Element | null {
                             />
                             <RootStack.Screen
                               name="Docs"
-                              component={DocsHome}
+                              component={DocsNavigator}
                               options={COVER_OPTIONS}
                             />
                             <RootStack.Screen
@@ -477,7 +380,7 @@ export default function App(): React.JSX.Element | null {
                             />
                             <RootStack.Screen
                               name="People"
-                              component={PeopleHome}
+                              component={PeopleNavigator}
                               options={COVER_OPTIONS}
                             />
                             <RootStack.Screen

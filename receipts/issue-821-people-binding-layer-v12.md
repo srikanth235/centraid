@@ -40,6 +40,60 @@ the root integrating the seams between them.
 
 ## What changed
 
+### Wave 3 — the phone's frame (scaffolding, walls still up)
+
+The mobile umbrella wave opens with the composition-root wiring for the two
+stacks the #819 holdback removed. `apps/mobile/src/navigation.ts` gains
+`DocsStackParamList` (17 routes; `DocsHome.destination` carries the claimed
+band's four shelves, the same shape as `PhotosHome`) and
+`PeopleStackParamList` (7 routes), plus the `DocsScreenProps` /
+`PeopleScreenProps` composites and the two shell-navigation types.
+`apps/mobile/App.tsx` registers `DocsNavigator` and `PeopleNavigator` over
+the former wall covers; the five nested navigators moved to
+`apps/mobile/navigators.tsx` (new, beside `lazy-screens.tsx` and for the
+same #765 reason — the composition root crossed the 625-line ceiling once
+Docs and People became stacks again). `apps/mobile/lazy-screens.tsx` binds
+every new screen; `apps/mobile/src/deep-links.ts` restores
+`docs/:documentId` and adds `apps/people/:personId`;
+`apps/mobile/src/screens/Home.tsx` springboard taps land on the named home
+screens. The two walls (`DocsHome.tsx`, `PeopleHome.tsx`) take the now-
+generic prop types, and every other new screen file is a stub holding its
+route while the app builds land in this same wave — `AWAITING_HANDOFF.mobile`
+is untouched until they do.
+
+Every file this wave-3 slice touched:
+
+- `apps/mobile/App.tsx`
+- `apps/mobile/navigators.tsx`
+- `apps/mobile/lazy-screens.tsx`
+- `apps/mobile/src/navigation.ts`
+- `apps/mobile/src/deep-links.ts`
+- `apps/mobile/src/screens/Home.tsx`
+- `apps/mobile/src/apps/docs/DocsHome.tsx`
+- `apps/mobile/src/apps/docs/AddToDocs.tsx`
+- `apps/mobile/src/apps/docs/BulkUpload.tsx`
+- `apps/mobile/src/apps/docs/DocsCapabilities.tsx`
+- `apps/mobile/src/apps/docs/DocsScan.tsx`
+- `apps/mobile/src/apps/docs/DocsStarred.tsx`
+- `apps/mobile/src/apps/docs/DocsStorage.tsx`
+- `apps/mobile/src/apps/docs/DocsTrash.tsx`
+- `apps/mobile/src/apps/docs/DocumentEditor.tsx`
+- `apps/mobile/src/apps/docs/DocumentNames.tsx`
+- `apps/mobile/src/apps/docs/DocumentProperties.tsx`
+- `apps/mobile/src/apps/docs/DocumentRead.tsx`
+- `apps/mobile/src/apps/docs/DocumentVersions.tsx`
+- `apps/mobile/src/apps/docs/DocumentViewer.tsx`
+- `apps/mobile/src/apps/docs/FolderView.tsx`
+- `apps/mobile/src/apps/docs/ProposedFiling.tsx`
+- `apps/mobile/src/apps/docs/RecentlyChanged.tsx`
+- `apps/mobile/src/apps/people/PeopleHome.tsx`
+- `apps/mobile/src/apps/people/LogTouch.tsx`
+- `apps/mobile/src/apps/people/MergeView.tsx`
+- `apps/mobile/src/apps/people/PeopleTrash.tsx`
+- `apps/mobile/src/apps/people/PersonEditor.tsx`
+- `apps/mobile/src/apps/people/PersonView.tsx`
+- `apps/mobile/src/apps/people/VaultLink.tsx`
+
 ### The app, screen by screen
 
 `packages/blueprints/apps/people` grew its render tree back, mirroring the
