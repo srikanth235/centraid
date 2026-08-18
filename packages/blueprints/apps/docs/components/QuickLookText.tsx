@@ -79,9 +79,14 @@ export function QuickLookText({ doc }: { doc: DriveDoc }) {
     };
   }, [inline, doc.content_uri]);
 
+  const title = doc.title || "Untitled";
+  const headingId = `docs-read-${doc.document_id}`;
   return (
-    <div className={styles.read}>
+    <article className={styles.read} aria-labelledby={headingId}>
       <div className={styles.readBody}>
+        <h1 className={styles.readHead} id={headingId}>
+          {title}
+        </h1>
         {loadState === "loading" ? (
           <p className={styles.readStatus}>Loading…</p>
         ) : loadState === "error" ? (
@@ -105,6 +110,6 @@ export function QuickLookText({ doc }: { doc: DriveDoc }) {
           )
         )}
       </div>
-    </div>
+    </article>
   );
 }

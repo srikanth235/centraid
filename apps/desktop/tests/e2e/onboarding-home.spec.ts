@@ -304,7 +304,7 @@ test("2.3 — opening a first-party app via the palette lands in the inline app 
   }
 });
 
-test("2.5 — App settings on an inline app exposes Manage", async () => {
+test("2.5 — App settings on an inline app is not in the frame", async () => {
   gateway.state.apps = [appEntry({ id: "tasks", name: "Tasks" })];
   await seedRemoteGateway(env, gateway);
   const { app, page } = await launchApp(env);
@@ -312,16 +312,15 @@ test("2.5 — App settings on an inline app exposes Manage", async () => {
     await waitForHome(page);
     await openAppFromPalette(page, "Tasks");
     await expect(page.getByTestId("inline-app-view")).toBeVisible();
-    await page.getByRole("button", { name: "App settings" }).click();
-    const settings = page.getByRole("dialog", { name: "App settings" });
-    await settings.waitFor({ state: "visible" });
-    await settings.getByRole("button", { name: "Manage", exact: true }).click();
-    // The mock gateway does not serve the first-party template catalog, so
-    // Tasks is not marked bundled here and Manage still offers Delete — that
-    // is the live harness UI, not the #708 production danger-zone rule.
+    // v11 unmounted the frame gear. The door it opened is gone until a
+    // handoff puts one back; pin the absence rather than click a control
+    // the chrome no longer draws.
     await expect(
-      settings.getByRole("button", { name: /Delete app/iu })
-    ).toBeVisible();
+      page.getByRole("button", { name: "App settings" })
+    ).toHaveCount(0);
+    await expect(
+      page.getByRole("dialog", { name: "App settings" })
+    ).toHaveCount(0);
   } finally {
     await closeApp(app);
   }

@@ -10,7 +10,11 @@ const { gatewayJson, loadConnection, webGatewayId } = vi.hoisted(() => ({
 }));
 
 vi.mock(import("./web-state.js"), () => ({
-  gatewayJson,
+  // `vi.fn<typeof gatewayJson>` is not assignable to the generic itself:
+  // the mock's return type collapses to `Promise<unknown>`, which is not
+  // `Promise<T>`. The wrapper keeps the hoisted mock and satisfies tsc.
+  gatewayJson: ((pathname: string, init?: RequestInit) =>
+    gatewayJson(pathname, init)) as typeof WebState.gatewayJson,
   loadConnection,
   webGatewayId,
 }));

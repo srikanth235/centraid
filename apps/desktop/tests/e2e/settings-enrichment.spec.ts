@@ -159,8 +159,8 @@ test("12.9 — Settings → Enrichment states what runs, and says when a stored 
     // `on-device` while the bundled OCR engine is gateway-lane, so the row
     // states the gate rather than reading as on and never running.
     await expect(pane).toContainText("Stopped by a stored ceiling");
-    // The answered egress question reads as a sentence about the member.
-    await expect(pane).toContainText("You declined");
+    // The answered egress question is on the record as a declined answer.
+    await expect(pane).toContainText("Declined · built-in engine only");
 
     // The UI-receipt evidence for issue #814 (check:ui-receipt): the
     // Enrichment page as a first run finds it.
