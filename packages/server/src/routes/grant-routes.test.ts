@@ -47,6 +47,8 @@ interface World {
   raviParty: string;
   documentId: string;
   laptop: string;
+  /** What this host has mounted — mutable, so a test can take a peer away. */
+  mounted: Map<string, VaultDb>;
   handler: ReturnType<typeof makeGrantRouteHandler>;
 }
 
@@ -132,6 +134,7 @@ function world(options: { linked?: boolean } = {}): World {
     raviParty,
     documentId: seedDocument(priya, "Trip plan"),
     laptop: laptop.endpointId,
+    mounted,
     handler: makeGrantRouteHandler({
       enrollments,
       currentVault: () => ({
@@ -267,7 +270,11 @@ describe("routes/grants", () => {
     });
     expect(revoked.status).toBe(200);
     expect(revoked.body).toMatchObject({ outcome: "revoked" });
-    expect(revoked.body.message).toContain("no longer shared");
+    // The sentence is DERIVED: this copy really was delivered and really was
+    // taken back, so the owner is told exactly that and nothing softer.
+    expect(revoked.body.message).toBe(
+      "no longer shared; every copy it delivered has been removed"
+    );
     expect(audienceTitles(house.ravi)).toStrictEqual([]);
     const after = await call(house, {
       method: "GET",
@@ -276,6 +283,87 @@ describe("routes/grants", () => {
     });
     expect(after.body.grant).toMatchObject({
       fulfillment: [{ peerVaultId: AUDIENCE, state: "removed" }],
+    });
+
+    // A revoked grant leaves the live answer and stays in the history one:
+    // `includeRevoked=1` is the difference between "what stands" and "what
+    // was ever decided", and the two must not be the same read.
+    const live = await call(house, {
+      method: "GET",
+      url: `/centraid/_vault/grants?audienceKind=party&audienceId=${house.raviParty}`,
+      deviceId: house.laptop,
+    });
+    expect(live.body.grants).toStrictEqual([]);
+    const history = await call(house, {
+      method: "GET",
+      url: `/centraid/_vault/grants?audienceKind=party&audienceId=${house.raviParty}&includeRevoked=1`,
+      deviceId: house.laptop,
+    });
+    const past = history.body.grants as Record<string, unknown>[];
+    expect(past).toHaveLength(1);
+    expect(past[0]).toMatchObject({ grantId: grant.grantId });
+    expect(past[0]!.revokedAt).toBeTypeOf("string");
+  });
+
+  test("revoking says which of the three removals actually happened", async () => {
+    // (1) Nothing was ever delivered — an audience with no channel parks at
+    // an invitation and holds no copy. The sentence must not imply a peer was
+    // asked to delete something it never had.
+    const parked = world({ linked: false });
+    const never = await call(parked, {
+      method: "POST",
+      url: "/centraid/_vault/grants",
+      deviceId: parked.laptop,
+      body: {
+        audienceKind: "party",
+        audienceId: parked.raviParty,
+        subjectType: "core.document",
+        subjectId: parked.documentId,
+        capability: "view",
+      },
+    });
+    expect(never.status).toBe(201);
+    const undelivered = await call(parked, {
+      method: "POST",
+      url: `/centraid/_vault/grants/${(never.body.grant as Record<string, unknown>).grantId as string}/revoke`,
+      deviceId: parked.laptop,
+    });
+    expect(undelivered.body.message).toBe(
+      "no longer shared; no delivered copy remains — nothing needed removing"
+    );
+
+    // (2) Delivered, then the audience vault is not mounted here any more.
+    // The removal was sent and nobody confirmed it — the owner is told so
+    // rather than being promised a deletion this host cannot witness.
+    const house = world();
+    const created = await call(house, {
+      method: "POST",
+      url: "/centraid/_vault/grants",
+      deviceId: house.laptop,
+      body: {
+        audienceKind: "party",
+        audienceId: house.raviParty,
+        subjectType: "core.document",
+        subjectId: house.documentId,
+        capability: "view",
+      },
+    });
+    const grantId = (created.body.grant as Record<string, unknown>)
+      .grantId as string;
+    expect(audienceTitles(house.ravi)).toStrictEqual(["Trip plan"]);
+    house.mounted.delete(AUDIENCE);
+    const unconfirmed = await call(house, {
+      method: "POST",
+      url: `/centraid/_vault/grants/${grantId}/revoke`,
+      deviceId: house.laptop,
+    });
+    expect(unconfirmed.body.message).toBe(
+      "no longer shared; a vault holding a copy has been asked to remove it and has not yet confirmed"
+    );
+    // Honest to the end: the peer still holds it, and the row says so.
+    expect(audienceTitles(house.ravi)).toStrictEqual(["Trip plan"]);
+    expect(unconfirmed.body.grant).toMatchObject({
+      fulfillment: [{ peerVaultId: AUDIENCE, state: "remove_sent" }],
     });
   });
 
@@ -340,6 +428,31 @@ describe("routes/grants", () => {
     });
     expect(unasked.status).toBe(400);
     expect(unasked.body.error).toBe("query_required");
+
+    // A stranger's id must not borrow "nothing is shared with them": this
+    // vault has never heard of them, which is its own answer.
+    const strangers = await Promise.all(
+      [
+        `/centraid/_vault/grants?partyId=${uuidv7()}`,
+        `/centraid/_vault/grants?audienceKind=party&audienceId=${uuidv7()}`,
+        `/centraid/_vault/grants?audienceKind=circle&audienceId=${uuidv7()}`,
+      ].map((url) =>
+        call(house, { method: "GET", url, deviceId: house.laptop })
+      )
+    );
+    for (const stranger of strangers) {
+      expect(stranger.status).toBe(404);
+      expect(stranger.body.error).toBe("audience_not_found");
+    }
+    // …and a party this vault DOES know, with nothing shared, still answers
+    // the empty list. Two facts, two answers.
+    const known = await call(house, {
+      method: "GET",
+      url: `/centraid/_vault/grants?audienceKind=party&audienceId=${house.raviParty}`,
+      deviceId: house.laptop,
+    });
+    expect(known.status).toBe(200);
+    expect(known.body.grants).toStrictEqual([]);
   });
 
   test("the offerable registry is readable, and a caller without a device is not", async () => {

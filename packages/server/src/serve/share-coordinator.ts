@@ -4,10 +4,10 @@
  * Before this, every route that touched an edge wrote its own UPDATE:
  * `edges-routes.ts` parked on an exception, `edges-reconcile.ts` walked
  * queued → in-flight → completed, `edges-reconcile-remote.ts` mapped six peer
- * outcomes to statuses of its own, and `peer-edge-give-route.ts` denied from
- * yet another place. Four hand-rolled state machines over one column meant
- * "what may follow what" had no answer — only four implementations that
- * happened to agree.
+ * outcomes to statuses of its own, and the peer give route denied from yet
+ * another place. Four hand-rolled state machines over one column meant "what
+ * may follow what" had no answer — only four implementations that happened
+ * to agree.
  *
  * This module is that answer, as PURE functions: `(state, signal) → {state,
  * effects}`. It knows nothing about SQLite, routes, vaults or the network.
@@ -21,6 +21,13 @@
  * transport (`edges-reconcile.ts`'s direct vault calls, or
  * `edges-reconcile-remote.ts`'s peer dial). If a transition ever needed to
  * ask which one it was, that would be the bug this shape exists to prevent.
+ *
+ * Since #825 only ONE locality can still reach this reducer: copy-as-share
+ * retired (ruling G-copy), so `POST /centraid/_gateway/edges` refuses a
+ * cross-owner pair and every surviving edge is a same-owner placement between
+ * two vaults on this machine. The `peer` delivery arm and the cross-owner
+ * gating below are therefore unreachable in production; they are kept intact
+ * rather than half-unpicked, and inventoried for #825's dead-give sweep.
  */
 
 import type { EdgeKind, EdgeStatus } from "./share-edge-row.js";

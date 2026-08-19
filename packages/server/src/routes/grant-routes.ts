@@ -19,10 +19,14 @@
  *     "who is this shared with" sheet on an album or a document.
  *
  * ABSENT IS NEVER EMPTY, on every read here. A grant nobody can see answers
- * `not_found`; a party this vault has never reached carries `channel: null`;
- * a grant with no delivery rows yet carries `fulfillment: []`. "We cannot
- * see", "never reached", and "reached nobody" are three different sentences
- * and none of them is allowed to arrive wearing another's clothes.
+ * `not_found`; an audience this vault has never heard of answers
+ * `audience_not_found` rather than borrowing "nothing is shared with them";
+ * a party this vault has never reached carries `channel: null`; a grant with
+ * no delivery rows yet carries `fulfillment: []`. "We cannot see", "we do not
+ * know them", "never reached", and "reached nobody" are four different
+ * sentences and none is allowed to arrive wearing another's clothes. The one
+ * question that cannot be split this way is the SUBJECT read — subject ids
+ * are app-polymorphic, so no existence check belongs at this layer.
  *
  * Refusals are honest and actionable (#750's rule, kept): a subject type the
  * vault has no fulfillment strategy for is refused at the door with the
@@ -293,11 +297,25 @@ function revokeGrant(
   });
 }
 
-/** The three listing questions, answered from one door. */
+/**
+ * The three listing questions, answered from one door.
+ *
+ * An audience this vault has never heard of is `404 audience_not_found`, not
+ * an empty list: `grants: []` means "nothing is shared with them", and a
+ * stranger's id must not borrow that sentence. The SUBJECT question cannot be
+ * answered the same way — subject ids are app-polymorphic and no table at
+ * this layer can be asked whether one exists — so there `[]` genuinely covers
+ * both facts, and the docs say so rather than claiming otherwise.
+ */
 function listGrants(res: ServerResponse, vault: GrantVault, url: URL): boolean {
   const db = vault.db;
   const partyId = url.searchParams.get("partyId");
   if (partyId) {
+    if (!audienceExists(db.vault, { kind: "party", id: partyId }))
+      return sendJson(res, 404, {
+        error: "audience_not_found",
+        message: "this vault knows no such person",
+      });
     return sendJson(res, 200, {
       partyId,
       // `null` is "this vault has never reached them" — not a severed channel,
@@ -316,6 +334,14 @@ function listGrants(res: ServerResponse, vault: GrantVault, url: URL): boolean {
         "invalid_audience",
         "audienceKind must be party or circle"
       );
+    if (!audienceExists(db.vault, { kind: audienceKind, id: audienceId }))
+      return sendJson(res, 404, {
+        error: "audience_not_found",
+        message:
+          audienceKind === "party"
+            ? "this vault knows no such person"
+            : "this vault knows no such circle",
+      });
     return sendJson(res, 200, {
       audience: { kind: audienceKind, id: audienceId },
       grants: grantsWire(

@@ -224,10 +224,15 @@ export function propagateGrantRemoval(input: {
  * commits the membership row, not the album, and narrowing by type would drop
  * exactly the case the ruling exists to guarantee.
  *
- * Re-projection is idempotent, so an extra pass costs work and changes
- * nothing — the same trade `recompileCommonsGrants` already makes on every
- * sequenced commons command. A vault with no live grants pays one indexed
- * read and stops, which is the overwhelming majority of commits.
+ * Re-projection is idempotent in OUTCOME, not free and not invisible: each
+ * pass scrubs and re-projects every live grant's closure, so row ids stay
+ * stable but the audience's change stream sees a full delete-then-insert.
+ * The doorbell also rings on EVERY provenance commit, not only on commons
+ * commands the way `recompileCommonsGrants` does, and the first ring of a
+ * window runs its pass inline on the committing request's path. A vault with
+ * no live grants pays one indexed read and stops, which is the overwhelming
+ * majority of commits; the rest is v1's accepted cost of keeping a standing
+ * grant true without a diff the engine deliberately does not keep.
  */
 
 /** Distinct live grant subjects in one vault, oldest grant first. */

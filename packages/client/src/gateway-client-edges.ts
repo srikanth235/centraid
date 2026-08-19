@@ -1,14 +1,19 @@
 /*
  * Renderer-side client for snapshot edges and circle-backed commons (#731 —
- * `packages/server/src/routes/edges-routes.ts` and `edge-answer-routes.ts`).
- * An edge is a one-shot copy of a fixed item set. Ongoing co-owned sharing
- * uses the commons route below.
+ * `packages/server/src/routes/edges-routes.ts`). An edge is a one-shot copy
+ * of a fixed item set. Ongoing co-owned sharing uses the commons route below.
  *
  *   GET  /centraid/_gateway/edges              — this DEVICE's own edges
  *   POST /centraid/_gateway/edges               {mode, kind, itemType, ...}
- *   GET  /centraid/_gateway/edges/pending        — parked asks awaiting the
- *                                                   caller's OWNER decision
- *   POST /centraid/_gateway/edges/<edgeId>/answer {decision: "accept"|"refuse"}
+ *
+ * SAME-OWNER ONLY since #825 (ruling G-copy): giving another person a copy is
+ * no longer a verb, so a cross-owner pair is refused with
+ * `cross_owner_give_retired` and sharing with somebody else is a standing
+ * GRANT on `/centraid/_vault/grants`. The D9 answer calls below
+ * (`GET …/edges/pending`, `POST …/edges/<edgeId>/answer`) lost their routes
+ * with that retirement and now 404 against a real gateway; retiring the
+ * callers is #825 app-wave work, recorded here so it is not read as an
+ * oversight.
  *
  * This is the People panel's data source, independent of any one blueprint
  * app mount — a share is a fact about the household, not about Photos or

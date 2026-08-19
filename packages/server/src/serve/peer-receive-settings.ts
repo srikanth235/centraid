@@ -1,8 +1,13 @@
 /*
  * D9 (#726 P3 decision 9): the audience side of a link's own accept|ask|refuse
- * preference for gives ARRIVING at its vault. Evaluated when an edge opens,
- * BEFORE any bytes move — `routes/peer-edge-give-route.ts` (remote) and a
- * same-machine caller alike read this before calling into the reconciler.
+ * preference for gives ARRIVING at its vault, read before any bytes moved.
+ *
+ * NOTHING ARRIVES ANY MORE. Copy-as-share retired with #825 (ruling G-copy):
+ * the remote reader (`routes/peer-edge-give-route.ts`) is deleted and a
+ * cross-owner pair is refused at `POST /centraid/_gateway/edges`, so the only
+ * rows this table can still answer for are same-owner ones, where a person
+ * does not ask their own permission. The table and its reads are inventoried
+ * for #825's dead-give sweep, which decides the shape of what is left.
  *
  * Deliberately its own table rather than `vault_links` columns: setting a
  * preference must never touch the ceremony/route columns' schema, and
