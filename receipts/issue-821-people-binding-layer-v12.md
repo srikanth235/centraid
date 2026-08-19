@@ -618,6 +618,8 @@ that earns it.
 
 #821 registers nine mobile People law tags in tests/matrix.json#laws after the #822 whole-file fingerprint re-pin. Qualities, demonstratedRed, and matrixGovernanceFingerprint are unchanged. Prior: #822.
 
+#821 restores native People and Docs on the phone, so the Hermes index chunk grows 6.36 MB → 7.14 MB. Ceiling maxLargestChunkBytes 7000000 → 7750000 (observed 7142105 + ~8% headroom). maxTotalBytes is unchanged. Prior: #659.
+
 The judgment calls the diff cannot show.
 
 **The phone reads entities and re-states the joins; it does not dispatch
@@ -887,7 +889,9 @@ Files in this follow-up: `packages/blueprints/apps/docs/components/ViewToggle.mo
 `packages/blueprints/apps/docs/format.ts`,
 `apps/mobile/src/apps/docs/docs-projection.ts`,
 `apps/mobile/src/apps/docs/editor-outcome.ts`,
-`apps/mobile/src/apps/docs/DocumentProperties.tsx`.
+`apps/mobile/src/apps/docs/DocumentProperties.tsx`,
+`apps/web/tests/e2e/pending-overlay.spec.ts`,
+`tests/experience-budgets/mobile.json`.
 
 ## Session
 
