@@ -350,10 +350,8 @@ test("production PWA routes recover Tally, Tasks, and Agenda pending rows while 
   await expect(page.getByText("Offline task", { exact: true })).toBeVisible();
   await expect(page.locator(".kit-pending-chip")).toHaveText("queued");
 
-  // The People wall is a static holdback, so a reload cannot recover a
-  // roster that the route does not draw.
   await openFirstParty(page, "People");
-  await expect(page.getByText("Not here yet", { exact: true })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Add person" })).toBeVisible();
 
   await openFirstParty(page, "Tally");
   await page.getByText("Offline Journey", { exact: true }).first().click();

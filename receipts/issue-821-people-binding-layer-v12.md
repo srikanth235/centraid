@@ -891,6 +891,7 @@ Files in this follow-up: `packages/blueprints/apps/docs/components/ViewToggle.mo
 `apps/mobile/src/apps/docs/editor-outcome.ts`,
 `apps/mobile/src/apps/docs/DocumentProperties.tsx`,
 `apps/web/tests/e2e/pending-overlay.spec.ts`,
+`apps/desktop/tests/e2e/pending-overlay.spec.ts`,
 `tests/experience-budgets/mobile.json`.
 
 ## Session
