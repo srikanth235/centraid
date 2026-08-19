@@ -36,6 +36,7 @@ import { armConfirm } from "@centraid/design/elements";
 import { GrantSheet } from "../../_shared/GrantSheet.tsx";
 import { buildSelectionActions as buildSharedSelectionActions } from "../../_shared/selection-engine.ts";
 import type { SelectionShelfKind } from "../../_shared/selection-engine.ts";
+import { parseAssetKey } from "../asset-key.ts";
 import { ONE_AT_A_TIME, usePhotoShare } from "../grant-audiences.ts";
 import {
   SelectAlbumIcon,
@@ -90,19 +91,20 @@ export interface SelectionActionSpec {
 export interface BuildSelectionActionsInput {
   count: number;
   shelfKind: SelectionShelfKind;
-  /** The third target's caption — `Copy to ⟨label⟩`, or the resting caption
-   *  while no single destination exists (sharing.ts's `copyActionLabel`). */
+  /** The third target's caption. Always *Share* since #825 — the sheet asks
+   *  who, so the control never names a destination. */
   copyLabel: string;
   /** Non-null in a read-only vault (§6): Favorite, Add to album and
-   *  Trash/Restore disable with this reason; *Copy to ⟨vault⟩* and Download
-   *  do not — copying into a vault the member owns, and downloading, are
-   *  never writes on someone else's library. */
+   *  Trash/Restore disable with this reason; *Share* and Download do not —
+   *  naming who may see a photograph, and downloading it, are never writes on
+   *  someone else's library. */
   readOnlyReason: string | null;
   /**
-   * Why *Copy to ⟨vault⟩* cannot fire — no other writable scope is mounted
-   * here, or several are and this control cannot yet ask which (issue #726).
-   * Null when exactly one destination exists. The control DISABLES with this
-   * sentence on it rather than being tappable and doing nothing.
+   * Why *Share* cannot fire — since #825, that a grant stands over ONE
+   * subject and this selection is not one (`ONE_AT_A_TIME`). Null when
+   * exactly one photograph is selected. The control DISABLES with this
+   * sentence on it rather than being tappable and doing nothing. Who there is
+   * to share WITH is never guessed here: that is the sheet's own read.
    */
   copyBlockedReason: string | null;
   onFavorite: () => void;
@@ -288,7 +290,13 @@ export function SelectionBarView({
           open={share.open}
           onClose={() => share.close()}
           audiences={share.audiences}
-          subject={{ subjectType: "media.asset", subjectId: only }}
+          // The selection holds COMPOSITE keys (scope + asset); the grant
+          // stands over the asset itself, so the key is parsed rather than
+          // posted — a `\0`-joined key is not an id any vault would know.
+          subject={{
+            subjectType: "media.asset",
+            subjectId: parseAssetKey(only).assetId,
+          }}
           onStatus={notice}
         />
       ) : null}
@@ -443,7 +451,13 @@ export function SelectionBottomBar({
           open={share.open}
           onClose={() => share.close()}
           audiences={share.audiences}
-          subject={{ subjectType: "media.asset", subjectId: only }}
+          // The selection holds COMPOSITE keys (scope + asset); the grant
+          // stands over the asset itself, so the key is parsed rather than
+          // posted — a `\0`-joined key is not an id any vault would know.
+          subject={{
+            subjectType: "media.asset",
+            subjectId: parseAssetKey(only).assetId,
+          }}
           onStatus={notice}
         />
       ) : null}

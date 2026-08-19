@@ -4,9 +4,10 @@
 // account was founded with. The tile marker is derived from the vault
 // record's `personal` marker, never from its name — so this is the one place
 // that reads the mounted scopes and hands Photos a map it can look a vault up
-// in. Where a share GOES is not here at all: the phone asks the member with
-// the ceremony-free commons sheet (`kit/share/ShareSheet.tsx`, issue #731),
-// so there is no pointer to resolve on this surface.
+// in. A share has no destination vault to resolve here at all (#825): sharing
+// a photograph records a GRANT over it, addressed to a person or a named
+// circle by the grant sheet (`kit/share/GrantSheet.tsx`), and nothing about
+// that names a vault this map could look up.
 
 import { useMemo } from "react";
 

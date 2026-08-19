@@ -10,8 +10,9 @@
 import { useState } from "react";
 
 import {
-  loadGrantAudiences,
   NOBODY_TO_SHARE_WITH,
+  readGrantAudiences,
+  ROSTER_UNREADABLE,
 } from "../_shared/grant-audiences.ts";
 import {
   grantPlaneAvailable,
@@ -40,7 +41,8 @@ export interface PhotoShareEntry {
    * The member asked to share. The roster is read HERE rather than on mount —
    * a member who adds someone in People and comes back sees them, and no
    * Photos surface holds a roster read it may never need. A refusal is spoken
-   * before the sheet opens: an empty picker is not an answer.
+   * before the sheet opens: an empty picker is not an answer, and neither is
+   * "you know nobody" when the truth is that the read failed.
    */
   request: () => void;
   close: () => void;
@@ -60,9 +62,15 @@ export function usePhotoShare(
         refuse(GRANTS_UNAVAILABLE_HERE);
         return;
       }
-      void loadGrantAudiences().then((rows) => {
-        setAudiences(rows);
-        if (rows.length === 0) refuse(NOBODY_TO_SHARE_WITH);
+      void readGrantAudiences().then((read) => {
+        // A roster that could not be read is NOT an empty roster: the member
+        // is told the read failed, not that they know nobody.
+        if (!read.ok) {
+          refuse(ROSTER_UNREADABLE);
+          return;
+        }
+        setAudiences(read.audiences);
+        if (read.audiences.length === 0) refuse(NOBODY_TO_SHARE_WITH);
         else setOpen(true);
       });
     },

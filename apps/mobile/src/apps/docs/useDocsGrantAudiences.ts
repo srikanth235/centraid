@@ -9,8 +9,9 @@
  * The MAPPING from those rows to audiences is not restated here either:
  * `_shared/grant-audiences.ts` owns it for every app and both seats.
  *
- * `null` is "not read yet", which is not the same fact as a vault that knows
- * nobody: Docs draws no Share verb until the roster is an actual answer.
+ * `null` is "not an answer" — not read yet, or read and unreadable — which is
+ * not the same fact as a vault that knows nobody: Docs draws no Share verb
+ * until the roster is an actual answer, and an empty answer is one.
  */
 
 import { useEffect, useMemo, useState } from "react";
@@ -35,7 +36,9 @@ export function useDocsGrantAudiences(): readonly GrantAudienceOption[] | null {
     "people",
     useMemo(() => ({ entity: "core.vault", limit: 1 }), [])
   );
-  const [links, setLinks] = useState<GatewayLink[] | null>(null);
+  // `null` is "not read yet"; `unreadable` is "asked, and the answer never
+  // came" — the two are not the same fact and neither is an empty list.
+  const [links, setLinks] = useState<GatewayLink[] | "unreadable" | null>(null);
   const gatewayBase = replica.gatewayBase;
 
   // Every write is deferred off the effect body: a synchronous setState here
@@ -43,11 +46,12 @@ export function useDocsGrantAudiences(): readonly GrantAudienceOption[] | null {
   useEffect(() => {
     let active = true;
     void Promise.resolve()
-      // A links read that fails is "no linked vaults known", never a reason to
-      // withhold the People rows that were already read — and a seat with no
-      // gateway yet has the same answer.
+      // A links read that fails is never a reason to withhold the People rows
+      // that were already read — but it is recorded as unreadable rather than
+      // as an empty list, because the two differ where People named nobody
+      // either. A seat with no gateway yet genuinely has no links.
       .then(() => (gatewayBase ? listLinks(gatewayBase) : []))
-      .catch(() => [])
+      .catch((): GatewayLink[] | "unreadable" => "unreadable")
       .then((rows) => {
         if (active) setLinks(rows);
       });
@@ -64,10 +68,17 @@ export function useDocsGrantAudiences(): readonly GrantAudienceOption[] | null {
     sourceVaultId: replica.vaultId ?? "",
     ...(ownerPartyId ? { ownerPartyId } : {}),
     parties: parties.rows,
-    links: links ?? [],
+    links: links === null || links === "unreadable" ? [] : links,
     scopes: replica.scopes ?? [],
   });
   const circles = useNamedShareCircles(targets, ownerPartyId);
   if (links === null) return null;
-  return grantAudiencesFrom(targets, circles);
+  const audiences = grantAudiencesFrom(targets, circles);
+  // A FAILED READ IS NOT AN EMPTY ROSTER. People's own rows still count — a
+  // linked-vault read that fell over never made the people this member added
+  // disappear — but when they name nobody either, the only honest answer is
+  // "no answer": Docs draws no Share verb rather than a sheet that would
+  // accuse a member of knowing nobody on the strength of a broken read.
+  if (links === "unreadable" && audiences.length === 0) return null;
+  return audiences;
 }

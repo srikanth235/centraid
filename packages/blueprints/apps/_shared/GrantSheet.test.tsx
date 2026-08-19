@@ -20,6 +20,7 @@ import { createRoot } from "react-dom/client";
 import type { Root } from "react-dom/client";
 import { afterEach, describe, expect, test } from "vitest";
 
+import { NOBODY_TO_SHARE_WITH } from "./grant-audiences.ts";
 import type { GrantDoor } from "./grant-door.ts";
 import type {
   GrantRecord,
@@ -621,6 +622,21 @@ describe("the grant sheet, web seat", () => {
       );
       await act(async () => answer());
       expect(container.textContent).toContain("Reachable");
+    });
+  });
+
+  describe("a roster with nobody in it", () => {
+    test("says so in words instead of drawing an empty picker", async () => {
+      const { container } = await mount({ audiences: [] });
+      expect(container.textContent).toContain(NOBODY_TO_SHARE_WITH);
+      expect(
+        container.querySelector('select[aria-label="Person or circle"]')
+      ).toBeNull();
+    });
+
+    test("cannot post a grant addressed to nobody", async () => {
+      const { container } = await mount({ audiences: [] });
+      expect(pressing(container, "Share").disabled).toBe(true);
     });
   });
 });

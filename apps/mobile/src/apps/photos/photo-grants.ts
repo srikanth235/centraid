@@ -17,6 +17,7 @@ import { useMemo, useState } from "react";
 import {
   grantAudiencesFrom,
   NOBODY_TO_SHARE_WITH,
+  ROSTER_UNREADABLE,
 } from "@centraid/blueprints/apps/_shared/grant-audiences";
 import type { GrantAudienceOption } from "@centraid/blueprints/apps/_shared/grant-plane";
 
@@ -39,8 +40,9 @@ export interface PhotoGrantEntry {
   visible: boolean;
   /**
    * The member asked to share. The roster is read HERE and the refusal — no
-   * gateway, or nobody to name — is spoken on the status line BEFORE a sheet
-   * opens. An empty picker is not an answer to "who can see this".
+   * gateway, nobody to name, or a roster that could not be read — is spoken on
+   * the status line BEFORE a sheet opens. An empty picker is not an answer to
+   * "who can see this", and neither is "you know nobody" after a failed read.
    */
   request: () => void;
   dismiss: () => void;
@@ -95,12 +97,15 @@ export function usePhotoGrantEntry(
       const base = replica.gatewayBase;
       void (async () => {
         let links: GatewayLink[] = [];
+        let linksUnread = false;
         try {
           links = await listLinks(base);
         } catch {
           // A link read that failed is not a roster: People still names
           // everyone this member added, and an invitation is a real target.
+          // But it is not NOTHING either — see the refusal below.
           links = [];
+          linksUnread = true;
         }
         // Built from the links just read, not from the ones a previous render
         // closed over — the decision below is about the roster as it IS.
@@ -122,8 +127,14 @@ export function usePhotoGrantEntry(
           })
         );
         setAudiences(rows);
-        if (rows.length === 0) refuse(NOBODY_TO_SHARE_WITH);
-        else setVisible(true);
+        if (rows.length > 0) {
+          setVisible(true);
+          return;
+        }
+        // NOBODY, OR NOT KNOWN? People's own rows carried nobody either way,
+        // but a link read that FAILED means half the roster never answered —
+        // saying "you know nobody" then blames the member for a broken read.
+        refuse(linksUnread ? ROSTER_UNREADABLE : NOBODY_TO_SHARE_WITH);
       })();
     },
     dismiss: () => setVisible(false),

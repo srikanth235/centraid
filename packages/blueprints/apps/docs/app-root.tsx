@@ -28,7 +28,7 @@ import {
 } from "@centraid/design/elements";
 
 import { publishOutcome } from "../_shared/app-frame.tsx";
-import { loadGrantAudiences } from "../_shared/grant-audiences.ts";
+import { readGrantAudiences } from "../_shared/grant-audiences.ts";
 import { grantPlaneAvailable } from "../_shared/grant-gateway.ts";
 import type { GrantAudienceOption } from "../_shared/grant-plane.ts";
 import { GrantSheet } from "../_shared/GrantSheet.tsx";
@@ -72,6 +72,7 @@ import {
 import { NO_FILTERS, filtersActive } from "./filters.ts";
 import type { DriveFilters } from "./filters.ts";
 import { appBar, bandClaim } from "./frame.tsx";
+import { docsRosterAnswer } from "./grant-audiences.ts";
 import type { DocsShareHost } from "./grant-audiences.ts";
 import { createLogic } from "./logic.ts";
 import { createNav } from "./nav.ts";
@@ -199,8 +200,9 @@ export function Root({
   const [dropVisible, setDropVisible] = useState(false);
   const [dropTarget, setDropTarget] = useState("");
   const [shareFolder, setShareFolder] = useState<Folder | null>(null);
-  // `null` is "the roster has not been read yet", which is not the same fact
-  // as a vault that knows nobody — Share is offered only once it IS an answer.
+  // `null` is "the roster is not an answer" — unread, or read and unreadable —
+  // which is not the same fact as a vault that knows nobody. Share is offered
+  // only once the roster IS an answer, and an empty one is.
   const [audiences, setAudiences] = useState<
     readonly GrantAudienceOption[] | null
   >(null);
@@ -605,13 +607,19 @@ export function Root({
   useEffect(() => {
     if (!ready || !grantPlaneAvailable()) return;
     let active = true;
-    void loadGrantAudiences().then((rows) => {
-      if (active) setAudiences(rows);
+    void readGrantAudiences().then((read) => {
+      if (!active) return;
+      // A ROSTER THAT COULD NOT BE READ IS NOT AN EMPTY ONE — `docsRosterAnswer`
+      // is where the two stay apart, and it hands back both halves: what Share
+      // may name, and what the status line owes the member.
+      const answer = docsRosterAnswer(read);
+      if (answer.status) publishOutcome(frame, { text: answer.status });
+      if (answer.audiences) setAudiences(answer.audiences);
     });
     return () => {
       active = false;
     };
-  }, [ready]);
+  }, [frame, ready]);
 
   useEffect(() => {
     if (!ready || !window.centraid.commonsResidents) return;

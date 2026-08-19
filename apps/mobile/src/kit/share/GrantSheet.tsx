@@ -19,6 +19,7 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { Modal, Pressable, ScrollView, StyleSheet, View } from "react-native";
 
+import { NOBODY_TO_SHARE_WITH } from "@centraid/blueprints/apps/_shared/grant-audiences";
 import {
   alreadyGrantedOutcome,
   audienceNotKnown,
@@ -407,6 +408,14 @@ export default function GrantSheet(props: GrantSheetProps): React.JSX.Element {
                 <Text style={[styles.eyebrow, { color: colors.textSoft }]}>
                   Person
                 </Text>
+                {/* AN EMPTY PICKER IS NOT AN ANSWER (#825): a roster read as
+                    empty says so in words. A roster that could not be read at
+                    all never opens the sheet — the host speaks that one. */}
+                {props.audiences.length === 0 ? (
+                  <Text style={{ color: colors.textSoft }}>
+                    {NOBODY_TO_SHARE_WITH}
+                  </Text>
+                ) : null}
                 <ScrollView horizontal showsHorizontalScrollIndicator={false}>
                   <View style={styles.pillRow}>
                     {props.audiences.map((option) =>

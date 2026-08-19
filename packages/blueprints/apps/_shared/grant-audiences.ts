@@ -20,19 +20,27 @@
  *    that does not exist.
  *
  * An empty answer is a real answer — "there is nobody to share with yet" — and
- * every caller states it rather than drawing an empty picker.
+ * every caller states it rather than drawing an empty picker. A read that
+ * FAILED is not that answer, and `readGrantAudiences` keeps the two apart:
+ * telling a member with a full People directory that they know nobody is a
+ * lie the roster's own error was never entitled to tell.
  */
 
 import type { GrantAudienceOption } from "./grant-plane.ts";
 import {
   isPendingPartyId,
-  loadShareCircles,
-  loadShareDestinations,
+  readShareCircles,
+  readShareDestinations,
 } from "./share-kit.ts";
 
 /** Why Share cannot even open. Stated on the control, never after the fact. */
 export const NOBODY_TO_SHARE_WITH =
   "There is nobody to share with yet — add someone in People first.";
+
+/** The OTHER reason the sheet does not open: the roster could not be read at
+ *  all. Never "nobody yet" — that would blame the member for a failed read. */
+export const ROSTER_UNREADABLE =
+  "Your People list could not be read just now — try Share again in a moment.";
 
 /**
  * One roster row, in the narrowest shape both seats already answer. `pending`
@@ -74,12 +82,30 @@ export function grantAudiencesFrom(
   return [...people, ...named];
 }
 
-/** The web seat's roster, live. Never throws: both loaders answer empty on a
- *  bad read, which the mapping turns into the honest "nobody yet". */
-export async function loadGrantAudiences(): Promise<GrantAudienceOption[]> {
-  const [destinations, circles] = await Promise.all([
-    loadShareDestinations(null),
-    loadShareCircles(),
-  ]);
-  return grantAudiencesFrom(destinations, circles);
+/**
+ * The roster as an ANSWER, which includes "there is no answer". Three states,
+ * because a host has three things to say: not read (the caller's own `null`),
+ * read and empty (`ok` with no options), and unreadable.
+ */
+export type GrantAudienceRead =
+  | { readonly ok: true; readonly audiences: GrantAudienceOption[] }
+  | { readonly ok: false };
+
+/**
+ * The web seat's roster, live — and honest about failing. Either half failing
+ * makes the whole read unreadable: a roster missing its circles, or its
+ * people, is not a roster a member could recognise as their own, and offering
+ * the surviving half as if it were complete is how a grant lands on the wrong
+ * audience.
+ */
+export async function readGrantAudiences(): Promise<GrantAudienceRead> {
+  try {
+    const [destinations, circles] = await Promise.all([
+      readShareDestinations(),
+      readShareCircles(),
+    ]);
+    return { ok: true, audiences: grantAudiencesFrom(destinations, circles) };
+  } catch {
+    return { ok: false };
+  }
 }

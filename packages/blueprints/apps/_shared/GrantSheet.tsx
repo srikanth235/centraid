@@ -23,6 +23,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { JSX } from "react";
 
+import { NOBODY_TO_SHARE_WITH } from "./grant-audiences.ts";
 import {
   alreadyGrantedOutcome,
   audienceNotKnown,
@@ -375,25 +376,33 @@ export function GrantSheet(props: GrantSheetProps): JSX.Element | null {
             <div className={styles.steps}>
               <section className={styles.step} aria-label="Person">
                 <p className={styles.eyebrow}>Person</p>
-                <select
-                  aria-label="Person or circle"
-                  value={audience?.id ?? ""}
-                  onChange={(event) => {
-                    setPicked(null);
-                    setAudienceId(event.target.value);
-                  }}
-                >
-                  {props.audiences.map((option) => (
-                    <option
-                      key={`${option.kind}:${option.id}`}
-                      value={option.id}
-                    >
-                      {option.kind === "circle"
-                        ? `Named group · ${option.label}`
-                        : option.label}
-                    </option>
-                  ))}
-                </select>
+                {/* AN EMPTY PICKER IS NOT AN ANSWER (#825). A host that opens
+                    the sheet over a roster it read as empty says so in words;
+                    a host that could not read the roster at all never gets
+                    here — it speaks its own sentence and does not open. */}
+                {props.audiences.length === 0 ? (
+                  <p className={styles.note}>{NOBODY_TO_SHARE_WITH}</p>
+                ) : (
+                  <select
+                    aria-label="Person or circle"
+                    value={audience?.id ?? ""}
+                    onChange={(event) => {
+                      setPicked(null);
+                      setAudienceId(event.target.value);
+                    }}
+                  >
+                    {props.audiences.map((option) => (
+                      <option
+                        key={`${option.kind}:${option.id}`}
+                        value={option.id}
+                      >
+                        {option.kind === "circle"
+                          ? `Named group · ${option.label}`
+                          : option.label}
+                      </option>
+                    ))}
+                  </select>
+                )}
                 {/* An unknown reach draws the checking line and nothing else:
                     every other label is a claim about this person that only an
                     answered read may make. */}
