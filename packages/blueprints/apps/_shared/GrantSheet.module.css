@@ -1,0 +1,119 @@
+/* The grant sheet's layout (#825). Colour and shape come from kit.css's
+   `.kit-modal` / `.kit-btn` / `.kit-seg`; only rhythm lives here. */
+
+.steps {
+  display: grid;
+  gap: var(--sp-4);
+  margin: var(--sp-3) 0 0;
+}
+
+.step {
+  display: grid;
+  gap: var(--sp-2);
+  min-inline-size: 0;
+}
+
+.eyebrow {
+  margin: 0;
+  font: var(--t-eyebrow);
+  letter-spacing: var(--t-eyebrow-tracking);
+  text-transform: var(--t-eyebrow-transform);
+  color: var(--text-soft);
+}
+
+.note {
+  margin: 0;
+  font: var(--t-small);
+  color: var(--text-soft);
+}
+
+.fixedSubject {
+  margin: 0;
+  font: var(--t-body-strong);
+  color: var(--text);
+}
+
+.reach {
+  display: flex;
+  align-items: baseline;
+  gap: var(--sp-2);
+  flex-wrap: wrap;
+}
+
+.reachState {
+  font: var(--t-annot-label-on);
+  color: var(--text-soft);
+}
+
+/* "Not yet, and not wrong" — an invitation nobody has accepted is neither an
+   error nor a delivery, and `--seam` is the one role that says so. */
+.reachState[data-reach="invited"],
+.reachState[data-reach="never-reached"] {
+  color: var(--seam);
+}
+
+.reachState[data-reach="severed"] {
+  color: var(--net);
+}
+
+.standing {
+  display: grid;
+  gap: var(--sp-1);
+  margin: 0;
+  padding: var(--sp-1);
+  border: 1px solid var(--line);
+  border-radius: var(--r-lg);
+  max-block-size: 220px;
+  overflow: auto;
+  min-inline-size: 0;
+}
+
+.standingRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-3);
+  min-block-size: var(--h-row);
+  padding: var(--sp-1) var(--sp-2);
+}
+
+.standingCopy {
+  display: grid;
+  gap: 2px;
+  min-inline-size: 0;
+}
+
+.standingTitle {
+  font: var(--t-body);
+  color: var(--text);
+  overflow-wrap: anywhere;
+}
+
+.standingMeta {
+  font: var(--t-annot-label);
+  color: var(--text-soft);
+}
+
+/* A grant addressed to no vault yet, an invitation still pending: the seam
+   rung, not the error rung. */
+.standingMeta[data-delivery="awaiting_channel"],
+.standingMeta[data-delivery="none"] {
+  color: var(--seam);
+}
+
+.refusal {
+  margin: 0;
+  font: var(--t-small);
+  color: var(--net);
+}
+
+.confirm {
+  display: grid;
+  gap: var(--sp-3);
+}
+
+.confirmBody {
+  margin: 0;
+  font: var(--t-reading);
+  color: var(--text);
+}

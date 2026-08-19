@@ -237,3 +237,5 @@ The auditor confirmed the wave's load-bearing claims (route security at least as
 Verdict (wave 3, post-fix): PASS — fixes verified by the re-run suites (17/17 across the four route/seam test files, server typecheck clean, reachability ok at 229 capabilities, protocol-routes ok, hygiene at budget)
 
 - Per-commit wave note: Wave 3 audit (in progress): grant-routes audience 404 tests; glossary give-retirement tense; stale comments on deleted routes.
+
+- Per-commit wave note: Wave 4 in progress: web GrantSheet scaffolding, grant-plane/copy/door, window.centraid.grants bridge.

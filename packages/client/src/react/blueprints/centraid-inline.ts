@@ -37,6 +37,8 @@ import type { ReplicaShellSession } from "../../replica/shell-session.js";
 import type { ReplicaInvalidation } from "../../replica/types.js";
 import { authorizeBlobText, authorizeBlobUrl } from "./blob-auth.js";
 import { stageBlob, stageDerivative } from "./blob-staging.js";
+import { grantBridge } from "./grant-wire.js";
+import type { GrantBridge } from "./grant-wire.js";
 import { runInlineQuery } from "./inlineQueryCtx.js";
 import { placementWireFromEdge } from "./placement-wire.js";
 import {
@@ -243,6 +245,9 @@ export interface InlineCentraidClient {
    *  destinations beyond the member's own mounted scopes, co-hosted and
    *  remote alike (D3: locality is routing, not semantics). */
   links: () => Promise<InlineLinkDestination[]>;
+  /** The grant plane (#825): standing shares, read and written by the
+   *  shared `_shared/grant-door` kit rather than by any app directly. */
+  grants: GrantBridge;
   describe: () => Promise<unknown>;
   onChange: (cb: (detail: InlineChangeDetail) => void) => () => void;
   /** An authed `blob:` URL for a `/_vault/blobs/…` path in one scope. */
@@ -932,6 +937,11 @@ export function createInlineCentraidClient(
     links() {
       return loadLinkDestinations(primary.scope.id);
     },
+
+    // One door, built once: the grant plane is owner-tier and vault-scoped to
+    // the ACTIVE vault, so it takes no scope argument — the vault header
+    // `doFetch` stamps is what addresses it.
+    grants: grantBridge(auth),
 
     describe() {
       // Manifests ship in the shell bundle; no inline app reads describe on the

@@ -429,6 +429,32 @@ interface CentraidClient {
       approved: boolean;
     }>
   >;
+  /**
+   * The GRANT PLANE (#825) — standing shares over `/centraid/_vault/grants`.
+   * Every call answers the route's parsed JSON body as `unknown`: the parsing
+   * and refusal law lives once in `_shared/grant-door.ts`, shared with the
+   * native seat, so no app reads a payload itself. A refused call rejects with
+   * the route's OWN message, which the sheet prints verbatim.
+   */
+  grants?: {
+    subjects: () => Promise<unknown>;
+    forParty: (partyId: string) => Promise<unknown>;
+    /** `undefined` for an audience this vault has no record of (404). */
+    forAudience: (
+      kind: "party" | "circle",
+      id: string
+    ) => Promise<unknown | undefined>;
+    forSubject: (subjectType: string, subjectId: string) => Promise<unknown>;
+    create: (request: {
+      audienceKind: "party" | "circle";
+      audienceId: string;
+      subjectType: string;
+      subjectId: string;
+      capability: "view" | "edit";
+      subjectLabel?: string;
+    }) => Promise<unknown>;
+    revoke: (grantId: string) => Promise<unknown>;
+  };
   describe?: () => Promise<unknown>;
   /** Subscribe to the change feed; returns the unsubscribe. */
   onChange: (cb: (detail: CentraidChangeDetail) => void) => () => void;
