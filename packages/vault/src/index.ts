@@ -236,6 +236,7 @@ export {
 // existing party↔vault binding read as one state. Commons above stays the
 // edit-fulfillment strategy underneath it.
 export {
+  audienceExists,
   createShareGrant,
   readShareGrant,
   readLiveShareGrant,

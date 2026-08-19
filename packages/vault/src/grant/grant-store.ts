@@ -306,6 +306,31 @@ export function listShareGrantsForSubject(
 }
 
 /**
+ * Does this vault know the audience at all?
+ *
+ * Absent-never-empty needs this: "a person this vault has never heard of" and
+ * "a person nothing is shared with" both answer `grants: []` otherwise, and
+ * they are different facts. The audience side CAN be checked — a party is a
+ * `core_party` row and a circle is a `social_circle` row — which is exactly
+ * what makes the subject side (app-polymorphic ids, no table to look in at
+ * this layer) the one place the distinction cannot be drawn.
+ */
+export function audienceExists(
+  db: DatabaseSync,
+  audience: ShareGrantAudience
+): boolean {
+  return (
+    db
+      .prepare(
+        audience.kind === "party"
+          ? "SELECT 1 FROM core_party WHERE party_id = ?"
+          : "SELECT 1 FROM social_circle WHERE circle_id = ?"
+      )
+      .get(audience.id) !== undefined
+  );
+}
+
+/**
  * The parties an audience resolves to: itself for a party, its roster for a
  * circle. A circle with no members resolves to nobody, which is the honest
  * answer — the grant stands, it simply reaches no one yet.

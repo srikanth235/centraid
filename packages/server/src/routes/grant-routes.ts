@@ -35,6 +35,7 @@ import type { IncomingMessage, ServerResponse } from "node:http";
 import { ROUTES } from "@centraid/core/protocol";
 import { AUTHED_DEVICE_HEADER } from "@centraid/server/engine";
 import {
+  audienceExists,
   channelForParty,
   createShareGrant,
   isOfferableSubjectType,
@@ -58,7 +59,10 @@ import type {
 
 import type { RouteHandler } from "../serve/build-gateway.js";
 import type { EnrollmentStore } from "../serve/enrollment-store.js";
-import type { GrantFulfillmentHost } from "../serve/grant-fulfillment.js";
+import type {
+  GrantFulfillmentHost,
+  GrantRemovalReport,
+} from "../serve/grant-fulfillment.js";
 import {
   fulfillGrant,
   propagateGrantRemoval,
@@ -245,6 +249,22 @@ async function createGrant(
   });
 }
 
+/**
+ * The one sentence a person reads about a revocation. It is derived from what
+ * actually happened, never a constant: an engine that keeps three honest
+ * removal answers must not be paraphrased by a route into one optimistic one.
+ */
+function revocationMessage(removal: GrantRemovalReport): string {
+  if (removal.outcome === "failed")
+    return `the share is revoked, but its removal could not be sent: ${removal.reason}`;
+  const steps = removal.result.steps;
+  if (steps.some((step) => step.state === "remove_sent"))
+    return "no longer shared; a vault holding a copy has been asked to remove it and has not yet confirmed";
+  if (steps.some((step) => step.removed === true))
+    return "no longer shared; every copy it delivered has been removed";
+  return "no longer shared; no delivered copy remains — nothing needed removing";
+}
+
 /** End a grant and send its removal out — one verb, honestly best-effort. */
 function revokeGrant(
   res: ServerResponse,
@@ -269,8 +289,7 @@ function revokeGrant(
     outcome: revoked.outcome,
     ...(grant ? { grant: grantWire(vault.db, grant) } : {}),
     removal,
-    message:
-      "no longer shared; their vault has been asked to remove the copy it holds",
+    message: revocationMessage(removal),
   });
 }
 

@@ -193,3 +193,5 @@ The auditor also independently re-ran the Verification battery (green) and confi
 **Second pass** (fresh context) confirmed all four fixes sound — the refusal `NOT EXISTS` is per-grant not per-circle (probed with a two-grants-one-circle fixture), the all-refused drop is disclosed and the commons snapshot covers the new rows, the #750 throw precedes any read/insert with an acyclic import graph, the empty-circle floor survives the SQL change — and REFUTED only two stale numbers in the `## Verification` block (pre-fix test count and fingerprint), both corrected above. It also surfaced a consequence the receipt had not named — a decomposed grant no longer follows roster drift — now recorded under Decisions. Gates re-run green by the auditor: vault 178 files / 1358 passed, typecheck clean, ratchet `f2991949…`.
 
 Verdict: PASS
+
+- Per-commit wave note: Wave 3 audit (partial): revoke message derives from the removal report; ARCHITECTURE sharing paragraph names the grant plane as current.
