@@ -249,9 +249,17 @@ async fn serve_blob(
     response
 }
 
+/// Consume the POST so HTTP/1.1 keep-alive can finish. Returning 403 without
+/// reading the body resets the socket; Node `fetch` of a 512KiB `/v1/hash`
+/// then fails with `write EPIPE` instead of the 403 the contract asserts.
+async fn forbidden_control(body: Body) -> Response {
+    let _ = to_bytes(body, MAX_TRANSFORM_BODY).await;
+    error(StatusCode::FORBIDDEN, "invalid_data_plane_secret")
+}
+
 async fn hash_body(State(state): State<PlaneState>, headers: HeaderMap, body: Body) -> Response {
     if !has_control_secret(&headers, &state) {
-        return error(StatusCode::FORBIDDEN, "invalid_data_plane_secret");
+        return forbidden_control(body).await;
     }
     let mut digest = Sha256::new();
     let mut size = 0_u64;
@@ -276,7 +284,7 @@ async fn compress_body(
     body: Body,
 ) -> Response {
     if !has_control_secret(&headers, &state) {
-        return error(StatusCode::FORBIDDEN, "invalid_data_plane_secret");
+        return forbidden_control(body).await;
     }
     let bytes = match to_bytes(body, MAX_TRANSFORM_BODY).await {
         Ok(bytes) => bytes,
@@ -345,7 +353,7 @@ async fn preview_body(
     body: Body,
 ) -> Response {
     if !has_control_secret(&headers, &state) {
-        return error(StatusCode::FORBIDDEN, "invalid_data_plane_secret");
+        return forbidden_control(body).await;
     }
     if !(32..=4096).contains(&query.edge) {
         return error(StatusCode::BAD_REQUEST, "invalid_edge");

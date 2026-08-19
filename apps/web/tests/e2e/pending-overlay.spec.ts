@@ -111,13 +111,11 @@ async function connectPwa(page: Page): Promise<void> {
   await page.locator('nav[aria-label="Apps"]').waitFor({ state: "visible" });
 }
 
-/** Roster bar verb is `Add`; first-run commit is `Add person`. Both can be
- *  visible at once, so the locator is the first match inside the inline view. */
+/** Roster bar verb is `Add` on the shell titlebar (outside `inline-app-view`);
+ *  first-run commit is `Add person` inside the view. Either means the route
+ *  booted. Both can be visible at once, so take the first match. */
 function peopleNewPersonControl(page: Page) {
-  return page
-    .getByTestId("inline-app-view")
-    .getByRole("button", { name: /^Add(?: person)?$/u })
-    .first();
+  return page.getByRole("button", { name: /^Add(?: person)?$/u }).first();
 }
 
 async function prepareTally(page: Page): Promise<void> {
