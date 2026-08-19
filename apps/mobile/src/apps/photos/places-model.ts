@@ -46,6 +46,15 @@ export interface PlaceCard {
   name: string;
   count: number;
   coverUri?: string;
+  /**
+   * The same photograph's undownscaled bytes — the card's second rung.
+   *
+   * `coverUri` is a `?variant=` URL, and a variant the gateway's preview
+   * backstop has not produced yet 404s over an original that is sitting in CAS
+   * intact. Carried here so the shelf can run the same ladder the grid tile
+   * runs (`useImageFallback`) instead of drawing an empty plate.
+   */
+  coverOriginalUri?: string;
 }
 
 /**
@@ -165,7 +174,12 @@ export function placeCards(
   const placeById = placeRowsById(rows);
   const groups = new Map<
     string,
-    { name: string; count: number; coverUri?: string }
+    {
+      name: string;
+      count: number;
+      coverUri?: string;
+      coverOriginalUri?: string;
+    }
   >();
   for (const asset of assets) {
     if (!asset.placeId) continue;
@@ -179,13 +193,17 @@ export function placeCards(
       readableName(row.name ? String(row.name) : null) ?? PLACE_UNNAMED;
     const current = groups.get(key);
     if (current) {
+      if (current.coverUri === undefined) {
+        current.coverUri = asset.previewUri ?? asset.uri;
+        current.coverOriginalUri = asset.originalUri;
+      }
       current.count += 1;
-      current.coverUri ??= asset.previewUri ?? asset.uri;
     } else {
       groups.set(key, {
         name,
         count: 1,
         coverUri: asset.previewUri ?? asset.uri,
+        coverOriginalUri: asset.originalUri,
       });
     }
   }
@@ -242,7 +260,12 @@ export function noLocationCard(
     count: placeless.length,
     // The timeline hands assets over newest first, so this is the most recent
     // place-less photograph rather than an arbitrary one.
-    ...(cover ? { coverUri: cover.previewUri ?? cover.uri } : {}),
+    ...(cover
+      ? {
+          coverUri: cover.previewUri ?? cover.uri,
+          coverOriginalUri: cover.originalUri,
+        }
+      : {}),
   };
 }
 
@@ -303,6 +326,7 @@ export function placePoints(
         // over newest first — so a pin shows the most recent photograph
         // taken there rather than an arbitrary one.
         thumb: asset.uri,
+        thumbOriginal: asset.originalUri,
       });
   }
   return [...byPlace.values()];
