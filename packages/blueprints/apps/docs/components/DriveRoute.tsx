@@ -61,6 +61,10 @@ export interface DriveRouteProps {
    *  — so what this changes here is the caption and what a row may promise. */
   offline: boolean;
   filters: DriveFilters;
+  /** The set the filter row derives its People options from: this drive's rows
+   *  BEFORE any filter narrows them, so picking an audience cannot remove the
+   *  pill that was picked. */
+  filterRows: readonly DriveDoc[];
   onSelectFilter: (axis: keyof DriveFilters, option: string | null) => void;
   onClearFilters: () => void;
   /** The closing sentence under the set (§4.1) — `captionFor`'s answer, or
@@ -194,6 +198,7 @@ export function DriveRoute(props: DriveRouteProps): ReactNode {
       {props.empty.visible && props.empty.variant !== "filter" ? null : (
         <FilterRow
           filters={props.filters}
+          rows={props.filterRows}
           onSelect={props.onSelectFilter}
           onClear={props.onClearFilters}
         />

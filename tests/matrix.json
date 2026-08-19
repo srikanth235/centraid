@@ -1808,6 +1808,51 @@
       "statement": "Every semantic flag the shared block contracts declare produces a mark on the phone that the unflagged form does not — accepting a flag and drawing the ordinary control is not parity.",
       "owner": "apps/mobile/src/kit/components/blockParity.test.tsx",
       "flow": "mobile-block-parity-law"
+    },
+    "people-overdue-never": {
+      "statement": "Cadence 0 is Never and never overdue.",
+      "owner": "apps/mobile/src/apps/people/people-model.test.ts",
+      "flow": "people-crm"
+    },
+    "people-link-tristate": {
+      "statement": "The link fact is linked, unlinked, or absent — never a false unlinked on a denied share read.",
+      "owner": "apps/mobile/src/apps/people/people-model.test.ts",
+      "flow": "people-crm"
+    },
+    "people-roster-sub": {
+      "statement": "A linked roster row's second line leads with Linked, then the role if any.",
+      "owner": "apps/mobile/src/apps/people/people-model.test.ts",
+      "flow": "people-crm"
+    },
+    "people-trash-split": {
+      "statement": "Deleted profiles are the trash shelf, not roster rows, and carry purge_at.",
+      "owner": "apps/mobile/src/apps/people/people-model.test.ts",
+      "flow": "people-crm"
+    },
+    "people-search-scope": {
+      "statement": "People search covers name, role and notes.",
+      "owner": "apps/mobile/src/apps/people/people-model.test.ts",
+      "flow": "people-crm"
+    },
+    "people-avatar-hue": {
+      "statement": "A stored avatar hue round-trips as a wheel key, honours a hex verbatim, and otherwise derives from the party id.",
+      "owner": "apps/mobile/src/apps/people/people-model.test.ts",
+      "flow": "people-crm"
+    },
+    "people-link-ring": {
+      "statement": "The avatar ring states the link and only the link: solid when linked, dashed when unlinked, nothing when unknown.",
+      "owner": "apps/mobile/src/apps/people/PeopleKit.test.tsx",
+      "flow": "people-crm"
+    },
+    "people-row-marks": {
+      "statement": "The People row's meta takes net only as a consequence of being overdue.",
+      "owner": "apps/mobile/src/apps/people/PeopleKit.test.tsx",
+      "flow": "people-crm"
+    },
+    "people-star-a11y": {
+      "statement": "The star names its person and its direction.",
+      "owner": "apps/mobile/src/apps/people/PeopleKit.test.tsx",
+      "flow": "people-crm"
     }
   },
   "appEngines": {

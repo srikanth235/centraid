@@ -93,6 +93,70 @@ export interface VaultLinkRow {
   created_at: string;
 }
 
+/** Why a link row changed — what a listener reconciles against (issue #821). */
+export type LinkChangeReason =
+  | "proposed"
+  | "approved"
+  | "linked"
+  | "parties"
+  | "revoked";
+
+/**
+ * Notified after a link's row settles, so facts DERIVED from a link can be
+ * kept in step — today that is the `share_party_vault_binding` row each side's
+ * vault holds (`serve/link-party-bindings.ts`). Deliberately called after the
+ * gateway-database transaction closes, never inside it: a listener writes a
+ * DIFFERENT database, which a rollback here could not take back.
+ */
+export type LinkChangeListener = (
+  link: VaultLink,
+  reason: LinkChangeReason
+) => void;
+
+/** Directory/route resolution a peer view needs — the store satisfies this. */
+export interface LinkSideLookups {
+  routeFor: (vaultId: string) => LinkRoute | undefined;
+  directoryEntry: (vaultId: string) => VaultDirectoryEntry | undefined;
+}
+
+/** The link as `localVaultId` sees it — `undefined` unless the far side is routed. */
+export function peerViewOf(
+  link: VaultLink,
+  localVaultId: string,
+  lookups: LinkSideLookups
+): LinkedPeer | undefined {
+  const mine = sideOf(link, localVaultId);
+  if (mine === undefined) return undefined;
+  const peerVaultId = mine === "a" ? link.vaultB : link.vaultA;
+  // A peer view is a view of a vault elsewhere; a local pair has no far side.
+  const route = lookups.routeFor(peerVaultId);
+  if (!route) return undefined;
+  const peer = lookups.directoryEntry(peerVaultId);
+  if (!peer) return undefined;
+  const mineEntry = lookups.directoryEntry(localVaultId);
+  const partyIds =
+    typeof link.permissions["commonsPartyIds"] === "object" &&
+    link.permissions["commonsPartyIds"] !== null
+      ? (link.permissions["commonsPartyIds"] as Record<string, unknown>)
+      : {};
+  return {
+    linkId: link.linkId,
+    localVaultId,
+    peerVaultId,
+    peerPublicKey: peer.publicKey,
+    ...(typeof partyIds[peerVaultId] === "string"
+      ? { peerPartyId: partyIds[peerVaultId] }
+      : {}),
+    ...(typeof partyIds[localVaultId] === "string"
+      ? { localPartyId: partyIds[localVaultId] }
+      : {}),
+    peerLabel: peer.label,
+    myLabel: mineEntry?.label ?? null,
+    route,
+    permissions: link.permissions,
+  };
+}
+
 type LinkSide = "a" | "b";
 
 export function toLink(row: VaultLinkRow): VaultLink {

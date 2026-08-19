@@ -79,4 +79,44 @@ describe("shared blueprint CSS", () => {
       ).toBe(false);
     }
   });
+
+  it("gives Docs ViewToggle .track one border — fieldset reset plus hairline, not two declarations", () => {
+    const css = readFileSync(
+      path.join(appDir, "docs", "components", "ViewToggle.module.css"),
+      "utf8"
+    );
+    const track = cssRuleBody(css, ".track");
+    const borders = propertyValues(track, "border");
+    expect(
+      borders,
+      "css:S4656 forbids a second border on .track"
+    ).toStrictEqual(["1px solid var(--line)"]);
+    expect(propertyValues(track, "margin")).toStrictEqual(["0"]);
+    expect(propertyValues(track, "min-inline-size")).toStrictEqual(["0"]);
+  });
 });
+
+function cssRuleBody(css: string, selector: string): string {
+  const start = css.indexOf(`${selector} {`);
+  expect(start, `missing ${selector} rule`).toBeGreaterThanOrEqual(0);
+  const open = css.indexOf("{", start);
+  let depth = 0;
+  for (let i = open; i < css.length; i++) {
+    const ch = css[i];
+    if (ch === "{") depth += 1;
+    else if (ch === "}") {
+      depth -= 1;
+      if (depth === 0) return css.slice(open + 1, i);
+    }
+  }
+  throw new Error(`unclosed ${selector} rule`);
+}
+
+function propertyValues(block: string, property: string): string[] {
+  const uncommented = block.replace(/\/\*[\s\S]*?\*\//gu, " ");
+  const escaped = property.replace(/[.*+?^${}()|[\]\\]/gu, "\\$&");
+  const matches = uncommented.matchAll(
+    new RegExp(`(?:^|[;\\s])${escaped}\\s*:\\s*([^;]+)`, "gu")
+  );
+  return [...matches].map((match) => match[1]!.trim());
+}

@@ -63,8 +63,8 @@ const WEBVIEW_APPS = new Set(["notes"]);
  */
 const AWAITING_HANDOFF: Readonly<Record<"web" | "mobile", readonly string[]>> =
   {
-    web: ["people"],
-    mobile: ["docs", "people"],
+    web: [],
+    mobile: [],
   };
 
 const AWAITING_HANDOFF_RATIONALE =
@@ -84,21 +84,115 @@ const WEB_EXCEPTIONS: Readonly<Record<string, ReachabilityException>> = {
   "docs.action.edit": {
     kind: "agent-only",
     rationale:
-      "Docs holds, versions and files a document; it does not open one to type into. The v11 drive has no editor on any seat (docs/design-divergences.md), so this write is the assistant's alone.",
+      "The WEB drive holds, versions and files a document; it does not open one to type into (docs/design-divergences.md). The v12 phone build is different by design — the handoff's Part 2 draws an editor there, and the mobile scan finds this write itself.",
   },
   "locker.query.watchtower": {
     kind: "agent-only",
     rationale:
       "The Locker UI receives the sealed Watchtower aggregate through items; the standalone query remains available to the assistant.",
   },
+  // People, rebuilt to the Binding Layer v12 handoff (#821). The handoff draws
+  // the roster, the person, Touch, Search, Trash, Log, Edit and Merge — and
+  // EXCLUDES seven record sections outright. The queries still return that data
+  // and the writes still land, so these are not dark handlers: they are the
+  // vault contract outliving a screen the handoff chose not to draw. The
+  // register is docs/design-divergences.md § "People — v12 parity state and
+  // sanctioned withholdings"; the handoff bans placeholders, so nothing here
+  // gets a stub UI to satisfy this gate.
+  "people.action.create-list": {
+    kind: "agent-only",
+    rationale:
+      "Lists are one of the seven sections the v12 handoff excludes from the UI; the assistant still files a person into a list the member names.",
+  },
+  "people.action.rename-list": {
+    kind: "agent-only",
+    rationale:
+      "Same excluded lists section: with no list surface drawn there is nothing on screen to rename, and the assistant keeps the write.",
+  },
+  "people.action.delete-list": {
+    kind: "agent-only",
+    rationale:
+      "Same excluded lists section. A delete offered without the list it deletes would be a control naming nothing.",
+  },
+  "people.action.move-person": {
+    kind: "agent-only",
+    rationale:
+      "Moving a person between lists needs the excluded lists section to move them between; the assistant performs it on the member's word.",
+  },
+  "people.action.add-journal-entry": {
+    kind: "agent-only",
+    rationale:
+      "The journal is excluded by the v12 handoff, so no screen composes an entry; the assistant writes one whenever the member dictates it.",
+  },
+  "people.query.journal": {
+    kind: "agent-only",
+    rationale:
+      "The read side of that excluded journal: entries stay retrievable by the assistant even though no People screen lists them.",
+  },
+  "people.action.add-task": {
+    kind: "agent-only",
+    rationale:
+      "Tasks about a person are excluded here because Tasks is its own app; the assistant files them without People growing a second board.",
+  },
+  "people.action.toggle-task": {
+    kind: "agent-only",
+    rationale:
+      "Same excluded tasks section: People draws no checkbox to tick, and the assistant completes the task the member names.",
+  },
+  "people.action.add-gift": {
+    kind: "agent-only",
+    rationale:
+      "Gifts are an excluded section in the v12 handoff; the assistant records a gift idea against a person with no screen to host it.",
+  },
+  "people.action.toggle-gift": {
+    kind: "agent-only",
+    rationale:
+      "Same excluded gifts section — marking one given is the assistant's, because the list it would be marked in is not drawn.",
+  },
+  "people.action.add-debt": {
+    kind: "agent-only",
+    rationale:
+      "Debts are excluded from People's UI because Tally owns shared money; the assistant keeps the person-scoped write for one-off IOUs.",
+  },
+  "people.action.settle-debt": {
+    kind: "agent-only",
+    rationale:
+      "Same excluded debts section: settling is the assistant's for the same reason the debt was never drawn beside the person.",
+  },
+  "people.action.add-relationship": {
+    kind: "agent-only",
+    rationale:
+      "Typed relationships between two people are an excluded section; the assistant records who is whose sibling without a screen for it.",
+  },
+  "people.action.undo-person": {
+    kind: "agent-only",
+    rationale:
+      "Edit history is excluded, and the app offers Undo only where a true reverse write exists (star, trash, edit, cadence) — this replays a stored revision instead, which is the assistant's.",
+  },
+  "people.query.history": {
+    kind: "agent-only",
+    rationale:
+      "The read side of that excluded edit history: the assistant can recount what changed and when, and no People screen shows a revision log.",
+  },
+  "people.action.undo-contact-channel": {
+    kind: "agent-only",
+    rationale:
+      "A channel's revision undo has no surface for the same reason: the person screen removes a channel outright and reports it, rather than drawing a history to step back through.",
+  },
 };
 
 // Native covers that DO render, and the queries their screens answer directly.
-// `docs` and `people` were here until those two native screens were removed
-// (AWAITING_HANDOFF above); their rows are gone rather than kept as a shopping
-// list, so this table never describes a screen that is not on the phone.
+// `docs` and `people` returned with their v12 phone rebuilds (#821). Neither
+// dispatches a NAMED query on the phone: both read consent-shaped replica
+// entities and re-state the web query emitters' joins in their own projection
+// modules (`docs-projection.ts`, `people-model.ts`), so the rows below name
+// the queries whose ANSWERS those screens draw — the read is native, the
+// contract is the same. Docs' `history` is the version chain the replica's
+// `core.link` revises edges carry (`docs-versions.ts`).
 const NATIVE_QUERY_UI: Readonly<Record<string, readonly string[]>> = {
   agenda: ["upcoming", "parties", "search"],
+  docs: ["drive", "search", "history"],
+  people: ["people", "person", "dashboard", "search", "trash"],
   locker: ["auth", "items", "item"],
   photos: [
     "library",
@@ -119,6 +213,7 @@ const NATIVE_QUERY_UI: Readonly<Record<string, readonly string[]>> = {
 
 const NATIVE_FALLBACK: Readonly<Record<string, readonly string[]>> = {
   agenda: ["action.attach", "action.detach"],
+  docs: ["action.tag", "action.untag", "action.replace", "query.activity"],
   locker: [
     "action.add-item",
     "action.edit-item",
@@ -158,10 +253,6 @@ const NATIVE_FALLBACK: Readonly<Record<string, readonly string[]>> = {
   ],
 };
 
-// `docs` and `people` had entries here too - the actions their native covers
-// deferred to the assistant. Both apps are now excused wholesale by
-// AWAITING_HANDOFF, and a per-action list beside that would be two records of
-// one fact, the finer one already false.
 const MOBILE_EXCEPTION_RATIONALE =
   "The native cover links to the always-available Assistant surface, which invokes this manifested handler with the same consent and receipt contract.";
 

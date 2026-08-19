@@ -37,8 +37,14 @@ interface FilterAxis {
 }
 interface DriveFilters {
   type: string | null;
+  people: string | null;
   modified: string | null;
   source: string | null;
+}
+interface SharedWith {
+  grant_id: string;
+  label: string;
+  via: "document" | "folder";
 }
 interface Row {
   document_id: string;
@@ -46,6 +52,8 @@ interface Row {
   custody_state: string | null;
   created_at: string;
   updated_at: string;
+  /** `[]` is shared with nobody; `null` is "the share reads were denied". */
+  shared_with: SharedWith[] | null;
 }
 interface SaveOutcome {
   id: string;
@@ -65,8 +73,8 @@ interface Crumb {
 const filters = (await import(app("filters.ts"))) as {
   NO_FILTERS: DriveFilters;
   filtersActive: (f: DriveFilters) => boolean;
-  liveAxes: () => readonly FilterAxis[];
-  liveOptions: (axis: FilterAxis) => readonly string[];
+  liveAxes: (rows?: readonly Row[]) => readonly FilterAxis[];
+  liveOptions: (axis: FilterAxis, rows?: readonly Row[]) => readonly string[];
   applyFilters: (
     rows: readonly Row[],
     f: DriveFilters,
@@ -114,25 +122,73 @@ const row = (over: Partial<Row> & { document_id: string }): Row => ({
   custody_state: "replicated",
   created_at: "2026-01-01T00:00:00.000Z",
   updated_at: "2026-01-01T00:00:00.000Z",
+  shared_with: [],
   ...over,
+});
+
+const share = (label: string, via: "document" | "folder" = "document") => ({
+  grant_id: `grant-${label}-${via}`,
+  label,
+  via,
 });
 
 describe("the filter row (§4.2)", () => {
   it("offers only the axes this drive can answer", () => {
-    // People is in the table and is not on screen: nothing this app reads
-    // knows who owns a document or who it was shared with, so every one of
-    // that axis' options would silently match nothing.
     expect(copy.DFILTERS.map((axis) => axis.id)).toStrictEqual([
       "type",
       "people",
       "modified",
       "source",
     ]);
+    // People is in the table and off the screen while nothing is shared: its
+    // options ARE the audiences the rows name (issue #821), so a drive with
+    // no shares has no answerable option and draws no pill.
     expect(filters.liveAxes().map((axis) => axis.id)).toStrictEqual([
       "type",
       "modified",
       "source",
     ]);
+    expect(
+      filters
+        .liveAxes([row({ document_id: "a", shared_with: [share("Family")] })])
+        .map((axis) => axis.id)
+    ).toStrictEqual(["type", "people", "modified", "source"]);
+  });
+
+  it("derives one People option per audience the rows actually name", () => {
+    const people = copy.DFILTERS.find((axis) => axis.id === "people")!;
+    const rows = [
+      row({ document_id: "a", shared_with: [share("Family")] }),
+      // The same audience twice is one pill; a folder-borne share is still a
+      // share, so it earns its audience an option.
+      row({ document_id: "b", shared_with: [share("Family", "folder")] }),
+      row({ document_id: "c", shared_with: [share("Ana and Tom")] }),
+      // Denied share reads are UNKNOWN, not an audience.
+      row({ document_id: "d", shared_with: null }),
+    ];
+    expect(filters.liveOptions(people, rows)).toStrictEqual([
+      "Shared with Ana and Tom",
+      "Shared with Family",
+    ]);
+    // Nothing is invented from the spec's fixtures: no owner, no names axis.
+    expect(people.options).toStrictEqual([]);
+  });
+
+  it("narrows to one audience, and never matches a row whose shares are unknown", () => {
+    const rows = [
+      row({ document_id: "a", shared_with: [share("Family", "folder")] }),
+      row({ document_id: "b", shared_with: [share("Ravi")] }),
+      row({ document_id: "c", shared_with: [] }),
+      row({ document_id: "d", shared_with: null }),
+    ];
+    expect(
+      filters
+        .applyFilters(rows, {
+          ...filters.NO_FILTERS,
+          people: "Shared with Family",
+        })
+        .map((r) => r.document_id)
+    ).toStrictEqual(["a"]);
   });
 
   it("offers only the options it has a predicate for", () => {

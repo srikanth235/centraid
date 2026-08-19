@@ -228,13 +228,11 @@ test("production Tally, Tasks, and Agenda pending rows survive an offline Electr
     await expect(page.getByText("Offline task", { exact: true })).toBeVisible();
     await expect(page.locator(".kit-pending-chip")).toHaveText("queued");
 
-    // People is held at the Binding Layer v11 wall: the roster is
-    // unrendered until the design handoff ships, so there is no New /
-    // Add person control to drive. The wall is the observable outcome.
+    // People is restored (#821): the roster is live, so the New-person
+    // control is the observable that the route booted — not the v11 wall.
     await openFirstParty(page, "People");
-    await expect(page.getByText("Not here yet", { exact: true })).toBeVisible();
     await expect(
-      page.getByText("People is being rebuilt from its design handoff.")
+      page.getByRole("button", { name: /^Add(?: person)?$/u })
     ).toBeVisible();
 
     await openFirstParty(page, "Tally");
@@ -285,10 +283,10 @@ test("production Tally, Tasks, and Agenda pending rows survive an offline Electr
     await expect(page.getByText("Offline task", { exact: true })).toBeVisible();
     await expect(page.locator(".kit-pending-chip")).toHaveText("queued");
 
-    // The People wall is a static holdback, so a reload cannot recover a
-    // roster that the route does not draw.
     await openFirstParty(page, "People");
-    await expect(page.getByText("Not here yet", { exact: true })).toBeVisible();
+    await expect(
+      page.getByRole("button", { name: /^Add(?: person)?$/u })
+    ).toBeVisible();
 
     await openFirstParty(page, "Tally");
     await page.getByText("Offline Journey", { exact: true }).first().click();

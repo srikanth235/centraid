@@ -19,6 +19,7 @@ import { EventDrawer } from "../apps/agenda/components/EventDrawer.tsx";
 import { ListRow as DocsRow } from "../apps/docs/components/List.tsx";
 import { LockerList } from "../apps/locker/components/List.tsx";
 import { Card as NoteCard } from "../apps/notes/components/Card.tsx";
+import { Row as PeopleRow } from "../apps/people/components/Shared.tsx";
 import { MemoriesStrip } from "../apps/photos/components/Memories.tsx";
 import { ExpenseRow } from "../apps/tally/components/ExpenseRow.tsx";
 import { Row as TaskRow } from "../apps/tasks/components/Row.tsx";
@@ -145,12 +146,22 @@ const RENDERERS: Record<string, Renderer> = {
         onTogglePin: noop,
       })
     ),
-  // People rendered its trash card here until the desktop app's whole render
-  // tree was removed pending the v11 design handoff (apps/people/app-root.tsx).
-  // This is a REAL loss of adversarial coverage, not a tidy-up: the rebuilt
-  // People must land back in this table on the same day it draws its first
-  // untrusted string, because every field it shows — name, role, note, channel
-  // — is member-supplied and reaches the DOM.
+  // ONE row draws the whole of People — the roster, Search, Touch's three
+  // lists, Trash and Merge all render this component (apps/people/components/
+  // Shared.tsx), so covering it covers every list the app has. Each of its
+  // three text slots is fed the vector, plus the avatar's own name path: a
+  // display name reaches both the monogram and the row's accessible label
+  // without ever having been typed by the member reading it.
+  people: (value) =>
+    renderToStaticMarkup(
+      createElement(PeopleRow, {
+        avatar: { party_id: "party-1", name: value, avatar_color: null },
+        name: value,
+        sub: value,
+        meta: value,
+        onOpen: noop,
+      })
+    ),
   photos: (value) =>
     renderToStaticMarkup(
       createElement(MemoriesStrip, {

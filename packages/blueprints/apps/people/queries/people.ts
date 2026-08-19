@@ -8,6 +8,13 @@
  * Reconnect / Upcoming / Favorites client-side exactly like the prototype.
  * `truncated` means older people exist beyond the window — grow it or search.
  *
+ * Each row also carries the sharing plane's answer to "is this person linked
+ * to a vault of their own?" (`linked` / `vault_count`, via ./_shared.ts). Those
+ * reads can be denied independently of the roster — People's `share.*` scopes
+ * are newer than the app — so a denial leaves `linked` null and flips
+ * `links_available` to false rather than darkening the window; the UI draws
+ * Linked/Unlinked chips only while that flag is true.
+ *
  * Everything comes from the vault; this app holds no rows of its own. A
  * consent denial is a first-class outcome (vaultDenied), rendered as the
  * "ask the owner for access" state.
@@ -17,6 +24,8 @@
  * shape (`as unknown as X[]`) at its read site. Handler logic is otherwise
  * byte-for-byte the pre-conversion JS.
  */
+
+import { readLiveBindings } from "./_shared.ts";
 
 interface RawProfile {
   party_id: string;
@@ -107,9 +116,15 @@ export default async function peopleHandler({ input, ctx }: HandlerArgs) {
     const profileRows = (profiles.rows ?? []) as unknown as RawProfile[];
     const partyIds = profileRows.map((p) => p.party_id);
     if (partyIds.length === 0)
-      return { people: [], lists, truncated: false, window };
+      return {
+        people: [],
+        lists,
+        truncated: false,
+        window,
+        links_available: true,
+      };
 
-    const [parties, tags, dates] = await Promise.all([
+    const [parties, tags, dates, bindings] = await Promise.all([
       ctx.vault.read({
         entity: "core.party",
         where: [{ column: "party_id", op: "in", value: partyIds }],
@@ -131,6 +146,8 @@ export default async function peopleHandler({ input, ctx }: HandlerArgs) {
         ],
         purpose,
       }),
+      // One bounded read for the whole window; null means "denied", not "none".
+      readLiveBindings(ctx.vault, partyIds),
     ]);
 
     const partyRows = (parties.rows ?? []) as unknown as RawParty[];
@@ -156,6 +173,14 @@ export default async function peopleHandler({ input, ctx }: HandlerArgs) {
       remindersByParty.set(d.party_id, arr);
     }
 
+    const linksAvailable = bindings !== null;
+    const vaultCountByParty = new Map<string, number>();
+    for (const binding of bindings ?? [])
+      vaultCountByParty.set(
+        binding.party_id,
+        (vaultCountByParty.get(binding.party_id) ?? 0) + 1
+      );
+
     const people = profileRows.map((pr) => ({
       party_id: pr.party_id,
       name: nameById.get(pr.party_id) ?? "—",
@@ -167,13 +192,22 @@ export default async function peopleHandler({ input, ctx }: HandlerArgs) {
       list_id: listByParty.get(pr.party_id) ?? null,
       starred: starredParties.has(pr.party_id),
       reminders: remindersByParty.get(pr.party_id) ?? [],
+      linked: linksAvailable ? vaultCountByParty.has(pr.party_id) : null,
+      vault_count: vaultCountByParty.get(pr.party_id) ?? 0,
     }));
-    return { people, lists, truncated: profileRows.length >= window, window };
+    return {
+      people,
+      lists,
+      truncated: profileRows.length >= window,
+      window,
+      links_available: linksAvailable,
+    };
   } catch (error) {
     const e = error as { code?: string; message?: string };
     return {
       people: [],
       lists: [],
+      links_available: false,
       vaultDenied: { code: e.code, message: e.message },
     };
   }

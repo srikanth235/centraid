@@ -190,6 +190,10 @@ The eight bundled system apps are inline React routes in the shared shell. Their
 
 Ruled 2026-08-18. Three surfaces were **removed rather than carried**, and none of them are deprecations: mobile Docs, mobile People, and desktop People. Each was drawn before the Binding Layer v11 handoff and answers an earlier grammar, so keeping it would have meant maintaining, testing and explaining screens the rebuild is going to replace. A surface that is wrong costs more than a surface that is absent.
 
+Amended 2026-08-18 by [#821](https://github.com/srikanth235/centraid/issues/821): **desktop/web People is restored** — rebuilt to the Binding Layer v12 handoff over the untouched contract, with `people` deleted from `AWAITING_HANDOFF.web` and its gate rows back on ([design-divergences.md](design-divergences.md#people--v12-parity-state-and-sanctioned-withholdings) records what the rebuild withholds and why). The first H-loss — People's adversarial untrusted-string rendering — is closed by the restored web renderer.
+
+Closed out 2026-08-18, same issue, wave 3: **mobile Docs and mobile People are restored** — native Expo rebuilds to the same handoff (People to Part 1's touch geometry, Docs to Part 2's fourteen phone screens), `AWAITING_HANDOFF.mobile` is empty, both stacks and their deep links are back (superseding H-shape's removal), and the gate now scans both native trees again with `NATIVE_QUERY_UI` / `NATIVE_FALLBACK` rows naming how each handler is reached. No surface remains under this holdback; the ruling stands only as the pattern for the next handoff. The H-loss row's second loss (the People phase of the mobile frame-drop scale flow) remains accepted — the native roster is back, but the 5,000-contact year-3 volume flow has not been re-authored yet.
+
 | Id | Current decision |
 | --- | --- |
 | **H-scope** | Only the RENDER TREE goes. Manifests, `./actions/*`, `./queries/*`, vault scopes, pending projections and receipts are untouched on all three. A design handoff redraws screens; it does not redesign a contract. The apps are **unrendered, not dark** — the assistant still invokes every handler, and desktop People's Ask panel still runs its seven queries. |
@@ -199,6 +203,19 @@ Ruled 2026-08-18. Three surfaces were **removed rather than carried**, and none 
 | **H-loss** | Two coverage losses are accepted and recorded, not papered over: People's adversarial untrusted-string rendering, and the People phase of the mobile frame-drop scale flow (no other native list carries its 5,000-contact year-3 volume, so it is excised rather than pointed at a stand-in). |
 
 Restoring a surface is the last step of its rebuild: delete its id from `AWAITING_HANDOFF`, put its rows back on the lists above, and the gates come back on by themselves.
+
+## People, links and the sharing plane (#821)
+
+Ruled 2026-08-18 by [#821](https://github.com/srikanth235/centraid/issues/821). The v12 People rebuild needed facts the contract did not answer, so the contract was **amended** — maintainer-authorized, in the same wave — rather than the screens being drawn over a guess. What each surface may say about a link, and who may make one, are separate answers.
+
+| Id | Current decision |
+| --- | --- |
+| **L-linked** | A person is **linked** exactly when a live `share_party_vault_binding` row names their party. The link ceremony writes it: approving a same-machine link, and redeeming a link ticket, both reconcile the binding into whichever side's vault is mounted here (`packages/server/src/serve/link-party-bindings.ts` over `VaultLinksStore`'s change listener). One party holds **at most one live binding** — on conflict the standing binding wins and the loser carries `revoked_at`, so "linked people" and "live bindings" are the same count by construction. |
+| **L-read** | People and Docs hold **read-only** scopes on the sharing plane (`share.party_vault_binding`, `share.circle_grant`, `share.commons_member_state`, `share.commons_invitation`, plus `social.circle_member` and `core.party`). Every share read degrades to **absent, not empty**, on denial: the query answers `null`, and the surface draws nothing rather than a zero. A scope may legitimately be parked on an existing vault, so "nobody is linked" must never be rendered from "we could not look". |
+| **L-write** | A share or a link is always made **from a container**. `window.centraid.share` requires `containerType` + `containerId` by contract, so the content apps make links and People **surfaces standing** — it shows who is linked and what is shared with them, and offers no `Share`, `Link vault`, `Link` or `Revoke` of its own. A People-initiated share waits on either a container picker or an invitation-only grant; neither is faked in the meantime, and no read-only surface grows a control naming an act it cannot perform. |
+| **L-never** | `cadence_days = 0` means **never**, and is stored verbatim — the vault `CHECK` floors at 0 and `people.add_person` / `people.set_cadence` type a minimum of 0. A person on zero is never overdue and is excluded from Reconnect outright; no stand-in number, and no sentinel. |
+
+What each surface consequently draws and withholds, screen by screen, is [design-divergences.md](design-divergences.md) — the [People](design-divergences.md#people--v12-parity-state-and-sanctioned-withholdings) and [Docs](design-divergences.md#docs--parity-state-and-sanctioned-withholdings) sections. The share-plane mechanics themselves are unchanged and live in [ARCHITECTURE.md](../ARCHITECTURE.md#circle-backed-commons-731).
 
 ## Performance and Rust byte plane
 

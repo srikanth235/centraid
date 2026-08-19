@@ -137,6 +137,18 @@ export {
 // One table, one answerer for "may an edge cross to vault X" — same rows for
 // a vault on this machine and a vault across the world (D3).
 export { VaultLinksStore } from "./serve/vault-links-store.js";
+export {
+  type LinkChangeListener,
+  type LinkChangeReason,
+} from "./serve/vault-link-row.js";
+// …and the vault-side shadow of those rows, so "is this person linked?" is a
+// question a vault query can answer (#821).
+export {
+  reconcileLinkBindings,
+  type LinkBindingDeps,
+  type LinkBindingOutcome,
+  type LinkBindingState,
+} from "./serve/link-party-bindings.js";
 export type {
   LinkedPeer,
   LinkRoute,

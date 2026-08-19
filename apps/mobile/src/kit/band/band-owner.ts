@@ -60,23 +60,24 @@ export interface BandClaimingApp {
 }
 
 /**
- * The apps that claim a band today — ONE, and the frame says so rather than
- * pretending otherwise.
+ * The apps that claim a band today.
  *
  * This is a hand-maintained roster, not a derived fact, and that is a real
  * limitation worth stating: mobile has no inline-app channel like web's
  * `frame.claimBand`, so an app's claim is a component it renders
- * (`PhotosBand.tsx`), not something the frame can enumerate. The frame cannot
- * ASK who has claimed, so the settings list has to be told. A second claiming
- * app must add its row here in the same change that adds its band — which is
- * the same shape of hand-maintained mirror `placement-registry.ts` and
- * `consent-gate.ts`'s `ENRICH_DOMAINS` already are, and it is why the
- * band-owner latch itself is keyed by an arbitrary `appId` rather than being
- * hard-wired to Photos: the mechanism is general even while the roster is one
- * row long.
+ * (`PhotosBand.tsx`, `DocsBand.tsx`, `PeopleBand.tsx`), not something the
+ * frame can enumerate. The frame cannot ASK who has claimed, so the settings
+ * list has to be told. A claiming app must add its row here in the same
+ * change that adds its band — which is the same shape of hand-maintained
+ * mirror `placement-registry.ts` and `consent-gate.ts`'s `ENRICH_DOMAINS`
+ * already are, and it is why the band-owner latch itself is keyed by an
+ * arbitrary `appId` rather than being hard-wired to one app: the mechanism
+ * is general, and since #821 the roster is three rows long.
  */
 export const BAND_CLAIMING_APPS: readonly BandClaimingApp[] = [
   { id: "photos", name: "Photos" },
+  { id: "docs", name: "Docs" },
+  { id: "people", name: "People" },
 ];
 
 export interface BandOwnerState {

@@ -1,51 +1,151 @@
-/* People's shell — reduced to the frame and the identity, awaiting the app's
-   design handoff.
+/* People's shell: the pane contract, the identity, and the content column.
+   Everything a SCREEN draws lives in `components/shared.module.css` — this
+   sheet owns only the box every screen stands in.
 
-   This sheet used to carry the app's whole chrome (sidebar, topbar, drawer,
-   tools rail, ask mount) plus the app-local aliases its components read. Those
-   components are gone (see app-root.tsx), so the rules that dressed them are
-   gone with them rather than left as a stylesheet nobody imports: dead CSS is
-   the kind of debt that gets copied forward by the next author because it
-   looks load-bearing.
+   TWO KNOBS, AND NOT A THIRD. `--app-hue` and `--app-identity` are the whole
+   sanctioned per-app identity surface (#686); People's rose is its identity,
+   not one of its screens, so the launcher tile, the frame's app bar and this
+   route all read the same pair. The budget in `src/token-purity-allowlist.ts`
+   is EXACT — a third reserved custom property here fails that gate, which is
+   why the page margin below is `--pe-content-margin` (an app-local name that
+   only ever READS tokens) rather than an alias of a `--sp-*`.
 
-   TWO THINGS SURVIVE, and both outlive any particular screen:
-
-   1. The SHELL. `composes: kit-app-shell` is how an inline app gets the pane's
-      flex/overflow/ground contract, so the wall below fills the route the same
-      way a real app would. An app that skipped it would paint into an
-      unconstrained box and scroll the shell instead of itself.
-
-   2. The IDENTITY. `--app-hue` and `--app-identity` are the two knobs the
-      design language sanctions for per-app identity (#686), and People's rose
-      is its identity, not one of its screens — the launcher tile, the frame's
-      app bar and the route's accents all read them. Dropping them would have
-      made the app go grey in surfaces that still list it, which is a visible
-      regression with no upside. Budgeted in
-      `src/token-purity-allowlist.ts`; the entry is exact, so adding a third
-      knob here fails that gate.
-
-   Precedence note (unchanged): the rule doubles the class
-   (`.appRoot.appRoot` → 0,2,0) to beat the shell's injected
-   `.centraid-inline-scope` block (0,1,0) appended to <head> at runtime. */
+   Precedence note: the identity rule doubles the class (`.appRoot.appRoot` →
+   0,2,0) to beat the shell's injected `.centraid-inline-scope` block (0,1,0),
+   appended to <head> at run time. */
 
 .appRoot {
   composes: kit-app-shell from global;
+  /* THE PAGE MARGIN IS DECLARED ONCE AND INHERITED (the fix Photos and Docs
+     both made). The handoff's rhythm is 32px desktop / 18px mobile; the
+     product's own `--page-margin` carries that pair, so this reads it rather
+     than restating the numbers. Every row that spans the pane takes it from
+     here, so the strip, the banners and the rows below cannot land their text
+     at three different insets. */
+  --pe-content-margin: var(--page-margin);
+  /* The handoff's desktop column: 760px of content between the margins. A
+     44px row 1,100px wide puts the name and its verb in different counties. */
+  --pe-content-width: 760px;
 }
 
 .appRoot.appRoot {
   color-scheme: light dark;
 
-  /* Rose identity: the hue knob tints every neutral, the palette entry is the
+  /* Rose identity: the hue knob is the wheel slot, the palette entry is the
      structural accent. */
   --app-hue: 345;
   --app-identity: var(--c-rose);
 }
 
-/* The wall's own cell. `kit-app-main` is the shell's main column — the wall
-   sits in it rather than directly in the flex row, so it is centred against
-   the pane and not against a zero-width first child. */
 .main {
   composes: kit-app-main from global;
+}
+
+/* The destination strip — People · Touch · Search — on POINTER SURFACES ONLY.
+   The compact band claims the same three, and drawing both would say the same
+   thing twice; `Chrome.tsx` passes null there rather than hiding it in CSS,
+   so the region does not exist instead of existing invisibly.
+
+   The current tab is a 2px INK rule plus the strong rung of the same size —
+   size holds, weight moves — so choosing a tab cannot reflow the strip under
+   the pointer, and the app's rose never lands on a control. */
+.strip {
+  display: flex;
+  align-items: stretch;
+  gap: var(--sp-1);
+  /* Insets by the margin LESS the tab's own padding, so what lands on the
+     margin is the first tab's LABEL rather than its hit area. */
+  padding-inline: calc(var(--pe-content-margin) - var(--sp-3));
+  border-block-end: 1px solid var(--line);
+  flex-shrink: 0;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+.strip::-webkit-scrollbar {
+  display: none;
+}
+
+.tab {
+  position: relative;
+  display: flex;
   align-items: center;
-  justify-content: center;
+  gap: var(--sp-2);
+  block-size: var(--h-control);
+  padding-inline: var(--sp-3);
+  border: none;
+  background: none;
+  color: var(--text-soft);
+  font: var(--t-body);
+  white-space: nowrap;
+  flex-shrink: 0;
+  cursor: pointer;
+  transition: color var(--dur-1) var(--ease);
+}
+.tab:hover {
+  color: var(--text);
+}
+.tab:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
+  border-radius: var(--r-sm);
+}
+.tab[data-current="true"] {
+  color: var(--text);
+  font: var(--t-label-on);
+}
+.tab[data-current="true"]::after {
+  content: "";
+  position: absolute;
+  inset-inline: var(--sp-2);
+  inset-block-end: -1px;
+  block-size: 2px;
+  background: var(--text);
+}
+
+/* Trust banners: kit.css `.kit-banner` owns the shape; this is only the
+   layout hook aligning them with the rest of the padded chrome. */
+.banner {
+  /* The notice banner is an `<output>` — inline by default, and the banner
+     shape needs a block box. */
+  display: block;
+  margin: var(--sp-3) var(--pe-content-margin) 0;
+}
+
+/* The scroll host. ONE scroller for the whole app: a screen that scrolled
+   itself inside this one would put two scrollbars on one phone. */
+.scroll {
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+}
+
+/* The content column. Mobile fills the width at the page margin; the pointer
+   surface caps at the handoff's 760px and centres it. `margin-inline: auto`
+   rather than a centred flex parent, so a screen that wants the full width
+   for a rule or a sheet can still reach the edge. */
+.column {
+  inline-size: 100%;
+  max-inline-size: var(--pe-content-width);
+  margin-inline: auto;
+  padding: var(--sp-3) var(--pe-content-margin) var(--sp-6);
+}
+
+/* Compact: the pane's own width, never the viewport (#505 trap 1). The
+   clearance below is for the host shell's compact action button, which floats
+   over the bottom of the pane — without it the last row sits underneath it. */
+.appRoot[data-narrow="true"] .column {
+  padding-block-end: calc(var(--sp-6) * 3);
+}
+
+/* Consent-denied: no grant yet, so the app collapses to the banner that
+   explains it rather than drawing a chrome around nothing. */
+.appRoot.denied .strip,
+.appRoot.denied .scroll {
+  display: none;
+}
+.appRoot.denied .banner {
+  margin: var(--sp-5) auto;
+  max-inline-size: 32rem;
 }

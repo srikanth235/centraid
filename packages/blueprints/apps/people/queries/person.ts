@@ -6,11 +6,20 @@
  * tasks, gift ideas, open debts and the interaction history. Nothing is stored
  * by the app; it is all a read of the owner's vault.
  *
+ * It also answers the sharing questions about them (./_shared.ts): which
+ * vault(s) they are linked to, what the owner has shared with them, and which
+ * invitations they have not answered. Those reads deny independently of the
+ * profile — People's `share.*` scopes are newer than the app, so on an
+ * existing vault they wait for the owner — and a denial leaves the three
+ * fields null instead of blanking the person.
+ *
  * TS conversion note: the vault read surface returns `Record<string, unknown>`
  * rows (see HandlerCtx.vault), so each raw row set is cast once to a typed
  * shape (`as unknown as X[]`) at its read site. Handler logic is otherwise
  * byte-for-byte the pre-conversion JS.
  */
+
+import { readPersonShareLinks } from "./_shared.ts";
 
 interface RawProfile {
   role?: string | null;
@@ -157,6 +166,7 @@ export default async function personHandler({ input, ctx }: HandlerArgs) {
       concepts,
       schemes,
       vault,
+      shareLinks,
     ] = await Promise.all([
       ctx.vault.read({
         entity: "core.party_identifier",
@@ -230,6 +240,8 @@ export default async function personHandler({ input, ctx }: HandlerArgs) {
       ctx.vault.read({ entity: "core.concept", purpose }),
       ctx.vault.read({ entity: "core.concept_scheme", purpose }),
       ctx.vault.read({ entity: "core.vault", purpose }),
+      // Null when the sharing plane is unreadable — never a thrown denial.
+      readPersonShareLinks(ctx.vault, partyId),
     ]);
 
     const identifierRows = (ids.rows ?? []) as unknown as RawIdentifier[];
@@ -524,6 +536,9 @@ export default async function personHandler({ input, ctx }: HandlerArgs) {
         text: interactionText.get(i.activity_id) ?? "",
         occurred_at: i.started_at,
       })),
+      vaults: shareLinks?.vaults ?? null,
+      pending_invites: shareLinks?.pending_invites ?? null,
+      shared_with_them: shareLinks?.shared_with_them ?? null,
     };
     return { person };
   } catch (error) {

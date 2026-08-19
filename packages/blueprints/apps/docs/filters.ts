@@ -1,4 +1,4 @@
-import { DFILTERS } from "./drive-copy.ts";
+import { DFILTERS, sharedWithOption } from "./drive-copy.ts";
 import type { FilterAxis } from "./drive-copy.ts";
 // The filter row's MEANING (Docs spec §4.2) — which option narrows a row set
 // to what, and which options this drive can answer at all.
@@ -12,24 +12,34 @@ import type { FilterAxis } from "./drive-copy.ts";
 // question has exactly one answer here.
 //
 // WHAT THIS FILE REFUSES TO ANSWER IS THE POINT. §4.2 names four properties
-// and 27 options. This drive reads documents, their media type, their times
-// and their byte custody — it does not read owners, shares, the app a document
-// arrived from, or the people a document names. An option whose predicate
-// cannot be computed is NOT rendered (`liveOptions` below), because a pill
-// that silently matches nothing is worse than a pill that is not there: the
-// member reads the empty result as a fact about their drive.
+// and 27 options. This drive reads documents, their media type, their times,
+// their byte custody and — since issue #821 — the live shares each one sits
+// inside. It still does not read owners, the app a document arrived from, or
+// the people a document names. An option whose predicate cannot be computed is
+// NOT rendered (`liveOptions` below), because a pill that silently matches
+// nothing is worse than a pill that is not there: the member reads the empty
+// result as a fact about their drive.
+//
+// THE PEOPLE AXIS IS DERIVED, NOT LISTED, for the same rule read forwards: its
+// options are the audiences the ROWS actually name, so the axis offers exactly
+// the pills that can match something and disappears when nothing is shared.
+// A row whose `shared_with` is `null` (the share reads were denied) contributes
+// no option and matches none — unknown is not a share, and it is not the
+// absence of one either.
 import { typeMeta } from "./format.ts";
 import type { DriveDoc } from "./types.ts";
 
 /** One selection per axis, or `null` for "this axis is not narrowing". */
 export interface DriveFilters {
   type: string | null;
+  people: string | null;
   modified: string | null;
   source: string | null;
 }
 
 export const NO_FILTERS: DriveFilters = {
   type: null,
+  people: null,
   modified: null,
   source: null,
 };
@@ -88,11 +98,35 @@ const SOURCE_PREDICATE: Readonly<Record<string, (doc: DriveDoc) => boolean>> = {
 };
 
 /**
+ * Every audience the given rows are actually shared with, once each, in the
+ * order a member reads them (alphabetical — the row order is a sort they chose
+ * for the documents, not for the circles).
+ */
+function sharedWithLabels(rows: readonly DriveDoc[]): string[] {
+  const labels = new Set<string>();
+  for (const doc of rows) {
+    for (const share of doc.shared_with ?? []) labels.add(share.label);
+  }
+  return [...labels].toSorted((a, b) => a.localeCompare(b));
+}
+
+/**
  * The options THIS drive can answer for an axis, in the spec's own order. An
  * axis with no answerable option is not rendered at all.
+ *
+ * `rows` is what the People axis is derived from — the drive's own set, not
+ * the filtered one, or choosing an audience would delete the pill that chose
+ * it. Every other axis ignores it: their options are properties of a document,
+ * not of the vault's sharing.
  */
-export function liveOptions(axis: FilterAxis): readonly string[] {
+export function liveOptions(
+  axis: FilterAxis,
+  rows: readonly DriveDoc[] = []
+): readonly string[] {
   if (!axis.live) return [];
+  if (axis.id === "people") {
+    return sharedWithLabels(rows).map(sharedWithOption);
+  }
   if (axis.id === "type") {
     return axis.options.filter((option) => option in TYPE_PREDICATE);
   }
@@ -108,8 +142,10 @@ export function liveOptions(axis: FilterAxis): readonly string[] {
 }
 
 /** The axes with at least one answerable option — what `FilterRow` draws. */
-export function liveAxes(): readonly FilterAxis[] {
-  return DFILTERS.filter((axis) => liveOptions(axis).length > 0);
+export function liveAxes(
+  rows: readonly DriveDoc[] = []
+): readonly FilterAxis[] {
+  return DFILTERS.filter((axis) => liveOptions(axis, rows).length > 0);
 }
 
 /**
@@ -125,6 +161,17 @@ export function applyFilters(
   let list = [...rows];
   const byType = filters.type ? TYPE_PREDICATE[filters.type] : undefined;
   if (byType) list = list.filter(byType);
+  // The People axis narrows to one audience. A row whose shares are unknown
+  // (`null`) is not a match: the filter answers "shared with X", and this row
+  // cannot say either way.
+  if (filters.people) {
+    const wanted = filters.people;
+    list = list.filter((doc) =>
+      (doc.shared_with ?? []).some(
+        (share) => sharedWithOption(share.label) === wanted
+      )
+    );
+  }
   if (filters.modified) {
     const days = MODIFIED_WINDOW[filters.modified];
     if (typeof days === "number") {

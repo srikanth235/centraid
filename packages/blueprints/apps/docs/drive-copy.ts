@@ -163,12 +163,21 @@ export const PLACE_MENU: readonly PlaceMenuItem[] = [
  * §4.2's four properties, with the spec's own option words.
  *
  * `live` is the same honesty flag `MORE_ROWS` carries: an axis is rendered
- * only where THIS DRIVE can answer it from what it has actually read. People
- * is off because no read on this surface returns an owner, a share or the
- * names a document mentions — a pill whose options cannot be computed is a
- * control that would either do nothing or, worse, filter by a fact the app
- * invented. The row keeps the axis so the agent who lands the names capability
- * flips one flag rather than re-deriving §4.2's copy.
+ * only where THIS DRIVE can answer it from what it has actually read. A pill
+ * whose options cannot be computed is a control that would either do nothing
+ * or, worse, filter by a fact the app invented.
+ *
+ * PEOPLE IS LIT ON ONE HALF OF ITSELF (issue #821). The drive projection now
+ * carries `shared_with` — real commons grants over a document or the folders
+ * above it — so "shared with <somebody>" is computable and the axis is
+ * rendered. Its options are therefore DERIVED FROM THE ROWS (filters.ts
+ * `liveOptions`), not listed here: the audiences are the owner's own circles
+ * and change with the vault, and a fixed list would be four pills that match
+ * whatever this vault happens to lack. The other two halves of §4.2's people
+ * axis stay dark and stay unlisted: nothing here reads an OWNER (this drive
+ * projects one vault, so "Owned by you" would select every row) and nothing
+ * reads the NAMES a document mentions (the details rail's Names tab says as
+ * much — Docs has not looked).
  */
 export interface FilterAxis {
   id: "type" | "people" | "modified" | "source";
@@ -197,13 +206,10 @@ export const DFILTERS: readonly FilterAxis[] = [
   {
     id: "people",
     label: "People",
-    options: [
-      "Owned by you",
-      "Owned by Ana",
-      "Names Tom Pemberton",
-      "Shared with Family",
-    ],
-    live: false,
+    // Empty on purpose — every option this axis offers is one audience the
+    // rows actually name (`sharedWithOption` below, derived in filters.ts).
+    options: [],
+    live: true,
   },
   {
     id: "modified",
@@ -230,6 +236,16 @@ export const DFILTERS: readonly FilterAxis[] = [
     live: true,
   },
 ];
+
+/**
+ * One People option, worded from the audience it narrows to — §4.2's own
+ * "Shared with Family" shape, with the vault's real circle in the slot the
+ * spec filled with a fixture. The option string IS the filter value, so the
+ * predicate compares generated strings rather than parsing a label back out.
+ */
+export function sharedWithOption(label: string): string {
+  return `Shared with ${label}`;
+}
 
 /** §4.2's link, which appears only once at least one filter is set. */
 export const CLEAR_FILTERS = "Clear filters";

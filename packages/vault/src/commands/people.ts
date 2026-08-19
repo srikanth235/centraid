@@ -305,7 +305,7 @@ const ADD_PERSON: CommandDefinition = {
       display_name: { type: "string", minLength: 1 },
       role: { type: "string" },
       avatar_color: { type: "string" },
-      cadence_days: { type: "integer", minimum: 1 },
+      cadence_days: { type: "integer", minimum: 0 },
       list_id: { type: "string", minLength: 1 },
     },
   },
@@ -485,7 +485,7 @@ const SET_CADENCE: CommandDefinition = {
     additionalProperties: false,
     properties: {
       party_id: { type: "string", minLength: 1 },
-      cadence_days: { type: "integer", minimum: 1 },
+      cadence_days: { type: "integer", minimum: 0 },
     },
   },
   outputSchema: {

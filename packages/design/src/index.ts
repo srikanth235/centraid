@@ -25,6 +25,7 @@ export {
 export type { Palette, ColorKey, ColorHex } from "./palette";
 export {
   IDENTITY_COLORS,
+  IDENTITY_HUE_KEYS,
   identityColor,
   identityFill,
   identityHueKey,
