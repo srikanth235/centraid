@@ -30,8 +30,11 @@
 // something this person can already reach and extend it to somebody else. The
 // first grant over a new album or document is made where that thing lives.
 
-import { GRANTS_UNREADABLE } from "../_shared/grant-copy.ts";
-import { capabilityLabel, deliveryLabel } from "../_shared/grant-copy.ts";
+import {
+  capabilityLabel,
+  deliveryLabel,
+  GRANTS_UNREADABLE,
+} from "../_shared/grant-copy.ts";
 import type { GrantDoor } from "../_shared/grant-door.ts";
 import {
   channelReach,
@@ -58,6 +61,9 @@ export type PartyGrantsState =
   | { kind: "loading" }
   | { kind: "unavailable"; message: string }
   | { kind: "refused"; message: string }
+  /** This vault has no record of the party at all — a different fact from a
+   *  party with nothing shared, and it keeps the kit's own sentence. */
+  | { kind: "unknown-party" }
   | { kind: "read"; reach: GrantReach; grants: readonly GrantRecord[] };
 
 /** The one read the dashboard is built from. Live grants only — a revoked
@@ -68,6 +74,10 @@ export async function readPartyGrants(
 ): Promise<PartyGrantsState> {
   try {
     const answer = await door.forParty(partyId);
+    // `known: false` is the 404: this vault knows no such person. Reading that
+    // as "nothing is shared with them" would answer a question about somebody
+    // the vault has never heard of.
+    if (!answer.known) return { kind: "unknown-party" };
     return {
       kind: "read",
       reach: channelReach(answer.channel),
@@ -78,7 +88,10 @@ export async function readPartyGrants(
     // person" is a different fact from "shares could not be read", and the
     // member is owed whichever one is true.
     const message = error instanceof Error ? error.message.trim() : "";
-    return { kind: "refused", message: message.length ? message : GRANTS_UNREADABLE };
+    return {
+      kind: "refused",
+      message: message.length ? message : GRANTS_UNREADABLE,
+    };
   }
 }
 

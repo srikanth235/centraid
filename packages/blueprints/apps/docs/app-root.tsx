@@ -36,8 +36,6 @@ import { SearchScaffold } from "../_shared/SearchScaffold.tsx";
 import { SAVED_TO_MY_VAULT } from "../_shared/shared-copy.ts";
 import type { InlineAppProps } from "../inline-types.ts";
 import { Chrome } from "./Chrome.tsx";
-import { loadGrantAudiences } from "./grant-audiences.ts";
-import type { DocsShareHost } from "./grant-audiences.ts";
 import {
   FilingRoute,
   LockerBoundaryRoute,
@@ -73,6 +71,8 @@ import {
 import { NO_FILTERS, filtersActive } from "./filters.ts";
 import type { DriveFilters } from "./filters.ts";
 import { appBar, bandClaim } from "./frame.tsx";
+import { loadGrantAudiences } from "./grant-audiences.ts";
+import type { DocsShareHost } from "./grant-audiences.ts";
 import { createLogic } from "./logic.ts";
 import { createNav } from "./nav.ts";
 import {
@@ -201,9 +201,9 @@ export function Root({
   const [shareFolder, setShareFolder] = useState<Folder | null>(null);
   // `null` is "the roster has not been read yet", which is not the same fact
   // as a vault that knows nobody — Share is offered only once it IS an answer.
-  const [audiences, setAudiences] = useState<readonly GrantAudienceOption[] | null>(
-    null
-  );
+  const [audiences, setAudiences] = useState<
+    readonly GrantAudienceOption[] | null
+  >(null);
   // The compact band's overflow sheet (§1.5). React state rather than a field
   // on the mutable `state` bag: nothing outside this component opens it.
   const [moreOpen, setMoreOpen] = useState(false);
@@ -964,11 +964,13 @@ export function Root({
   // WHAT DOCS OWES THE SHARE KIT (issue #825): the roster, and the one status
   // line. Absent until the roster has actually been read — a sheet opened over
   // an unread roster would say "nobody yet" about a vault full of people.
+  const handleShareStatus = (message: string): void => {
+    publishOutcome(frame, { text: message });
+  };
   const shareHost: DocsShareHost | null = audiences
     ? {
         audiences,
-        onStatus: (message: string) =>
-          publishOutcome(frame, { text: message }),
+        onStatus: handleShareStatus,
       }
     : null;
 
@@ -1398,7 +1400,7 @@ export function Root({
                 },
               }
             : {})}
-          onStatus={shareHost.onStatus}
+          onStatus={handleShareStatus}
         />
       ) : null}
     </>

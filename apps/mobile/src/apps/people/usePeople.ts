@@ -17,6 +17,7 @@ import { useMemo } from "react";
 import type {
   DashboardData,
   PersonDetail,
+  PersonRow,
 } from "@centraid/blueprints/apps/people/types";
 
 import {
@@ -227,6 +228,11 @@ export interface PersonData {
   /** Null past the loading gate means the id no longer resolves to a live
    *  person (trashed or merged away in the meantime). */
   person: PersonDetail | null;
+  /** The roster window this person was found in. The grant dashboard hands it
+   *  to the share sheet as the audience list: People is where a party id has
+   *  a name (#825), and it is already in hand here — a second read of the
+   *  same rows would be the same window twice. */
+  roster: readonly PersonRow[];
 }
 
 /**
@@ -409,5 +415,6 @@ export function usePerson(partyId: string): PersonData {
       ? { unavailableReason: queryState.unavailableReason }
       : {}),
     person,
+    roster: people.people,
   };
 }

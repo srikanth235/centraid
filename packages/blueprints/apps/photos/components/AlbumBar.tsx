@@ -2,8 +2,6 @@ import { armConfirm } from "@centraid/design/elements";
 
 import { GrantSheet } from "../../_shared/GrantSheet.tsx";
 import { usePhotoShare } from "../grant-audiences.ts";
-import { notice } from "../outcomes.ts";
-
 // Album detail's own row (v4 handoff §5): "Album detail keeps the app bar,
 // drops the shelf strip, adds a way back, and carries the album's own title
 // and count in the bar."
@@ -17,6 +15,7 @@ import { notice } from "../outcomes.ts";
 // before it fires — the kit's `armConfirm`, the same confirmation every
 // destructive action in this app uses on every surface.
 import { ChevronLeftIcon } from "../icons.tsx";
+import { notice } from "../outcomes.ts";
 import { InlineInput } from "./InlineInput.tsx";
 
 import styles from "./AlbumBar.module.css";
@@ -70,7 +69,7 @@ export function AlbumBar({
     <div className={styles.bar}>
       <GrantSheet
         open={share.open}
-        onClose={share.close}
+        onClose={() => share.close()}
         audiences={share.audiences}
         // The album, as the ONE subject: `core.collection`. Membership does
         // the rest — a photograph added to it later reaches the same audience
@@ -103,7 +102,11 @@ export function AlbumBar({
         />
       ) : (
         <div className={styles.actions}>
-          <button type="button" className="kit-btn" onClick={share.request}>
+          <button
+            type="button"
+            className="kit-btn"
+            onClick={() => share.request()}
+          >
             Share
           </button>
           <button

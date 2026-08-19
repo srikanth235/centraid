@@ -33,7 +33,7 @@ import {
 import type { PhotosScreenProps } from "../../navigation";
 import { Store } from "../../storage";
 import { makeStyles } from "./AlbumDetail.styles";
-import { usePhotoShare } from "./photo-grants";
+import { usePhotoGrantEntry } from "./photo-grants";
 import {
   NO_DOWNLOAD_REASON,
   batchAddToAlbum,
@@ -255,7 +255,7 @@ export default function AlbumDetail({
   // The ALBUM's own grant (`core.collection`) — a different subject from the
   // selection's, so a different entry. Membership does the rest: a photograph
   // added to a shared album reaches the same audience with no second gesture.
-  const albumShare = usePhotoShare(postStatus);
+  const albumShare = usePhotoGrantEntry(postStatus);
   const share = usePhotoSelectionShare(
     () => selectedVaultAssets,
     () => setSelection(new Set())
@@ -470,7 +470,7 @@ export default function AlbumDetail({
             <Pressable
               accessibilityLabel="Share album"
               accessibilityRole="button"
-              onPress={albumShare.request}
+              onPress={() => albumShare.request()}
               style={styles.headerBtn}
             >
               <Icon name="share" size={20} color={colors.text} />
@@ -588,12 +588,12 @@ export default function AlbumDetail({
       </Modal>
       <GrantSheet
         visible={share.visible}
-        onClose={share.dismiss}
+        onClose={() => share.dismiss()}
         {...share.sheetProps}
       />
       <GrantSheet
         visible={albumShare.visible}
-        onClose={albumShare.dismiss}
+        onClose={() => albumShare.dismiss()}
         audiences={albumShare.audiences}
         subject={{
           subjectType: "core.collection",

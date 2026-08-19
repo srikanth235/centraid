@@ -16,6 +16,7 @@ import {
   capabilitiesFor,
   channelReach,
   defaultCapability,
+  drawableCapability,
   grantDelivery,
   grantOverSubject,
   grantRequestFor,
@@ -130,11 +131,19 @@ describe("absent is never empty", () => {
 
   test("never reached, invited and severed are three different facts", () => {
     expect(channelReach(parseChannel(null))).toBe("never-reached");
-    expect(channelReach(parseChannel(undefined))).toBe("never-reached");
     expect(channelReach(parseChannel({ state: "invited" }))).toBe("invited");
     expect(
       channelReach(parseChannel({ state: "severed", vaultId: "vault-priya" }))
     ).toBe("severed");
+  });
+
+  test("a read that did not say is unknown, never the definite never-reached", () => {
+    // Only an explicit `null` on the wire is the claim "we have never reached
+    // them". An absent key or a drifted state is a fact about the READ.
+    expect(channelReach(parseChannel(undefined))).toBe("unknown");
+    expect(channelReach(parseChannel({}))).toBe("unknown");
+    expect(channelReach(parseChannel({ state: "elsewhere" }))).toBe("unknown");
+    expect(channelReach(parseChannel("live"))).toBe("unknown");
   });
 });
 
@@ -167,17 +176,44 @@ describe("what the sheet proposes", () => {
     expect(liveGrants([grant(), revoked])).toHaveLength(1);
   });
 
+  const PRIYA = { kind: "party" as const, id: "party-priya" };
+  const DOC = { subjectType: "core.document", subjectId: "doc-1" };
+
   test("a standing grant sets the capability the sheet opens on", () => {
     const standing = grant({ capability: "edit" });
-    expect(
-      defaultCapability(
-        grantOverSubject([standing], {
-          subjectType: "core.document",
-          subjectId: "doc-1",
-        })
-      )
-    ).toBe("edit");
+    expect(defaultCapability(grantOverSubject([standing], DOC, PRIYA))).toBe(
+      "edit"
+    );
     expect(defaultCapability(undefined)).toBe("view");
+  });
+
+  test("a circle's edit does not widen a new grant to the person", () => {
+    // `?partyId=` unions the grants naming Priya with the circle grants she
+    // is on the roster of. A circle's `edit` is a decision about the CIRCLE.
+    const circleEdit = grant({
+      grantId: "grant-circle",
+      audience: { kind: "circle", id: "circle-ski" },
+      capability: "edit",
+    });
+    expect(grantOverSubject([circleEdit], DOC, PRIYA)).toBeUndefined();
+    expect(defaultCapability(grantOverSubject([circleEdit], DOC, PRIYA))).toBe(
+      "view"
+    );
+    expect(
+      grantOverSubject([circleEdit], DOC, {
+        kind: "circle",
+        id: "circle-ski",
+      })?.capability
+    ).toBe("edit");
+    expect(grantOverSubject([circleEdit], DOC, undefined)).toBeUndefined();
+  });
+
+  test("what Share submits is clamped to what the picker could draw", () => {
+    // A subject the registry has since narrowed to view-only still carries
+    // its old `edit` grant; a member cannot un-pick a verb never drawn.
+    expect(drawableCapability(["view"], "edit")).toBe("view");
+    expect(drawableCapability(["view", "edit"], "edit")).toBe("edit");
+    expect(drawableCapability([], "edit")).toBe("view");
   });
 
   test("the request carries the subject label only when there is one", () => {

@@ -29,9 +29,9 @@ Photos' north star is **iOS Photos** ([blueprint seats](../blueprint-seats.md)):
    - Type "beach sunset"; scored matches appear as a "Photos that look like…" hit group and join the grid. Type a word that appears as text inside a photograph (a sign, a receipt) and it can match too.
    - **Status: SHIPPED when the local model assets are installed** — the derived ledger, bundled recognition handlers, semantic-search route, and mobile hit group are live. Each handler reads and writes through `ctx.vault`; there is no service to configure. Photo OCR ([recognition automations](../recognition-automations.md)) accepts images and PDFs and lands extracted text in the same FTS plane as captions. Without embedding assets the gateway answers `unavailable` and omits only the semantic hit group. Offline semantic ranking over replicated vectors remains open; devices do not run model inference ([derived ledger](derived-ledger.md)).
 
-7. **Share one photograph.**
-   - Copy to a shared vault; custody marks stay honest per seat.
-   - **Status: SHIPPED**.
+7. **Share one photograph, or a whole album.**
+   - Share is a standing grant through the one shared kit ([#825](https://github.com/srikanth235/centraid/issues/825)): the viewer shares the photograph (`media.asset`), an album's bar shares the album (`core.collection`), and both are _view_ — the declared subject registry offers no `edit` here, so album co-contribution is a deliberate v1 non-goal. Custody marks stay honest per seat.
+   - **Status: SHIPPED** for one subject at a time; a multi-photograph selection refuses and names the album instead.
 
 8. **Back up, then free up space.**
    - Backup is consent-gated per-photograph; `CloudOff` marks what the gateway does not hold.

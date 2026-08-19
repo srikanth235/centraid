@@ -208,31 +208,62 @@ describe("Docs shares its actual folder container", () => {
   // conditional read: a test that skips itself when its subject is missing
   // passes for the wrong reason, and would go on passing if the rebuilt drive
   // shared the wrong container. Restore it with the screen.
-  it("web passes docs.folder plus the selected folder id", () => {
+  // #825 moved Docs' sharing off the Commons placement door and onto the
+  // grant plane too: a shared folder is one standing grant over the declared
+  // `docs.folder` subject, not a batch of item ids placed into a vault.
+  it("web shares the selected folder as one docs.folder grant", () => {
     const web = readFileSync(
       path.join(APPS_DIR, "docs", "app-root.tsx"),
       "utf8"
     );
-    expect(web).toContain('itemType="docs.folder"');
+    expect(web).toContain('subjectType: "docs.folder"');
     expect(web).toContain("shareFolder.folder_id");
+    // No app-private share plumbing survives anywhere in the app: no commons
+    // ShareSheet, no member array, no `window.centraid.share` of Docs' own.
+    for (const file of sourceFiles(path.join(APPS_DIR, "docs"))) {
+      const text = readFileSync(file, "utf8");
+      expect(text, file).not.toContain("ShareSheet");
+      expect(text, file).not.toContain("window.centraid.share");
+    }
   });
-});
 
-describe("native Photos selection reaches Commons with explicit items", () => {
-  it("passes media asset ids and has no retired giveMany override", () => {
-    const source = readFileSync(
+  it("native shares the folder it is standing in as the same subject", () => {
+    const native = readFileSync(
       path.resolve(
         PACKAGE_ROOT,
-        "../../apps/mobile/src/apps/photos/use-copy-to-vault.ts"
+        "../../apps/mobile/src/apps/docs/FolderView.tsx"
       ),
       "utf8"
     );
-    expect(source).toContain('itemType: "media.asset"');
-    expect(source).toContain("itemIds: targets.map((asset) => asset.assetId)");
+    expect(native).toContain('subjectType: "docs.folder"');
+    expect(native).not.toContain("ShareSheet");
+  });
+});
+
+// #825 moved Photos' sharing off the Commons placement door and onto the
+// grant plane: a share is now a standing grant over ONE declared subject, not
+// a batch of item ids placed into a vault. What these two hold is that the
+// move is complete on the native seat — the subject types are the registry's
+// (`media.asset`, `core.collection`), and the retain half (receiving someone
+// else's album) is untouched, because retaining is not sharing.
+describe("native Photos selection reaches the grant plane by subject", () => {
+  it("shares the selected photograph as one media.asset grant", () => {
+    const source = readFileSync(
+      path.resolve(
+        PACKAGE_ROOT,
+        "../../apps/mobile/src/apps/photos/use-photo-selection-share.ts"
+      ),
+      "utf8"
+    );
+    expect(source).toContain('subjectType: "media.asset"');
+    // No app-private share plumbing survives: no member array, no source
+    // vault, no `session.share` call of Photos' own.
     expect(source).not.toContain("giveMany");
+    expect(source).not.toContain("session.share");
+    expect(source).not.toContain("itemIds");
   });
 
-  it("does not originate an album Commons declaration, but can retain a received album", () => {
+  it("shares an album as core.collection, and still retains a received album", () => {
     const nativeAlbum = readFileSync(
       path.resolve(
         PACKAGE_ROOT,
@@ -242,9 +273,10 @@ describe("native Photos selection reaches Commons with explicit items", () => {
     );
     expect(nativeAlbum).not.toContain('itemType="core.collection"');
     expect(nativeAlbum).not.toContain("Share album with household");
+    expect(nativeAlbum).toContain('subjectType: "core.collection"');
+    // Retaining a received album is the Commons plane and stays exactly so.
     expect(nativeAlbum).toContain('itemType: "core.collection"');
     expect(nativeAlbum).toContain("Save to my vault");
-    expect(nativeAlbum).toContain("copyToVault.sheetProps");
 
     const webAlbumOrigin = sourceFiles(path.join(APPS_DIR, "photos")).filter(
       (file) =>

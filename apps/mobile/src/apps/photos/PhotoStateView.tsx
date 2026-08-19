@@ -409,7 +409,7 @@ export default function PhotoStateView({
       )}
       <GrantSheet
         visible={share.visible}
-        onClose={share.dismiss}
+        onClose={() => share.dismiss()}
         {...share.sheetProps}
       />
     </PhotosScreen>

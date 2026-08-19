@@ -1,15 +1,20 @@
 // @vitest-environment jsdom
 //
-// The grant sheet, web seat (#825). Four claims:
+// The grant sheet, web seat (#825). Five claims:
 //
 //  1. AUDIENCE-FIRST works end to end — person → what → capability → one write
 //     door, carrying exactly the request the route takes.
-//  2. `edit` is drawn ONLY where the declared registry answers it, and the
-//     co-contribution sentence belongs to a group and nothing else.
-//  3. An invitation nobody has accepted reads as pending, never as an error,
-//     and a person this vault has never reached says so in her own line.
+//  2. `edit` is drawn ONLY where the declared registry answers it, a registry
+//     still in flight refuses nothing, an unreadable one says which happened,
+//     and the co-contribution sentence belongs to a group and nothing else.
+//  3. An invitation nobody has accepted reads as pending, never as an error;
+//     a person this vault has never reached says so in her own line; and a
+//     reach nothing has read yet says NOTHING about her, on either entry.
 //  4. Revoking asks first, in the honest best-effort words, and then reports
 //     the ROUTE'S sentence verbatim rather than a local paraphrase.
+//  5. NO SILENT SUCCESS. An audience this vault does not know, and a standing
+//     grant the route left at another capability, each get their own sentence
+//     instead of borrowing "nothing shared" or "already shared".
 import { act, createElement } from "react";
 import { createRoot } from "react-dom/client";
 import type { Root } from "react-dom/client";
@@ -63,8 +68,8 @@ function standingGrant(overrides: Partial<GrantRecord> = {}): GrantRecord {
 
 function stubDoor(overrides: Partial<GrantDoor> = {}): GrantDoor {
   return {
-    subjects: () => Promise.resolve(OFFERS),
-    forParty: () => Promise.resolve({ channel: null, grants: [] }),
+    subjects: () => Promise.resolve({ readable: true, offers: OFFERS }),
+    forParty: () => Promise.resolve({ known: true, channel: null, grants: [] }),
     forAudience: () => Promise.resolve({ known: true, grants: [] }),
     forSubject: () => Promise.resolve([]),
     create: () => Promise.resolve({ ok: true, outcome: "created" as const }),
@@ -182,6 +187,34 @@ describe("the grant sheet, web seat", () => {
       expect(status).toStrictEqual(["Already shared with Priya"]);
     });
 
+    test("a capability the route did not change is not reported as a change", async () => {
+      const standing = standingGrant();
+      const { container, status } = await mount({
+        door: stubDoor({
+          forParty: () =>
+            Promise.resolve({
+              known: true,
+              channel: { state: "live" as const },
+              grants: [standing],
+            }),
+          // What the route answers for a standing `view` when `edit` is asked
+          // for: `exists`, and the capability untouched.
+          create: () =>
+            Promise.resolve({
+              ok: true,
+              outcome: "exists_other_capability",
+              standing: "view",
+              grant: standing,
+            }),
+        }),
+      });
+      await act(async () => pressing(container, "Can edit").click());
+      await act(async () => pressing(container, "Share").click());
+      expect(status).toStrictEqual([
+        "Already shared with Priya for viewing; changing access is not offered yet — revoke and share again to change it.",
+      ]);
+    });
+
     test("a refusal is shown in the route's own words", async () => {
       const { container } = await mount({
         door: stubDoor({
@@ -227,6 +260,75 @@ describe("the grant sheet, web seat", () => {
       expect(pressing(container, "Share").disabled).toBe(true);
     });
 
+    test("a registry still being read refuses nothing and offers no Share", async () => {
+      let answer: () => void = () => undefined;
+      const { container } = await mount({
+        door: stubDoor({
+          subjects: () =>
+            new Promise((resolve) => {
+              answer = (): void => resolve({ readable: true, offers: OFFERS });
+            }),
+        }),
+      });
+      // Before the gateway answers, the sheet knows nothing about what a
+      // document may be shared as — and refuses on nobody's behalf.
+      expect(container.textContent).not.toContain(
+        "cannot be shared as a standing grant"
+      );
+      expect(pressing(container, "Share").disabled).toBe(true);
+      await act(async () => answer());
+      expect(pressing(container, "Share").disabled).toBe(false);
+      expect(pressing(container, "Can edit")).toBeDefined();
+    });
+
+    test("an unreadable registry says so rather than refusing the subject", async () => {
+      const { container } = await mount({
+        door: stubDoor({
+          subjects: () => Promise.resolve({ readable: false, offers: [] }),
+        }),
+      });
+      expect(container.textContent).toContain(
+        "Shareable items could not be read."
+      );
+      expect(container.textContent).not.toContain(
+        "cannot be shared as a standing grant"
+      );
+      expect(pressing(container, "Share").disabled).toBe(true);
+    });
+
+    test("a stale standing edit does not post a verb the picker never drew", async () => {
+      const sent: GrantRequest[] = [];
+      const { container } = await mount({
+        subjects: [
+          { subjectType: "media.asset", subjectId: "photo-1", label: "Beach" },
+        ],
+        door: stubDoor({
+          forParty: () =>
+            Promise.resolve({
+              known: true,
+              channel: { state: "live" as const },
+              grants: [
+                standingGrant({
+                  grantId: "grant-2",
+                  subjectType: "media.asset",
+                  subjectId: "photo-1",
+                  capability: "edit",
+                }),
+              ],
+            }),
+          create: (request) => {
+            sent.push(request);
+            return Promise.resolve({ ok: true, outcome: "created" });
+          },
+        }),
+      });
+      expect(
+        buttons(container).some((button) => button.textContent === "Can edit")
+      ).toBe(false);
+      await act(async () => pressing(container, "Share").click());
+      expect(sent.map((request) => request.capability)).toStrictEqual(["view"]);
+    });
+
     test("co-contribution is said for a group with edit, and nowhere else", async () => {
       const { container } = await mount({
         subjects: [
@@ -259,6 +361,7 @@ describe("the grant sheet, web seat", () => {
         door: stubDoor({
           forParty: () =>
             Promise.resolve({
+              known: true,
               channel: { state: "invited" as const },
               grants: [
                 standingGrant({
@@ -281,11 +384,92 @@ describe("the grant sheet, web seat", () => {
       ).not.toBeNull();
     });
 
+    test("a severed link is rendered as its own state, not as an absence", async () => {
+      const { container } = await mount({
+        door: stubDoor({
+          forParty: () =>
+            Promise.resolve({
+              known: true,
+              channel: { state: "severed" as const, vaultId: "vault-priya" },
+              grants: [],
+            }),
+        }),
+      });
+      expect(container.textContent).toContain("Link ended");
+      expect(container.textContent).toContain(
+        "The link to their vault ended; nothing new can be delivered."
+      );
+      expect(container.querySelector('[data-reach="severed"]')).not.toBeNull();
+      expect(container.textContent).not.toContain("Not reached yet");
+    });
+
+    test("a reach still being read makes no claim about the person", async () => {
+      let answer: () => void = () => undefined;
+      const { container } = await mount({
+        door: stubDoor({
+          forParty: () =>
+            new Promise((resolve) => {
+              answer = (): void =>
+                resolve({
+                  known: true,
+                  channel: { state: "live" },
+                  grants: [],
+                });
+            }),
+        }),
+      });
+      // The read has not answered. "Not reached yet" would be a definite
+      // claim about Priya that nothing has established.
+      expect(container.textContent).toContain("Checking…");
+      expect(container.textContent).not.toContain("Not reached yet");
+      expect(container.textContent).not.toContain(
+        "Sharing sends an invitation first."
+      );
+      await act(async () => answer());
+      expect(container.textContent).toContain("Reachable");
+    });
+
+    test("a person this vault has no record of says that, and nothing else", async () => {
+      const { container } = await mount({
+        door: stubDoor({
+          forParty: () =>
+            Promise.resolve({ known: false, channel: undefined, grants: [] }),
+        }),
+      });
+      expect(container.textContent).toContain(
+        "This vault has no record of Priya."
+      );
+      // Three sentences this one is NOT allowed to arrive wearing.
+      expect(container.textContent).not.toContain(
+        "Nothing shared with Priya yet."
+      );
+      expect(container.textContent).not.toContain("Shares could not be read.");
+      expect(container.textContent).not.toContain("Not reached yet");
+    });
+
+    test("a circle this vault has no record of says that, not 'nothing shared'", async () => {
+      const { container } = await mount({
+        audiences: [
+          { kind: "circle" as const, id: "circle-1", label: "Ski trip" },
+        ],
+        door: stubDoor({
+          forAudience: () => Promise.resolve({ known: false, grants: [] }),
+        }),
+      });
+      expect(container.textContent).toContain(
+        "This vault has no record of Ski trip."
+      );
+      expect(container.textContent).not.toContain(
+        "Nothing shared with Ski trip yet."
+      );
+    });
+
     test("a grant addressed to no vault yet is not a delivered one", async () => {
       const { container } = await mount({
         door: stubDoor({
           forParty: () =>
             Promise.resolve({
+              known: true,
               channel: { state: "live" as const },
               grants: [standingGrant({ fulfillment: [] })],
             }),
@@ -310,6 +494,7 @@ describe("the grant sheet, web seat", () => {
           },
           forParty: () =>
             Promise.resolve({
+              known: true,
               channel: { state: "live" as const },
               grants: [standingGrant()],
             }),
@@ -345,6 +530,7 @@ describe("the grant sheet, web seat", () => {
           },
           forParty: () =>
             Promise.resolve({
+              known: true,
               channel: { state: "live" as const },
               grants: [standingGrant()],
             }),
@@ -379,6 +565,62 @@ describe("the grant sheet, web seat", () => {
       expect(container.textContent).toContain("Trip plan");
       // The standing list is the object side, so its rows name PEOPLE.
       expect(container.textContent).toContain("Priya");
+    });
+
+    test("the person's reach is read here too, never invented from the object read", async () => {
+      // `forSubject` cannot answer reach, so the object-first sheet asks the
+      // person side for it. Without that read a live-channel person was told
+      // sharing would send her an invitation first.
+      const { container } = await mount({
+        subject: {
+          subjectType: "core.document",
+          subjectId: "doc-1",
+          label: "Trip plan",
+        },
+        door: stubDoor({
+          forSubject: () => Promise.resolve([standingGrant()]),
+          forParty: () =>
+            Promise.resolve({
+              known: true,
+              channel: { state: "live" as const, vaultId: "vault-priya" },
+              grants: [],
+            }),
+        }),
+      });
+      expect(container.textContent).toContain("Reachable");
+      expect(container.textContent).not.toContain("Not reached yet");
+      expect(container.textContent).not.toContain(
+        "Sharing sends an invitation first."
+      );
+    });
+
+    test("an object-first reach still being read paints no claim", async () => {
+      let answer: () => void = () => undefined;
+      const { container } = await mount({
+        subject: {
+          subjectType: "core.document",
+          subjectId: "doc-1",
+          label: "Trip plan",
+        },
+        door: stubDoor({
+          forSubject: () => Promise.resolve([standingGrant()]),
+          forParty: () =>
+            new Promise((resolve) => {
+              answer = (): void =>
+                resolve({
+                  known: true,
+                  channel: { state: "live" },
+                  grants: [],
+                });
+            }),
+        }),
+      });
+      expect(container.textContent).not.toContain("Not reached yet");
+      expect(container.textContent).not.toContain(
+        "Sharing sends an invitation first."
+      );
+      await act(async () => answer());
+      expect(container.textContent).toContain("Reachable");
     });
   });
 });

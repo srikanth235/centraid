@@ -57,7 +57,11 @@ function docsSeat() {
  */
 function audienceAgent(seat: ReturnType<typeof docsSeat>, name = "ravi-seat") {
   const agent = enrollAgent(seat.origin, { name, modelRef: "model-x" });
-  const device = enrollDevice(seat.origin, seat.originBoot.ownerPartyId, "host");
+  const device = enrollDevice(
+    seat.origin,
+    seat.originBoot.ownerPartyId,
+    "host"
+  );
   createGrant(seat.origin, {
     granteePartyId: agent.partyId,
     purposeConceptId: seat.originBoot.concepts[PURPOSE] as string,

@@ -9,8 +9,9 @@
 // What changed in wave 6: the control opens the ONE grant kit
 // (`kit/share/GrantSheet.tsx`) over the selected photograph as a standing
 // `media.asset` grant. Photos no longer assembles a destination list, no
-// longer names a source vault, and no longer calls `session.share` — the door,
-// the capability verbs and every sentence belong to the kit.
+// longer names a source vault, and no longer reaches the replica session to
+// place a batch of items — the door, the capability verbs and every sentence
+// belong to the kit.
 //
 // TWO REFUSALS ARE THIS FILE'S OWN, and both are honest rather than silent:
 // a selection from more than one photograph (a grant stands over one subject —
@@ -22,7 +23,7 @@ import { ONE_AT_A_TIME } from "@centraid/blueprints/apps/photos/grant-audiences"
 
 import { postStatus } from "../../kit/components/status-line";
 import type { GrantSheetProps } from "../../kit/share/GrantSheet";
-import { usePhotoShare } from "./photo-grants";
+import { usePhotoGrantEntry } from "./photo-grants";
 import type { VaultAsset } from "./photos-selection-writes";
 
 export interface PhotoSelectionShare {
@@ -42,7 +43,7 @@ export function usePhotoSelectionShare(
   selected: () => readonly VaultAsset[],
   onDone: () => void
 ): PhotoSelectionShare {
-  const share = usePhotoShare(postStatus);
+  const share = usePhotoGrantEntry(postStatus);
   const targets = selected();
   const only = targets.length === 1 ? targets[0] : undefined;
 

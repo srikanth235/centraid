@@ -62,12 +62,16 @@ const grant = (id, subjectType, capability, fulfillment) => ({
 
 const door = {
   subjects: () =>
-    Promise.resolve([
-      { subjectType: "core.document", capabilities: ["view", "edit"] },
-      { subjectType: "media.asset", capabilities: ["view"] },
-    ]),
+    Promise.resolve({
+      readable: true,
+      offers: [
+        { subjectType: "core.document", capabilities: ["view", "edit"] },
+        { subjectType: "media.asset", capabilities: ["view"] },
+      ],
+    }),
   forParty: () =>
     Promise.resolve({
+      known: true,
       channel: { state: "live" },
       grants: [
         grant("doc-1", "core.document", "edit", [
@@ -165,10 +169,14 @@ test("the grant sheet draws audience-first over the shipped tokens", async ({
   // `edit` is drawn because the declared registry answers it for a document.
   await expect(page.getByRole("button", { name: "Can edit" })).toBeVisible();
 
-  // Three delivery states, three sentences — absent is never empty.
+  // Three delivery states, three sentences — absent is never empty. And the
+  // reach line reports the channel the read actually answered: a person this
+  // vault reaches is never told sharing sends an invitation first.
   await expect(page.getByText("Delivered")).toBeVisible();
   await expect(page.getByText("Invitation pending")).toBeVisible();
   await expect(page.getByText("Not sent yet")).toBeVisible();
+  await expect(page.locator('[data-reach="live"]')).toBeVisible();
+  await expect(page.getByText("Not reached yet")).toHaveCount(0);
 
   await mkdir(EVIDENCE_DIR, { recursive: true });
   await page.screenshot({

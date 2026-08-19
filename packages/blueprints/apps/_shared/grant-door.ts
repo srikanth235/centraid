@@ -19,6 +19,7 @@
 import { GRANT_FAILED, REVOKE_FAILED } from "./grant-copy.ts";
 import type {
   GrantAudienceKind,
+  GrantCapability,
   GrantChannel,
   GrantRecord,
   GrantRequest,
@@ -41,8 +42,12 @@ import {
 export interface GrantWireCalls {
   /** `GET …/grants/subjects` — the declared registry. */
   subjects: () => Promise<unknown>;
-  /** `GET …/grants?partyId=` — the G-audience union plus the channel. */
-  forParty: (partyId: string) => Promise<unknown>;
+  /**
+   * `GET …/grants?partyId=` — the G-audience union plus the channel.
+   * `undefined` for a 404: a person this vault has no record of is an ANSWER,
+   * and it must not arrive as a thrown read failure.
+   */
+  forParty: (partyId: string) => Promise<unknown | undefined>;
   /** `GET …/grants?audienceKind=&audienceId=`; `undefined` for a 404. */
   forAudience: (
     kind: GrantAudienceKind,
@@ -56,10 +61,26 @@ export interface GrantWireCalls {
   revoke: (grantId: string) => Promise<unknown>;
 }
 
-/** What a person can reach, and whether this vault can reach them at all. */
+/**
+ * What a person can reach, and whether this vault can reach them at all.
+ * `known: false` is a party the vault has no record of — its `channel` stays
+ * `undefined`, because a stranger has no reach state to report.
+ */
 export interface PartyReach {
+  known: boolean;
   channel: GrantChannel;
   grants: GrantRecord[];
+}
+
+/**
+ * The declared registry, plus whether it could be read at all. An unreadable
+ * registry offers NOTHING (never everything), but "the vault refuses this
+ * subject" is a different sentence from "we could not ask", so the two facts
+ * travel separately instead of both collapsing into an empty list.
+ */
+export interface SubjectRegistry {
+  readable: boolean;
+  offers: GrantSubjectOffer[];
 }
 
 /**
@@ -72,8 +93,23 @@ export interface AudienceGrants {
   grants: GrantRecord[];
 }
 
+/**
+ * What saying the sentence did.
+ *
+ * `exists_other_capability` is the outcome the route cannot name for itself:
+ * it answers `exists` for any grant already naming this audience and subject,
+ * INCLUDING one standing at another capability, which it leaves alone. A sheet
+ * that reported that as "already shared" would be reporting the widening the
+ * member just asked for as though it had happened.
+ */
 export type GrantCreateOutcome =
   | { ok: true; outcome: "created" | "exists"; grant?: GrantRecord }
+  | {
+      ok: true;
+      outcome: "exists_other_capability";
+      standing: GrantCapability;
+      grant: GrantRecord;
+    }
   | { ok: false; message: string };
 
 export type GrantRevokeOutcome =
@@ -81,7 +117,7 @@ export type GrantRevokeOutcome =
   | { ok: false; message: string };
 
 export interface GrantDoor {
-  subjects: () => Promise<GrantSubjectOffer[]>;
+  subjects: () => Promise<SubjectRegistry>;
   forParty: (partyId: string) => Promise<PartyReach>;
   forAudience: (kind: GrantAudienceKind, id: string) => Promise<AudienceGrants>;
   forSubject: (subject: GrantSubject) => Promise<GrantRecord[]>;
@@ -104,19 +140,29 @@ function refusal(error: unknown, fallback: string): string {
 export function grantDoor(calls: GrantWireCalls): GrantDoor {
   return {
     async subjects() {
-      // A registry that cannot be read is an EMPTY registry, never an open
-      // one: a surface that guessed here would offer a verb the vault has no
-      // strategy for and record a grant it could not keep.
+      // A registry that cannot be read offers NOTHING, never everything: a
+      // surface that guessed here would offer a verb the vault has no strategy
+      // for and record a grant it could not keep. `readable` travels beside
+      // the list so a surface can say which of the two happened.
       try {
-        return parseSubjectOffers(body(await calls.subjects()).subjects);
+        return {
+          readable: true,
+          offers: parseSubjectOffers(body(await calls.subjects()).subjects),
+        };
       } catch {
-        return [];
+        return { readable: false, offers: [] };
       }
     },
 
     async forParty(partyId) {
-      const out = body(await calls.forParty(partyId));
+      const answer = await calls.forParty(partyId);
+      // A person this vault has no record of: `channel` stays undefined, so
+      // nothing downstream can read a stranger as "never reached".
+      if (answer === undefined)
+        return { known: false, channel: undefined, grants: [] };
+      const out = body(answer);
       return {
+        known: true,
         channel: parseChannel(out.channel),
         grants: parseGrants(out.grants),
       };
@@ -142,6 +188,20 @@ export function grantDoor(calls: GrantWireCalls): GrantDoor {
         // it is a success: the grant the member asked for is standing.
         const outcome = out.outcome === "exists" ? "exists" : "created";
         const grant = parseGrant(out.grant);
+        // …unless the standing grant carries ANOTHER capability. The route
+        // returns the grant it kept, so the mismatch is readable right here,
+        // and a silent no-op is never allowed to leave wearing a success.
+        if (
+          outcome === "exists" &&
+          grant &&
+          grant.capability !== request.capability
+        )
+          return {
+            ok: true,
+            outcome: "exists_other_capability",
+            standing: grant.capability,
+            grant,
+          };
         return { ok: true, outcome, ...(grant ? { grant } : {}) };
       } catch (error) {
         return { ok: false, message: refusal(error, GRANT_FAILED) };

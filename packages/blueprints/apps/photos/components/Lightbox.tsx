@@ -20,7 +20,6 @@
 // lands on the FRAME's one status line via `notice`.
 import { useCallback, useEffect, useRef, useState } from "react";
 
-import { grantPlaneAvailable } from "../../_shared/grant-gateway.ts";
 import { GrantSheet } from "../../_shared/GrantSheet.tsx";
 import {
   canWriteScope,
@@ -308,7 +307,7 @@ export function LightboxShell({
     >
       <GrantSheet
         open={share.open}
-        onClose={share.close}
+        onClose={() => share.close()}
         audiences={share.audiences}
         // OBJECT-FIRST: the sheet was opened over THIS photograph, so the
         // "what" step is a fixed line and the standing list is this

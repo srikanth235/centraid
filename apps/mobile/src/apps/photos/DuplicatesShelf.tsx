@@ -225,7 +225,7 @@ export default function DuplicatesShelf({
       </ScrollView>
       <GrantSheet
         visible={share.visible}
-        onClose={share.dismiss}
+        onClose={() => share.dismiss()}
         {...share.sheetProps}
       />
     </PhotosScreen>

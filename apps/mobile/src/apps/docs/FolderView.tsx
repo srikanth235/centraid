@@ -23,6 +23,7 @@ import Icon from "../../kit/components/Icon";
 import { Text, TextInput } from "../../kit/components/NativeText";
 import { postStatus } from "../../kit/components/status-line";
 import ReplicaStatusBar from "../../kit/replica/ReplicaStatusBar";
+import GrantSheet from "../../kit/share/GrantSheet";
 import { borders, radii, t, useTheme } from "../../kit/theme";
 import type { ThemeColors } from "../../kit/theme";
 import type { DocsScreenProps, DocsShellNavigation } from "../../navigation";
@@ -30,6 +31,7 @@ import { folderStatus } from "./docs-copy";
 import DocsScreen from "./DocsScreen";
 import DriveList from "./DriveList";
 import { useDocs, useDocsWrite } from "./useDocs";
+import { useDocsGrantAudiences } from "./useDocsGrantAudiences";
 
 export default function FolderView({
   route,
@@ -46,6 +48,10 @@ export default function FolderView({
   const [menuOpen, setMenuOpen] = useState(false);
   const [renaming, setRenaming] = useState(false);
   const [draft, setDraft] = useState(folderName);
+  // `null` until the roster is an actual answer; the place menu offers Share
+  // only then, rather than a row that could only apologise.
+  const audiences = useDocsGrantAudiences();
+  const [shareOpen, setShareOpen] = useState(false);
 
   // The read's own name wins once it lands; the route param titles the first
   // paint so the bar never waits a replica round trip.
@@ -152,6 +158,15 @@ export default function FolderView({
                   setRenaming(true);
                 },
               },
+              ...(audiences
+                ? [
+                    {
+                      key: "share",
+                      label: "Share folder",
+                      onSelect: () => setShareOpen(true),
+                    },
+                  ]
+                : []),
               {
                 key: "delete",
                 label: "Delete folder",
@@ -204,6 +219,22 @@ export default function FolderView({
           </View>
         </View>
       </Modal>
+
+      {/* OBJECT-FIRST over the folder this screen is already about. The kit
+          owns every sentence; this seat owns the roster and the status line. */}
+      {audiences ? (
+        <GrantSheet
+          visible={shareOpen}
+          onClose={() => setShareOpen(false)}
+          audiences={audiences}
+          subject={{
+            subjectType: "docs.folder",
+            subjectId: folderId,
+            label: liveName,
+          }}
+          onStatus={postStatus}
+        />
+      ) : null}
     </DocsScreen>
   );
 }

@@ -286,7 +286,7 @@ export function SelectionBarView({
       {only ? (
         <GrantSheet
           open={share.open}
-          onClose={share.close}
+          onClose={() => share.close()}
           audiences={share.audiences}
           subject={{ subjectType: "media.asset", subjectId: only }}
           onStatus={notice}
@@ -441,7 +441,7 @@ export function SelectionBottomBar({
       {only ? (
         <GrantSheet
           open={share.open}
-          onClose={share.close}
+          onClose={() => share.close()}
           audiences={share.audiences}
           subject={{ subjectType: "media.asset", subjectId: only }}
           onStatus={notice}

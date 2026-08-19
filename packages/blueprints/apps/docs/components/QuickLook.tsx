@@ -32,9 +32,9 @@ import type { ReactNode } from "react";
 import { GrantSheet } from "../../_shared/GrantSheet.tsx";
 import { STAGE_ACTIONS } from "../document-copy.ts";
 import { fmtBytes, typeMeta } from "../format.ts";
+import type { DocsShareHost } from "../grant-audiences.ts";
 import { I, STAGE_ICONS } from "../icons.ts";
 import { printDoc, printKind, printRefusal } from "../print.ts";
-import type { DocsShareHost } from "../grant-audiences.ts";
 import type { DriveDoc } from "../types.ts";
 import { QuickLookInfo } from "./QuickLookInfo.tsx";
 import { QuickLookStage } from "./QuickLookStage.tsx";
@@ -193,6 +193,8 @@ export function QuickLook({
   // asked yet.
   const [infoOpen, setInfoOpen] = useState(false);
   const [shareOpen, setShareOpen] = useState(false);
+  // The stage reports through the app's one status line, never its own.
+  const handleStatus = (message: string): void => shareHost?.onStatus(message);
   const printable = printKind(doc) !== null;
   // The stage's own region, read for ONE thing: the src the picture is
   // currently showing. Off the gateway origin that is a `blob:` URL the shell
@@ -318,7 +320,7 @@ export function QuickLook({
             subjectId: doc.document_id,
             ...(doc.title ? { label: doc.title } : {}),
           }}
-          onStatus={shareHost.onStatus}
+          onStatus={handleStatus}
         />
       ) : null}
       <div className={styles.topbar}>

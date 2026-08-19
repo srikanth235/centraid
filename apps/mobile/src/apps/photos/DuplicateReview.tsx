@@ -215,7 +215,7 @@ export default function DuplicateReview({
       )}
       <GrantSheet
         visible={share.visible}
-        onClose={share.dismiss}
+        onClose={() => share.dismiss()}
         {...share.sheetProps}
       />
     </PhotosScreen>

@@ -34,6 +34,7 @@ import {
   revokeConfirmBody,
   revokeConfirmTitle,
   nothingSharedYet,
+  audienceNotKnown,
 } from "../../_shared/grant-copy.ts";
 import type { GrantDoor } from "../../_shared/grant-door.ts";
 import {
@@ -41,8 +42,8 @@ import {
   grantPlaneAvailable,
   webGrantDoor,
 } from "../../_shared/grant-gateway.ts";
-import { GrantSheet } from "../../_shared/GrantSheet.tsx";
 import type { GrantRecord } from "../../_shared/grant-plane.ts";
+import { GrantSheet } from "../../_shared/GrantSheet.tsx";
 import { LoadingSkeleton } from "../../_shared/LoadingSkeleton.tsx";
 import {
   grantNoun,
@@ -101,8 +102,16 @@ export function PersonGrants(props: PersonGrantsProps): ReactNode {
     [available, door, partyId]
   );
 
+  // Deferred off the effect body: a synchronous setState here would cascade a
+  // second render before the first has painted.
   useEffect(() => {
-    void read(true);
+    let active = true;
+    void Promise.resolve().then(async () => {
+      if (active) await read(true);
+    });
+    return () => {
+      active = false;
+    };
   }, [read]);
 
   const grants = state.kind === "read" ? state.grants : [];
@@ -129,8 +138,9 @@ export function PersonGrants(props: PersonGrantsProps): ReactNode {
 
   const body = (): ReactNode => {
     if (state.kind === "loading") return <LoadingSkeleton rows={2} />;
-    if (state.kind !== "read")
-      return <EmptyState title={state.message} />;
+    if (state.kind === "unknown-party")
+      return <EmptyState title={audienceNotKnown(props.personName)} />;
+    if (state.kind !== "read") return <EmptyState title={state.message} />;
     return (
       <>
         {/* The channel, in the kit's words. `Not reached yet · Sharing sends
@@ -183,10 +193,7 @@ export function PersonGrants(props: PersonGrantsProps): ReactNode {
         {...(subjects.length
           ? {
               add: (
-                <Verb
-                  label={VERBS.share}
-                  onClick={() => setSheetOpen(true)}
-                />
+                <Verb label={VERBS.share} onClick={() => setSheetOpen(true)} />
               ),
             }
           : {})}

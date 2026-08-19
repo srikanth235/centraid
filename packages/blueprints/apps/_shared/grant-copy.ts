@@ -70,7 +70,13 @@ export function deliveryLabel(delivery: GrantDelivery): string {
   }
 }
 
-/** How this vault can reach the audience, in the member's terms. */
+/**
+ * How this vault can reach the audience, in the member's terms.
+ *
+ * `unknown` gets the checking line, not one of the other four: the read has
+ * not answered, and "Not reached yet" is a claim about a person that only a
+ * read which actually answered may make.
+ */
 export function reachLabel(reach: GrantReach): string {
   switch (reach) {
     case "live":
@@ -79,8 +85,10 @@ export function reachLabel(reach: GrantReach): string {
       return "Invitation pending";
     case "severed":
       return "Link ended";
-    default:
+    case "never-reached":
       return "Not reached yet";
+    default:
+      return "Checking…";
   }
 }
 
@@ -103,6 +111,15 @@ export function nothingSharedYet(audienceLabel: string): string {
   return `Nothing shared with ${audienceLabel} yet.`;
 }
 
+/**
+ * An audience this vault has no record of. "We do not know them" and "nothing
+ * is shared with them" are two facts, and the second one is a lie about the
+ * first — so the 404 gets its own sentence rather than the empty state's.
+ */
+export function audienceNotKnown(audienceLabel: string): string {
+  return `This vault has no record of ${audienceLabel}.`;
+}
+
 /** The refusal when the registry answers no capability for a subject type. */
 export function subjectNotOfferable(noun: string): string {
   return `A ${noun} cannot be shared as a standing grant.`;
@@ -121,6 +138,23 @@ export function grantedOutcome(
 /** The outcome when the same grant was already standing. */
 export function alreadyGrantedOutcome(audienceLabel: string): string {
   return `Already shared with ${audienceLabel}`;
+}
+
+/**
+ * The outcome when a grant already stands at a DIFFERENT capability.
+ *
+ * The route answers `exists` and changes nothing, so `alreadyGrantedOutcome`
+ * would report the widening the member just asked for as if it had happened.
+ * Changing a standing capability would mean revoking and re-granting, which
+ * transiently deletes the audience's copy — not a thing to do by accident —
+ * so this sentence names the standing access and the move that changes it.
+ */
+export function capabilityUnchangedOutcome(
+  audienceLabel: string,
+  standing: GrantCapability
+): string {
+  const noun = standing === "edit" ? "editing" : "viewing";
+  return `Already shared with ${audienceLabel} for ${noun}; changing access is not offered yet — revoke and share again to change it.`;
 }
 
 /** The destructive confirm's heading. */
@@ -143,5 +177,12 @@ export const REVOKE_CANCEL_ACTION = "Keep sharing";
 
 /** What a failed read or write says when the door gave no message of its own. */
 export const GRANTS_UNREADABLE = "Shares could not be read.";
+
+/**
+ * The declared registry could not be read. Distinct from `subjectNotOfferable`
+ * on purpose: "the vault refuses this subject" and "we could not ask" are two
+ * facts, and the refusal is the one a member would act on wrongly.
+ */
+export const REGISTRY_UNREADABLE = "Shareable items could not be read.";
 export const GRANT_FAILED = "The share could not be recorded.";
 export const REVOKE_FAILED = "The share could not be revoked.";

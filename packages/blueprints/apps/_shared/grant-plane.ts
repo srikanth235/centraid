@@ -12,9 +12,11 @@
  *
  *  - ABSENT IS NEVER EMPTY. `fulfillment: []` is "no audience vault has been
  *    addressed yet", `channel: null` is "this vault has never reached them",
- *    and a severed channel is a third thing again. `grantDelivery` and
+ *    a severed channel is a third thing again, and `channel: undefined` — not
+ *    read yet, or a read that did not say — is a fourth. `grantDelivery` and
  *    `channelReach` answer each of them with its own token, never with one
- *    shared blank.
+ *    shared blank. UNKNOWN IS NOT A CLAIM: only a read that actually answered
+ *    may produce the definite "never reached".
  *  - THE REGISTRY DECIDES WHICH VERBS EXIST. `capabilitiesFor` reads the
  *    declared subject registry the gateway serves (`…/grants/subjects`); no
  *    surface may decide from a hardcoded list which subjects take `edit`.
@@ -72,11 +74,16 @@ export interface GrantSubjectOffer {
   capabilities: readonly GrantCapability[];
 }
 
-/** How this vault can reach a person; `null` is "never reached", not "none". */
-export type GrantChannel = {
-  state: "live" | "invited" | "severed";
-  vaultId?: string;
-} | null;
+/**
+ * How this vault can reach a person. Three answers, and the third is the one
+ * a surface most easily fakes: `null` is the definite "this vault has never
+ * reached them", and `undefined` is "nobody has asked yet, or the answer did
+ * not say" — which is not a fact about the person at all.
+ */
+export type GrantChannel =
+  | { state: "live" | "invited" | "severed"; vaultId?: string }
+  | null
+  | undefined;
 
 /** What a subject-first sheet is opened over. */
 export interface GrantSubject {
@@ -199,16 +206,19 @@ export function parseSubjectOffers(value: unknown): GrantSubjectOffer[] {
 }
 
 /**
- * The channel, or `null`. `undefined` on the wire is also `null` here: a read
- * that did not say is the same fact as a vault that has never reached them,
- * and neither is a severed link.
+ * The channel the read actually answered. Only an explicit `null` on the wire
+ * is the definite "never reached" — an absent key, a non-object, or a state
+ * this build does not recognise is DRIFT, and drift answers `undefined` so a
+ * surface cannot paint "Not reached yet" over a person the vault may well be
+ * reaching. A claim about someone's reach is only ever as good as the read.
  */
 export function parseChannel(value: unknown): GrantChannel {
+  if (value === null) return null;
   const row = record(value);
-  if (!row) return null;
+  if (!row) return undefined;
   const state = row.state;
   if (state !== "live" && state !== "invited" && state !== "severed")
-    return null;
+    return undefined;
   const vaultId = text(row, "vaultId");
   return { state, ...(vaultId ? { vaultId } : {}) };
 }
@@ -263,10 +273,20 @@ export function grantDelivery(grant: GrantRecord): GrantDelivery {
   return "none";
 }
 
-/** How this vault can reach the audience, as one token a sheet can draw. */
-export type GrantReach = "never-reached" | "invited" | "live" | "severed";
+/**
+ * How this vault can reach the audience, as one token a sheet can draw.
+ * `unknown` is the read that has not answered — it is not a reach state, and
+ * a surface owes it a checking line rather than any of the other four.
+ */
+export type GrantReach =
+  | "unknown"
+  | "never-reached"
+  | "invited"
+  | "live"
+  | "severed";
 
 export function channelReach(channel: GrantChannel): GrantReach {
+  if (channel === undefined) return "unknown";
   return channel === null ? "never-reached" : channel.state;
 }
 
@@ -277,15 +297,27 @@ export function liveGrants(
   return grants.filter((grant) => grant.revokedAt === null);
 }
 
-/** The standing grant over exactly this subject, if the audience has one. */
+/**
+ * The standing grant over exactly this subject FOR THIS AUDIENCE.
+ *
+ * The audience is not optional detail. A `?partyId=` read is a union — the
+ * grants naming that person plus the circle grants she is on the roster of —
+ * so matching on the subject alone would let a circle's `edit` decide what a
+ * new grant to the person herself proposes, widening a decision nobody made.
+ * A read with no audience in hand has no standing grant to answer with.
+ */
 export function grantOverSubject(
   grants: readonly GrantRecord[],
-  subject: GrantSubject
+  subject: GrantSubject,
+  audience: GrantAudience | undefined
 ): GrantRecord | undefined {
+  if (!audience) return undefined;
   return liveGrants(grants).find(
     (grant) =>
       grant.subjectType === subject.subjectType &&
-      grant.subjectId === subject.subjectId
+      grant.subjectId === subject.subjectId &&
+      grant.audience.kind === audience.kind &&
+      grant.audience.id === audience.id
   );
 }
 
@@ -298,6 +330,23 @@ export function defaultCapability(
   standing: GrantRecord | undefined
 ): GrantCapability {
   return standing?.capability ?? "view";
+}
+
+/**
+ * The capability a sheet may actually SUBMIT: whatever the picker could draw.
+ *
+ * `defaultCapability` reads a grant recorded when the registry may have said
+ * something else — a subject the vault has since narrowed to view-only still
+ * carries its old `edit` grant — and a member cannot un-pick a verb that was
+ * never drawn. Posting the unofferable one would be refused at the door with
+ * a sentence about a choice the member never made, so it is clamped here.
+ */
+export function drawableCapability(
+  capabilities: readonly GrantCapability[],
+  wanted: GrantCapability
+): GrantCapability {
+  if (capabilities.includes(wanted)) return wanted;
+  return capabilities[0] ?? "view";
 }
 
 /** The request body the create door takes, built in one place per seat. */

@@ -30,7 +30,8 @@ export interface GrantCreateRequest {
 /** The bridge `window.centraid.grants` exposes to an inline blueprint app. */
 export interface GrantBridge {
   subjects: () => Promise<unknown>;
-  forParty: (partyId: string) => Promise<unknown>;
+  /** `undefined` for a person this vault has no record of (404). */
+  forParty: (partyId: string) => Promise<unknown | undefined>;
   /** `undefined` for an audience this vault has no record of (404). */
   forAudience: (
     kind: "party" | "circle",
@@ -96,7 +97,12 @@ export function grantBridge(auth: () => Promise<GatewayAuth>): GrantBridge {
     },
     async forParty(partyId) {
       const op = "read what this person can reach";
-      return grantJson(await get(query({ partyId })), op);
+      const response = await get(query({ partyId }));
+      // `audience_not_found` is a real answer — this vault knows no such
+      // person — and letting it throw would make it arrive wearing "shares
+      // could not be read", which is a different sentence entirely.
+      if (response.status === 404) return undefined;
+      return grantJson(response, op);
     },
     async forAudience(kind, id) {
       const op = "read this audience's shares";

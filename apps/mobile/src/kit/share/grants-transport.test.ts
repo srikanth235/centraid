@@ -94,6 +94,38 @@ describe("the native grant transport", () => {
         grants: [],
       });
     });
+
+    test("a person the vault has no record of is an answer, not a read failure", async () => {
+      // The primary read is `?partyId=`. Throwing here would make "we do not
+      // know this person" arrive wearing "shares could not be read".
+      stubFetch(() => ({
+        status: 404,
+        body: {
+          error: "audience_not_found",
+          message: "this vault knows no such person",
+        },
+      }));
+      await expect(
+        nativeGrantCalls(BASE).forParty("party-nobody")
+      ).resolves.toBeUndefined();
+      await expect(
+        nativeGrantDoor(BASE).forParty("party-nobody")
+      ).resolves.toStrictEqual({
+        known: false,
+        channel: undefined,
+        grants: [],
+      });
+    });
+
+    test("a party read that did not say leaves the channel unknown, never never-reached", async () => {
+      stubFetch(() => ({ status: 200, body: { grants: [] } }));
+      const reach = await nativeGrantDoor(BASE).forParty("party-priya");
+      expect(reach).toStrictEqual({
+        known: true,
+        channel: undefined,
+        grants: [],
+      });
+    });
   });
 
   describe("refusals keep the route's words", () => {
@@ -126,9 +158,77 @@ describe("the native grant transport", () => {
       ).resolves.toStrictEqual({ ok: true, message });
     });
 
-    test("an unreadable registry offers nothing rather than everything", async () => {
+    test("an unreadable registry offers nothing rather than everything, and says which", async () => {
       stubFetch(() => ({ status: 500, body: { error: "boom" } }));
-      await expect(nativeGrantDoor(BASE).subjects()).resolves.toStrictEqual([]);
+      await expect(nativeGrantDoor(BASE).subjects()).resolves.toStrictEqual({
+        readable: false,
+        offers: [],
+      });
+    });
+
+    test("a standing grant at another capability is not a silent success", async () => {
+      // The route answers `exists` and leaves the capability alone. Reporting
+      // that as "already shared" would report the widening as though it had
+      // happened, which is the one thing a share sheet may never do.
+      stubFetch(() => ({
+        status: 200,
+        body: {
+          outcome: "exists",
+          grant: {
+            grantId: "grant-1",
+            audience: { kind: "party", id: "party-priya" },
+            subjectType: "core.document",
+            subjectId: "doc-1",
+            capability: "view",
+            grantedAt: "2026-08-01T10:00:00.000Z",
+            revokedAt: null,
+            grantedBy: "party-owner",
+            maxSizeBytes: null,
+            fulfillment: [],
+          },
+        },
+      }));
+      const outcome = await nativeGrantDoor(BASE).create({
+        audienceKind: "party",
+        audienceId: "party-priya",
+        subjectType: "core.document",
+        subjectId: "doc-1",
+        capability: "edit",
+      });
+      expect(outcome).toMatchObject({
+        ok: true,
+        outcome: "exists_other_capability",
+        standing: "view",
+      });
+    });
+
+    test("the same capability standing is the ordinary already-shared success", async () => {
+      stubFetch(() => ({
+        status: 200,
+        body: {
+          outcome: "exists",
+          grant: {
+            grantId: "grant-1",
+            audience: { kind: "party", id: "party-priya" },
+            subjectType: "core.document",
+            subjectId: "doc-1",
+            capability: "view",
+            grantedAt: "2026-08-01T10:00:00.000Z",
+            revokedAt: null,
+            grantedBy: "party-owner",
+            maxSizeBytes: null,
+            fulfillment: [],
+          },
+        },
+      }));
+      const outcome = await nativeGrantDoor(BASE).create({
+        audienceKind: "party",
+        audienceId: "party-priya",
+        subjectType: "core.document",
+        subjectId: "doc-1",
+        capability: "view",
+      });
+      expect(outcome).toMatchObject({ ok: true, outcome: "exists" });
     });
   });
 });

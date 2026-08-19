@@ -25,7 +25,9 @@ import type { JSX } from "react";
 
 import {
   alreadyGrantedOutcome,
+  audienceNotKnown,
   capabilityLabel,
+  capabilityUnchangedOutcome,
   deliveryLabel,
   GRANT_SHEET_TITLE,
   GRANTS_UNREADABLE,
@@ -34,18 +36,20 @@ import {
   nothingSharedYet,
   reachLabel,
   reachNote,
+  REGISTRY_UNREADABLE,
   REVOKE_CANCEL_ACTION,
   REVOKE_CONFIRM_ACTION,
   revokeConfirmBody,
   revokeConfirmTitle,
   subjectNotOfferable,
 } from "./grant-copy.ts";
-import type { GrantDoor } from "./grant-door.ts";
+import type { GrantDoor, SubjectRegistry } from "./grant-door.ts";
 import { webGrantDoor } from "./grant-gateway.ts";
 import {
   capabilitiesFor,
   channelReach,
   defaultCapability,
+  drawableCapability,
   grantDelivery,
   grantOverSubject,
   grantRequestFor,
@@ -58,7 +62,6 @@ import type {
   GrantChannel,
   GrantRecord,
   GrantSubject,
-  GrantSubjectOffer,
 } from "./grant-plane.ts";
 
 import styles from "./GrantSheet.module.css";
@@ -96,14 +99,20 @@ export function GrantSheet(props: GrantSheetProps): JSX.Element | null {
   // every render would re-read the grant plane on every keystroke.
   const door = useMemo(() => props.door ?? webGrantDoor(), [props.door]);
   const dialogRef = useRef<HTMLDialogElement>(null);
-  const [offers, setOffers] = useState<GrantSubjectOffer[]>([]);
+  // `null` is "the registry read has not answered". It is NOT an empty
+  // registry: an empty one is the refusal "this cannot be shared", and
+  // painting that before the gateway has spoken refuses on its behalf.
+  const [registry, setRegistry] = useState<SubjectRegistry | null>(null);
   const [audienceId, setAudienceId] = useState(props.audienceId ?? "");
   const [subjectId, setSubjectId] = useState("");
   // `null` is "the member has not chosen"; the capability is then DERIVED from
   // whatever grant already stands, during render rather than in an effect.
   const [picked, setPicked] = useState<GrantCapability | null>(null);
   const [standing, setStanding] = useState<GrantRecord[] | null>(null);
-  const [channel, setChannel] = useState<GrantChannel>(null);
+  // `undefined` until a read answers — see `GrantChannel`. Starting at `null`
+  // would paint "Not reached yet" over every person for one frame.
+  const [channel, setChannel] = useState<GrantChannel>(undefined);
+  const [audienceKnown, setAudienceKnown] = useState(true);
   const [busy, setBusy] = useState(false);
   const [refusal, setRefusal] = useState<string | null>(null);
   const [confirming, setConfirming] = useState<GrantRecord | null>(null);
@@ -137,8 +146,9 @@ export function GrantSheet(props: GrantSheetProps): JSX.Element | null {
       setPicked(null);
       setAudienceId(props.audienceId ?? "");
       setSubjectId("");
-      const rows = await door.subjects();
-      if (active) setOffers(rows);
+      setRegistry(null);
+      const read = await door.subjects();
+      if (active) setRegistry(read);
     });
     return () => {
       active = false;
@@ -147,6 +157,10 @@ export function GrantSheet(props: GrantSheetProps): JSX.Element | null {
 
   // The standing read follows whichever question the sheet was opened with:
   // the object side when a subject is pinned, the person side otherwise.
+  //
+  // REACH IS A FACT ABOUT THE PERSON, not about which door was used. An
+  // object-first sheet still names someone, so it still owes an honest reach
+  // line — and its own read, since `forSubject` cannot answer one.
   useEffect(() => {
     if (!props.open) return;
     if (!pinnedType && !audienceKey) return;
@@ -154,12 +168,29 @@ export function GrantSheet(props: GrantSheetProps): JSX.Element | null {
     void Promise.resolve().then(async () => {
       if (!active) return;
       setStanding(null);
+      setChannel(undefined);
+      setAudienceKnown(true);
+      // A reach read that fails leaves the channel UNKNOWN and the standing
+      // list alone: "we could not ask" is not "never reached", and it is not
+      // a reason to blank the shares the other read answered.
+      const readReach = async (): Promise<void> => {
+        try {
+          const reach = await door.forParty(audienceKey);
+          if (!active) return;
+          if (reach.known) setChannel(reach.channel);
+          else setAudienceKnown(false);
+        } catch {
+          /* unknown draws the checking line, never a claim */
+        }
+      };
       try {
         if (pinnedType) {
-          const found = await door.forSubject({
-            subjectType: pinnedType,
-            subjectId: pinnedId,
-          });
+          const [found] = await Promise.all([
+            door.forSubject({ subjectType: pinnedType, subjectId: pinnedId }),
+            audienceKind === "party" && audienceKey
+              ? readReach()
+              : Promise.resolve(),
+          ]);
           if (active) setStanding(found);
           return;
         }
@@ -167,12 +198,13 @@ export function GrantSheet(props: GrantSheetProps): JSX.Element | null {
           const reach = await door.forParty(audienceKey);
           if (!active) return;
           setChannel(reach.channel);
+          setAudienceKnown(reach.known);
           setStanding(reach.grants);
           return;
         }
         const read = await door.forAudience(audienceKind, audienceKey);
         if (!active) return;
-        setChannel(null);
+        setAudienceKnown(read.known);
         setStanding(read.grants);
       } catch {
         if (!active) return;
@@ -200,23 +232,51 @@ export function GrantSheet(props: GrantSheetProps): JSX.Element | null {
   // Derived at render — an effect writing it back would be a second source of
   // truth for a value the standing read already answers.
   const alreadyStanding =
-    subject && standing ? grantOverSubject(standing, subject) : undefined;
-  const capability = picked ?? defaultCapability(alreadyStanding);
+    subject && standing
+      ? grantOverSubject(
+          standing,
+          subject,
+          audience ? { kind: audience.kind, id: audience.id } : undefined
+        )
+      : undefined;
 
   if (!props.open) return null;
 
   const capabilities = subject
-    ? capabilitiesFor(offers, subject.subjectType)
+    ? capabilitiesFor(registry?.offers ?? [], subject.subjectType)
     : [];
+  // Clamped to what the picker could draw: a standing `edit` over a subject
+  // the registry has since narrowed must not be what Share posts.
+  const capability = drawableCapability(
+    capabilities,
+    picked ?? defaultCapability(alreadyStanding)
+  );
   const noun = subject ? subjectNoun(subject.subjectType) : "shared item";
-  const notOfferable = Boolean(subject) && capabilities.length === 0;
+  // Three states, not two: the registry has not answered, it answered nothing
+  // for this subject, or it could not be read. Only the middle one is the
+  // refusal, and only it may say a subject cannot be shared.
+  const registryPending = registry === null;
+  const registryUnreadable = registry !== null && !registry.readable;
+  const notOfferable =
+    Boolean(subject) &&
+    registry !== null &&
+    registry.readable &&
+    capabilities.length === 0;
   const contributionNote = subject
     ? groupContributionNote(subject.subjectType, capability)
     : null;
   const rows = standing ? liveGrants(standing) : [];
+  const reach = channelReach(channel);
+  const cannotShare =
+    !audience ||
+    !subject ||
+    registryPending ||
+    registryUnreadable ||
+    notOfferable ||
+    busy;
 
   const submit = async (): Promise<void> => {
-    if (!audience || !subject || notOfferable || busy) return;
+    if (!audience || !subject || cannotShare) return;
     setBusy(true);
     setRefusal(null);
     const outcome = await door.create(
@@ -228,9 +288,11 @@ export function GrantSheet(props: GrantSheetProps): JSX.Element | null {
       return;
     }
     props.onStatus(
-      outcome.outcome === "exists"
-        ? alreadyGrantedOutcome(audience.label)
-        : grantedOutcome(audience.label, capability)
+      outcome.outcome === "exists_other_capability"
+        ? capabilityUnchangedOutcome(audience.label, outcome.standing)
+        : outcome.outcome === "exists"
+          ? alreadyGrantedOutcome(audience.label)
+          : grantedOutcome(audience.label, capability)
     );
     props.onClose();
   };
@@ -322,17 +384,15 @@ export function GrantSheet(props: GrantSheetProps): JSX.Element | null {
                     </option>
                   ))}
                 </select>
-                {audience?.kind === "party" ? (
+                {/* An unknown reach draws the checking line and nothing else:
+                    every other label is a claim about this person that only an
+                    answered read may make. */}
+                {audience?.kind === "party" && audienceKnown ? (
                   <p className={styles.reach}>
-                    <span
-                      className={styles.reachState}
-                      data-reach={channelReach(channel)}
-                    >
-                      {reachLabel(channelReach(channel))}
+                    <span className={styles.reachState} data-reach={reach}>
+                      {reachLabel(reach)}
                     </span>
-                    <span className={styles.note}>
-                      {reachNote(channelReach(channel))}
-                    </span>
+                    <span className={styles.note}>{reachNote(reach)}</span>
                   </p>
                 ) : null}
               </section>
@@ -388,12 +448,19 @@ export function GrantSheet(props: GrantSheetProps): JSX.Element | null {
                 {notOfferable ? (
                   <p className={styles.refusal}>{subjectNotOfferable(noun)}</p>
                 ) : null}
+                {registryUnreadable ? (
+                  <p className={styles.refusal}>{REGISTRY_UNREADABLE}</p>
+                ) : null}
               </section>
 
               <section className={styles.step} aria-label="Already shared">
                 <p className={styles.eyebrow}>Already shared</p>
                 {standing === null ? (
                   <p className={styles.note}>Reading shares…</p>
+                ) : !audienceKnown ? (
+                  <p className={styles.note}>
+                    {audienceNotKnown(audience?.label ?? "this audience")}
+                  </p>
                 ) : rows.length === 0 ? (
                   <p className={styles.note}>
                     {nothingSharedYet(
@@ -444,7 +511,7 @@ export function GrantSheet(props: GrantSheetProps): JSX.Element | null {
               <button
                 type="button"
                 className="kit-btn primary"
-                disabled={!audience || !subject || notOfferable || busy}
+                disabled={cannotShare}
                 onClick={() => void submit()}
               >
                 {busy ? "Sharing…" : GRANT_SHEET_TITLE}

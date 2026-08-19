@@ -19,9 +19,9 @@ import { GrantSheet } from "../../_shared/GrantSheet.tsx";
 import { mountedScopes } from "../../_shared/scope-kit.ts";
 import { SAVED_TO_MY_VAULT } from "../../_shared/shared-copy.ts";
 import { RAIL_NOTES, RAIL_TABS } from "../document-copy.ts";
-import type { DocsShareHost } from "../grant-audiences.ts";
 import type { RailTabId } from "../document-copy.ts";
 import { custodyMeta, extOf, fmtBytes, tintBg, typeMeta } from "../format.ts";
+import type { DocsShareHost } from "../grant-audiences.ts";
 import { I, KIND_ICONS_LG } from "../icons.ts";
 import type { CustodyTone, DriveDoc, VersionEntry } from "../types.ts";
 import { FactsTab, NamesTab, PropsTab } from "./DetailsTabs.tsx";
@@ -129,6 +129,9 @@ export function Details({
   // A document is shared as a STANDING GRANT through the one shared kit —
   // Docs holds no share state of its own beyond "is the sheet open".
   const [shareOpen, setShareOpen] = useState(false);
+  // Every outcome this rail produces — a grant, a revoke, a save — leaves
+  // through the app's single status line and nowhere else.
+  const handleStatus = (message: string): void => shareHost?.onStatus(message);
   const actorVaultId = mountedScopes()[0]?.id ?? "";
   const [residentDocumentId, setResidentDocumentId] = useState<string | null>(
     null
@@ -169,9 +172,9 @@ export function Details({
         itemId: doc.document_id,
       });
       setResidentDocumentId(null);
-      shareHost?.onStatus(SAVED_TO_MY_VAULT);
+      handleStatus(SAVED_TO_MY_VAULT);
     } catch (error) {
-      shareHost?.onStatus(
+      handleStatus(
         error instanceof Error
           ? `Document was not saved: ${error.message}`
           : "Document was not saved to your vault."
@@ -303,7 +306,7 @@ export function Details({
                     subjectId: doc.document_id,
                     ...(doc.title ? { label: doc.title } : {}),
                   }}
-                  onStatus={shareHost.onStatus}
+                  onStatus={handleStatus}
                 />
               </>
             ) : null}
