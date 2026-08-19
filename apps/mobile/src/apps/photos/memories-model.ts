@@ -425,11 +425,11 @@ export function tripDateLabel(trip: TripMemory): string | null {
   if (!trip.startedAt || !trip.endedAt) return trip.titleHint;
   const start = new Date(trip.startedAt);
   const end = new Date(trip.endedAt);
-  const fmt = new Intl.DateTimeFormat(undefined, {
+  const fmt = new Intl.DateTimeFormat("en-US", {
     month: "short",
     day: "numeric",
   });
-  const yearFmt = new Intl.DateTimeFormat(undefined, { year: "numeric" });
+  const yearFmt = new Intl.DateTimeFormat("en-US", { year: "numeric" });
   return `${fmt.format(start)} – ${fmt.format(end)}, ${yearFmt.format(end)}`;
 }
 

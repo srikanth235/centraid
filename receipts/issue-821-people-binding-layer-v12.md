@@ -881,7 +881,9 @@ Files in this follow-up: `packages/blueprints/apps/docs/components/ViewToggle.mo
 `tests/design-gallery/baselines/sh-c-light.png`,
 `tests/design-gallery/baselines/sh-dark.png`,
 `tests/design-gallery/baselines/sh-light.png`,
-`tests/design-gallery/manifest.json`.
+`tests/design-gallery/manifest.json`,
+`tests/schema-export-fingerprint.json`,
+`apps/mobile/src/apps/photos/memories-model.ts`.
 
 ## Session
 
