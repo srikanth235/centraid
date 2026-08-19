@@ -374,6 +374,183 @@ describe("grant/fulfillment", () => {
     ).toMatchObject({ state: "remove_sent" });
   });
 
+  test("revoking a never-delivered grant removes nothing, says so, and withdraws the ask", () => {
+    const home = household();
+    const now = nowIso();
+    const dev = addParty(home.origin.vault, "Dev", now);
+    // A severed channel: the peer vault is known, the binding is revoked, so
+    // the pass parks at `awaiting_channel` and mints the invitation.
+    home.origin.vault
+      .prepare(
+        `INSERT INTO share_party_vault_binding
+           (binding_id, party_id, vault_id, vault_public_key, linked_at, revoked_at)
+         VALUES (?, ?, ?, NULL, ?, ?)`
+      )
+      .run(uuidv7(), dev, AUDIENCE_VAULT, now, now);
+    const { albumId } = seedAlbum(home, now);
+    const grant = createShareGrant(home.origin.vault, {
+      audience: { kind: "party", id: dev },
+      subjectType: "core.collection",
+      subjectId: albumId,
+      capability: "view",
+      grantedAt: now,
+      grantedBy: home.originBoot.ownerPartyId,
+    });
+    const parked = fulfillShareGrant({
+      origin: home.origin,
+      originVaultId: ORIGIN_VAULT,
+      grantId: grant.grantId,
+      seatFor: () => undefined,
+      now,
+    });
+    expect(parked.steps[0]).toMatchObject({
+      partyId: dev,
+      state: "awaiting_channel",
+      peerVaultId: AUDIENCE_VAULT,
+    });
+
+    const revokedAt = "2026-08-19T15:00:00.000Z";
+    revokeShareGrant(home.origin.vault, { grantId: grant.grantId, revokedAt });
+    // The peer vault is mounted at revoke time — and it still must NOT be
+    // told `removed` as if something had been taken back: nothing was ever
+    // delivered, and the state says exactly that.
+    const removal = propagateShareGrantRevocation({
+      origin: home.origin,
+      originVaultId: ORIGIN_VAULT,
+      grantId: grant.grantId,
+      seatFor: (vaultId) =>
+        vaultId === AUDIENCE_VAULT ? home.audience : undefined,
+      now: revokedAt,
+    });
+    expect(removal.steps).toStrictEqual([
+      {
+        peerVaultId: AUDIENCE_VAULT,
+        state: "removed",
+        detail: "nothing had been delivered; there was nothing to remove",
+        removed: false,
+      },
+    ]);
+    expect(audienceTitles(home.audience.vault)).toStrictEqual([]);
+    // The pending ask does not outlive the grant it carried.
+    expect(removal.invitationsWithdrawn).toBe(1);
+    expect(
+      home.origin.vault
+        .prepare(
+          `SELECT COUNT(*) AS n FROM share_commons_invitation
+            WHERE grant_id = ? AND status = 'pending'`
+        )
+        .get(grant.grantId)
+    ).toMatchObject({ n: 0 });
+    expect(channelForParty(home.origin.vault, dev)).toMatchObject({
+      state: "severed",
+    });
+  });
+
+  test("a circle audience skips the granter and recompiles its roster per pass", () => {
+    const home = household();
+    const now = nowIso();
+    const owner = home.originBoot.ownerPartyId;
+    const ravi = addParty(home.origin.vault, "Ravi", now);
+    linkVault(home.origin.vault, ravi, AUDIENCE_VAULT, now);
+    const circleId = uuidv7();
+    home.origin.vault
+      .prepare(
+        `INSERT INTO social_circle (circle_id, owner_party_id, name, kind)
+         VALUES (?, ?, 'Home', 'custom')`
+      )
+      .run(circleId, owner);
+    const addMember = (partyId: string): void => {
+      home.origin.vault
+        .prepare(
+          `INSERT INTO social_circle_member
+             (member_id, circle_id, party_id, added_at, capability)
+           VALUES (?, ?, ?, ?, 'read')`
+        )
+        .run(uuidv7(), circleId, partyId, now);
+    };
+    addMember(owner);
+    addMember(ravi);
+    const { albumId } = seedAlbum(home, now);
+    const grant = createShareGrant(home.origin.vault, {
+      audience: { kind: "circle", id: circleId },
+      subjectType: "core.collection",
+      subjectId: albumId,
+      capability: "view",
+      grantedAt: now,
+      grantedBy: owner,
+    });
+
+    const first = fulfillShareGrant({
+      origin: home.origin,
+      originVaultId: ORIGIN_VAULT,
+      grantId: grant.grantId,
+      seatFor: (vaultId) =>
+        vaultId === AUDIENCE_VAULT ? home.audience : undefined,
+      now,
+    });
+    // The granter is in the roster and gets no step: a circle containing the
+    // owner never projects their own subject back into their own vault.
+    expect(first.steps).toHaveLength(1);
+    expect(first.steps[0]).toMatchObject({
+      partyId: ravi,
+      state: "delivered",
+      peerVaultId: AUDIENCE_VAULT,
+    });
+    expect(audienceTitles(home.audience.vault)).toStrictEqual(["Photo a"]);
+
+    // A party added to the circle later is visited on the next pass with no
+    // re-grant — the roster is recompiled per pass, not snapshotted.
+    const later = "2026-08-19T16:00:00.000Z";
+    const nila = addParty(home.origin.vault, "Nila", later);
+    linkVault(home.origin.vault, nila, AUDIENCE_VAULT, later);
+    addMember(nila);
+    const second = fulfillShareGrant({
+      origin: home.origin,
+      originVaultId: ORIGIN_VAULT,
+      grantId: grant.grantId,
+      seatFor: (vaultId) =>
+        vaultId === AUDIENCE_VAULT ? home.audience : undefined,
+      now: later,
+    });
+    expect(second.steps.map((step) => step.partyId).sort()).toStrictEqual(
+      [ravi, nila].sort()
+    );
+    expect(
+      listShareGrantsForSubject(home.origin.vault, "core.collection", albumId)
+    ).toHaveLength(1);
+  });
+
+  test("an over-ceiling grant leaves no row even when every peer is unreachable", () => {
+    const home = household();
+    const now = nowIso();
+    const ravi = addParty(home.origin.vault, "Ravi", now);
+    linkVault(home.origin.vault, ravi, "vault-elsewhere", now);
+    const { albumId } = seedAlbum(home, now);
+    const grant = createShareGrant(home.origin.vault, {
+      audience: { kind: "party", id: ravi },
+      subjectType: "core.collection",
+      subjectId: albumId,
+      capability: "view",
+      grantedAt: now,
+      grantedBy: home.originBoot.ownerPartyId,
+      maxSizeBytes: 16,
+    });
+    // The unreachable-seat branch must not write `syncing` before the
+    // ceiling is read: the size check precedes every state move.
+    expect(() =>
+      fulfillShareGrant({
+        origin: home.origin,
+        originVaultId: ORIGIN_VAULT,
+        grantId: grant.grantId,
+        seatFor: () => undefined,
+        now,
+      })
+    ).toThrow(ShareGrantMaxSizeError);
+    expect(
+      readFulfillment(home.origin.vault, grant.grantId, "vault-elsewhere")
+    ).toBeUndefined();
+  });
+
   test("a subject above the grant's ceiling is refused before anything lands", () => {
     const home = household();
     const now = nowIso();

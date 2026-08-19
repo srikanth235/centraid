@@ -282,6 +282,10 @@ export function fulfillShareGrant(
     });
     return loaded;
   };
+  // Read (and size-check) the subject before ANY state moves anywhere, so an
+  // over-ceiling grant leaves no fulfillment row at all — whatever mix of
+  // parked, unreachable, and deliverable audiences it has.
+  closure();
   const steps: GrantFulfillmentStep[] = [];
   for (const partyId of resolveAudienceParties(db, grant.audience)) {
     // The owner is not their own audience: a circle that contains the granter
@@ -329,9 +333,6 @@ export function fulfillShareGrant(
       });
       continue;
     }
-    // Read (and size-check) the subject BEFORE any state moves, so a grant
-    // over a subject above its ceiling is refused with the fulfillment row
-    // exactly as it was — no `syncing` left standing for a pass that never ran.
     const wire = closure();
     setFulfillmentState(db, {
       grantId: grant.grantId,
@@ -386,10 +387,14 @@ export interface PropagateShareGrantRevocationInput {
  * Carry a revocation out to every audience vault that was delivered to. The
  * store already dated the revocation; this is the delivery half of it.
  *
- * `remove_sent` is TERMINAL ENOUGH. A peer this host cannot reach has been
- * asked and has not answered, and the copy the owner reads says exactly that.
- * Nothing here ever promotes it to `removed` on a timer or an assumption —
- * only a real deletion in a real audience vault does.
+ * `remove_sent` is TERMINAL ENOUGH. A peer that HELD the subject and cannot
+ * be reached has been asked and has not answered, and the copy the owner
+ * reads says exactly that. Nothing here promotes it to `removed` on a timer
+ * or an assumption: a delivered row ends `removed` only by looking inside the
+ * audience vault (deleting the projection, or finding it verifiably gone). A
+ * row that never got past `awaiting_channel`/`syncing` was never delivered
+ * to, so it ends `removed` with a detail saying nothing had been delivered —
+ * never a fabricated "removal sent" to a peer that received nothing.
  */
 export function propagateShareGrantRevocation(
   input: PropagateShareGrantRevocationInput
@@ -405,6 +410,28 @@ export function propagateShareGrantRevocation(
   for (const row of listFulfillment(db, grant.grantId)) {
     if (row.state === "removed") {
       steps.push({ peerVaultId: row.peerVaultId, state: "removed" });
+      continue;
+    }
+    // A row still parked at `awaiting_channel` or `syncing` never had the
+    // subject projected into it: there is nothing to remove and nothing was
+    // ever sent, so the honest terminal state is `removed` with a detail
+    // saying so — never a fabricated "removal sent" to a peer that received
+    // nothing.
+    if (row.state === "awaiting_channel" || row.state === "syncing") {
+      const detail = "nothing had been delivered; there was nothing to remove";
+      setFulfillmentState(db, {
+        grantId: grant.grantId,
+        peerVaultId: row.peerVaultId,
+        state: "removed",
+        updatedAt: input.now,
+        detail,
+      });
+      steps.push({
+        peerVaultId: row.peerVaultId,
+        state: "removed",
+        detail,
+        removed: false,
+      });
       continue;
     }
     const seat = input.seatFor(row.peerVaultId);
@@ -433,7 +460,9 @@ export function propagateShareGrantRevocation(
     const prior = priorProjection(seat.vault, input.originVaultId, grant);
     // Hard delete, no tombstone (ruling G-revoke). The audience is left with
     // no row saying something used to be here — the projection simply is not
-    // there any more, and its bytes go to that vault's own orphan sweep.
+    // there any more, and its bytes go to that vault's own orphan sweep. A
+    // delivered row whose projection is already gone (the peer cleaned up on
+    // its own) still ends `removed`: the peer verifiably does not hold it.
     const removed =
       prior !== undefined &&
       unshareFromVault({
@@ -446,6 +475,9 @@ export function propagateShareGrantRevocation(
       peerVaultId: row.peerVaultId,
       state: "removed",
       updatedAt: input.now,
+      ...(removed
+        ? {}
+        : { detail: "the audience vault no longer held a projection" }),
     });
     steps.push({ peerVaultId: row.peerVaultId, state: "removed", removed });
   }
