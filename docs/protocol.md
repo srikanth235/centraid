@@ -196,9 +196,31 @@ The `/centraid/_tool/centraid_*` shim these replaced was deleted outright — v0
 
 Mobile judges the normal gateway handshake before mounting a replica. The mutual protocol window and the required `multiVaultReplica` / `crossVaultPlacements` capabilities are evaluated once in `mobile-gateway-compatibility-core.ts`; incompatibility produces exactly one “update gateway” or “update app” wall. Feature code does not retry older route shapes or silently fall back to an online-only client.
 
-Household placement uses the gateway control plane because one request names an origin and an audience vault. `gatewayPlacements` is the durable, link-token-idempotent client outbox ingress — the only route left on this plane since #726 P0 deleted the dead `/share` routes (`gatewayShare`, `gatewayShareRemove`, `gatewayShareReceipts` had no client caller; placement's own `share_access_receipts` recording stays). The gateway resolves both vault handles and confirms ownership — not a role — before entering either single-vault context.
+Household placement uses the gateway control plane because one request names an origin and an audience vault. It is **same-owner only** since #825: `POST /centraid/_gateway/edges` refuses a cross-owner pair with `cross_owner_give_retired` and names the grant plane in its message, because giving another person a copy is no longer a verb this product has (ruling G-copy). `gatewayPlacements` is the durable, link-token-idempotent client outbox ingress — the only route left on this plane since #726 P0 deleted the dead `/share` routes (`gatewayShare`, `gatewayShareRemove`, `gatewayShareReceipts` had no client caller; placement's own `share_access_receipts` recording stays). The gateway resolves both vault handles and confirms ownership — not a role — before entering either single-vault context.
 
 `briefToday` is a read-only feature-plane projection. The caller supplies an explicit local-day `[from,to)` range, date, and IANA time zone; the response is bounded events, due tasks, the day's photo count, and the owner's Tally net position. Notification schedulers may wake Home but must not copy those titles or balances into a push payload.
+
+### The grant plane (`/centraid/_vault/grants`, issue #825)
+
+A share is a **standing grant**, not a copy handed over: who may see or edit which subject, from when, until it is revoked. Owner tier, active-vault scope (`ROUTE_SECURITY_REGISTRY`), constants `ROUTES.vaultGrants` / `ROUTES.vaultGrantSubjects` with the `vaultGrantPath` / `vaultGrantRevokePath` builders in `@centraid/core/protocol`.
+
+| Method + path | Body / query | Answers |
+| --- | --- | --- |
+| `GET /centraid/_vault/grants/subjects` | — | `{subjects: [{subjectType, capabilities, fulfillment}]}` — the declared registry a surface consults BEFORE drawing Share. |
+| `POST /centraid/_vault/grants` | `{audienceKind: party\|circle, audienceId, subjectType, subjectId, capability: view\|edit, subjectLabel?, maxSizeBytes?}` | `201 {outcome: "created", grant, fulfillmentPass}` — or `200 {outcome: "exists", …}` for the grant already standing. Fulfillment runs on the gesture. |
+| `GET /centraid/_vault/grants?partyId=` | — | `{partyId, channel, grants}` — everything that person can reach, party grants unioned with the circle grants they are on the roster of (ruling G-audience). |
+| `GET /centraid/_vault/grants?audienceKind=&audienceId=[&includeRevoked=1]` | — | `{audience, grants}` — the literal rows for that audience; a party grant and a circle grant containing that party are never merged here. |
+| `GET /centraid/_vault/grants?subjectType=&subjectId=[&includeRevoked=1]` | — | `{subject, grants}` — the object side: who is this album/document shared with. |
+| `GET /centraid/_vault/grants/<grantId>` | — | `{grant}`, delivery state included; `404` for one this caller cannot see. |
+| `POST /centraid/_vault/grants/<grantId>/revoke` | — | `{outcome, grant, removal, message}` — one verb, uniform, honestly best-effort (ruling G-revoke). |
+
+Every grant on the wire carries `fulfillment: [{peerVaultId, state, updatedAt, detail}]`, the per-audience-vault delivery state (`awaiting_channel | syncing | delivered | remove_sent | removed`).
+
+**Absent is never empty.** `channel: null` is "this vault has never reached that person" and is a different fact from a `severed` channel; `fulfillment: []` is "no audience vault addressed yet"; a grant this caller cannot see is `404`, never an empty answer. The seam behind the routes keeps the same distinction — a pass over a vault this host has not mounted answers `{origin: "unmounted", reason}`, never an empty report list.
+
+Refusals are actionable rather than silent: a subject type with no fulfillment strategy is `400 subject_not_offerable`, and an `edit` grant on a container the commons rail cannot carry writes to is `400 capability_not_offerable`, both naming what the vault CAN do instead. Clients read grants themselves through the **ordinary replica plane** — `share.grant` and `share.fulfillment` are consent-shaped entities like any other, so an app with the scope gets them in its shape and an app without it gets no entity at all.
+
+**Retired by #825.** The give verbs left the surface with copy-as-share (ruling G-copy): the peer frames `POST /centraid/_peer/edge/give`, `GET /centraid/_peer/edge/closure/:id` and `POST /centraid/_peer/edge/deny` now answer `not_found` exactly as an unknown path does, and the D9 answer surface (`GET /centraid/_gateway/edges/pending`, `POST /centraid/_gateway/edges/:edgeId/answer`) is gone. Closure reading and projection survive BENEATH a grant as internal fulfillment transport — machinery, never a member-facing act.
 
 ## Stream authority
 

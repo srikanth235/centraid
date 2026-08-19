@@ -31,7 +31,6 @@ import {
   completeShareEffect,
   deferShareEffect,
   enqueueShareEffect,
-  findQueuedEffect,
   listQueuedEffects,
 } from "./share-effects.js";
 
@@ -106,9 +105,9 @@ describe("[law:share-outbox-obligation] every share obligation is durable, singl
     expect(listQueuedEffects(db, "await-answer")).toStrictEqual([
       { effectId: "ask:edge-ask", attempts: 0, effect: ask },
     ]);
-    expect(
-      findQueuedEffect(db, "await-answer", "edge-ask")?.effect
-    ).toStrictEqual(ask);
+    expect(queuedFor(db, "await-answer", "edge-ask")?.effect).toStrictEqual(
+      ask
+    );
   });
 
   test("[law:share-outbox-obligation] one unreadable row never blocks the obligations beside it", async () => {
@@ -159,3 +158,15 @@ describe("[law:share-outbox-obligation] every share obligation is durable, singl
     ]);
   });
 });
+
+/** The one queued effect of a kind for an edge — a local read, now that the
+ *  retired give routes that needed it as a shared capability are gone. */
+function queuedFor(
+  db: Parameters<typeof listQueuedEffects>[0],
+  kind: Parameters<typeof listQueuedEffects>[1],
+  edgeId: string
+): ReturnType<typeof listQueuedEffects>[number] | undefined {
+  return listQueuedEffects(db, kind).find(
+    (pending) => pending.effect.edgeId === edgeId
+  );
+}

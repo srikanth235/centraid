@@ -5,18 +5,18 @@
  * photographs sharing one edge project through ONE reconcile pass — where
  * a placement covered exactly one.
  *
- * Same-owner edges (Work→Personal) and cross-owner edges (father→daughter)
- * ride the SAME substrate below. Whether a pair may be crossed at all is not
- * decided here: `serve/link-crossing.ts` is the one answerer, for a vault on
- * this machine and a vault across the world alike (D3). An unauthorized pair
- * answers `not_found` — topology hiding, you learn nothing about a vault you
- * cannot reach.
+ * SAME-OWNER ONLY since #825. Placing between the vaults one person holds
+ * (Work→Personal) is what this route is for; giving a copy to ANOTHER
+ * person's vault retired with copy-as-share (ruling G-copy) and is refused
+ * here with the grant plane named in the copy. Whether a pair may be crossed
+ * at all is still not decided here: `serve/link-crossing.ts` is the one
+ * answerer (D3), and an unauthorized pair answers `not_found` — topology
+ * hiding, you learn nothing about a vault you cannot reach.
  *
  * Since #750 this route hand-writes no status at all. It records the edge,
  * asks the reducer to `begin` (which durably enqueues ONE `deliver-give`
  * effect), and runs that effect inline so the owner still gets the answer
- * synchronously. If the peer is unreachable the effect stays in the outbox
- * and the sweep retries it — the give is no longer lost to a bad moment.
+ * synchronously.
  *
  * GET lists by OWNER, not by device (#750 abstraction 5): authority is the
  * owner's, so every device of one owner sees the same edges.
@@ -139,26 +139,26 @@ export function makeEdgesRouteHandler(deps: EdgesRouteDeps): RouteHandler {
     // a revoked one all leave the same trace.
     if (crossing.state === "not_found")
       return sendJson(res, 404, { error: "not_found" });
-    // A move both gives away AND erases the owner's own copy — coherent only
-    // within one person's own vaults, which is why the table itself refuses
-    // `kind = 'move'` outside `mode = 'snapshot'` combined with same-owner
-    // intent. Refused cleanly here (not `not_found`): the caller already has
-    // a legitimate, approved relationship with this vault, so there is
-    // nothing to hide from them.
-    if (crossing.state === "linked" && input.kind === "move")
+    // COPY-AS-SHARE RETIRED (#825, ruling G-copy). `judgeEdgeCrossing`
+    // answering `linked` always means a CROSS-owner pair, and handing another
+    // person a copy is no longer a verb this product has: a share is a
+    // standing grant now, and the grant plane — not this route — is what
+    // carries a subject to somebody else's vault. Refused cleanly rather than
+    // hidden: the caller has a legitimate, approved relationship with that
+    // vault, and the copy says where the gesture went instead.
+    if (crossing.state === "linked")
       return sendJson(res, 400, {
-        error: "cross_owner_move_refused",
-        message: "a move can only happen between vaults the same owner holds",
+        error: "cross_owner_give_retired",
+        message:
+          "giving a copy to another person's vault has been replaced by sharing — grant them the album, folder or document instead",
       });
 
-    // `route` present means `judgeEdgeCrossing` resolved the audience to a
-    // vault elsewhere — the ONLY thing remoteness changes (D3). No route (or
-    // same-owner) is the same-machine path, unchanged.
-    const route = crossing.state === "linked" ? crossing.route : undefined;
+    // Only the SAME-OWNER pair survives the refusal above, so both vaults are
+    // on this machine by construction: the remote lane this route used to
+    // carry left with copy-as-share.
     const origin = deps.vaultFor(input.originVaultId);
-    const audience = route ? undefined : deps.vaultFor(input.audienceVaultId);
-    if (!origin || (!route && !audience))
-      return sendJson(res, 404, { error: "not_found" });
+    const audience = deps.vaultFor(input.audienceVaultId);
+    if (!origin || !audience) return sendJson(res, 404, { error: "not_found" });
 
     let row: EdgeRow;
     try {
@@ -169,14 +169,8 @@ export function makeEdgesRouteHandler(deps: EdgesRouteDeps): RouteHandler {
         message: error instanceof Error ? error.message : String(error),
       });
     }
-    const delivery: EdgeDelivery = route ? "peer" : "local";
-    const facts = edgeFactsOf(row, {
-      delivery,
-      // Same-owner needs no link row to reach `judgeEdgeCrossing`'s "linked"
-      // state at all (D3) — reaching this branch as "linked" always means a
-      // CROSS-owner pair (threat 8).
-      crossOwner: crossing.state === "linked",
-    });
+    const delivery: EdgeDelivery = "local";
+    const facts = edgeFactsOf(row, { delivery, crossOwner: false });
     row = applyEdgeSignal(deps.gatewayDatabase, row, facts, { type: "begin" });
     const effect: ShareEffect = {
       kind: "deliver-give",

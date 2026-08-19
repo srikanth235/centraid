@@ -35,11 +35,6 @@ import {
   redeemLinkTicket,
 } from "./peer-link-client.js";
 import type { PeerRequest } from "./peer-link-client.js";
-import { readEdgeRow } from "./share-edge-row.js";
-import type { EdgeRow } from "./share-edge-row.js";
-import { drainShareEffects, runShareEffect } from "./share-effect-executor.js";
-import type { DrainShareEffectsResult } from "./share-effect-executor.js";
-import { listQueuedEffects } from "./share-effects.js";
 import type { LinkRoute } from "./vault-link-row.js";
 import { VaultLinksStore } from "./vault-links-store.js";
 
@@ -249,18 +244,6 @@ export function dialFrom(caller: Side, callee: Side): PeerDial {
   };
 }
 
-/** `dialFrom`'s co-hosted counterpart: dial INTO `sides` (several vaults
- *  answering as one gateway) FROM `caller`. */
-export function dialFromHost(
-  caller: Side,
-  sides: readonly [Side, ...Side[]]
-): PeerDial {
-  return {
-    request: transportToHost(sides, caller.endpointId),
-    endpointTicketFor: (endpointId) => `ticket-for-${endpointId}`,
-  };
-}
-
 function showTicket(side: Side): string {
   const ticket = side.links.tickets.mint(side.vaultId, side.publicKey);
   return encodeLinkTicket({
@@ -360,104 +343,4 @@ export function seedPhoto(side: Side, label: string): SeededPhoto {
     bytes,
     thumbBytes,
   };
-}
-
-export function insertEdgeRow(
-  origin: Side,
-  input: { edgeId: string; audienceVaultId: string; itemIds: string[] }
-): EdgeRow {
-  const now = new Date().toISOString();
-  origin.gatewayDb.run(
-    `INSERT INTO share_edges
-       (edge_id, created_by_device, owner_id, kind, mode, item_type,
-        scope_json, origin_vault_id, audience_vault_id, verbs,
-        target_state, source_state, status, created_at, updated_at)
-     VALUES (?, ?, ?, 'add', 'snapshot', 'media.asset', ?, ?, ?, 'read',
-             'queued', 'not-needed', 'queued', ?, ?)`,
-    input.edgeId,
-    origin.deviceId,
-    origin.ownerId,
-    JSON.stringify(input.itemIds),
-    origin.vaultId,
-    input.audienceVaultId,
-    now,
-    now
-  );
-  return readEdgeRow(origin.gatewayDb, input.edgeId)!;
-}
-
-export function derivativeRows(vault: VaultDb): Array<{ sha256: string }> {
-  return vault.vault
-    .prepare("SELECT sha256 FROM core_content_derivative")
-    .all() as Array<{ sha256: string }>;
-}
-
-export function contentItemCount(vault: VaultDb): number {
-  return (
-    vault.vault
-      .prepare("SELECT count(*) AS n FROM core_content_item")
-      .get() as {
-      n: number;
-    }
-  ).n;
-}
-
-/**
- * Deliver an edge the way production does since #750: run its `deliver-give`
- * effect through the ONE executor, which resolves the route from this
- * gateway's own link store and picks the peer transport itself.
- */
-export async function deliverEdge(
-  origin: Side,
-  row: EdgeRow,
-  dial: PeerDial
-): Promise<EdgeRow> {
-  await runShareEffect(
-    {
-      db: origin.gatewayDb,
-      links: origin.links,
-      vaultFor: (vaultId) =>
-        vaultId === origin.vaultId ? origin.vault : undefined,
-      dial,
-    },
-    {
-      kind: "deliver-give",
-      edgeId: row.edge_id,
-      delivery: "peer",
-      crossOwner: true,
-    }
-  );
-  return readEdgeRow(origin.gatewayDb, row.edge_id)!;
-}
-
-/** One background tick of `side`'s share outbox. */
-export function drainEdgeEffects(
-  side: Side,
-  dial: PeerDial,
-  options: { chunkBytes?: number; now?: number } = {}
-): Promise<DrainShareEffectsResult> {
-  return drainShareEffects(
-    {
-      db: side.gatewayDb,
-      links: side.links,
-      vaultFor: (vaultId) =>
-        vaultId === side.vaultId ? side.vault : undefined,
-      dial,
-      ...(options.chunkBytes === undefined
-        ? {}
-        : { chunkBytes: options.chunkBytes }),
-    },
-    options.now === undefined ? {} : { now: options.now }
-  );
-}
-
-/** Every original this gateway still owes itself, as the outbox holds it. */
-export function pendingPulls(
-  side: Side
-): Array<{ sha256: string; tmpPath: string }> {
-  return listQueuedEffects(side.gatewayDb, "pull-blob").flatMap((pending) =>
-    pending.effect.kind === "pull-blob"
-      ? [{ sha256: pending.effect.sha256, tmpPath: pending.effect.tmpPath }]
-      : []
-  );
 }

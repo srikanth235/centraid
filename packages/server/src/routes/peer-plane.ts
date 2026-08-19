@@ -41,11 +41,6 @@ import type { RouteHandler } from "../serve/build-gateway.js";
 import type { GatewayDatabase } from "../serve/gateway-db.js";
 import { PEER_BLOB_CHUNK_PATH } from "../serve/peer-blob-route-path.js";
 import {
-  PEER_EDGE_CLOSURE_PATH_PREFIX,
-  PEER_EDGE_DENY_PATH,
-  PEER_EDGE_GIVE_PATH,
-} from "../serve/peer-edge-give-client.js";
-import {
   parseRouteAssertion,
   verifyRouteAssertion,
 } from "../serve/peer-route-assertion.js";
@@ -68,11 +63,6 @@ import {
   PEER_COMMONS_INVITE_PATH,
   PEER_COMMONS_REFUSE_PATH,
 } from "./peer-commons-route.js";
-import {
-  handlePeerEdgeClosure,
-  handlePeerEdgeDeny,
-  handlePeerEdgeGive,
-} from "./peer-edge-give-route.js";
 import { readJson, sendJson } from "./route-helpers.js";
 
 export const PEER_LINK_REDEEM_PATH = `${PEER_PLANE_PREFIX}link/redeem`;
@@ -94,9 +84,9 @@ export interface PeerPlaneDeps {
   /** Per-link hygiene budget (threat 7). */
   budget?: TokenBucket;
   /**
-   * A LOCAL vault a proved peer may be given into, or pulled bytes from
-   * (#726 P3 decision 7: edge/give, edge/closure, blob/chunk). Absent from
-   * the P3-transport build; every remote-give frame is `not_found` without it.
+   * A LOCAL vault a proved peer may pull bytes from (`blob/chunk`). The give
+   * frames it also served retired with copy-as-share (#825, ruling G-copy);
+   * absent from the P3-transport build, and `not_found` without it.
    */
   vaultFor?: (vaultId: string) => ShareVaultRef | undefined;
   /** Commons commands execute once through the steward's ordinary gateway. */
@@ -366,38 +356,15 @@ export function makePeerPlaneHandler(deps: PeerPlaneDeps): RouteHandler {
     if (pathname === PEER_ROUTE_ASSERT_PATH && method === "POST") {
       return assertRoute(req, res, peer);
     }
-    // The D9 refusal notice (#726 P3 decision 9) only touches this gateway's
-    // OWN `share_edges` bookkeeping — no local vault needed, unlike give.
-    if (
-      deps.gatewayDatabase &&
-      pathname === PEER_EDGE_DENY_PATH &&
-      method === "POST"
-    ) {
-      return handlePeerEdgeDeny(req, res, peer, {
-        gatewayDatabase: deps.gatewayDatabase,
-      });
-    }
-    // The remote-give frames (#726 P3 decision 7) need a local vault + this
-    // gateway's own edge bookkeeping; a build wired with neither answers
-    // `not_found` for all three exactly as it would for an unknown path.
+    /*
+     * The remote-GIVE frames are gone (#825, ruling G-copy): copy-as-share
+     * retired with the grant plane, and `/centraid/_peer/edge/give`,
+     * `/edge/closure/:id` and `/edge/deny` answer `not_found` here exactly as
+     * an unknown path does. Closure reading and projection survive BENEATH a
+     * grant as internal fulfillment transport; they are simply not a frame a
+     * peer can ask for any more.
+     */
     if (deps.vaultFor && deps.gatewayDatabase) {
-      const giveDeps = {
-        vaultFor: deps.vaultFor,
-        gatewayDatabase: deps.gatewayDatabase,
-      };
-      if (pathname === PEER_EDGE_GIVE_PATH && method === "POST") {
-        return handlePeerEdgeGive(req, res, peer, giveDeps);
-      }
-      if (
-        pathname.startsWith(PEER_EDGE_CLOSURE_PATH_PREFIX) &&
-        method === "GET"
-      ) {
-        const edgeId = decodeURIComponent(
-          pathname.slice(PEER_EDGE_CLOSURE_PATH_PREFIX.length)
-        );
-        if (!edgeId) return notFound(res);
-        return handlePeerEdgeClosure(res, peer, edgeId, giveDeps);
-      }
       if (pathname === PEER_BLOB_CHUNK_PATH && method === "GET") {
         const query = new URL(target, "http://gateway.local").searchParams;
         return handlePeerBlobChunk(res, peer, query, {

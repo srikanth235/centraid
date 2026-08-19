@@ -7,7 +7,17 @@
     "packages/server/src/routes/commons-*.ts",
     "packages/server/src/routes/edges-*.ts",
     "packages/server/src/routes/edge-*.ts",
+    "packages/vault/src/grant/*.ts",
     "packages/vault/src/share/*.ts"
   ],
-  "allowlist": []
+  "allowlist": [
+    {
+      "capability": "packages/server/src/serve/share-effects.ts#listQueuedEffects",
+      "reason": "The share outbox still HOLDS obligations (same-owner deliver-give, leftover pull-blob rows); what retired with copy-as-share in #825 is the surface that listed them for a human. Deleting the read would take the outbox's only inspection point with it, so it is held for the #825 dead-give sweep that decides the outbox's shape as a whole."
+    },
+    {
+      "capability": "packages/vault/src/grant/fulfillment-edit.ts#routeShareGrantEdit",
+      "reason": "Edit fulfillment's routing answer (#825, ruling G-edit). Its production seam is the vault gateway's single write door (packages/vault/src/gateway/gateway.ts invoke, beside commonsGrantForCommand), which is a vault-package change the #825 gateway wave owns; the grant plane's HTTP surface deliberately does not duplicate that door."
+    }
+  ]
 }

@@ -277,25 +277,3 @@ export function listQueuedEffects(
 ): PendingShareEffect[] {
   return selectEffects(db, kind, "");
 }
-
-export function findQueuedEffect(
-  db: GatewayDatabase,
-  kind: ShareEffectKind,
-  edgeId: string
-): PendingShareEffect | undefined {
-  return selectEffects(db, kind, "AND edge_id = ?", edgeId)[0];
-}
-
-/** Whether a pull for these exact bytes is already owed — sha-level dedupe. */
-export function hasQueuedBlobPull(
-  db: GatewayDatabase,
-  localVaultId: string,
-  sha256: string
-): boolean {
-  return listQueuedEffects(db, "pull-blob").some(
-    (pending) =>
-      pending.effect.kind === "pull-blob" &&
-      pending.effect.localVaultId === localVaultId &&
-      pending.effect.sha256 === sha256
-  );
-}

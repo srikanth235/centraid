@@ -12,15 +12,7 @@ import type { WireDerivativeBlob } from "./peer-closure-blobs.js";
 import type { PeerRequest } from "./peer-link-client.js";
 
 export const PEER_EDGE_GIVE_PATH = "/centraid/_peer/edge/give";
-export const PEER_EDGE_CLOSURE_PATH_PREFIX = "/centraid/_peer/edge/closure/";
 export const PEER_EDGE_DENY_PATH = "/centraid/_peer/edge/deny";
-
-/** Local only: the one caller is `pullEdgeClosure` below, and the peer plane
- *  matches the PREFIX rather than rebuilding a path it never dials. */
-function peerEdgeClosurePath(edgeId: string): string {
-  return `${PEER_EDGE_CLOSURE_PATH_PREFIX}${encodeURIComponent(edgeId)}`;
-}
-
 export interface PeerDialRoute {
   endpointId: string;
   relayHints: string[];
@@ -114,61 +106,6 @@ export async function giveEdgeOverPeer(
     };
   }
   return interpretGiveAnswer(response.status, response.json);
-}
-
-export interface PullEdgeClosureResult {
-  closure: WireClosure;
-  derivatives: readonly WireDerivativeBlob[];
-}
-
-export type PullEdgeClosureOutcome =
-  | ({ state: "given" } & PullEdgeClosureResult)
-  | { state: "not_found" }
-  | { state: "bad_request"; detail: string }
-  | { state: "unreachable"; detail: string };
-
-/** Fetch a closure back from the origin — the D9 'ask' → accept resume. */
-export async function pullEdgeClosure(input: {
-  dial: PeerDial;
-  route: PeerDialRoute;
-  edgeId: string;
-}): Promise<PullEdgeClosureOutcome> {
-  let response: { status: number; json: unknown };
-  try {
-    response = await input.dial.request({
-      endpointTicket: input.dial.endpointTicketFor(
-        input.route.endpointId,
-        input.route.relayHints
-      ),
-      method: "GET",
-      target: peerEdgeClosurePath(input.edgeId),
-    });
-  } catch (error) {
-    return {
-      state: "unreachable",
-      detail: error instanceof Error ? error.message : String(error),
-    };
-  }
-  const body =
-    response.json !== null && typeof response.json === "object"
-      ? (response.json as Record<string, unknown>)
-      : {};
-  if (body.state === "not_found" || response.status === 404) {
-    return { state: "not_found" };
-  }
-  if (
-    body.state === "given" &&
-    body.closure !== null &&
-    typeof body.closure === "object" &&
-    Array.isArray(body.derivatives)
-  ) {
-    return {
-      state: "given",
-      closure: body.closure as WireClosure,
-      derivatives: body.derivatives as WireDerivativeBlob[],
-    };
-  }
-  return { state: "bad_request", detail: "malformed peer answer" };
 }
 
 export type DenyEdgeOverPeerOutcome =

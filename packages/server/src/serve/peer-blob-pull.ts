@@ -4,10 +4,11 @@
  * ORIGINAL, pulled by sha — RANGED, resumable across interruption, sha256
  * verified before the bytes become durable.
  *
- * Since #750 the queue is not a table of its own: `recordPendingPulls` writes
- * `pull-blob` effects into the ONE share outbox, and `runBlobPull` is what
- * `share-effect-executor.ts` calls for each. The mechanics below are
- * unchanged, because they were never the problem.
+ * Since #750 the queue is not a table of its own: `pull-blob` effects live in
+ * the ONE share outbox, and `runBlobPull` is what `share-effect-executor.ts`
+ * calls for each. Nothing records those effects any more — the give frames
+ * that did retired with copy-as-share (#825, ruling G-copy) — so this half
+ * runs only against rows an older build left behind.
  *
  * Resumability needs no extra state beyond what is on disk: `tmpPath` is
  * minted ONCE (the vault's own `promotionTempPathSync` — same filesystem as
@@ -19,53 +20,12 @@
 import { createHash } from "node:crypto";
 import { appendFileSync, createReadStream, rmSync, statSync } from "node:fs";
 
-import type { BlobManifestEntry, ShareVaultRef } from "@centraid/vault";
+import type { ShareVaultRef } from "@centraid/vault";
 
-import type { GatewayDatabase } from "./gateway-db.js";
 import { PEER_BLOB_CHUNK_PATH } from "./peer-blob-route-path.js";
 import type { PeerDial, PeerDialRoute } from "./peer-edge-give-client.js";
-import { enqueueShareEffect, hasQueuedBlobPull } from "./share-effects.js";
 
 const DEFAULT_BLOB_CHUNK_BYTES = 4 * 1024 * 1024;
-
-/** Queue every ORIGINAL-rung blob a just-projected give still needs, sha-deduped. */
-export function recordPendingPulls(
-  db: GatewayDatabase,
-  audience: ShareVaultRef,
-  input: {
-    edgeId: string;
-    linkId: string;
-    localVaultId: string;
-    originals: readonly BlobManifestEntry[];
-  }
-): void {
-  for (const entry of input.originals) {
-    // Re-give short-circuits by sha: already-resident bytes need no pull.
-    if (audience.blobs.local.hasSync(entry.sha256)) continue;
-    if (hasQueuedBlobPull(db, input.localVaultId, entry.sha256)) continue;
-    const tmpPath = audience.blobs.local.promotionTempPathSync?.(entry.sha256);
-    // No streaming-adoption seam (the in-memory tier) — nothing durable to
-    // resume across, so there is no pull to track. Vault-package scope keeps
-    // this module from doing anything about that here.
-    if (!tmpPath) continue;
-    enqueueShareEffect(
-      db,
-      {
-        kind: "pull-blob",
-        edgeId: input.edgeId,
-        linkId: input.linkId,
-        localVaultId: input.localVaultId,
-        sha256: entry.sha256,
-        size: entry.size,
-        tmpPath,
-      },
-      // A pull the outbox already discharged, for bytes this vault no longer
-      // holds, is a real obligation again — re-arm the row rather than let a
-      // `done` marker outlive the fact it recorded.
-      { requeue: true }
-    );
-  }
-}
 
 function fileSizeOf(path: string): number {
   try {

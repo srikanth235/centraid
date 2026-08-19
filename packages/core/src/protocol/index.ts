@@ -26,6 +26,8 @@ export {
   ROUTE_PATHS,
   vaultConnectionAuthorizePath,
   vaultConnectionPath,
+  vaultGrantPath,
+  vaultGrantRevokePath,
   appActionPath,
   appQueryPath,
   appDescribePath,

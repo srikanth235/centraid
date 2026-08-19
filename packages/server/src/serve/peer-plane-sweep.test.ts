@@ -14,7 +14,7 @@ import { tempDirSync } from "@centraid/test-kit/temp-dir";
 import { GatewayDatabase } from "./gateway-db.js";
 import type { PeerDial } from "./peer-edge-give-client.js";
 import { createPeerPlaneSweep } from "./peer-plane-sweep.js";
-import { enqueueShareEffect, findQueuedEffect } from "./share-effects.js";
+import { enqueueShareEffect, listQueuedEffects } from "./share-effects.js";
 import { VaultLinksStore } from "./vault-links-store.js";
 
 function seedRoutedLink(
@@ -97,9 +97,7 @@ describe("peer plane sweep (#726 P3 gap 2)", () => {
       sweep.start();
       await vi.waitFor(
         () => {
-          expect(
-            findQueuedEffect(db, "deliver-refusal", "edge-tick")
-          ).toBeUndefined();
+          expect(queuedFor(db, "deliver-refusal", "edge-tick")).toBeUndefined();
         },
         { timeout: 2000, interval: 10 }
       );
@@ -140,8 +138,18 @@ describe("peer plane sweep (#726 P3 gap 2)", () => {
     expect(warnings).toHaveLength(1);
     expect(warnings[0]).toMatch(/simulated db failure/u);
     // The row is untouched — a failed tick parks, it never loses work.
-    expect(
-      findQueuedEffect(db, "deliver-refusal", "edge-backoff")
-    ).toBeDefined();
+    expect(queuedFor(db, "deliver-refusal", "edge-backoff")).toBeDefined();
   });
 });
+
+/** The one queued effect of a kind for an edge — a local read, now that the
+ *  retired give routes that needed it as a shared capability are gone. */
+function queuedFor(
+  db: Parameters<typeof listQueuedEffects>[0],
+  kind: Parameters<typeof listQueuedEffects>[1],
+  edgeId: string
+): ReturnType<typeof listQueuedEffects>[number] | undefined {
+  return listQueuedEffects(db, kind).find(
+    (pending) => pending.effect.edgeId === edgeId
+  );
+}

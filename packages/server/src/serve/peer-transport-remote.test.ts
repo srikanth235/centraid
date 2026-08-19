@@ -1,14 +1,14 @@
 /*
  * Exit evidence for #726 P3 gap 1 — "no production peer dial". Every other
- * peer-plane test (`peer-link-ceremony.test.ts`, `peer-remote-give.test.ts`)
- * proves the PROTOCOL against an in-process double that calls the far side's
- * route handler directly. This file proves the TRANSPORT: two gateways that
- * reach each other ONLY through a real `centraid/gw-link/1` QUIC connection
- * — `startGatewayEndpoint` (accept, `@centraid/tunnel`) on one side,
- * `startPeerDial` (dial, `./peer-dial.js`, this package's production
- * implementation of `PeerRequest`/`PeerDial`) on the other — complete a link
- * ceremony, a remote give (with a derivative painted immediately), and a
- * ranged original pull. No `transportTo`-style handler call anywhere here.
+ * peer-plane test (`peer-link-ceremony.test.ts`) proves the PROTOCOL against
+ * an in-process double that calls the far side's route handler directly. This
+ * file proves the TRANSPORT: two gateways that reach each other ONLY through
+ * a real `centraid/gw-link/1` QUIC connection — `startGatewayEndpoint`
+ * (accept, `@centraid/tunnel`) on one side, `startPeerDial` (dial,
+ * `./peer-dial.js`, this package's production implementation of
+ * `PeerRequest`/`PeerDial`) on the other — complete a link ceremony, verify a
+ * signed route assertion, and see the retired give frame refused on the wire.
+ * No `transportTo`-style handler call anywhere here.
  *
  * `relays: "disabled"` keeps this offline and fast (loopback UDP, no n0
  * network dependency), the same posture `peer-plane.test.ts` and
@@ -53,7 +53,7 @@ import {
   redeemLinkTicket,
 } from "./peer-link-client.js";
 import { readEdgeRow } from "./share-edge-row.js";
-import { drainShareEffects, runShareEffect } from "./share-effect-executor.js";
+import { runShareEffect } from "./share-effect-executor.js";
 import { listQueuedEffects } from "./share-effects.js";
 import { isLinkApproved } from "./vault-link-row.js";
 import { VaultLinksStore } from "./vault-links-store.js";
@@ -332,10 +332,17 @@ describe("peer transport over real iroh (#726 P3 gap 1)", () => {
     ]);
   }, 30_000);
 
-  test("a remote give paints the derivative immediately and pulls the ranged original over the real transport", async () => {
-    const photo = seedPhoto(origin, "real-transport");
+  /*
+   * Copy-as-share retired (#825, ruling G-copy), so the give frame is gone
+   * from the peer plane. Proved HERE, over the real QUIC transport, because
+   * the retirement has to hold on the wire and not merely in a handler
+   * double: the origin's outbox effect parks and the audience adopts nothing
+   * — no derivative painted, no pull owed, no bytes.
+   */
+  test("a remote give is refused over the real transport and adopts nothing", async () => {
+    const photo = seedPhoto(origin, "retired-give");
     const row = insertEdgeRow(origin, {
-      edgeId: "edge-real-transport",
+      edgeId: "edge-retired-give",
       audienceVaultId: audience.vaultId,
       itemIds: [photo.assetId],
     });
@@ -354,27 +361,11 @@ describe("peer transport over real iroh (#726 P3 gap 1)", () => {
         crossOwner: true,
       }
     );
-    expect(readEdgeRow(origin.gatewayDb, row.edge_id)!.status).toBe(
-      "completed"
-    );
-    expect(audience.vault.blobs.local.hasSync(photo.thumbSha)).toBe(true);
-    // The original crossed as a manifest entry, not yet as bytes.
+    expect(readEdgeRow(origin.gatewayDb, row.edge_id)!.status).toBe("parked");
+    expect(audience.vault.blobs.local.hasSync(photo.thumbSha)).toBe(false);
     expect(audience.vault.blobs.local.hasSync(photo.sha256)).toBe(false);
-    expect(listQueuedEffects(audience.gatewayDb, "pull-blob")).toHaveLength(1);
-
-    const drained = await drainShareEffects({
-      db: audience.gatewayDb,
-      links: audience.links,
-      vaultFor: (id: string) =>
-        id === audience.vaultId ? audience.vault : undefined,
-      dial: dialFrom(audience, origin),
-      chunkBytes: 8,
-    });
-    expect(drained.done).toHaveLength(1);
-    expect(audience.vault.blobs.local.hasSync(photo.sha256)).toBe(true);
-    expect(
-      audience.vault.blobs.local.getSync(photo.sha256)?.equals(photo.bytes)
-    ).toBe(true);
-    expect(listQueuedEffects(audience.gatewayDb, "pull-blob")).toHaveLength(0);
+    expect(listQueuedEffects(audience.gatewayDb, "pull-blob")).toStrictEqual(
+      []
+    );
   }, 30_000);
 });

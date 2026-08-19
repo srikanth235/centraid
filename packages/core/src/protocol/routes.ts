@@ -52,6 +52,12 @@ export const ROUTES = {
   vaultReplicaChanges: `${VAULT_PLANE_PREFIX}/changes`,
   vaultReplicaIntents: `${VAULT_PLANE_PREFIX}/replica/intents`,
   vaultScopes: `${VAULT_PLANE_PREFIX}/scopes`,
+  /** The grant plane (#825): standing shares of a subject with an audience. */
+  vaultGrants: `${VAULT_PLANE_PREFIX}/grants`,
+  /** What this vault will actually stand a grant over, and with which
+   *  capabilities — the declared registry a surface consults before drawing
+   *  the Share verb. */
+  vaultGrantSubjects: `${VAULT_PLANE_PREFIX}/grants/subjects`,
   vaultApps: `${VAULT_PLANE_PREFIX}/apps`,
   vaultConnections: `${VAULT_PLANE_PREFIX}/connections`,
   vaultConnectionProviders: `${VAULT_PLANE_PREFIX}/connections/providers`,
@@ -69,6 +75,16 @@ export type RouteName = keyof typeof ROUTES;
 /** Dynamic routes whose identifier component must be encoded by the caller. */
 export function vaultConnectionPath(encodedConnectionId: string): string {
   return `${ROUTES.vaultConnections}/${encodedConnectionId}`;
+}
+
+/** One standing grant, by id. */
+export function vaultGrantPath(encodedGrantId: string): string {
+  return `${ROUTES.vaultGrants}/${encodedGrantId}`;
+}
+
+/** End one standing grant and send its removal out (#825, ruling G-revoke). */
+export function vaultGrantRevokePath(encodedGrantId: string): string {
+  return `${vaultGrantPath(encodedGrantId)}/revoke`;
 }
 
 export function vaultConnectionAuthorizePath(
