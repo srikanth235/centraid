@@ -53,7 +53,7 @@ describe(postureFromResult, () => {
 
   it("never invents a reason field's absence into silence", () => {
     const posture = postureFromResult({ intentId: "i", status: "denied" });
-    expect(posture.reason).toBeTruthy();
+    expect(posture.reason).toBe("the vault rejected this change");
   });
 });
 
@@ -99,7 +99,7 @@ describe(editorOutcomeCopy, () => {
   it("nochange: a no-op is not a version", () => {
     const copy = editorOutcomeCopy({ id: "nochange" });
     expect(copy.line).toBe("Nothing changed · no new version, no receipt");
-    expect(copy.note).toContain("A no-op is not a version");
+    expect(copy.note).toContain("a no-op is not a version");
     expect(copy.commitEnabled).toBe(true);
   });
 
@@ -108,7 +108,7 @@ describe(editorOutcomeCopy, () => {
     expect(copy.line).toBe(
       "Waiting for the owner's approval · held, not refused"
     );
-    expect(copy.note).toContain("not the same state as queued");
+    expect(copy.note).toContain("is not the same state as queued");
     expect(copy.action).toBe("approvals");
     expect(copy.net).toBe(false);
   });
@@ -118,7 +118,7 @@ describe(editorOutcomeCopy, () => {
     expect(copy.line).toBe(
       "Queued on this device · the gateway is unreachable"
     );
-    expect(copy.note).toContain("nobody has to approve it");
+    expect(copy.note).toContain("Nobody has to approve it");
     expect(copy.net).toBe(true);
     expect(copy.action).toBeUndefined();
   });
@@ -126,7 +126,7 @@ describe(editorOutcomeCopy, () => {
   it("refused (not text): names the rule and offers 'What can be edited?'", () => {
     const copy = editorOutcomeCopy({ id: "refused", reason: NOT_TEXT_REASON });
     expect(copy.line).toBe("Refused · this document is not text");
-    expect(copy.note).toContain("a body can only be set on a text document");
+    expect(copy.note).toContain("A body can only be set on a text document");
     expect(copy.action).toBe("editable");
     expect(EDITOR_ACTION_LABELS[copy.action!]).toBe("What can be edited?");
     expect(copy.net).toBe(true);

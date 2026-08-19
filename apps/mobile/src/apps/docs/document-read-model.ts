@@ -187,7 +187,7 @@ export function factsRows(
     {
       key: "What Docs does",
       value:
-        "Holds it, versions it and files it. Renaming, moving, starring and trash all work on this kind.",
+        "Holds, versions and files it — rename, move, star and trash all work on this kind",
     },
     {
       key: "What Docs will not do",

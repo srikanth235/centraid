@@ -134,28 +134,30 @@ export default function DocumentViewer({
             accessibilityLabel="Previous document"
             disabled={index <= 0}
             onPress={() => step(-1)}
-            style={[
-              styles.stepper,
-              styles.stepPrev,
-              index <= 0 ? styles.stepOff : undefined,
-            ]}
+            style={[styles.stepper, styles.stepPrev]}
           >
-            <Icon name="chevron-left" size={22} color={colors.onStage} />
+            <Icon
+              name="chevron-left"
+              size={22}
+              color={index <= 0 ? colors.onStageSoft : colors.onStage}
+            />
           </Pressable>
           <Pressable
             accessibilityRole="button"
             accessibilityLabel="Next document"
             disabled={index < 0 || index >= shelfDocs.length - 1}
             onPress={() => step(1)}
-            style={[
-              styles.stepper,
-              styles.stepNext,
-              index < 0 || index >= shelfDocs.length - 1
-                ? styles.stepOff
-                : undefined,
-            ]}
+            style={[styles.stepper, styles.stepNext]}
           >
-            <Icon name="chevron-right" size={22} color={colors.onStage} />
+            <Icon
+              name="chevron-right"
+              size={22}
+              color={
+                index < 0 || index >= shelfDocs.length - 1
+                  ? colors.onStageSoft
+                  : colors.onStage
+              }
+            />
           </Pressable>
         </View>
 
@@ -373,7 +375,6 @@ const makeStyles = (colors: ThemeColors) =>
     },
     statusText: { ...t("small"), color: colors.onStageSoft, flex: 1 },
     stepNext: { insetInlineEnd: 12 },
-    stepOff: { opacity: 0.3 },
     stepPrev: { insetInlineStart: 12 },
     stepper: {
       alignItems: "center",

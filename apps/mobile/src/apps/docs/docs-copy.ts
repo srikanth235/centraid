@@ -127,7 +127,7 @@ export const VERSIONS_WHO_WITHHELD =
 /** The chain read failed or was denied — the honest absence, not an empty
  *  fabricated history. */
 export const VERSIONS_ABSENT =
-  "This device's replica could not read the version links, so no history is shown. The versions themselves are safe on the vault — nothing is ever overwritten.";
+  "This device could not read the version links, so no history is shown";
 
 /** §11: the backup timestamp is the gateway's own fact; no read for it here. */
 export const PROPERTIES_BACKUP_WITHHELD =
@@ -143,7 +143,7 @@ export function capabilitiesStatus(onCount: number): string {
 /** Why the capabilities screen draws NO switch: there is no consent record to
  *  write, and a control that flips nothing would be a promise, not a consent. */
 export const CAPABILITY_SWITCH_WITHHELD =
-  "There is no consent record behind these yet, so this screen draws no switch: a control that flipped nothing would promise a consent nobody recorded.";
+  "No consent record yet — this screen draws no switch";
 
 /** §12's two capability-product screens, honest at zero. */
 export function filingStatus(count: number): string {
@@ -170,6 +170,6 @@ export function bulkStatus(
  *  what it lands today is a single-page image document with its reviewed
  *  text — the multi-page-PDF assembly has no machinery on this seat yet. */
 export const SCAN_HANDOFF_BODY =
-  "Scanning opens the phone's own Scan cover: one capture, reviewed on this device, saved into Docs as an image document with its extracted text.";
+  "Scan cover: one capture, reviewed here, saved into Docs as an image with its extracted text";
 export const SCAN_PDF_WITHHELD =
   "Multi-page capture that lands as one PDF is not built on this phone yet, so this screen does not promise it.";

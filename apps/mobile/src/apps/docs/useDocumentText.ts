@@ -26,7 +26,7 @@ export interface UseDocumentTextResult {
 }
 
 const OFFLINE_REASON =
-  "The bytes of this document are not on this device and the gateway is out of reach, so the text cannot be shown right now.";
+  "This document's bytes are not on this device and the gateway is out of reach";
 const FETCH_FAILED_REASON =
   "The gateway did not hand this document's bytes over, so the text cannot be shown right now.";
 

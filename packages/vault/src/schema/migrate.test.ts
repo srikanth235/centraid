@@ -366,7 +366,7 @@ ${touchUpdatedAt("people_profile", "profile_id")}
            WHERE type = 'index' AND name = 'people_profile_purge_idx'`
         )
         .get()
-    ).toBeTruthy();
+    ).toBeDefined();
     // …and the foreign key onto the party spine.
     expect(() =>
       db.exec(

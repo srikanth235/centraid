@@ -109,7 +109,7 @@ export function editorOutcomeCopy(posture: EditorPosture): EditorOutcomeCopy {
     case "unsaved":
       return {
         line: "Unsaved changes on this device · nothing has been committed",
-        note: "Closing now keeps the draft here and commits nothing. The document in the library is unchanged.",
+        note: "Closing now keeps the draft here and commits nothing — the library document is unchanged",
         commit: "Save",
         net: false,
         commitEnabled: true,
@@ -117,7 +117,7 @@ export function editorOutcomeCopy(posture: EditorPosture): EditorOutcomeCopy {
     case "saving":
       return {
         line: "Saving · one command in flight",
-        note: "The command has left this device and has not been acknowledged. Nothing else is queued behind it.",
+        note: "The command has left this device and has not been acknowledged — nothing else is queued behind it",
         commit: "Saving…",
         net: false,
         commitEnabled: false,
@@ -143,7 +143,7 @@ export function editorOutcomeCopy(posture: EditorPosture): EditorOutcomeCopy {
     case "nochange":
       return {
         line: "Nothing changed · no new version, no receipt",
-        note: "The body you saved is byte-identical to the current version. A no-op is not a version: nothing was written, and the history is not one entry longer.",
+        note: "Saved bytes match the current version — a no-op is not a version, so history did not grow",
         commit: "Save",
         net: false,
         commitEnabled: true,
@@ -151,7 +151,7 @@ export function editorOutcomeCopy(posture: EditorPosture): EditorOutcomeCopy {
     case "approval":
       return {
         line: "Waiting for the owner's approval · held, not refused",
-        note: "The write is legitimate and it is being held until the owner consents. It is in Approvals, and it commits the moment they do. This is not the same state as queued.",
+        note: "Held until the owner consents — it sits in Approvals and is not the same state as queued",
         commit: "Save",
         net: false,
         action: "approvals",
@@ -160,7 +160,7 @@ export function editorOutcomeCopy(posture: EditorPosture): EditorOutcomeCopy {
     case "queued":
       return {
         line: "Queued on this device · the gateway is unreachable",
-        note: "The write is legitimate and nobody has to approve it. It is on this phone, in order, and it goes the moment the gateway is back. Nothing is lost and nothing is discarded to make room.",
+        note: "Nobody has to approve it — it sits on this phone in order and goes when the gateway is back",
         commit: "Save",
         net: true,
         commitEnabled: false,
@@ -171,8 +171,8 @@ export function editorOutcomeCopy(posture: EditorPosture): EditorOutcomeCopy {
         line: `Refused · ${reason}`,
         note:
           reason === NOT_TEXT_REASON
-            ? 'The rule that refused it can be named: a body can only be set on a text document. This is a different refusal from "not permitted", which names a person to ask instead of a rule.'
-            : "The vault refused this write and named its reason above. Nothing was committed and the document is unchanged.",
+            ? "A body can only be set on a text document — that is a named rule, not a person to ask"
+            : "The vault refused this write and named its reason above — nothing was committed",
         commit: "Save",
         net: true,
         ...(reason === NOT_TEXT_REASON ? { action: "editable" as const } : {}),

@@ -14,10 +14,10 @@
    same rung Photos' `.select` takes in the same row. */
 
 .track {
-  /* A real <fieldset> (ViewToggle.tsx), so the UA's own border/margin/padding
-     box has to be cleared here before this control's own is applied. */
+  /* A real <fieldset> (ViewToggle.tsx): clear the UA margin/min-size box, then
+     one `border` that both replaces the UA fieldset frame and draws the sunken
+     hairline. Two `border` declarations in this same rule trip css:S4656. */
   margin: 0;
-  border: none;
   min-inline-size: 0;
   display: flex;
   flex: none;

@@ -86,8 +86,7 @@ describe(buildDocMenu, () => {
       true,
     ]);
     move.rows[1]?.onSelect();
-    expect(on.moveTo).toHaveBeenCalledWith("c-property");
     move.rows[0]?.onSelect();
-    expect(on.moveTo).toHaveBeenCalledWith(null);
+    expect(on.moveTo.mock.calls).toStrictEqual([["c-property"], [null]]);
   });
 });

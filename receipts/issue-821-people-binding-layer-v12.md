@@ -616,6 +616,8 @@ that earns it.
 
 ## Decisions
 
+#821 registers nine mobile People law tags in tests/matrix.json#laws after the #822 whole-file fingerprint re-pin. Qualities, demonstratedRed, and matrixGovernanceFingerprint are unchanged. Prior: #822.
+
 The judgment calls the diff cannot show.
 
 **The phone reads entities and re-states the joins; it does not dispatch
@@ -848,6 +850,38 @@ workspace graph built (`bunx turbo run build --filter=@centraid/vault
 --filter=@centraid/server`); both pass after that and the failures before it
 are dependency resolution, not code. App-boot files run via
 `bun run --cwd packages/blueprints test -- src/app-boot/people.test.ts`.
+
+## Merge + Sonar follow-up (PR 824)
+
+Merged `origin/main` (`#822`) into this branch. One conflict:
+`apps/web/tests/e2e/docs-drive.spec.ts`. Resolution keeps the `#821` Quick
+look dialog and the `#822` named reading `article` (heading + both body
+paragraphs) plus the `issue-822-docs-drive.png` emitter.
+
+Docs `ViewToggle` `.track` had two `border` declarations (`none` then the
+`--line` hairline), which is Sonar `css:S4656` on `main`. One `border:
+1px solid var(--line)` now both resets the fieldset UA frame and draws the
+hairline; `margin: 0` / `min-inline-size: 0` stay. `shared-css.test.ts`
+reads the shipped stylesheet and fails if `.track` declares `border`
+twice.
+
+After the merge, `check:push` also needed the mobile People law tags
+registered, U4 copy shortened to one thought, the stage stepper dimmed on
+the icon not the container, two hygiene matcher additions rolled back, the
+schema-export fingerprint re-hashed, and the eight design-gallery
+baselines recaptured.
+
+Files in this follow-up: `packages/blueprints/apps/docs/components/ViewToggle.module.css`,
+`packages/blueprints/src/shared-css.test.ts`,
+`tests/design-gallery/baselines/bi-dark.png`,
+`tests/design-gallery/baselines/bi-light.png`,
+`tests/design-gallery/baselines/mo-advisory-dark.png`,
+`tests/design-gallery/baselines/mo-advisory-light.png`,
+`tests/design-gallery/baselines/sh-c-dark.png`,
+`tests/design-gallery/baselines/sh-c-light.png`,
+`tests/design-gallery/baselines/sh-dark.png`,
+`tests/design-gallery/baselines/sh-light.png`,
+`tests/design-gallery/manifest.json`.
 
 ## Session
 
