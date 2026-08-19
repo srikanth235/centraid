@@ -231,6 +231,47 @@ export {
   type CommonsRecoveryResult,
   type RecoverCommonsFromReplicaInput,
 } from "./share/commons-recovery.js";
+// The GRANT PLANE (#825): a share is a standing grant (who may see/edit what),
+// fulfillment is per-audience-vault delivery state, and the channel is the
+// existing party↔vault binding read as one state. Commons above stays the
+// edit-fulfillment strategy underneath it.
+export {
+  createShareGrant,
+  readShareGrant,
+  readLiveShareGrant,
+  revokeShareGrant,
+  listShareGrantsForAudience,
+  listShareGrantsForSubject,
+  listLiveGrantsReachingParty,
+  resolveAudienceParties,
+  ensureFulfillment,
+  setFulfillmentState,
+  readFulfillment,
+  listFulfillment,
+  UnofferableSubjectError,
+  type CreateShareGrantInput,
+  type CreateShareGrantResult,
+  type RevokeShareGrantResult,
+  type ShareFulfillmentRecord,
+  type ShareFulfillmentState,
+  type ShareGrantAudience,
+  type ShareGrantAudienceKind,
+  type ShareGrantCapability,
+  type ShareGrantRecord,
+} from "./grant/grant-store.js";
+export {
+  isOfferableSubjectType,
+  fulfillmentAnswerFor,
+  shareSubjectDeclaration,
+  SHARE_SUBJECT_REGISTRY,
+  type ShareFulfillmentStrategy,
+  type ShareSubjectDeclaration,
+} from "./grant/subject-registry.js";
+export {
+  channelForParty,
+  type ShareChannel,
+  type ShareChannelState,
+} from "./grant/channel.js";
 // The LOCAL orphan reclaim (#599 d11): each vault unlinks only its own CAS
 // directory entries, so hardlinked bytes survive until the last vault lets go.
 export {

@@ -144,6 +144,28 @@
 // restore, and losing it would leave a restored vault unable to tell a linked
 // person from a stranger until every ceremony was run again. No content bytes.
 
+// Schema/export audit #825: `share.grant` and `share.fulfillment` are two NEW
+// TABLES, both registered in schema/tables.ts, so the canonical walk
+// (`listVaultEntities` — not "every table in the file", per the #724 W5 note)
+// carries them like any other row. Both must be carried, for different
+// reasons. `share_grant` is the OWNER DECISION itself — which audience may see
+// or edit which subject — held apart from the commons machinery that delivers
+// it; a restore that dropped it would hand back a vault that had forgotten
+// every share it had ever made, while the projected rows sitting in audience
+// vaults kept existing. `share_fulfillment` is per-audience-vault delivery
+// state, and dropping it would make a restored vault believe nothing had ever
+// been delivered: it would re-send every subject to every peer and could not
+// tell a revocation that had been acknowledged from one still in flight.
+// Neither needs a human-readable adapter (both are control truth, not
+// something a person reads outside this system) and neither carries content
+// bytes — a granted subject's bytes are already covered by the canonical
+// content walk and manifest through the subject's own tables. Nothing is
+// dropped: `share_circle_grant` and the rest of the commons plane stay exactly
+// as they were, because commons is now the edit-fulfillment STRATEGY under the
+// grant plane rather than a rival record of the same fact. The two tables
+// arrive on existing files as migration rung three, whose backfill only reads
+// the commons tables and only writes the two new ones.
+
 import { createHash } from "node:crypto";
 
 import { sha256OfBytes } from "../blob/store.js";
