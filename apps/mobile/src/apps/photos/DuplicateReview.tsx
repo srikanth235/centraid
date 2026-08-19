@@ -22,7 +22,7 @@ import {
   surfaceWriteFailure,
   surfaceWriteOutcome,
 } from "../../kit/replica/write-outcome";
-import ShareSheet from "../../kit/share/ShareSheet";
+import GrantSheet from "../../kit/share/GrantSheet";
 import { spacing, t, useTheme } from "../../kit/theme";
 import type { ThemeColors } from "../../kit/theme";
 import type { NativeWriteResult } from "../../lib/replica/native-session";
@@ -37,7 +37,7 @@ import PhotoTimeline from "./PhotoTimeline";
 import { sectionPhotoAssets } from "./timeline-model";
 import type { PhotoAsset } from "./timeline-model";
 import { usePhotoTimeline } from "./timeline-source";
-import { useCopyToVault } from "./use-copy-to-vault";
+import { usePhotoSelectionShare } from "./use-photo-selection-share";
 import { READ_ONLY_VAULT_REASON } from "./viewer-model";
 
 export default function DuplicateReview({
@@ -106,9 +106,9 @@ export default function DuplicateReview({
   };
   const selected = vaultAssets(hints, selection);
   // One handler for the third selection target, shared by every Photos shelf
-  // (`use-copy-to-vault.ts`) so the picker moment and the refusal grammar
-  // cannot drift between them.
-  const copyToVault = useCopyToVault(
+  // (`use-photo-selection-share.ts`) so the grant sheet's moment and the
+  // refusal grammar cannot drift between them.
+  const share = usePhotoSelectionShare(
     () => selected,
     () => setSelection(new Set())
   );
@@ -120,7 +120,7 @@ export default function DuplicateReview({
   const selectionBar = {
     count: selection.size,
     shelf: "normal" as const,
-    copyLabel: copyToVault.copyLabel,
+    copyLabel: share.copyLabel,
     readOnlyReason: writeBlockedReason,
     favorite: writeBlockedReason
       ? { unavailableReason: writeBlockedReason }
@@ -136,8 +136,8 @@ export default function DuplicateReview({
     addToAlbum: {
       unavailableReason: "Add to album from the library, where the albums are.",
     },
-    // Share uses the same ceremony-free commons destination list everywhere.
-    share: copyToVault.handler,
+    // Share is one standing grant over one photograph, through the one kit.
+    share: share.handler,
     download: { unavailableReason: NO_DOWNLOAD_REASON },
     // The shelf's whole verb. Same confirm the head's control asks for, so
     // the two ways to reach it cannot mean two different things.
@@ -213,10 +213,10 @@ export default function DuplicateReview({
           </Text>
         </View>
       )}
-      <ShareSheet
-        visible={copyToVault.picking}
-        onClose={() => copyToVault.dismiss()}
-        {...copyToVault.sheetProps}
+      <GrantSheet
+        visible={share.visible}
+        onClose={share.dismiss}
+        {...share.sheetProps}
       />
     </PhotosScreen>
   );

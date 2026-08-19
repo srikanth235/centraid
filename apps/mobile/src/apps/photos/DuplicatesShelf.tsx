@@ -42,7 +42,7 @@ import {
   surfaceWriteFailure,
   surfaceWriteOutcome,
 } from "../../kit/replica/write-outcome";
-import ShareSheet from "../../kit/share/ShareSheet";
+import GrantSheet from "../../kit/share/GrantSheet";
 import { borders, spacing, t, useTheme, radii } from "../../kit/theme";
 import type { ThemeColors } from "../../kit/theme";
 import type { NativeWriteResult } from "../../lib/replica/native-session";
@@ -67,7 +67,7 @@ import PhotosScreen from "./PhotosScreen";
 import PhotoTile from "./PhotoTile";
 import type { PhotoAsset } from "./timeline-model";
 import { usePhotoTimeline } from "./timeline-source";
-import { useCopyToVault } from "./use-copy-to-vault";
+import { usePhotoSelectionShare } from "./use-photo-selection-share";
 import { READ_ONLY_VAULT_REASON } from "./viewer-model";
 
 /** The shelf's copy when there is nothing to review — the web's own sentence
@@ -99,9 +99,9 @@ export default function DuplicatesShelf({
   };
   const selected = vaultAssets(shown, selection);
   // One handler for the third selection target, shared by every Photos shelf
-  // (`use-copy-to-vault.ts`) so the picker moment and the refusal grammar
-  // cannot drift between them.
-  const copyToVault = useCopyToVault(
+  // (`use-photo-selection-share.ts`) so the grant sheet's moment and the
+  // refusal grammar cannot drift between them.
+  const share = usePhotoSelectionShare(
     () => selected,
     () => setSelection(new Set())
   );
@@ -124,7 +124,7 @@ export default function DuplicatesShelf({
   const selectionBar = {
     count: selection.size,
     shelf: "normal" as const,
-    copyLabel: copyToVault.copyLabel,
+    copyLabel: share.copyLabel,
     readOnlyReason: writeBlockedReason,
     favorite: writeBlockedReason
       ? { unavailableReason: writeBlockedReason }
@@ -137,8 +137,8 @@ export default function DuplicatesShelf({
     addToAlbum: {
       unavailableReason: "Add to album from the library, where the albums are.",
     },
-    // Share uses the same ceremony-free commons destination list everywhere.
-    share: copyToVault.handler,
+    // Share is one standing grant over one photograph, through the one kit.
+    share: share.handler,
     download: { unavailableReason: NO_DOWNLOAD_REASON },
     // The shelf's own verb (proto:4437 — "selecting a copy marks it for
     // trash"). Same confirm the rest of Photos asks for, so the two ways to
@@ -223,10 +223,10 @@ export default function DuplicatesShelf({
           />
         ))}
       </ScrollView>
-      <ShareSheet
-        visible={copyToVault.picking}
-        onClose={() => copyToVault.dismiss()}
-        {...copyToVault.sheetProps}
+      <GrantSheet
+        visible={share.visible}
+        onClose={share.dismiss}
+        {...share.sheetProps}
       />
     </PhotosScreen>
   );

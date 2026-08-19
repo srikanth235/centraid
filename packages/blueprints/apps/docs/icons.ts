@@ -197,7 +197,7 @@ export const STAGE_ICONS = {
   star: glyph("Star", 18),
   download: glyph("Download", 18),
   print: glyph("Print", 18),
-  place: glyph("Share", 18),
+  share: glyph("Share", 18),
   info: glyph("Info", 18),
   trash: glyph("Trash", 18),
 } as const;

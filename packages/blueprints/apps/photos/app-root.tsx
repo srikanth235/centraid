@@ -829,6 +829,7 @@ export function Root({
         // Album detail drops the strip and puts the way back in its place.
         shelfStripRoot.render(
           <AlbumBar
+            albumId={album.album_id}
             title={album.title ?? "Album"}
             renaming={renamingAlbum}
             canWrite={!albumWriteTarget().disabled}

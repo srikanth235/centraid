@@ -14,13 +14,16 @@
 // back to wave 1's link-free rendering when `links_available` is false, which
 // is what a parked `share.*` scope looks like from in here.
 //
-// WHAT IS STILL ABSENT, and why it is absence rather than omission: the
-// `Share` / `Link vault` commits, the roster's trailing `Link` verb and every
-// `Revoke`. All four are WRITES on the sharing plane and People holds only
-// reads on it; a share is additionally always a share of a container, which
-// People does not own (`_shared/ShareSheet.tsx`, `people-copy.ts`). Also
-// absent are the six record sections the handoff itself excludes (lists,
-// journal, tasks, gifts, debts, typed relationships, edit history).
+// THE GRANT PLANE IS THE PERSON SCREEN'S OWN READ (#825). `Share` and
+// `Revoke` are live there, and neither travels through `logic.ts` or
+// `writes.ts`: the plane is the gateway's door, not one of this app's vault
+// queries, so `components/PersonGrants.tsx` holds it and this file supplies
+// only the two things a host owes it — the roster, which is where a party id
+// has a name, and the frame's one status line.
+//
+// STILL ABSENT, and absence rather than omission: the six record sections the
+// handoff itself excludes (lists, journal, tasks, gifts, debts, typed
+// relationships, edit history).
 import {
   useCallback,
   useEffect,
@@ -392,6 +395,13 @@ export function Root({
           void writes.toggleReminder(dateId, label, date?.reminder_on ?? false);
         }}
         onDeleteChannel={(channel) => void writes.deleteChannel(channel)}
+        roster={data.people}
+        onStatus={(message) => {
+          // A share or a revoke is an OUTCOME, so it holds the line exactly as
+          // a People write's own outcome does, until the member navigates.
+          outcomeHeld.current = true;
+          publishOutcome(frame, { text: message });
+        }}
         onTrash={() => {
           if (!data.person) return;
           state.confirm = { kind: "trash", party_id: data.person.party_id };

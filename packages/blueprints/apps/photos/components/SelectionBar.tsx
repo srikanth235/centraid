@@ -15,9 +15,9 @@
 // `buildSelectionActions` is the one place the fixed order and the Trash
 // shelf's swap (Trash → Restore) live, as a pure function of shelf +
 // read-only state — both view components and the tests read the same table,
-// so the order can't drift between them. The third target is *Copy to
-// ⟨vault⟩* (issue #726): the destination is another mounted writable scope
-// (sharing.ts's `copyDestinations`), not a Sharing place or a pointer.
+// so the order can't drift between them. The third target is *Share* (#825):
+// it opens the ONE grant kit over the selected photograph, so the bar carries
+// no destination list, no scope reading and no share call of its own.
 //
 // INTEGRATION NOTE (not this file's to fix): `SelectionBarView` is rendered
 // into the app's `#selectionBar` overlay region (Chrome.tsx), not literally
@@ -28,16 +28,15 @@
 // exposes optional getters for both so wiring them up later is additive.
 // `SelectionBottomBar` is written and tested but not yet mounted anywhere —
 // the phone band is Chrome.tsx's to claim.
-import { useRef, useState } from "react";
+import { useRef } from "react";
 import type { FC } from "react";
 
 import { armConfirm } from "@centraid/design/elements";
 
-import { ownScopeId } from "../../_shared/scope-kit.ts";
+import { GrantSheet } from "../../_shared/GrantSheet.tsx";
 import { buildSelectionActions as buildSharedSelectionActions } from "../../_shared/selection-engine.ts";
 import type { SelectionShelfKind } from "../../_shared/selection-engine.ts";
-import { ShareSheet } from "../../_shared/ShareSheet.tsx";
-import type { InlineScope } from "../../inline-types.ts";
+import { ONE_AT_A_TIME, usePhotoShare } from "../grant-audiences.ts";
 import {
   SelectAlbumIcon,
   SelectDownloadIcon,
@@ -208,9 +207,6 @@ export interface SelectionBarViewProps {
    *  from here, and Select all/none walks the same list. */
   visible: readonly Asset[];
   albums: Album[];
-  /** Every mounted scope (issue #599) — the share sheet's destination list is
-   *  every OTHER writable one plus every linked person (issue #726 P6). */
-  scopes: readonly InlineScope[];
   shelfKind: SelectionShelfKind;
   readOnlyReason: string | null;
   menuOpen: boolean;
@@ -230,7 +226,6 @@ export function SelectionBarView({
   selectedIds,
   visible,
   albums: albumList,
-  scopes,
   shelfKind,
   readOnlyReason,
   menuOpen,
@@ -245,8 +240,8 @@ export function SelectionBarView({
 }: SelectionBarViewProps) {
   const count = selectedIds.size;
   const countRef = useRef<HTMLSpanElement>(null);
-  const [shareOpen, setShareOpen] = useState(false);
-  const ownId = ownScopeId(scopes);
+  const share = usePhotoShare(notice);
+  const [only] = [...selectedIds];
 
   // countRef is passed as a REF, and the batch helpers dereference it only
   // inside their own event-time bodies; nothing reads `.current` during this
@@ -255,19 +250,20 @@ export function SelectionBarView({
   const actions = buildSelectionActions({
     count,
     shelfKind,
-    // The sheet decides what "nowhere to share" means once it has actually
-    // asked for the destination list (own vaults sync, linked people async);
-    // the control itself never disables on a synchronous guess (#726 P6).
+    // Who there is to share with is still the sheet's asynchronous question
+    // (#726 P6) — the control never disables on a guess about the roster.
+    // HOW MANY is not a guess, though: a grant stands over one subject, so a
+    // multi-selection refuses here with the sentence that names the album.
     copyLabel: "Share",
     readOnlyReason,
-    copyBlockedReason: null,
+    copyBlockedReason: count === 1 ? null : ONE_AT_A_TIME,
     onFavorite: () =>
       void runBatchFavorite([...selectedIds], countRef, {
         refresh,
         setBarBusy,
       }),
     onAddToAlbum: onToggleMenu,
-    onShare: () => setShareOpen(true),
+    onShare: share.request,
     onDownload: () =>
       void runBatchDownload([...selectedIds], visible, countRef, {
         setBarBusy,
@@ -287,21 +283,15 @@ export function SelectionBarView({
 
   return (
     <>
-      <ShareSheet
-        open={shareOpen}
-        onClose={() => setShareOpen(false)}
-        sourceScopeId={ownId}
-        scopes={scopes}
-        itemType="media.asset"
-        itemIds={[...selectedIds]}
-        onDone={(outcome) => {
-          notice(outcome.message);
-          if (outcome.ok) {
-            onExit();
-            void refresh();
-          }
-        }}
-      />
+      {only ? (
+        <GrantSheet
+          open={share.open}
+          onClose={share.close}
+          audiences={share.audiences}
+          subject={{ subjectType: "media.asset", subjectId: only }}
+          onStatus={notice}
+        />
+      ) : null}
       <span className={styles.count} ref={countRef}>
         {count}
       </span>
@@ -378,8 +368,6 @@ export function SelectionBarView({
 export interface SelectionBottomBarProps {
   selectedIds: Set<string>;
   visible: readonly Asset[];
-  /** Every mounted scope — see `SelectionBarViewProps`. */
-  scopes: readonly InlineScope[];
   shelfKind: SelectionShelfKind;
   readOnlyReason: string | null;
   refresh: () => Promise<void>;
@@ -399,7 +387,6 @@ export interface SelectionBottomBarProps {
 export function SelectionBottomBar({
   selectedIds,
   visible,
-  scopes,
   shelfKind,
   readOnlyReason,
   refresh,
@@ -408,14 +395,15 @@ export function SelectionBottomBar({
   onAddToAlbum,
 }: SelectionBottomBarProps) {
   const count = selectedIds.size;
-  const [shareOpen, setShareOpen] = useState(false);
-  const ownId = ownScopeId(scopes);
+  const share = usePhotoShare(notice);
+  const [only] = [...selectedIds];
   const actions = buildSelectionActions({
     count,
     shelfKind,
     copyLabel: "Share",
     readOnlyReason,
-    copyBlockedReason: null,
+    // One subject per grant, on this surface too — see `SelectionBarView`.
+    copyBlockedReason: count === 1 ? null : ONE_AT_A_TIME,
     onFavorite: () =>
       void runBatchFavorite(
         [...selectedIds],
@@ -423,7 +411,7 @@ export function SelectionBottomBar({
         { refresh, setBarBusy }
       ),
     onAddToAlbum,
-    onShare: () => setShareOpen(true),
+    onShare: share.request,
     onDownload: () =>
       void runBatchDownload(
         [...selectedIds],
@@ -450,21 +438,15 @@ export function SelectionBottomBar({
 
   return (
     <>
-      <ShareSheet
-        open={shareOpen}
-        onClose={() => setShareOpen(false)}
-        sourceScopeId={ownId}
-        scopes={scopes}
-        itemType="media.asset"
-        itemIds={[...selectedIds]}
-        onDone={(outcome) => {
-          notice(outcome.message);
-          if (outcome.ok) {
-            onExit();
-            void refresh();
-          }
-        }}
-      />
+      {only ? (
+        <GrantSheet
+          open={share.open}
+          onClose={share.close}
+          audiences={share.audiences}
+          subject={{ subjectType: "media.asset", subjectId: only }}
+          onStatus={notice}
+        />
+      ) : null}
       <div
         className={styles.bottomBar}
         role="toolbar"

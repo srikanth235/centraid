@@ -35,6 +35,8 @@ import {
   releaseExpiredEnrichmentLeases,
 } from "../enrich/leases.js";
 import { rebuildMemories } from "../enrich/memories.js";
+import { routeShareGrantEdit } from "../grant/fulfillment-edit.js";
+import { resolveAudienceParties } from "../grant/grant-store.js";
 import { nowIso, uuidv7 } from "../ids.js";
 import { importIcsEvents, importVcardParties } from "../ingest/import.js";
 import type { ImportResult } from "../ingest/import.js";
@@ -1097,9 +1099,82 @@ export class Gateway {
     return { changes, cursor, receiptId };
   }
 
+  /**
+   * THE GRANT PLANE'S ONE SEAM into ordinary writes (issue #825, ruling
+   * G-edit), or `undefined` when the grant plane has nothing to say.
+   *
+   * ACTOR-AWARENESS IS THE WHOLE POINT. `routeShareGrantEdit` answers about
+   * the CONTAINER: it returns a route — refusals included, "shared for view
+   * only" among them — whenever ANY grant covers the container, because a
+   * router that had to ask who was writing would be authorizing, which is not
+   * its job. So the seam asks. A grant constrains the AUDIENCE it names and
+   * never the vault that issued it: an owner editing a document inside a
+   * folder they shared for view is exercising their own ownership, not the
+   * grant, and refusing them would make sharing a way to lock yourself out.
+   * The owner's write therefore goes through exactly as it did before the
+   * grant plane existed, and only a write made on behalf of some OTHER party
+   * consults the refusals.
+   *
+   * An `app` credential carries no party: an installed app is the owner's own
+   * foreground door, so it is the owner acting and the plane stands aside
+   * without a query. And a non-owner party the grants over this container
+   * never NAMED is not this plane's business either — a grant speaks about
+   * the audience it addressed, so an actor no grant reaches is left to the
+   * consent layer that was already deciding for them.
+   */
+  private shareGrantRefusal(
+    identity: Identity,
+    rawRequest: InvokeRequest
+  ): { reason: string; containerId: string; actorPartyId: string } | undefined {
+    const actorPartyId = identity.partyId;
+    if (!actorPartyId) return undefined;
+    const owner = this.db.vault
+      .prepare("SELECT owner_party_id FROM core_vault LIMIT 1")
+      .get() as { owner_party_id: string | null } | undefined;
+    if (!owner?.owner_party_id || owner.owner_party_id === actorPartyId)
+      return undefined;
+    const route = routeShareGrantEdit(this.db.vault, {
+      command: rawRequest.command,
+      commandInput: rawRequest.input,
+    });
+    if (!route?.refusal) return undefined;
+    const named = route.grants.some((grant) =>
+      resolveAudienceParties(this.db.vault, grant.audience).includes(
+        actorPartyId
+      )
+    );
+    if (!named) return undefined;
+    return {
+      reason: route.refusal,
+      containerId: route.containerId,
+      actorPartyId,
+    };
+  }
+
   /** Typed-command invocation: the only write path (rule R04). */
   invoke(cred: Credential, rawRequest: InvokeRequest): InvokeOutcome {
     const identity = this.identify(cred);
+    // BEFORE the commons rail, not after it. A refusal the grant plane draws
+    // — co-contribution to a folder, a view-only subject — is a refusal about
+    // the STANDING GRANT, and the commons rail beneath it would happily carry
+    // the write to the steward and apply it there.
+    const refused = this.shareGrantRefusal(identity, rawRequest);
+    if (refused) {
+      const receiptId = writeReceipt(this.db.journal, {
+        grantId: null,
+        invocationId: rawRequest.invocationId ?? null,
+        action: `act ${rawRequest.command}`,
+        objectType: "share.grant",
+        objectId: refused.containerId,
+        purpose: rawRequest.purpose ?? DEFAULT_PURPOSE,
+        decision: "deny",
+        detail: {
+          failing: refused.reason,
+          actorPartyId: refused.actorPartyId,
+        },
+      });
+      return { status: "denied", receiptId, reason: refused.reason };
+    }
     const grant = commonsGrantForCommand(
       this.db.vault,
       rawRequest.command,

@@ -267,3 +267,5 @@ Verdict (wave 3, post-fix): PASS — fixes verified by the re-run suites (17/17 
 - Per-commit wave note: Wave 3 audit (in progress): grant-routes audience 404 tests; glossary give-retirement tense; stale comments on deleted routes.
 
 - Per-commit wave note: Wave 4 in progress: web GrantSheet scaffolding, grant-plane/copy/door, window.centraid.grants bridge.
+
+- Per-commit wave note: Waves 5–7 in progress: Docs/Photos/People grant-kit integrations on both seats; copy-to-vault deleted.

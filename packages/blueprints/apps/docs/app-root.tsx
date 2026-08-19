@@ -28,12 +28,16 @@ import {
 } from "@centraid/design/elements";
 
 import { publishOutcome } from "../_shared/app-frame.tsx";
+import { grantPlaneAvailable } from "../_shared/grant-gateway.ts";
+import type { GrantAudienceOption } from "../_shared/grant-plane.ts";
+import { GrantSheet } from "../_shared/GrantSheet.tsx";
 import { mountedScopes } from "../_shared/scope-kit.ts";
 import { SearchScaffold } from "../_shared/SearchScaffold.tsx";
 import { SAVED_TO_MY_VAULT } from "../_shared/shared-copy.ts";
-import { ShareSheet } from "../_shared/ShareSheet.tsx";
 import type { InlineAppProps } from "../inline-types.ts";
 import { Chrome } from "./Chrome.tsx";
+import { loadGrantAudiences } from "./grant-audiences.ts";
+import type { DocsShareHost } from "./grant-audiences.ts";
 import {
   FilingRoute,
   LockerBoundaryRoute,
@@ -195,6 +199,11 @@ export function Root({
   const [dropVisible, setDropVisible] = useState(false);
   const [dropTarget, setDropTarget] = useState("");
   const [shareFolder, setShareFolder] = useState<Folder | null>(null);
+  // `null` is "the roster has not been read yet", which is not the same fact
+  // as a vault that knows nobody — Share is offered only once it IS an answer.
+  const [audiences, setAudiences] = useState<readonly GrantAudienceOption[] | null>(
+    null
+  );
   // The compact band's overflow sheet (§1.5). React state rather than a field
   // on the mutable `state` bag: nothing outside this component opens it.
   const [moreOpen, setMoreOpen] = useState(false);
@@ -590,6 +599,20 @@ export function Root({
     return () => cancelAnimationFrame(id);
   }, []);
 
+  // THE ROSTER IS READ ONCE, HERE. Three surfaces open the share sheet — the
+  // folder rail, the details rail and the stage — and a roster read per sheet
+  // would ask People the same question three times for one app.
+  useEffect(() => {
+    if (!ready || !grantPlaneAvailable()) return;
+    let active = true;
+    void loadGrantAudiences().then((rows) => {
+      if (active) setAudiences(rows);
+    });
+    return () => {
+      active = false;
+    };
+  }, [ready]);
+
   useEffect(() => {
     if (!ready || !window.centraid.commonsResidents) return;
     const actorVaultId = mountedScopes()[0]?.id;
@@ -938,7 +961,16 @@ export function Root({
   const trashed = inTrash;
   const showFoot =
     state.driveTruncated && !searching && state.shelf !== STARRED;
-  const scopes = mountedScopes();
+  // WHAT DOCS OWES THE SHARE KIT (issue #825): the roster, and the one status
+  // line. Absent until the roster has actually been read — a sheet opened over
+  // an unread roster would say "nobody yet" about a vault full of people.
+  const shareHost: DocsShareHost | null = audiences
+    ? {
+        audiences,
+        onStatus: (message: string) =>
+          publishOutcome(frame, { text: message }),
+      }
+    : null;
 
   // ---- slots ----
 
@@ -1315,6 +1347,7 @@ export function Root({
       onOpenVersions={handleOpenVersions}
       onAddTag={handleAddTag}
       onRemoveTag={handleRemoveTag}
+      shareHost={shareHost}
     />
   ) : null;
   const rail = railable ? detailsRail : null;
@@ -1330,6 +1363,7 @@ export function Root({
           folderName={logic.folderName}
           onClose={handleCloseQuick}
           onStep={handleQuickStep}
+          shareHost={shareHost}
           {...(quickDoc.trashed
             ? {}
             : {
@@ -1346,16 +1380,27 @@ export function Root({
               })}
         />
       ) : null}
-      <ShareSheet
-        open={shareFolder !== null}
-        onClose={() => setShareFolder(null)}
-        sourceScopeId={scopes[0]?.id ?? ""}
-        scopes={scopes}
-        itemType="docs.folder"
-        itemIds={shareFolder ? [shareFolder.folder_id] : []}
-        appLabel="Docs"
-        onDone={(outcome) => publishOutcome(frame, { text: outcome.message })}
-      />
+      {/* THE ONE SHEET, opened over the folder. Docs no longer carries a
+          share flow of its own: who may see or edit a folder is a standing
+          grant, drawn by the shared kit, and every outcome lands on the
+          frame's single status line (§11). */}
+      {shareHost ? (
+        <GrantSheet
+          open={shareFolder !== null}
+          onClose={() => setShareFolder(null)}
+          audiences={shareHost.audiences}
+          {...(shareFolder
+            ? {
+                subject: {
+                  subjectType: "docs.folder",
+                  subjectId: shareFolder.folder_id,
+                  label: shareFolder.name,
+                },
+              }
+            : {})}
+          onStatus={shareHost.onStatus}
+        />
+      ) : null}
     </>
   );
 

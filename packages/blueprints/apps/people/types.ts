@@ -72,7 +72,10 @@ export interface PendingInvite {
   created_at: string;
 }
 
-/** One thing the owner has shared with this person. */
+/** One thing the owner has shared with this person, as the COMMONS plane
+ *  carries it. The person screen now draws the grant plane instead
+ *  (`grant-dashboard.ts`); this shape stays because `queries/person.ts` still
+ *  answers it and the phone's replica projection mirrors that query. */
 export interface SharedContainer {
   grant_id: string;
   container_type: string;
@@ -338,6 +341,13 @@ export interface SearchRouteProps extends RouteBase {
 
 export interface PersonRouteProps extends RouteBase {
   person: PersonDetail | null;
+  /** The roster window, which the grant dashboard hands the share sheet as
+   *  its audience list: People is where a party id has a name (#825). */
+  roster: readonly PersonRow[];
+  /** The frame's one status line, for what a share or a revoke answered. The
+   *  grant plane is not a People write, so it does not travel through
+   *  `writes.ts` — but its outcome lands on the same one line. */
+  onStatus: (message: string) => void;
   /** Which section keys are collapsed. Absent means open. */
   collapsed: Readonly<Record<string, boolean>>;
   composer: ComposerState | null;

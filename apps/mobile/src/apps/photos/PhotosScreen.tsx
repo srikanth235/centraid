@@ -67,9 +67,9 @@ import PhotosMoreSheet from "./PhotosMoreSheet";
 export interface PhotosSelectionProps {
   count: number;
   shelf: SelectionShelfKind;
-  /** The third target's caption — `Copy to ⟨destination⟩`, resolved by the
-   *  screen's own `useCopyToVault` (issue #726: the destination is the
-   *  caller's to resolve, never derived by the engine). */
+  /** The third target's caption — `Share`, resolved by the screen's own
+   *  `usePhotoSelectionShare` (#825: who and what a grant names is the
+   *  sheet's question, never the engine's). */
   copyLabel: string;
   /** Non-null when the scope refuses writes — stated inline, never hidden. */
   readOnlyReason: string | null;

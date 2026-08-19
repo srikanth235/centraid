@@ -107,7 +107,7 @@ export const STAGE_ACTIONS = {
   starred: "Starred",
   download: "Download",
   print: "Print",
-  place: "Place…",
+  share: "Share",
   properties: "Properties",
   trash: "Trash",
   close: "Close",
