@@ -307,7 +307,9 @@ test("production PWA routes recover Tally, Tasks, and Agenda pending rows while 
   // People is restored (#821): the roster is live, so the New-person
   // control is the observable that the route booted — not the v11 wall.
   await openFirstParty(page, "People");
-  await expect(page.getByRole("button", { name: "Add person" })).toBeVisible();
+  await expect(
+    page.getByRole("button", { name: /^Add(?: person)?$/u })
+  ).toBeVisible();
 
   await openFirstParty(page, "Tally");
   await page.getByText("Offline Journey", { exact: true }).first().click();
@@ -351,7 +353,9 @@ test("production PWA routes recover Tally, Tasks, and Agenda pending rows while 
   await expect(page.locator(".kit-pending-chip")).toHaveText("queued");
 
   await openFirstParty(page, "People");
-  await expect(page.getByRole("button", { name: "Add person" })).toBeVisible();
+  await expect(
+    page.getByRole("button", { name: /^Add(?: person)?$/u })
+  ).toBeVisible();
 
   await openFirstParty(page, "Tally");
   await page.getByText("Offline Journey", { exact: true }).first().click();

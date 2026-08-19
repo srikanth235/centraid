@@ -232,7 +232,7 @@ test("production Tally, Tasks, and Agenda pending rows survive an offline Electr
     // control is the observable that the route booted — not the v11 wall.
     await openFirstParty(page, "People");
     await expect(
-      page.getByRole("button", { name: "Add person" })
+      page.getByRole("button", { name: /^Add(?: person)?$/u })
     ).toBeVisible();
 
     await openFirstParty(page, "Tally");
@@ -285,7 +285,7 @@ test("production Tally, Tasks, and Agenda pending rows survive an offline Electr
 
     await openFirstParty(page, "People");
     await expect(
-      page.getByRole("button", { name: "Add person" })
+      page.getByRole("button", { name: /^Add(?: person)?$/u })
     ).toBeVisible();
 
     await openFirstParty(page, "Tally");
