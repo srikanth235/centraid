@@ -883,7 +883,11 @@ Files in this follow-up: `packages/blueprints/apps/docs/components/ViewToggle.mo
 `tests/design-gallery/baselines/sh-light.png`,
 `tests/design-gallery/manifest.json`,
 `tests/schema-export-fingerprint.json`,
-`apps/mobile/src/apps/photos/memories-model.ts`.
+`apps/mobile/src/apps/photos/memories-model.ts`,
+`packages/blueprints/apps/docs/format.ts`,
+`apps/mobile/src/apps/docs/docs-projection.ts`,
+`apps/mobile/src/apps/docs/editor-outcome.ts`,
+`apps/mobile/src/apps/docs/DocumentProperties.tsx`.
 
 ## Session
 

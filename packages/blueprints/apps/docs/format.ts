@@ -3,14 +3,15 @@
 // orchestrator (currentRows' type filter, the upload size-skip message, the
 // empty-row copy) and the row/details/quick-look components can call these
 // directly instead of threading them all as props.
-import { fmtBytes as fmtBytesBase } from "@centraid/design/elements";
+import { formatBytes } from "@centraid/design";
 
 import { safeDocumentUrl } from "../_shared/untrusted.ts";
 import type { CustodyInfo, DocFields, TypeMeta } from "./types.ts";
 
-// The drive shows an em dash for absent sizes everywhere it prints bytes.
+// Token-layer `formatBytes`, not `@centraid/design/elements`: Metro pulls this
+// file into the phone bundle, and the elements subpath is DOM-only.
 export const fmtBytes = (n: number | null | undefined): string =>
-  fmtBytesBase(n, "—");
+  !n || !Number.isFinite(Number(n)) || n < 0 ? "—" : formatBytes(n);
 
 export function fmtDate(iso: string | null | undefined): string {
   if (!iso) return "";

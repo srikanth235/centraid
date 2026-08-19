@@ -473,8 +473,10 @@ export function sortDocuments<T extends DriveDoc>(
         return typeMeta(a.media_type, a.title).name.localeCompare(
           typeMeta(b.media_type, b.title).name
         );
-      default:
-        // `changed` (and the phone offers no `owner` order — one vault).
+      case "changed":
+      case "owner":
+        // The phone offers no `owner` order — one vault — so both keys share
+        // the changed-newest clock.
         return (a.updated_at || a.created_at).localeCompare(
           b.updated_at || b.created_at
         );
@@ -498,7 +500,8 @@ export function kindIconName(doc: {
       return "Table";
     case "media":
       return "Music";
-    default:
+    case "doc":
+    case "other":
       return "FileText";
   }
 }

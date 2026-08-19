@@ -50,6 +50,8 @@ export function custodyStatusLine(state: string | null): string {
       return "Only in the cloud · not on this device";
     case "missing":
       return "Missing — on neither tier · needs attention";
+    case null:
+      return "Not swept yet · custody unknown until the vault's next sweep";
     default:
       return "Not swept yet · custody unknown until the vault's next sweep";
   }

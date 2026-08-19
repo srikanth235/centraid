@@ -94,7 +94,9 @@ export function postureFromResult(result: NativeWriteResult): EditorPosture {
       return { id: "queued" };
     case "in-flight":
       return { id: "saving" };
-    default:
+    case "denied":
+    case "failed":
+    case "conflict":
       return {
         id: "refused",
         reason: result.reason ?? "the vault rejected this change",
