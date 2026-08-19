@@ -58,7 +58,10 @@ describe("parsing the grant wire", () => {
   test("a complete grant survives with its delivery rows", () => {
     const parsed = parseGrant(WIRE_GRANT);
     expect(parsed?.grantId).toBe("grant-1");
-    expect(parsed?.audience).toStrictEqual({ kind: "party", id: "party-priya" });
+    expect(parsed?.audience).toStrictEqual({
+      kind: "party",
+      id: "party-priya",
+    });
     expect(parsed?.fulfillment).toStrictEqual([
       {
         peerVaultId: "vault-priya",
@@ -70,8 +73,12 @@ describe("parsing the grant wire", () => {
   });
 
   test("a drifted grant is dropped rather than rendered half-built", () => {
-    expect(parseGrant({ ...WIRE_GRANT, capability: "comment" })).toBeUndefined();
-    expect(parseGrant({ ...WIRE_GRANT, audience: { kind: "team", id: "x" } })).toBeUndefined();
+    expect(
+      parseGrant({ ...WIRE_GRANT, capability: "comment" })
+    ).toBeUndefined();
+    expect(
+      parseGrant({ ...WIRE_GRANT, audience: { kind: "team", id: "x" } })
+    ).toBeUndefined();
     expect(parseGrant(null)).toBeUndefined();
     expect(parseGrants([WIRE_GRANT, { grantId: "" }])).toHaveLength(1);
   });
@@ -79,7 +86,10 @@ describe("parsing the grant wire", () => {
   test("a drifted delivery row is dropped without taking the grant with it", () => {
     const parsed = parseGrant({
       ...WIRE_GRANT,
-      fulfillment: [{ peerVaultId: "v", state: "invented" }, WIRE_GRANT.fulfillment[0]],
+      fulfillment: [
+        { peerVaultId: "v", state: "invented" },
+        WIRE_GRANT.fulfillment[0],
+      ],
     });
     expect(parsed?.fulfillment).toHaveLength(1);
   });
@@ -171,11 +181,19 @@ describe("what the sheet proposes", () => {
   });
 
   test("the request carries the subject label only when there is one", () => {
-    const audience = { kind: "party" as const, id: "party-priya", label: "Priya" };
+    const audience = {
+      kind: "party" as const,
+      id: "party-priya",
+      label: "Priya",
+    };
     expect(
       grantRequestFor(
         audience,
-        { subjectType: "core.document", subjectId: "doc-1", label: "Trip plan" },
+        {
+          subjectType: "core.document",
+          subjectId: "doc-1",
+          label: "Trip plan",
+        },
         "edit"
       )
     ).toStrictEqual({

@@ -68,6 +68,16 @@ Realized here, word for word: `peer-edge-give-route` and the give/edge-answer ve
 - **The edges route lost its whole remote-delivery lane**, not just cross-owner give: with `crossing.state === "linked"` refused before any vault lookup, `EdgesRouteDeps.peerDial`, the `delivery: "peer"` arm and `edges-reconcile-remote.ts` are unreachable from the route. The route's own refusal vocabulary changed with it — `cross_owner_move_refused` is gone, replaced by `cross_owner_give_retired`, which now covers add and move alike.
 - **Stale prose referencing deleted files.** Three source headers named the deleted routes and were re-worded to current state in the audit-fix pass (`serve/peer-receive-settings.ts`, `serve/share-coordinator.ts`, `client/src/gateway-client-edges.ts`). Desktop e2e fixtures still mock the retired surface; that is app-wave work and is not touched here.
 
+### Wave 4 — the shared share kit, both seats (no app integrated yet)
+
+- Shared core in `packages/blueprints/apps/_shared/`: `grant-plane.ts` (326 — wire types + parsing + derivations: `parseGrant`/`parseGrants`/`parseSubjectOffers`/`parseChannel`, `capabilitiesFor`, `grantDelivery`, `channelReach`, `liveGrants`, `grantOverSubject`, `defaultCapability`, `grantRequestFor`), `grant-copy.ts` (147 — every sentence the kit says, one place), `grant-door.ts` (168 — `grantDoor(calls)`: subjects/forParty/forAudience/forSubject/create/revoke decided once; only six thin transport calls differ per seat), `grant-gateway.ts` (49 — the web door over `window.centraid.grants`), `GrantSheet.tsx` (473) + `GrantSheet.module.css` (119) — audience-first sheet (person → what → capability), object-first entry reusing the same core via a `subject` prop.
+- Mobile seat `apps/mobile/src/kit/share/`: `GrantSheet.tsx` (583, same props with `visible`), `grants-transport.ts` (118, `nativeGrantDoor(baseUrl)`).
+- Client bridge: `packages/client/src/react/blueprints/grant-wire.ts` (126) mounts `window.centraid.grants`; `centraid-inline.ts` +10; `packages/blueprints/types/centraid.d.ts` +26. All paths come from `ROUTES.vaultGrants`/`vaultGrantRevokePath` — no literals.
+- Tests: `grant-plane.test.ts` (215), `GrantSheet.test.tsx` (384 web / 359 mobile), `grants-transport.test.ts` (134) — 22 kit tests recording observable outcomes (the request that reached the door, the sentences that reached the status line), zero `vi.fn` in the sheet suites. E2E: `apps/web/tests/e2e/grant-sheet.spec.ts` (200), emitting `artifacts/e2e/ui-impact/issue-825-grant-sheet.png` via `page.screenshot(`.
+- Full file list for this wave: `packages/blueprints/apps/_shared/grant-plane.ts`, `packages/blueprints/apps/_shared/grant-copy.ts`, `packages/blueprints/apps/_shared/grant-door.ts`, `packages/blueprints/apps/_shared/grant-gateway.ts`, `packages/blueprints/apps/_shared/GrantSheet.tsx`, `packages/blueprints/apps/_shared/GrantSheet.module.css`, `packages/blueprints/apps/_shared/grant-plane.test.ts`, `packages/blueprints/apps/_shared/GrantSheet.test.tsx`, `apps/mobile/src/kit/share/GrantSheet.tsx`, `apps/mobile/src/kit/share/GrantSheet.test.tsx`, `apps/mobile/src/kit/share/grants-transport.ts`, `apps/mobile/src/kit/share/grants-transport.test.ts`, `packages/client/src/react/blueprints/grant-wire.ts`, `packages/client/src/react/blueprints/centraid-inline.ts`, `packages/blueprints/types/centraid.d.ts`, `apps/web/tests/e2e/grant-sheet.spec.ts`.
+
+The kit checklist item ("Docs and Photos share/unshare through the one shared kit…") stays unchecked: the kit exists on both seats with one write door each, but no app imports it yet — that is the wave-4 exit condition (no gate names a verb it cannot perform), and waves 5–7 integrate. The revoke item's UI-copy half is realized in kit copy (confirm: "…their vault is asked to remove its copy" — the ask, honestly tensed, before the act; the after-sentence is always the route's `message` rendered verbatim, never authored client-side) but the item closes only when an integrated app surface shows it live.
+
 ## Decisions
 
 The judgment calls the diff cannot show.
@@ -114,6 +124,12 @@ The accepted trade is correctness-first: a cheaper doorbell needs either row-lev
 
 **Dead receive-side give transport was deleted, not allowlisted (wave 3).** The retirement made `pullEdgeClosure`, the queued-blob-pull reads, and the wire-shape verifiers production-unreachable; allowlisting dead code would weaken the gate to go green. What is dead but still *referenced* — `runBlobPull` + the `pull-blob` effect kind (no producer left), `giveEdgeOverPeer`/`denyEdgeOverPeer`, `edges-reconcile-remote.ts`, `collectDerivativeBlobs`, the `deliver-refusal`/`await-answer` effect kinds, cross-owner `receiveSettingFor` rows, `EdgesRouteDeps.peerDial` — is inventoried for the wave-8 sweep.
 
+**The registry decides the verbs; the kit never hardcodes a capability (wave 4).** `edit` is drawn only where `GET …/grants/subjects` answers it, and an unreadable registry offers nothing rather than everything. Capability is derived, not stored: `picked ?? defaultCapability(alreadyStanding)`, so a grant already standing for `edit` never opens as a silent downgrade.
+
+**One write door per seat, one copy table for both (wave 4).** Only six thin transport calls differ between web (`window.centraid.grants` bridge) and mobile (`nativeGrantDoor(baseUrl)`); parsing, refusal handling, "already shared", and the revoke sentences are decided once in `grant-door.ts`/`grant-copy.ts`. The confirm-dialog copy is the kit's and honestly tensed ("their vault is asked to remove its copy" — the ask, before the act); the after-sentence is always the route's `message` rendered verbatim, never authored client-side, so the engine's three honest removal answers reach the person unparaphrased.
+
+**Not-yet is never an error color (wave 4).** `awaiting_channel`, `channel: null`, and `invited` all paint the seam token — "not yet, and not wrong" — never danger; `fulfillment: []` renders "Not sent yet", `channel: null` "Not reached yet", `severed` "Link ended", and a 404 audience is `{known: false}`, each with a test. Hosts supply `audiences` and `subjects` (People holds the roster, each app its own objects; `subjectNoun` reads the existing placement registry, no second noun table) and wire `onStatus` to their StatusLine — the kit renders no toast or status line of its own.
+
 ## Out of scope
 
 Named so the omissions are not read as oversights.
@@ -133,6 +149,8 @@ Waves 0–2 change no running surface: wave 0 is docs only, wave 1 adds vault ta
 - `POST /centraid/_gateway/edges` with a cross-owner pair — an approved link between two people — is refused `400 cross_owner_give_retired`. Same-owner placement (Work → Personal) is unchanged, and that is the only edge a person can still make.
 - A gateway that upgraded with a cross-owner `deliver-give` already in the outbox keeps it: `drainShareEffects` on the peer-plane sweep still claims that row and still dials `deliverGiveOverPeer`, which now meets a `not_found` at the far end and parks the edge with that reason rather than delivering. No new such obligation can be minted (the route refuses first), and no copy already delivered is un-delivered. Draining the leftovers is wave-8 sweep work.
 - Sharing with another person is the grant plane from here on; its owner routes exist (`/centraid/_vault/grants`) but no screen calls them yet — the surfaces arrive in waves 4–7.
+
+**Wave 4 ships the sheet but wires it to no app**, so a user still sees nothing new; the kit is reachable only through its own suites and the e2e harness. What a user WILL see when waves 5–7 mount it: one grant sheet on web and mobile — pick a person (or circle), pick what, pick view/edit where the registry offers edit, one filled `Share`; the standing list shows delivery honestly (`Delivered`, `Invitation pending`, `Not sent yet` — never an error color for not-yet); revoke confirms with "Stop sharing with Priya? Priya loses access to the document, and their vault is asked to remove its copy." and afterwards shows the route's own sentence verbatim. First-run: opening the sheet with no grants and no linked people shows the empty audience list and "Nothing shared yet" — no error, no spinner-forever; the primary stays disabled until an audience and subject are picked. Screenshot evidence: `artifacts/e2e/ui-impact/issue-825-grant-sheet.png`, emitted by `apps/web/tests/e2e/grant-sheet.spec.ts` (the Playwright chromium binary is absent in this container, so the spec's assertions were verified by executing the same script against the shipped component bundle in jsdom; the spec runs in CI).
 
 ## Verification
 
@@ -174,6 +192,16 @@ bun run check:reachability               # ok — 229 capabilities across 9 modu
 bun run lint:protocol-routes             # ok (16 paths)
 bun run format && bun run lint           # both green
 bun run test:hygiene-ratchet             # 1285 test files at budget
+# Wave 4 (kit, both seats):
+bun run --cwd packages/blueprints test   # 116 files, 4102 passed
+bun run --cwd packages/blueprints typecheck   # test + apps tsconfigs, clean
+bun run --cwd apps/mobile typecheck      # clean
+bun run --cwd apps/mobile test           # 1592 passed | 1 file failed pre-existing
+#   (PendingRestartJourney: node:sqlite bundling — fails identically on a clean tree)
+bun run lint:mobile-design && bun run lint:logical-insets && bun run lint:hairline  # ok
+bun run lint && bun run format:check && bun run knip && bun run test:hygiene-ratchet  # green; 1289 files at budget
+# npx playwright test grant-sheet — chromium binary absent in this container (env);
+# spec compiles, webServer boots, assertions verified against the shipped bundle in jsdom; runs in CI
 ```
 
 Link integrity: every relative link added resolves (`decisions.md#sharing-v1--the-grant-plane-825` anchor matches the file's em-dash slug convention; `../packages/vault/src/share/{commons-routing,read-closure,project-closure}.ts` all exist).

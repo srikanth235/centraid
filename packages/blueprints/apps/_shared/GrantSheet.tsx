@@ -86,7 +86,9 @@ function subjectKey(subject: GrantSubject): string {
 
 /** The title a member reads for a subject: its own, else its noun. */
 function subjectTitle(subject: GrantSubject): string {
-  return subject.label?.trim() ? subject.label.trim() : subjectNoun(subject.subjectType);
+  return subject.label?.trim()
+    ? subject.label.trim()
+    : subjectNoun(subject.subjectType);
 }
 
 export function GrantSheet(props: GrantSheetProps): JSX.Element | null {
@@ -97,7 +99,9 @@ export function GrantSheet(props: GrantSheetProps): JSX.Element | null {
   const [offers, setOffers] = useState<GrantSubjectOffer[]>([]);
   const [audienceId, setAudienceId] = useState(props.audienceId ?? "");
   const [subjectId, setSubjectId] = useState("");
-  const [capability, setCapability] = useState<GrantCapability>("view");
+  // `null` is "the member has not chosen"; the capability is then DERIVED from
+  // whatever grant already stands, during render rather than in an effect.
+  const [picked, setPicked] = useState<GrantCapability | null>(null);
   const [standing, setStanding] = useState<GrantRecord[] | null>(null);
   const [channel, setChannel] = useState<GrantChannel>(null);
   const [busy, setBusy] = useState(false);
@@ -111,21 +115,29 @@ export function GrantSheet(props: GrantSheetProps): JSX.Element | null {
   const subject =
     offered.find((candidate) => subjectKey(candidate) === subjectId) ??
     offered[0];
-  // Effect keys, not objects: a host that rebuilds its roster array on every
-  // render must not make the sheet re-read the grant plane on every render.
+  // Effect KEYS, not objects: a host that rebuilds its roster array on every
+  // render must not make the sheet re-read the grant plane on every render, so
+  // the reads below close over these primitives and nothing else.
   const audienceKey = audience?.id ?? "";
   const audienceKind = audience?.kind ?? "party";
-  const subjectPin = props.subject ? subjectKey(props.subject) : "";
+  const pinnedType = props.subject?.subjectType ?? "";
+  const pinnedId = props.subject?.subjectId ?? "";
 
+  // Opening resets the sheet and reads the declared registry. Every write to
+  // state is deferred off the effect body — a synchronous setState here would
+  // cascade a second render before the first one has painted.
   useEffect(() => {
     if (!props.open) return;
-    setBusy(false);
-    setRefusal(null);
-    setConfirming(null);
-    setAudienceId(props.audienceId ?? "");
-    setSubjectId("");
     let active = true;
-    void door.subjects().then((rows) => {
+    void Promise.resolve().then(async () => {
+      if (!active) return;
+      setBusy(false);
+      setRefusal(null);
+      setConfirming(null);
+      setPicked(null);
+      setAudienceId(props.audienceId ?? "");
+      setSubjectId("");
+      const rows = await door.subjects();
       if (active) setOffers(rows);
     });
     return () => {
@@ -137,40 +149,41 @@ export function GrantSheet(props: GrantSheetProps): JSX.Element | null {
   // the object side when a subject is pinned, the person side otherwise.
   useEffect(() => {
     if (!props.open) return;
-    const pinned = props.subject;
-    if (!pinned && !audience) return;
+    if (!pinnedType && !audienceKey) return;
     let active = true;
-    setStanding(null);
-    void (async () => {
+    void Promise.resolve().then(async () => {
+      if (!active) return;
+      setStanding(null);
       try {
-        if (pinned) {
-          const rows = await door.forSubject(pinned);
-          if (active) setStanding(rows);
+        if (pinnedType) {
+          const found = await door.forSubject({
+            subjectType: pinnedType,
+            subjectId: pinnedId,
+          });
+          if (active) setStanding(found);
           return;
         }
-        if (audience?.kind === "party") {
-          const reach = await door.forParty(audience.id);
+        if (audienceKind === "party") {
+          const reach = await door.forParty(audienceKey);
           if (!active) return;
           setChannel(reach.channel);
           setStanding(reach.grants);
           return;
         }
-        if (!audience) return;
-        const read = await door.forAudience(audience.kind, audience.id);
+        const read = await door.forAudience(audienceKind, audienceKey);
         if (!active) return;
         setChannel(null);
         setStanding(read.grants);
       } catch {
-        if (active) {
-          setStanding([]);
-          setRefusal(GRANTS_UNREADABLE);
-        }
+        if (!active) return;
+        setStanding([]);
+        setRefusal(GRANTS_UNREADABLE);
       }
-    })();
+    });
     return () => {
       active = false;
     };
-  }, [props.open, subjectPin, audienceKind, audienceKey, door]);
+  }, [props.open, pinnedType, pinnedId, audienceKind, audienceKey, door]);
 
   useEffect(() => {
     const dialog = dialogRef.current;
@@ -184,11 +197,11 @@ export function GrantSheet(props: GrantSheetProps): JSX.Element | null {
   // A grant already standing over this exact pair opens on ITS capability:
   // proposing `view` over a live `edit` would read as a downgrade nobody asked
   // for, and proposing `edit` because the registry allows it widens the grant.
+  // Derived at render — an effect writing it back would be a second source of
+  // truth for a value the standing read already answers.
   const alreadyStanding =
     subject && standing ? grantOverSubject(standing, subject) : undefined;
-  useEffect(() => {
-    setCapability(defaultCapability(alreadyStanding));
-  }, [alreadyStanding]);
+  const capability = picked ?? defaultCapability(alreadyStanding);
 
   if (!props.open) return null;
 
@@ -238,7 +251,9 @@ export function GrantSheet(props: GrantSheetProps): JSX.Element | null {
 
   const confirmView = confirming ? (
     <div className={styles.confirm}>
-      <h2>{revokeConfirmTitle(audienceLabelFor(confirming, props.audiences))}</h2>
+      <h2>
+        {revokeConfirmTitle(audienceLabelFor(confirming, props.audiences))}
+      </h2>
       <p className={styles.confirmBody}>
         {revokeConfirmBody(
           audienceLabelFor(confirming, props.audiences),
@@ -291,10 +306,16 @@ export function GrantSheet(props: GrantSheetProps): JSX.Element | null {
                 <select
                   aria-label="Person or circle"
                   value={audience?.id ?? ""}
-                  onChange={(event) => setAudienceId(event.target.value)}
+                  onChange={(event) => {
+                    setPicked(null);
+                    setAudienceId(event.target.value);
+                  }}
                 >
                   {props.audiences.map((option) => (
-                    <option key={`${option.kind}:${option.id}`} value={option.id}>
+                    <option
+                      key={`${option.kind}:${option.id}`}
+                      value={option.id}
+                    >
                       {option.kind === "circle"
                         ? `Named group · ${option.label}`
                         : option.label}
@@ -326,7 +347,12 @@ export function GrantSheet(props: GrantSheetProps): JSX.Element | null {
                   <select
                     aria-label="What to share"
                     value={subject ? subjectKey(subject) : ""}
-                    onChange={(event) => setSubjectId(event.target.value)}
+                    onChange={(event) => {
+                      // A different subject may answer different verbs, so the
+                      // member's pick does not carry across.
+                      setPicked(null);
+                      setSubjectId(event.target.value);
+                    }}
                   >
                     {offered.map((candidate) => (
                       <option
@@ -340,20 +366,22 @@ export function GrantSheet(props: GrantSheetProps): JSX.Element | null {
                 )}
               </section>
 
-              <section className={styles.step} aria-label="Access">
+              {/* The fieldset carries the group's accessible name; the
+                  section would only repeat it. */}
+              <section className={styles.step}>
                 <p className={styles.eyebrow}>Access</p>
-                <div className="kit-seg" role="group" aria-label="Access">
+                <fieldset className="kit-seg" aria-label="Access">
                   {capabilities.map((candidate) => (
                     <button
                       key={candidate}
                       type="button"
                       aria-pressed={capability === candidate}
-                      onClick={() => setCapability(candidate)}
+                      onClick={() => setPicked(candidate)}
                     >
                       {capabilityLabel(candidate)}
                     </button>
                   ))}
-                </div>
+                </fieldset>
                 {contributionNote ? (
                   <p className={styles.note}>{contributionNote}</p>
                 ) : null}

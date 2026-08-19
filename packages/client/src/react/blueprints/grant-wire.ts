@@ -76,7 +76,10 @@ export function grantBridge(auth: () => Promise<GatewayAuth>): GrantBridge {
       headers: authHeaders(gatewayAuth.token),
     });
   };
-  const post = async (pathname: string, payload?: unknown): Promise<Response> => {
+  const post = async (
+    pathname: string,
+    payload?: unknown
+  ): Promise<Response> => {
     const gatewayAuth = await auth();
     return doFetch(gatewayAuth.baseUrl, pathname, {
       method: "POST",
