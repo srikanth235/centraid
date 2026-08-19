@@ -320,3 +320,5 @@ The auditor confirmed the kit's load-bearing claims (wire shapes match the route
 One false alarm resolved by root: 9 `src/app-boot/*` suites appeared to fail after the fixes with "Cannot find module …intent-invalidations.ts" — reproduced only when vitest is invoked with `--root packages/blueprints` from the repo root (vite cannot serve the cross-package dynamic import outside its root); via the repo's own `bun run --cwd packages/blueprints test` all 120 files / 4159 tests pass. The repo rule "tools run only via repo scripts" is exactly this trap.
 
 Verdict (wave 4, post-fix): PASS — 126 kit tests green across 15 shared-kit files, 35 mobile kit tests, 7 client wire tests, all four package typechecks clean, lint/format/knip/hygiene at budget
+
+- Per-commit wave note: Wave 8 in progress: give/blob/receive-settings modules deleted; peer plane trimmed to remaining reaches.

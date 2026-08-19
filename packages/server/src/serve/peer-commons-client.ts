@@ -44,7 +44,7 @@ import type {
   CommonsPullOutcome,
   CommonsStewardStatus,
 } from "./commons-observability.js";
-import type { PeerDial, PeerDialRoute } from "./peer-edge-give-client.js";
+import type { PeerDial, PeerDialRoute } from "./peer-link-client.js";
 
 const CHUNK_BYTES = 1024 * 1024;
 

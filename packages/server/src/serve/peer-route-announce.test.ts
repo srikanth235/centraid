@@ -9,7 +9,7 @@
 
 import { describe, expect, test } from "vitest";
 
-import type { PeerDial } from "./peer-edge-give-client.js";
+import type { PeerDial } from "./peer-link-client.js";
 import {
   link,
   makeCoHostedSides,

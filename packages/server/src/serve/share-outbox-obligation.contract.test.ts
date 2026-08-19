@@ -3,18 +3,19 @@
  *
  * `share_effects` succeeded three hand-rolled queues with three drainers and
  * three ways to forget a crash. What replaced them is only worth having if
- * four things hold together: an obligation is keyed by WHAT IT IS ABOUT (so a
- * replay lands on the same row rather than doubling the work), an obligation
- * that waits on a HUMAN is never picked up by a machine tick, one unreadable
+ * three things hold together: an obligation is keyed by WHAT IT IS ABOUT (so a
+ * replay lands on the same row rather than doubling the work), one unreadable
  * row cannot stop the drainer from discharging its neighbours, and a failed
- * attempt backs off instead of spinning — while a transfer that made progress
- * is not punished for a backoff it never earned.
+ * attempt backs off instead of spinning.
+ *
+ * A fourth law arrived with #825's retirement: an obligation whose TRANSPORT
+ * no longer exists must leave the queue, and its edge must be ended honestly.
+ * A queue that keeps retrying a withdrawn verb is a queue that lies about what
+ * is still going to happen.
  *
  * Those are delivery guarantees, not storage details: the failure each one
  * prevents is a share that is silently duplicated, silently stalled, or
- * silently lost. `share-refusal-outbox.test.ts` proves ONE effect kind's
- * journey end-to-end across two gateways; this file owns the guarantees the
- * table gives EVERY obligation, which that journey can only sample.
+ * silently lost.
  *
  * Deterministic by injection: every call here takes an explicit `now`, so the
  * retry clock is asserted at its exact boundary rather than slept through.
@@ -31,8 +32,8 @@ import {
   completeShareEffect,
   deferShareEffect,
   enqueueShareEffect,
-  listQueuedEffects,
 } from "./share-effects.js";
+import { retireDeadShareEffects } from "./share-effects-retire.js";
 
 const opened: GatewayDatabase[] = [];
 
@@ -46,11 +47,73 @@ async function outbox(): Promise<GatewayDatabase> {
 }
 
 function give(edgeId: string): ShareEffect {
-  return { kind: "deliver-give", edgeId, delivery: "peer", crossOwner: true };
+  return { kind: "deliver-give", edgeId };
 }
 
 function dueIds(db: GatewayDatabase, now: number): string[] {
   return claimDueShareEffects(db, { now }).map((pending) => pending.effectId);
+}
+
+/** A row an older generation wrote, straight into the table. The current CHECK
+ *  constraint only applies to tables this build CREATED, which is exactly the
+ *  situation the drain exists for; `kind` is therefore written as the schema
+ *  before the retirement allowed. */
+function seedLegacyRow(
+  db: GatewayDatabase,
+  row: { effectId: string; edgeId: string; kind: string; payload: string }
+): void {
+  db.db.exec("DROP TABLE share_effects");
+  db.db.exec(`CREATE TABLE IF NOT EXISTS share_effects (
+      effect_id TEXT PRIMARY KEY,
+      edge_id TEXT NOT NULL,
+      kind TEXT NOT NULL,
+      payload_json TEXT NOT NULL,
+      status TEXT NOT NULL CHECK (status IN ('queued', 'done')),
+      attempts INTEGER NOT NULL DEFAULT 0,
+      next_attempt_at INTEGER,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    ) STRICT`);
+  db.run(
+    `INSERT INTO share_effects
+       (effect_id, edge_id, kind, payload_json, status, attempts,
+        next_attempt_at, created_at, updated_at)
+     VALUES (?, ?, ?, ?, 'queued', 0, ?, ?, ?)`,
+    row.effectId,
+    row.edgeId,
+    row.kind,
+    row.payload,
+    T0,
+    new Date(T0).toISOString(),
+    new Date(T0).toISOString()
+  );
+}
+
+function seedEdge(db: GatewayDatabase, edgeId: string, status: string): void {
+  const now = new Date(T0).toISOString();
+  db.run("INSERT OR IGNORE INTO owners (owner_id, label, created_at) VALUES ('own-1', 'Owner', ?)", T0);
+  db.run(
+    `INSERT INTO share_edges
+       (edge_id, created_by_device, owner_id, kind, mode, item_type,
+        scope_json, origin_vault_id, audience_vault_id, verbs,
+        target_state, source_state, status, created_at, updated_at)
+     VALUES (?, 'dev-1', 'own-1', 'add', 'snapshot', 'media.asset',
+             '["item-1"]', 'vlt-a', 'vlt-b', 'read',
+             'queued', 'not-needed', ?, ?, ?)`,
+    edgeId,
+    status,
+    now,
+    now
+  );
+}
+
+function edgeRow(
+  db: GatewayDatabase,
+  edgeId: string
+): { status: string; reason: string | null } {
+  return db.db
+    .prepare("SELECT status, reason FROM share_edges WHERE edge_id = ?")
+    .get(edgeId) as { status: string; reason: string | null };
 }
 
 describe("[law:share-outbox-obligation] every share obligation is durable, single, and eventually drained", () => {
@@ -72,42 +135,10 @@ describe("[law:share-outbox-obligation] every share obligation is durable, singl
     enqueueShareEffect(db, give("edge-1"), { now: T0 });
     expect(dueIds(db, T0)).toStrictEqual([]);
 
-    // An explicit requeue is the deliberate opposite — the owner asking for
-    // this exact obligation to be tried again now.
-    enqueueShareEffect(db, give("edge-1"), { requeue: true, now: T0 });
-    expect(dueIds(db, T0)).toStrictEqual(["give:edge-1"]);
-
     // Discharged is forward-only: the row survives as evidence it happened,
     // and no later tick picks it up again.
     completeShareEffect(db, first);
     expect(dueIds(db, T0 + 86_400_000)).toStrictEqual([]);
-    expect(listQueuedEffects(db, "deliver-give")).toStrictEqual([]);
-  });
-
-  test("[law:share-outbox-obligation] an obligation waiting on a human is never claimed by a machine tick", async () => {
-    const db = await outbox();
-    const ask: ShareEffect = {
-      kind: "await-answer",
-      edgeId: "edge-ask",
-      linkId: "link-1",
-      peerVaultId: "vlt-peer",
-      localVaultId: "vlt-local",
-      itemType: "media.asset",
-      itemCount: 3,
-    };
-    enqueueShareEffect(db, ask, { awaitsHuman: true, now: T0 });
-    enqueueShareEffect(db, give("edge-2"), { now: T0 });
-
-    // A year of ticks later, the ask is still nobody's work but its owner's.
-    expect(dueIds(db, T0 + 365 * 86_400_000)).toStrictEqual(["give:edge-2"]);
-    // …and it is emphatically not lost: the surface that shows an owner what
-    // they must answer still finds it, unchanged.
-    expect(listQueuedEffects(db, "await-answer")).toStrictEqual([
-      { effectId: "ask:edge-ask", attempts: 0, effect: ask },
-    ]);
-    expect(queuedFor(db, "await-answer", "edge-ask")?.effect).toStrictEqual(
-      ask
-    );
   });
 
   test("[law:share-outbox-obligation] one unreadable row never blocks the obligations beside it", async () => {
@@ -120,7 +151,7 @@ describe("[law:share-outbox-obligation] every share obligation is durable, singl
          (effect_id, edge_id, kind, payload_json, status, attempts,
           next_attempt_at, created_at, updated_at)
        VALUES ('give:edge-drifted', 'edge-drifted', 'deliver-give',
-               '{"delivery":"carrier-pigeon"}', 'queued', 0, ?, ?, ?)`,
+               'not json at all', 'queued', 0, ?, ?, ?)`,
       T0 + 1,
       new Date(T0 + 1).toISOString(),
       new Date(T0 + 1).toISOString()
@@ -133,7 +164,7 @@ describe("[law:share-outbox-obligation] every share obligation is durable, singl
     ]);
   });
 
-  test("[law:share-outbox-obligation] a failed attempt backs off; a transfer that moved bytes does not", async () => {
+  test("[law:share-outbox-obligation] a failed attempt backs off rather than spinning", async () => {
     const db = await outbox();
     const effectId = enqueueShareEffect(db, give("edge-retry"), { now: T0 });
 
@@ -149,24 +180,44 @@ describe("[law:share-outbox-obligation] every share obligation is durable, singl
     deferShareEffect(db, effectId, { attempts, now: T0 + 5_000 });
     expect(dueIds(db, T0 + 5_000 + 9_999)).toStrictEqual([]);
     expect(dueIds(db, T0 + 5_000 + 10_000)).toStrictEqual(["give:edge-retry"]);
+  });
 
-    // A resumable pull that moved bytes has not failed at anything: it returns
-    // to the queue immediately and forfeits the attempts it had accumulated.
-    deferShareEffect(db, effectId, { attempts: 2, progressed: true, now: T0 });
-    expect(claimDueShareEffects(db, { now: T0 })).toStrictEqual([
-      { effectId: "give:edge-retry", attempts: 0, effect: give("edge-retry") },
-    ]);
+  test("[law:share-outbox-obligation] an obligation whose transport retired leaves the queue and ends its edge honestly", async () => {
+    const db = await outbox();
+    seedEdge(db, "edge-cross", "parked");
+    seedLegacyRow(db, {
+      effectId: "give:edge-cross",
+      edgeId: "edge-cross",
+      kind: "deliver-give",
+      payload: '{"delivery":"peer","crossOwner":true}',
+    });
+
+    const drained = retireDeadShareEffects(db);
+    expect(drained).toStrictEqual({ effects: 1, edges: 1 });
+    // Not skipped, not silently marked discharged — gone from the queue.
+    expect(dueIds(db, T0 + 365 * 86_400_000)).toStrictEqual([]);
+    const after = edgeRow(db, "edge-cross");
+    expect(after.status).toBe("failed");
+    expect(after.reason).toBe(
+      "giving a copy to another person's vault was retired; share it as a grant instead"
+    );
+    // Idempotent: a second open finds nothing left to drain.
+    expect(retireDeadShareEffects(db)).toStrictEqual({ effects: 0, edges: 0 });
+  });
+
+  test("[law:share-outbox-obligation] the drain never rewrites an edge that already reached an answer", async () => {
+    const db = await outbox();
+    seedEdge(db, "edge-landed", "completed");
+    seedLegacyRow(db, {
+      effectId: "pull:edge-landed:abc",
+      edgeId: "edge-landed",
+      kind: "pull-blob",
+      payload: '{"linkId":"l","localVaultId":"v","sha256":"abc","size":1}',
+    });
+
+    expect(retireDeadShareEffects(db)).toStrictEqual({ effects: 1, edges: 0 });
+    const after = edgeRow(db, "edge-landed");
+    expect(after.status).toBe("completed");
+    expect(after.reason).toBeNull();
   });
 });
-
-/** The one queued effect of a kind for an edge — a local read, now that the
- *  retired give routes that needed it as a shared capability are gone. */
-function queuedFor(
-  db: Parameters<typeof listQueuedEffects>[0],
-  kind: Parameters<typeof listQueuedEffects>[1],
-  edgeId: string
-): ReturnType<typeof listQueuedEffects>[number] | undefined {
-  return listQueuedEffects(db, kind).find(
-    (pending) => pending.effect.edgeId === edgeId
-  );
-}

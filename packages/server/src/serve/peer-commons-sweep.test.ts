@@ -23,7 +23,7 @@ import {
   COMMONS_SWEEP_BACKOFF_MAX_MS,
   sweepPeerCommons,
 } from "./peer-commons-sweep.js";
-import type { PeerDial } from "./peer-edge-give-client.js";
+import type { PeerDial } from "./peer-link-client.js";
 import { link, makeSide, seedPhoto } from "./peer-give.test-fixtures.js";
 
 const DAY_MS = 24 * 60 * 60 * 1000;

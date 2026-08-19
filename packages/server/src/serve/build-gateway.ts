@@ -309,7 +309,7 @@ import {
   pullPeerCommons,
   refusePeerCommonsInvitation,
 } from "./peer-commons-client.js";
-import type { PeerDial } from "./peer-edge-give-client.js";
+import type { PeerDial } from "./peer-link-client.js";
 import { createPeerPlaneSweep } from "./peer-plane-sweep.js";
 import { announceLocalRoutes } from "./peer-route-announce.js";
 import { PowerContextMonitor } from "./power-context.js";
@@ -5007,7 +5007,6 @@ export async function buildGateway(
     enrollments: enrollmentStore,
     links: vaultLinksStore,
     vaultFor: (vaultId) => vaultRegistry.get(vaultId)?.db,
-    ...(options.peerPlane?.dial ? { peerDial: options.peerPlane.dial } : {}),
   });
   const commonsHandler = makeCommonsRouteHandler({
     enrollments: enrollmentStore,
@@ -5137,9 +5136,6 @@ export async function buildGateway(
         localRoute: options.peerPlane.localRoute,
         localLabel: () => os.hostname().replace(/\.local$/u, ""),
         budget: createTokenBucket(PEER_PLANE_BUDGET),
-        // The remote-give frames (#726 P3 decision 7) — same vault resolver
-        // and gateway.db the same-machine edge plane already uses.
-        vaultFor: (vaultId) => vaultRegistry.get(vaultId)?.db,
         commonsVaultFor: (vaultId) => vaultRegistry.get(vaultId)?.db,
         commonsGatewayFor: (vaultId) => vaultRegistry.get(vaultId)?.gateway,
         commonsCredentialFor: (vaultId) => {
@@ -5152,13 +5148,12 @@ export async function buildGateway(
               }
             : undefined;
         },
-        gatewayDatabase,
       })
     : undefined;
   /*
-   * Peer-plane background delivery (#726 P3 gaps 2 & 3): drains
-   * the ONE share outbox (`share_effects`: a give's ORIGINAL bytes, a D9
-   * 'refuse' the origin has not heard yet, a give the peer was offline for)
+   * Peer-plane background maintenance (#726 P3 gaps 2 & 3): drains
+   * the ONE share outbox (`share_effects` — since #825 a same-owner
+   * placement whose vaults were not both open when it was asked for)
    * on the gateway's own clock
    * rather than never — same posture as the outbox sweep below (bounded rows
    * per tick, backs off on failure, never throws out of the timer). `dial`

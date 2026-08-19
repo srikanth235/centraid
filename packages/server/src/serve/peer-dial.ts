@@ -1,9 +1,8 @@
 /*
  * The real transport behind `PeerRequest`/`PeerDial` (#726 P3 — "no
  * production peer dial"). Every peer-plane caller — `redeemLinkTicket`,
- * `pushRouteAssertion` (`peer-link-client.ts`), `giveEdgeOverPeer`,
- * `pullEdgeClosure`, `denyEdgeOverPeer` (`peer-edge-give-client.ts`), and
- * the share outbox executor (`share-effect-executor.ts`) — already depend on nothing
+ * `pushRouteAssertion` (`peer-link-client.ts`) and the commons rail's own
+ * client (`peer-commons-client.ts`) — already depend on nothing
  * more than these two transport-agnostic interfaces; this file is the ONE
  * production implementation of them, built on `@centraid/tunnel`'s generic
  * client. Tests substitute a loopback double that calls the far side's route
@@ -34,7 +33,7 @@ import {
 } from "@centraid/tunnel";
 import type { TunnelClient } from "@centraid/tunnel";
 
-import type { PeerDial } from "./peer-edge-give-client.js";
+import type { PeerDial } from "./peer-link-client.js";
 import type { PeerRequest } from "./peer-link-client.js";
 
 export interface PeerDialHandle extends PeerDial {

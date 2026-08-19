@@ -27,17 +27,12 @@ import { AUTHED_DEVICE_HEADER } from "@centraid/server/engine";
 import type { RouteHandler } from "../serve/build-gateway.js";
 import type { EnrollmentStore } from "../serve/enrollment-store.js";
 import type { GatewayDatabase } from "../serve/gateway-db.js";
-import type { PeerDial } from "../serve/peer-edge-give-client.js";
+import type { PeerDial } from "../serve/peer-link-client.js";
 import {
   encodeLinkTicket,
   parseLinkTicket,
   redeemLinkTicket,
 } from "../serve/peer-link-client.js";
-import {
-  isReceiveSetting,
-  receiveSettingFor,
-  setReceiveSetting,
-} from "../serve/peer-receive-settings.js";
 import type { VaultLink } from "../serve/vault-link-row.js";
 import {
   isLinkApproved,
@@ -390,37 +385,6 @@ export function makeVaultLinksRouteHandler(
         return sendJson(res, 405, { error: "method_not_allowed" });
       const approved = deps.store.approve(linkId, callerSide)!;
       return sendJson(res, 200, { link: linkDto(deps.store, approved) });
-    }
-    if (rest[1] === "receive-setting") {
-      // D9 (#726 P3 decision 9): a vault sets ONLY its own receiving
-      // preference — never the peer's — and reads it back the same way.
-      if (method === "GET") {
-        return sendJson(res, 200, {
-          linkId,
-          vaultId: callerSide,
-          setting: receiveSettingFor(deps.gatewayDatabase, linkId, callerSide),
-        });
-      }
-      if (method !== "PUT" && method !== "PATCH")
-        return sendJson(res, 405, { error: "method_not_allowed" });
-      let body: Record<string, unknown>;
-      try {
-        body = await readJson(req);
-      } catch {
-        return sendJson(res, 400, { error: "invalid_body" });
-      }
-      if (!isReceiveSetting(body.setting)) {
-        return sendJson(res, 400, {
-          error: "invalid_receive_setting",
-          message: "setting must be accept, ask, or refuse",
-        });
-      }
-      setReceiveSetting(deps.gatewayDatabase, linkId, callerSide, body.setting);
-      return sendJson(res, 200, {
-        linkId,
-        vaultId: callerSide,
-        setting: body.setting,
-      });
     }
     return false;
   };

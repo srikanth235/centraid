@@ -41,9 +41,8 @@ import type { RouteHandler } from "../serve/build-gateway.js";
 import type { EnrollmentStore } from "../serve/enrollment-store.js";
 import type { GatewayDatabase } from "../serve/gateway-db.js";
 import { judgeEdgeCrossing } from "../serve/link-crossing.js";
-import type { PeerDial } from "../serve/peer-edge-give-client.js";
 import { effectIdFor } from "../serve/share-coordinator.js";
-import type { EdgeDelivery, ShareEffect } from "../serve/share-coordinator.js";
+import type { ShareEffect } from "../serve/share-coordinator.js";
 import type { EdgeKind, EdgeMode, EdgeRow } from "../serve/share-edge-row.js";
 import { readEdgeRow } from "../serve/share-edge-row.js";
 import { applyEdgeSignal, edgeFactsOf } from "../serve/share-edge-store.js";
@@ -77,14 +76,6 @@ export interface EdgesRouteDeps {
   vaultFor: (vaultId: string) => ShareVaultRef | undefined;
   share?: typeof shareItemsToVault;
   move?: typeof moveOutOfVault;
-  /**
-   * Outbound peer-plane dialing (#726 P3 decision 7). Absent means this
-   * build cannot dial out at all — a route that needs one parks rather than
-   * ever reaching for a client that isn't there (production wiring of a real
-   * transport is a `packages/tunnel` concern, out of this package's scope;
-   * tests inject the same in-process transport the link ceremony tests do).
-   */
-  peerDial?: PeerDial;
 }
 
 export function makeEdgesRouteHandler(deps: EdgesRouteDeps): RouteHandler {
@@ -169,16 +160,10 @@ export function makeEdgesRouteHandler(deps: EdgesRouteDeps): RouteHandler {
         message: error instanceof Error ? error.message : String(error),
       });
     }
-    const delivery: EdgeDelivery = "local";
-    const facts = edgeFactsOf(row, { delivery, crossOwner: false });
+    const facts = edgeFactsOf(row);
     row = applyEdgeSignal(deps.gatewayDatabase, row, facts, { type: "begin" });
-    const effect: ShareEffect = {
-      kind: "deliver-give",
-      edgeId: row.edge_id,
-      delivery,
-      crossOwner: facts.crossOwner,
-    };
-    const outcome = await runShareEffect(effectDeps(deps), effect);
+    const effect: ShareEffect = { kind: "deliver-give", edgeId: row.edge_id };
+    const outcome = runShareEffect(effectDeps(deps), effect);
     settle(
       deps.gatewayDatabase,
       { effectId: effectIdFor(effect), attempts: 0, effect },
@@ -186,8 +171,8 @@ export function makeEdgesRouteHandler(deps: EdgesRouteDeps): RouteHandler {
     );
     const settled = readEdgeRow(deps.gatewayDatabase, row.edge_id) ?? row;
     // 202 is "this gateway could not act" — a vault call that threw, or a
-    // build with no way to dial out. A peer STATE (asked, denied, offline)
-    // is a 200 answer about the edge, exactly as before.
+    // vault that is not open here. Any other outcome is a 200 answer about
+    // the edge, exactly as before.
     return sendJson(
       res,
       outcome.state === "retry" && outcome.fault ? 202 : 200,
@@ -201,9 +186,7 @@ function effectDeps(
 ): Parameters<typeof runShareEffect>[0] {
   return {
     db: deps.gatewayDatabase,
-    links: deps.links,
     vaultFor: deps.vaultFor,
-    ...(deps.peerDial ? { dial: deps.peerDial } : {}),
     ...(deps.share ? { share: deps.share } : {}),
     ...(deps.move ? { move: deps.move } : {}),
   };

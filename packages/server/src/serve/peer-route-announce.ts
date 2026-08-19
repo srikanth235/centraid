@@ -18,7 +18,7 @@
  * as delivered).
  */
 
-import type { PeerDial } from "./peer-edge-give-client.js";
+import type { PeerDial } from "./peer-link-client.js";
 import { pushRouteAssertion } from "./peer-link-client.js";
 import type { VaultLinksStore } from "./vault-links-store.js";
 

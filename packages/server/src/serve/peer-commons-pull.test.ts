@@ -27,7 +27,7 @@ import {
   PEER_COMMONS_BLOB_PATH,
 } from "../routes/peer-commons-route.js";
 import { pullPeerCommons } from "./peer-commons-client.js";
-import type { PeerDial } from "./peer-edge-give-client.js";
+import type { PeerDial } from "./peer-link-client.js";
 import { dialFrom, link, makeSide } from "./peer-give.test-fixtures.js";
 import type { Side } from "./peer-give.test-fixtures.js";
 

@@ -12,7 +12,7 @@ import { describe, expect, it, vi } from "vitest";
 import { tempDirSync } from "@centraid/test-kit/temp-dir";
 
 import { GatewayDatabase } from "./gateway-db.js";
-import type { PeerDial } from "./peer-edge-give-client.js";
+import type { PeerDial } from "./peer-link-client.js";
 import { createPeerPlaneSweep } from "./peer-plane-sweep.js";
 import { enqueueShareEffect, listQueuedEffects } from "./share-effects.js";
 import { VaultLinksStore } from "./vault-links-store.js";

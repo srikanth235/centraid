@@ -212,45 +212,31 @@ export function installGatewaySchema(db: DatabaseSync): void {
      * abstraction 2). It succeeds peer_pending_gives, peer_blob_pulls and
      * peer_pending_refusals outright — pre-1.0, no dual write — because
      * those were three hand-rolled queues with three drainers, three retry
-     * policies and three places to forget a crash. One table, one executor,
-     * per-kind handlers.
+     * policies and three places to forget a crash. One table, one executor.
      *
-     * Every effect is forward-only and idempotent: effect_id is DERIVED
-     * from what the effect is about (give:<edge>, ask:<edge>,
-     * refuse:<edge>, pull:<edge>:<sha256>), so a replay after a crash
-     * re-enqueues the SAME row rather than a second copy, and each handler
-     * keeps the anchor that already made its work replay-safe: sha-verified
-     * CAS adoption for a pulled original, the edge-unique
-     * share_access_receipts row for a delivered give, the origin's
-     * acknowledgement for a relayed refusal.
+     * Every effect is forward-only and idempotent: effect_id is DERIVED from
+     * what the effect is about (give:<edge>), so a replay after a crash
+     * re-enqueues the SAME row rather than a second copy, and the handler
+     * keeps the anchor that already made its work replay-safe: the
+     * edge-unique share_access_receipts row for a delivered placement.
      *
-     * next_attempt_at is the retry clock AND the drainability flag: NULL
-     * means no machine ever retries this row because it is waiting on a
-     * HUMAN — that is exactly what an 'await-answer' effect is (the D9 'ask'
-     * the P6 surface lists), and it is why that lifecycle needs no table of
-     * its own. An 'await-answer' effect deliberately carries no bytes and no
-     * closure: nothing is written until the owner accepts, at which point the
-     * audience pulls the closure FRESH from the origin rather than projecting
-     * something staged here to go stale.
+     * next_attempt_at is the retry clock. ONE KIND remains (#825, ruling
+     * G-copy): 'await-answer', 'deliver-refusal' and 'pull-blob' each existed
+     * only to carry a copy to ANOTHER person's vault, and left with
+     * copy-as-share. 'deliver-give' survives as the same-owner placement's
+     * retry anchor, and its payload carries nothing beyond the kind and the
+     * edge. A gateway upgraded across that retirement has its leftover rows
+     * removed once by retireDeadShareEffects (share-effects-retire.ts),
+     * which also ends their edges honestly — an obligation whose transport no
+     * longer exists must not sit queued forever pretending it might land.
      *
-     * Durability-before-network is the invariant a 'deliver-refusal' effect
-     * exists for: the owner's answer commits here, in the same transaction
-     * that closes the 'await-answer' effect, BEFORE any delivery attempt, so
-     * an offline origin can never lose a refusal. A 'pull-blob' effect keeps
-     * its tmp_path in the payload for the same reason it used to be a
-     * column: the file's own on-disk length IS the resume offset, so an
-     * interrupted transfer continues with a Range request instead of
-     * restarting.
-     *
-     * edge_id is deliberately not a foreign key: at the AUDIENCE end of a
-     * remote give there is no local share_edges row at all — the edge lives
-     * on the origin's gateway — and the effect is still this gateway's own
-     * durable obligation.
+     * edge_id is deliberately not a foreign key: it was written at the
+     * AUDIENCE end of a remote give, where no local share_edges row existed.
      */
     CREATE TABLE IF NOT EXISTS share_effects (
       effect_id TEXT PRIMARY KEY,
       edge_id TEXT NOT NULL,
-      kind TEXT NOT NULL CHECK (kind IN ('deliver-give', 'await-answer', 'deliver-refusal', 'pull-blob')),
+      kind TEXT NOT NULL CHECK (kind IN ('deliver-give')),
       payload_json TEXT NOT NULL,
       status TEXT NOT NULL CHECK (status IN ('queued', 'done')),
       attempts INTEGER NOT NULL DEFAULT 0,
@@ -383,20 +369,14 @@ export function installGatewaySchema(db: DatabaseSync): void {
       expires_at INTEGER NOT NULL
     ) STRICT;
     /*
-     * D9 (#726 P3 decision 9): each side's own accept|ask|refuse preference
-     * for gives ARRIVING at its vault over a link. Keyed by (link_id,
-     * vault_id) rather than added as vault_links columns, so setting it never
-     * touches the ceremony/route columns' schema. No row for a pair means
-     * 'accept' — the default that makes an approved link behave exactly as
-     * P2 already did, before D9 existed.
+     * link_receive_settings is NOT here. D9's accept|ask|refuse preference
+     * answered one question — "may another person's vault push a copy into
+     * mine?" — and copy-as-share retired (#825, ruling G-copy), so nothing
+     * arrives for it to govern: a grant is a standing permission the AUDIENCE
+     * accepts through the channel invitation, not a push it pre-authorizes.
+     * retireDeadShareEffects drops the table where an older generation left
+     * one, rather than keeping a setting no code reads.
      */
-    CREATE TABLE IF NOT EXISTS link_receive_settings (
-      link_id TEXT NOT NULL,
-      vault_id TEXT NOT NULL,
-      setting TEXT NOT NULL CHECK (setting IN ('accept', 'ask', 'refuse')),
-      updated_at TEXT NOT NULL,
-      PRIMARY KEY (link_id, vault_id)
-    ) STRICT;
     CREATE TABLE IF NOT EXISTS push_registrations (
       device_id TEXT PRIMARY KEY REFERENCES devices(endpoint_id) ON DELETE CASCADE,
       expo_token TEXT NOT NULL UNIQUE,

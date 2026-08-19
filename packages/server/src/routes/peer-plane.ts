@@ -32,21 +32,15 @@ import {
   PEER_PLANE_PREFIX,
   PEER_PROOF_HEADER,
 } from "@centraid/tunnel";
-import type {
-  ExecuteCommonsCommandInput,
-  ShareVaultRef,
-} from "@centraid/vault";
+import type { ExecuteCommonsCommandInput } from "@centraid/vault";
 
 import type { RouteHandler } from "../serve/build-gateway.js";
-import type { GatewayDatabase } from "../serve/gateway-db.js";
-import { PEER_BLOB_CHUNK_PATH } from "../serve/peer-blob-route-path.js";
 import {
   parseRouteAssertion,
   verifyRouteAssertion,
 } from "../serve/peer-route-assertion.js";
 import type { LinkedPeer } from "../serve/vault-link-row.js";
 import type { VaultLinksStore } from "../serve/vault-links-store.js";
-import { handlePeerBlobChunk } from "./peer-blob-route.js";
 import {
   handlePeerCommonsBlob,
   handlePeerCommonsBlobAuthorize,
@@ -83,12 +77,6 @@ export interface PeerPlaneDeps {
   localLabel: () => string;
   /** Per-link hygiene budget (threat 7). */
   budget?: TokenBucket;
-  /**
-   * A LOCAL vault a proved peer may pull bytes from (`blob/chunk`). The give
-   * frames it also served retired with copy-as-share (#825, ruling G-copy);
-   * absent from the P3-transport build, and `not_found` without it.
-   */
-  vaultFor?: (vaultId: string) => ShareVaultRef | undefined;
   /** Commons commands execute once through the steward's ordinary gateway. */
   commonsVaultFor?: (
     vaultId: string
@@ -99,8 +87,6 @@ export interface PeerPlaneDeps {
   commonsCredentialFor?: (
     vaultId: string
   ) => ExecuteCommonsCommandInput["credential"] | undefined;
-  /** This gateway's own `share_edges`/pending-give bookkeeping. */
-  gatewayDatabase?: GatewayDatabase;
 }
 
 export interface PeerIdentity {
@@ -357,22 +343,16 @@ export function makePeerPlaneHandler(deps: PeerPlaneDeps): RouteHandler {
       return assertRoute(req, res, peer);
     }
     /*
-     * The remote-GIVE frames are gone (#825, ruling G-copy): copy-as-share
-     * retired with the grant plane, and `/centraid/_peer/edge/give`,
-     * `/edge/closure/:id` and `/edge/deny` answer `not_found` here exactly as
-     * an unknown path does. Closure reading and projection survive BENEATH a
-     * grant as internal fulfillment transport; they are simply not a frame a
-     * peer can ask for any more.
+     * COPY-AS-SHARE IS OFF THIS WIRE (#825, ruling G-copy). The remote-give
+     * frames — `/centraid/_peer/edge/give`, `/edge/closure/:id`, `/edge/deny`
+     * — and the ranged byte pull their audience ran, `/centraid/_peer/blob/
+     * chunk`, all answer `not_found` here exactly as an unknown path does.
+     * Closure reading and projection survive BENEATH a grant as internal
+     * fulfillment transport; they are simply not a frame a peer can ask for.
+     * What a linked peer may still reach on this plane is the link ceremony,
+     * the route assertion, and the COMMONS rail below — which carries its own
+     * blob doors (`/centraid/_peer/commons/blob`) and never used this one.
      */
-    if (deps.vaultFor && deps.gatewayDatabase) {
-      if (pathname === PEER_BLOB_CHUNK_PATH && method === "GET") {
-        const query = new URL(target, "http://gateway.local").searchParams;
-        return handlePeerBlobChunk(res, peer, query, {
-          gatewayDatabase: deps.gatewayDatabase,
-          blobsFor: (vaultId) => deps.vaultFor!(vaultId)?.blobs.local,
-        });
-      }
-    }
     if (
       deps.commonsVaultFor &&
       deps.commonsGatewayFor &&

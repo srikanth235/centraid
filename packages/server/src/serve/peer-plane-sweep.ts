@@ -1,8 +1,12 @@
 /*
  * Adaptive peer maintenance. Since #750 there is ONE queue to drain — the
- * share outbox (`share_effects`) — instead of a per-lifecycle drainer for
- * give bytes and another for refusal relays; the commons sweep and the route
- * re-announcement remain their own concerns.
+ * share outbox (`share_effects`) — instead of a drainer per lifecycle; the
+ * commons sweep and the route re-announcement remain their own concerns.
+ *
+ * Since #825 the outbox is no longer a PEER concern at all: copy-as-share
+ * retired, so its one surviving obligation is a same-owner placement between
+ * two local vaults. It stays on this tick because it is still a durable
+ * obligation something has to retry, not because it dials anybody.
  */
 
 import type {
@@ -14,7 +18,7 @@ import type {
 
 import type { GatewayDatabase } from "./gateway-db.js";
 import { sweepPeerCommons } from "./peer-commons-sweep.js";
-import type { PeerDial } from "./peer-edge-give-client.js";
+import type { PeerDial } from "./peer-link-client.js";
 import { drainShareEffects } from "./share-effect-executor.js";
 import type { VaultLinksStore } from "./vault-links-store.js";
 
@@ -80,29 +84,24 @@ export function createPeerPlaneSweep(
     const dial = options.dial();
     try {
       // Route announcements first: a peer that moved cannot be dialed for
-      // pulls/refusals until IT has re-asserted to us, but our own move must
+      // commons work until IT has re-asserted to us, but our own move must
       // not wait behind this tick's other work either way.
       if (options.announceRoutes) await options.announceRoutes();
-      const [effects, commons] = await Promise.all([
-        drainShareEffects(
-          {
-            db: options.db,
+      // The share outbox drains WITHOUT a dial since #825: its one surviving
+      // obligation is a same-owner placement between two vaults open here.
+      const effects = drainShareEffects(
+        { db: options.db, vaultFor: options.vaultFor },
+        { limit: rowLimit }
+      );
+      const commons = options.commonsVaults
+        ? await sweepPeerCommons({
+            vaults: options.commonsVaults(),
             links: options.links,
-            vaultFor: options.vaultFor,
             ...(dial ? { dial } : {}),
-          },
-          { limit: rowLimit }
-        ),
-        options.commonsVaults
-          ? sweepPeerCommons({
-              vaults: options.commonsVaults(),
-              links: options.links,
-              ...(dial ? { dial } : {}),
-              ...(options.logger ? { logger: options.logger } : {}),
-              limit: rowLimit,
-            })
-          : Promise.resolve({ progressed: 0 }),
-      ]);
+            ...(options.logger ? { logger: options.logger } : {}),
+            limit: rowLimit,
+          })
+        : { progressed: 0 };
       const progressed =
         effects.done.length > 0 ||
         effects.abandoned.length > 0 ||

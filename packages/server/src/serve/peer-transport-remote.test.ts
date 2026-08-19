@@ -45,7 +45,7 @@ import { EnrollmentStore } from "./enrollment-store.js";
 import { GatewayDatabase } from "./gateway-db.js";
 import { startPeerDial } from "./peer-dial.js";
 import type { PeerDialHandle } from "./peer-dial.js";
-import type { PeerDial } from "./peer-edge-give-client.js";
+import type { PeerDial } from "./peer-link-client.js";
 import {
   encodeLinkTicket,
   parseLinkTicket,
