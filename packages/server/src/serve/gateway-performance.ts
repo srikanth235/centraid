@@ -85,7 +85,13 @@ export class GatewayPerformanceMonitor {
   snapshot(): GatewayPerformanceSnapshot {
     const current = this.readWindow();
     const signal = current.eventLoopLagSamples > 0 ? current : this.lastWindow;
-    this.peakP99Ms = Math.max(this.peakP99Ms, signal.eventLoopLagP99Ms);
+    // A live rolling window can have a handful of samples whose p99 is the
+    // max of that handful. Peak is a completed-window statistic; promote the
+    // in-progress window only when no timer is running (unit tests with
+    // sampleWindowMs: 0).
+    if (!this.timer) {
+      this.peakP99Ms = Math.max(this.peakP99Ms, signal.eventLoopLagP99Ms);
+    }
     return {
       ...signal,
       eventLoopLagPeakP99Ms: this.peakP99Ms,
@@ -104,6 +110,14 @@ export class GatewayPerformanceMonitor {
     this.lastWindow = { ...EMPTY_WINDOW };
     this.peakP99Ms = 0;
     this.histogram.reset();
+    // The rolling timer was scheduled from construction. Closing it against
+    // the handful of samples collected since this reset would treat their max
+    // as p99/peak (CI: 6 samples, 503 ms). Restart the window so the first
+    // post-reset close is a full interval.
+    if (this.timer) {
+      clearTimeout(this.timer);
+      this.scheduleWindowEnd(this.sampleIntervalMs);
+    }
   }
 
   close(): void {

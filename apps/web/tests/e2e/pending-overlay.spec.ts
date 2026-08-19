@@ -111,32 +111,29 @@ async function connectPwa(page: Page): Promise<void> {
   await page.locator('nav[aria-label="Apps"]').waitFor({ state: "visible" });
 }
 
+/** Roster bar verb is `Add`; first-run commit is `Add person`. Both can be
+ *  visible at once, so the locator is the first match inside the inline view. */
+function peopleNewPersonControl(page: Page) {
+  return page
+    .getByTestId("inline-app-view")
+    .getByRole("button", { name: /^Add(?: person)?$/u })
+    .first();
+}
+
 async function prepareTally(page: Page): Promise<void> {
   await openFirstParty(page, "Tally");
   type Dashboard = { friends: Array<{ party_id: string }> };
-  let dashboard: Dashboard | undefined;
+  let memberId: string | undefined;
   await expect
     .poll(
       async () => {
         try {
-          dashboard = await page.evaluate(() =>
+          const dashboard = await page.evaluate(() =>
             window.centraid.read<Dashboard>({ query: "dashboard", input: {} })
           );
-          return true;
-        } catch {
-          return false;
-        }
-      },
-      { timeout: 30_000 }
-    )
-    .toBe(true);
-  let memberId = dashboard!.friends[0]?.party_id;
-  if (!memberId) {
-    let friend: { status: string; partyId?: string } | undefined;
-    await expect
-      .poll(
-        async () => {
-          friend = await page.evaluate(async () => {
+          memberId = dashboard.friends[0]?.party_id;
+          if (memberId) return "ready";
+          const friend = await page.evaluate(async () => {
             try {
               const outcome = await window.centraid.write({
                 action: "add-friend",
@@ -148,16 +145,21 @@ async function prepareTally(page: Page): Promise<void> {
                 partyId: outcome.output?.["party_id"] as string | undefined,
               };
             } catch {
-              return { status: "replica-not-ready" };
+              return { status: "replica-not-ready" as const };
             }
           });
+          memberId = friend.partyId;
+          if (memberId) return "ready";
+          // Idempotent replay (`tally.add_friend` is once) returns executed
+          // without party_id; the next dashboard read supplies the row.
           return friend.status;
-        },
-        { timeout: 30_000 }
-      )
-      .toBe("executed");
-    memberId = friend?.partyId;
-  }
+        } catch {
+          return "replica-not-ready";
+        }
+      },
+      { timeout: 30_000 }
+    )
+    .toBe("ready");
   expect(memberId).toEqual(expect.any(String));
   await expect
     .poll(
@@ -307,9 +309,7 @@ test("production PWA routes recover Tally, Tasks, and Agenda pending rows while 
   // People is restored (#821): the roster is live, so the New-person
   // control is the observable that the route booted — not the v11 wall.
   await openFirstParty(page, "People");
-  await expect(
-    page.getByRole("button", { name: /^Add(?: person)?$/u })
-  ).toBeVisible();
+  await expect(peopleNewPersonControl(page)).toBeVisible();
 
   await openFirstParty(page, "Tally");
   await page.getByText("Offline Journey", { exact: true }).first().click();
@@ -353,9 +353,7 @@ test("production PWA routes recover Tally, Tasks, and Agenda pending rows while 
   await expect(page.locator(".kit-pending-chip")).toHaveText("queued");
 
   await openFirstParty(page, "People");
-  await expect(
-    page.getByRole("button", { name: /^Add(?: person)?$/u })
-  ).toBeVisible();
+  await expect(peopleNewPersonControl(page)).toBeVisible();
 
   await openFirstParty(page, "Tally");
   await page.getByText("Offline Journey", { exact: true }).first().click();
