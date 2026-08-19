@@ -72,6 +72,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Fixed
 
+- Docs Preview opens the reading sheet as an article named for the file, with the title on the paper and the body paragraphs painted, so the north-star journey can find `lease-notes.txt` after a PWA reload ([#822](https://github.com/srikanth235/centraid/issues/822)).
+- `main` CI after the Docs/System binding-layer land: web typecheck accepts the health-module mock, and the matrix fingerprint is re-pinned for the two pending-overlay flow-name edits ([#822](https://github.com/srikanth235/centraid/issues/822)).
 - A handler that exceeds its deadline now fails closed on that deadline instead of waiting for the worker thread to exit, so a hung query cannot hold the admission slot or stall the next dispatch ([#811](https://github.com/srikanth235/centraid/issues/811)).
 - `main` CI after the served-app retirement: spent `replacesMinimumTestsFlow` markers no longer fail `test:ratchet` against itself, and the web offline-reconnect journey writes through the already-open Tasks session instead of remounting into a not-bootstrapped replica ([#802](https://github.com/srikanth235/centraid/issues/802)).
 - Text embeddings refresh when OCR or transcript text is rewritten under the same embedding model, so semantic search cannot retain a vector for superseded text ([#736](https://github.com/srikanth235/centraid/issues/736)).

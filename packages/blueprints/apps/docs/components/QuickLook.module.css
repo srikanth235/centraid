@@ -597,6 +597,9 @@
   font: var(--t-title);
   color: var(--text);
 }
+.readHead:first-child {
+  margin-block-start: 0;
+}
 .readPara {
   margin: 0 0 var(--sp-4);
   font: var(--t-reading);
