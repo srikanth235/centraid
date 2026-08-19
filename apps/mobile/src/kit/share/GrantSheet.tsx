@@ -272,6 +272,16 @@ export default function GrantSheet(props: GrantSheetProps): React.JSX.Element {
     ? groupContributionNote(subject.subjectType, capability)
     : null;
   const rows = standing ? liveGrants(standing) : [];
+  // An audience the vault has no record of gets its OWN sentence: "nothing is
+  // shared with them" is a lie about a person we do not know.
+  const standingEmptyLine = audienceKnown
+    ? nothingSharedYet(
+        props.subject
+          ? subjectTitle(props.subject)
+          : (audience?.label ?? "this audience")
+      )
+    : audienceNotKnown(audience?.label ?? "this audience");
+  const showStanding = audienceKnown && rows.length > 0;
   const reach = channelReach(channel);
   const blocked =
     !audience ||
@@ -515,19 +525,7 @@ export default function GrantSheet(props: GrantSheetProps): React.JSX.Element {
                   <Text style={[styles.note, { color: colors.textSoft }]}>
                     Reading shares…
                   </Text>
-                ) : !audienceKnown ? (
-                  <Text style={[styles.note, { color: colors.textSoft }]}>
-                    {audienceNotKnown(audience?.label ?? "this audience")}
-                  </Text>
-                ) : rows.length === 0 ? (
-                  <Text style={[styles.note, { color: colors.textSoft }]}>
-                    {nothingSharedYet(
-                      props.subject
-                        ? subjectTitle(props.subject)
-                        : (audience?.label ?? "this audience")
-                    )}
-                  </Text>
-                ) : (
+                ) : showStanding ? (
                   rows.map((grant) => (
                     <View
                       key={grant.grantId}
@@ -569,6 +567,10 @@ export default function GrantSheet(props: GrantSheetProps): React.JSX.Element {
                       </Pressable>
                     </View>
                   ))
+                ) : (
+                  <Text style={[styles.note, { color: colors.textSoft }]}>
+                    {standingEmptyLine}
+                  </Text>
                 )}
               </View>
 

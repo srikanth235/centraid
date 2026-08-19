@@ -95,7 +95,9 @@ describe("the shell's grant bridge", () => {
       // payload, shared with the native seat.
       const grants = [{ grantId: "grant-1" }];
       answer = () => ({ status: 200, body: { channel: null, grants } });
-      await expect(grantBridge(auth).forParty("party-priya")).resolves.toEqual({
+      await expect(
+        grantBridge(auth).forParty("party-priya")
+      ).resolves.toStrictEqual({
         channel: null,
         grants,
       });

@@ -266,6 +266,16 @@ export function GrantSheet(props: GrantSheetProps): JSX.Element | null {
     ? groupContributionNote(subject.subjectType, capability)
     : null;
   const rows = standing ? liveGrants(standing) : [];
+  // An audience the vault has no record of gets its OWN sentence: "nothing is
+  // shared with them" is a lie about a person we do not know.
+  const standingEmptyLine = audienceKnown
+    ? nothingSharedYet(
+        props.subject
+          ? subjectTitle(props.subject)
+          : (audience?.label ?? "this audience")
+      )
+    : audienceNotKnown(audience?.label ?? "this audience");
+  const showStanding = audienceKnown && rows.length > 0;
   const reach = channelReach(channel);
   const cannotShare =
     !audience ||
@@ -457,19 +467,7 @@ export function GrantSheet(props: GrantSheetProps): JSX.Element | null {
                 <p className={styles.eyebrow}>Already shared</p>
                 {standing === null ? (
                   <p className={styles.note}>Reading shares…</p>
-                ) : !audienceKnown ? (
-                  <p className={styles.note}>
-                    {audienceNotKnown(audience?.label ?? "this audience")}
-                  </p>
-                ) : rows.length === 0 ? (
-                  <p className={styles.note}>
-                    {nothingSharedYet(
-                      props.subject
-                        ? subjectTitle(props.subject)
-                        : (audience?.label ?? "this audience")
-                    )}
-                  </p>
-                ) : (
+                ) : showStanding ? (
                   <ul className={styles.standing}>
                     {rows.map((grant) => (
                       <li className={styles.standingRow} key={grant.grantId}>
@@ -498,6 +496,8 @@ export function GrantSheet(props: GrantSheetProps): JSX.Element | null {
                       </li>
                     ))}
                   </ul>
+                ) : (
+                  <p className={styles.note}>{standingEmptyLine}</p>
                 )}
               </section>
 
