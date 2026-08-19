@@ -272,6 +272,32 @@ export {
   type ShareChannel,
   type ShareChannelState,
 } from "./grant/channel.js";
+// Fulfillment: the act of keeping a grant true. View re-projects the subject
+// over the closure transport, edit routes back through the commons rail, and
+// revoke propagates a removal instead of pretending it reached the peer.
+export {
+  fulfillShareGrant,
+  propagateShareGrantRevocation,
+  ShareGrantMaxSizeError,
+  type FulfillShareGrantInput,
+  type GrantFulfillmentResult,
+  type GrantFulfillmentStep,
+  type GrantRemovalResult,
+  type GrantRemovalStep,
+  type PropagateShareGrantRevocationInput,
+} from "./grant/fulfillment.js";
+export {
+  routeShareGrantEdit,
+  SHARE_GRANT_CO_CONTRIBUTION_COMMANDS,
+  SHARE_GRANT_CO_CONTRIBUTION_TYPES,
+  type ShareGrantEditRoute,
+} from "./grant/fulfillment-edit.js";
+export {
+  mintGrantInvitation,
+  withdrawGrantInvitations,
+  type GrantInvitation,
+  type MintGrantInvitationInput,
+} from "./grant/fulfillment-invite.js";
 // The LOCAL orphan reclaim (#599 d11): each vault unlinks only its own CAS
 // directory entries, so hardlinked bytes survive until the last vault lets go.
 export {

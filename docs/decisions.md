@@ -234,7 +234,7 @@ Ruled 2026-08-19 by [#825](https://github.com/srikanth235/centraid/issues/825). 
 | **G-audience** | Audience-first is the primary key. "Everything Priya can reach" is one query over `share_grant`; People's person screen is the grant dashboard, and Share and Revoke return there through it. |
 | **G-subject** | `people.person` is never a subject. A person is the **audience** side of a grant; subjects are the shared things — album, folder, document, asset. |
 
-Per-grant size ceilings carry over unchanged from the commons limits; the grant plane adds no second budget.
+Per-grant size ceilings carry over unchanged from the commons limits; the grant plane adds no second budget. Circle grants recompile their roster on every fulfillment pass — a party added to a granted circle is delivered on the next pass with no re-grant — while grants the #825 migration decomposed into per-party rows are literal and do not follow roster drift; reaching a later addition there takes a new grant.
 
 ## Performance and Rust byte plane
 

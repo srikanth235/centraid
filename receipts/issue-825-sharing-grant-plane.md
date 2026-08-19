@@ -7,11 +7,11 @@ One umbrella, one receipt, nine waves (0–8). Wave 0 records the rulings in the
 ## Checklist
 
 - [x] `grant` + `fulfillment` tables exist with the live-grant uniqueness and lifecycle above; migration lands existing commons grants and bindings with zero semantic loss (proven by pre/post fixture tests).
-- [ ] Sharing an album/folder covers later additions: an item added to a granted container reaches the audience without a new grant.
-- [ ] An origin edit on a `view`-granted subject follows to the audience replica (test: caption/body edit visible after sync).
+- [x] Sharing an album/folder covers later additions: an item added to a granted container reaches the audience without a new grant.
+- [x] An origin edit on a `view`-granted subject follows to the audience replica (test: caption/body edit visible after sync).
 - [ ] Revoking a grant stops sync and drives fulfillment to `remove_sent`/`removed`; a compliant peer removes the replica (integration test), and the UI copy states the best-effort nature verbatim.
 - [ ] A grant to an unlinked person parks at `awaiting_channel` and mints the channel invitation as its first step — no separate link ceremony required of the member.
-- [ ] `edit`-capability writes route back via the command routing table; a subject type without a routing answer cannot be offered (mechanical test, #750).
+- [x] `edit`-capability writes route back via the command routing table; a subject type without a routing answer cannot be offered (mechanical test, #750).
 - [ ] Docs and Photos share/unshare through the one shared kit on web **and** mobile; no app-private share plumbing remains.
 - [ ] People's person screen lists every live grant for that party and offers `Share` and `Revoke`; the three #821 withholding rows in `docs/design-divergences.md` are closed or rewritten with this issue as the cause.
 - [ ] `peer-edge-give-route` and the give/edge-answer verbs are gone from the public surface; `readShareClosure`/`projectShareClosure` remain internal-only fulfillment transport.
@@ -38,6 +38,17 @@ The `docs/decisions.md records the eight rulings + supersessions` checklist item
 
 Realized here, word for word: `grant` + `fulfillment` tables exist with the live-grant uniqueness and lifecycle above; migration lands existing commons grants and bindings with zero semantic loss (proven by pre/post fixture tests). The tables are `share_grant`/`share_fulfillment` (the consent plane owns the bare `grant` name), the uniqueness is the partial index, the lifecycle is `granted_at`/`revoked_at` plus the five fulfillment states, and the pre/post fixture tests are `migrate-share-grant.test.ts`'s seeded v2 vault asserted row-for-row after the rung, with the commons snapshot proving byte-identical survival.
 
+### Wave 2 — the fulfillment engine
+
+- `packages/vault/src/grant/fulfillment.ts` (new, 457 lines): `fulfillShareGrant` — one pass over a grant's audience parties. For each: no channel → `mintGrantInvitation` + `awaiting_channel` (peer vault known) or invitation-only (no vault to name); live channel but peer vault not mounted here → `syncing` with a detail naming the vault; deliverable → the view strategy: the prior projection is found via the audience's `core_share_origin`, scrubbed with `unshareFromVault`, and the CURRENT closure re-projected in one audience transaction — origin-authoritative re-projection, no CRDT, so an origin caption/body edit follows on the next pass and a crash can never leave the audience empty under a live grant. Per-grant `max_size_bytes` (default: the commons ceiling constant — no second budget) is checked before any state moves; `ShareGrantMaxSizeError` names grant and sizes. The owner is skipped when a circle audience contains the granter. `propagateShareGrantRevocation` — stops sync, hard-deletes the audience projection (no tombstone, the v1 default), `remove_sent` → `removed` only when a real deletion happened in a real audience vault; an unreachable peer keeps `remove_sent` with an honest detail, never a faked `removed`; pending grant invitations are withdrawn.
+- `packages/vault/src/grant/fulfillment-edit.ts` (new, 192 lines): `routeShareGrantEdit` — resolves a command's container via `commonsRoutesForCommand` (the declared table, never string heuristics), finds live `share_grant` rows over the resolved containers, and hands delegation to `commonsGrantForCommand` so the commons rail's own decision routes the write; commons steward/quota/recovery behavior untouched. Two v1 refusals are explicit `refusal` results, never silent success: co-contribution outside `tally.group`, and an edit grant over a container with no commons rail (the #750 failure mode).
+- `packages/vault/src/grant/fulfillment-invite.ts` (new, 188 lines): `mintGrantInvitation` reuses the commons machinery (`queueCommonsInvitation` when the peer vault is known, `createCommonsClaimInvitation` when nothing is), written into the origin vault — the row `channelForParty` reads to answer `invited`; a standing pending invitation is reported, not re-minted, so a claim token never rotates out from under a sent link. `withdrawGrantInvitations` hard-deletes pending invitation rows carrying a share-grant id on revoke.
+- `packages/server/src/serve/grant-fulfillment.ts` (new, 137 lines): the host seam — `fulfillGrantsForSubject` (every live grant over a subject, failures isolated per grant and reported with reasons, not thrown) and `propagateGrantRemoval`. Reachable only from its test until wave 3 wires the `build-gateway.ts` hook.
+- Tests: `packages/vault/src/grant/fulfillment.test.ts` (408 lines) proves over two real vault fixtures: share → deliver; an item added to a granted album reaches the audience with **no second grant** (membership-not-snapshot needs no code — `readShareClosure` re-walks the container each pass); an origin caption edit is visible in the audience vault after the next pass; revoke → `remove_sent` → peer removal → `removed`; the unreachable-peer case stays `remove_sent` and the peer still holds the copy. `packages/vault/src/grant/fulfillment-edit.test.ts` (202 lines) proves edit writes route back through the routing table and both refusals fire. `packages/server/src/serve/grant-fulfillment.test.ts` (262 lines) covers the seam. `packages/vault/src/index.ts` gains three contiguous export blocks (engine, edit routing, invitation minting).
+- `docs/decisions.md`: one sentence added under the Sharing v1 section — circle grants recompile their roster on every fulfillment pass (a party added to a granted circle is delivered on the next pass with no re-grant), while migration-decomposed per-party grants are literal and do not follow roster drift.
+
+Realized here, word for word — Sharing an album/folder covers later additions: an item added to a granted container reaches the audience without a new grant. An origin edit on a `view`-granted subject follows to the audience replica (test: caption/body edit visible after sync). `edit`-capability writes route back via the command routing table; a subject type without a routing answer cannot be offered (mechanical test, #750). All three are proven at the engine layer by the integration tests above over real two-vault fixtures; the app surfaces that expose them arrive in waves 4–7. The revoke item stays unchecked only for its UI-copy half; the awaiting_channel item stays unchecked until People's wave-7 surface proves no separate link ceremony is asked of the member.
+
 ## Decisions
 
 The judgment calls the diff cannot show.
@@ -57,6 +68,16 @@ The judgment calls the diff cannot show.
 **`packages/vault/src/grant/` is deliberately outside `share-reachability.json` in this wave.** The reachability gate demands a production caller for every export of the listed share modules, and the grant store's production callers arrive in waves 2–3; adding the glob now would force a fake caller. The glob lands with the engine.
 
 **Writers take input objects, readers stay positional.** Every write needs a caller-supplied timestamp (no host clock in the vault), matching `share/party-vault-binding.ts`'s house style.
+
+**View delivery is scrub-then-reproject in one audience transaction (wave 2).** `projectShareClosure` dedupes by sha256 and row id — right for one-time placement, wrong for a standing grant (a caption edit would never land). The engine finds the prior projection via the audience's `core_share_origin`, removes it with `unshareFromVault`, and projects the current closure, all under one transaction, so a crash never leaves the audience empty under a live grant. Membership-not-snapshot costs no code: `readShareClosure` re-walks the container every pass.
+
+**`removed` is never faked; `syncing` is honest transit (wave 2).** Only an actual deletion in a real audience vault advances `remove_sent` to `removed`; an unreachable peer keeps `remove_sent` with a detail saying the peer has not acknowledged. A live channel whose peer vault is not mounted on this host reports `syncing` with the vault named — the ask stands, the grant has not failed.
+
+**Revoke withdraws the grant's own pending invitations (wave 2).** `withdrawGrantInvitations` hard-deletes pending `share_commons_invitation` rows carrying a share-grant id — leaving them would keep `channelForParty` answering `invited` for a grant that no longer stands. This touches a table whose lifecycle the commons plane owns, but only rows the grant plane itself minted and only while still pending; accepted/refused history is untouched. If commons should own the verb, a commons-side withdraw is the follow-up shape.
+
+**Per-grant ceiling reuses the commons budget constant (wave 2).** `max_size_bytes ?? COMMONS_DEFAULT_MAX_SIZE_BYTES`, checked before any fulfillment state moves so an over-ceiling grant leaves no row; `ShareGrantMaxSizeError` names grant and sizes. No second budget exists.
+
+**The server seam isolates failures per grant (wave 2).** One over-ceiling or unreachable audience must not stall everyone else's delivery: `fulfillGrantsForSubject` reports each grant's outcome with reasons instead of throwing, and stays unwired until wave 3 adds the `build-gateway.ts` hook — nothing calls it in production yet, deliberately.
 
 ## Out of scope
 
@@ -80,6 +101,13 @@ bun run --cwd packages/vault test        # 178 files, 1358 passed | 2 skipped
 bun run --cwd packages/vault typecheck   # tsc -p tsconfig.test.json --noEmit, clean
 bun run lint:schema-export               # ratchet f2991949… matches the re-pinned fingerprint
 bun run knip                             # exit 0, no unused-export findings for grant/
+# Wave 2 (engine):
+bun run --cwd packages/vault test        # 180 files, 1368 passed | 2 skipped
+bun run --cwd packages/server typecheck  # clean
+bunx vitest run --root packages/vault src/grant/            # 5 files, 27 passed
+bunx vitest run --root packages/server src/serve/grant-fulfillment.test.ts  # 3 passed
+bun run check:reachability               # ok — 212 capabilities across 8 module globs
+bun run test:hygiene-ratchet             # 1285 test files at budget
 ```
 
 Link integrity: every relative link added resolves (`decisions.md#sharing-v1--the-grant-plane-825` anchor matches the file's em-dash slug convention; `../packages/vault/src/share/{commons-routing,read-closure,project-closure}.ts` all exist).
