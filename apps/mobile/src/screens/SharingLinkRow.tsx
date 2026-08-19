@@ -1,12 +1,15 @@
-// One link row for Sharing.tsx — the receive setting is tap-to-cycle to match this
-// screen's existing component idiom (nothing here uses a TextInput/keyboard
-// entry). Split out to keep Sharing.tsx under the repo's file-size guidance.
+// One link row for Sharing.tsx. Split out to keep Sharing.tsx under the
+// repo's file-size guidance.
 //
-// `LinkTicketPanel` (below) is the one exception to "no TextInput": pasting
-// a ticket someone showed you is external data, not a setting to cycle
-// through, so it needs a real field.
+// It carried a tap-to-cycle "Receive gives" preference until #825 (ruling
+// G-copy) retired copy-as-share: nothing arrives over a link for a preference
+// to govern, because a grant is a standing permission the audience accepts
+// through its channel invitation, not a push it pre-authorizes.
+//
+// `LinkTicketPanel` (below) is this file's one TextInput: pasting a ticket
+// someone showed you is external data, not a setting to cycle through.
 import * as Clipboard from "expo-clipboard";
-import React, { useEffect, useState } from "react";
+import React, { useState } from "react";
 import { Pressable, StyleSheet, TextInput, View } from "react-native";
 
 import { SHARING_UNREACHABLE } from "@centraid/client/sharing-copy";
@@ -15,53 +18,24 @@ import { Text } from "../kit/components/NativeText";
 import type { useTheme } from "../kit/theme";
 import { density, family, radii, t } from "../kit/theme";
 import {
-  getReceiveSetting,
   mintLinkTicket,
   redeemLinkTicket,
-  setReceiveSetting,
 } from "../lib/replica/links-transport";
-import type {
-  GatewayLink,
-  ReceiveSetting,
-} from "../lib/replica/links-transport";
+import type { GatewayLink } from "../lib/replica/links-transport";
 
 export default function SharingLinkRow({
   link,
   label,
   busy,
   colors,
-  gatewayBase,
   onApprove,
 }: {
   link: GatewayLink;
   label: string;
   busy: boolean;
   colors: ReturnType<typeof useTheme>["colors"];
-  gatewayBase?: string;
   onApprove: () => void;
 }): React.JSX.Element {
-  const [setting, setSetting] = useState<ReceiveSetting | undefined>();
-  useEffect(() => {
-    if (!gatewayBase) return;
-    let live = true;
-    getReceiveSetting(gatewayBase, link.linkId)
-      .then((value) => {
-        if (live) setSetting(value);
-      })
-      .catch(() => undefined);
-    return () => {
-      live = false;
-    };
-  }, [gatewayBase, link.linkId]);
-
-  const cycle = (): void => {
-    if (!gatewayBase || !setting) return;
-    const order: ReceiveSetting[] = ["accept", "ask", "refuse"];
-    const next = order[(order.indexOf(setting) + 1) % order.length]!;
-    setSetting(next);
-    void setReceiveSetting(gatewayBase, link.linkId, next);
-  };
-
   return (
     <View
       style={[
@@ -75,11 +49,6 @@ export default function SharingLinkRow({
           {link.revoked ? "revoked" : link.approved ? "linked" : "pending"}
         </Text>
       </View>
-      <Pressable accessibilityRole="button" disabled={!setting} onPress={cycle}>
-        <Text style={[t("small"), { color: colors.textSoft }]}>
-          Receive gives: {setting ?? "…"} (tap to change)
-        </Text>
-      </Pressable>
       {!link.approved && !link.revoked ? (
         <Pressable
           accessibilityRole="button"

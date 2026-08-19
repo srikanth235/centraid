@@ -902,34 +902,29 @@ export {
   type GatewayOwnerVault,
 } from "./gateway-client-owners.js";
 
-// The link ceremony + D9 receive setting (#726 P2/P3) and the edge/ask
-// surface (#726 P2/P4) — the People panel's own data plane. Same barrel so
-// `SharingCard.tsx` reads it beside the devices/owners surfaces above.
+// The link ceremony (#726 P2/P3) and the placement/commons surface (#726
+// P2/P4) — the People panel's own data plane. Same barrel so
+// `SharingCard.tsx` reads it beside the devices/owners surfaces above. D9's
+// per-link receive setting is NOT here: it governed gives arriving from
+// another person's vault, and copy-as-share retired (#825, ruling G-copy).
 export {
   listGatewayLinks,
   proposeGatewayLink,
   approveGatewayLink,
-  getReceiveSetting,
-  setReceiveSetting,
   type GatewayLink,
-  type ReceiveSetting,
 } from "./gateway-client-links.js";
 export {
   listGatewayEdges,
-  giveEdge,
   createCommons,
   listCommonsInvitations,
   claimCommonsInvitation,
   answerCommonsInvitation,
   listCommonsRecovery,
   recoverCommons,
-  listPendingEdges,
-  answerPendingEdge,
   type GatewayEdge,
   type EdgeMode,
   type EdgeKind,
   type EdgeStatus,
-  type PendingEdge,
   type CommonsInvitation,
   type CommonsRecoveryGrant,
   type CommonsRecoveryOutcome,

@@ -9,15 +9,28 @@
 //
 //   (a) the owner's own write is never refused by the owner's own grant;
 //   (b) a write made on behalf of a party a grant NAMES does consult the
-//       refusals — view-only, and folder co-contribution, which v1 defers;
+//       refusals — view-only, and folder co-contribution, which v1 defers —
+//       and consults the refusals THAT PARTY'S OWN grants imply: a container
+//       shared to one audience for edit and another for view refuses the
+//       second, whose write would otherwise ride the rail attributed to the
+//       owner by the commons arm's actor fallback;
 //   (c) commons delegation is untouched: a write the grant plane has nothing
 //       to say about still routes to the rail and sequences there.
+//
+// The first describe below answers the question those claims do not: WHERE
+// edit enforcement lives for the path a household actually uses. The grant
+// plane's door is the ORIGIN vault's — a non-owner party credential there,
+// such as an enrolled agent. A member writing at their own seat is their own
+// vault's owner and holds no `share_grant` rows at all (grants are never
+// projected, asserted below), so their write is governed by the commons rail
+// and its steward authorization, exactly as it was before the grant plane.
 import { afterEach, describe, expect, test } from "vitest";
 
 import { createGrant, enrollAgent, enrollDevice } from "../bootstrap.js";
 import { registerDocumentCommands } from "../commands/documents.js";
 import { createShareGrant } from "../grant/grant-store.js";
 import { nowIso } from "../ids.js";
+import { folderCommons } from "../share/commons-replay.test-fixtures.js";
 import { createCommonsGrant } from "../share/commons.js";
 import { closeOpenVaults, household } from "../share/placement-fixture.js";
 import { createGateway } from "./gateway.js";
@@ -76,6 +89,96 @@ function audienceAgent(seat: ReturnType<typeof docsSeat>, name = "ravi-seat") {
   };
   return { partyId: agent.partyId, credential };
 }
+
+describe("where an audience's edit is actually enforced", () => {
+  afterEach(closeOpenVaults);
+
+  test("a member's own-seat edit rides the commons rail; grants stay origin-only", () => {
+    const fixture = folderCommons(1);
+    const documentId = fixture.documents[0] as string;
+    const memberPartyId = fixture.home.audienceBoot.ownerPartyId;
+    createShareGrant(fixture.home.origin.vault, {
+      audience: { kind: "party", id: memberPartyId },
+      subjectType: "docs.folder",
+      subjectId: fixture.folderId,
+      capability: "edit",
+      grantedAt: nowIso(),
+      grantedBy: fixture.home.originBoot.ownerPartyId,
+    });
+
+    // THE DISCLOSURE, AS A TESTED FACT: `share_grant` rows live in the vault
+    // that issued them and are never projected. A member sitting at their own
+    // seat therefore has no grant plane to consult even in principle — and is
+    // that vault's own owner besides, which short-circuits the seam.
+    expect(
+      fixture.home.audience.vault
+        .prepare("SELECT COUNT(*) AS n FROM share_grant")
+        .get()
+    ).toMatchObject({ n: 0 });
+
+    const edit = {
+      document_id: documentId,
+      body_text: "Museum tickets attached",
+      title: "Museum tickets",
+    };
+    const queued = fixture.member.gateway.invoke(fixture.member.credential, {
+      command: "core.edit_document",
+      input: edit,
+      intentId: "member-edit",
+      intentDeviceId: fixture.home.audienceBoot.deviceId,
+    });
+    // Nothing about that outcome came from the grant plane: it is the commons
+    // rail's own answer, because execution belongs to the steward's seat.
+    expect(queued).toMatchObject({
+      status: "denied",
+      reason: "waiting for Priya's device",
+    });
+    expect(
+      fixture.home.audience.vault
+        .prepare("SELECT status FROM share_commons_intent WHERE intent_id = ?")
+        .get("member-edit")
+    ).toMatchObject({ status: "queued" });
+    expect(fixture.documentTitle(documentId)).toBe("Booking 0");
+
+    // Executed at the steward's seat, sequenced on the rail, replayed back
+    // onto the member's seat — the whole edit path, end to end.
+    fixture.write("core.edit_document", edit);
+    expect(fixture.documentTitle(documentId)).toBe("Museum tickets");
+    expect(
+      fixture.home.origin.vault
+        .prepare(
+          `SELECT COUNT(*) AS n FROM share_commons_op
+            WHERE grant_id = ? AND command = 'core.edit_document'`
+        )
+        .get(fixture.grantId)
+    ).toMatchObject({ n: 1 });
+  });
+
+  test("an origin-side audience with an edit grant but no rail is refused", () => {
+    const seat = docsSeat();
+    const audience = audienceAgent(seat);
+    createShareGrant(seat.origin.vault, {
+      audience: { kind: "party", id: audience.partyId },
+      subjectType: "docs.folder",
+      subjectId: seat.folderId,
+      capability: "edit",
+      grantedAt: nowIso(),
+      grantedBy: seat.originBoot.ownerPartyId,
+    });
+
+    // The #750 rule at the seam: a write with nowhere to land is refused, not
+    // applied privately where the next compile would silently revert it.
+    expect(
+      seat.gateway.invoke(audience.credential, {
+        command: "core.edit_document",
+        input: { document_id: seat.documentId, body_text: "Amended" },
+      })
+    ).toMatchObject({
+      status: "denied",
+      reason: `docs.folder ${seat.folderId} has no commons rail to route core.edit_document to`,
+    });
+  });
+});
 
 describe("the grant plane's seam into invoke", () => {
   afterEach(closeOpenVaults);
@@ -183,6 +286,70 @@ describe("the grant plane's seam into invoke", () => {
       input: { document_id: seat.documentId, body_text: "Amended" },
     });
     expect(outcome.status).not.toBe("denied");
+  });
+
+  test("a view-only audience is refused even where another audience holds edit", () => {
+    const seat = docsSeat();
+    const editor = audienceAgent(seat, "ravi-seat");
+    const viewer = audienceAgent(seat, "asha-seat");
+    const stranger = audienceAgent(seat, "dev-seat");
+    const now = nowIso();
+    const commons = createCommonsGrant({
+      origin: seat.origin.vault,
+      ownerPartyId: seat.originBoot.ownerPartyId,
+      containerType: "docs.folder",
+      containerId: seat.folderId,
+      members: [{ partyId: editor.partyId, capability: "read+write" }],
+      now,
+    });
+    for (const [audience, capability] of [
+      [editor, "edit"],
+      [viewer, "view"],
+    ] as const)
+      createShareGrant(seat.origin.vault, {
+        audience: { kind: "party", id: audience.partyId },
+        subjectType: "docs.folder",
+        subjectId: seat.folderId,
+        capability,
+        grantedAt: now,
+        grantedBy: seat.originBoot.ownerPartyId,
+      });
+    const edit = {
+      command: "core.edit_document",
+      input: { document_id: seat.documentId, body_text: "Amended" },
+    };
+    const opCount = () =>
+      (
+        seat.origin.vault
+          .prepare(
+            `SELECT COUNT(*) AS n FROM share_commons_op
+              WHERE grant_id = ? AND command = 'core.edit_document'`
+          )
+          .get(commons.grantId) as { n: number }
+      ).n;
+
+    // THE BUG THIS TEST EXISTS FOR: the container carries an edit grant, so
+    // the container-level refusal is silent — but it is Ravi's, not Asha's.
+    expect(seat.gateway.invoke(viewer.credential, edit)).toMatchObject({
+      status: "denied",
+      reason: `core.edit_document writes into docs.folder ${seat.folderId}, which is shared for view only`,
+    });
+    // Refused at the seam means refused BEFORE the rail: no op is sequenced,
+    // so the owner-fallback actor in the commons arm never gets to attribute
+    // Asha's write to the owner and execute it.
+    expect(opCount()).toBe(0);
+
+    // The party the edit grant does name still delegates to the rail.
+    expect(seat.gateway.invoke(editor.credential, edit).status).toBe(
+      "executed"
+    );
+    expect(opCount()).toBe(1);
+    // The owner's own write is still the owner's own.
+    expect(seat.gateway.invoke(seat.owner, edit).status).toBe("executed");
+    // And a party no grant here names is still left to consent.
+    expect(seat.gateway.invoke(stranger.credential, edit).status).not.toBe(
+      "denied"
+    );
   });
 
   test("commons delegation is unchanged where the grant plane refuses nothing", () => {

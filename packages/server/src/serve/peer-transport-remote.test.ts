@@ -54,7 +54,6 @@ import {
 } from "./peer-link-client.js";
 import { readEdgeRow } from "./share-edge-row.js";
 import { runShareEffect } from "./share-effect-executor.js";
-import { listQueuedEffects } from "./share-effects.js";
 import { isLinkApproved } from "./vault-link-row.js";
 import { VaultLinksStore } from "./vault-links-store.js";
 
@@ -118,8 +117,6 @@ async function makeSide(name: string): Promise<Side> {
     vaultPublicKey: (id) => (id === vaultId ? publicKey : undefined),
     localRoute,
     localLabel: () => name,
-    vaultFor: (id) => (id === vaultId ? vault : undefined),
-    gatewayDatabase: gatewayDb,
   });
   const upstream = http.createServer((req, res) => {
     if ((req.headers.authorization ?? "") !== `Bearer ${UPSTREAM_TOKEN}`) {
@@ -333,39 +330,40 @@ describe("peer transport over real iroh (#726 P3 gap 1)", () => {
   }, 30_000);
 
   /*
-   * Copy-as-share retired (#825, ruling G-copy), so the give frame is gone
-   * from the peer plane. Proved HERE, over the real QUIC transport, because
+   * Copy-as-share retired (#825, ruling G-copy), so the give plane is gone
+   * from the peer wire. Proved HERE, over the real QUIC transport, because
    * the retirement has to hold on the wire and not merely in a handler
-   * double: the origin's outbox effect parks and the audience adopts nothing
-   * — no derivative painted, no pull owed, no bytes.
+   * double: every frame the plane ever served answers `not_found`, and the
+   * audience adopts nothing.
    */
-  test("a remote give is refused over the real transport and adopts nothing", async () => {
+  test("every retired give frame answers not_found over the real transport", async () => {
     const photo = seedPhoto(origin, "retired-give");
-    const row = insertEdgeRow(origin, {
-      edgeId: "edge-retired-give",
-      audienceVaultId: audience.vaultId,
-      itemIds: [photo.assetId],
-    });
+    const dial = dialFrom(origin, audience);
+    const ticket = dial.endpointTicketFor(audience.endpoint.endpointId, []);
 
-    await runShareEffect(
+    for (const frame of [
+      { method: "POST", target: "/centraid/_peer/edge/give" },
+      { method: "GET", target: "/centraid/_peer/edge/closure/edge-1" },
+      { method: "POST", target: "/centraid/_peer/edge/deny" },
       {
-        db: origin.gatewayDb,
-        links: origin.links,
-        vaultFor: (id) => (id === origin.vaultId ? origin.vault : undefined),
-        dial: dialFrom(origin, audience),
+        method: "GET",
+        target: `/centraid/_peer/blob/chunk?sha256=${photo.sha256}&offset=0&length=16&edgeId=edge-1`,
       },
-      {
-        kind: "deliver-give",
-        edgeId: row.edge_id,
-        delivery: "peer",
-        crossOwner: true,
-      }
-    );
-    expect(readEdgeRow(origin.gatewayDb, row.edge_id)!.status).toBe("parked");
+    ]) {
+      // oxlint-disable-next-line no-await-in-loop -- one QUIC round trip per frame; the point is the sequence of answers
+      const answer = await dial.request({
+        endpointTicket: ticket,
+        method: frame.method,
+        target: frame.target,
+        body: { edgeId: "edge-1" },
+      });
+      expect(answer.json, frame.target).toStrictEqual({ state: "not_found" });
+    }
+
     expect(audience.vault.blobs.local.hasSync(photo.thumbSha)).toBe(false);
     expect(audience.vault.blobs.local.hasSync(photo.sha256)).toBe(false);
-    expect(listQueuedEffects(audience.gatewayDb, "pull-blob")).toStrictEqual(
-      []
-    );
+    expect(
+      audience.gatewayDb.db.prepare("SELECT * FROM share_effects").all()
+    ).toStrictEqual([]);
   }, 30_000);
 });

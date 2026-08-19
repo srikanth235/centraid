@@ -10,11 +10,6 @@ import SkeletonRows from "../../kit/components/SkeletonRows";
 import { memberFacingError } from "../../kit/member-error";
 import { VAULT_SECTION_ORDER } from "../../kit/origin-seat-layout";
 import { useReplica } from "../../kit/replica/ReplicaProvider";
-import type { PendingEdge } from "../../lib/replica/edges-transport";
-import {
-  answerPendingEdge,
-  listPendingEdges,
-} from "../../lib/replica/edges-transport";
 import type { GatewayLink } from "../../lib/replica/links-transport";
 import { listLinks } from "../../lib/replica/links-transport";
 import {
@@ -98,12 +93,11 @@ export function VaultCopiesSection({
 
 interface SharingRead {
   links: GatewayLink[];
-  pending: PendingEdge[];
   state: "loading" | "ready" | "error";
   error?: string;
 }
 
-const SHARING_START: SharingRead = { links: [], pending: [], state: "loading" };
+const SHARING_START: SharingRead = { links: [], state: "loading" };
 
 function linkedPersonLabel(
   link: GatewayLink,
@@ -121,18 +115,14 @@ export function VaultSharingSection({
   const [read, setRead] = useState<SharingRead>(SHARING_START);
   const refresh = useCallback((): void => {
     if (!replica.gatewayBase) return;
-    void Promise.all([
-      listLinks(replica.gatewayBase),
-      listPendingEdges(replica.gatewayBase),
-    ])
-      .then(([links, pending]) => setRead({ links, pending, state: "ready" }))
+    void listLinks(replica.gatewayBase)
+      .then((links) => setRead({ links, state: "ready" }))
       .catch((error: unknown) =>
         setRead({
           error: memberFacingError(
             error instanceof Error ? error.message : String(error)
           ),
           links: [],
-          pending: [],
           state: "error",
         })
       );
@@ -140,25 +130,12 @@ export function VaultSharingSection({
 
   useEffect(refresh, [refresh]);
 
+  // A parked incoming SHARE used to be drawn here beside the links; copy-as-
+  // share retired (#825, ruling G-copy), and a grant's audience answers its
+  // channel invitation in People rather than on this section.
   const visibleRead: SharingRead = replica.gatewayBase
     ? read
-    : { links: [], pending: [], state: "ready" };
-
-  const answer = (row: PendingEdge, decision: "accept" | "refuse"): void => {
-    if (!replica.gatewayBase) return;
-    void answerPendingEdge(replica.gatewayBase, row.edgeId, decision)
-      .then(refresh)
-      .catch((error: unknown) =>
-        setRead({
-          error: memberFacingError(
-            error instanceof Error ? error.message : String(error)
-          ),
-          links: visibleRead.links,
-          pending: visibleRead.pending,
-          state: "error",
-        })
-      );
-  };
+    : { links: [], state: "ready" };
 
   return (
     <>
@@ -189,22 +166,6 @@ export function VaultSharingSection({
         />
       ) : (
         <>
-          {visibleRead.pending.map((row) => (
-            <PanelBlock
-              action={{
-                label: "Accept",
-                onPress: () => answer(row, "accept"),
-              }}
-              action2={{
-                label: "Refuse",
-                onPress: () => answer(row, "refuse"),
-              }}
-              body={`${row.itemCount} ${row.itemType} · nothing is written until you accept.`}
-              eyebrow="Waiting for your decision"
-              key={row.edgeId}
-              title="A shared copy is waiting"
-            />
-          ))}
           <RowsBlock
             accessibilityLabel="People linked to this vault"
             rows={visibleRead.links.map((link) => ({
@@ -218,8 +179,7 @@ export function VaultSharingSection({
               title: linkedPersonLabel(link, replica.vaultId),
             }))}
           />
-          {visibleRead.links.length === 0 &&
-          visibleRead.pending.length === 0 ? (
+          {visibleRead.links.length === 0 ? (
             <EmptyBlock
               action={{ label: "Link with someone", onPress: openSharing }}
               body="Shared spaces and direct copies appear here."
@@ -227,7 +187,7 @@ export function VaultSharingSection({
               title="Nothing shared yet"
             />
           ) : null}
-          {visibleRead.links.length > 0 || visibleRead.pending.length > 0 ? (
+          {visibleRead.links.length > 0 ? (
             <PanelBlock
               action={{ label: "Manage sharing", onPress: openSharing }}
               body="Link people, review invitations, and manage shared spaces."

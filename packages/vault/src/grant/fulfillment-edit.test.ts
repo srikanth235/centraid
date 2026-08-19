@@ -5,7 +5,10 @@ import { afterEach, describe, expect, test } from "vitest";
 import { nowIso, uuidv7 } from "../ids.js";
 import { createCommonsGrant } from "../share/commons.js";
 import { closeOpenVaults, household } from "../share/placement-fixture.js";
-import { routeShareGrantEdit } from "./fulfillment-edit.js";
+import {
+  routeShareGrantEdit,
+  shareGrantEditRefusal,
+} from "./fulfillment-edit.js";
 import { createShareGrant } from "./grant-store.js";
 import type { ShareGrantCapability } from "./grant-store.js";
 
@@ -57,6 +60,56 @@ describe("grant/fulfillment-edit", () => {
     });
     expect(route?.refusal).toBeUndefined();
     expect(route?.grants).toHaveLength(1);
+  });
+
+  test("one audience's edit grant does not lend edit to another audience", () => {
+    const { origin, originBoot } = household();
+    const now = nowIso();
+    const ravi = addParty(origin.vault, "Ravi", now);
+    const asha = addParty(origin.vault, "Asha", now);
+    const groupId = uuidv7();
+    createCommonsGrant({
+      origin: origin.vault,
+      ownerPartyId: originBoot.ownerPartyId,
+      containerType: "tally.group",
+      containerId: groupId,
+      members: [
+        { partyId: ravi, capability: "read+write" },
+        { partyId: asha, capability: "read" },
+      ],
+      now,
+    });
+    for (const [party, capability] of [
+      [ravi, "edit"],
+      [asha, "view"],
+    ] as const)
+      createShareGrant(origin.vault, {
+        audience: { kind: "party", id: party },
+        subjectType: "tally.group",
+        subjectId: groupId,
+        capability,
+        grantedAt: now,
+        grantedBy: originBoot.ownerPartyId,
+      });
+
+    const route = routeShareGrantEdit(origin.vault, {
+      command: "tally.add_expense",
+      commandInput: { group_id: groupId },
+    });
+    if (!route) throw new Error("the shared group routed nowhere");
+    // The CONTAINER question folds both grants together, so it refuses
+    // nothing: something shared here does carry edit.
+    expect(route.grants).toHaveLength(2);
+    expect(route.refusal).toBeUndefined();
+
+    const grantsFor = (partyId: string) =>
+      route.grants.filter((grant) => grant.audience.id === partyId);
+    // The ACTOR question is answered per audience: Asha holds view only, and
+    // Ravi's edit grant next door does not lend her its capability.
+    expect(shareGrantEditRefusal(route, grantsFor(asha))).toBe(
+      `tally.add_expense writes into tally.group ${groupId}, which is shared for view only`
+    );
+    expect(shareGrantEditRefusal(route, grantsFor(ravi))).toBeUndefined();
   });
 
   test("a write that touches nothing shared is invisible to the grant plane", () => {

@@ -46,7 +46,6 @@ describe("gateway-db scenarios", () => {
       "devices",
       "erase_intents",
       "gateway_meta",
-      "link_receive_settings",
       "owners",
       "peer_link_tickets",
       "prefs",

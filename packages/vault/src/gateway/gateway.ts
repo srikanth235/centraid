@@ -35,7 +35,10 @@ import {
   releaseExpiredEnrichmentLeases,
 } from "../enrich/leases.js";
 import { rebuildMemories } from "../enrich/memories.js";
-import { routeShareGrantEdit } from "../grant/fulfillment-edit.js";
+import {
+  routeShareGrantEdit,
+  shareGrantEditRefusal,
+} from "../grant/fulfillment-edit.js";
 import { resolveAudienceParties } from "../grant/grant-store.js";
 import { nowIso, uuidv7 } from "../ids.js";
 import { importIcsEvents, importVcardParties } from "../ingest/import.js";
@@ -1121,6 +1124,15 @@ export class Gateway {
    * never NAMED is not this plane's business either — a grant speaks about
    * the audience it addressed, so an actor no grant reaches is left to the
    * consent layer that was already deciding for them.
+   *
+   * ASKING WHO IS WRITING IS NOT ENOUGH — the refusal has to be RE-DERIVED
+   * from that actor's own grants. The route's own `refusal` folds the whole
+   * container's grant set together, so on a container shared to A for edit and
+   * B for view it reports no view-only refusal at all, and B's write would
+   * sail past a seam that merely checked B was named by something. So the seam
+   * filters the container's grants down to the ones whose audience resolves to
+   * this actor and re-asks the engine (`shareGrantEditRefusal`) about those.
+   * The refusal sentences stay the engine's; only the grant set narrows.
    */
   private shareGrantRefusal(
     identity: Identity,
@@ -1137,18 +1149,16 @@ export class Gateway {
       command: rawRequest.command,
       commandInput: rawRequest.input,
     });
-    if (!route?.refusal) return undefined;
-    const named = route.grants.some((grant) =>
+    if (!route) return undefined;
+    const actorGrants = route.grants.filter((grant) =>
       resolveAudienceParties(this.db.vault, grant.audience).includes(
         actorPartyId
       )
     );
-    if (!named) return undefined;
-    return {
-      reason: route.refusal,
-      containerId: route.containerId,
-      actorPartyId,
-    };
+    if (actorGrants.length === 0) return undefined;
+    const reason = shareGrantEditRefusal(route, actorGrants);
+    if (!reason) return undefined;
+    return { reason, containerId: route.containerId, actorPartyId };
   }
 
   /** Typed-command invocation: the only write path (rule R04). */

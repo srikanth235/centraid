@@ -1,13 +1,13 @@
 // Renderer-side transport for the gateway's link surface (#726 P2/P3 —
 // `packages/server/src/routes/vault-links-routes.ts`), mirroring
 // `placement-transport.ts`'s shape. Mobile's own People/Sharing screen data
-// source — a link is the ceremony a cross-owner edge needs before it may
-// cross, same-machine or across the world alike (D3).
+// source — a link is the channel a grant to another person is delivered over
+// (#825), same-machine or across the world alike (D3). Its per-link "receive
+// gives" preference retired with copy-as-share: nothing arrives unasked for a
+// preference to govern.
 import { authHeader } from "../gateway";
 
 const LINKS_PATH = "/centraid/_gateway/links";
-
-export type ReceiveSetting = "accept" | "ask" | "refuse";
 
 export interface GatewayLink {
   linkId: string;
@@ -92,39 +92,6 @@ export async function approveLink(
   if (!response.ok) throw new Error(`approve link failed (${response.status})`);
   const out = (await response.json()) as { link: GatewayLink };
   return out.link;
-}
-
-export async function getReceiveSetting(
-  baseUrl: string,
-  linkId: string
-): Promise<ReceiveSetting> {
-  const out = await getJson<{ setting: ReceiveSetting }>(
-    baseUrl,
-    `${LINKS_PATH}/${encodeURIComponent(linkId)}/receive-setting`
-  );
-  return out.setting;
-}
-
-export async function setReceiveSetting(
-  baseUrl: string,
-  linkId: string,
-  setting: ReceiveSetting
-): Promise<ReceiveSetting> {
-  const response = await fetch(
-    new URL(
-      `${LINKS_PATH}/${encodeURIComponent(linkId)}/receive-setting`,
-      baseUrl
-    ),
-    {
-      method: "PUT",
-      headers: { ...authHeader(), "content-type": "application/json" },
-      body: JSON.stringify({ setting }),
-    }
-  );
-  if (!response.ok)
-    throw new Error(`set receive setting failed (${response.status})`);
-  const out = (await response.json()) as { setting: ReceiveSetting };
-  return out.setting;
 }
 
 /** A minted, pasteable/scannable ticket for a vault the caller owns

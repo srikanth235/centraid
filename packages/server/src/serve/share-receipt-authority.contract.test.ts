@@ -82,10 +82,8 @@ async function origin(name: string): Promise<Origin> {
   };
 }
 
-const LOCAL = { delivery: "local", crossOwner: false } as const;
-
 function factsFor(row: EdgeRow): EdgeFacts {
-  return edgeFactsOf(row, LOCAL);
+  return edgeFactsOf(row);
 }
 
 function receipts(db: GatewayDatabase): Receipt[] {
@@ -166,10 +164,11 @@ describe("[law:share-receipt-authority] the access audit names exactly what land
   });
 
   test.each([
-    ["a refused edge", { type: "give-denied", reason: "declined" }, "denied"],
+    // Every non-projection outcome. A receipt records what LANDED in an
+    // audience vault, so a transition that projected nothing may claim none.
     [
-      "an unreachable peer",
-      { type: "give-parked", reason: "offline" },
+      "an edge this gateway could not act on",
+      { type: "give-failed", reason: "the audience vault is not open here" },
       "parked",
     ],
     [
@@ -177,9 +176,6 @@ describe("[law:share-receipt-authority] the access audit names exactly what land
       { type: "revoked", reason: "owner withdrew" },
       "revoked",
     ],
-    // "Given" to a peer is this gateway's optimism, not an observation: it
-    // learns no audience ids, so it may claim no audit of what landed.
-    ["a peer hand-off", { type: "give-served" }, "completed"],
   ] satisfies Array<[string, EdgeSignal, string]>)(
     "[law:share-receipt-authority] %s leaves no access record",
     async (label, signal, expectedStatus) => {

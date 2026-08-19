@@ -91,7 +91,16 @@ function seedLegacyRow(
 
 function seedEdge(db: GatewayDatabase, edgeId: string, status: string): void {
   const now = new Date(T0).toISOString();
-  db.run("INSERT OR IGNORE INTO owners (owner_id, label, created_at) VALUES ('own-1', 'Owner', ?)", T0);
+  db.run(
+    "INSERT OR IGNORE INTO owners (owner_id, label, created_at) VALUES ('own-1', 'Owner', ?)",
+    T0
+  );
+  db.run(
+    `INSERT OR IGNORE INTO devices
+       (enrollment_id, endpoint_id, owner_id, label, remember_device, added_at)
+     VALUES ('enr-1', 'dev-1', 'own-1', 'Laptop', 1, ?)`,
+    new Date(T0).toISOString()
+  );
   db.run(
     `INSERT INTO share_edges
        (edge_id, created_by_device, owner_id, kind, mode, item_type,

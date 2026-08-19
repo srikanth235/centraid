@@ -55,6 +55,9 @@ export const SHARE_GRANT_CO_CONTRIBUTION_TYPES: readonly ShareableItemType[] = [
 ];
 
 export interface ShareGrantEditRoute {
+  /** The command that was routed — carried so a caller can re-derive the
+   * refusal against a narrower set of grants (see `shareGrantEditRefusal`). */
+  command: string;
   containerType: ShareableItemType;
   /** The container in ORIGIN ids — the subject of the grants below. */
   containerId: string;
@@ -140,6 +143,35 @@ function refusalFor(input: {
 }
 
 /**
+ * The same refusal, re-derived against a NARROWER set of grants than the
+ * container's — the ones that actually reach the party making the write.
+ *
+ * `routeShareGrantEdit` answers about a container, so its `refusal` is the
+ * container's whole grant set folded together: one party's edit grant silences
+ * "shared for view only" for everyone the container is shared with. That is
+ * the right answer to the container question and the WRONG answer to the actor
+ * question — a view-only audience member is not permitted by someone else's
+ * edit grant. A caller that knows who is writing (the gateway seam) passes
+ * that actor's own grants here and gets the capability line drawn where the
+ * grants drew it: per audience, never per container.
+ */
+export function shareGrantEditRefusal(
+  route: ShareGrantEditRoute,
+  grants: readonly ShareGrantRecord[]
+): string | undefined {
+  return refusalFor({
+    command: route.command,
+    containerType: route.containerType,
+    containerId: route.containerId,
+    grants,
+    actable: route.actable,
+    ...(route.commonsGrantId === undefined
+      ? {}
+      : { commonsGrantId: route.commonsGrantId }),
+  });
+}
+
+/**
  * Where an ordinary command lands in the grant plane, or `undefined` when it
  * addresses nothing anyone has shared — which is the overwhelming majority of
  * writes, and must stay indistinguishable from the world before grants.
@@ -179,6 +211,7 @@ export function routeShareGrantEdit(
         ...(commonsGrantId === undefined ? {} : { commonsGrantId }),
       });
       return {
+        command: input.command,
         containerType: route.containerType,
         containerId,
         grants,

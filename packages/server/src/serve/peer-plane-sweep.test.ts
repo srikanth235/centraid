@@ -1,10 +1,14 @@
 /*
  * Exit evidence for #726 P3 gap 2 (and gap 3's delivery half): the ONE share
- * outbox drains on a SCHEDULER TICK, not by a direct call — proved
- * here by calling only `.start()`/`.stop()` on the sweep and observing the
- * durable rows disappear on their own. `runOnce()` (the test seam for
- * `peer-blob-pull.test.ts`-style direct-call assertions) is deliberately
- * NOT used in the "drains on a tick" test below.
+ * outbox drains on a SCHEDULER TICK, not by a direct call — proved here by
+ * calling only `.start()`/`.stop()` on the sweep and observing the durable row
+ * disappear on its own. `runOnce()` (the test seam for direct-call assertions)
+ * is deliberately NOT used in the "drains on a tick" test below.
+ *
+ * The outbox stopped being a PEER concern with #825's copy-as-share
+ * retirement — its one surviving obligation is a same-owner placement — so
+ * these tests wire no dial into the drain at all. The sweep's other two
+ * concerns (route re-announcement, the commons rail) still dial.
  */
 
 import { describe, expect, it, vi } from "vitest";
@@ -12,35 +16,47 @@ import { describe, expect, it, vi } from "vitest";
 import { tempDirSync } from "@centraid/test-kit/temp-dir";
 
 import { GatewayDatabase } from "./gateway-db.js";
-import type { PeerDial } from "./peer-link-client.js";
 import { createPeerPlaneSweep } from "./peer-plane-sweep.js";
-import { enqueueShareEffect, listQueuedEffects } from "./share-effects.js";
+import { enqueueShareEffect } from "./share-effects.js";
 import { VaultLinksStore } from "./vault-links-store.js";
 
-function seedRoutedLink(
-  links: VaultLinksStore,
-  localVaultId: string,
-  peerVaultId: string
-): string {
-  const link = links.recordPeer({
-    localVaultId,
-    localPublicKey: "local-key",
-    localLabel: "local",
-    peerVaultId,
-    peerPublicKey: "peer-key",
-    peerLabel: "peer",
-    route: { endpointId: "ep-peer", relayHints: [], assertedAt: Date.now() },
-  });
-  return link!.linkId;
+/** One `share_edges` row with the owner/device rows its foreign keys need. */
+function seedEdge(db: GatewayDatabase, edgeId: string): void {
+  const now = new Date().toISOString();
+  db.run(
+    "INSERT OR IGNORE INTO owners (owner_id, label, created_at) VALUES ('own-1', 'Owner', ?)",
+    Date.now()
+  );
+  db.run(
+    `INSERT OR IGNORE INTO devices
+       (enrollment_id, endpoint_id, owner_id, label, remember_device, added_at)
+     VALUES ('enr-1', 'dev-1', 'own-1', 'Laptop', 1, ?)`,
+    now
+  );
+  db.run(
+    `INSERT INTO share_edges
+       (edge_id, created_by_device, owner_id, kind, mode, item_type,
+        scope_json, origin_vault_id, audience_vault_id, verbs,
+        target_state, source_state, status, created_at, updated_at)
+     VALUES (?, 'dev-1', 'own-1', 'add', 'snapshot', 'media.asset',
+             '["item-1"]', 'vlt_local', 'vlt_other', 'read',
+             'queued', 'not-needed', 'in-flight', ?, ?)`,
+    edgeId,
+    now,
+    now
+  );
 }
 
-const okDial: PeerDial = {
-  request: async () => ({ status: 200, json: { state: "acknowledged" } }),
-  endpointTicketFor: (endpointId) => `ticket-for-${endpointId}`,
-};
+function queuedIds(db: GatewayDatabase): string[] {
+  return (
+    db.db
+      .prepare("SELECT effect_id FROM share_effects WHERE status = 'queued'")
+      .all() as unknown as { effect_id: string }[]
+  ).map((row) => row.effect_id);
+}
 
 describe("peer plane sweep (#726 P3 gap 2)", () => {
-  it("idles without touching either table when no dial is wired", async () => {
+  it("idles without touching the outbox when there is nothing to drain", async () => {
     const db = GatewayDatabase.open(tempDirSync("centraid-sweep-idle-"));
     const links = VaultLinksStore.open(db);
     const sweep = createPeerPlaneSweep({
@@ -50,8 +66,6 @@ describe("peer plane sweep (#726 P3 gap 2)", () => {
       dial: () => undefined,
     });
     await sweep.runOnce();
-    // No throw, nothing to assert on disk — a build with no peer dial wired
-    // must not write anything into the share outbox.
     expect(db.db.prepare("SELECT * FROM share_effects").all()).toHaveLength(0);
   });
 
@@ -74,22 +88,17 @@ describe("peer plane sweep (#726 P3 gap 2)", () => {
     expect(announced).toBe(1);
   });
 
-  it("drains a durable refusal on a SCHEDULER TICK, not a direct call", async () => {
+  it("drains a durable obligation on a SCHEDULER TICK, not a direct call", async () => {
     const db = GatewayDatabase.open(tempDirSync("centraid-sweep-tick-"));
     const links = VaultLinksStore.open(db);
-    const linkId = seedRoutedLink(links, "vlt_local", "vlt_peer");
-    enqueueShareEffect(db, {
-      kind: "deliver-refusal",
-      edgeId: "edge-tick",
-      linkId,
-      peerVaultId: "vlt_peer",
-      localVaultId: "vlt_local",
-    });
+    // An obligation whose edge no longer exists is ABANDONED by the executor —
+    // the shortest honest path to "the tick discharged this row by itself".
+    enqueueShareEffect(db, { kind: "deliver-give", edgeId: "edge-tick" });
     const sweep = createPeerPlaneSweep({
       db,
       links,
       vaultFor: () => undefined,
-      dial: () => okDial,
+      dial: () => undefined,
       idleIntervalMs: 10,
       activeIntervalMs: 10,
     });
@@ -97,7 +106,7 @@ describe("peer plane sweep (#726 P3 gap 2)", () => {
       sweep.start();
       await vi.waitFor(
         () => {
-          expect(queuedFor(db, "deliver-refusal", "edge-tick")).toBeUndefined();
+          expect(queuedIds(db)).toStrictEqual([]);
         },
         { timeout: 2000, interval: 10 }
       );
@@ -110,26 +119,17 @@ describe("peer plane sweep (#726 P3 gap 2)", () => {
     const db = GatewayDatabase.open(tempDirSync("centraid-sweep-backoff-"));
     const links = VaultLinksStore.open(db);
     let calls = 0;
-    const throwingLinks = {
-      peerViewFor: () => {
+    const warnings: string[] = [];
+    seedEdge(db, "edge-backoff");
+    enqueueShareEffect(db, { kind: "deliver-give", edgeId: "edge-backoff" });
+    const sweep = createPeerPlaneSweep({
+      db,
+      links,
+      vaultFor: () => {
         calls += 1;
         throw new Error("simulated db failure");
       },
-    } as unknown as VaultLinksStore;
-    const warnings: string[] = [];
-    const linkId = seedRoutedLink(links, "vlt_local", "vlt_peer");
-    enqueueShareEffect(db, {
-      kind: "deliver-refusal",
-      edgeId: "edge-backoff",
-      linkId,
-      peerVaultId: "vlt_peer",
-      localVaultId: "vlt_local",
-    });
-    const sweep = createPeerPlaneSweep({
-      db,
-      links: throwingLinks,
-      vaultFor: () => undefined,
-      dial: () => okDial,
+      dial: () => undefined,
       idleIntervalMs: 10,
       logger: { warn: (message) => warnings.push(message) },
     });
@@ -138,18 +138,6 @@ describe("peer plane sweep (#726 P3 gap 2)", () => {
     expect(warnings).toHaveLength(1);
     expect(warnings[0]).toMatch(/simulated db failure/u);
     // The row is untouched — a failed tick parks, it never loses work.
-    expect(queuedFor(db, "deliver-refusal", "edge-backoff")).toBeDefined();
+    expect(queuedIds(db)).toStrictEqual(["give:edge-backoff"]);
   });
 });
-
-/** The one queued effect of a kind for an edge — a local read, now that the
- *  retired give routes that needed it as a shared capability are gone. */
-function queuedFor(
-  db: Parameters<typeof listQueuedEffects>[0],
-  kind: Parameters<typeof listQueuedEffects>[1],
-  edgeId: string
-): ReturnType<typeof listQueuedEffects>[number] | undefined {
-  return listQueuedEffects(db, kind).find(
-    (pending) => pending.effect.edgeId === edgeId
-  );
-}

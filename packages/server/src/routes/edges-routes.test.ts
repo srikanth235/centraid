@@ -25,9 +25,20 @@ import type { VaultDb } from "@centraid/vault";
 import { EnrollmentStore } from "../serve/enrollment-store.js";
 import { GatewayDatabase } from "../serve/gateway-db.js";
 import { readEdgeRow } from "../serve/share-edge-row.js";
-import { listQueuedEffects } from "../serve/share-effects.js";
 import { VaultLinksStore } from "../serve/vault-links-store.js";
 import { makeEdgesRouteHandler } from "./edges-routes.js";
+
+/** Effect ids still queued in the outbox. A direct read: the outbox has one
+ *  kind since #825 and no production inspection door of its own. */
+function queuedEffectIds(db: GatewayDatabase): string[] {
+  return (
+    db.db
+      .prepare(
+        "SELECT effect_id FROM share_effects WHERE status = 'queued' ORDER BY created_at"
+      )
+      .all() as unknown as { effect_id: string }[]
+  ).map((row) => row.effect_id);
+}
 
 interface Household {
   gatewayDb: GatewayDatabase;
@@ -308,10 +319,7 @@ describe("POST/GET /centraid/_gateway/edges", () => {
     );
     expect(noteCount(house.personal)).toBe(0);
     // The obligation outlives the attempt: still queued, ready to retry.
-    const queued = listQueuedEffects(house.gatewayDb, "deliver-give");
-    expect(queued.map((row) => row.effectId)).toStrictEqual([
-      "give:edge-parked",
-    ]);
+    expect(queuedEffectIds(house.gatewayDb)).toStrictEqual(["give:edge-parked"]);
 
     // A later attempt with a working vault completes the SAME edge.
     const retried = await give(house, house.laptop, "edge-parked", [noteId]);
@@ -319,7 +327,7 @@ describe("POST/GET /centraid/_gateway/edges", () => {
     expect(readEdgeRow(house.gatewayDb, "edge-parked")!.status).toBe(
       "completed"
     );
-    expect(listQueuedEffects(house.gatewayDb, "deliver-give")).toHaveLength(0);
+    expect(queuedEffectIds(house.gatewayDb)).toStrictEqual([]);
   });
 
   test("a cross-owner pair is refused as retired, while same-owner placement still lands (#825)", async () => {
@@ -349,7 +357,7 @@ describe("POST/GET /centraid/_gateway/edges", () => {
     );
     // Refused at the door: no edge row, no effect, nothing in Bo's vault.
     expect(readEdgeRow(house.gatewayDb, "edge-to-bo")).toBeUndefined();
-    expect(listQueuedEffects(house.gatewayDb, "deliver-give")).toHaveLength(0);
+    expect(queuedEffectIds(house.gatewayDb)).toStrictEqual([]);
     expect(noteCount(house.neighbour)).toBe(0);
 
     // The owner's own two vaults are untouched by the retirement.

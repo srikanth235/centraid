@@ -194,14 +194,12 @@ export function transportTo(side: Side, callerEndpointId: string): PeerRequest {
       vaultId === side.vaultId ? side.ownerPartyId : undefined,
     localRoute: () => ({ endpointId: side.endpointId, relayHints: [] }),
     localLabel: () => side.label,
-    vaultFor: (vaultId) => (vaultId === side.vaultId ? side.vault : undefined),
     commonsVaultFor: (vaultId) =>
       vaultId === side.vaultId ? side.vault : undefined,
     commonsGatewayFor: (vaultId) =>
       vaultId === side.vaultId ? side.gateway : undefined,
     commonsCredentialFor: (vaultId) =>
       vaultId === side.vaultId ? side.ownerCredential : undefined,
-    gatewayDatabase: side.gatewayDb,
   });
   return wireHandler(handler, callerEndpointId, side.proof);
 }
@@ -228,11 +226,9 @@ export function transportToHost(
     ownerPartyFor: (vaultId) => sideFor(vaultId)?.ownerPartyId,
     localRoute: () => ({ endpointId: host.endpointId, relayHints: [] }),
     localLabel: () => host.label,
-    vaultFor: (vaultId) => sideFor(vaultId)?.vault,
     commonsVaultFor: (vaultId) => sideFor(vaultId)?.vault,
     commonsGatewayFor: (vaultId) => sideFor(vaultId)?.gateway,
     commonsCredentialFor: (vaultId) => sideFor(vaultId)?.ownerCredential,
-    gatewayDatabase: host.gatewayDb,
   });
   return wireHandler(handler, callerEndpointId, host.proof);
 }
