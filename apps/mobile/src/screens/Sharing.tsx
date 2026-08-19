@@ -366,7 +366,6 @@ export default function SharingScreen({
                 link={link}
                 busy={busyId === link.linkId}
                 colors={colors}
-                gatewayBase={replica.gatewayBase}
                 label={vaultLabel(link.remoteVaultId ?? link.vaultB, links)}
                 onApprove={() =>
                   replica.gatewayBase &&

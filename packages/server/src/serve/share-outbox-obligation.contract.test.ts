@@ -27,13 +27,13 @@ import { tempDir } from "@centraid/test-kit/temp-dir";
 
 import { GatewayDatabase } from "./gateway-db.js";
 import type { ShareEffect } from "./share-coordinator.js";
+import { retireDeadShareEffects } from "./share-effects-retire.js";
 import {
   claimDueShareEffects,
   completeShareEffect,
   deferShareEffect,
   enqueueShareEffect,
 } from "./share-effects.js";
-import { retireDeadShareEffects } from "./share-effects-retire.js";
 
 const opened: GatewayDatabase[] = [];
 

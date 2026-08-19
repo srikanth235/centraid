@@ -571,6 +571,5 @@ export function projectPersonDetail(input: PersonDetailInput): PersonDetail {
     interactions,
     vaults: input.shareLinks?.vaults ?? null,
     pending_invites: input.shareLinks?.pending_invites ?? null,
-    shared_with_them: input.shareLinks?.shared_with_them ?? null,
   };
 }

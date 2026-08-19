@@ -52,8 +52,6 @@ import {
   pushRouteAssertion,
   redeemLinkTicket,
 } from "./peer-link-client.js";
-import { readEdgeRow } from "./share-edge-row.js";
-import { runShareEffect } from "./share-effect-executor.js";
 import { isLinkApproved } from "./vault-link-row.js";
 import { VaultLinksStore } from "./vault-links-store.js";
 
@@ -248,30 +246,6 @@ function seedPhoto(side: Side, label: string) {
     )
     .run(assetId, contentId, now);
   return { assetId, sha256: original.sha256, thumbSha: thumb.sha256, bytes };
-}
-
-function insertEdgeRow(
-  origin: Side,
-  input: { edgeId: string; audienceVaultId: string; itemIds: string[] }
-) {
-  const now = new Date().toISOString();
-  origin.gatewayDb.run(
-    `INSERT INTO share_edges
-       (edge_id, created_by_device, owner_id, kind, mode, item_type,
-        scope_json, origin_vault_id, audience_vault_id, verbs,
-        target_state, source_state, status, created_at, updated_at)
-     VALUES (?, ?, ?, 'add', 'snapshot', 'media.asset', ?, ?, ?, 'read',
-             'queued', 'not-needed', 'queued', ?, ?)`,
-    input.edgeId,
-    origin.deviceId,
-    origin.ownerId,
-    JSON.stringify(input.itemIds),
-    origin.vaultId,
-    input.audienceVaultId,
-    now,
-    now
-  );
-  return readEdgeRow(origin.gatewayDb, input.edgeId)!;
 }
 
 describe("peer transport over real iroh (#726 P3 gap 1)", () => {

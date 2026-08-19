@@ -1,15 +1,13 @@
 /*
  * Renderer-side client for the gateway's link surface (#726 P2/P3 —
- * `packages/server/src/routes/vault-links-routes.ts`). A link is the
- * same-machine "ceremony" a cross-owner edge needs before it may cross; it is
- * also what a remote pair's ticket redemption lands as (D3: locality is
- * routing, not semantics — one link table serves both).
+ * `packages/server/src/routes/vault-links-routes.ts`). A link is the channel
+ * a grant to another person is delivered over (#825); it is also what a
+ * remote pair's ticket redemption lands as (D3: locality is routing, not
+ * semantics — one link table serves both).
  *
  *   GET   /centraid/_gateway/links
  *   POST  /centraid/_gateway/links                       {vaultId, otherVaultId}
  *   POST  /centraid/_gateway/links/<linkId>/approve
- *   GET   /centraid/_gateway/links/<linkId>/receive-setting
- *   PUT   /centraid/_gateway/links/<linkId>/receive-setting {setting}
  *   POST  /centraid/_gateway/links/ticket                 {vaultId}
  *   POST  /centraid/_gateway/links/redeem                 {vaultId, ticket}
  *
@@ -21,9 +19,9 @@
  * gateway dials the peer itself.
  *
  * Not centralized in `@centraid/core/protocol`'s `ROUTES` table: the gateway route
- * itself exports its own local `LINKS_PATH` constant rather than a shared one
- * (same precedent as the edges-answer sub-paths), so this module mirrors that
- * choice instead of adding a new shared route name for a single consumer.
+ * itself exports its own local `LINKS_PATH` constant rather than a shared one,
+ * so this module mirrors that choice instead of adding a new shared route name
+ * for a single consumer.
  */
 
 import {

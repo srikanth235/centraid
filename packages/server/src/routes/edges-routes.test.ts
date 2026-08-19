@@ -319,7 +319,9 @@ describe("POST/GET /centraid/_gateway/edges", () => {
     );
     expect(noteCount(house.personal)).toBe(0);
     // The obligation outlives the attempt: still queued, ready to retry.
-    expect(queuedEffectIds(house.gatewayDb)).toStrictEqual(["give:edge-parked"]);
+    expect(queuedEffectIds(house.gatewayDb)).toStrictEqual([
+      "give:edge-parked",
+    ]);
 
     // A later attempt with a working vault completes the SAME edge.
     const retried = await give(house, house.laptop, "edge-parked", [noteId]);

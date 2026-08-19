@@ -6,6 +6,8 @@
  * own reading of People — the replica party rows, the approved links, the
  * named circles — so this hook composes those readers rather than adding a
  * second directory that could disagree with the one the old share sheet used.
+ * The MAPPING from those rows to audiences is not restated here either:
+ * `_shared/grant-audiences.ts` owns it for every app and both seats.
  *
  * `null` is "not read yet", which is not the same fact as a vault that knows
  * nobody: Docs draws no Share verb until the roster is an actual answer.
@@ -13,6 +15,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 
+import { grantAudiencesFrom } from "@centraid/blueprints/apps/_shared/grant-audiences";
 import type { GrantAudienceOption } from "@centraid/blueprints/apps/_shared/grant-plane";
 
 import { useReplicaQuery } from "../../kit/hooks/useReplicaQuery";
@@ -66,25 +69,5 @@ export function useDocsGrantAudiences(): readonly GrantAudienceOption[] | null {
   });
   const circles = useNamedShareCircles(targets, ownerPartyId);
   if (links === null) return null;
-  return [
-    // A person queued offline carries an id no vault has settled; a grant
-    // naming one would address somebody who does not exist yet.
-    ...targets.flatMap((target) =>
-      target.partyId && !target.pending
-        ? [
-            {
-              kind: "party" as const,
-              id: target.partyId,
-              label: target.label,
-            },
-          ]
-        : []
-    ),
-    ...circles.map((circle) => ({
-      kind: "circle" as const,
-      id: circle.circleId,
-      label: circle.label,
-      memberCount: circle.members.length,
-    })),
-  ];
+  return grantAudiencesFrom(targets, circles);
 }

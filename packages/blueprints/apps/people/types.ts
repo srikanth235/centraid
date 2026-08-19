@@ -72,20 +72,6 @@ export interface PendingInvite {
   created_at: string;
 }
 
-/** One thing the owner has shared with this person, as the COMMONS plane
- *  carries it. The person screen now draws the grant plane instead
- *  (`grant-dashboard.ts`); this shape stays because `queries/person.ts` still
- *  answers it and the phone's replica projection mirrors that query. */
-export interface SharedContainer {
-  grant_id: string;
-  container_type: string;
-  container_id: string;
-  container_label: string | null;
-  capability: ShareCapability;
-  status: "invited" | "current" | "refused";
-  since: string;
-}
-
 /** One contact channel on the person screen. `legacy` marks a row projected
  *  from a party identifier rather than a channel, which has no id to edit. */
 export interface ContactChannel {
@@ -141,14 +127,16 @@ export interface PersonDetail {
   notes: PersonNote[];
   interactions: Interaction[];
   /**
-   * The sharing plane, all three of it. NULL IS NOT AN EMPTY LIST: it means
+   * The sharing plane, both halves of it. NULL IS NOT AN EMPTY LIST: it means
    * the reads were denied, and the person screen then draws no vault section
    * at all rather than an empty one claiming nothing is shared
-   * (`queries/_shared.ts` returns the three together for exactly this reason).
+   * (`queries/_shared.ts` returns the two together for exactly this reason).
+   * WHAT IS SHARED WITH THIS PERSON IS NOT HERE (#825): standing grants are
+   * read from the grant plane by `grant-dashboard.ts`, not projected through
+   * this query.
    */
   vaults: VaultBinding[] | null;
   pending_invites: PendingInvite[] | null;
-  shared_with_them: SharedContainer[] | null;
 }
 
 /** The card every dashboard list is built out of. The cadence pair is not the

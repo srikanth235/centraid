@@ -9,7 +9,6 @@
 
 import { describe, expect, test } from "vitest";
 
-import type { PeerDial } from "./peer-link-client.js";
 import {
   link,
   makeCoHostedSides,
@@ -18,6 +17,7 @@ import {
   transportToHost,
 } from "./peer-give.test-fixtures.js";
 import type { Side } from "./peer-give.test-fixtures.js";
+import type { PeerDial } from "./peer-link-client.js";
 import {
   announceLocalRoutes,
   LAST_ASSERTED_ENDPOINT_META_KEY,

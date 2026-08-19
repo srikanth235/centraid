@@ -28,6 +28,7 @@ import {
 } from "@centraid/design/elements";
 
 import { publishOutcome } from "../_shared/app-frame.tsx";
+import { loadGrantAudiences } from "../_shared/grant-audiences.ts";
 import { grantPlaneAvailable } from "../_shared/grant-gateway.ts";
 import type { GrantAudienceOption } from "../_shared/grant-plane.ts";
 import { GrantSheet } from "../_shared/GrantSheet.tsx";
@@ -71,7 +72,6 @@ import {
 import { NO_FILTERS, filtersActive } from "./filters.ts";
 import type { DriveFilters } from "./filters.ts";
 import { appBar, bandClaim } from "./frame.tsx";
-import { loadGrantAudiences } from "./grant-audiences.ts";
 import type { DocsShareHost } from "./grant-audiences.ts";
 import { createLogic } from "./logic.ts";
 import { createNav } from "./nav.ts";

@@ -33,8 +33,7 @@ import {
 } from "@centraid/tunnel";
 import type { TunnelClient } from "@centraid/tunnel";
 
-import type { PeerDial } from "./peer-link-client.js";
-import type { PeerRequest } from "./peer-link-client.js";
+import type { PeerDial, PeerRequest } from "./peer-link-client.js";
 
 export interface PeerDialHandle extends PeerDial {
   close: () => Promise<void>;

@@ -143,7 +143,7 @@ describe("People roster link chips (#821)", () => {
 });
 
 describe("People profile sharing standing (#821)", () => {
-  it("reports vaults, pending invitations and shared containers", async () => {
+  it("reports vaults and pending invitations", async () => {
     const result = await personHandler({
       input: { party_id: "party-linked" },
       ...ctxOf(false),
@@ -167,17 +167,9 @@ describe("People profile sharing standing (#821)", () => {
         created_at: "2026-04-01T00:00:00Z",
       },
     ]);
-    expect(person.shared_with_them).toStrictEqual([
-      {
-        grant_id: "grant-trip",
-        container_type: "media.album",
-        container_id: "album-trip",
-        container_label: "Kerala trip",
-        capability: "read+write",
-        status: "current",
-        since: "2026-03-02T00:00:00Z",
-      },
-    ]);
+    // WHAT IS SHARED WITH THEM IS NOT THIS QUERY'S ANSWER (#825): standing
+    // grants come from the grant plane, read live by the person screen.
+    expect(person).not.toHaveProperty("shared_with_them");
   });
 
   it("keeps the profile whole and the sharing fields null when share reads deny", async () => {
@@ -193,7 +185,6 @@ describe("People profile sharing standing (#821)", () => {
     expect(person.name).toBe("Priya");
     expect(person.vaults).toBeNull();
     expect(person.pending_invites).toBeNull();
-    expect(person.shared_with_them).toBeNull();
   });
 });
 

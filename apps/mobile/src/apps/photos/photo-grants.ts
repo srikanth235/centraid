@@ -3,21 +3,22 @@
 // The kit draws the sheet and owns the whole write door; the HOST says who is
 // in the room and where an outcome is spoken. That is all this module is.
 //
-// The mapping itself is NOT restated here: `photoAudiences` is the blueprint
-// law both seats read (`apps/photos/grant-audiences.ts`), so "a grant is
-// addressed to a party, never to a vault, and never to a `pending:` overlay
-// id" is decided once for the phone and the desktop together. What native
+// The mapping itself is NOT restated here: `grantAudiencesFrom` is the
+// blueprint law every app and both seats read
+// (`apps/_shared/grant-audiences.ts`), so "a grant is addressed to a party,
+// never to a vault, and never to a pending overlay id" is decided once for
+// the phone and the desktop together. What native
 // genuinely supplies differently is only where the roster comes from —
 // replica queries plus the gateway's link list, exactly as the commons sheet
 // reads them.
 
 import { useMemo, useState } from "react";
 
-import type { GrantAudienceOption } from "@centraid/blueprints/apps/_shared/grant-plane";
 import {
+  grantAudiencesFrom,
   NOBODY_TO_SHARE_WITH,
-  photoAudiences,
-} from "@centraid/blueprints/apps/photos/grant-audiences";
+} from "@centraid/blueprints/apps/_shared/grant-audiences";
+import type { GrantAudienceOption } from "@centraid/blueprints/apps/_shared/grant-plane";
 
 import { useReplicaQuery } from "../../kit/hooks/useReplicaQuery";
 import { useReplica } from "../../kit/replica/ReplicaProvider";
@@ -110,7 +111,7 @@ export function usePhotoGrantEntry(
           links,
           scopes: replica.scopes ?? [],
         });
-        const rows = photoAudiences(
+        const rows = grantAudiencesFrom(
           targets,
           nativeNamedShareCircles({
             circles: circles.rows,

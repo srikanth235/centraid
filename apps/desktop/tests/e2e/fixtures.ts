@@ -144,14 +144,11 @@ export interface MockState {
   scopes: Array<Record<string, unknown>>;
   /** GET /centraid/_gateway/links → `{links}` (vault-links-routes.ts `linkDto`). */
   links: Array<Record<string, unknown>>;
-  /** D9 per-link receive settings; an absent row answers "accept", matching
-   *  `receiveSettingFor` in vault-links-routes.ts. */
-  receiveSettings: Record<string, string>;
-  /** GET /centraid/_gateway/edges → `{edges}` (edges-routes.ts `edgeWire`). */
+  /** GET /centraid/_gateway/edges → `{edges}` (edges-routes.ts `edgeWire`).
+   *  Same-owner placements only — copy-as-share retired (#825, ruling
+   *  G-copy), and with it the D9 receive setting and the parked-ask surface
+   *  this fixture used to serve. */
   edges: Array<Record<string, unknown>>;
-  /** GET /centraid/_gateway/edges/pending → `{pending}` (edge-answer-routes.ts
-   *  `pendingDto`); POST …/:edgeId/answer consumes a row. */
-  pendingEdges: Array<Record<string, unknown>>;
   /** GET /centraid/_gateway/commons/invitations?actorVaultId= → `{invitations}`
    *  (commons-routes.ts / `listCommonsInvitations`), filtered to the asking
    *  vault the way the real route reads one member vault's own rows. */
@@ -236,9 +233,7 @@ function defaultState(): MockState {
     devices: [],
     scopes: [],
     links: [],
-    receiveSettings: {},
     edges: [],
-    pendingEdges: [],
     commonsInvitations: [],
     commonsRecovery: {},
     deviceWork: [],
@@ -749,7 +744,7 @@ async function route(
     return json(res, 200, { scopes });
   }
 
-  // vault-links-routes.ts: list, approve, and the D9 receive setting.
+  // vault-links-routes.ts: list and approve.
   if (p === "/centraid/_gateway/links" && method === "GET")
     return json(res, 200, { links: s.links });
   if (seg[0] === "centraid" && seg[1] === "_gateway" && seg[2] === "links") {
@@ -774,51 +769,14 @@ async function route(
       const approved = s.links.find((link) => link.linkId === linkId) ?? null;
       return json(res, 200, { link: approved });
     }
-    if (seg[4] === "receive-setting") {
-      const link = s.links.find((row) => row.linkId === linkId);
-      const own = new Set(s.scopes.map((row) => row.vaultId));
-      const vaultId = own.has(link?.vaultA as string)
-        ? link?.vaultA
-        : link?.vaultB;
-      if (method === "GET") {
-        return json(res, 200, {
-          linkId,
-          vaultId,
-          setting: s.receiveSettings[linkId] ?? "accept",
-        });
-      }
-      if (method === "PUT" || method === "PATCH") {
-        const setting = safeJson(body)["setting"];
-        if (typeof setting === "string") s.receiveSettings[linkId] = setting;
-        return json(res, 200, { linkId, vaultId, setting });
-      }
-    }
   }
 
-  // edges-routes.ts GET (`{edges}`) + edge-answer-routes.ts pending/answer.
+  // edges-routes.ts GET (`{edges}`). The pending/answer verbs retired with
+  // copy-as-share (#825, ruling G-copy) and are deliberately NOT served here:
+  // a fixture that answered a route the gateway 404s would let a journey pass
+  // against a fiction.
   if (p === "/centraid/_gateway/edges" && method === "GET")
     return json(res, 200, { edges: s.edges });
-  if (p === "/centraid/_gateway/edges/pending" && method === "GET")
-    return json(res, 200, { pending: s.pendingEdges });
-  if (
-    seg[0] === "centraid" &&
-    seg[1] === "_gateway" &&
-    seg[2] === "edges" &&
-    seg[4] === "answer" &&
-    method === "POST"
-  ) {
-    const edgeId = decodeURIComponent(seg[3] ?? "");
-    const decision = safeJson(body)["decision"];
-    // Mirror the gateway: answering consumes the parked ask either way —
-    // accept pulls + projects (`{edgeId, decision, items}`), refuse deletes
-    // the pointer row (`{edgeId, decision: "refuse"}`).
-    s.pendingEdges = s.pendingEdges.filter((row) => row.edgeId !== edgeId);
-    return json(res, 200, {
-      edgeId,
-      decision,
-      ...(decision === "accept" ? { items: [] } : {}),
-    });
-  }
 
   // commons-routes.ts invitations (list / claim / answer).
   if (p === "/centraid/_gateway/commons/invitations" && method === "GET") {
@@ -1343,24 +1301,6 @@ export function gatewayLinkRecord(over: {
     remoteVaultId: over.remoteVaultId ?? null,
     revoked: over.revoked === true,
     createdAt: "2026-03-01T00:00:00.000Z",
-  };
-}
-
-/** Build one parked-ask `pendingDto` row (edge-answer-routes.ts). */
-export function pendingEdgeRecord(over: {
-  edgeId: string;
-  peerVaultId: string;
-  localVaultId: string;
-  itemType: string;
-  itemCount: number;
-}): Record<string, unknown> {
-  return {
-    edgeId: over.edgeId,
-    peerVaultId: over.peerVaultId,
-    localVaultId: over.localVaultId,
-    itemType: over.itemType,
-    itemCount: over.itemCount,
-    createdAt: "2026-03-02T00:00:00.000Z",
   };
 }
 

@@ -28,13 +28,12 @@ import { makePeerPlaneHandler } from "../routes/peer-plane.js";
 import { EnrollmentStore } from "./enrollment-store.js";
 import { GatewayDatabase } from "./gateway-db.js";
 import { judgeEdgeCrossing } from "./link-crossing.js";
-import type { PeerDial } from "./peer-link-client.js";
 import {
   encodeLinkTicket,
   parseLinkTicket,
   redeemLinkTicket,
 } from "./peer-link-client.js";
-import type { PeerRequest } from "./peer-link-client.js";
+import type { PeerDial, PeerRequest } from "./peer-link-client.js";
 import type { LinkRoute } from "./vault-link-row.js";
 import { VaultLinksStore } from "./vault-links-store.js";
 

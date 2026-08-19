@@ -130,32 +130,16 @@ export const LINK = {
   /** An invitation this person has not answered yet. */
   inviteRow: "Invitation sent",
   inviteWaiting: "waiting to be accepted",
-  /** A shared container this person has not accepted yet. */
-  waiting: "waiting",
-  /** `read · since 4 March` — a shared row's second line. */
+  /** `Can view · since 4 March` — a grant row's second line. */
   sharedSince: (capability: string, when: string) =>
     `${capability} · since ${when.toLowerCase()}`,
-  /** The two capabilities, in the handoff's own words. */
-  read: "read",
-  readWrite: "read + write",
 } as const;
 
-/**
- * How a shared container is named when the invitation carried no label. The
- * container TYPE is the only thing the grant itself knows, so it is worded
- * rather than printed as a schema name.
- */
-export const CONTAINER_WORDS: Readonly<Record<string, string>> = {
-  "core.collection": "An album",
-  "core.content_item": "A note",
-  "core.document": "A document",
-  "docs.folder": "A folder",
-  "media.asset": "A photograph",
-  "tally.group": "A group",
-};
-
-/** What an unlabelled container of an unknown type is called. */
-export const CONTAINER_FALLBACK = "Shared items";
+// CONTAINER_WORDS/CONTAINER_FALLBACK are gone (#825): they worded a
+// commons-era container whose only reader was the retired `shared_with_them`
+// projection. A grant's subject is named by the placement registry through
+// `grant-dashboard.ts`'s `grantNoun`, which is the same noun the app that owns
+// the subject already uses.
 
 /** The kinds a logged touch can be. The vault stores the word. */
 export const LOG_KINDS = ["Message", "Call", "Met up", "Note"] as const;
@@ -212,8 +196,6 @@ export const EMPTY = {
   upcoming: "No dates coming up.",
   recent: "Nothing logged yet.",
   vaults: "Not linked yet.",
-  shared: "Nothing shared yet.",
-  sharedUnlinked: "Link a vault to share.",
   channels: "No channels.",
   dates: "No dates.",
   notes: "No notes.",

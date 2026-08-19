@@ -15,8 +15,8 @@ import {
   recordCommonsPull,
 } from "./commons-observability.js";
 import { pullPeerCommons } from "./peer-commons-client.js";
-import type { PeerDial } from "./peer-link-client.js";
 import { makeSide } from "./peer-give.test-fixtures.js";
+import type { PeerDial } from "./peer-link-client.js";
 
 const HOUR = 60 * 60 * 1000;
 const DAY = 24 * HOUR;

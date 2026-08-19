@@ -2,7 +2,7 @@ import { describe, expect, test } from "vitest";
 
 import { grantAudiencesFrom } from "./grant-audiences.ts";
 
-describe("docs grant audiences", () => {
+describe("grant audiences — one roster mapping for every app", () => {
   test("names people by party, then named circles with their size", () => {
     expect(
       grantAudiencesFrom(
@@ -40,5 +40,20 @@ describe("docs grant audiences", () => {
 
   test("an empty roster is a real answer, not a failure", () => {
     expect(grantAudiencesFrom([], [])).toStrictEqual([]);
+  });
+
+  test("the native seat's own pending flag is honoured beside the id form", () => {
+    // The native roster settles the pending question itself and carries a real
+    // party id beside the flag; the web roster carries it in the id. One law
+    // reads both rather than each seat restating it.
+    expect(
+      grantAudiencesFrom(
+        [
+          { label: "Queued", partyId: "party-real", pending: true },
+          { label: "Settled", partyId: "party-real-2", pending: false },
+        ],
+        []
+      )
+    ).toStrictEqual([{ kind: "party", id: "party-real-2", label: "Settled" }]);
   });
 });

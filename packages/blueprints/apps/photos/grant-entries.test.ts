@@ -17,8 +17,6 @@ import path from "node:path";
 
 import { describe, expect, it } from "vitest";
 
-import { photoAudiences } from "./grant-audiences.ts";
-
 const HERE = import.meta.dirname;
 
 function sourceFiles(dir: string): string[] {
@@ -31,40 +29,10 @@ function sourceFiles(dir: string): string[] {
   });
 }
 
-describe("who Photos may name in a grant", () => {
-  it("names people by party, and a named circle by its circle", () => {
-    expect(
-      photoAudiences(
-        [{ id: "v1", label: "Priya", partyId: "party-priya", vaultId: "v1" }],
-        [
-          {
-            circleId: "circle-1",
-            label: "Ski trip",
-            members: [{ partyId: "party-priya", capability: "read" }],
-          },
-        ]
-      )
-    ).toStrictEqual([
-      { kind: "party", id: "party-priya", label: "Priya" },
-      { kind: "circle", id: "circle-1", label: "Ski trip", memberCount: 1 },
-    ]);
-  });
-
-  it("drops a destination that names no person — a grant needs one", () => {
-    expect(
-      photoAudiences([{ id: "v2", label: "Linked library" }], [])
-    ).toStrictEqual([]);
-  });
-
-  it("drops an offline overlay id, which has settled on nobody yet", () => {
-    expect(
-      photoAudiences(
-        [{ id: "party:pending:i1:0", label: "Sam", partyId: "pending:i1:0" }],
-        []
-      )
-    ).toStrictEqual([]);
-  });
-});
+// WHO PHOTOS MAY NAME IN A GRANT is not asserted here any more (#825): the
+// roster mapping is one law for every app and both seats, proved in
+// `apps/_shared/grant-audiences.test.ts`. What stays below is the part that
+// is genuinely about THIS app — that nothing app-private survives under it.
 
 describe("no app-private share plumbing remains under apps/photos", () => {
   const sources = sourceFiles(HERE).map(

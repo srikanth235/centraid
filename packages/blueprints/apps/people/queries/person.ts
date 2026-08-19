@@ -538,7 +538,6 @@ export default async function personHandler({ input, ctx }: HandlerArgs) {
       })),
       vaults: shareLinks?.vaults ?? null,
       pending_invites: shareLinks?.pending_invites ?? null,
-      shared_with_them: shareLinks?.shared_with_them ?? null,
     };
     return { person };
   } catch (error) {

@@ -220,7 +220,21 @@ Every grant on the wire carries `fulfillment: [{peerVaultId, state, updatedAt, d
 
 Refusals are actionable rather than silent: a subject type with no fulfillment strategy is `400 subject_not_offerable`, and an `edit` grant on a container the commons rail cannot carry writes to is `400 capability_not_offerable`, both naming what the vault CAN do instead. Three answers are shared by every route in the table, since the plane is owner-tier and active-vault-scoped: `403 device_identity_required` for a caller with no proved device, `409 vault_unavailable` when no vault is mounted for the request, and `404` — bare, nothing else said — for a mounted vault this caller's owner does not hold, the same topology hiding the edge plane uses. Clients read grants themselves through the **ordinary replica plane** — `share.grant` and `share.fulfillment` are consent-shaped entities like any other, so an app with the scope gets them in its shape and an app without it gets no entity at all.
 
-**Retired by #825.** The give verbs left the surface with copy-as-share (ruling G-copy): the peer frames `POST /centraid/_peer/edge/give`, `GET /centraid/_peer/edge/closure/:id` and `POST /centraid/_peer/edge/deny` now answer `not_found` exactly as an unknown path does, and the D9 answer surface (`GET /centraid/_gateway/edges/pending`, `POST /centraid/_gateway/edges/:edgeId/answer`) is gone. Closure reading and projection survive BENEATH a grant as internal fulfillment transport — machinery, never a member-facing act.
+**What #825 took off the wire.** Copy-as-share retired (ruling G-copy), and these answer `not_found` exactly as an unknown path does:
+
+| Retired verb | Was |
+| --- | --- |
+| `POST /centraid/_peer/edge/give` | pushing a closure to another owner's vault |
+| `GET /centraid/_peer/edge/closure/:id` | the audience pulling that closure back after answering an ask |
+| `POST /centraid/_peer/edge/deny` | relaying the audience's refusal to the origin |
+| `GET /centraid/_peer/blob/chunk` | the audience's ranged, resumable pull of a given item's ORIGINAL bytes |
+| `GET /centraid/_gateway/edges/pending` | the owner's list of asks awaiting a decision |
+| `POST /centraid/_gateway/edges/:edgeId/answer` | accept/refuse on one of those asks |
+| `GET\|PUT /centraid/_gateway/links/<linkId>/receive-setting` | the per-link accept/ask/refuse preference for gives ARRIVING — nothing arrives to govern |
+
+Their handlers are deleted, not gated. What a proved peer may still reach on `/centraid/_peer/*` is the link ceremony, the route assertion, and the commons rail (which carries its own blob doors and never used the retired one). Closure reading and projection survive BENEATH a grant as internal fulfillment transport — machinery, never a member-facing act.
+
+**Cross-host grant delivery is an open gap.** Fulfillment resolves an audience vault through the host gateway's own registry, so a grant to a party whose vault lives on another gateway parks at `syncing` with that vault named and stays there. It is not an error state and no route reports it as one; v1's tested reach is co-hosted vaults, and carrying a grant across the peer plane is a follow-up under [#825](https://github.com/srikanth235/centraid/issues/825).
 
 ## Stream authority
 
