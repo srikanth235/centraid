@@ -25,7 +25,27 @@ export const family = {
   monoMedium: "monospace",
   monoRegular: "monospace",
   sansMedium: "InstrumentSans_600SemiBold",
-  sansRegular: "InstrumentSans_400Regular",
+  // THE 400 REGISTER RENDERS IN A 470 FACE, AND ONLY ON NATIVE. The ramp still
+  // SPECIFIES weight 400 (DESIGN.md § Type) — this is the same rasterizer
+  // compensation the size delta already is, applied to the other axis.
+  //
+  // `NATIVE_DELTA_BY_FAMILY` concedes that a phone at arm's length needs +2px
+  // size and +3px leading over a desktop pane at the same role. That step
+  // scales the glyph but not the stroke's optical presence, and iOS compounds
+  // it: CoreText draws with grayscale antialiasing where a desktop browser
+  // gets stem darkening. Same face, same token, objectively lighter strokes on
+  // the phone — which is why the 400 register reads correct on desktop and
+  // thin on the device, and why no edit to the shared ramp could fix one
+  // without wrecking the other.
+  //
+  // 470 rather than the 500 that `@expo-google-fonts` ships: 500 overshot by
+  // eye, and 470 is ~73% of the way from 400 to 500 in measured ink coverage.
+  // The face is a derived static instance — see `assets/fonts/README.md`.
+  //
+  // Deliberately NOT a third rung on the ramp: nothing may ask for "470". The
+  // token space is still two weights, and this is the lowering that draws one
+  // of them. Web and desktop are untouched.
+  sansRegular: "InstrumentSans_470Book",
 } as const;
 
 export const fonts = {

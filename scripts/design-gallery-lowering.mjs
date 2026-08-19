@@ -40,10 +40,18 @@ function nativeTokenCss(scheme) {
     vars.push(`--sp-${key}: ${value}px;`);
   for (const [key, value] of Object.entries(theme.type))
     vars.push(
-      // The family is the product's, not `system-ui`: mobile renders
-      // `InstrumentSans_400Regular`/`_600SemiBold`, which are the same faces
-      // this sheet loads as `.woff2` (#799 — the `system-ui` literal here was
-      // the fidelity bug that made these baselines OS-dependent).
+      // The family is the product's, not `system-ui`: this sheet loads the
+      // same Instrument Sans faces the product does, as `.woff2` (#799 — the
+      // `system-ui` literal here was the fidelity bug that made these
+      // baselines OS-dependent).
+      //
+      // One KNOWN divergence, ruled 2026-08-19 (docs/decisions.md): native
+      // draws the 400 register in a 470 face to compensate for CoreText's
+      // lighter rasterization at the touch size delta. This sheet keeps
+      // `value.weight`, so the gallery depicts the ramp's SPECIFICATION and
+      // the phone deliberately differs from it on that one axis. Do not
+      // "fix" this by teaching the gallery about the 470 — the baselines
+      // photograph the contract, not the device.
       `--t-${kebab(key)}: ${value.weight} ${value.fontSize}px/${value.lineHeight}px '${SANS}';`
     );
   vars.push(

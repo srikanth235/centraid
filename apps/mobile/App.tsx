@@ -1,13 +1,5 @@
-// Direct sub-path imports avoid the package's barrel index.js which
-// re-exports every weight (some of which Metro fails to resolve).
-//
-// The Binding Layer's ONE face, two weights (400 / 600): Instrument Sans for
-// every product role. The reading serif and numeric face are withdrawn, so
-// this list must stay two files — a face loaded here that the
-// ramp cannot name is exactly the divergence from the shared registry that the
-// native adapter prevents. Code surfaces use the PLATFORM monospace
-// (see kit/theme/index.ts#family), which loads nothing.
-import InstrumentSans_400Regular from "@expo-google-fonts/instrument-sans/400Regular/InstrumentSans_400Regular.ttf";
+// Sub-path import, not the barrel: index.js re-exports every weight and
+// Metro fails to resolve some of them. The 600 rung, straight from upstream.
 import InstrumentSans_600SemiBold from "@expo-google-fonts/instrument-sans/600SemiBold/InstrumentSans_600SemiBold.ttf";
 import { NavigationContainer } from "@react-navigation/native";
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
@@ -27,6 +19,8 @@ import {
   useSafeAreaInsets,
 } from "react-native-safe-area-context";
 
+// The 400 rung, bundled rather than upstream — see the `useFonts` call.
+import InstrumentSans_470Book from "./assets/fonts/InstrumentSans_470Book.ttf";
 // Every screen here is reached only through a `component=` prop on a
 // navigator, and each one's module body is evaluated on first navigation
 // rather than at app start — see `lazy-screens.tsx` for why.
@@ -240,8 +234,20 @@ export default function App(): React.JSX.Element | null {
   // The return tuple is deliberately dropped: nothing gates on it any more (see
   // the tradeoff note below the effects). `useFonts` still re-renders this
   // component when the faces land, which is what swaps the system fallback out.
+  // The Binding Layer's ONE face, two weights (400 / 600): Instrument Sans for
+  // every product role. The reading serif and numeric face are withdrawn, so
+  // this list must stay two files — a face loaded here that the ramp cannot
+  // name is exactly the divergence from the shared registry that the native
+  // adapter prevents. Code surfaces use the PLATFORM monospace (see
+  // kit/theme/index.ts#family), which loads nothing.
+  //
+  // The 400 rung's FILE is a 470, and that is a LOWERING rather than a third
+  // weight: the ramp still names two weights and nothing may ask for a 470.
+  // `kit/theme/native.ts` carries why the phone needs it. The upstream 400
+  // static is deliberately absent — on a touch surface nothing renders it, so
+  // loading it would ship a face no role can reach.
   useFonts({
-    InstrumentSans_400Regular,
+    InstrumentSans_470Book,
     InstrumentSans_600SemiBold,
   });
 
