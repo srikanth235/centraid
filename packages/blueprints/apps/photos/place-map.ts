@@ -41,6 +41,8 @@ export interface PlacePoint {
   name: string | null;
   /** A photograph taken here, to draw AS the pin. See `MapPin.thumb`. */
   thumb?: string | null;
+  /** That same photograph's undownscaled bytes. See `MapPin.thumbOriginal`. */
+  thumbOriginal?: string | null;
 }
 
 /** A place (or a merged group of places) at a position in the drawing box. */
@@ -67,6 +69,15 @@ export interface MapPin {
    * of the photographs came from.
    */
   thumb?: string | null;
+  /**
+   * The same photograph's undownscaled bytes — the pin's second rung.
+   *
+   * `thumb` is a `?variant=` URL, and a variant the gateway's preview backstop
+   * has not produced yet 404s over an original sitting in CAS intact. A pin
+   * that gave up there drew as a bare count on a map whose whole legibility
+   * argument is that the pin is the picture.
+   */
+  thumbOriginal?: string | null;
 }
 
 /** One graticule line: a meridian or a parallel, with the degree it names. */
@@ -312,6 +323,29 @@ export function tileZoomFor(camera: MapCamera): number {
 }
 
 /**
+ * The zoom that shows this much ground per pixel to an SDK that reads `zoom`
+ * as a VIEWPORT SPAN rather than as a tile-pyramid level.
+ *
+ * `expo-maps` is one: its iOS side turns a zoom into a region with
+ * `longitudeDelta = 360 / 2^zoom` and reads one back as `log2(360 /
+ * longitudeDelta)`, with no tile size and no cosine anywhere in it. Handing
+ * `tileZoomFor`'s number to that convention is not a rounding error — the two
+ * disagree by the tile size and the latitude scale together, and because the
+ * SDK reports its camera back to us, the disagreement COMPOUNDS: every
+ * reported camera came out a little tighter than the one we sent, so a map
+ * opened on a 200km fit walked itself down to a street corner.
+ *
+ * The inverse of `kmPerPxForSpan`, which is what makes the round trip a fixed
+ * point instead of a spiral.
+ */
+export function spanZoomFor(camera: MapCamera, heightPx: number): number {
+  const latitudeDegrees =
+    (Math.max(camera.kmPerPx, MIN_KM_PER_PX) * Math.max(1, heightPx)) /
+    KM_PER_DEG_LAT;
+  return clamp(Math.log2(360 / latitudeDegrees), 0, 20);
+}
+
+/**
  * A pixel position for one coordinate, seen through a camera.
  *
  * Exported because a basemap has to run this BACKWARDS as well: the SDK hands
@@ -507,6 +541,7 @@ export function projectPlaces(
         name: point.name,
         places: 1,
         thumb: point.thumb ?? null,
+        thumbOriginal: point.thumbOriginal ?? null,
       });
     }
   }

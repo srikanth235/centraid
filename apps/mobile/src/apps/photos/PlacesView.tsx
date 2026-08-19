@@ -24,11 +24,13 @@ import { FlatList, Pressable, StyleSheet, View } from "react-native";
 import { Text } from "../../kit/components/NativeText";
 import { useReplicaQuery } from "../../kit/hooks/useReplicaQuery";
 import { imageSource } from "../../kit/media/media-source";
+import { useImageFallback } from "../../kit/media/use-image-fallback";
 import ReplicaStatusBar from "../../kit/replica/ReplicaStatusBar";
 import { borders, radii, spacing, t, useTheme } from "../../kit/theme";
 import type { ThemeColors } from "../../kit/theme";
 import type { PhotosScreenProps } from "../../navigation";
 import PhotosScreen from "./PhotosScreen";
+import type { PlaceCard } from "./places-model";
 import { noLocationCard, placeCards } from "./places-model";
 import { tileGround } from "./tile-overlays";
 import { usePhotoTimeline } from "./timeline-source";
@@ -116,34 +118,7 @@ export default function PlacesView({
               })
             }
           >
-            {/* THE GROUND (issue #712 P9). `--skel` is defined as "the ground
-                a tile paints BEFORE its bytes arrive" (packages/design/src/
-                roles.ts) — it is the absence, not the surface. This card used
-                to pin it forever, so a place whose cover had decoded still
-                stood on the placeholder. `tileGround` is the app's own
-                contract for exactly this (PhotoTile.tsx): skel while there is
-                nothing to show, `--bg-sunken` once there is. */}
-            <View
-              style={[
-                styles.cover,
-                {
-                  backgroundColor: tileGround(
-                    Boolean(item.coverUri),
-                    colors.skel,
-                    colors.bgSunken
-                  ),
-                },
-              ]}
-            >
-              {item.coverUri ? (
-                <Image
-                  source={imageSource(item.coverUri)}
-                  style={styles.coverImage}
-                  contentFit="cover"
-                  allowDownscaling
-                />
-              ) : null}
-            </View>
+            <PlaceCover card={item} colors={colors} styles={styles} />
             <Text numberOfLines={2} style={styles.cardTitle}>
               {item.name}
             </Text>
@@ -152,6 +127,66 @@ export default function PlacesView({
         )}
       />
     </PhotosScreen>
+  );
+}
+
+/**
+ * One card's cover, with the grid tile's retry ladder under it.
+ *
+ * Its own component rather than JSX inside `renderItem` because the ladder is
+ * a hook, and `renderItem` is a callback — not a component — so a hook called
+ * there would be a hook called in a loop.
+ */
+function PlaceCover({
+  card,
+  colors,
+  styles,
+}: {
+  card: PlaceCard;
+  colors: ThemeColors;
+  styles: ReturnType<typeof makeStyles>;
+}): React.JSX.Element {
+  // A missing DERIVATIVE is not a missing PHOTOGRAPH. The cover asks for
+  // `?variant=preview`, and a variant the gateway's backstop has not produced
+  // yet 404s over an original sitting in CAS intact — which this shelf drew as
+  // an empty plate. Same ladder the grid tile runs (`use-image-fallback.ts`).
+  const cover = useImageFallback(
+    card.coverUri ?? "",
+    card.coverOriginalUri,
+    card.id
+  );
+  return (
+    /* THE GROUND (issue #712 P9). `--skel` is defined as "the ground
+       a tile paints BEFORE its bytes arrive" (packages/design/src/
+       roles.ts) — it is the absence, not the surface. This card used
+       to pin it forever, so a place whose cover had decoded still
+       stood on the placeholder. `tileGround` is the app's own
+       contract for exactly this (PhotoTile.tsx): skel while there is
+       nothing to show, `--bg-sunken` once there is. */
+    <View
+      style={[
+        styles.cover,
+        {
+          backgroundColor: tileGround(
+            Boolean(card.coverUri),
+            colors.skel,
+            colors.bgSunken
+          ),
+        },
+      ]}
+    >
+      {card.coverUri && !cover.failed ? (
+        <Image
+          source={imageSource(cover.source)}
+          style={styles.coverImage}
+          contentFit="cover"
+          allowDownscaling
+          onError={cover.handleError}
+          onLoad={cover.handleLoad}
+          recyclingKey={cover.recyclingKey}
+        />
+      ) : null}
+    </View>
   );
 }
 

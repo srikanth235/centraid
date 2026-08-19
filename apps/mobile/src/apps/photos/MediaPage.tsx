@@ -27,6 +27,7 @@ import Icon from "../../kit/components/Icon";
 import { Text } from "../../kit/components/NativeText";
 import { fetchAccess, FetchChoicePlaceholder } from "../../kit/fetch-gate";
 import { imageSource, videoSource } from "../../kit/media/media-source";
+import { useImageFallback } from "../../kit/media/use-image-fallback";
 import { useTheme } from "../../kit/theme";
 import { applyZoom, buildZoomGesture } from "./lightbox-gestures";
 import { styles } from "./PhotoLightbox.styles";
@@ -93,6 +94,12 @@ function MeteredPlaceholder({
   onLoad: () => void;
 }): React.JSX.Element {
   const { colors } = useTheme();
+  // Same ladder as the stage: the preview variant may never have been produced.
+  const metered = useImageFallback(
+    asset.previewUri || asset.uri,
+    asset.originalUri,
+    `${asset.id}:metered`
+  );
   return (
     <FetchChoicePlaceholder
       accessibilityLabel="Load full quality over mobile data"
@@ -102,9 +109,10 @@ function MeteredPlaceholder({
       width={width}
     >
       <Image
-        source={imageSource(asset.previewUri || asset.uri)}
+        source={imageSource(metered.source)}
+        onError={metered.handleError}
         cachePolicy="memory-disk"
-        recyclingKey={`${asset.id}:metered`}
+        recyclingKey={`${asset.id}:metered:${metered.recyclingKey}`}
         placeholder={
           asset.thumbhash ? { thumbhash: asset.thumbhash } : undefined
         }
@@ -247,11 +255,18 @@ export function MediaPage({
   // state during render (React's documented "derive state from props" escape
   // hatch) rather than in an effect means the reset lands before paint, so a new
   // asset can never flash the previous one's full-resolution source.
+  // A derivative the gateway never produced 404s while the original sits in CAS,
+  // whole and decodable — the same rung failure `useImageFallback` exists for on
+  // the grid. Without this the stage kept rendering the dead `?variant=` URL and
+  // a member sat looking at the thumbhash blur forever, on a photograph that was
+  // never actually missing.
+  const [derivativeFailed, setDerivativeFailed] = useState(false);
   const [qualityAssetId, setQualityAssetId] = useState(asset.id);
   if (qualityAssetId !== asset.id) {
     setQualityAssetId(asset.id);
     setQuality("thumb");
     setFullQualityUnlocked(false);
+    setDerivativeFailed(false);
     setZoom(1);
   }
   // On a metered connection nothing reaches for the original until the user
@@ -342,7 +357,7 @@ export function MediaPage({
   // The quality rung actually on screen. The status line's ask (`originalRequested`)
   // climbs the ladder to the top from OUTSIDE this component, so the one offer
   // in the stage drives the same escalation the removed in-stage chip did.
-  const rung = originalRequested ? "original" : quality;
+  const rung = originalRequested || derivativeFailed ? "original" : quality;
 
   // A video page streams the original the moment it mounts — the most expensive
   // ungated fetch in the app. On cellular it waits behind the same tap.
@@ -399,6 +414,12 @@ export function MediaPage({
                 asset.previewUri !== asset.uri
               )
                 setQuality("preview");
+            }}
+            onError={() => {
+              // Only the derivative rungs have anywhere left to fall. If the
+              // ORIGINAL is what failed, the photograph is genuinely unreadable
+              // and re-pointing at it would spin.
+              if (rung !== "original") setDerivativeFailed(true);
             }}
             style={{
               backgroundColor: colors.skel,

@@ -30,6 +30,8 @@ import { Image } from "expo-image";
 import React, { useMemo } from "react";
 import { Pressable, ScrollView, StyleSheet, View } from "react-native";
 
+import { readableName } from "@centraid/blueprints/apps/photos/place-map";
+import { PLACE_UNNAMED } from "@centraid/blueprints/apps/photos/shared-copy";
 import { radii } from "@centraid/design";
 
 import Icon from "../../kit/components/Icon";
@@ -304,20 +306,35 @@ export default function PhotosCollectionsView({
         assetIds,
       });
     }
+    const seenPlaceKeys = new Set<string>();
     return buildCollectionSections({
       assets,
       albums,
+      // ONE ENTRY PER CARD, not per ROW. `placeCardKey` rounds to a 0.1°
+      // cell, so two `core_place` rows in the same cell are ONE place to
+      // every other surface — the shelf this rail opens groups them
+      // (`placeCards`). Emitting a tile per row handed React two children
+      // with the same key and printed a count (rows) that the shelf it opens
+      // disagreed with (cards).
+      //
+      // Rows arrive newest-photograph-first, so the first row to claim a cell
+      // is the one whose name and cover the shelf would also show.
       places: places.rows.flatMap((row) => {
         const key = placeCardKey(row);
-        return key === null
-          ? []
-          : [
-              {
-                placeId: String(row.place_id),
-                key,
-                name: String(row.name ?? "Place"),
-              },
-            ];
+        if (key === null || seenPlaceKeys.has(key)) return [];
+        seenPlaceKeys.add(key);
+        return [
+          {
+            placeId: String(row.place_id),
+            key,
+            // A coordinate-shaped label is not a name (issue #816) — the same
+            // predicate the shelf and the detail head ask. This rail was the
+            // one surface still printing the digits `findOrCreatePlaceTx`
+            // minted, and passing them on as `placeName` when a tile opened.
+            name:
+              readableName(row.name ? String(row.name) : null) ?? PLACE_UNNAMED,
+          },
+        ];
       }),
       people: [...byParty.entries()].map(([partyId, entry]) => ({
         partyId,

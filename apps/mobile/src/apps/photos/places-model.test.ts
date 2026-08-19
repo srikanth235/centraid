@@ -301,6 +301,10 @@ describe("the points the map plots", () => {
         count: 1,
         name: "Lake Tahoe",
         thumb: "https://fixture.invalid/thumb/a",
+        // The pin's second rung: a `?variant=` thumb that was never produced
+        // 404s over an original sitting in CAS, and a pin that gave up there
+        // drew as a bare count.
+        thumbOriginal: "https://fixture.invalid/original/place-tahoe",
       },
     ]);
   });
@@ -505,6 +509,9 @@ describe("the photographs that carry no place at all", () => {
       name: NO_LOCATION_NAME,
       count: 2,
       coverUri: "https://fixture.invalid/thumb/scan",
+      // Same ladder the shelf's located cards carry: the cover asks for a
+      // derivative and falls back to the original when there is none.
+      coverOriginalUri: "https://fixture.invalid/original/place-tahoe",
     });
     // The name is a name, not the unnamed-place fallback and not a coordinate.
     expect(card?.name).toBe("No location yet");

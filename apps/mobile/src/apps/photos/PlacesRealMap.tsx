@@ -51,6 +51,19 @@ import { PIN_MAX } from "./places-model";
 /** What a provider is handed. Everything decided here; nothing to decide. */
 export interface PlacesBasemapProps {
   camera: MapCamera;
+  /**
+   * The viewport the PHOTOGRAPHS chose — what a provider COMMANDS its SDK to,
+   * as opposed to `camera`, which is wherever the member has since moved it.
+   *
+   * The two are separate because an SDK's camera must not be a controlled
+   * prop. A provider that echoes the camera the SDK just reported back at it
+   * as a command closes a feedback loop, and the loop only holds still if the
+   * conversion in each direction is the exact inverse of the other — which is
+   * a property no SDK owes us. Commanding the fit instead means the member's
+   * own panning is never fought, and this changes only when the photographs
+   * being drawn do.
+   */
+  opening: MapCamera;
   pins: readonly MapPin[];
   /** The busiest pin's count, so every provider sizes the ramp identically. */
   largest: number;
@@ -112,6 +125,7 @@ export default function PlacesRealMap({
     largest,
     onCamera: setMoved,
     onRead,
+    opening: fitted ?? camera,
     pins: projection.pins,
     width,
   };

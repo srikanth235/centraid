@@ -40,7 +40,7 @@ import {
   kmPerPxForSpan,
   pinAtPoint,
   projectAt,
-  tileZoomFor,
+  spanZoomFor,
 } from "@centraid/blueprints/apps/photos/place-map";
 import type { MapPin } from "@centraid/blueprints/apps/photos/place-map";
 
@@ -57,24 +57,61 @@ import type { PlacesBasemapProps } from "./PlacesRealMap";
  */
 const icons = new Map<string, ImageRef>();
 
+/**
+ * The thumbs BOTH rungs failed on — so a picture that is genuinely unreadable
+ * is not re-fetched on every camera move for the life of the process.
+ *
+ * Keyed by the thumb URI, same as `icons`, because that is the identity the
+ * two together answer "have we settled this one?" about.
+ */
+const unreadable = new Set<string>();
+
+/** One rung of the ladder: the decoded picture, or null if these bytes would
+ *  not decode. Null rather than a throw because a failed rung is the EXPECTED
+ *  case here — a derivative that was never produced — not an error. */
+async function loadRung(
+  uri: string | null | undefined
+): Promise<ImageRef | null> {
+  if (!uri) return null;
+  try {
+    return await ExpoImage.loadAsync(uri);
+  } catch {
+    return null;
+  }
+}
+
 function usePinIcons(pins: readonly MapPin[]): number {
   // A counter rather than the map itself: the cache is shared and mutable, so
   // what a render needs to know is only that it grew.
   const [loaded, setLoaded] = useState(0);
   useEffect(() => {
     let live = true;
-    const missing = pins
-      .map((pin) => pin.thumb)
-      .filter((uri): uri is string => Boolean(uri) && !icons.has(uri!));
+    const missing = pins.filter(
+      (pin) =>
+        Boolean(pin.thumb) &&
+        !icons.has(pin.thumb!) &&
+        !unreadable.has(pin.thumb!)
+    );
     if (missing.length === 0) return;
     void Promise.all(
-      missing.map(async (uri) => {
-        try {
-          icons.set(uri, await ExpoImage.loadAsync(uri));
-        } catch {
-          // A pin whose picture would not decode is still a pin: it draws with
-          // its count alone rather than taking the map down with it.
-        }
+      missing.map(async (pin) => {
+        const uri = pin.thumb!;
+        // THE RETRY LADDER, the map's copy of it (`kit/media/
+        // use-image-fallback.ts` carries the full reasoning). The thumb is a
+        // `?variant=` URL and the variant may never have been produced; the
+        // original is in CAS regardless. Cached under the THUMB key either
+        // way, so the render below keeps reading `icons.get(pin.thumb)`.
+        //
+        // Sequential on purpose, and NOT a `Promise.all` over the rungs: the
+        // second rung is the undownscaled original, and fetching it next to
+        // the thumb would pull full-resolution bytes over the tunnel for
+        // every pin whose thumb was going to arrive perfectly well.
+        const icon =
+          (await loadRung(uri)) ?? (await loadRung(pin.thumbOriginal));
+        // A pin whose picture would not decode is still a pin: it draws with
+        // its count alone rather than taking the map down with it.
+        if (icon) icons.set(uri, icon);
+        else unreadable.add(uri);
       })
     ).then(() => {
       if (live) setLoaded((count) => count + 1);
@@ -94,14 +131,23 @@ export default function PlacesAppleMap({
   activeKey,
   onRead,
   onCamera,
+  opening,
 }: PlacesBasemapProps): React.JSX.Element {
   usePinIcons(pins);
   return (
     <AppleMaps.View
       style={{ height, width }}
+      // `opening`, NOT `camera` — see `PlacesBasemapProps`. MapKit reports its
+      // camera to us and re-applies whatever `cameraPosition` holds; feeding
+      // the reported one straight back made the map zoom itself in, a few
+      // percent per report, until a continent was a street corner.
+      //
+      // `spanZoomFor` rather than `tileZoomFor` for the same reason in the
+      // other direction: `expo-maps` reads `zoom` as degrees of viewport span
+      // (`360 / 2^zoom`), not as a tile-pyramid level.
       cameraPosition={{
-        coordinates: { latitude: camera.lat, longitude: camera.lng },
-        zoom: tileZoomFor(camera),
+        coordinates: { latitude: opening.lat, longitude: opening.lng },
+        zoom: spanZoomFor(opening, height),
       }}
       // Nothing but the base layer and our own pins. Points of interest are
       // excluded outright: this map answers "where have I been", and a
