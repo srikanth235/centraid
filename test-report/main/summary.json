@@ -1,6 +1,6 @@
 {
-  "generatedAt": "2026-08-20T12:39:05.972Z",
-  "passed": 1270,
+  "generatedAt": "2026-08-20T17:19:54.782Z",
+  "passed": 1258,
   "failed": 0,
   "skipped": 0,
   "skippedTests": 37,
@@ -154,8 +154,8 @@
   ],
   "newFailedCellIds": [],
   "floorSeries": {
-    "coverage:repo-wide:lines": 70.13,
-    "coverage:repo-wide:branches": 60.08,
+    "coverage:repo-wide:lines": 72.61,
+    "coverage:repo-wide:branches": 62.28,
     "coverage:packages/server/src/engine/**:lines": 84.25,
     "coverage:packages/server/src/engine/**:branches": 73.64,
     "coverage:packages/server/src/automation/**:lines": 85.62,
@@ -164,12 +164,12 @@
     "coverage:packages/backup/src/**:branches": 77.95,
     "coverage:packages/core/src/blob/**:lines": 100,
     "coverage:packages/core/src/blob/**:branches": 100,
-    "coverage:packages/blueprints/src/**:lines": 95.16,
-    "coverage:packages/blueprints/src/**:branches": 82.03,
+    "coverage:packages/blueprints/src/**:lines": 93.64,
+    "coverage:packages/blueprints/src/**:branches": 80.84,
     "coverage:packages/blueprints/apps/photos/**:lines": 52.39,
     "coverage:packages/blueprints/apps/photos/**:branches": 48.59,
-    "coverage:packages/blueprints/apps/{_shared,agenda,docs,locker,notes,people,tally,tasks}/**:lines": 33.72,
-    "coverage:packages/blueprints/apps/{_shared,agenda,docs,locker,notes,people,tally,tasks}/**:branches": 28.17,
+    "coverage:packages/blueprints/apps/{_shared,agenda,docs,locker,notes,people,tally,tasks}/**:lines": 45.75,
+    "coverage:packages/blueprints/apps/{_shared,agenda,docs,locker,notes,people,tally,tasks}/**:branches": 36.05,
     "coverage:packages/model-runtime/src/**:lines": 70.58,
     "coverage:packages/model-runtime/src/**:branches": 58.02,
     "coverage:packages/model-runtime/automation-handlers/**:lines": 86.29,
@@ -189,9 +189,9 @@
     "coverage:packages/server/src/acp/**:lines": 86.71,
     "coverage:packages/server/src/acp/**:branches": 76.45,
     "coverage:packages/vault/src/**:lines": 89.45,
-    "coverage:packages/vault/src/**:branches": 76.17,
-    "coverage:packages/design/src/**:lines": 96.28,
-    "coverage:packages/design/src/**:branches": 84.1,
+    "coverage:packages/vault/src/**:branches": 76.16,
+    "coverage:packages/design/src/**:lines": 95.76,
+    "coverage:packages/design/src/**:branches": 83.36,
     "coverage:packages/tunnel/src/**:lines": 75.13,
     "coverage:packages/tunnel/src/**:branches": 57.97,
     "coverage:packages/core/src/protocol/**:lines": 100,
@@ -224,6 +224,18 @@
   "floorRatchetCandidates": [],
   "agedInfraMismatchCellIds": [],
   "absoluteWeaknesses": [
+    {
+      "kind": "coverage-floor-lag",
+      "scope": "packages/blueprints/apps/{_shared,agenda,docs,locker,notes,people,tally,tasks}/**",
+      "value": 45.75,
+      "floor": 20
+    },
+    {
+      "kind": "coverage-floor-lag",
+      "scope": "packages/blueprints/apps/{_shared,agenda,docs,locker,notes,people,tally,tasks}/** (branches)",
+      "value": 36.05,
+      "floor": 14
+    },
     {
       "kind": "coverage-floor-lag",
       "scope": "packages/core/src/time/**",
