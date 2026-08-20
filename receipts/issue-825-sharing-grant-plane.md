@@ -149,6 +149,10 @@ Remaining gates after the prior CI close-out:
 
 No new files this round.
 
+### Verify coverage — grant-plane protocol path helpers
+
+`packages/core/src/protocol/routes.test.ts` — sibling case for `ROUTES.vaultGrants`, `ROUTES.vaultGrantSubjects`, `vaultGrantPath`, and `vaultGrantRevokePath` (same encode-via-the-caller shape as `vaultConnectionPath`). The 98% protocol-tree line floor is unchanged.
+
 - Also touched (full paths the wave lists did not spell): `CHANGELOG.md`, `packages/vault/src/schema/atlas-census.ts`, `packages/vault/src/schema/atlas-census.test.ts`, `packages/blueprints/manifest.json`, `apps/desktop/tests/e2e/fixtures.ts`, `apps/mobile/package.json`, `apps/mobile/lazy-screens.tsx`, `apps/mobile/navigators.tsx`, `apps/mobile/src/apps/docs/useDocsGrantAudiences.test.tsx`, `apps/mobile/src/apps/people/PersonGrants.test.tsx`, `apps/mobile/src/apps/people/people-model.test.ts`, `apps/mobile/src/apps/people/people-model.ts`, `apps/mobile/src/apps/people/people-share-model.ts`, `apps/mobile/src/apps/photos/photo-grants.test.tsx`, `apps/mobile/src/apps/photos/photos-vaults.ts`, `apps/mobile/src/apps/photos/use-photo-selection-share.test.tsx`, `apps/mobile/src/lib/replica/links-transport.ts`, `apps/mobile/src/navigation.ts`, `apps/mobile/src/screens/SharingLinkRow.tsx`, `apps/mobile/src/screens/data/VaultSections.tsx`, `packages/blueprints/apps/_shared/share-kit.ts`, `packages/blueprints/apps/people/queries/_shared.ts`, `packages/blueprints/apps/people/queries/person.ts`, `packages/blueprints/apps/people/queries/share-links.test.ts`, `packages/blueprints/src/photos-selection-bar.test.ts`, `packages/client/src/gateway-client.ts`, `packages/client/src/react/screens/HouseholdScreen.test.tsx`, `packages/client/src/react/screens/HouseholdScreen.tsx`, `packages/client/src/react/shell/routes/HouseholdRoute.tsx`, `packages/server/src/cli/endpoint-host.ts`, `packages/server/src/routes/edges-reconcile.ts`, `packages/server/src/routes/vault-links-ticket-routes.test.ts`, `packages/server/src/serve/commons-observability.test.ts`, `packages/server/src/serve/gateway-db.test.ts`, `packages/server/src/serve/gateway-db.ts`, `packages/server/src/serve/peer-commons-client.ts`, `packages/server/src/serve/peer-commons-pull.test.ts`, `packages/server/src/serve/peer-commons-sweep.test.ts`, `packages/server/src/serve/peer-commons-sweep.ts`, `packages/server/src/serve/peer-dial.ts`, `packages/server/src/serve/peer-link-client.ts`, `packages/server/src/serve/peer-plane-sweep.ts`, `packages/server/src/serve/peer-route-announce.test.ts`, `packages/server/src/serve/peer-route-announce.ts`, `packages/server/src/serve/share-coordinator.test.ts`, `packages/server/src/serve/share-edge-store.ts`, `packages/server/src/serve/share-receipt-authority.contract.test.ts`, `receipts/issue-825-sharing-grant-plane.md`.
 
 ## Decisions
@@ -326,6 +330,12 @@ bun run lint:quality-knobs                # exit 0 — route-security.ts fingerp
 bash .governance/run.sh                   # commit-issue-receipt-match, receipt-per-issue, repo-hygiene
 # Rebase onto #828 + remaining gates:
 # CHANGELOG Unreleased keeps #825 Added/Removed/Fixed and #827 Fixed
+# Verify coverage miss (CI verify on PR 829):
+# ERROR: Coverage for lines (97.26%) does not meet "packages/core/src/protocol/**" threshold (98%)
+# Cause: vaultGrants / vaultGrantSubjects / vaultGrantPath / vaultGrantRevokePath
+# had no caller in packages/core (index.ts is coverage-excluded). Floor not lowered.
+bun run --cwd packages/core test src/protocol/routes.test.ts
+bash .governance/run.sh
 ```
 
 Link integrity: every relative link added resolves (`decisions.md#sharing-v1--the-grant-plane-825` anchor matches the file's em-dash slug convention; `../packages/vault/src/share/{commons-routing,read-closure,project-closure}.ts` all exist).
