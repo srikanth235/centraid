@@ -166,25 +166,16 @@ describe("Tally consumes the placement engine with zero engine edits (A6)", () =
     }
   });
 
-  it("Tally's own call sites pass nothing the engine had to learn", () => {
-    // Web: an itemType from the registry and an id. Native: the same, plus
-    // the caller's own noun for the status line — copy, not behaviour.
-    const web = readFileSync(
-      path.join(APPS_DIR, "tally", "components", "GroupManager.tsx"),
-      "utf8"
-    );
-    expect(web).toContain('itemType="tally.group"');
-    expect(web).toContain("ShareSheet");
-    const native = readFileSync(
-      path.resolve(
-        PACKAGE_ROOT,
-        "../../apps/mobile/src/apps/tally/TallyHome.tsx"
-      ),
-      "utf8"
-    );
-    expect(native).toContain('itemType="tally.group"');
-    expect(native).toContain("ShareSheet");
-  });
+  // The pair that asserted Tally's own call sites — `tally/components/
+  // GroupManager.tsx` on the web and `apps/mobile/src/apps/tally/TallyHome.tsx`
+  // on the phone — passed the engine an `itemType` from the registry and an id,
+  // and nothing else. Both surfaces were removed whole pending a ground-up
+  // redesign, so the test is dropped rather than softened to a conditional
+  // read: a test that skips itself when its subject is missing passes for the
+  // wrong reason, and would go on passing if the rebuilt Tally handed the
+  // engine something it had to learn. Restore it with the screens. The
+  // registry entry it stood over (`tally.group`) is still asserted above, and
+  // the engine-side ban below is unaffected.
 
   it("record-only Tally reaches placement without touching custody", () => {
     // The two engines are independent by construction: being "born shared"

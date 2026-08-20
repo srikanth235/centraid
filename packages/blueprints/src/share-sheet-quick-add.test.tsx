@@ -2,8 +2,8 @@
 // Issue #776 Track B: the web ShareSheet's inline person quick-add. The
 // destination roster is a one-shot fetch per open, so the local append IS the
 // refresh; and an ambiguous name mints nobody until a second, explicit press
-// (#630). Rendered as the real component against a stubbed `window.centraid`,
-// the same harness shape `apps/tally/components/GroupManager.test.tsx` uses.
+// (#630). Rendered as the real component against a stubbed `window.centraid`
+// — the harness shape every component suite under `apps/` uses.
 import path from "node:path";
 import { pathToFileURL } from "node:url";
 

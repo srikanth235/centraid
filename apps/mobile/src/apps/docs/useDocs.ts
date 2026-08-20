@@ -2,7 +2,7 @@
 // consent-shaped replica, exactly the entity set the `docs` manifest's read
 // scopes grant (packages/blueprints/apps/docs/app.json).
 //
-// Same shape as `useAgenda`: one `useReplicaQuery` per entity, one combined
+// Same shape as `usePeople`: one `useReplicaQuery` per entity, one combined
 // honesty state, one memoized pure projection (`docs-projection.ts`). Two
 // deliberate splits in the honesty accounting:
 //

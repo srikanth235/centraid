@@ -1,5 +1,5 @@
 {
-  "approvedDeviation": "#825 re-pins packages/server/src/routes/route-security.ts after the grant-routes owner-tier row. Qualities, demonstratedRed, and matrixGovernanceFingerprint are unchanged. Prior: #821.",
+  "approvedDeviation": "#831 re-pins the `tests/matrix.json` fingerprint in\n`tests/quality/classification-ratchet.json` after retargeting the two\noffline flows and re-noting `desktop.offline`. Qualities, demonstratedRed\nand matrixGovernanceFingerprint are unchanged. Prior: #825.",
   "matrixGovernanceFingerprint": "8657a0b1943b8244ebf0632ca4c4f4ede4e22ee034662db59fc2f39058a34737",
   "fingerprints": {
     "packages/server/src/acp/backends/acp/vault-mcp-server.ts": "62893489b538f861feb46200dc69a53a7ce02b0809224b93f74e2f39fc32276d",
@@ -8,6 +8,6 @@
     "packages/server/src/serve/health-registry.ts": "d1f3fc416ecbe43af2ab4b091fecf3b1041590e52f2002a242e5031c65c9fd04",
     "packages/vault/src/schema/sealed.ts": "40fba400b21048b193006c3e81d063e0fdfb79cfe1dd3b4b90b94bd44547ecc0",
     "tests/quality/fault-points.ts": "805c9c9611cee6a209cba5ff3aa0365e70bb3a3bbbc6e2383cecdd07f50f570e",
-    "tests/matrix.json": "b9da82acb9da129a22b8732b6b2e504a81b31682fc2736a44b1d0a7e483dac60"
+    "tests/matrix.json": "a996529cd63f2b37c7eee4745d287d62c84444a52151ab081c5ca132c4f3c99d"
   }
 }

@@ -5,10 +5,10 @@
 // the owner's own library"). `search-scaffold.test.ts` already proves
 // `perScopeReach`/`scopeReachFacts` correct in isolation; what matters here is
 // that `createSearch` (apps/photos/search.ts) actually consumes them instead
-// of the old binary `allScopesReached` collapse. Loaded by file URL like
-// `tasks-scope-fanout.test.ts`, since `search.ts` reads `window.centraid`
-// live; its `@centraid/design/elements` import resolves to that package's
-// source through this package's own `vitest.config.ts` alias.
+// of the old binary `allScopesReached` collapse. Loaded by file URL, since
+// `search.ts` reads `window.centraid` live; its `@centraid/design/elements`
+// import resolves to that package's source through this package's own
+// `vitest.config.ts` alias.
 import path from "node:path";
 import { pathToFileURL } from "node:url";
 

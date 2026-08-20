@@ -72,8 +72,8 @@ const BODY_LOOKUP_ROWS = 12;
 
 /**
  * A bounded `in` lookup, with the sentinel form for "nothing to look up yet".
- * Same shape apps/notes/useNotes uses: an unbounded second read would blow past
- * the 1000-row default at photo scale and return none of the ids that matter.
+ * Bounded on purpose: an unbounded second read would blow past the 1000-row
+ * default at photo scale and return none of the ids that matter.
  */
 function idFilter(
   entity: string,

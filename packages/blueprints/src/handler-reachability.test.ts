@@ -41,8 +41,8 @@ const MOBILE_APPS_ROOT = path.join(REPO_ROOT, "apps/mobile/src/apps");
 const WEBVIEW_APPS = new Set(["notes"]);
 
 /**
- * Apps whose UI on a given surface has been REMOVED pending its Binding Layer
- * v11 design handoff, and which therefore dispatch nothing there.
+ * Apps whose UI on a given surface has been REMOVED pending a ground-up
+ * redesign, and which therefore dispatch nothing there.
  *
  * This is the one exception in this file that is not about a capability - it is
  * about a surface. The other three say "this handler is reached another way";
@@ -63,12 +63,12 @@ const WEBVIEW_APPS = new Set(["notes"]);
  */
 const AWAITING_HANDOFF: Readonly<Record<"web" | "mobile", readonly string[]>> =
   {
-    web: [],
-    mobile: [],
+    web: ["agenda", "notes", "tally", "tasks"],
+    mobile: ["agenda", "notes", "tally", "tasks"],
   };
 
 const AWAITING_HANDOFF_RATIONALE =
-  "The surface was removed pending its Binding Layer v11 design handoff; the manifest, actions, queries and vault scopes are untouched and the assistant still reaches every handler.";
+  "The surface was removed whole pending a ground-up redesign; the manifest, actions, queries and vault scopes are untouched and the assistant still reaches every handler.";
 
 const WEB_EXCEPTIONS: Readonly<Record<string, ReachabilityException>> = {
   "locker.query.autofill-candidates": {
@@ -377,10 +377,15 @@ describe("manifest handler reachability", () => {
           )
         : ""
     );
-    const mobileSource = sourceTree(
+    // The app's OWN native cover, alone. Kept separate from `mobileSource`
+    // below because a suspended surface is asserted absent over exactly what
+    // was removed — the cover — and not over the shared phone surfaces that
+    // outlived it.
+    const nativeCover = sourceTree(
       path.join(MOBILE_APPS_ROOT, manifest.id),
       false
-    ).concat(
+    );
+    const mobileSource = nativeCover.concat(
       manifest.id === "photos" || manifest.id === "tally"
         ? sourceTree(path.join(REPO_ROOT, "apps/mobile/src/lib/upload"), false)
         : ""
@@ -420,9 +425,15 @@ describe("manifest handler reachability", () => {
     });
 
     const mobileUnexpected = (): Array<{ kind: Kind; name: string }> => {
+      // Asserted over the cover alone, not `mobileSource`. Removing a cover
+      // does not remove the shared capture/upload path beside it, and Tally's
+      // `add-receipt-expense` is still dispatched from there — a capability
+      // that outlived the screen, which is a reached handler, not a leak. What
+      // this proves is the narrower claim the entry actually makes: the app's
+      // own native cover dispatches nothing.
       if (awaitingHandoff("mobile", manifest.id))
         return handlers(manifest).filter(({ name }) =>
-          hasLiteral(mobileSource, name)
+          hasLiteral(nativeCover, name)
         );
       return handlers(manifest).filter(({ kind, name }) => {
         if (WEBVIEW_APPS.has(manifest.id))
