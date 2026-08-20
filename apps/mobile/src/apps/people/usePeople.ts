@@ -1,6 +1,7 @@
 // People's read layer on the phone: the local replica, entity by entity,
 // projected into the same row shapes the web query emitters serve
-// (`people-model.ts` names the mirrors). The shape is `useAgenda`'s — several
+// (`people-model.ts` names the mirrors). The shape every native read layer
+// here takes — several
 // `useReplicaQuery(appId, request)` calls, one combined state, one memoized
 // projection.
 //

@@ -15,11 +15,11 @@ const tasksInlineApp: InlineAppModule = {
   appId: "tasks",
   pendingProjection,
   changeTables: CHANGE_TABLES,
-  // Mount over every scope this member can see (issue #726 D11 task 3): the
-  // board is the merge of their own open tasks and each audience they
-  // belong to, through the shared scope kit (see `scope-declaration.ts` and
-  // `app-root.tsx`'s `refresh`) — the same door Photos' timeline already
-  // walks (issue #599).
+  // Mount over every scope this member can see (issue #726 D11 task 3): a
+  // task board is the merge of the member's own open tasks and each audience
+  // they belong to, never one vault's slice — the same door Photos' timeline
+  // walks (issue #599). Declared here, not in the UI, so the rebuilt `Root`
+  // inherits the N-scope mount rather than rediscovering it.
   multiScope: true,
   // The query defaults are typed against the ambient `HandlerArgs`; the inline
   // contract types `ctx` as `unknown`, so bridge the two here (the shell builds

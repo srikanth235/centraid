@@ -408,8 +408,8 @@ function isPendingProjectionValue(
  * The accessible label a pending badge carries (issue #805).
  *
  * Both surfaces built it inline from the same prefix — web in
- * `PendingWriteActions.tsx`, native in `kit/replica/PendingRowStatus.tsx` —
- * so the prefix lives beside the copy it prefixes.
+ * `PendingWriteActions.tsx`, and natively in the row status the phone's
+ * covers drew — so the prefix lives beside the copy it prefixes.
  */
 export function pendingChangeLabel(
   pending: PendingOverlayPresentation

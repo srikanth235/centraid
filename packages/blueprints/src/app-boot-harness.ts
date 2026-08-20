@@ -21,13 +21,6 @@ import { createRoot } from "react-dom/client";
 import type { Root as ReactRoot } from "react-dom/client";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
-import {
-  decoratePendingMutation,
-  definePendingProjection,
-  pendingPatch,
-  projectPendingWrite,
-} from "@centraid/blueprints/apps/_shared/pending-overlay";
-import { BRAND } from "@centraid/design";
 // Boots a blueprint app the way the v0 client does: its query-free `Root`,
 // the real kit, the workspace React runtime, and a mocked `window.centraid`
 // vault. The retired served adapter and its vendored React copy are not part
@@ -54,26 +47,16 @@ import { BRAND } from "@centraid/design";
 //     app re-runs `refresh()` on window 'focus', so flipping the mock and
 //     dispatching focus walks granted → denied → granted on a single instance.
 //
-// Agenda and Photos additionally boot populated replica fixtures. Agenda's
-// pending-chip assertions consume the production intent-invalidation
-// derivation, so the harness cannot invent a terminal browser signal that the
-// real coordinator would never publish.
+// Photos additionally boots a populated replica fixture and is the one app
+// held to the live-read journey (`expectLive`). Agenda drove that journey too —
+// including the pending-chip assertions over the production intent-invalidation
+// derivation — until its interface was removed pending a ground-up redesign;
+// the rebuilt app re-enters here with its own `<app>.test.ts`.
 
 // Resolved from this module's own path, not process.cwd(): cwd differs
 // between a root-run vitest (repo root) and a package-run vitest (this
 // package's dir), but the file's own location never does.
 const PKG = path.resolve(import.meta.dirname, "..");
-
-// The intent-invalidation derivation is the client's (packages/client/src/
-// replica/intent-invalidations.ts). It is loaded BY PATH rather than as
-// `@centraid/client/replica/intent-invalidations` because `@centraid/client`
-// already depends on `@centraid/blueprints`: declaring the reverse edge — even
-// as a devDependency — would make Turbo's topological `^build` graph cyclic.
-const { replicaIntentInvalidations } = await import(
-  pathToFileURL(
-    path.resolve(PKG, "../client/src/replica/intent-invalidations.ts")
-  ).href
-);
 
 // The harness compiles the same TS/TSX source the client bundles, using the
 // normal React automatic runtime. The esbuild CLI is used because its JS API
@@ -174,47 +157,11 @@ function compileModuleCss(
 
 const DENIED = { vaultDenied: { message: "Grant revoked." } };
 
-const AGENDA_EVENT_ID = "event-airplane";
-const AGENDA_INTENT_ID = "intent-airplane-cancel";
-const AGENDA_TITLE = "Airplane-mode planning";
 const PHOTO_ASSET_ID = "asset-airplane";
 const PHOTO_TITLE = "Airplane-mode photo";
-const TALLY_TRASH_ID = "expense-airplane-trash";
-
-const AGENDA_PENDING_PROJECTION = definePendingProjection({
-  appId: "agenda",
-  actions: {
-    "cancel-event": ({ input }) =>
-      pendingPatch("core.event", input.event_id, input),
-  },
-});
 
 /** Populated, clone-safe rows shaped exactly like each app's local query. */
 function replicaFixture(app: string): unknown {
-  if (app === "agenda") {
-    return {
-      events: [
-        {
-          event_id: AGENDA_EVENT_ID,
-          calendar_id: "calendar-local",
-          summary: AGENDA_TITLE,
-          description: "Already present in the local replica.",
-          dtstart: "2099-01-15T09:00:00.000Z",
-          dtend: "2099-01-15T10:00:00.000Z",
-          status: "confirmed",
-          attendees: [],
-          attachments: [],
-        },
-      ],
-      calendars: [
-        {
-          calendar_id: "calendar-local",
-          name: "Local calendar",
-          color: BRAND,
-        },
-      ],
-    };
-  }
   if (app === "photos") {
     return {
       assets: [
@@ -243,35 +190,6 @@ function replicaFixture(app: string): unknown {
       trash: [],
       truncated: false,
       window: 500,
-    };
-  }
-  if (app === "tally") {
-    return {
-      me: "party-owner",
-      currency: "USD",
-      friends: [],
-      groups: [
-        {
-          group_id: "group-airplane",
-          name: "Offline group",
-          icon: "✈️",
-          color: "#4E68DD",
-          member_count: 1,
-          owner_net_minor: 0,
-        },
-      ],
-      trash: [
-        {
-          expense_id: TALLY_TRASH_ID,
-          description: "Recoverable dinner",
-          amount_minor: 4200,
-          group_name: "Offline group",
-          deleted_at: "2026-07-15T08:00:00.000Z",
-          purge_at: null,
-        },
-      ],
-      owe_total_minor: 0,
-      owed_total_minor: 0,
     };
   }
   return {};
@@ -318,9 +236,10 @@ const settle = () =>
  *
  * Boot calls `refresh()` without awaiting and the apps paint through React's
  * async scheduler, so the DOM that a fixed sleep observes is a guess. Measured:
- * the tally trash shelf lands 4 event-loop turns (~4ms) after its module import
- * resolves locally — 20× inside the old fixed 80ms settle — yet the loaded CI
- * runner still queried a null shelf and failed the `check` job. Dropping settle
+ * a shelf rendered from the local replica lands 4 event-loop turns (~4ms) after
+ * its module import resolves locally — 20× inside the old fixed 80ms settle —
+ * yet the loaded CI runner still queried a null node and failed the `check`
+ * job. Dropping settle
  * to 1ms reproduces that exact failure locally, confirming a race rather than a
  * budget. So poll for the precondition instead of guessing at it.
  *
@@ -347,8 +266,8 @@ async function waitFor(
 }
 
 // The single boot journey runs the app's real esbuild transform + jsdom render
-// plus the remaining fixed settle windows; the slowest app (agenda) lands ~1.5s
-// locally now that the appear-assertions poll (waitFor) instead of sleeping.
+// plus the remaining fixed settle windows; the slowest app lands ~1.5s locally
+// now that the appear-assertions poll (waitFor) instead of sleeping.
 // The affected-package gate runs every package at once; Photos has crossed 8s
 // under that CPU contention even though it remains sub-3s alone. Keep a
 // bounded 20s journey budget rather than turning scheduler load into a false
@@ -396,7 +315,7 @@ function mirrorSources(srcRoot: string, destRoot: string): void {
 
 export function describeAppBoot(
   app: string,
-  options: { expectLive?: boolean; expectReplica?: boolean } = {}
+  options: { expectLive?: boolean } = {}
 ) {
   describe(`${app} boots`, () => {
     let dir: string;
@@ -470,15 +389,7 @@ export function describeAppBoot(
       { timeout: BOOT_TEST_TIMEOUT_MS },
       async () => {
         document.body.innerHTML = '<div id="appRoot"></div>';
-        if (app === "agenda") {
-          // Schedule view renders the populated fixture independent of the
-          // machine's current month, keeping this browser journey deterministic.
-          document.documentElement.dataset.appDefaultView = "schedule";
-        }
-        const granted =
-          options.expectLive || options.expectReplica
-            ? replicaFixture(app)
-            : {};
+        const granted = options.expectLive ? replicaFixture(app) : {};
         let response: unknown = granted;
         let nextReadError: Error | undefined;
         let readCalls = 0;
@@ -493,40 +404,6 @@ export function describeAppBoot(
         globalThis.fetch = async (...args: unknown[]) => {
           networkCalls.push(args[0]);
           throw new Error("synthetic airplane mode");
-        };
-        const updateAgendaOverlay = (state: "queued" | "parked" | "denied") => {
-          if (app !== "agenda") return;
-          const projected = projectPendingWrite(AGENDA_PENDING_PROJECTION, {
-            appId: "agenda",
-            action: "cancel-event",
-            input: { event_id: AGENDA_EVENT_ID },
-            intentId: AGENDA_INTENT_ID,
-          });
-          const mutation = projected.optimistic[0];
-          if (!mutation || mutation.op !== "upsert") return;
-          const decorated = decoratePendingMutation(mutation, {
-            intentId: AGENDA_INTENT_ID,
-            state,
-            action: "cancel-event",
-            ...(state === "parked"
-              ? { reason: "Waiting for the owner to approve this change." }
-              : state === "denied"
-                ? { reason: "The owner denied this cancellation." }
-                : {}),
-          });
-          const current = response as {
-            events: Array<Record<string, unknown>>;
-            calendars: Array<Record<string, unknown>>;
-          };
-          response = {
-            ...current,
-            events: current.events.map((event) =>
-              event.event_id === mutation.rowId
-                ? { ...event, ...decorated.values }
-                : event
-            ),
-          };
-          for (const listener of live) listener(response);
         };
         window.centraid = {
           appId: app,
@@ -557,44 +434,12 @@ export function describeAppBoot(
           },
           write: async (request: unknown) => {
             writeCalls.push(request);
-            if (
-              app === "agenda" &&
-              (request as { action?: string }).action === "cancel-event"
-            ) {
-              updateAgendaOverlay("queued");
-              return { status: "queued", intentId: AGENDA_INTENT_ID };
-            }
             return {};
           },
           onChange: (listener: (detail: unknown) => void) => {
             changes.add(listener);
             return () => changes.delete(listener);
           },
-        };
-
-        const emitAgendaIntentState = (state: "parked" | "denied") => {
-          updateAgendaOverlay(state);
-          const invalidations = replicaIntentInvalidations([
-            {
-              intentId: AGENDA_INTENT_ID,
-              payloadHash: "harness-payload",
-              appId: "agenda",
-              action: "cancel-event",
-              input: { event_id: AGENDA_EVENT_ID },
-              state,
-              createdOrder: 1,
-              attempts: 1,
-              optimistic: [],
-              dependencies: [
-                { shapeId: "shape-agenda-events", entity: "core.event" },
-              ],
-            },
-          ]);
-          for (const invalidation of invalidations) {
-            for (const listener of changes) {
-              listener({ ...invalidation, tables: [invalidation.entity] });
-            }
-          }
         };
 
         // The frame's contribution channel (Photos v4 §3), recorded rather
@@ -631,35 +476,6 @@ export function describeAppBoot(
         await settle();
         expectNoErrors("rendering its granted replica in airplane mode");
 
-        if (app === "tally" && options.expectReplica) {
-          await waitFor(
-            () =>
-              document.querySelector('[aria-label="Trashed expenses"]') !==
-              null,
-            "Tally's trash shelf to render from the local replica"
-          );
-          const shelf = document.querySelector(
-            '[aria-label="Trashed expenses"]'
-          );
-          expect(shelf?.textContent).toContain("Recoverable dinner");
-          const restore = Array.from(
-            shelf?.querySelectorAll<HTMLButtonElement>("button") ?? []
-          ).find((button) => button.textContent?.trim() === "Restore");
-          expect(
-            restore,
-            "Tally trash shelf lost its restore control"
-          ).toBeTruthy();
-          restore?.click();
-          await waitFor(
-            () => writeCalls.length > 0,
-            "Tally's restore click to reach the vault write path"
-          );
-          expect(writeCalls).toContainEqual({
-            action: "restore-expense",
-            input: { expense_id: TALLY_TRASH_ID },
-          });
-        }
-
         if (options.expectLive) {
           await waitFor(
             () => live.size > 0,
@@ -679,99 +495,7 @@ export function describeAppBoot(
             `${app} never subscribed to its replica read`
           ).toBeGreaterThan(0);
 
-          if (app === "agenda") {
-            const askToCancel = () =>
-              Array.from(
-                document.querySelectorAll<HTMLButtonElement>("button")
-              ).find(
-                (button) => button.textContent?.trim() === "Ask to cancel"
-              );
-            await waitFor(
-              () => document.querySelector(".ag-sched-title") !== null,
-              "Agenda's schedule row to render from the local replica"
-            );
-            const event = document.querySelector(".ag-sched-title");
-            expect(event?.textContent).toBe(AGENDA_TITLE);
-            event?.closest("button")?.click();
-            await waitFor(
-              () => askToCancel() !== undefined,
-              "the Agenda event's drawer to open"
-            );
-            const cancel = askToCancel();
-            expect(
-              cancel,
-              "populated Agenda event did not open its drawer"
-            ).toBeTruthy();
-            cancel?.click();
-            cancel?.click();
-            // waitFor lands the first write; settle then holds a quiet window so
-            // the exactly-one assertion below still proves the second click was
-            // deduped rather than merely not yet delivered.
-            await waitFor(
-              () => writeCalls.length > 0,
-              "Agenda's cancel ask to reach the vault"
-            );
-            await settle();
-            expect(writeCalls).toEqual([
-              {
-                action: "cancel-event",
-                input: { event_id: AGENDA_EVENT_ID },
-                optimistic: undefined,
-              },
-            ]);
-            expect(
-              readCalls,
-              "offline interaction unexpectedly re-read the replica"
-            ).toBe(bootReads);
-            expect(
-              networkCalls,
-              "offline interaction attempted a network request"
-            ).toEqual([]);
-            await waitFor(
-              () => document.querySelector(".kit-pending-chip") !== null,
-              "Agenda's pending chip to paint for the queued cancel"
-            );
-            expect(
-              document.querySelector(".kit-pending-chip")?.textContent
-            ).toBe("cancel asked");
-            expect(document.body.textContent).toContain(AGENDA_TITLE);
-
-            // Reconnect admission parks the exact queued intent: the event stays
-            // canonical and the chip remains until a terminal owner decision.
-            Object.defineProperty(window.navigator, "onLine", {
-              configurable: true,
-              value: true,
-            });
-            emitAgendaIntentState("parked");
-            await new Promise((resolve) => {
-              setTimeout(resolve, 250);
-            });
-            expect(
-              document.querySelector(".kit-pending-chip")?.textContent
-            ).toBe("cancel asked");
-
-            // A denial is durable attention state: the row and explanation stay
-            // visible until the member edits, retries, or explicitly discards it.
-            emitAgendaIntentState("denied");
-            await waitFor(
-              () =>
-                document.querySelector(".kit-pending-chip")?.textContent ===
-                "denied",
-              "Agenda's denied chip to persist on the exact outcome"
-            );
-            expect(
-              document.querySelector(".kit-pending-chip")?.textContent
-            ).toBe("denied");
-            expect(document.body.textContent).toContain(AGENDA_TITLE);
-            expect(
-              readCalls,
-              "outbox state changes did not invalidate the composed replica read"
-            ).toBeGreaterThan(bootReads);
-            expect(
-              networkCalls,
-              "outbox state invalidation attempted a network read"
-            ).toEqual([]);
-          } else if (app === "photos") {
+          if (app === "photos") {
             await waitFor(
               () =>
                 document.querySelector(
@@ -865,7 +589,7 @@ export function describeAppBoot(
             `${app} did not attempt the replacement live read`
           ).toBeGreaterThan(beforeFailure);
           const afterFailure = readCalls;
-          const table = app === "photos" ? "core.content_item" : "core.event";
+          const table = "core.content_item";
           for (const listener of changes) listener({ tables: [table] });
           await waitFor(
             () => readCalls > afterFailure && live.size > 0,

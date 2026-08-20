@@ -241,7 +241,7 @@ export function mosaicCells(
 
 /**
  * Decode a `core.content_item` body. Notes and short documents store their text
- * as a `data:` URI, which is the same wire shape apps/notes/notes-model decodes;
+ * as a `data:` URI — the wire shape `core.content_item` bodies always take;
  * anything else (a PDF, an image) has no prose to excerpt and returns "".
  */
 export function decodeProse(contentUri: unknown): string {

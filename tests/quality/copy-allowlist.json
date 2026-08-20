@@ -1,12 +1,6 @@
 {
-  "approvedDeviation": null,
-  "entries": [
-    {
-      "file": "packages/blueprints/apps/tasks/components/Board.tsx",
-      "literal": "Inbox",
-      "reason": "Task workflow column, not the unified owner-facing Notifications surface."
-    }
-  ],
+  "approvedDeviation": "#831 removes the copy-allowlist entry for\n`packages/blueprints/apps/tasks/components/Board.tsx`. The file was\ndeleted with the Tasks interface, so the entry excused a string that no\nlonger exists — an allowlist shrinking with its subject, not a rule being\nrelaxed. No other entry changes and `copyRatchet` is untouched.",
+  "entries": [],
   "copyRatchet": {
     "_comment": "U4 copy-density ratchet (#805). Every entry is a user-facing string literal the walk in tests/quality/user-facing-qualities.test.ts flags as over 120 chars, two or more sentences, or carrying banned filler. Seeded green on day one so the gate lands without rewriting copy; TIGHTEN-ONLY from here. Audit slices D1..D5 rewrite the copy, DELETE the entry, and lower maxEntries by the same count; the gate fails on any entry that no longer matches a real string, so seeds cannot outlive the copy they excuse. maxEntries is capped in turn by COPY_SEED_CEILING in the owning test, which may only ever fall.",
     "maxEntries": 29,

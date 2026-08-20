@@ -58,21 +58,28 @@ test("the element layer's status line (toast's replacement) keeps its accessibil
 });
 
 test("blueprint dialogs, keyboard focus, and Photos focus restore stay wired", async () => {
-  const [tallyModal, photos, tasksCss, tallyCss, lockerCss] = await Promise.all(
-    [
-      source("packages/blueprints/apps/tally/components/Shared.tsx"),
+  // Tally's shared `<dialog>` wrapper was the second subject here — the one
+  // that proved a blueprint modal restores focus to its opener on close — and
+  // Tasks and Tally owned two of the focus-ring sheets, until all three web
+  // interfaces were removed pending a ground-up redesign. Nothing is softened
+  // to a conditional read: a check that skips itself when its subject is
+  // missing passes for the wrong reason. What remains is asserted on the
+  // subjects that are actually there — the shared grant sheet for the modal,
+  // Photos' lightbox for focus restore — and each rebuilt app owes this test
+  // its dialog and its focus ring back.
+  const [grantSheet, photos, lockerCss, peopleCss, photosCss] =
+    await Promise.all([
+      source("packages/blueprints/apps/_shared/GrantSheet.tsx"),
       source("packages/blueprints/apps/photos/lightbox.tsx"),
-      source("packages/blueprints/apps/tasks/Chrome.module.css"),
-      source("packages/blueprints/apps/tally/Chrome.module.css"),
       source("packages/blueprints/apps/locker/Chrome.module.css"),
-    ]
-  );
-  assert.match(tallyModal, /<dialog/u);
-  assert.match(tallyModal, /showModal/u);
-  assert.match(tallyModal, /prior\?\.focus/u);
+      source("packages/blueprints/apps/people/Chrome.module.css"),
+      source("packages/blueprints/apps/photos/Chrome.module.css"),
+    ]);
+  assert.match(grantSheet, /<dialog/u);
+  assert.match(grantSheet, /showModal/u);
   assert.match(photos, /priorFocus\?\.focus/u);
   assert.match(photos, /button\[aria-label="Close"\]/u);
-  for (const css of [tasksCss, tallyCss, lockerCss])
+  for (const css of [lockerCss, peopleCss, photosCss])
     assert.match(css, /:focus-visible/u);
 });
 
@@ -101,11 +108,11 @@ test("every mobile Pressable screen names an accessibility contract and keeps Dy
 test("long native surfaces remain virtualized and photo cells keep bounded image caches", async () => {
   // Docs' native drive was the fourth surface here until it was removed
   // pending the v11 design handoff (apps/mobile/src/apps/docs/DocsHome.tsx is
-  // now a wall). Put it back on this list the moment the rebuilt drive renders
-  // a list of unbounded length — a virtualization gate is only meaningful over
-  // a surface that can actually grow.
+  // now a wall), and Agenda's native cover left the same way pending its own
+  // ground-up redesign. Put each back on this list the moment its rebuilt
+  // screen renders a list of unbounded length — a virtualization gate is only
+  // meaningful over a surface that can actually grow.
   const files = [
-    "apps/mobile/src/apps/agenda/AgendaHome.tsx",
     "apps/mobile/src/apps/photos/FaceReview.tsx",
     "apps/mobile/src/apps/assistant/Assistant.tsx",
   ];

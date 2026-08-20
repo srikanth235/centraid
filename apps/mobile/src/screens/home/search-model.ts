@@ -101,8 +101,8 @@ export function selectSearchRecents(
 
 /**
  * The numeric-register meta column, formatted for display: a short month +
- * day, the same shape `AgendaHome.tsx`'s range header and
- * `TallyRecurringTemplates.tsx`'s upcoming-dates line already use.
+ * day — the springboard's one date format, so a search row and a tile body
+ * never spell the same day two ways.
  * `undefined` in, `undefined` out — a row with no meta column renders none,
  * never a fabricated date.
  */

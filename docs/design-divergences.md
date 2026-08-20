@@ -39,7 +39,7 @@ Two things this is NOT:
 
 The **compact form factor keeps a pad**, `min-height: 52px` and 8px block, because there the three trailing columns fold into a snippet line under the title and the row is genuinely two lines. Same split the handoff makes, and for the same reason: the height is set by what the row holds, not by the surface.
 
-Tasks and Notes already read `--density-row` for their rows. Docs' list was the one list in the app answering the density tier with the wrong token.
+Tasks and Notes read `--density-row` for their rows until their interfaces were cleared for a ground-up redesign ([#831](https://github.com/srikanth235/centraid/issues/831)); Docs' list was the one list in the app answering the density tier with the wrong token, and is now the rung's standing reference.
 
 ### The screens the shelf model names
 

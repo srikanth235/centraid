@@ -9,7 +9,12 @@ const read = (relative: string): string =>
   readFileSync(path.resolve(appsRoot, relative), "utf8");
 
 describe("blueprint state honesty", () => {
-  test.each(["agenda", "locker", "notes", "tasks"])(
+  // Agenda, Notes, Tally and Tasks are absent from every row in this file:
+  // their interfaces were removed whole pending a ground-up redesign, and a
+  // row naming a file that no longer exists asserts nothing. Each rebuilt app
+  // rejoins the row that matches how it draws — these are requirements on an
+  // interface, not exemptions granted to an app.
+  test.each(["locker"])(
     "%s paints a skeleton until its first read settles",
     (app) => {
       expect(read(`${app}/Chrome.tsx`)).toContain("LoadingSkeleton");
@@ -65,12 +70,8 @@ describe("blueprint state honesty", () => {
   // action lives in that screen. What is asserted is unchanged: a denied read
   // always offers a direct way to the grant, never a dead end.
   test.each([
-    ["agenda", "agenda/Chrome.tsx"],
     ["locker", "locker/Chrome.tsx"],
-    ["notes", "notes/Chrome.tsx"],
-    ["tasks", "tasks/Chrome.tsx"],
     ["docs", "docs/Chrome.tsx"],
-    ["tally", "tally/Chrome.tsx"],
     ["photos", "photos/components/Permission.tsx"],
     ["people", "people/Chrome.tsx"],
   ])("%s gives denied reads a direct vault-access action", (_app, file) => {
@@ -78,11 +79,7 @@ describe("blueprint state honesty", () => {
   });
 
   test.each([
-    ["agenda", "agenda/components/ScheduleView.tsx"],
     ["locker", "locker/components/List.tsx"],
-    ["notes", "notes/components/Wall.tsx"],
-    ["tasks", "tasks/components/Board.tsx"],
-    ["tally", "tally/components/Ledger.tsx"],
     ["people", "people/components/EmptyState.tsx"],
   ])("%s primary empty state uses kit vocabulary with a CTA", (_app, file) => {
     const source = read(file);

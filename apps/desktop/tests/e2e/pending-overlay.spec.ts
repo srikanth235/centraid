@@ -13,12 +13,31 @@ import {
   waitForHome,
 } from "./fixtures";
 
-/** Roster bar verb is `Add` on the shell titlebar (outside `inline-app-view`);
- *  first-run commit is `Add person` inside the view. Either means the route
- *  booted. Both can be visible at once, so take the first match. */
-function peopleNewPersonControl(page: Page) {
-  return page.getByRole("button", { name: /^Add(?: person)?$/u }).first();
-}
+// Desktop offline honesty (matrix cell `desktop.offline`): a write made with
+// the renderer's network severed lands in the durable replica outbox, paints
+// its row as pending in the production app, and BOTH survive a full Electron
+// reload while still offline.
+//
+// It drove Tally, Tasks and Agenda until those three interfaces were removed
+// pending a ground-up redesign, and is rebuilt here on Docs — the remaining
+// app whose production rows render the shared pending overlay
+// (`apps/docs/components/List.tsx` → `_shared/PendingWriteActions.tsx`). The
+// contract asserted is unchanged and app-agnostic: replica ⊕ outbox recovery
+// across a reload, with the pending state visible to the member the whole
+// time. Nothing here is mocked; the local gateway is the real one.
+//
+// The offline write is issued through `window.centraid.write` rather than a
+// toolbar control ON PURPOSE. Docs' only rename affordances live in the
+// sidebar the inline seat hides and behind the Quick Look info panel, so a
+// UI-driven rename would spend most of this journey proving navigation. The
+// door used is the same one the app's own handler calls, and every observable
+// after it — the optimistic title, the pending chip, their survival across the
+// reload — is the production UI's.
+
+const DOC_TITLE = "quarterly-review.txt";
+const DOC_BODY = "Numbers for the quarterly review.";
+const RENAMED_TITLE = "quarterly-review-offline.txt";
+const RENAME_INTENT = "desktop-pending-overlay-offline-rename";
 
 async function openFirstParty(page: Page, name: string): Promise<void> {
   await openAppFromPalette(page, name);
@@ -36,272 +55,131 @@ async function foundDesktop(page: Page): Promise<void> {
     .getByTestId("first-run-choice")
     .getByRole("button", { name: /start fresh on this mac/iu })
     .click();
-  // First run is now one connection act: the local path starts the embedded
-  // host and hands straight to Home. Profile identity belongs in Settings, so
-  // this fixture must not resurrect the deleted name/color gate.
+  // First run is one connection act: the local path starts the embedded host
+  // and hands straight to Home. Profile identity belongs in Settings, so this
+  // fixture must not resurrect the deleted name/color gate.
   const onboarding = page.getByTestId("onboarding-view");
   await onboarding.waitFor({ state: "visible", timeout: 60_000 });
   await onboarding.waitFor({ state: "detached", timeout: 60_000 });
   await waitForHome(page);
-  await expect
-    .poll(
-      async () =>
-        page.evaluate(async () => {
-          const settings = await window.CentraidApi.getSettings();
-          if (settings.activeGatewayKind !== "local" || !settings.gatewayUrl)
-            return false;
-          try {
-            const result = (await window.CentraidApi.listGatewayVaults({
-              gatewayId: "local",
-            })) as { vaults?: unknown };
-            return Array.isArray(result.vaults);
-          } catch {
-            return false;
-          }
-        }),
-      { timeout: 60_000 }
-    )
-    .toBe(true);
-  // This fixture exercises app writes after onboarding, not the background
-  // sample generators. Let the one-shot first-run fill finish so its gateway
-  // writes and replica catch-up cannot overlap the pending-write journey.
-  await expect(page.getByTestId("home-sample-note")).toBeVisible({
-    timeout: 60_000,
-  });
 }
 
-/**
- * Prepare only the canonical rows the two edit journeys need. The writes run
- * through the production inline-app bridge and real local gateway; the
- * offline writes below use the visible product controls.
- */
-async function prepareTally(page: Page): Promise<string> {
-  await openFirstParty(page, "Tally");
-  type Dashboard = { friends: Array<{ party_id: string }> };
-  let dashboard: Dashboard | undefined;
-  await expect
-    .poll(
-      async () => {
-        try {
-          dashboard = await page.evaluate(() =>
-            window.centraid.read<Dashboard>({ query: "dashboard", input: {} })
-          );
-          return true;
-        } catch {
-          return false;
-        }
-      },
-      { timeout: 30_000 }
-    )
-    .toBe(true);
-  const prepared = await page.evaluate(async (existingMemberId) => {
-    const client = window.centraid;
-    let friendStatus = "already-present";
-    let memberId = existingMemberId;
-    if (!memberId) {
-      const friend = await client.write({
-        action: "add-friend",
-        input: { name: "Offline Teammate" },
-      });
-      friendStatus = friend.status;
-      memberId = friend.output?.["party_id"] as string | undefined;
-    }
-    const group = await client.write({
-      action: "create-group",
-      input: {
-        name: "Offline Journey",
-        icon: "🏠",
-        color: "#6f5bf6",
-        member_ids: [memberId!],
-      },
-    });
-    return {
-      friendStatus,
-      groupStatus: group.status,
-      groupId: group.output?.["group_id"],
-    };
-  }, dashboard!.friends[0]?.party_id);
-  expect(["already-present", "executed"]).toContain(prepared.friendStatus);
-  expect(prepared.groupStatus).toBe("executed");
-  expect(prepared.groupId).toEqual(expect.any(String));
-  return String(prepared.groupId);
+/** The document ids the drive read carries for a given exact title. */
+async function driveIdsFor(page: Page, title: string): Promise<string[]> {
+  type Drive = { documents: Array<{ document_id: string; title: string }> };
+  const drive = await page.evaluate(() =>
+    window.centraid.read<Drive>({ query: "drive", input: {} })
+  );
+  return drive.documents
+    .filter((doc) => doc.title === title)
+    .map((doc) => doc.document_id);
 }
 
-async function prepareAgenda(page: Page): Promise<string> {
-  await openFirstParty(page, "Agenda");
-  type Upcoming = {
-    calendars: Array<{ calendar_id: string }>;
-  };
-  type Parties = {
-    parties: Array<{ party_id: string; is_you?: boolean }>;
-  };
-  let setup: { upcoming: Upcoming; parties: Parties } | undefined;
-  await expect
-    .poll(
-      async () => {
-        try {
-          setup = await page.evaluate(async () => {
-            const client = window.centraid;
-            const [upcoming, parties] = await Promise.all([
-              client.read<Upcoming>({
-                query: "upcoming",
-                input: {
-                  from: new Date(Date.now() - 86_400_000).toISOString(),
-                },
-              }),
-              client.read<Parties>({ query: "parties", input: {} }),
-            ]);
-            return { upcoming, parties };
-          });
-          return Boolean(
-            setup?.upcoming.calendars[0]?.calendar_id &&
-            setup.parties.parties.some((party) => party.is_you)
-          );
-        } catch {
-          return false;
-        }
-      },
-      { timeout: 60_000 }
-    )
-    .toBe(true);
-  // Propose can land while the replica is still re-bootstrapping after
-  // Tally's writes (CI: ReplicaRebootstrapRequiredError / HTTP 500 pull).
-  // Retry the write until the rail is up — a failed propose does not
-  // persist an event, so a later executed write is the only durable row.
-  let prepared: { status: string; eventId?: unknown } | undefined;
-  await expect
-    .poll(
-      async () => {
-        prepared = await page.evaluate(async (ready) => {
-          const client = window.centraid;
-          // Seed occupies days 0–7 at fixed local hours and refuses ANY
-          // busy overlap. now+1d around 06:00 UTC collides with
-          // "Morning run" (day+1 06:30). Ten days out at 03:17 UTC
-          // cannot hit that week.
-          const start = new Date(Date.now() + 10 * 86_400_000);
-          start.setUTCHours(3, 17, 0, 0);
-          const event = await client.write({
-            action: "propose",
-            input: {
-              summary: "Offline RSVP planning",
-              calendar_id: ready.upcoming.calendars[0]!.calendar_id,
-              dtstart: start.toISOString(),
-              dtend: new Date(start.getTime() + 3_600_000).toISOString(),
-              start_tz: "UTC",
-              attendee_party_ids: [
-                ready.parties.parties.find((party) => party.is_you)!.party_id,
-              ],
-            },
-          });
-          return { status: event.status, eventId: event.output?.["event_id"] };
-        }, setup!);
-        return prepared.status;
-      },
-      { timeout: 60_000, intervals: [2_000] }
-    )
-    .toBe("executed");
-  expect(prepared?.eventId).toEqual(expect.any(String));
-  return String(prepared!.eventId);
-}
-
-test("production Tally, Tasks, and Agenda pending rows survive an offline Electron reload", async () => {
+test("a production Docs row queued offline survives an Electron reload", async () => {
   test.setTimeout(180_000);
   const env = await makeEnv();
   const { app, page } = await launchApp(env);
   try {
     await foundDesktop(page);
-    const groupId = await prepareTally(page);
-    await page.getByRole("button", { name: "Home", exact: true }).click();
-    await expect(page.getByTestId("inline-app-view")).toHaveCount(0);
-    const eventId = await prepareAgenda(page);
+    await openFirstParty(page, "Docs");
 
-    // Warm each production inline bundle before the browser context loses its
-    // network. The local outbox, query engine, and app routes remain real.
-    await openFirstParty(page, "Tasks");
-    await openFirstParty(page, "People");
-    await openFirstParty(page, "Tally");
-    await openFirstParty(page, "Agenda");
+    // Write-rail readiness must be proven BEFORE severing the network: the
+    // replica session bootstraps asynchronously, an offline session can never
+    // finish bootstrapping, and a write issued before it does throws
+    // not-bootstrapped instead of queueing. The probe is a write the vault
+    // deterministically REFUSES (an unstaged sha fails add_document's
+    // staged_or_owned precondition), so readiness costs no row.
+    await expect
+      .poll(
+        () =>
+          page.evaluate(async () => {
+            try {
+              const outcome = await window.centraid.write({
+                action: "upload",
+                input: {
+                  staged_sha: "0".repeat(64),
+                  title: "readiness-probe",
+                },
+                intentId: "desktop-pending-overlay-readiness-probe",
+              });
+              return outcome.status;
+            } catch {
+              return "replica-not-ready";
+            }
+          }),
+        { timeout: 30_000 }
+      )
+      .not.toBe("replica-not-ready");
+
+    // One real document, through the product's own upload control, while the
+    // gateway is still reachable — this is the canonical row the offline write
+    // then decorates.
+    await page.locator('input[aria-label="Upload files"]').setInputFiles({
+      name: DOC_TITLE,
+      mimeType: "text/plain",
+      buffer: Buffer.from(DOC_BODY, "utf8"),
+    });
     await expect(
-      page.getByRole("button", { name: /Offline RSVP planning/u })
+      page.getByRole("button", { name: `Select ${DOC_TITLE}` })
     ).toBeVisible({ timeout: 30_000 });
+    let documentId = "";
+    await expect
+      .poll(
+        async () => {
+          const ids = await driveIdsFor(page, DOC_TITLE);
+          documentId = ids[0] ?? "";
+          return ids.length;
+        },
+        { timeout: 30_000 }
+      )
+      .toBe(1);
+
+    // Sever the renderer's network and rename the document. Stay on the
+    // session the readiness probe proved: remounting the route would start a
+    // replica walk that an offline session can never finish, and the write
+    // would then throw instead of queueing.
     await page.context().setOffline(true);
-
-    await openFirstParty(page, "Tasks");
-    await page
-      .getByRole("textbox", { name: "Task title" })
-      .fill("Offline task");
-    await page.getByRole("button", { name: "Today", exact: true }).click();
-    await page.getByRole("button", { name: "Add", exact: true }).click();
-    await expect(page.getByText("Offline task", { exact: true })).toBeVisible();
-    await expect(page.locator(".kit-pending-chip")).toHaveText("queued");
-
-    // People is restored (#821): the roster is live, so the New-person
-    // control is the observable that the route booted — not the v11 wall.
-    await openFirstParty(page, "People");
-    await expect(peopleNewPersonControl(page)).toBeVisible();
-
-    await openFirstParty(page, "Tally");
-    await page.getByText("Offline Journey", { exact: true }).first().click();
-    await page.getByRole("button", { name: "Add expense" }).click();
-    await page.getByPlaceholder("What was it for?").fill("Offline lunch");
-    await page.locator('input[inputmode="decimal"]').first().fill("12.50");
-    await page.getByRole("button", { name: "Save", exact: true }).click();
-    await expect(
-      page.getByText("Offline lunch", { exact: true })
-    ).toBeVisible();
-    const expenseCancel = page
-      .getByRole("dialog")
-      .getByRole("button", { name: "Cancel", exact: true });
-    if (await expenseCancel.isVisible()) await expenseCancel.click();
-    expect(groupId).not.toBe("");
-
-    await openFirstParty(page, "Agenda");
-    const plannedEvent = page.getByRole("button", {
-      name: /Offline RSVP planning/u,
-    });
-    await expect(plannedEvent).toBeVisible();
-    await plannedEvent.click();
-    await page.getByRole("button", { name: "Going" }).click();
-    await expect(page.getByRole("dialog")).toHaveClass(/kit-pending/u);
-    await expect(
-      page.getByRole("dialog").locator(".kit-pending-chip")
-    ).toHaveText("queued");
-    expect(eventId).not.toBe("");
-
-    await page.reload({ waitUntil: "domcontentloaded" });
-    await openFirstParty(page, "Agenda");
-    const restoredEvent = page.getByRole("button", {
-      name: /Offline RSVP planning/u,
-    });
-    await expect(restoredEvent).toBeVisible();
-    await restoredEvent.click();
-    await expect(page.getByRole("dialog")).toHaveClass(/kit-pending/u);
-    await expect(
-      page.getByRole("dialog").locator(".kit-pending-chip")
-    ).toHaveText("queued");
-    await page
-      .getByRole("dialog")
-      .getByRole("button", { name: "Close" })
-      .click();
-
-    await openFirstParty(page, "Tasks");
-    await expect(page.getByText("Offline task", { exact: true })).toBeVisible();
-    await expect(page.locator(".kit-pending-chip")).toHaveText("queued");
-
-    await openFirstParty(page, "People");
-    await expect(peopleNewPersonControl(page)).toBeVisible();
-
-    await openFirstParty(page, "Tally");
-    await page.getByText("Offline Journey", { exact: true }).first().click();
-    await expect(
-      page.getByText("Offline lunch", { exact: true })
-    ).toBeVisible();
-    const tallyPending = page.locator(".kit-pending-chip");
-    await expect(tallyPending).toHaveText("pending");
-    await expect(tallyPending).toHaveAttribute(
-      "title",
-      "Waiting for a connection."
+    await page.evaluate(
+      async ({ id, title, intentId }) =>
+        window.centraid.write({
+          action: "rename",
+          input: { document_id: id, title },
+          intentId,
+        }),
+      { id: documentId, title: RENAMED_TITLE, intentId: RENAME_INTENT }
     );
+
+    // The overlay is the member's answer, painted by the production row: the
+    // new title stands where the old one was, and the row says it has not
+    // landed yet.
+    await expect(
+      page.getByRole("button", { name: `Select ${RENAMED_TITLE}` })
+    ).toBeVisible({ timeout: 30_000 });
+    await expect(page.locator(".kit-pending-chip").first()).toHaveText(
+      "queued"
+    );
+
+    // Durability is the whole claim: a full Electron reload, still offline,
+    // must restore BOTH the optimistic row and its pending state from the
+    // local outbox rather than snapping back to the canonical title.
+    await page.reload({ waitUntil: "domcontentloaded" });
+    await openFirstParty(page, "Docs");
+    await expect(
+      page.getByRole("button", { name: `Select ${RENAMED_TITLE}` })
+    ).toBeVisible({ timeout: 30_000 });
+    // Either honest word for "still in the outbox": `queued` while the drain
+    // has not tried, `pending` once it has and is waiting on a connection.
+    // What must never appear is a settled row or a denial — the vault has not
+    // been reachable since the write.
+    await expect(page.locator(".kit-pending-chip").first()).toHaveText(
+      /^(?:queued|pending)$/u
+    );
+
+    // One row, not two: the outbox entry DECORATES the canonical document it
+    // names — an overlay that minted a second row would show the member two
+    // copies of one file the moment they went offline.
+    expect(await driveIdsFor(page, RENAMED_TITLE)).toEqual([documentId]);
+    expect(await driveIdsFor(page, DOC_TITLE)).toEqual([]);
 
     const evidenceDir = path.resolve(
       import.meta.dirname,
@@ -309,7 +187,7 @@ test("production Tally, Tasks, and Agenda pending rows survive an offline Electr
     );
     await mkdir(evidenceDir, { recursive: true });
     await page.screenshot({
-      path: path.join(evidenceDir, "issue-738-pending-write-overlay.png"),
+      path: path.join(evidenceDir, "desktop-pending-overlay.png"),
       fullPage: true,
     });
   } finally {

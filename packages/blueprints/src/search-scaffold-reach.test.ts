@@ -17,10 +17,9 @@ import { describe, expect, it } from "vitest";
 
 // Local restatements of `search-scaffold.ts`'s types, not an `import type`
 // from `apps/` — this package's `tsconfig.test.json` roots at `src/`, so a
-// static reference (even type-only) into `apps/` fails `rootDir` (the same
-// reason `tasks-scope-fanout.test.ts` declares its own local `BoardPayload`
-// instead of importing the app's). The file URL dynamic import below is the
-// one sanctioned way this suite reaches into `apps/`.
+// static reference (even type-only) into `apps/` fails `rootDir`. The file
+// URL dynamic import below is the one sanctioned way this suite reaches into
+// `apps/`.
 type SearchStatus = "resting" | "searching" | "ready" | "unreachable";
 interface SearchGroupRow {
   kind: string;

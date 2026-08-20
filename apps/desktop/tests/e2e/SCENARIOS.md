@@ -12,7 +12,6 @@ This is the current, executable coverage map for the real Electron app. A scenar
 | Inline app / automation templates / Analytics | `appview-templates-insights.spec.ts` | 3 | System app renders inline with no iframe, automation clone survives a restart, Analytics runs chart |
 | Automations | `automations.spec.ts` | 12 | List/error/retry, create/edit, enable/disable, webhook URL, delete, run viewer, success/failure timeline, nested tool transcript, rerun |
 | Settings / gateways | `settings-gateways.spec.ts` | 12 | Theme and system mode persistence, dark restart, Agents page, pairing-only enrollment, switch/rename/remove gateway, unreachable/auth errors, Cmd+K |
-| Pending writes | `pending-overlay.spec.ts` | 1 | Production inline Tally, Tasks, and Agenda routes over the real local gateway; visible offline add/RSVP controls and replica ⊕ outbox recovery across an Electron reload. People is the Binding Layer v11 holdback wall. |
 | Household | `household.spec.ts` | 2 | Roster, the owner's scopes and sharing surface as served; another person's seat changes presentation, never authorization |
 | Docs journey | `docs-drive.spec.ts` | 1 | Byte-bearing north star (docs/apps/docs-scenarios.md): real staged upload through the visible control, Electron reload, byte-exact round-trip through the bearer transport, reading route opens |
 | Locker journey | `locker.spec.ts` | 1 | Custodian-seat admission: first-open passphrase setup, item add over the live local gateway, relock on reload, item invisible until the same passphrase unlocks |

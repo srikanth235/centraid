@@ -706,7 +706,7 @@
     "blueprints.offline": "Partial: packages/client/src/replica/app-convergence.contract.test.ts proves deterministic replay for task/contact/expense/event blueprint writes; web/mobile journeys own the consuming offline UI. Tracked under #781 (originally #656).",
     "blueprints.compat": "Partial: packages/blueprints/src/app-manifests.test.ts validates the shipped app.json contract and mobile's protocol wall prevents an incompatible host from mounting those apps. Tracked under #781 (originally #656).",
     "desktop.scalability": "Owned by tests/scale/desktop-windows.scale.test.ts; records a nightly scalability budget and durable numeric measurements.",
-    "desktop.offline": "Owned since #781: production pending rows survive an offline Electron reload (apps/desktop/tests/e2e/pending-overlay.spec.ts). The prior skip rationale (desktop hosts the gateway) still bounds scope: detached-gateway outage logging covers host-side continuity; this cell owns the renderer's offline honesty.",
+    "desktop.offline": "Partial: apps/desktop/tests/e2e/pending-overlay.spec.ts owns the renderer's offline honesty — a write made with the network severed queues in the durable replica outbox and BOTH the optimistic row and its pending chip survive a full Electron reload. The journey drove Tally, Tasks and Agenda until those three interfaces were removed pending a ground-up redesign; it was rebuilt on Docs, the remaining app whose production rows render the shared pending overlay, so the contract moved seats rather than lapsing. Still missing on this seat, and what keeps the cell partial: the reconnect half (the PWA's apps/web/tests/e2e/offline-reconnect.spec.ts proves replay settles exactly once; desktop has no equivalent) and a UI-driven offline write, which Docs cannot offer while its rename affordances live off the inline seat. Detached-gateway outage logging still covers host-side continuity. Tracked under #781.",
     "desktop.compat": "Partial: gateway pairing response folding and primary-first multi-vault retention are covered by apps/desktop/src/main/gateway-pairing-core.test.ts; desktop settings/schema version-skew fixtures remain tracked under #781 (originally #656).",
     "web.scalability": "Owned by tests/scale/web-tabs.scale.test.ts; records a nightly scalability budget and durable numeric measurements.",
     "web.compat": "Partial: pairing persistence and primary-first multi-vault retention are covered by apps/web/src/web-host.test.ts; web storage/version-skew fixtures remain tracked under #781 (originally #656).",
@@ -3217,6 +3217,17 @@
       "minimumTests": 1
     },
     {
+      "id": "web-offline-pending-row",
+      "name": "A row queued while offline shows its pending state across a PWA reload",
+      "surface": "web",
+      "dimension": "offline",
+      "tier": "e2e",
+      "owner": "apps/web/tests/e2e/offline-reconnect.spec.ts",
+      "minimumTests": 1,
+      "replacesMinimumTestsFlow": "web-pending-overlay",
+      "approvedMinimumTestsDeviation": "Takes over the retired `web-pending-overlay` floor one-to-one. That journey proved the PWA recovers a VISIBLE pending row across a reload while still offline, and it drove Tally, Tasks and Agenda — three interfaces removed whole pending a ground-up redesign, which left it without a subject on this seat. Rather than keep two near-identical offline journeys over the one remaining app that renders the shared pending overlay, the contract moved into `offline-reconnect.spec.ts`, which was itself retargeted from Tasks to Docs in the same change: it now asserts the optimistic title AND its `.kit-pending-chip` survive the offline reload before going on to prove settlement on reconnect. Two named contracts over one journey, exactly as `desktop-real-journey` and `desktop-app-open-journey` share `onboarding-home.spec.ts`. Same surface, dimension, tier and floor; no assertion dropped."
+    },
+    {
       "id": "household-sharing-journey",
       "name": "Household renders the gateway's roster and owner scopes; another seat changes presentation, never authorization",
       "surface": "desktop",
@@ -3297,7 +3308,7 @@
     },
     {
       "id": "desktop-pending-overlay",
-      "name": "Pending rows survive an offline Electron reload across Tally, Tasks, and Agenda",
+      "name": "A Docs row queued while offline survives an Electron reload, row and pending state both",
       "surface": "desktop",
       "dimension": "offline",
       "tier": "e2e",
@@ -3312,15 +3323,6 @@
       "tier": "e2e",
       "owner": "apps/desktop/tests/e2e/settings-gateways.spec.ts",
       "minimumTests": 12
-    },
-    {
-      "id": "web-pending-overlay",
-      "name": "PWA routes recover pending rows across Tally, Tasks, and Agenda while still offline",
-      "surface": "web",
-      "dimension": "offline",
-      "tier": "e2e",
-      "owner": "apps/web/tests/e2e/pending-overlay.spec.ts",
-      "minimumTests": 1
     },
     {
       "id": "mobile-cold-start",
