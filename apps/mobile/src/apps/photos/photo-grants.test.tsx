@@ -1,3 +1,4 @@
+// @vitest-environment jsdom
 // Photos' way into the grant sheet, phone seat (#825): the REFUSALS, spoken
 // before a sheet opens, and the mapping law they stand on.
 //
@@ -8,7 +9,6 @@
 //
 // The hook is driven inside a probe component: what reached the status line,
 // and whether the sheet opened, are the whole observable outcome of a refusal.
-// @vitest-environment jsdom
 
 import React, { act } from "react";
 import { createRoot } from "react-dom/client";
@@ -23,6 +23,10 @@ import {
   NO_GATEWAY_TO_SHARE_THROUGH,
   usePhotoGrantEntry,
 } from "./photo-grants";
+
+(
+  globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }
+).IS_REACT_ACT_ENVIRONMENT = true;
 
 const replica = vi.hoisted(() => ({
   value: {

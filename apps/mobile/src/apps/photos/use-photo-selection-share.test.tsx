@@ -1,3 +1,4 @@
+// @vitest-environment jsdom
 // *Share*, as ONE selection-bar handler (#825): what the four Photos shelves
 // get for their third target.
 //
@@ -5,7 +6,6 @@
 // not one subject, and where it is one, the sheet is opened over that
 // photograph's own id — never over the selection key that carries it. Every
 // outcome lands on the status line and then closes the selection.
-// @vitest-environment jsdom
 
 import React, { act } from "react";
 import { createRoot } from "react-dom/client";
@@ -15,6 +15,10 @@ import { ONE_AT_A_TIME } from "@centraid/blueprints/apps/photos/grant-audiences"
 
 import type { VaultAsset } from "./photos-selection-writes";
 import { usePhotoSelectionShare } from "./use-photo-selection-share";
+
+(
+  globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }
+).IS_REACT_ACT_ENVIRONMENT = true;
 
 // The grant entry has its own suite (`photo-grants.test.tsx`) — here it is a
 // recorder, so this file's own two decisions are what is under test.

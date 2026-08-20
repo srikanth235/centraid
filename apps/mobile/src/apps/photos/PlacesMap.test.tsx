@@ -42,7 +42,7 @@ import type { Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { makePhotosFixture } from "./photos-fixtures";
-import { setMapMode } from "./places-map-mode";
+import { DEFAULT_PLACES_MAP_MODE, setMapMode } from "./places-map-mode";
 import PlacesMap from "./PlacesMap";
 
 type ReactNative = typeof import("react-native");
@@ -75,6 +75,8 @@ const mocks = vi.hoisted(() => ({
   /** The groups the mode menu was opened with, newest last. */
   menus: [] as unknown[],
   places: [] as unknown[],
+  /** Survives `set` so an in-flight `hydrate` cannot snap back to the default. */
+  stored: new Map<string, unknown>(),
 }));
 
 vi.mock(import("react-native"), async () => {
@@ -216,8 +218,11 @@ vi.mock(
   () =>
     ({
       Store: {
-        hydrate: async (_key: string, fallback: unknown) => fallback,
-        set: () => undefined,
+        hydrate: async (key: string, fallback: unknown) =>
+          mocks.stored.has(key) ? mocks.stored.get(key) : fallback,
+        set: (key: string, value: unknown) => {
+          mocks.stored.set(key, value);
+        },
       },
     }) as never
 );
@@ -279,13 +284,17 @@ function renderMap(): void {
 }
 
 /** Render and let the real map's lazily-imported provider resolve. Real maps
- *  are the default, so this is the ordinary path. */
+ *  are the default, so this is the ordinary path. Two microticks used to be
+ *  enough on an idle worker; a coverage run compiling the provider for the
+ *  first time is not idle, so wait for the recorder the SDK mock is. */
 async function renderRealMap(): Promise<void> {
   renderMap();
-  // Twice: the first flush resolves the dynamic import of the platform's
-  // provider, the second renders what it resolved to.
-  await act(async () => undefined);
-  await act(async () => undefined);
+  // Same module `PlacesRealMap` lazy-loads. Awaiting it inside `act` is what
+  // two microticks used to stand in for — coverage compiling that graph is
+  // not two ticks.
+  await act(async () => {
+    await import("./places-map-libre");
+  });
 }
 
 function pins(): HTMLButtonElement[] {
@@ -312,6 +321,7 @@ describe("the Places map (native)", () => {
     document.body.appendChild(container);
     mocks.mapViews = [];
     mocks.menus = [];
+    mocks.stored.clear();
     mocks.places = PLACE_ROWS;
     // Three geotagged photographs across two places, plus one the library
     // holds that carries no place at all.
@@ -329,6 +339,9 @@ describe("the Places map (native)", () => {
     container?.remove();
     root = undefined;
     container = undefined;
+    mocks.mapViews = [];
+    mocks.menus = [];
+    setMapMode(DEFAULT_PLACES_MAP_MODE);
   });
 
   it("states how many photographs are drawn out of how many the library holds", () => {
@@ -441,6 +454,7 @@ describe("what the Places map asks of anybody, per mode", () => {
     container = document.createElement("div");
     document.body.appendChild(container);
     mocks.mapViews = [];
+    mocks.stored.clear();
     mocks.places = PLACE_ROWS;
     mocks.assets = [TAHOE_PHOTO, HOME_PHOTO];
   });
@@ -450,6 +464,9 @@ describe("what the Places map asks of anybody, per mode", () => {
     container?.remove();
     root = undefined;
     container = undefined;
+    mocks.mapViews = [];
+    mocks.menus = [];
+    setMapMode(DEFAULT_PLACES_MAP_MODE);
   });
 
   it("constructs no map view at all on the private sketch", () => {
