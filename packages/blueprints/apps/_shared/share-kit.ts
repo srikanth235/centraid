@@ -203,8 +203,39 @@ export function nearNameMatches(
 }
 
 /**
+ * The people roster, read STRICTLY: a read that FAILED throws rather than
+ * answering the empty roster. The forgiving `loadShareDestinations` below is
+ * right for the commons sheet, which draws its own destination list and can
+ * live with a thinner one; it is wrong for a host that must decide between
+ * "there is nobody to share with" and "we could not find out" — those are
+ * different sentences, and a caller handed `[]` cannot tell them apart.
+ *
+ * The link surface is still the fallback for a host that has no `shareTargets`
+ * bridge AT ALL — that is feature detection, not failure. A People read that
+ * threw is failure, and is reported as such rather than quietly demoted to the
+ * older surface.
+ */
+export async function readShareDestinations(
+  scopes: readonly InlineScope[] = mountedScopes()
+): Promise<ShareDestination[]> {
+  if (window.centraid.shareTargets) {
+    return peopleDestinations(await window.centraid.shareTargets(), scopes);
+  }
+  return linkedDestinations((await window.centraid.links?.()) ?? [], scopes);
+}
+
+/** Named circles, read strictly — see `readShareDestinations`. A host with no
+ *  circles bridge has genuinely no named circles; a failing one throws. */
+export async function readShareCircles(): Promise<ShareCircle[]> {
+  if (!window.centraid.shareCircles) return [];
+  return await window.centraid.shareCircles();
+}
+
+/**
  * Load the people roster live. Never throws: a transient People read falls
  * back to approved links, and a host with neither answers an empty roster.
+ * The commons ShareSheet's read — a host that must distinguish an unreadable
+ * roster from an empty one wants `readShareDestinations` instead.
  */
 export async function loadShareDestinations(
   _currentScopeId: string | null | undefined,

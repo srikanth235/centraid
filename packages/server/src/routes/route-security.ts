@@ -120,6 +120,7 @@ export const ROUTE_SECURITY_REGISTRY: readonly RouteSecurityRegistration[] = [
     `
     /centraid/_vault/assistant|assistant-routes.ts
     /centraid/_vault/enrich/semantic-search|enrich-search-routes.ts|reads across the whole photo library at once — owner capability, never app-grantable
+    /centraid/_vault/grants|grant-routes.ts|standing shares of this vault's subjects — the owner's own decisions, never app-grantable
     /centraid/_vault/imports|import-routes.ts
     /centraid/_vault/connections|connections-routes.ts
     /centraid/_vault|vault-routes.ts

@@ -72,17 +72,6 @@ export interface PendingInvite {
   created_at: string;
 }
 
-/** One thing the owner has shared with this person. */
-export interface SharedContainer {
-  grant_id: string;
-  container_type: string;
-  container_id: string;
-  container_label: string | null;
-  capability: ShareCapability;
-  status: "invited" | "current" | "refused";
-  since: string;
-}
-
 /** One contact channel on the person screen. `legacy` marks a row projected
  *  from a party identifier rather than a channel, which has no id to edit. */
 export interface ContactChannel {
@@ -138,14 +127,16 @@ export interface PersonDetail {
   notes: PersonNote[];
   interactions: Interaction[];
   /**
-   * The sharing plane, all three of it. NULL IS NOT AN EMPTY LIST: it means
+   * The sharing plane, both halves of it. NULL IS NOT AN EMPTY LIST: it means
    * the reads were denied, and the person screen then draws no vault section
    * at all rather than an empty one claiming nothing is shared
-   * (`queries/_shared.ts` returns the three together for exactly this reason).
+   * (`queries/_shared.ts` returns the two together for exactly this reason).
+   * WHAT IS SHARED WITH THIS PERSON IS NOT HERE (#825): standing grants are
+   * read from the grant plane by `grant-dashboard.ts`, not projected through
+   * this query.
    */
   vaults: VaultBinding[] | null;
   pending_invites: PendingInvite[] | null;
-  shared_with_them: SharedContainer[] | null;
 }
 
 /** The card every dashboard list is built out of. The cadence pair is not the
@@ -338,6 +329,13 @@ export interface SearchRouteProps extends RouteBase {
 
 export interface PersonRouteProps extends RouteBase {
   person: PersonDetail | null;
+  /** The roster window, which the grant dashboard hands the share sheet as
+   *  its audience list: People is where a party id has a name (#825). */
+  roster: readonly PersonRow[];
+  /** The frame's one status line, for what a share or a revoke answered. The
+   *  grant plane is not a People write, so it does not travel through
+   *  `writes.ts` — but its outcome lands on the same one line. */
+  onStatus: (message: string) => void;
   /** Which section keys are collapsed. Absent means open. */
   collapsed: Readonly<Record<string, boolean>>;
   composer: ComposerState | null;

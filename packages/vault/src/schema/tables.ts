@@ -182,6 +182,12 @@ export const VAULT_TABLES: Readonly<Record<string, readonly string[]>> = {
     "commons_retained",
     "commons_intent",
     "commons_invitation",
+    // The grant plane (#825). `grant` is the standing permission itself and
+    // `fulfillment` its per-audience-vault delivery state; both must ride the
+    // canonical walk, or a restore would hand back a vault that had forgotten
+    // who it shares with and would re-deliver everything it had already sent.
+    "grant",
+    "fulfillment",
   ],
   notifications: ["notice"],
   // Read-only custody projections, both rebuilt on the standing sweep:

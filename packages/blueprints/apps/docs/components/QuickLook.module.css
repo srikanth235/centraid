@@ -525,16 +525,7 @@
   text-wrap: pretty;
 }
 
-/* ---------------------------------------------------------- status, share */
-
-/* What the sheet said, once, where the member left it. */
-.shareStatus {
-  flex: none;
-  padding: var(--sp-2) var(--sp-4);
-  border-block-start: 1px solid var(--stage-line);
-  font: var(--t-small);
-  color: var(--on-stage-soft);
-}
+/* ---------------------------------------------------------------- status */
 
 /* The stage's own status line: a dot and a sentence, on the stage's trailing
    rule — the same shape the shell's status line takes, so "where is this"

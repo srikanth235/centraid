@@ -23,8 +23,7 @@ import { PEER_ENDPOINT_HEADER, PEER_PROOF_HEADER } from "@centraid/tunnel";
 
 import { EnrollmentStore } from "../serve/enrollment-store.js";
 import { GatewayDatabase } from "../serve/gateway-db.js";
-import type { PeerDial } from "../serve/peer-edge-give-client.js";
-import type { PeerRequest } from "../serve/peer-link-client.js";
+import type { PeerDial, PeerRequest } from "../serve/peer-link-client.js";
 import { VaultLinksStore } from "../serve/vault-links-store.js";
 import { makePeerPlaneHandler } from "./peer-plane.js";
 import { makeVaultLinksRouteHandler } from "./vault-links-routes.js";

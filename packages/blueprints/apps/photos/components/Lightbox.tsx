@@ -20,16 +20,17 @@
 // lands on the FRAME's one status line via `notice`.
 import { useCallback, useEffect, useRef, useState } from "react";
 
+import { GrantSheet } from "../../_shared/GrantSheet.tsx";
 import {
   canWriteScope,
   mountedScopes,
   scopeAttr,
 } from "../../_shared/scope-kit.ts";
 import { SAVED_TO_MY_VAULT } from "../../_shared/shared-copy.ts";
-import { ShareSheet } from "../../_shared/ShareSheet.tsx";
 import { displayText, safeMediaUrl } from "../../_shared/untrusted.ts";
 import { toggleFavorite } from "../assets-actions.ts";
 import { isVideoAsset } from "../format.ts";
+import { usePhotoShare } from "../grant-audiences.ts";
 import {
   CloseIcon,
   DownloadIcon,
@@ -148,8 +149,10 @@ export function LightboxShell({
   const downloadHref = safeMediaUrl(asset.content_uri);
   const editable =
     isRenderableUri(asset.content_uri) && !isVideoAsset(asset) && canWrite;
-  // Share opens the ceremony-free commons sheet for this photograph.
-  const [shareOpen, setShareOpen] = useState(false);
+  // Share is a STANDING GRANT over this one photograph (#825): the object-first
+  // entry into the shared grant kit, `media.asset` as its subject. Photos owns
+  // only the roster and the status line; the sheet owns everything else.
+  const share = usePhotoShare(notice);
   const scopes = mountedScopes();
   const actorVaultId = asset.scope_id ?? scopes[0]?.id ?? "";
   const [residentAssetId, setResidentAssetId] = useState<string | null>(null);
@@ -253,11 +256,11 @@ export function LightboxShell({
       id: "copy",
       icon: ShareIcon,
       label: commonsResident ? "Save to my vault" : "Share",
-      // The sheet resolves the true empty state (own vaults sync, linked
-      // people async) itself — this control never disables on a guess.
+      // Never disabled on a guess: whether there is anybody to name is an
+      // asynchronous question, and `share.request` answers it on the status
+      // line rather than greying the control out on a stale reading.
       disabled: false,
-      onRun: () =>
-        commonsResident ? void saveToMyVault() : setShareOpen(true),
+      onRun: () => (commonsResident ? void saveToMyVault() : share.request()),
     },
     download: {
       id: "download",
@@ -302,18 +305,24 @@ export function LightboxShell({
       // SIBLINGS, so it is said once here rather than twice further down.
       data-info={!editing && infoOpen ? "open" : undefined}
     >
-      <ShareSheet
-        open={shareOpen}
-        onClose={() => setShareOpen(false)}
-        sourceScopeId={asset.scope_id ?? mountedScopes()[0]?.id ?? ""}
-        scopes={mountedScopes()}
-        itemType="media.asset"
-        itemIds={[asset.asset_id]}
-        appLabel="Photos"
-        onDone={(outcome) => {
-          notice(outcome.message);
-          if (outcome.ok && outcome.verb === "share") void refresh();
+      <GrantSheet
+        open={share.open}
+        onClose={() => share.close()}
+        audiences={share.audiences}
+        // OBJECT-FIRST: the sheet was opened over THIS photograph, so the
+        // "what" step is a fixed line and the standing list is this
+        // photograph's own. The capability picker is the registry's answer for
+        // `media.asset`, never a choice made here.
+        subject={{
+          subjectType: "media.asset",
+          subjectId: asset.asset_id,
+          // Its own title when it has one; the kit falls back to the
+          // registry's noun rather than to an id dressed up as a name.
+          ...(displayText(asset.title ?? "").trim()
+            ? { label: displayText(asset.title ?? "").trim() }
+            : {}),
         }}
+        onStatus={notice}
       />
       <div className={styles.topbar} ref={barRef}>
         <button

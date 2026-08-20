@@ -4,6 +4,9 @@
 // ship as separate rungs. Rung two (issue #821) is the first genuine upgrade
 // rung: relaxing a CHECK in the baseline text reaches new files only, so
 // vaults already stamped v1 need a vault-preserving rebuild to get there.
+// Rung three (issue #825) adds the grant plane's tables and restates live
+// commons grants into them; it is written `IF NOT EXISTS` + backfill so a
+// fresh file, which got the tables from the baseline, walks it as a no-op.
 // `migrate()` applies rungs transactionally and stamps `PRAGMA user_version`,
 // and that version number is load-bearing beyond this file: it is the
 // downgrade guard
@@ -12,9 +15,10 @@
 // build understands" reported by the gateway's backup/recovery provenance
 // (`packages/server/src/backup/backup-service.ts`,
 // `packages/server/src/backup/recover-internals.ts` read
-// `VAULT_MIGRATIONS.length`). A fresh file walks BOTH rungs (rung two is a
-// faithful re-creation on a table that already has the relaxed CHECK), so the
-// two paths land on the same shape and the same version.
+// `VAULT_MIGRATIONS.length`). A fresh file walks EVERY rung (rung two is a
+// faithful re-creation on a table that already has the relaxed CHECK; rung
+// three creates tables the baseline already made and backfills from an empty
+// commons plane), so the two paths land on the same shape and version.
 
 import type { DatabaseSync } from "node:sqlite";
 
@@ -61,6 +65,7 @@ import { OUTBOX_DDL } from "./outbox.js";
 import { REPLICA_DDL } from "./replica.js";
 import { SEED_DDL } from "./seed.js";
 import { SHARE_COMMONS_DDL } from "./share-commons.js";
+import { SHARE_GRANT_BACKFILL_DDL, SHARE_GRANT_DDL } from "./share-grant.js";
 import { SYNC_CREDENTIAL_DDL, SYNC_DDL } from "./sync.js";
 import { TIME_ORGANIZE_DDL } from "./time-organize.js";
 
@@ -141,12 +146,22 @@ export const VAULT_MIGRATIONS: readonly string[] = [
     RENAME_INBOX_NOTICE_DDL,
     SHARE_COMMONS_DDL,
     COMMONS_RESILIENCE_DDL,
+    // The grant plane (issue #825) after the commons plane it is restated
+    // from: `granted_by` references `core_party`, and rung three's backfill
+    // reads `share_circle_grant` and the roster.
+    SHARE_GRANT_DDL,
   ].join("\n"),
   // Rung two (issue #821): the vault-preserving people_profile rebuild that
   // carries the relaxed `cadence_days >= 0` CHECK to files created before it.
   // See `PEOPLE_PROFILE_CADENCE_FLOOR_DDL` for why a rebuild, and for how the
   // rung handles foreign keys inside the runner's transaction.
   PEOPLE_PROFILE_CADENCE_FLOOR_DDL,
+  // Rung three (issue #825): the grant plane reaches files stamped before it.
+  // The DDL is `IF NOT EXISTS` throughout, so a fresh file — which already got
+  // the tables from the baseline above — walks this rung as a no-op create
+  // plus a backfill that selects from an empty `share_circle_grant`, and the
+  // two paths land on the same shape and version.
+  SHARE_GRANT_BACKFILL_DDL,
 ];
 
 export const JOURNAL_MIGRATIONS: readonly string[] = [JOURNAL_DDL];

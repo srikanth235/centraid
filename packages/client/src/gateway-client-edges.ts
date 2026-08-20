@@ -1,17 +1,20 @@
 /*
  * Renderer-side client for snapshot edges and circle-backed commons (#731 —
- * `packages/server/src/routes/edges-routes.ts` and `edge-answer-routes.ts`).
- * An edge is a one-shot copy of a fixed item set. Ongoing co-owned sharing
- * uses the commons route below.
+ * `packages/server/src/routes/edges-routes.ts`). An edge is a one-shot copy
+ * of a fixed item set between two vaults ONE PERSON owns. Ongoing co-owned
+ * sharing uses the commons route below.
  *
- *   GET  /centraid/_gateway/edges              — this DEVICE's own edges
- *   POST /centraid/_gateway/edges               {mode, kind, itemType, ...}
- *   GET  /centraid/_gateway/edges/pending        — parked asks awaiting the
- *                                                   caller's OWNER decision
- *   POST /centraid/_gateway/edges/<edgeId>/answer {decision: "accept"|"refuse"}
+ *   GET  /centraid/_gateway/edges              — this owner's own edges
+ *
+ * SAME-OWNER ONLY since #825 (ruling G-copy): giving another person a copy is
+ * no longer a verb, so a cross-owner pair is refused with
+ * `cross_owner_give_retired` and sharing with somebody else is a standing
+ * GRANT on `/centraid/_vault/grants` (`react/blueprints/grant-wire.ts`). The
+ * D9 answer calls this module used to carry — `GET …/edges/pending`,
+ * `POST …/edges/<edgeId>/answer` — retired with the routes that served them.
  *
  * This is the People panel's data source, independent of any one blueprint
- * app mount — a share is a fact about the household, not about Photos or
+ * app mount — a placement is a fact about the household, not about Photos or
  * Tasks. `centraid-inline.ts`'s `place()` covers the SAME wire door
  * from inside an app; this module exists because the People panel runs at
  * shell level, outside any app's `window.centraid`.
@@ -40,7 +43,7 @@ export type EdgeStatus =
   | "completed"
   | "failed";
 
-/** One snapshot edge this device created, as `share_edges` answers it. */
+/** One snapshot placement, as `share_edges` answers it. */
 export interface GatewayEdge {
   edgeId: string;
   kind: EdgeKind;
@@ -57,7 +60,7 @@ export interface GatewayEdge {
   updatedAt: string;
 }
 
-/** Every snapshot edge this device created. */
+/** Every snapshot edge this owner made. */
 export async function listGatewayEdges(): Promise<GatewayEdge[]> {
   const { baseUrl, token } = await auth();
   const res = await doFetch(baseUrl, EDGES_PATH, {
@@ -66,33 +69,6 @@ export async function listGatewayEdges(): Promise<GatewayEdge[]> {
   });
   const out = await readJson<{ edges: GatewayEdge[] }>(res, "list edges");
   return out.edges ?? [];
-}
-
-/** Give (copy) a fixed set of items into another vault. Irrevocable the
- *  instant it lands — callers warn BEFORE this fires, never after (D7). */
-export async function giveEdge(input: {
-  originVaultId: string;
-  audienceVaultId: string;
-  itemType: string;
-  itemIds: string[];
-  kind?: EdgeKind;
-}): Promise<GatewayEdge> {
-  const { baseUrl, token } = await auth();
-  const res = await doFetch(baseUrl, EDGES_PATH, {
-    method: "POST",
-    headers: authHeaders(token, "application/json"),
-    body: JSON.stringify({
-      edgeId: crypto.randomUUID(),
-      originVaultId: input.originVaultId,
-      audienceVaultId: input.audienceVaultId,
-      mode: "snapshot",
-      kind: input.kind ?? "add",
-      itemType: input.itemType,
-      itemIds: input.itemIds,
-      verbs: "read",
-    }),
-  });
-  return readJson<GatewayEdge>(res, "give");
 }
 
 export async function createCommons(input: {
@@ -279,48 +255,4 @@ export async function recoverCommons(
     throw new Error(RECOVERY_REFUSALS[reason] ?? `Recovery refused: ${reason}`);
   }
   return readJson<CommonsRecoveryOutcome>(res, "recover shared space");
-}
-
-/** One give parked by the audience's D9 `ask` receive setting — nothing was
- *  written yet; the audience owner has not answered. */
-export interface PendingEdge {
-  edgeId: string;
-  peerVaultId: string;
-  localVaultId: string;
-  itemType: string;
-  itemCount: number;
-  createdAt: string;
-}
-
-/** Every parked ask awaiting a decision from an owner this caller is. */
-export async function listPendingEdges(): Promise<PendingEdge[]> {
-  const { baseUrl, token } = await auth();
-  const res = await doFetch(baseUrl, `${EDGES_PATH}/pending`, {
-    method: "GET",
-    headers: authHeaders(token),
-  });
-  const out = await readJson<{ pending: PendingEdge[] }>(
-    res,
-    "list pending edges"
-  );
-  return out.pending ?? [];
-}
-
-/**
- * Answer a parked ask. `accept` pulls the closure fresh from the origin and
- * projects it — nothing was staged while it waited; `refuse` deletes the
- * pointer row and writes nothing back to the origin (D9: a refusal reaches
- * forward only).
- */
-export async function answerPendingEdge(
-  edgeId: string,
-  decision: "accept" | "refuse"
-): Promise<{ edgeId: string; decision: string }> {
-  const { baseUrl, token } = await auth();
-  const res = await doFetch(baseUrl, `${EDGES_PATH}/${enc(edgeId)}/answer`, {
-    method: "POST",
-    headers: authHeaders(token, "application/json"),
-    body: JSON.stringify({ decision }),
-  });
-  return readJson(res, "answer pending edge");
 }

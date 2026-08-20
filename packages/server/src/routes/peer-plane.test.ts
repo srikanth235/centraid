@@ -438,3 +438,35 @@ describe("route assertion", () => {
     expect(stale.json).toStrictEqual({ state: "stale" });
   });
 });
+
+/*
+ * Copy-as-share retired with the grant plane (#825, ruling G-copy). These are
+ * the frames that carried it; a linked peer asking for them now learns exactly
+ * what it learns about a path that never existed.
+ */
+describe("retired give frames (#825)", () => {
+  it.each([
+    ["POST", "/centraid/_peer/edge/give"],
+    ["GET", "/centraid/_peer/edge/closure/edge-1"],
+    ["POST", "/centraid/_peer/edge/deny"],
+  ])("answers not_found for %s %s", async (method, url) => {
+    const links = openStore();
+    const ticket = links.tickets.mint(LOCAL_VAULT, LOCAL_KEY);
+    links.redeem({
+      ticketId: ticket.ticketId,
+      secret: ticket.secret,
+      peerVaultId: PEER_VAULT,
+      peerPublicKey,
+      route: { endpointId: PEER_ENDPOINT, relayHints: [], assertedAt: 1 },
+      peerLabel: "Priya",
+      localLabel: "Home",
+    });
+    const result = await call(makeHandler(links), {
+      method,
+      url,
+      body: method === "POST" ? { edgeId: "edge-1" } : undefined,
+    });
+    expect(result.status).toBe(404);
+    expect(result.json).toStrictEqual({ state: "not_found" });
+  });
+});

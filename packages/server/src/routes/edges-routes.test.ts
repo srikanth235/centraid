@@ -25,15 +25,27 @@ import type { VaultDb } from "@centraid/vault";
 import { EnrollmentStore } from "../serve/enrollment-store.js";
 import { GatewayDatabase } from "../serve/gateway-db.js";
 import { readEdgeRow } from "../serve/share-edge-row.js";
-import { listQueuedEffects } from "../serve/share-effects.js";
 import { VaultLinksStore } from "../serve/vault-links-store.js";
 import { makeEdgesRouteHandler } from "./edges-routes.js";
+
+/** Effect ids still queued in the outbox. A direct read: the outbox has one
+ *  kind since #825 and no production inspection door of its own. */
+function queuedEffectIds(db: GatewayDatabase): string[] {
+  return (
+    db.db
+      .prepare(
+        "SELECT effect_id FROM share_effects WHERE status = 'queued' ORDER BY created_at"
+      )
+      .all() as unknown as { effect_id: string }[]
+  ).map((row) => row.effect_id);
+}
 
 interface Household {
   gatewayDb: GatewayDatabase;
   links: VaultLinksStore;
   work: VaultDb;
   personal: VaultDb;
+  neighbour: VaultDb;
   laptop: string;
   phone: string;
   handler: ReturnType<typeof makeEdgesRouteHandler>;
@@ -41,6 +53,8 @@ interface Household {
 
 const WORK = "vlt_work";
 const PERSONAL = "vlt_personal";
+/** Another person's vault, co-hosted here and linked to Ada's. */
+const NEIGHBOUR = "vlt_neighbour";
 
 function openVault(root: string, name: string, vaultId: string): VaultDb {
   const dir = path.join(root, name);
@@ -67,25 +81,54 @@ function household(): Household {
     label: "phone",
     ownerId: laptop.ownerId,
   });
+  // A second PERSON on the same box: their own owner, their own vault. This
+  // is the pair `cross_owner_give_retired` exists for.
+  enrollments.enroll({
+    endpointId: "device-neighbour",
+    vaultIds: [NEIGHBOUR],
+    label: "neighbour-laptop",
+    ownerLabel: "Bo",
+  });
   const work = openVault(root, "work", WORK);
   const personal = openVault(root, "personal", PERSONAL);
+  const neighbour = openVault(root, "neighbour", NEIGHBOUR);
   const links = VaultLinksStore.open(gatewayDb);
+  const vaultFor = (vaultId: string): VaultDb | undefined =>
+    vaultId === WORK
+      ? work
+      : vaultId === PERSONAL
+        ? personal
+        : vaultId === NEIGHBOUR
+          ? neighbour
+          : undefined;
   const handler = makeEdgesRouteHandler({
     gatewayDatabase: gatewayDb,
     enrollments,
     links,
-    vaultFor: (vaultId) =>
-      vaultId === WORK ? work : vaultId === PERSONAL ? personal : undefined,
+    vaultFor,
   });
   return {
     gatewayDb,
     links,
     work,
     personal,
+    neighbour,
     laptop: laptop.endpointId,
     phone: phone.endpointId,
     handler,
   };
+}
+
+/** Both owners approve the WORK ↔ NEIGHBOUR link — an APPROVED cross-owner
+ *  pair, so the refusal below is a ruling and not a missing permission. */
+function linkNeighbour(house: Household): void {
+  const link = house.links.propose({
+    fromVaultId: WORK,
+    fromPublicKey: "key-work",
+    toVaultId: NEIGHBOUR,
+    toPublicKey: "key-neighbour",
+  });
+  house.links.approve(link.linkId, NEIGHBOUR);
 }
 
 async function call(
@@ -276,8 +319,7 @@ describe("POST/GET /centraid/_gateway/edges", () => {
     );
     expect(noteCount(house.personal)).toBe(0);
     // The obligation outlives the attempt: still queued, ready to retry.
-    const queued = listQueuedEffects(house.gatewayDb, "deliver-give");
-    expect(queued.map((row) => row.effectId)).toStrictEqual([
+    expect(queuedEffectIds(house.gatewayDb)).toStrictEqual([
       "give:edge-parked",
     ]);
 
@@ -287,7 +329,44 @@ describe("POST/GET /centraid/_gateway/edges", () => {
     expect(readEdgeRow(house.gatewayDb, "edge-parked")!.status).toBe(
       "completed"
     );
-    expect(listQueuedEffects(house.gatewayDb, "deliver-give")).toHaveLength(0);
+    expect(queuedEffectIds(house.gatewayDb)).toStrictEqual([]);
+  });
+
+  test("a cross-owner pair is refused as retired, while same-owner placement still lands (#825)", async () => {
+    const house = household();
+    linkNeighbour(house);
+    const noteId = seedNote(house.work, "for-bo");
+    const refused = await call(house, {
+      method: "POST",
+      deviceId: house.laptop,
+      body: {
+        edgeId: "edge-to-bo",
+        originVaultId: WORK,
+        audienceVaultId: NEIGHBOUR,
+        mode: "snapshot",
+        kind: "add",
+        itemType: "core.content_item",
+        itemIds: [noteId],
+        verbs: "read",
+      },
+    });
+    // Not `not_found`: the link is real and approved, so hiding the pair would
+    // be a lie. The verb itself is gone, and the copy says what replaced it.
+    expect(refused.status).toBe(400);
+    expect(refused.body.error).toBe("cross_owner_give_retired");
+    expect(refused.body.message).toBe(
+      "giving a copy to another person's vault has been replaced by sharing — grant them the album, folder or document instead"
+    );
+    // Refused at the door: no edge row, no effect, nothing in Bo's vault.
+    expect(readEdgeRow(house.gatewayDb, "edge-to-bo")).toBeUndefined();
+    expect(queuedEffectIds(house.gatewayDb)).toStrictEqual([]);
+    expect(noteCount(house.neighbour)).toBe(0);
+
+    // The owner's own two vaults are untouched by the retirement.
+    const placed = await give(house, house.laptop, "edge-own", [noteId]);
+    expect(placed.status).toBe(200);
+    expect(placed.body.status).toBe("completed");
+    expect(noteCount(house.personal)).toBe(1);
   });
 
   test("a malformed scope is refused at the wire door, loudly", async () => {

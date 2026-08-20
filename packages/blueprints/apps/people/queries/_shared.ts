@@ -1,12 +1,18 @@
 /**
  * The sharing-plane reads People's queries make about a person, factored out
  * once the roster (people.ts), the profile (person.ts) and the summary
- * (dashboard.ts) all needed the same bounded joins over the vault's share
+ * (dashboard.ts) all needed the same bounded reads over the vault's share
  * tables: who is linked to a vault of their own
  * (share.party_vault_binding — packages/vault/src/schema/share-commons.ts),
- * and what has been shared with them (the circle_grant × circle_member ×
- * commons_member_state join that packages/vault/src/share/commons-lifecycle.ts
- * `listCommonsGrants` runs steward-side, here scoped to one member party).
+ * and which shared-space invitations are still awaiting their answer.
+ *
+ * WHAT IS SHARED WITH A PERSON IS NOT READ HERE any more (#825). It used to be
+ * a commons-era projection — the circle_grant × circle_member ×
+ * commons_member_state join — that no surface drew once People moved to the
+ * grant plane; the person screen reads standing grants from
+ * `GET /centraid/_vault/grants?partyId=` through the share kit's own door
+ * (`apps/people/grant-dashboard.ts`), which answers for both seats and knows
+ * about delivery, which this join never did.
  *
  * NOT a query itself — the dispatcher resolves a query name straight to
  * `queries/<name>.ts` (packages/server/src/engine/handlers/dispatcher.ts), so
@@ -35,27 +41,6 @@ export interface BindingRow {
   linked_at: string;
 }
 
-interface RawMembership {
-  circle_id: string;
-  party_id: string;
-  capability?: "read" | "read+write" | null;
-}
-
-interface RawGrant {
-  grant_id: string;
-  circle_id: string;
-  container_type: string;
-  container_id: string;
-  created_at: string;
-}
-
-interface RawMemberState {
-  grant_id: string;
-  party_id: string;
-  status: "invited" | "current" | "refused";
-  accepted_at?: string | null;
-}
-
 interface RawInvitation {
   invitation_id: string;
   grant_id: string;
@@ -63,17 +48,6 @@ interface RawInvitation {
   capability: "read" | "read+write";
   status: "pending" | "accepted" | "refused";
   created_at: string;
-}
-
-/** One thing the owner has shared with this person, as the app renders it. */
-export interface SharedContainer {
-  grant_id: string;
-  container_type: string;
-  container_id: string;
-  container_label: string | null;
-  capability: "read" | "read+write";
-  status: "invited" | "current" | "refused";
-  since: string;
 }
 
 /** One invitation sent to this person that they have not answered yet. */
@@ -88,7 +62,6 @@ export interface PendingInvite {
 export interface PersonShareLinks {
   vaults: Array<{ binding_id: string; vault_id: string; linked_at: string }>;
   pending_invites: PendingInvite[];
-  shared_with_them: SharedContainer[];
 }
 
 /**
@@ -119,30 +92,23 @@ export async function readLiveBindings(
 }
 
 /**
- * Everything the sharing plane knows about one person: their live vault
- * bindings, the invitations still awaiting their answer, and the containers
- * shared with them. `null` when any of those reads is unavailable — the sharing
- * plane is one story, and half of it would read as "nothing is shared" rather
- * than "we cannot see".
+ * What the sharing plane knows about one person: their live vault bindings and
+ * the invitations still awaiting their answer. `null` when either read is
+ * unavailable — the sharing plane is one story, and half of it would read as
+ * "nothing is shared" rather than "we cannot see".
  */
 export async function readPersonShareLinks(
   vault: VaultApi,
   partyId: string
 ): Promise<PersonShareLinks | null> {
   try {
-    const [bindings, memberships, invitations] = await Promise.all([
+    const [bindings, invitations] = await Promise.all([
       vault.read({
         entity: "share.party_vault_binding",
         where: [
           { column: "party_id", op: "eq", value: partyId },
           { column: "revoked_at", op: "is-null" },
         ],
-        purpose: PURPOSE,
-      }),
-      vault.read({
-        entity: "social.circle_member",
-        where: [{ column: "party_id", op: "eq", value: partyId }],
-        limit: 500,
         purpose: PURPOSE,
       }),
       vault.read({
@@ -153,51 +119,8 @@ export async function readPersonShareLinks(
       }),
     ]);
     const bindingRows = (bindings.rows ?? []) as unknown as BindingRow[];
-    const membershipRows = (memberships.rows ??
-      []) as unknown as RawMembership[];
     const invitationRows = (invitations.rows ??
       []) as unknown as RawInvitation[];
-    const circleIds = [...new Set(membershipRows.map((m) => m.circle_id))];
-
-    // The commons join, member-side: their circles' live grants, kept only
-    // where a roster row names them (mirrors listCommonsGrants' inner join).
-    const grants = circleIds.length
-      ? await vault.read({
-          entity: "share.circle_grant",
-          where: [
-            { column: "circle_id", op: "in", value: circleIds },
-            { column: "revoked_at", op: "is-null" },
-          ],
-          limit: 500,
-          purpose: PURPOSE,
-        })
-      : { rows: [] };
-    const grantRows = (grants.rows ?? []) as unknown as RawGrant[];
-    const grantIds = grantRows.map((g) => g.grant_id);
-    const states = grantIds.length
-      ? await vault.read({
-          entity: "share.commons_member_state",
-          where: [
-            { column: "grant_id", op: "in", value: grantIds },
-            { column: "party_id", op: "eq", value: partyId },
-          ],
-          limit: 500,
-          purpose: PURPOSE,
-        })
-      : { rows: [] };
-    const stateRows = (states.rows ?? []) as unknown as RawMemberState[];
-
-    const stateByGrant = new Map(stateRows.map((s) => [s.grant_id, s]));
-    const capabilityByCircle = new Map(
-      membershipRows.map((m) => [m.circle_id, m.capability ?? "read"] as const)
-    );
-    // The invitation is the only place a human-readable container name is
-    // kept; without one the caller words the row from container_type.
-    const labelByGrant = new Map(
-      invitationRows.map(
-        (i) => [i.grant_id, i.container_label ?? null] as const
-      )
-    );
 
     return {
       vaults: bindingRows.map((b) => ({
@@ -213,21 +136,6 @@ export async function readPersonShareLinks(
           capability: i.capability,
           created_at: i.created_at,
         })),
-      shared_with_them: grantRows.flatMap((grant) => {
-        const state = stateByGrant.get(grant.grant_id);
-        if (!state) return [];
-        return [
-          {
-            grant_id: grant.grant_id,
-            container_type: grant.container_type,
-            container_id: grant.container_id,
-            container_label: labelByGrant.get(grant.grant_id) ?? null,
-            capability: capabilityByCircle.get(grant.circle_id) ?? "read",
-            status: state.status,
-            since: state.accepted_at ?? grant.created_at,
-          },
-        ];
-      }),
     };
   } catch {
     return null;

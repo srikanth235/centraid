@@ -12,8 +12,6 @@ import type {
   CommonsRecoveryOutcome,
   GatewayEdge,
   GatewayLink,
-  PendingEdge,
-  ReceiveSetting,
 } from "../../gateway-client.js";
 import { SHARING_INVALID_INVITE } from "../../sharing-copy.js";
 import { startVisibilityTicker } from "../shell/routes/visibility-ticker.js";
@@ -64,12 +62,15 @@ function parseCommonsInvite(value: string): CommonsInviteClaim | null {
   }
 }
 
+/** Which of the caller's OWN vaults a placement landed in. Cross-owner gives
+ *  retired (#825, ruling G-copy), so the other end of an edge is never another
+ *  person — labelling it "Linked person" said something that cannot be true. */
 function vaultLabel(vaultId: string, links: readonly GatewayLink[]): string {
   for (const link of links) {
-    if (link.vaultA === vaultId) return link.labelA ?? "Linked person";
-    if (link.vaultB === vaultId) return link.labelB ?? "Linked person";
+    if (link.vaultA === vaultId) return link.labelA ?? shortId(vaultId);
+    if (link.vaultB === vaultId) return link.labelB ?? shortId(vaultId);
   }
-  return "Linked person";
+  return shortId(vaultId);
 }
 
 export interface SharingCardProps {
@@ -81,17 +82,7 @@ export interface SharingCardProps {
     otherVaultId: string
   ) => Promise<GatewayLink>;
   onApproveLink: (linkId: string) => Promise<GatewayLink>;
-  loadReceiveSetting: (linkId: string) => Promise<ReceiveSetting>;
-  onSetReceiveSetting: (
-    linkId: string,
-    setting: ReceiveSetting
-  ) => Promise<ReceiveSetting>;
   loadEdges: () => Promise<GatewayEdge[]>;
-  loadPending: () => Promise<PendingEdge[]>;
-  onAnswerPending: (
-    edgeId: string,
-    decision: "accept" | "refuse"
-  ) => Promise<unknown>;
   loadCommonsInvitations: (
     actorVaultId: string
   ) => Promise<CommonsInvitation[]>;
@@ -131,8 +122,6 @@ export default function SharingCard(props: SharingCardProps): JSX.Element {
     onProposeLink,
     onApproveLink,
     loadEdges,
-    loadPending,
-    onAnswerPending,
     loadCommonsInvitations,
     onClaimCommonsInvitation,
     onAnswerCommonsInvitation,
@@ -143,7 +132,6 @@ export default function SharingCard(props: SharingCardProps): JSX.Element {
   } = props;
   const [links, setLinks] = useState<GatewayLink[]>([]);
   const [edges, setEdges] = useState<GatewayEdge[]>([]);
-  const [pending, setPending] = useState<PendingEdge[]>([]);
   const [commonsInvitations, setCommonsInvitations] = useState<
     CommonsInvitation[]
   >([]);
@@ -163,7 +151,6 @@ export default function SharingCard(props: SharingCardProps): JSX.Element {
     void Promise.all([
       loadLinks(),
       loadEdges(),
-      loadPending(),
       Promise.all(
         (ownVaultKey ? ownVaultKey.split("\0") : []).map(loadCommonsInvitations)
       ).then((rows) => rows.flat()),
@@ -175,14 +162,12 @@ export default function SharingCard(props: SharingCardProps): JSX.Element {
         ([
           nextLinks,
           nextEdges,
-          nextPending,
           nextCommonsInvitations,
           nextCommonsRecovery,
         ]) => {
           if (!mountedRef.current) return;
           setLinks(nextLinks);
           setEdges(nextEdges);
-          setPending(nextPending);
           setCommonsInvitations(nextCommonsInvitations);
           setCommonsRecovery(nextCommonsRecovery);
           setErrorMessage(null);
@@ -199,7 +184,6 @@ export default function SharingCard(props: SharingCardProps): JSX.Element {
     loadCommonsRecovery,
     loadEdges,
     loadLinks,
-    loadPending,
     ownVaultKey,
   ]);
 
@@ -265,58 +249,6 @@ export default function SharingCard(props: SharingCardProps): JSX.Element {
                 }
               : {})}
           />
-        ) : null}
-
-        {pending.length ? (
-          <div className={styles.section}>
-            <h3 className={styles.sectionTitle}>Waiting for your decision</h3>
-            <div className={deviceStyles.list}>
-              {pending.map((row) => (
-                <div key={row.edgeId} className={deviceStyles.row}>
-                  <Icon name="Share" size={15} />
-                  <div className={deviceStyles.main}>
-                    <div className={deviceStyles.name}>
-                      {vaultLabel(row.peerVaultId, links)} shared{" "}
-                      {row.itemCount} {row.itemType}
-                    </div>
-                    <div className={deviceStyles.meta}>
-                      Nothing is written until you accept.
-                    </div>
-                  </div>
-                  <div className={deviceStyles.rowAction}>
-                    <button
-                      type="button"
-                      className={cx(
-                        buttonCss.btn,
-                        buttonCss.sm,
-                        controlsCss.soft
-                      )}
-                      disabled={busyRow === row.edgeId}
-                      onClick={() =>
-                        void act(row.edgeId, () =>
-                          onAnswerPending(row.edgeId, "accept")
-                        )
-                      }
-                    >
-                      Accept
-                    </button>{" "}
-                    <button
-                      type="button"
-                      className={cx(buttonCss.btn, buttonCss.sm)}
-                      disabled={busyRow === row.edgeId}
-                      onClick={() =>
-                        void act(row.edgeId, () =>
-                          onAnswerPending(row.edgeId, "refuse")
-                        )
-                      }
-                    >
-                      Refuse
-                    </button>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
         ) : null}
 
         <div className={styles.section}>
@@ -440,7 +372,9 @@ export default function SharingCard(props: SharingCardProps): JSX.Element {
         ) : null}
 
         <div className={styles.section}>
-          <h3 className={styles.sectionTitle}>Recent direct copies</h3>
+          <h3 className={styles.sectionTitle}>
+            Recent copies between your vaults
+          </h3>
           {completed.length ? (
             <div className={deviceStyles.list}>
               {completed.map((edge) => (
@@ -464,7 +398,9 @@ export default function SharingCard(props: SharingCardProps): JSX.Element {
               ))}
             </div>
           ) : (
-            <div className={gwStyles.panelEmpty}>No direct copies yet.</div>
+            <div className={gwStyles.panelEmpty}>
+              No copies between your vaults yet.
+            </div>
           )}
         </div>
 
@@ -533,8 +469,6 @@ export default function SharingCard(props: SharingCardProps): JSX.Element {
                     onApprove={() =>
                       void act(link.linkId, () => onApproveLink(link.linkId))
                     }
-                    loadReceiveSetting={props.loadReceiveSetting}
-                    onSetReceiveSetting={props.onSetReceiveSetting}
                   />
                 );
               })}

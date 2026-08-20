@@ -7,7 +7,6 @@ import type {
   GatewayDeviceTicket,
   GatewayDeviceTicketInput,
   GatewayLink,
-  PendingEdge,
 } from "../../gateway-client.js";
 import type { OpsState } from "../shell/opsBar.js";
 import type { OwnerScope } from "../shell/ownerScope.js";
@@ -67,7 +66,6 @@ const NO_REVOKE = async (): Promise<{ removed: boolean }> => ({
   removed: false,
 });
 const NO_LINKS = async (): Promise<GatewayLink[]> => [];
-const NO_PENDING = async (): Promise<PendingEdge[]> => [];
 
 /** How often the page re-reads what is waiting on somebody's decision. */
 const PENDING_POLL_MS = 30_000;
@@ -166,16 +164,15 @@ function otherSide(
 
 /**
  * What is waiting on a decision: a link the other side proposed and this owner
- * has not answered, and a parked share nobody has accepted yet. Both are
- * "somebody asked" — the page counts them together and the status line reads
- * the first one out loud.
+ * has not answered. A parked incoming SHARE used to count here too; copy-as-
+ * share retired (#825, ruling G-copy), and a grant's audience answers its
+ * channel invitation in People rather than on this page.
  */
 function pendingRequests(
   links: readonly GatewayLink[],
-  pending: readonly PendingEdge[],
   ownVaultIds: readonly string[]
 ): PendingRequest[] {
-  const fromLinks = links
+  return links
     .filter((link) => !link.revoked && !link.approved)
     .map((link) => ({ link, side: otherSide(link, ownVaultIds) }))
     .filter(({ side }) => !side.mineApproved)
@@ -183,11 +180,6 @@ function pendingRequests(
       id: `link:${link.linkId}`,
       sentence: `${side.label} asked to connect on ${dateLabel(link.createdAt)}.`,
     }));
-  const fromEdges = pending.map((edge) => ({
-    id: `edge:${edge.edgeId}`,
-    sentence: `Somebody asked to send you ${edge.itemCount} ${edge.itemType} on ${dateLabel(edge.createdAt)}.`,
-  }));
-  return [...fromLinks, ...fromEdges];
 }
 
 /** The pending half of the page's health, polled beside the roster. */
@@ -196,9 +188,7 @@ function usePendingRequests(
   ownVaultIds: readonly string[]
 ): PendingRequest[] {
   const loadLinks = sharing?.loadLinks ?? NO_LINKS;
-  const loadPending = sharing?.loadPending ?? NO_PENDING;
   const [links, setLinks] = useState<GatewayLink[]>([]);
-  const [pending, setPending] = useState<PendingEdge[]>([]);
   const ownKey = ownVaultIds.join("\0");
   useEffect(() => {
     let live = true;
@@ -210,11 +200,6 @@ function usePendingRequests(
         // A gateway that won't answer about links has already said so through
         // the roster's own error; the health line just stays quiet.
         .catch(() => undefined);
-      void loadPending()
-        .then((rows) => {
-          if (live) setPending(rows);
-        })
-        .catch(() => undefined);
     };
     read();
     const stop = startVisibilityTicker(read, PENDING_POLL_MS);
@@ -222,10 +207,10 @@ function usePendingRequests(
       live = false;
       stop();
     };
-  }, [loadLinks, loadPending]);
+  }, [loadLinks]);
   return useMemo(
-    () => pendingRequests(links, pending, ownKey ? ownKey.split("\0") : []),
-    [links, ownKey, pending]
+    () => pendingRequests(links, ownKey ? ownKey.split("\0") : []),
+    [links, ownKey]
   );
 }
 

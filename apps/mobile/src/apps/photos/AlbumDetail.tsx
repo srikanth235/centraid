@@ -23,7 +23,7 @@ import {
   surfaceWriteFailure,
   surfaceWriteOutcome,
 } from "../../kit/replica/write-outcome";
-import ShareSheet from "../../kit/share/ShareSheet";
+import GrantSheet from "../../kit/share/GrantSheet";
 import { useTheme } from "../../kit/theme";
 import type { NativeWriteResult } from "../../lib/replica/native-session";
 import {
@@ -33,6 +33,7 @@ import {
 import type { PhotosScreenProps } from "../../navigation";
 import { Store } from "../../storage";
 import { makeStyles } from "./AlbumDetail.styles";
+import { usePhotoGrantEntry } from "./photo-grants";
 import {
   NO_DOWNLOAD_REASON,
   batchAddToAlbum,
@@ -44,7 +45,7 @@ import PhotosScreen from "./PhotosScreen";
 import PhotoTimeline from "./PhotoTimeline";
 import { sectionPhotoAssets } from "./timeline-model";
 import { usePhotoTimeline } from "./timeline-source";
-import { useCopyToVault } from "./use-copy-to-vault";
+import { usePhotoSelectionShare } from "./use-photo-selection-share";
 import { READ_ONLY_VAULT_REASON } from "./viewer-model";
 
 const KEEP_ORIGINALS_KEY = "photos.keepOriginalAlbums";
@@ -249,9 +250,13 @@ export default function AlbumDetail({
   };
   const selectedVaultAssets = vaultAssets(assets, selection);
   // One handler for the third selection target, shared by every Photos shelf
-  // (`use-copy-to-vault.ts`) so the picker moment and the refusal grammar
-  // cannot drift between them.
-  const copyToVault = useCopyToVault(
+  // (`use-photo-selection-share.ts`) so the grant sheet's moment and the
+  // refusal grammar cannot drift between them.
+  // The ALBUM's own grant (`core.collection`) — a different subject from the
+  // selection's, so a different entry. Membership does the rest: a photograph
+  // added to a shared album reaches the same audience with no second gesture.
+  const albumShare = usePhotoGrantEntry(postStatus);
+  const share = usePhotoSelectionShare(
     () => selectedVaultAssets,
     () => setSelection(new Set())
   );
@@ -309,7 +314,7 @@ export default function AlbumDetail({
   const selectionBar = {
     count: selection.size,
     shelf: "normal" as const,
-    copyLabel: copyToVault.copyLabel,
+    copyLabel: share.copyLabel,
     readOnlyReason: writeBlockedReason,
     favorite: canChangeAlbum
       ? {
@@ -322,8 +327,8 @@ export default function AlbumDetail({
     addToAlbum: canChangeAlbum
       ? { run: () => addToAnotherAlbum() }
       : { unavailableReason: writeBlockedReason! },
-    // Share uses the same ceremony-free commons destination list everywhere.
-    share: copyToVault.handler,
+    // Share is one standing grant over one photograph, through the one kit.
+    share: share.handler,
     download: { unavailableReason: NO_DOWNLOAD_REASON },
     trash: canChangeAlbum
       ? {
@@ -463,6 +468,14 @@ export default function AlbumDetail({
               </Pressable>
             ) : null}
             <Pressable
+              accessibilityLabel="Share album"
+              accessibilityRole="button"
+              onPress={() => albumShare.request()}
+              style={styles.headerBtn}
+            >
+              <Icon name="share" size={20} color={colors.text} />
+            </Pressable>
+            <Pressable
               accessibilityLabel="Rename album"
               accessibilityRole="button"
               accessibilityState={{ disabled: !canChangeAlbum }}
@@ -573,10 +586,23 @@ export default function AlbumDetail({
           </Pressable>
         </View>
       </Modal>
-      <ShareSheet
-        visible={copyToVault.picking}
-        onClose={() => copyToVault.dismiss()}
-        {...copyToVault.sheetProps}
+      <GrantSheet
+        visible={share.visible}
+        onClose={() => share.dismiss()}
+        {...share.sheetProps}
+      />
+      <GrantSheet
+        visible={albumShare.visible}
+        onClose={() => albumShare.dismiss()}
+        audiences={albumShare.audiences}
+        subject={{
+          subjectType: "core.collection",
+          subjectId: route.params.albumId,
+          ...(String(album?.name ?? "").trim()
+            ? { label: String(album?.name).trim() }
+            : {}),
+        }}
+        onStatus={postStatus}
       />
     </PhotosScreen>
   );

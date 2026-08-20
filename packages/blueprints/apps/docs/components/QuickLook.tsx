@@ -29,10 +29,10 @@
 import { useState } from "react";
 import type { ReactNode } from "react";
 
-import { mountedScopes } from "../../_shared/scope-kit.ts";
-import { ShareSheet } from "../../_shared/ShareSheet.tsx";
+import { GrantSheet } from "../../_shared/GrantSheet.tsx";
 import { STAGE_ACTIONS } from "../document-copy.ts";
 import { fmtBytes, typeMeta } from "../format.ts";
+import type { DocsShareHost } from "../grant-audiences.ts";
 import { I, STAGE_ICONS } from "../icons.ts";
 import { printDoc, printKind, printRefusal } from "../print.ts";
 import type { DriveDoc } from "../types.ts";
@@ -165,6 +165,7 @@ export function QuickLook({
   onToggleStar,
   onRename,
   onTrash,
+  shareHost,
 }: {
   doc: DriveDoc;
   rows: DriveDoc[];
@@ -181,6 +182,9 @@ export function QuickLook({
   onToggleStar?: () => void;
   onRename?: () => void;
   onTrash?: () => void;
+  /** The roster and status line Share needs, or `null` where this seat has no
+   *  grant plane — the stage then draws no Share verb at all. */
+  shareHost: DocsShareHost | null;
 }) {
   const m = typeMeta(doc.media_type, doc.title);
   const idx = rows.findIndex((d) => d.document_id === doc.document_id);
@@ -189,7 +193,8 @@ export function QuickLook({
   // asked yet.
   const [infoOpen, setInfoOpen] = useState(false);
   const [shareOpen, setShareOpen] = useState(false);
-  const [shareStatus, setShareStatus] = useState("");
+  // The stage reports through the app's one status line, never its own.
+  const handleStatus = (message: string): void => shareHost?.onStatus(message);
   const printable = printKind(doc) !== null;
   // The stage's own region, read for ONE thing: the src the picture is
   // currently showing. Off the gateway origin that is a `blob:` URL the shell
@@ -239,12 +244,16 @@ export function QuickLook({
     ...(printable ? {} : { reason: printRefusal(doc) }),
     onRun: handlePrint,
   };
-  const place: StageAction = {
-    id: "place",
-    label: STAGE_ACTIONS.place,
-    svg: STAGE_ICONS.place,
-    onRun: () => setShareOpen(true),
-  };
+  // Drawn only where the grant plane can be reached: a Share the host cannot
+  // fulfil is a verb that exists to refuse.
+  const share: StageAction | null = shareHost
+    ? {
+        id: "share",
+        label: STAGE_ACTIONS.share,
+        svg: STAGE_ICONS.share,
+        onRun: () => setShareOpen(true),
+      }
+    : null;
   const properties: StageAction = {
     id: "properties",
     label: STAGE_ACTIONS.properties,
@@ -262,10 +271,10 @@ export function QuickLook({
       }
     : null;
 
-  const barActions = [star, download, print, place, properties].filter(
+  const barActions = [star, download, print, share, properties].filter(
     (a): a is StageAction => a !== null
   );
-  const phoneActions = [place, star, properties, download, trash].filter(
+  const phoneActions = [share, star, properties, download, trash].filter(
     (a): a is StageAction => a !== null
   );
 
@@ -298,18 +307,22 @@ export function QuickLook({
       aria-modal="true"
       aria-label="Quick look"
     >
-      {/* Place… opens the same ceremony-free commons sheet every container in
-          the product opens; the stage does not invent a second sharing flow. */}
-      <ShareSheet
-        open={shareOpen}
-        onClose={() => setShareOpen(false)}
-        sourceScopeId={mountedScopes()[0]?.id ?? ""}
-        scopes={mountedScopes()}
-        itemType="core.document"
-        itemIds={[doc.document_id]}
-        appLabel="Docs"
-        onDone={(outcome) => setShareStatus(outcome.message)}
-      />
+      {/* Share opens the one shared grant sheet, object-first over the
+          document already on the stage; the stage invents no sharing flow of
+          its own and keeps no share state beyond "is it open". */}
+      {shareHost ? (
+        <GrantSheet
+          open={shareOpen}
+          onClose={() => setShareOpen(false)}
+          audiences={shareHost.audiences}
+          subject={{
+            subjectType: "core.document",
+            subjectId: doc.document_id,
+            ...(doc.title ? { label: doc.title } : {}),
+          }}
+          onStatus={handleStatus}
+        />
+      ) : null}
       <div className={styles.topbar}>
         {/* Close is the FIRST thing in the bar, at the leading edge: it is the
             way back out of a surface that covers everything, and the way out
@@ -340,11 +353,6 @@ export function QuickLook({
       <div className={styles.body} data-quicklook-body="">
         {body}
       </div>
-      {shareStatus ? (
-        <output className={styles.shareStatus} aria-live="polite">
-          {shareStatus}
-        </output>
-      ) : null}
       {/* The status line: where in the set this document is, and where its
           bytes are — the one custody fact a stage can state and a row cannot
           fit. */}

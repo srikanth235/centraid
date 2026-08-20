@@ -4,8 +4,9 @@
  * same questions could only be asked through a route, a database and a
  * transport, which is why four files could disagree about them.
  *
- * The two transports' behaviour over the SAME transitions is pinned by
- * `peer-remote-give.test.ts` (peer) and `edges-routes.test.ts` (local).
+ * The one surviving transport's behaviour over these transitions is pinned by
+ * `edges-routes.test.ts`; the peer transport retired with copy-as-share
+ * (#825, ruling G-copy), and with it the four peer answer signals.
  */
 
 import { describe, expect, test } from "vitest";
@@ -13,14 +14,8 @@ import { describe, expect, test } from "vitest";
 import { effectIdFor, reduceEdge } from "./share-coordinator.js";
 import type { EdgeFacts, EdgeSignal, EdgeState } from "./share-coordinator.js";
 
-const ADD: EdgeFacts = {
-  edgeId: "edge-1",
-  kind: "add",
-  delivery: "local",
-  crossOwner: false,
-};
+const ADD: EdgeFacts = { edgeId: "edge-1", kind: "add" };
 const MOVE: EdgeFacts = { ...ADD, kind: "move" };
-const PEER: EdgeFacts = { ...ADD, delivery: "peer", crossOwner: true };
 
 function queued(overrides: Partial<EdgeState> = {}): EdgeState {
   return {
@@ -33,18 +28,13 @@ function queued(overrides: Partial<EdgeState> = {}): EdgeState {
   };
 }
 
-describe("reduceEdge — one lifecycle for both localities", () => {
-  test("begin emits exactly one deliver-give effect, whatever the locality", () => {
-    for (const facts of [ADD, PEER]) {
+describe("reduceEdge — one lifecycle for the placement plane", () => {
+  test("begin emits exactly one deliver-give effect", () => {
+    for (const facts of [ADD, MOVE]) {
       const outcome = reduceEdge(facts, queued(), { type: "begin" });
       expect(outcome.state.status).toBe("in-flight");
       expect(outcome.effects).toStrictEqual([
-        {
-          kind: "deliver-give",
-          edgeId: facts.edgeId,
-          delivery: facts.delivery,
-          crossOwner: facts.crossOwner,
-        },
+        { kind: "deliver-give", edgeId: facts.edgeId },
       ]);
     }
   });
@@ -103,44 +93,37 @@ describe("reduceEdge — one lifecycle for both localities", () => {
     ).toBe(false);
   });
 
-  test("a refusal is a state, and a terminal edge absorbs later signals", () => {
-    const denied = reduceEdge(PEER, queued({ status: "parked" }), {
-      type: "give-denied",
-      reason: "recipient declined this share",
-    });
-    expect(denied.state.status).toBe("denied");
-    // A late-arriving retry of the same relay clobbers nothing.
-    for (const signal of [
-      { type: "begin" },
-      { type: "target-projected", targetItemIds: ["x"] },
-      { type: "give-denied", reason: "again" },
-    ] satisfies EdgeSignal[]) {
-      expect(reduceEdge(PEER, denied.state, signal).changed).toBe(false);
-    }
+  test("a terminal edge absorbs every later signal", () => {
     const completed = reduceEdge(ADD, queued(), {
       type: "target-projected",
       targetItemIds: ["x"],
     }).state;
-    expect(
-      reduceEdge(ADD, completed, { type: "give-denied", reason: "late" })
-        .changed
-    ).toBe(false);
+    expect(completed.status).toBe("completed");
+    for (const signal of [
+      { type: "begin" },
+      { type: "target-projected", targetItemIds: ["y"] },
+      { type: "settled" },
+      { type: "give-failed", reason: "late" },
+    ] satisfies EdgeSignal[]) {
+      expect(reduceEdge(ADD, completed, signal).changed).toBe(false);
+    }
   });
 
-  test("an ask and an unreachable peer both park, and stay retryable", () => {
-    const asked = reduceEdge(PEER, queued({ status: "in-flight" }), {
-      type: "give-asked",
-    });
-    expect(asked.state.status).toBe("parked");
-    expect(asked.state.reason).toBe("awaiting recipient decision");
-    const parked = reduceEdge(PEER, asked.state, {
-      type: "give-parked",
-      reason: "peer unreachable: offline",
+  test("a parked edge stays retryable — parked is not terminal", () => {
+    const parked = reduceEdge(ADD, queued({ status: "in-flight" }), {
+      type: "give-failed",
+      reason: "the audience vault is not open here",
     });
     expect(parked.state.status).toBe("parked");
-    // Parked is NOT terminal — a later attempt may still complete the edge.
+    // Repeating the same reason is a legal no-op, not a second write.
     expect(
-      reduceEdge(PEER, parked.state, {
+      reduceEdge(ADD, parked.state, {
+        type: "give-failed",
+        reason: "the audience vault is not open here",
+      }).changed
+    ).toBe(false);
+    expect(
+      reduceEdge(ADD, parked.state, {
         type: "target-projected",
         targetItemIds: ["x"],
       }).state.status
@@ -172,24 +155,6 @@ describe("reduceEdge — one lifecycle for both localities", () => {
   });
 
   test("effect ids are derived, so a replay lands on the same row", () => {
-    expect(
-      effectIdFor({
-        kind: "deliver-give",
-        edgeId: "e",
-        delivery: "peer",
-        crossOwner: true,
-      })
-    ).toBe("give:e");
-    expect(
-      effectIdFor({
-        kind: "pull-blob",
-        edgeId: "e",
-        linkId: "l",
-        localVaultId: "v",
-        sha256: "abc",
-        size: 1,
-        tmpPath: "/tmp/x",
-      })
-    ).toBe("pull:e:abc");
+    expect(effectIdFor({ kind: "deliver-give", edgeId: "e" })).toBe("give:e");
   });
 });

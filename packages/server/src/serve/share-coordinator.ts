@@ -1,13 +1,9 @@
 /*
  * ONE reducer for the edge lifecycle (issue #750 abstraction 5).
  *
- * Before this, every route that touched an edge wrote its own UPDATE:
- * `edges-routes.ts` parked on an exception, `edges-reconcile.ts` walked
- * queued → in-flight → completed, `edges-reconcile-remote.ts` mapped six peer
- * outcomes to statuses of its own, and `peer-edge-give-route.ts` denied from
- * yet another place. Four hand-rolled state machines over one column meant
- * "what may follow what" had no answer — only four implementations that
- * happened to agree.
+ * Before this, four routes each wrote their own UPDATE over `share_edges`:
+ * four hand-rolled state machines over one column meant "what may follow
+ * what" had no answer — only four implementations that happened to agree.
  *
  * This module is that answer, as PURE functions: `(state, signal) → {state,
  * effects}`. It knows nothing about SQLite, routes, vaults or the network.
@@ -15,17 +11,18 @@
  * and `share-effect-executor.ts` is the only thing that runs the effects it
  * emits.
  *
- * Locality does not fork the domain (D3). A give to a vault on this machine
- * and a give across the world produce the SAME `deliver-give` effect from the
- * SAME transition; `delivery` rides along only so the executor can pick a
- * transport (`edges-reconcile.ts`'s direct vault calls, or
- * `edges-reconcile-remote.ts`'s peer dial). If a transition ever needed to
- * ask which one it was, that would be the bug this shape exists to prevent.
+ * ONE LOCALITY REMAINS (#825, ruling G-copy). Copy-as-share retired with the
+ * grant plane: `POST /centraid/_gateway/edges` refuses a cross-owner pair, so
+ * every edge this reducer can still see is a same-owner placement between two
+ * vaults open in this process. The peer delivery arm, the cross-owner closure
+ * gate and the four peer answer signals (`give-served`, `give-asked`,
+ * `give-denied`, `give-parked`) left with the transport that produced them —
+ * a `delivery` discriminator over a single transport would state a choice
+ * nothing makes. Sharing WITH ANOTHER PERSON is a standing grant, and the
+ * grant plane's own fulfillment engine carries it.
  */
 
 import type { EdgeKind, EdgeStatus } from "./share-edge-row.js";
-
-export type EdgeDelivery = "local" | "peer";
 
 /** The mutable half of an edge — the columns a transition may move. */
 export interface EdgeState {
@@ -40,14 +37,6 @@ export interface EdgeState {
 export interface EdgeFacts {
   edgeId: string;
   kind: EdgeKind;
-  delivery: EdgeDelivery;
-  /**
-   * Threat 8: a co-hosted CROSS-owner give must gate the origin's
-   * `media.location` policy inside the closure read. Same-owner gives do not.
-   * Decided once, where the crossing is judged, and carried on the effect so
-   * a retry after a crash re-decides nothing.
-   */
-  crossOwner: boolean;
 }
 
 /**
@@ -67,59 +56,21 @@ export type EdgeSignal =
    * on the one path where no work remained to report.
    */
   | { type: "settled" }
-  /**
-   * The audience came BACK for the closure after its owner accepted a D9
-   * 'ask' (`peer/edge/closure/:id`). Handing it over twice is this gateway's
-   * definition of "given" — it has no way to observe the far side's
-   * projection, so unlike `target-projected` there are no audience item ids
-   * to record, and no receipt claims any.
-   */
-  | { type: "give-served" }
-  /** The audience is not accepting automatically — its owner must answer. */
-  | { type: "give-asked" }
-  /** The audience (or its owner) refused. Terminal, and never says why. */
-  | { type: "give-denied"; reason: string }
-  /** Not delivered, not refused — try again later. */
-  | { type: "give-parked"; reason: string }
   /** This gateway could not act at all (a local vault call threw). */
   | { type: "give-failed"; reason: string }
   | { type: "revoked"; reason: string };
 
-/** A durable obligation the outbox owns until it is discharged. */
-export type ShareEffect =
-  | {
-      kind: "deliver-give";
-      edgeId: string;
-      delivery: EdgeDelivery;
-      crossOwner: boolean;
-    }
-  | {
-      kind: "await-answer";
-      edgeId: string;
-      linkId: string;
-      peerVaultId: string;
-      localVaultId: string;
-      itemType: string;
-      itemCount: number;
-    }
-  | {
-      kind: "deliver-refusal";
-      edgeId: string;
-      linkId: string;
-      peerVaultId: string;
-      localVaultId: string;
-    }
-  | {
-      kind: "pull-blob";
-      edgeId: string;
-      linkId: string;
-      localVaultId: string;
-      sha256: string;
-      size: number;
-      tmpPath: string;
-    };
-
-export type ShareEffectKind = ShareEffect["kind"];
+/**
+ * A durable obligation the outbox owns until it is discharged. ONE kind since
+ * #825: the three peer-plane obligations (`await-answer`, `deliver-refusal`,
+ * `pull-blob`) existed only to carry a copy to another person's vault, and
+ * left with copy-as-share. `deliver-give` survives as the same-owner
+ * placement's own retry anchor.
+ */
+export interface ShareEffect {
+  kind: "deliver-give";
+  edgeId: string;
+}
 
 export interface EdgeOutcome {
   state: EdgeState;
@@ -175,14 +126,7 @@ export function reduceEdge(
     case "begin":
       return {
         state: { ...state, status: "in-flight", reason: null },
-        effects: [
-          {
-            kind: "deliver-give",
-            edgeId: facts.edgeId,
-            delivery: facts.delivery,
-            crossOwner: facts.crossOwner,
-          },
-        ],
+        effects: [{ kind: "deliver-give", edgeId: facts.edgeId }],
         changed: true,
       };
     case "target-projected": {
@@ -212,33 +156,12 @@ export function reduceEdge(
       };
       return { state: next, effects: [], changed: true };
     }
-    case "give-served":
-      return {
-        state: {
-          ...state,
-          targetState: "executed",
-          status: "completed",
-          reason: null,
-        },
-        effects: [],
-        changed: true,
-      };
     case "settled":
       if (!settled(facts, state.targetState, state.sourceState))
         return unchanged(state);
       if (state.status === "completed") return unchanged(state);
       return {
         state: { ...state, status: "completed", reason: null },
-        effects: [],
-        changed: true,
-      };
-    case "give-asked":
-      return park(state, "awaiting recipient decision");
-    case "give-parked":
-      return park(state, signal.reason);
-    case "give-denied":
-      return {
-        state: { ...state, status: "denied", reason: signal.reason },
         effects: [],
         changed: true,
       };
@@ -272,14 +195,5 @@ function settled(
 
 /** The deterministic id an effect replays under — the outbox's primary key. */
 export function effectIdFor(effect: ShareEffect): string {
-  switch (effect.kind) {
-    case "deliver-give":
-      return `give:${effect.edgeId}`;
-    case "await-answer":
-      return `ask:${effect.edgeId}`;
-    case "deliver-refusal":
-      return `refuse:${effect.edgeId}`;
-    case "pull-blob":
-      return `pull:${effect.edgeId}:${effect.sha256}`;
-  }
+  return `give:${effect.edgeId}`;
 }

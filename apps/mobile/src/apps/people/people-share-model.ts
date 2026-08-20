@@ -4,10 +4,14 @@
 // replica's own tables, and the caller hands null row sets for reads that
 // failed; ANY failed read nulls the whole answer — the plane is one story,
 // and half of it would read as "nothing is shared".
+//
+// WHAT IS SHARED WITH THE PERSON IS NOT PROJECTED HERE (#825). The commons-era
+// circle_grant × circle_member × commons_member_state projection retired with
+// the twin it mirrored; standing grants are read live from the grant plane by
+// `PersonGrants.tsx` through the share kit's own transport.
 
 import type {
   PendingInvite,
-  SharedContainer,
   VaultBinding,
 } from "@centraid/blueprints/apps/people/types";
 
@@ -17,24 +21,19 @@ import { str } from "./people-model";
 export interface ShareLinksInput {
   partyId: string;
   bindings: readonly Row[] | null;
-  memberships: readonly Row[] | null;
-  grants: readonly Row[] | null;
-  memberStates: readonly Row[] | null;
   invitations: readonly Row[] | null;
 }
 
 export interface PersonShareLinks {
   vaults: VaultBinding[];
   pending_invites: PendingInvite[];
-  shared_with_them: SharedContainer[];
 }
 
 export function projectShareLinks(
   input: ShareLinksInput
 ): PersonShareLinks | null {
-  const { bindings, memberships, grants, memberStates, invitations } = input;
-  if (!bindings || !memberships || !grants || !memberStates || !invitations)
-    return null;
+  const { bindings, invitations } = input;
+  if (!bindings || !invitations) return null;
 
   const vaults: VaultBinding[] = bindings.flatMap((binding) => {
     if (str(binding, "party_id") !== input.partyId) return [];
@@ -68,52 +67,5 @@ export function projectShareLinks(
     ];
   });
 
-  const circleIds = new Set<string>();
-  const capabilityByCircle = new Map<string, "read" | "read+write">();
-  for (const membership of memberships) {
-    if (str(membership, "party_id") !== input.partyId) continue;
-    const circle = str(membership, "circle_id");
-    if (!circle) continue;
-    circleIds.add(circle);
-    capabilityByCircle.set(
-      circle,
-      str(membership, "capability") === "read+write" ? "read+write" : "read"
-    );
-  }
-  const stateByGrant = new Map<string, Row>();
-  for (const state of memberStates) {
-    if (str(state, "party_id") !== input.partyId) continue;
-    const grant = str(state, "grant_id");
-    if (grant) stateByGrant.set(grant, state);
-  }
-  const labelByGrant = new Map<string, string | null>();
-  for (const invitation of theirInvitations) {
-    const grant = str(invitation, "grant_id");
-    if (grant) labelByGrant.set(grant, str(invitation, "container_label"));
-  }
-
-  const shared: SharedContainer[] = grants.flatMap((grant) => {
-    const circle = str(grant, "circle_id");
-    if (!circle || !circleIds.has(circle)) return [];
-    if (str(grant, "revoked_at")) return [];
-    const grantId = str(grant, "grant_id");
-    if (!grantId) return [];
-    const state = stateByGrant.get(grantId);
-    if (!state) return [];
-    const status = str(state, "status");
-    return [
-      {
-        grant_id: grantId,
-        container_type: str(grant, "container_type") ?? "",
-        container_id: str(grant, "container_id") ?? "",
-        container_label: labelByGrant.get(grantId) ?? null,
-        capability: capabilityByCircle.get(circle) ?? "read",
-        status:
-          status === "invited" || status === "refused" ? status : "current",
-        since: str(state, "accepted_at") ?? str(grant, "created_at") ?? "",
-      },
-    ];
-  });
-
-  return { vaults, pending_invites: pending, shared_with_them: shared };
+  return { vaults, pending_invites: pending };
 }

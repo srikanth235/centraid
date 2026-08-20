@@ -111,11 +111,7 @@ describe("HouseholdScreen suite", () => {
       onApproveLink: async () => {
         throw new Error("not used");
       },
-      loadReceiveSetting: async () => "ask",
-      onSetReceiveSetting: async (_id, setting) => setting,
       loadEdges: async () => [],
-      loadPending: async () => [],
-      onAnswerPending: async () => ({}),
       loadCommonsInvitations: async () => [],
       onClaimCommonsInvitation: async () => ({}),
       onAnswerCommonsInvitation: async () => ({}),

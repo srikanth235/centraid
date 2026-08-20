@@ -1,7 +1,10 @@
 // THE MODAL CONFIRM (v12 handoff § The three confirms) — the acts no reverse
-// write can undo. Two remain on this surface: Trash and Merge. The handoff's
-// third, Revoke, is withheld with the whole sharing-plane write set
-// (decisions.md #821 L-write; `INTEGRATION-NOTES.md`).
+// write can undo. All three stand on this surface now: Trash, Merge, and —
+// since the grant plane gave People the write side (#825) — Revoke, whose
+// title, body and both control words are the shared kit's
+// (`_shared/grant-copy.ts`), which is why the cancel word is a prop: `Keep
+// sharing` is the honest opposite of a revoke, where `Cancel` is the opposite
+// of the other two.
 //
 // Full width, bottom-anchored, 12px radius on the top corners, one sentence of
 // body, then `Cancel` (quiet) and the verb (destructive — outlined, never a
@@ -22,6 +25,8 @@ export interface PeopleConfirmProps {
   title: string;
   body: string;
   verb: string;
+  /** The way out, where it is not the plain `Cancel`. */
+  cancelLabel?: string;
   onConfirm: () => void;
   onCancel: () => void;
 }
@@ -31,6 +36,7 @@ export default function PeopleConfirm({
   title,
   body,
   verb,
+  cancelLabel = VERBS.cancel,
   onConfirm,
   onCancel,
 }: PeopleConfirmProps): React.JSX.Element {
@@ -52,7 +58,7 @@ export default function PeopleConfirm({
         {/* The scrim dismisses — the same out a swipe-down would be. */}
         <Pressable
           accessibilityRole="button"
-          accessibilityLabel={VERBS.cancel}
+          accessibilityLabel={cancelLabel}
           onPress={onCancel}
           style={{ flex: 1 }}
         />
@@ -84,7 +90,7 @@ export default function PeopleConfirm({
             }}
           >
             <View style={{ flex: 1 }}>
-              <Button label={VERBS.cancel} onPress={onCancel} variant="quiet" />
+              <Button label={cancelLabel} onPress={onCancel} variant="quiet" />
             </View>
             <View style={{ flex: 1 }}>
               <Button label={verb} onPress={onConfirm} variant="destructive" />

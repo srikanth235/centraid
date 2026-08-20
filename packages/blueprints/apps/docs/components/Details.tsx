@@ -15,12 +15,13 @@ import { useEffect, useRef, useState } from "react";
 
 import { armConfirm } from "@centraid/design/elements";
 
+import { GrantSheet } from "../../_shared/GrantSheet.tsx";
 import { mountedScopes } from "../../_shared/scope-kit.ts";
 import { SAVED_TO_MY_VAULT } from "../../_shared/shared-copy.ts";
-import { ShareSheet } from "../../_shared/ShareSheet.tsx";
 import { RAIL_NOTES, RAIL_TABS } from "../document-copy.ts";
 import type { RailTabId } from "../document-copy.ts";
 import { custodyMeta, extOf, fmtBytes, tintBg, typeMeta } from "../format.ts";
+import type { DocsShareHost } from "../grant-audiences.ts";
 import { I, KIND_ICONS_LG } from "../icons.ts";
 import type { CustodyTone, DriveDoc, VersionEntry } from "../types.ts";
 import { FactsTab, NamesTab, PropsTab } from "./DetailsTabs.tsx";
@@ -91,6 +92,7 @@ export function Details({
   onOpenVersions,
   onAddTag,
   onRemoveTag,
+  shareHost,
 }: {
   doc: DriveDoc;
   /** DOCKED, not drawn over the drive. At a desk the rail is a column beside
@@ -116,13 +118,20 @@ export function Details({
   onOpenVersions: (documentId: string) => void;
   onAddTag: (doc: DriveDoc, label: string) => void;
   onRemoveTag: (doc: DriveDoc, tagId: string) => void;
+  /** The roster and status line Share needs. `null` where this seat has no
+   *  grant plane to reach — the rail then offers no Share at all, rather than
+   *  a control that can only refuse. */
+  shareHost: DocsShareHost | null;
 }) {
   const m = typeMeta(doc.media_type, doc.title);
   const trashed = doc.trashed;
   const [tab, setTab] = useState<RailTabId>("props");
-  // Documents use the same ceremony-free commons sheet as every container.
+  // A document is shared as a STANDING GRANT through the one shared kit —
+  // Docs holds no share state of its own beyond "is the sheet open".
   const [shareOpen, setShareOpen] = useState(false);
-  const [shareStatus, setShareStatus] = useState("");
+  // Every outcome this rail produces — a grant, a revoke, a save — leaves
+  // through the app's single status line and nowhere else.
+  const handleStatus = (message: string): void => shareHost?.onStatus(message);
   const actorVaultId = mountedScopes()[0]?.id ?? "";
   const [residentDocumentId, setResidentDocumentId] = useState<string | null>(
     null
@@ -163,9 +172,9 @@ export function Details({
         itemId: doc.document_id,
       });
       setResidentDocumentId(null);
-      setShareStatus(SAVED_TO_MY_VAULT);
+      handleStatus(SAVED_TO_MY_VAULT);
     } catch (error) {
-      setShareStatus(
+      handleStatus(
         error instanceof Error
           ? `Document was not saved: ${error.message}`
           : "Document was not saved to your vault."
@@ -276,27 +285,30 @@ export function Details({
                 onClick={() => void saveToMyVault()}
               />
             ) : null}
-            <ActionBtn
-              icon="share"
-              label="Share document"
-              tone="quiet"
-              className={shared.detailBtn!}
-              onClick={() => setShareOpen(true)}
-            />
-            <ShareSheet
-              open={shareOpen}
-              onClose={() => setShareOpen(false)}
-              sourceScopeId={mountedScopes()[0]?.id ?? ""}
-              scopes={mountedScopes()}
-              itemType="core.document"
-              itemIds={[doc.document_id]}
-              appLabel="Docs"
-              onDone={(outcome) => setShareStatus(outcome.message)}
-            />
-            {shareStatus ? (
-              <output className={styles.shareStatus} aria-live="polite">
-                {shareStatus}
-              </output>
+            {shareHost ? (
+              <>
+                <ActionBtn
+                  icon="share"
+                  label="Share document"
+                  tone="quiet"
+                  className={shared.detailBtn!}
+                  onClick={() => setShareOpen(true)}
+                />
+                {/* OBJECT-FIRST: the rail is already about this one document,
+                    so the sheet opens over it and asks only who. Outcomes go
+                    to the app's single status line, never a second one here. */}
+                <GrantSheet
+                  open={shareOpen}
+                  onClose={() => setShareOpen(false)}
+                  audiences={shareHost.audiences}
+                  subject={{
+                    subjectType: "core.document",
+                    subjectId: doc.document_id,
+                    ...(doc.title ? { label: doc.title } : {}),
+                  }}
+                  onStatus={handleStatus}
+                />
+              </>
             ) : null}
           </>
         )}

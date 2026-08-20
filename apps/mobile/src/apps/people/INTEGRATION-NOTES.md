@@ -20,18 +20,16 @@ Every `share.*` (and `social.circle_member`) read is kept OUT of the combined qu
 
 ## Withheld controls (register these as divergences)
 
-Same set and same causes as the web v12 build (docs/design-divergences.md § People; decisions.md #821 L-write). All READ state is drawn: link rings, vault tags, `Vaults` and `Shared with them` sections, pending invites, `linked/to_link` tiles, `Linked/Unlinked` chips, cadence/Never.
+Same set and same causes as the web build (docs/design-divergences.md § People). `Share` and `Revoke` are NO LONGER among them: the grant plane (#825) gave People the write side, and `PersonGrants.tsx` draws the person screen's grant dashboard on this seat — every live grant reaching the party from `GET …/grants?partyId=`, `Revoke` per row behind the shared kit's confirm, `Share` on the section head opening the kit's own sheet. All READ state is still drawn: link rings, vault tags, `Vaults`, pending invites, `linked/to_link` tiles, `Linked/Unlinked` chips, cadence/Never.
 
 | Withheld | Handoff site | Cause |
 | --- | --- | --- |
-| `Share` and `Link vault` commits; the Share sheet (§6) | person screen | Host `share()` structurally requires a container; People owns none. Commits are `Log` (primary) + `Edit` (secondary), the web's own pair. |
-| Trailing `Link` verb on unlinked roster rows | roster/search rows | Same cause, one row down. |
-| `Revoke` on vault rows and shared items; the third modal confirm | person + vault-link screens | People's `share.*` scopes are read-only; no production revoke route. Two confirms remain: Trash, Merge. |
-| The vault composer (name field, label chips, `Link vault`) and the `Vaults` section of the editor (§8) | person screen, editor | Writes on the sharing plane; also `vault labels` (`personal/work/household/shared`) exist nowhere in the contract. |
-| The vault-link screen's two ceremony sentences (§7) | `VaultLink.tsx` | They narrate the withheld composer ("One approval each, once — then sharing to them is two taps."); drawn without it they promise an act no control performs. |
+| A subject picker of People's own — anything this person cannot already reach | the sheet's `What` step | People owns no container and the grant plane has no catalog read (subject ids are app-polymorphic), so the sheet is offered exactly the subjects a standing grant already names. With nothing to name, `Share` is absent and the section says a share starts in the app that holds the thing. |
+| `Link vault` commit; the trailing `Link` verb on roster rows; the vault composer (§6, §8) | person screen, roster, editor | RETIRED, not withheld: a grant to an unlinked person parks at `awaiting_channel` and mints the invitation itself, so no link ceremony remains for a control to open. `vault labels` (`personal/work/household/shared`) also exist nowhere in the contract. |
+| The vault-link screen's two ceremony sentences (§7) | `VaultLink.tsx` | They narrate the retired ceremony ("One approval each, once — then sharing to them is two taps."); drawn now they would promise an act no control performs. |
 | Ambient per-screen status sentences (`STATUS.*`) | every screen | The mobile frame's `StatusLine` is quiet until a note is posted — there is no ambient-sentence slot (see kit gaps). Write outcomes + Undo all go through `postStatus`. The search result count renders as the search screen's own closing line instead. |
 
-`PersonLink` (`VaultLink.tsx`) is reachable only by deep link today: the two doors the handoff gives it (roster `Link`, person `Link vault`) are the withheld writes. It renders the link standing read-only.
+`PersonLink` (`VaultLink.tsx`) is reachable only by deep link: the two doors the handoff gives it (roster `Link`, person `Link vault`) named the retired ceremony. It renders the link standing read-only, and it is the one surface still drawing the commons-era `shared_with_them` projection — repointing or retiring it belongs with the copy-as-share sweep.
 
 ## Departures inside the drawn set (web parity, not new)
 
@@ -59,7 +57,7 @@ Same set and same causes as the web v12 build (docs/design-divergences.md § Peo
 
 ## Layout / structure
 
-- `PeopleScreen.tsx` (shell: frame + claimed band, pop-not-push, Home capsule) · `PeopleBand.tsx` + `people-band.ts` (3 destinations, no More sheet — sanctioned deviation 2) · `PeopleHome.tsx` (roster/touch/search on one screen via the `destination` param) · `PersonView.tsx` · `LogTouch.tsx` · `PersonEditor.tsx` · `VaultLink.tsx` · `MergeView.tsx` · `PeopleTrash.tsx` · `PeopleKit.tsx` (one row, one section, ring, star, confirm-free primitives) · `PeopleConfirm.tsx` (the two modal confirms) · `people-model.ts` (pure projections) · `usePeople.ts` (replica reads) · `people-writes.ts`.
+- `PeopleScreen.tsx` (shell: frame + claimed band, pop-not-push, Home capsule) · `PeopleBand.tsx` + `people-band.ts` (3 destinations, no More sheet — sanctioned deviation 2) · `PeopleHome.tsx` (roster/touch/search on one screen via the `destination` param) · `PersonView.tsx` · `LogTouch.tsx` · `PersonEditor.tsx` · `VaultLink.tsx` · `PersonGrants.tsx` (the grant dashboard) · `MergeView.tsx` · `PeopleTrash.tsx` · `PeopleKit.tsx` (one row, one section, ring, star, confirm-free primitives) · `PeopleConfirm.tsx` (the modal confirms: Trash, Merge, and the kit-worded Revoke) · `people-model.ts` (pure projections) · `usePeople.ts` (replica reads) · `people-writes.ts`.
 - Tests: `people-model.test.ts` (projection/overdue/tri-state/search/hue), `PeopleKit.test.tsx` (ring solid/dashed/absent, net meta, a11y labels) — both green under `apps/mobile` vitest.
 
 ## Gate results (at hand-off)

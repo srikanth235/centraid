@@ -15,12 +15,8 @@ import { Text, TextInput } from "../kit/components/NativeText";
 import TopSafeArea from "../kit/components/TopSafeArea";
 import { useReplica } from "../kit/replica/ReplicaProvider";
 import { density, radii, t, useTheme } from "../kit/theme";
-import {
-  answerPendingEdge,
-  listEdges,
-  listPendingEdges,
-} from "../lib/replica/edges-transport";
-import type { GatewayEdge, PendingEdge } from "../lib/replica/edges-transport";
+import { listEdges } from "../lib/replica/edges-transport";
+import type { GatewayEdge } from "../lib/replica/edges-transport";
 import { approveLink, listLinks } from "../lib/replica/links-transport";
 import type { GatewayLink } from "../lib/replica/links-transport";
 import {
@@ -53,10 +49,10 @@ function stewardLine(entry: CommonsRecoveryGrant): string {
 
 function vaultLabel(vaultId: string, links: readonly GatewayLink[]): string {
   for (const link of links) {
-    if (link.vaultA === vaultId) return link.labelA ?? "Linked person";
-    if (link.vaultB === vaultId) return link.labelB ?? "Linked person";
+    if (link.vaultA === vaultId) return link.labelA ?? vaultId;
+    if (link.vaultB === vaultId) return link.labelB ?? vaultId;
   }
-  return "Linked person";
+  return vaultId;
 }
 
 export default function SharingScreen({
@@ -66,7 +62,6 @@ export default function SharingScreen({
   const replica = useReplica();
   const [links, setLinks] = useState<GatewayLink[]>([]);
   const [edges, setEdges] = useState<GatewayEdge[]>([]);
-  const [pending, setPending] = useState<PendingEdge[]>([]);
   const [commonsInvitations, setCommonsInvitations] = useState<
     CommonsInvitation[]
   >([]);
@@ -82,7 +77,6 @@ export default function SharingScreen({
     void Promise.all([
       listLinks(replica.gatewayBase),
       listEdges(replica.gatewayBase),
-      listPendingEdges(replica.gatewayBase),
       listCommonsInvitations(replica.gatewayBase, replica.vaultId),
       listCommonsRecovery(replica.gatewayBase, replica.vaultId),
     ])
@@ -90,13 +84,11 @@ export default function SharingScreen({
         ([
           nextLinks,
           nextEdges,
-          nextPending,
           nextCommonsInvitations,
           nextCommonsRecovery,
         ]) => {
           setLinks(nextLinks);
           setEdges(nextEdges);
-          setPending(nextPending);
           setCommonsInvitations(nextCommonsInvitations);
           setCommonsRecovery(nextCommonsRecovery);
           setErrorMessage(undefined);
@@ -208,62 +200,6 @@ export default function SharingScreen({
                 </View>
               );
             })}
-          </Section>
-        ) : null}
-
-        {pending.length ? (
-          <Section title="Waiting for your decision" colors={colors}>
-            {pending.map((row) => (
-              <View
-                key={row.edgeId}
-                style={[
-                  styles.card,
-                  { backgroundColor: colors.bgElev, borderColor: colors.line },
-                ]}
-              >
-                <Text style={[t("body"), { color: colors.text }]}>
-                  {vaultLabel(row.peerVaultId, links)} shared {row.itemCount}{" "}
-                  {row.itemType}
-                </Text>
-                <Text style={[t("small"), { color: colors.textSoft }]}>
-                  Nothing is written until you accept.
-                </Text>
-                <View style={styles.rowActions}>
-                  {(["accept", "refuse"] as const).map((decision) => (
-                    <Pressable
-                      key={decision}
-                      accessibilityRole="button"
-                      disabled={busyId === row.edgeId}
-                      onPress={() =>
-                        replica.gatewayBase &&
-                        void act(row.edgeId, () =>
-                          answerPendingEdge(
-                            replica.gatewayBase!,
-                            row.edgeId,
-                            decision
-                          )
-                        )
-                      }
-                      style={[styles.pill, { borderColor: colors.line }]}
-                    >
-                      <Text
-                        style={[
-                          t("control"),
-                          {
-                            color:
-                              decision === "accept"
-                                ? colors.accent
-                                : colors.textSoft,
-                          },
-                        ]}
-                      >
-                        {decision === "accept" ? "Accept" : "Refuse"}
-                      </Text>
-                    </Pressable>
-                  ))}
-                </View>
-              </View>
-            ))}
           </Section>
         ) : null}
 
@@ -383,7 +319,7 @@ export default function SharingScreen({
           </Section>
         ) : null}
 
-        <Section title="Recent direct copies" colors={colors}>
+        <Section title="Recent copies between your vaults" colors={colors}>
           {snapshots.length ? (
             snapshots.map((edge) => (
               <View
@@ -408,7 +344,7 @@ export default function SharingScreen({
             ))
           ) : (
             <Text style={[t("small"), { color: colors.textSoft }]}>
-              No direct copies yet.
+              No copies between your vaults yet.
             </Text>
           )}
         </Section>
@@ -430,7 +366,6 @@ export default function SharingScreen({
                 link={link}
                 busy={busyId === link.linkId}
                 colors={colors}
-                gatewayBase={replica.gatewayBase}
                 label={vaultLabel(link.remoteVaultId ?? link.vaultB, links)}
                 onApprove={() =>
                   replica.gatewayBase &&

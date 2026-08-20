@@ -38,6 +38,24 @@ export type PeerRequest = (input: {
   body?: unknown;
 }) => Promise<{ status: number; json: unknown }>;
 
+/** Where a dial goes. Address data, never identity (decision 1). */
+export interface PeerDialRoute {
+  endpointId: string;
+  relayHints: string[];
+}
+
+/**
+ * A transport plus the one thing only the caller can mint: an EndpointTicket
+ * for a route. Every outbound peer call in this package takes one of these,
+ * so nothing below the transport ever learns about iroh. Its home is here
+ * because this module IS the dialing half of the peer plane; it lived in the
+ * give client until copy-as-share retired that module (#825).
+ */
+export interface PeerDial {
+  request: PeerRequest;
+  endpointTicketFor: (endpointId: string, relayHints: string[]) => string;
+}
+
 export type LinkCeremonyResult =
   | { state: "linked"; link: LinkedPeer }
   /** Ticket unknown, expired, or already redeemed — one answer for all three. */

@@ -11,7 +11,6 @@ import {
   gotoNav,
   launchApp,
   makeEnv,
-  pendingEdgeRecord,
   scopeRowRecord,
   seedRemoteGateway,
   startMockGateway,
@@ -26,7 +25,7 @@ import type { MockGateway, TestEnv } from "./fixtures";
  * Household is retired as a launcher destination. The mock still mirrors the
  * real roster/owner-scope/sharing handlers (`owners-routes.ts`,
  * `devices-routes.ts`, `scopes-routes.ts`, `vault-links-routes.ts`,
- * `edge-answer-routes.ts`, `commons-recovery-routes.ts`), so these journeys
+ * `edges-routes.ts`, `commons-recovery-routes.ts`), so these journeys
  * prove the merged surface: the roster renders people-first, the owner's
  * scope registry is the vault list, and another person's seat changes
  * PRESENTATION (grouping, attribution, state word) but never AUTHORIZATION
@@ -115,8 +114,9 @@ test.beforeEach(async () => {
     }),
     scopeRowRecord({ vaultId: "v-shared", label: "Shared" }),
   ];
-  // The sharing surface: one approved link to Priya, one parked ask from her
-  // (D9 "ask" receive setting), and one commons whose steward is absent.
+  // The sharing surface: one approved link to Priya, and one commons whose
+  // steward is absent. There is no parked incoming ask to seed — copy-as-share
+  // retired (#825, ruling G-copy), so nothing arrives for an owner to answer.
   gateway.state.links = [
     gatewayLinkRecord({
       linkId: "link-priya",
@@ -127,15 +127,6 @@ test.beforeEach(async () => {
       approvedByA: true,
       approvedByB: true,
       remoteVaultId: "v-priya",
-    }),
-  ];
-  gateway.state.pendingEdges = [
-    pendingEdgeRecord({
-      edgeId: "edge-ask-1",
-      peerVaultId: "v-priya",
-      localVaultId: "v-personal",
-      itemType: "photos",
-      itemCount: 3,
     }),
   ];
   gateway.state.commonsRecovery = {
@@ -212,17 +203,11 @@ test("2.12 — Household renders the roster, the owner's scopes, and the sharing
       row(page, "Personal").getByText("You own this vault.")
     ).toBeVisible();
 
-    // The sharing card: the linked person's roster, the parked ask with both
-    // answers offered, and the absent steward's recovery row (#750's UI).
+    // The sharing card: the linked person's roster and the absent steward's
+    // recovery row (#750's UI).
     await expect(
       page.getByRole("heading", { name: "People & circles" })
     ).toBeVisible();
-    const ask = page
-      .locator("section")
-      .filter({ hasText: "Waiting for your decision" });
-    await expect(ask.getByText("Priya's vault shared 3 photos")).toBeVisible();
-    await expect(ask.getByRole("button", { name: "Accept" })).toBeEnabled();
-    await expect(ask.getByRole("button", { name: "Refuse" })).toBeEnabled();
     await expect(
       page.getByRole("heading", { name: "Shared-space recovery" })
     ).toBeVisible();
@@ -230,16 +215,13 @@ test("2.12 — Household renders the roster, the owner's scopes, and the sharing
       page.getByRole("button", { name: "Recover from my copy" })
     ).toBeVisible();
 
-    // Refusing the parked ask consumes it — the mock mirrors the gateway's
-    // answer door (delete the pointer row, write nothing back), and the card
-    // reloads to a roster without the ask.
-    await ask.getByRole("button", { name: "Refuse" }).click();
-    await expect(page.getByText("Priya's vault shared 3 photos")).toBeHidden();
+    // THE RETIRED ASK SURFACE IS NOT DRAWN, and nothing on this page reaches
+    // for the routes that served it (#825). A card that still asked would
+    // 404 against a real gateway, so its absence is the assertion.
+    await expect(page.getByText("Waiting for your decision")).toBeHidden();
     expect(
-      gateway.countCalls("POST", (path) =>
-        path.endsWith("/edges/edge-ask-1/answer")
-      )
-    ).toBe(1);
+      gateway.countCalls("GET", (path) => path.endsWith("/edges/pending"))
+    ).toBe(0);
   } finally {
     await closeApp(app);
   }

@@ -26,7 +26,7 @@ import {
   pullPeerCommons,
   sendPeerCommonsCommand,
 } from "./peer-commons-client.js";
-import type { PeerDial } from "./peer-edge-give-client.js";
+import type { PeerDial } from "./peer-link-client.js";
 import type { VaultLinksStore } from "./vault-links-store.js";
 
 /** Presences worth a log line — a closed episode or a healthy laptop-closed

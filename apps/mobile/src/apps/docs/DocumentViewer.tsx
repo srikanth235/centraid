@@ -18,7 +18,7 @@
 import { useNavigation } from "@react-navigation/native";
 import { Image } from "expo-image";
 import { useVideoPlayer, VideoView } from "expo-video";
-import React, { useMemo } from "react";
+import React, { useMemo, useState } from "react";
 import { Pressable, ScrollView, StyleSheet, View } from "react-native";
 
 import { STAGE_ACTIONS } from "@centraid/blueprints/apps/docs/document-copy";
@@ -33,6 +33,7 @@ import { Text } from "../../kit/components/NativeText";
 import { postStatus } from "../../kit/components/status-line";
 import { imageSource, videoSource } from "../../kit/media/media-source";
 import { useReplica } from "../../kit/replica/ReplicaProvider";
+import GrantSheet from "../../kit/share/GrantSheet";
 import { borders, radii, t, useTheme } from "../../kit/theme";
 import type { ThemeColors } from "../../kit/theme";
 import type { DocsScreenProps, DocsShellNavigation } from "../../navigation";
@@ -41,6 +42,7 @@ import type { MobileDriveDoc } from "./docs-projection";
 import DocsScreen from "./DocsScreen";
 import { docBytesUrl } from "./document-read-model";
 import { useDocs, useDocsWrite } from "./useDocs";
+import { useDocsGrantAudiences } from "./useDocsGrantAudiences";
 
 export default function DocumentViewer({
   route,
@@ -53,6 +55,11 @@ export default function DocumentViewer({
   const shellNavigation = useNavigation<DocsShellNavigation>();
   const drive = useDocs();
   const write = useDocsWrite(shellNavigation);
+  // Share is drawn only once the roster is an answer — `null` is "not read
+  // yet", and a Share verb over an unread roster would say "nobody yet" about
+  // a vault full of people.
+  const audiences = useDocsGrantAudiences();
+  const [shareOpen, setShareOpen] = useState(false);
 
   // The current shelf's steppable set: the active drive, default order.
   const shelfDocs = useMemo(
@@ -175,6 +182,14 @@ export default function DocumentViewer({
               onPress={() => void onDownload(doc)}
               styles={styles}
             />
+            {audiences ? (
+              <StageAction
+                label={STAGE_ACTIONS.share}
+                icon="share"
+                onPress={() => setShareOpen(true)}
+                styles={styles}
+              />
+            ) : null}
             <StageAction
               label={STAGE_ACTIONS.properties}
               icon="info"
@@ -206,6 +221,22 @@ export default function DocumentViewer({
           </View>
         ) : null}
       </View>
+      {/* OBJECT-FIRST: the stage is already about this one document, so the
+          shared kit opens over it and asks only who. Outcomes go to the seat's
+          one status line — the sheet paints none of its own. */}
+      {doc && audiences ? (
+        <GrantSheet
+          visible={shareOpen}
+          onClose={() => setShareOpen(false)}
+          audiences={audiences}
+          subject={{
+            subjectType: "core.document",
+            subjectId: doc.document_id,
+            ...(doc.title ? { label: doc.title } : {}),
+          }}
+          onStatus={postStatus}
+        />
+      ) : null}
     </DocsScreen>
   );
 }

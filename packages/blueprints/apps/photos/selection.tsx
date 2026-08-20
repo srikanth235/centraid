@@ -237,7 +237,6 @@ export function createSelection({
           <SelectionBottomBar
             selectedIds={keys}
             visible={getVisible()}
-            scopes={mountedScopes()}
             shelfKind={shelfKind()}
             readOnlyReason={readOnlyReason()}
             refresh={refresh}
@@ -256,7 +255,6 @@ export function createSelection({
           selectedIds={keys}
           visible={getVisible()}
           albums={getAlbums()}
-          scopes={mountedScopes()}
           shelfKind={shelfKind()}
           readOnlyReason={readOnlyReason()}
           menuOpen={menuOpen}

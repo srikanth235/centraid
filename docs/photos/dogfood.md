@@ -35,9 +35,10 @@ Run this motion:
    - [ ] Person / place / album hits appear as grouped rows with counts.
    - [ ] With an embedder configured on the gateway, a content query ("beach sunset") produces the semantic hit group; without one, the group is simply absent and nothing else about search breaks.
 
-6. **Share one photo.** Verify:
-   - [ ] Share targets include Household members and audience vaults.
-   - [ ] After placement, the photo appears in the recipient's vault with proper custody markers.
+6. **Share one photograph, and one album.** Verify:
+   - [ ] Share on the viewer opens the grant sheet over that photograph (`media.asset`); Share on an album's bar opens it over the album (`core.collection`).
+   - [ ] The people offered are the People roster and the named circles; access reads _Can view_ only — the declared registry answers no `edit` for either subject.
+   - [ ] After sharing, the subject appears in the recipient's vault with proper custody markers, and a photograph added to the shared album afterwards reaches them with no second gesture.
 
 7. **Free up space (custody workflow).** Verify:
    - [ ] Offload flow shows device-only photos distinctly.

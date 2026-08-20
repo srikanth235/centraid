@@ -17,6 +17,7 @@ import { useMemo } from "react";
 import type {
   DashboardData,
   PersonDetail,
+  PersonRow,
 } from "@centraid/blueprints/apps/people/types";
 
 import {
@@ -227,6 +228,11 @@ export interface PersonData {
   /** Null past the loading gate means the id no longer resolves to a live
    *  person (trashed or merged away in the meantime). */
   person: PersonDetail | null;
+  /** The roster window this person was found in. The grant dashboard hands it
+   *  to the share sheet as the audience list: People is where a party id has
+   *  a name (#825), and it is already in hand here — a second read of the
+   *  same rows would be the same window twice. */
+  roster: readonly PersonRow[];
 }
 
 /**
@@ -302,23 +308,14 @@ export function usePerson(partyId: string): PersonData {
     )
   );
 
-  // The sharing plane, all five tables — each degrades to absent on its own,
-  // and `projectShareLinks` nulls the whole answer when any is missing.
+  // The sharing plane's two tables — each degrades to absent on its own, and
+  // `projectShareLinks` nulls the whole answer when either is missing. The
+  // commons-grant join that used to sit beside them retired with the
+  // `shared_with_them` projection (#825); standing grants are read live from
+  // the grant plane by `PersonGrants.tsx`.
   const bindings = useReplicaQuery(
     APP,
     useMemo(() => ({ entity: "share.party_vault_binding" }), [])
-  );
-  const memberships = useReplicaQuery(
-    APP,
-    useMemo(() => ({ entity: "social.circle_member" }), [])
-  );
-  const grants = useReplicaQuery(
-    APP,
-    useMemo(() => ({ entity: "share.circle_grant" }), [])
-  );
-  const memberStates = useReplicaQuery(
-    APP,
-    useMemo(() => ({ entity: "share.commons_member_state" }), [])
   );
   const invitations = useReplicaQuery(
     APP,
@@ -338,28 +335,15 @@ export function usePerson(partyId: string): PersonData {
   const loading = people.loading || queryState.loading;
 
   const bindingRows = shareRows(bindings);
-  const membershipRows = shareRows(memberships);
-  const grantRows = shareRows(grants);
-  const memberStateRows = shareRows(memberStates);
   const invitationRows = shareRows(invitations);
   const shareLinks = useMemo(
     () =>
       projectShareLinks({
         partyId,
         bindings: bindingRows,
-        memberships: membershipRows,
-        grants: grantRows,
-        memberStates: memberStateRows,
         invitations: invitationRows,
       }),
-    [
-      bindingRows,
-      grantRows,
-      invitationRows,
-      memberStateRows,
-      membershipRows,
-      partyId,
-    ]
+    [bindingRows, invitationRows, partyId]
   );
 
   const partyNames = useMemo(() => {
@@ -409,5 +393,6 @@ export function usePerson(partyId: string): PersonData {
       ? { unavailableReason: queryState.unavailableReason }
       : {}),
     person,
+    roster: people.people,
   };
 }

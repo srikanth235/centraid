@@ -231,6 +231,74 @@ export {
   type CommonsRecoveryResult,
   type RecoverCommonsFromReplicaInput,
 } from "./share/commons-recovery.js";
+// The GRANT PLANE (#825): a share is a standing grant (who may see/edit what),
+// fulfillment is per-audience-vault delivery state, and the channel is the
+// existing party↔vault binding read as one state. Commons above stays the
+// edit-fulfillment strategy underneath it.
+export {
+  audienceExists,
+  createShareGrant,
+  readShareGrant,
+  readLiveShareGrant,
+  revokeShareGrant,
+  listShareGrantsForAudience,
+  listShareGrantsForSubject,
+  listLiveGrantsReachingParty,
+  resolveAudienceParties,
+  ensureFulfillment,
+  setFulfillmentState,
+  readFulfillment,
+  listFulfillment,
+  UnofferableSubjectError,
+  type CreateShareGrantInput,
+  type CreateShareGrantResult,
+  type RevokeShareGrantResult,
+  type ShareFulfillmentRecord,
+  type ShareFulfillmentState,
+  type ShareGrantAudience,
+  type ShareGrantAudienceKind,
+  type ShareGrantCapability,
+  type ShareGrantRecord,
+} from "./grant/grant-store.js";
+export {
+  isOfferableSubjectType,
+  fulfillmentAnswerFor,
+  shareSubjectDeclaration,
+  SHARE_SUBJECT_REGISTRY,
+  type ShareFulfillmentStrategy,
+  type ShareSubjectDeclaration,
+} from "./grant/subject-registry.js";
+export {
+  channelForParty,
+  type ShareChannel,
+  type ShareChannelState,
+} from "./grant/channel.js";
+// Fulfillment: the act of keeping a grant true. View re-projects the subject
+// over the closure transport, edit routes back through the commons rail, and
+// revoke propagates a removal instead of pretending it reached the peer.
+export {
+  fulfillShareGrant,
+  propagateShareGrantRevocation,
+  ShareGrantMaxSizeError,
+  type FulfillShareGrantInput,
+  type GrantFulfillmentResult,
+  type GrantFulfillmentStep,
+  type GrantRemovalResult,
+  type GrantRemovalStep,
+  type PropagateShareGrantRevocationInput,
+} from "./grant/fulfillment.js";
+export {
+  routeShareGrantEdit,
+  SHARE_GRANT_CO_CONTRIBUTION_COMMANDS,
+  SHARE_GRANT_CO_CONTRIBUTION_TYPES,
+  type ShareGrantEditRoute,
+} from "./grant/fulfillment-edit.js";
+export {
+  mintGrantInvitation,
+  withdrawGrantInvitations,
+  type GrantInvitation,
+  type MintGrantInvitationInput,
+} from "./grant/fulfillment-invite.js";
 // The LOCAL orphan reclaim (#599 d11): each vault unlinks only its own CAS
 // directory entries, so hardlinked bytes survive until the last vault lets go.
 export {

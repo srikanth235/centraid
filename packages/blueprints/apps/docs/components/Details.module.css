@@ -186,12 +186,6 @@
   border-color: color-mix(in oklab, var(--danger) 35%, var(--line));
 }
 
-.shareStatus {
-  display: block;
-  color: var(--text-soft);
-  font: var(--t-small);
-  margin: var(--sp-2) 0;
-}
 .detailsFoot {
   display: flex;
   gap: var(--sp-2);

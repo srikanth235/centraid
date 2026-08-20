@@ -1,5 +1,7 @@
 import { armConfirm } from "@centraid/design/elements";
 
+import { GrantSheet } from "../../_shared/GrantSheet.tsx";
+import { usePhotoShare } from "../grant-audiences.ts";
 // Album detail's own row (v4 handoff §5): "Album detail keeps the app bar,
 // drops the shelf strip, adds a way back, and carries the album's own title
 // and count in the bar."
@@ -13,11 +15,13 @@ import { armConfirm } from "@centraid/design/elements";
 // before it fires — the kit's `armConfirm`, the same confirmation every
 // destructive action in this app uses on every surface.
 import { ChevronLeftIcon } from "../icons.tsx";
+import { notice } from "../outcomes.ts";
 import { InlineInput } from "./InlineInput.tsx";
 
 import styles from "./AlbumBar.module.css";
 
 export function AlbumBar({
+  albumId,
   title,
   renaming,
   canWrite,
@@ -28,6 +32,8 @@ export function AlbumBar({
   onRenameCancel,
   onDelete,
 }: {
+  /** The album this bar stands over — the `core.collection` a grant names. */
+  albumId: string;
   title: string;
   renaming: boolean;
   /** A read-only audience disables the two writes and says why inline — the
@@ -54,8 +60,27 @@ export function AlbumBar({
   // this member is not allowed to make.
   const startRename = canWrite ? onStartRename : () => {};
   const deleteAlbum = canWrite ? onDelete : () => {};
+  // SHARING AN ALBUM IS NOT A WRITE TO IT. A member viewing a read-only
+  // library still owns nothing here to give, but the grant door — not this
+  // bar — is what refuses that, and it refuses with its own sentence. What
+  // this bar knows is only which album the sheet is opened over.
+  const share = usePhotoShare(notice);
   return (
     <div className={styles.bar}>
+      <GrantSheet
+        open={share.open}
+        onClose={() => share.close()}
+        audiences={share.audiences}
+        // The album, as the ONE subject: `core.collection`. Membership does
+        // the rest — a photograph added to it later reaches the same audience
+        // with no second gesture and no re-share call from this app.
+        subject={{
+          subjectType: "core.collection",
+          subjectId: albumId,
+          ...(title.trim() ? { label: title.trim() } : {}),
+        }}
+        onStatus={notice}
+      />
       <button
         type="button"
         className={`kit-btn quiet ${styles.back}`}
@@ -77,6 +102,13 @@ export function AlbumBar({
         />
       ) : (
         <div className={styles.actions}>
+          <button
+            type="button"
+            className="kit-btn"
+            onClick={() => share.request()}
+          >
+            Share
+          </button>
           <button
             type="button"
             className="kit-btn"

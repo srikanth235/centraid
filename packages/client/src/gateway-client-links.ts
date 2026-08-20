@@ -1,15 +1,13 @@
 /*
  * Renderer-side client for the gateway's link surface (#726 P2/P3 —
- * `packages/server/src/routes/vault-links-routes.ts`). A link is the
- * same-machine "ceremony" a cross-owner edge needs before it may cross; it is
- * also what a remote pair's ticket redemption lands as (D3: locality is
- * routing, not semantics — one link table serves both).
+ * `packages/server/src/routes/vault-links-routes.ts`). A link is the channel
+ * a grant to another person is delivered over (#825); it is also what a
+ * remote pair's ticket redemption lands as (D3: locality is routing, not
+ * semantics — one link table serves both).
  *
  *   GET   /centraid/_gateway/links
  *   POST  /centraid/_gateway/links                       {vaultId, otherVaultId}
  *   POST  /centraid/_gateway/links/<linkId>/approve
- *   GET   /centraid/_gateway/links/<linkId>/receive-setting
- *   PUT   /centraid/_gateway/links/<linkId>/receive-setting {setting}
  *   POST  /centraid/_gateway/links/ticket                 {vaultId}
  *   POST  /centraid/_gateway/links/redeem                 {vaultId, ticket}
  *
@@ -21,9 +19,9 @@
  * gateway dials the peer itself.
  *
  * Not centralized in `@centraid/core/protocol`'s `ROUTES` table: the gateway route
- * itself exports its own local `LINKS_PATH` constant rather than a shared one
- * (same precedent as the edges-answer sub-paths), so this module mirrors that
- * choice instead of adding a new shared route name for a single consumer.
+ * itself exports its own local `LINKS_PATH` constant rather than a shared one,
+ * so this module mirrors that choice instead of adding a new shared route name
+ * for a single consumer.
  */
 
 import {
@@ -35,10 +33,6 @@ import {
 } from "./gateway-client-core.js";
 
 const LINKS_PATH = "/centraid/_gateway/links";
-
-/** D9's per-direction preference (#726 P3 decision 9). No row on the gateway
- *  means `"accept"` — an approved link behaves as it did before D9 existed. */
-export type ReceiveSetting = "accept" | "ask" | "refuse";
 
 /** One link, from the caller's own side (`GatewayLink.vaultA`/`vaultB` are the
  *  RAW pair; `remoteVaultId` is which side, if either, needs routing). */
@@ -141,45 +135,6 @@ export async function approveGatewayLink(linkId: string): Promise<GatewayLink> {
     headers: authHeaders(token, "application/json"),
   });
   return (await readJson<{ link: GatewayLink }>(res, "approve link")).link;
-}
-
-/** The caller's OWN receiving preference for gives arriving over this link —
- *  never the peer's, which this gateway cannot read or set (D9). */
-export async function getReceiveSetting(
-  linkId: string
-): Promise<ReceiveSetting> {
-  const { baseUrl, token } = await auth();
-  const res = await doFetch(
-    baseUrl,
-    `${LINKS_PATH}/${enc(linkId)}/receive-setting`,
-    { method: "GET", headers: authHeaders(token) }
-  );
-  const out = await readJson<{ setting: ReceiveSetting }>(
-    res,
-    "read receive setting"
-  );
-  return out.setting;
-}
-
-export async function setReceiveSetting(
-  linkId: string,
-  setting: ReceiveSetting
-): Promise<ReceiveSetting> {
-  const { baseUrl, token } = await auth();
-  const res = await doFetch(
-    baseUrl,
-    `${LINKS_PATH}/${enc(linkId)}/receive-setting`,
-    {
-      method: "PUT",
-      headers: authHeaders(token, "application/json"),
-      body: JSON.stringify({ setting }),
-    }
-  );
-  const out = await readJson<{ setting: ReceiveSetting }>(
-    res,
-    "set receive setting"
-  );
-  return out.setting;
 }
 
 /** A minted, pasteable/scannable ticket for a vault the caller owns

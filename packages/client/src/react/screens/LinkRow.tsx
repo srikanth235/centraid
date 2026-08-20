@@ -3,7 +3,7 @@ import { useEffect, useState } from "react";
 import type { JSX } from "react";
 
 import type { RedeemLinkTicketOutcome } from "../../gateway-client-links.js";
-import type { GatewayLink, ReceiveSetting } from "../../gateway-client.js";
+import type { GatewayLink } from "../../gateway-client.js";
 import { SHARING_UNREACHABLE } from "../../sharing-copy.js";
 import { cx } from "../ui/cx.js";
 import Icon from "../ui/Icon.js";
@@ -15,7 +15,11 @@ import deviceStyles from "./DevicesCard.module.css";
 import styles from "./SharingCard.module.css";
 
 /**
- * One link row, with its own receive-setting control.
+ * One link row. It carried a per-link "Receive gives" control until #825
+ * (ruling G-copy) retired copy-as-share: nothing arrives over a link for a
+ * preference to govern any more, because a grant is a standing permission the
+ * audience accepts through its channel invitation, not a push it
+ * pre-authorizes. The link's own standing is what remains to say.
  */
 export default function LinkRow({
   link,
@@ -23,33 +27,13 @@ export default function LinkRow({
   mineApproved,
   busy,
   onApprove,
-  loadReceiveSetting,
-  onSetReceiveSetting,
 }: {
   link: GatewayLink;
   otherLabel: string;
   mineApproved: boolean;
   busy: boolean;
   onApprove: () => void;
-  loadReceiveSetting: (linkId: string) => Promise<ReceiveSetting>;
-  onSetReceiveSetting: (
-    linkId: string,
-    setting: ReceiveSetting
-  ) => Promise<ReceiveSetting>;
 }): JSX.Element {
-  const [setting, setSetting] = useState<ReceiveSetting | null>(null);
-  useEffect(() => {
-    let live = true;
-    loadReceiveSetting(link.linkId)
-      .then((value) => {
-        if (live) setSetting(value);
-      })
-      .catch(() => undefined);
-    return () => {
-      live = false;
-    };
-  }, [link.linkId, loadReceiveSetting]);
-
   return (
     <div className={deviceStyles.row}>
       <span className={deviceStyles.glyph} aria-hidden="true">
@@ -71,24 +55,6 @@ export default function LinkRow({
               pending approval
             </StatusPill>
           )}
-        </div>
-        <div className={deviceStyles.meta}>
-          <span>Receive gives</span>
-          <select
-            aria-label={`Receive setting for ${otherLabel}`}
-            className={styles.receiveSelect}
-            value={setting ?? "accept"}
-            disabled={setting === null || link.revoked}
-            onChange={(event) => {
-              const value = event.target.value as ReceiveSetting;
-              setSetting(value);
-              void onSetReceiveSetting(link.linkId, value);
-            }}
-          >
-            <option value="accept">Accept</option>
-            <option value="ask">Ask first</option>
-            <option value="refuse">Refuse</option>
-          </select>
         </div>
       </div>
       {!link.approved && !link.revoked ? (

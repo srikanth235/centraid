@@ -1,14 +1,14 @@
 /*
  * Exit evidence for #726 P3 gap 1 — "no production peer dial". Every other
- * peer-plane test (`peer-link-ceremony.test.ts`, `peer-remote-give.test.ts`)
- * proves the PROTOCOL against an in-process double that calls the far side's
- * route handler directly. This file proves the TRANSPORT: two gateways that
- * reach each other ONLY through a real `centraid/gw-link/1` QUIC connection
- * — `startGatewayEndpoint` (accept, `@centraid/tunnel`) on one side,
- * `startPeerDial` (dial, `./peer-dial.js`, this package's production
- * implementation of `PeerRequest`/`PeerDial`) on the other — complete a link
- * ceremony, a remote give (with a derivative painted immediately), and a
- * ranged original pull. No `transportTo`-style handler call anywhere here.
+ * peer-plane test (`peer-link-ceremony.test.ts`) proves the PROTOCOL against
+ * an in-process double that calls the far side's route handler directly. This
+ * file proves the TRANSPORT: two gateways that reach each other ONLY through
+ * a real `centraid/gw-link/1` QUIC connection — `startGatewayEndpoint`
+ * (accept, `@centraid/tunnel`) on one side, `startPeerDial` (dial,
+ * `./peer-dial.js`, this package's production implementation of
+ * `PeerRequest`/`PeerDial`) on the other — complete a link ceremony, verify a
+ * signed route assertion, and see the retired give frame refused on the wire.
+ * No `transportTo`-style handler call anywhere here.
  *
  * `relays: "disabled"` keeps this offline and fast (loopback UDP, no n0
  * network dependency), the same posture `peer-plane.test.ts` and
@@ -45,16 +45,13 @@ import { EnrollmentStore } from "./enrollment-store.js";
 import { GatewayDatabase } from "./gateway-db.js";
 import { startPeerDial } from "./peer-dial.js";
 import type { PeerDialHandle } from "./peer-dial.js";
-import type { PeerDial } from "./peer-edge-give-client.js";
+import type { PeerDial } from "./peer-link-client.js";
 import {
   encodeLinkTicket,
   parseLinkTicket,
   pushRouteAssertion,
   redeemLinkTicket,
 } from "./peer-link-client.js";
-import { readEdgeRow } from "./share-edge-row.js";
-import { drainShareEffects, runShareEffect } from "./share-effect-executor.js";
-import { listQueuedEffects } from "./share-effects.js";
 import { isLinkApproved } from "./vault-link-row.js";
 import { VaultLinksStore } from "./vault-links-store.js";
 
@@ -118,8 +115,6 @@ async function makeSide(name: string): Promise<Side> {
     vaultPublicKey: (id) => (id === vaultId ? publicKey : undefined),
     localRoute,
     localLabel: () => name,
-    vaultFor: (id) => (id === vaultId ? vault : undefined),
-    gatewayDatabase: gatewayDb,
   });
   const upstream = http.createServer((req, res) => {
     if ((req.headers.authorization ?? "") !== `Bearer ${UPSTREAM_TOKEN}`) {
@@ -253,30 +248,6 @@ function seedPhoto(side: Side, label: string) {
   return { assetId, sha256: original.sha256, thumbSha: thumb.sha256, bytes };
 }
 
-function insertEdgeRow(
-  origin: Side,
-  input: { edgeId: string; audienceVaultId: string; itemIds: string[] }
-) {
-  const now = new Date().toISOString();
-  origin.gatewayDb.run(
-    `INSERT INTO share_edges
-       (edge_id, created_by_device, owner_id, kind, mode, item_type,
-        scope_json, origin_vault_id, audience_vault_id, verbs,
-        target_state, source_state, status, created_at, updated_at)
-     VALUES (?, ?, ?, 'add', 'snapshot', 'media.asset', ?, ?, ?, 'read',
-             'queued', 'not-needed', 'queued', ?, ?)`,
-    input.edgeId,
-    origin.deviceId,
-    origin.ownerId,
-    JSON.stringify(input.itemIds),
-    origin.vaultId,
-    input.audienceVaultId,
-    now,
-    now
-  );
-  return readEdgeRow(origin.gatewayDb, input.edgeId)!;
-}
-
 describe("peer transport over real iroh (#726 P3 gap 1)", () => {
   let origin: Side;
   let audience: Side;
@@ -332,49 +303,41 @@ describe("peer transport over real iroh (#726 P3 gap 1)", () => {
     ]);
   }, 30_000);
 
-  test("a remote give paints the derivative immediately and pulls the ranged original over the real transport", async () => {
-    const photo = seedPhoto(origin, "real-transport");
-    const row = insertEdgeRow(origin, {
-      edgeId: "edge-real-transport",
-      audienceVaultId: audience.vaultId,
-      itemIds: [photo.assetId],
-    });
+  /*
+   * Copy-as-share retired (#825, ruling G-copy), so the give plane is gone
+   * from the peer wire. Proved HERE, over the real QUIC transport, because
+   * the retirement has to hold on the wire and not merely in a handler
+   * double: every frame the plane ever served answers `not_found`, and the
+   * audience adopts nothing.
+   */
+  test("every retired give frame answers not_found over the real transport", async () => {
+    const photo = seedPhoto(origin, "retired-give");
+    const dial = dialFrom(origin, audience);
+    const ticket = dial.endpointTicketFor(audience.endpoint.endpointId, []);
 
-    await runShareEffect(
+    for (const frame of [
+      { method: "POST", target: "/centraid/_peer/edge/give" },
+      { method: "GET", target: "/centraid/_peer/edge/closure/edge-1" },
+      { method: "POST", target: "/centraid/_peer/edge/deny" },
       {
-        db: origin.gatewayDb,
-        links: origin.links,
-        vaultFor: (id) => (id === origin.vaultId ? origin.vault : undefined),
-        dial: dialFrom(origin, audience),
+        method: "GET",
+        target: `/centraid/_peer/blob/chunk?sha256=${photo.sha256}&offset=0&length=16&edgeId=edge-1`,
       },
-      {
-        kind: "deliver-give",
-        edgeId: row.edge_id,
-        delivery: "peer",
-        crossOwner: true,
-      }
-    );
-    expect(readEdgeRow(origin.gatewayDb, row.edge_id)!.status).toBe(
-      "completed"
-    );
-    expect(audience.vault.blobs.local.hasSync(photo.thumbSha)).toBe(true);
-    // The original crossed as a manifest entry, not yet as bytes.
-    expect(audience.vault.blobs.local.hasSync(photo.sha256)).toBe(false);
-    expect(listQueuedEffects(audience.gatewayDb, "pull-blob")).toHaveLength(1);
+    ]) {
+      // oxlint-disable-next-line no-await-in-loop -- one QUIC round trip per frame; the point is the sequence of answers
+      const answer = await dial.request({
+        endpointTicket: ticket,
+        method: frame.method,
+        target: frame.target,
+        body: { edgeId: "edge-1" },
+      });
+      expect(answer.json, frame.target).toStrictEqual({ state: "not_found" });
+    }
 
-    const drained = await drainShareEffects({
-      db: audience.gatewayDb,
-      links: audience.links,
-      vaultFor: (id: string) =>
-        id === audience.vaultId ? audience.vault : undefined,
-      dial: dialFrom(audience, origin),
-      chunkBytes: 8,
-    });
-    expect(drained.done).toHaveLength(1);
-    expect(audience.vault.blobs.local.hasSync(photo.sha256)).toBe(true);
+    expect(audience.vault.blobs.local.hasSync(photo.thumbSha)).toBe(false);
+    expect(audience.vault.blobs.local.hasSync(photo.sha256)).toBe(false);
     expect(
-      audience.vault.blobs.local.getSync(photo.sha256)?.equals(photo.bytes)
-    ).toBe(true);
-    expect(listQueuedEffects(audience.gatewayDb, "pull-blob")).toHaveLength(0);
+      audience.gatewayDb.db.prepare("SELECT * FROM share_effects").all()
+    ).toStrictEqual([]);
   }, 30_000);
 });

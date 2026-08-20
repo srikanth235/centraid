@@ -175,13 +175,13 @@ describe("schema/migrate", () => {
     db.close();
   });
 
-  test("fresh vaults apply the composed baseline plus the cadence rung", () => {
-    expect(VAULT_MIGRATIONS).toHaveLength(2);
+  test("fresh vaults apply the composed baseline plus the cadence and grant rungs", () => {
+    expect(VAULT_MIGRATIONS).toHaveLength(3);
     const db = openVaultDb();
     const version = db.vault.prepare("PRAGMA user_version").get() as {
       user_version: number;
     };
-    expect(version.user_version).toBe(2);
+    expect(version.user_version).toBe(3);
     for (const table of [
       "locker_auth_credential",
       "core_entity_revision",
@@ -189,6 +189,8 @@ describe("schema/migrate", () => {
       "social_contact_channel",
       "notifications_notice",
       "share_circle_grant",
+      "share_grant",
+      "share_fulfillment",
     ]) {
       expect(
         db.vault
@@ -306,7 +308,10 @@ ${touchUpdatedAt("people_profile", "profile_id")}
         .all() as unknown[];
     const before = readAll();
 
-    migrate(db, VAULT_MIGRATIONS);
+    // Stops at rung two: this file holds only the two people tables, and rung
+    // three reads the commons plane. The grant rung has its own upgrade test
+    // (migrate-share-grant.test.ts) with the shape it needs.
+    migrate(db, VAULT_MIGRATIONS.slice(0, 2));
 
     expect(
       (db.prepare("PRAGMA user_version").get() as { user_version: number })

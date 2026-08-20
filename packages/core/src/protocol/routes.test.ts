@@ -20,6 +20,8 @@ import {
   assistantTurnPath,
   vaultConnectionAuthorizePath,
   vaultConnectionPath,
+  vaultGrantPath,
+  vaultGrantRevokePath,
 } from "./routes.js";
 
 describe("ROUTES table + plane prefixes", () => {
@@ -60,6 +62,15 @@ describe("parametric path helpers", () => {
     );
     expect(vaultConnectionAuthorizePath("c1")).toBe(
       "/centraid/_vault/connections/c1/authorize"
+    );
+  });
+
+  it("grant-plane paths encode the id component via the caller", () => {
+    expect(ROUTES.vaultGrants).toBe("/centraid/_vault/grants");
+    expect(ROUTES.vaultGrantSubjects).toBe("/centraid/_vault/grants/subjects");
+    expect(vaultGrantPath("g%2F1")).toBe("/centraid/_vault/grants/g%2F1");
+    expect(vaultGrantRevokePath("g1")).toBe(
+      "/centraid/_vault/grants/g1/revoke"
     );
   });
 

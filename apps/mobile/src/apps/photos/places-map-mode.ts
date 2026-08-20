@@ -101,6 +101,9 @@ export function coerceMapMode(value: unknown): PlacesMapMode {
 
 let current: PlacesMapMode = DEFAULT_PLACES_MAP_MODE;
 let hydrated = false;
+/** `setMapMode` already answered this process. An in-flight first hydrate
+ *  must not put the disk (or the default) back over that choice. */
+let chosen = false;
 const listeners = new Set<() => void>();
 
 function publish(): void {
@@ -115,6 +118,7 @@ export function hydrateMapMode(): void {
     PLACES_MAP_MODE_KEY,
     DEFAULT_PLACES_MAP_MODE
   ).then((stored) => {
+    if (chosen) return;
     const next = coerceMapMode(stored);
     if (next === current) return;
     current = next;
@@ -123,6 +127,7 @@ export function hydrateMapMode(): void {
 }
 
 export function setMapMode(next: PlacesMapMode): void {
+  chosen = true;
   if (next === current) return;
   current = next;
   Store.set(PLACES_MAP_MODE_KEY, next);

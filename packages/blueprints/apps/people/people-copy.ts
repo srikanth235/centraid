@@ -9,19 +9,18 @@
 // `Vaults` and `Shared with them` sections and the vault-counting status lines
 // live here in full.
 //
-// TWO STRINGS FROM THE HANDOFF'S INVENTORY ARE STILL ABSENT, and each is an
-// absence rather than an omission:
+// `Share` AND `Revoke` NOW HAVE COPY, because the grant plane answers them
+// (#825). A share is a standing grant over an audience × subject × capability
+// — no container of this app's own is required, and no link ceremony precedes
+// it — so the person screen carries both verbs and the words for them come
+// from the shared kit (`_shared/grant-copy.ts`): the delivery and reach
+// sentences, the revoke confirm, and the outcome each act reports. They are
+// NOT restated here; one fact, one sentence, both seats.
 //
-// - `Share` / `Link vault` (the person screen's commits) and the roster's
-//   trailing `Link` verb. A share is always a share OF A CONTAINER —
-//   `window.centraid.share` requires `containerType` + `containerId`
-//   (`types/centraid.d.ts`), and the shared sheet refuses to send without them
-//   (`_shared/ShareSheet.tsx`). People owns no container, and no People action
-//   writes a party↔vault binding, so a `Link vault` here could only open a
-//   sheet that cannot send. The reads are honest; the write is not there yet.
-// - `Revoke`, on a vault row and on a shared item. Nothing in `app.json` grants
-//   People a write on the sharing plane — its `share.*` scopes are `read` —
-//   so a `Revoke` would be a control naming an act this app cannot perform.
+// `Link vault` HAS NO COPY, and that is not a withholding: linking stopped
+// being an act a member performs. A grant to an unlinked person parks at
+// `awaiting_channel` and mints the invitation as its own first step, so a
+// `Link vault` commit would name a ceremony the product no longer has.
 //
 // Budgets (DESIGN.md § Copy): a label is a verb-first fragment, an empty state
 // or a banner is ONE sentence, nothing exceeds 120 characters, and "please",
@@ -48,6 +47,7 @@ export const VERBS = {
   remove: "Remove",
   restore: "Restore",
   save: "Save",
+  share: "Share",
   trash: "Trash",
   undo: "Undo",
 } as const;
@@ -130,32 +130,16 @@ export const LINK = {
   /** An invitation this person has not answered yet. */
   inviteRow: "Invitation sent",
   inviteWaiting: "waiting to be accepted",
-  /** A shared container this person has not accepted yet. */
-  waiting: "waiting",
-  /** `read · since 4 March` — a shared row's second line. */
+  /** `Can view · since 4 March` — a grant row's second line. */
   sharedSince: (capability: string, when: string) =>
     `${capability} · since ${when.toLowerCase()}`,
-  /** The two capabilities, in the handoff's own words. */
-  read: "read",
-  readWrite: "read + write",
 } as const;
 
-/**
- * How a shared container is named when the invitation carried no label. The
- * container TYPE is the only thing the grant itself knows, so it is worded
- * rather than printed as a schema name.
- */
-export const CONTAINER_WORDS: Readonly<Record<string, string>> = {
-  "core.collection": "An album",
-  "core.content_item": "A note",
-  "core.document": "A document",
-  "docs.folder": "A folder",
-  "media.asset": "A photograph",
-  "tally.group": "A group",
-};
-
-/** What an unlabelled container of an unknown type is called. */
-export const CONTAINER_FALLBACK = "Shared items";
+// CONTAINER_WORDS/CONTAINER_FALLBACK are gone (#825): they worded a
+// commons-era container whose only reader was the retired `shared_with_them`
+// projection. A grant's subject is named by the placement registry through
+// `grant-dashboard.ts`'s `grantNoun`, which is the same noun the app that owns
+// the subject already uses.
 
 /** The kinds a logged touch can be. The vault stores the word. */
 export const LOG_KINDS = ["Message", "Call", "Met up", "Note"] as const;
@@ -212,8 +196,6 @@ export const EMPTY = {
   upcoming: "No dates coming up.",
   recent: "Nothing logged yet.",
   vaults: "Not linked yet.",
-  shared: "Nothing shared yet.",
-  sharedUnlinked: "Link a vault to share.",
   channels: "No channels.",
   dates: "No dates.",
   notes: "No notes.",
@@ -232,13 +214,18 @@ export const FIRST_RUN = {
 /** The one sentence each screen is allowed. */
 export const SENTENCES = {
   mergeWarning: "Merging cannot be undone.",
+  /** Why the person screen offers no subject of its own to share: People
+   *  keeps people, not albums or documents, and the grant plane has no
+   *  catalog read to borrow one from (`grant-dashboard.ts` head). */
+  shareStartsWhereItLives: "A share starts in the app that holds the thing.",
   merged: "Merged.",
   trashPurge: "Erased after 30 days.",
 } as const;
 
-/** The handoff's three modal confirms, minus Revoke: People reads the sharing
- *  plane and writes none of it (see the head of this file), so there is no
- *  revoke to confirm. */
+/** Two of the handoff's three modal confirms. The third — Revoke — is the
+ *  KIT'S, word for word (`_shared/grant-copy.ts` revokeConfirmTitle/Body): a
+ *  removal crossing to a vault this device does not own is asked for, not
+ *  performed, and that sentence is written once for both seats. */
 export const CONFIRMS = {
   trash: {
     title: (name: string) => `Move ${name} to trash?`,

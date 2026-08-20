@@ -4,10 +4,12 @@
  * direct call into `@centraid/vault`'s share/move doors.
  *
  * It owns no state machine. Every status this file used to write by hand now
- * goes through `applyEdgeSignal` → `share-coordinator.ts`, exactly as the
- * peer transport's does — locality decides ROUTING, never semantics (D3).
- * What remains here is the genuinely local part: which vault calls to make,
- * in which order.
+ * goes through `applyEdgeSignal` → `share-coordinator.ts`. What remains here
+ * is the genuinely local part: which vault calls to make, in which order.
+ *
+ * Since #825 this is the ONLY transport an edge has: copy-as-share retired,
+ * so a placement is always between two vaults one person owns and both are
+ * open in this process.
  *
  * That order is the invariant a crash can land inside of: the audience
  * projection ALWAYS commits (and earns its receipt) before a move deletes the
@@ -57,10 +59,12 @@ export function deliverGiveLocally(input: DeliverGiveLocallyInput): EdgeRow {
       itemType: current.item_type,
       itemIds,
       sharedBy: current.owner_id,
-      // Threat 8: a co-hosted CROSS-owner give gates the origin's
-      // `media.location` policy inside `readShareClosure`. Same-owner gives
-      // (Work→Personal) are unaffected.
-      crossOwner: input.facts.crossOwner,
+      // Threat 8's cross-owner `media.location` gate inside `readShareClosure`
+      // has nothing left to gate: an edge is a same-owner placement
+      // (Work→Personal), which that gate never applied to. A grant to ANOTHER
+      // person goes through the grant plane's fulfillment engine, which reads
+      // its own closure and applies its own policy.
+      crossOwner: false,
     });
     current = applyEdgeSignal(input.db, current, input.facts, {
       type: "target-projected",

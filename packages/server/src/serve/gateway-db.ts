@@ -14,6 +14,7 @@ import { DatabaseSync } from "node:sqlite";
 import type { SQLInputValue } from "node:sqlite";
 
 import { installGatewaySchema } from "./gateway-schema.js";
+import { retireDeadShareEffects } from "./share-effects-retire.js";
 
 export const GATEWAY_DB_FILE = "gateway.db";
 
@@ -90,12 +91,19 @@ export class GatewayDatabase {
       // SELECT happens to run first (issue #568 item H).
       if (lockMode === "read-only")
         db.prepare("SELECT 1 FROM sqlite_schema LIMIT 1").get();
-      return new GatewayDatabase(
+      const opened = new GatewayDatabase(
         file,
         db,
         lockMode,
         options.networkFileSystem ?? detectNetworkFileSystem(root)
       );
+      // Durable rows can outlive the transport that created them. A gateway
+      // upgraded across #825's copy-as-share retirement still holds queued
+      // obligations whose verb no longer exists; they are drained here, once,
+      // at the same door the schema is installed at, so no drainer ever sees
+      // one. A fresh gateway finds nothing and pays one indexed read.
+      if (lockMode !== "read-only") retireDeadShareEffects(opened);
+      return opened;
     } catch (error) {
       db.close();
       if (isBusy(error)) throw new GatewayLockError(file);

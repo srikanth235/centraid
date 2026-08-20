@@ -116,9 +116,6 @@ export const PersonLog = lazyScreen(() => import("./src/apps/people/LogTouch"));
 export const PersonEditor = lazyScreen(
   () => import("./src/apps/people/PersonEditor")
 );
-export const PersonLink = lazyScreen(
-  () => import("./src/apps/people/VaultLink")
-);
 export const PersonMerge = lazyScreen(
   () => import("./src/apps/people/MergeView")
 );

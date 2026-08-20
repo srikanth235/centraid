@@ -44,7 +44,7 @@ import type {
   CommonsPullOutcome,
   CommonsStewardStatus,
 } from "./commons-observability.js";
-import type { PeerDial, PeerDialRoute } from "./peer-edge-give-client.js";
+import type { PeerDial, PeerDialRoute } from "./peer-link-client.js";
 
 const CHUNK_BYTES = 1024 * 1024;
 
@@ -87,7 +87,7 @@ function fileSizeOf(path: string): number {
  * defect b): the steward authorizes the pull once and every chunk validates
  * against that session — no per-chunk closure export or signing on either
  * side. Chunks stream into the vault's own promotion temp file (the same
- * pattern `peer-blob-pull.ts` uses), so member-side peak memory is one chunk
+ * pattern the retired give-side blob pull used), so member-side peak memory is one chunk
  * plus the hash state, not the whole blob; a store without the temp seam (the
  * in-memory test tier) falls back to whole-blob assembly, bounded by the
  * blob's declared size.

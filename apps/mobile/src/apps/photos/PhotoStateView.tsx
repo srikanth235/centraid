@@ -21,7 +21,7 @@ import {
   surfaceWriteFailure,
   surfaceWriteOutcome,
 } from "../../kit/replica/write-outcome";
-import ShareSheet from "../../kit/share/ShareSheet";
+import GrantSheet from "../../kit/share/GrantSheet";
 import { borders, spacing, t, useTheme, radii } from "../../kit/theme";
 import type { NativeWriteResult } from "../../lib/replica/native-session";
 import type { PhotosScreenProps } from "../../navigation";
@@ -42,7 +42,7 @@ import PhotosScreen from "./PhotosScreen";
 import PhotoTimeline from "./PhotoTimeline";
 import { sectionPhotoAssets } from "./timeline-model";
 import { usePhotoTimeline } from "./timeline-source";
-import { useCopyToVault } from "./use-copy-to-vault";
+import { usePhotoSelectionShare } from "./use-photo-selection-share";
 import { READ_ONLY_VAULT_REASON } from "./viewer-model";
 
 /**
@@ -163,9 +163,9 @@ export default function PhotoStateView({
   };
   const selected = vaultAssets(assets, selection);
   // One handler for the third selection target, shared by every Photos shelf
-  // (`use-copy-to-vault.ts`) so the picker moment and the refusal grammar
-  // cannot drift between them.
-  const copyToVault = useCopyToVault(
+  // (`use-photo-selection-share.ts`) so the grant sheet's moment and the
+  // refusal grammar cannot drift between them.
+  const share = usePhotoSelectionShare(
     () => selected,
     () => setSelection(new Set())
   );
@@ -244,7 +244,7 @@ export default function PhotoStateView({
     // Trash swaps the fifth target for Restore (§6). Every other shelf here
     // carries the base five untouched.
     shelf: mode === "trash" ? ("trash" as const) : ("normal" as const),
-    copyLabel: copyToVault.copyLabel,
+    copyLabel: share.copyLabel,
     readOnlyReason: writeBlockedReason,
     favorite: canWrite
       ? {
@@ -266,8 +266,8 @@ export default function PhotoStateView({
         ? "Add to album from the library, where the albums are."
         : writeBlockedReason!,
     },
-    // Share uses the same ceremony-free commons destination list everywhere.
-    share: copyToVault.handler,
+    // Share is one standing grant over one photograph, through the one kit.
+    share: share.handler,
     download: { unavailableReason: NO_DOWNLOAD_REASON },
     trash: canWrite
       ? {
@@ -407,10 +407,10 @@ export default function PhotoStateView({
           </Text>
         </View>
       )}
-      <ShareSheet
-        visible={copyToVault.picking}
-        onClose={() => copyToVault.dismiss()}
-        {...copyToVault.sheetProps}
+      <GrantSheet
+        visible={share.visible}
+        onClose={() => share.dismiss()}
+        {...share.sheetProps}
       />
     </PhotosScreen>
   );

@@ -35,7 +35,6 @@ import {
   PersonView,
   PersonLog,
   PersonEditor,
-  PersonLink,
   PersonMerge,
   PeopleTrash,
   AlbumDetail,
@@ -157,7 +156,6 @@ export function PeopleNavigator(): React.JSX.Element {
       <PeopleStack.Screen name="Person" component={PersonView} />
       <PeopleStack.Screen name="PersonLog" component={PersonLog} />
       <PeopleStack.Screen name="PersonEditor" component={PersonEditor} />
-      <PeopleStack.Screen name="PersonLink" component={PersonLink} />
       <PeopleStack.Screen name="PersonMerge" component={PersonMerge} />
       <PeopleStack.Screen name="PeopleTrash" component={PeopleTrash} />
     </PeopleStack.Navigator>

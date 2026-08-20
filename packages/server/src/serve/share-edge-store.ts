@@ -14,12 +14,7 @@
 import type { GatewayDatabase } from "./gateway-db.js";
 import { recordShareAccessReceipt } from "./share-access-receipts.js";
 import { reduceEdge } from "./share-coordinator.js";
-import type {
-  EdgeDelivery,
-  EdgeFacts,
-  EdgeSignal,
-  EdgeState,
-} from "./share-coordinator.js";
+import type { EdgeFacts, EdgeSignal, EdgeState } from "./share-coordinator.js";
 import type { EdgeRow } from "./share-edge-row.js";
 import { readEdgeRow } from "./share-edge-row.js";
 import { enqueueShareEffect } from "./share-effects.js";
@@ -37,16 +32,8 @@ export function edgeStateOf(row: EdgeRow): EdgeState {
   };
 }
 
-export function edgeFactsOf(
-  row: EdgeRow,
-  context: { delivery: EdgeDelivery; crossOwner: boolean }
-): EdgeFacts {
-  return {
-    edgeId: row.edge_id,
-    kind: row.kind,
-    delivery: context.delivery,
-    crossOwner: context.crossOwner,
-  };
+export function edgeFactsOf(row: EdgeRow): EdgeFacts {
+  return { edgeId: row.edge_id, kind: row.kind };
 }
 
 /**

@@ -6,7 +6,7 @@
     "packages/server/src/serve/commons-*.ts",
     "packages/server/src/routes/commons-*.ts",
     "packages/server/src/routes/edges-*.ts",
-    "packages/server/src/routes/edge-*.ts",
+    "packages/vault/src/grant/*.ts",
     "packages/vault/src/share/*.ts"
   ],
   "allowlist": []

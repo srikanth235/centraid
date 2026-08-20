@@ -159,8 +159,6 @@ export type PeopleStackParamList = {
   PersonLog: { personId: string };
   // One editor for edit and new: no `personId` means a new person.
   PersonEditor: { personId?: string } | undefined;
-  // The vault-link setup screen — a rare act, so it gets room.
-  PersonLink: { personId: string };
   PersonMerge: { personId: string };
   PeopleTrash: undefined;
 };

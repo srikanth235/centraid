@@ -264,7 +264,7 @@ export async function runBatchDownload(
 
 // `runBatchCopyToVault` (the old `copy-into-scope` command path) is gone
 // (#726 P6) — it was never backed on the gateway (no such action was ever
-// registered; every call silently narrated "not recognised"). The selection
-// bar's Share control now opens `_shared/ShareSheet.tsx`, which gives through
-// the SAME landed `/edges` door Lightbox's single-asset share already used
-// successfully (`window.centraid.place`) — a real fix, not a relabeling.
+// registered; every call silently narrated "not recognised"). There is no
+// batch share command here at all now (#825): the bar's Share control opens
+// the shared grant kit over ONE subject, and a grant is a standing answer to
+// "who may see this", not a copy this module could run in a loop.

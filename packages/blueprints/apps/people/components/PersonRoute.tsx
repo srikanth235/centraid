@@ -5,18 +5,19 @@
 // they all come from `Shared.tsx` and `shared.module.css`, so this screen and
 // the roster cannot disagree about what a 44px line looks like.
 //
-// THE VAULT LINK IS DRAWN HERE IN FULL, and its two sections are ABSENT
-// ENTIRELY when the sharing plane could not be read: `vaults`,
-// `pending_invites` and `shared_with_them` are null together, and an empty
-// `Not linked yet.` over a denied read would be this screen answering a
-// question nobody could ask (`queries/_shared.ts`).
+// THE VAULT LINK IS DRAWN HERE IN FULL, and its section is ABSENT ENTIRELY
+// when the sharing plane could not be read: `vaults` and `pending_invites`
+// are null together, and an empty `Not linked yet.` over a denied read would
+// be this screen answering a question nobody could ask
+// (`queries/_shared.ts`).
 //
-// WHAT THE HANDOFF DRAWS AND THIS SCREEN STILL DOES NOT: the `Share` /
-// `Link vault` commits and the per-row `Revoke`. Both are WRITES on the
-// sharing plane, and People holds only reads on it (`app.json` grants
-// `share.*` as `read`); a share is additionally always a share of a container,
-// which People does not own (`people-copy.ts` head). So the commits are `Log`
-// + `Edit` — the two acts this screen can actually perform.
+// `Share` AND `Revoke` ARE HERE, AND THEY ARE LIVE (#825). Both were withheld
+// while a share could only be a share of a container People does not own; a
+// share is now a standing grant over an audience × subject × capability, so
+// the person screen is the grant dashboard the ruling names it — every live
+// grant reaching this party, with `Revoke` on each row and `Share` on the
+// section that lists them (`PersonGrants.tsx`). `Link vault` is gone rather
+// than withheld: linking is no longer an act a member performs.
 //
 // ADDING IS A FIELD WHERE THE ROW WILL BE, never a new screen (handoff
 // deviation 3). The composer's state lives in `app-root.tsx`; this screen only
@@ -32,8 +33,6 @@ import {
   whenLabel,
 } from "../format.ts";
 import {
-  CONTAINER_FALLBACK,
-  CONTAINER_WORDS,
   EMPTY,
   FIELDS,
   FRAGMENTS,
@@ -46,10 +45,9 @@ import type {
   ComposerKey,
   ContactChannel,
   PersonRouteProps,
-  ShareCapability,
-  SharedContainer,
 } from "../types.ts";
 import { EmptyState } from "./EmptyState.tsx";
+import { PersonGrants } from "./PersonGrants.tsx";
 import {
   CadenceLine,
   ChipRow,
@@ -73,20 +71,6 @@ const CHANNEL_KINDS: readonly ContactChannel["kind"][] = [
   "email",
   "handle",
 ];
-
-/** The two capabilities in the handoff's own words — `read` and `read + write`
- *  — rather than the vault's `read+write`, which is a stored value, not copy. */
-function capabilityWord(capability: ShareCapability): string {
-  return capability === "read+write" ? LINK.readWrite : LINK.read;
-}
-
-/** What a shared container is called. The invitation's own label wins; without
- *  one the container TYPE is worded, because a container id names nothing a
- *  member would recognise. */
-function sharedName(container: SharedContainer): string {
-  if (container.container_label) return container.container_label;
-  return CONTAINER_WORDS[container.container_type] ?? CONTAINER_FALLBACK;
-}
 
 /** `phone · work · preferred` — the channel row's second line. A label the
  *  vault never stored is absent rather than drawn as an empty separator. */
@@ -138,7 +122,6 @@ export function PersonRoute(props: PersonRouteProps): ReactNode {
   // in hand, not a second read.
   const vaults = person.vaults;
   const invites = person.pending_invites;
-  const sharedItems = person.shared_with_them;
   const linksAvailable = vaults !== null;
   const linked = (vaults?.length ?? 0) > 0;
 
@@ -222,39 +205,18 @@ export function PersonRoute(props: PersonRouteProps): ReactNode {
         </Section>
       ) : null}
 
-      {/* SHARED WITH THEM opens by default exactly while the person is linked
-          — an unlinked person's section says what to do about it instead of
-          standing open and empty. `waiting` in the meta slot is the member's
-          own end of an invitation: shared, not yet accepted. */}
-      {linksAvailable ? (
-        <Section
-          title={SECTIONS.shared}
-          count={sharedItems?.length ?? 0}
-          collapsible
-          open={"shared" in props.collapsed ? !props.collapsed.shared : linked}
-          onToggle={() => props.onToggleSection("shared")}
-        >
-          {(sharedItems?.length ?? 0) === 0 ? (
-            <EmptyState title={linked ? EMPTY.shared : EMPTY.sharedUnlinked} />
-          ) : (
-            (sharedItems ?? []).map((container) => (
-              <Row
-                key={container.grant_id}
-                name={sharedName(container)}
-                strong
-                sub={LINK.sharedSince(
-                  capabilityWord(container.capability),
-                  whenLabel(container.since)
-                )}
-                subNumeric
-                {...(container.status === "invited"
-                  ? { meta: LINK.waiting, metaNet: true }
-                  : {})}
-              />
-            ))
-          )}
-        </Section>
-      ) : null}
+      {/* SHARED WITH THEM IS THE GRANT DASHBOARD (`PersonGrants.tsx`): every
+          live grant reaching this party, read from the plane itself
+          (`?partyId=`), with `Share` and `Revoke` on it. It opens by default
+          exactly while the person is linked, as the handoff has it. */}
+      <PersonGrants
+        partyId={person.party_id}
+        personName={person.name}
+        roster={props.roster}
+        open={"shared" in props.collapsed ? !props.collapsed.shared : linked}
+        onToggle={() => props.onToggleSection("shared")}
+        onStatus={props.onStatus}
+      />
 
       <Section
         title={SECTIONS.channels}

@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { InlineAppModule } from "@centraid/blueprints/apps/inline-types";
 import { lockerPendingProjection } from "@centraid/blueprints/apps/locker/pending-projection";
+import { ROUTES } from "@centraid/core/protocol";
 
 import type * as TypeImport_oycips from "../../gateway-client-core.js";
 import type { ReplicaInvalidation } from "../../replica/types.js";
@@ -876,5 +877,47 @@ describe(installInlineCentraid, () => {
     expect(target.centraid).toBe(secondClient);
     second();
     expect(target.centraid).toBeUndefined();
+  });
+
+  it("clears window.centraid when only the live mount tears down", () => {
+    // Discarded useState initializers publish a client whose teardown never
+    // arms. Restoring that predecessor is the goHome hang: Home paints,
+    // `window.centraid` stays set.
+    const session = fakeSession();
+    const target: { centraid?: unknown } = {};
+    installInlineCentraid({
+      appId: "tasks",
+      session,
+      queries: noQueries,
+      target,
+    });
+    const live = installInlineCentraid({
+      appId: "tasks",
+      session,
+      queries: noQueries,
+      target,
+    });
+    live();
+    expect(target.centraid).toBeUndefined();
+  });
+
+  it("answers the grant plane through the host bridge", async () => {
+    const session = fakeSession();
+    const target: { centraid?: unknown } = {};
+    installInlineCentraid({
+      appId: "docs",
+      session,
+      queries: noQueries,
+      target,
+    });
+    doFetch.mockResolvedValue({
+      ok: true,
+      text: async () => JSON.stringify({ subjects: [] }),
+    } as Response);
+
+    await expect(
+      (target.centraid as InlineCentraidClient).grants.subjects()
+    ).resolves.toStrictEqual({ subjects: [] });
+    expect(doFetch.mock.calls[0]?.[1]).toBe(ROUTES.vaultGrantSubjects);
   });
 });

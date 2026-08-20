@@ -62,7 +62,7 @@ import { EnrollmentStore } from "../serve/enrollment-store.js";
 import type { GatewayDatabase } from "../serve/gateway-db.js";
 import { PairingTicketStore } from "../serve/pairing-store.js";
 import { startPeerDial } from "../serve/peer-dial.js";
-import type { PeerDial } from "../serve/peer-edge-give-client.js";
+import type { PeerDial } from "../serve/peer-link-client.js";
 import { announceLocalRoutes } from "../serve/peer-route-announce.js";
 import type { DeviceAccess } from "../serve/vault-context.js";
 import { VaultLinksStore } from "../serve/vault-links-store.js";

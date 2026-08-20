@@ -195,7 +195,6 @@ import { makeDemoRouteHandler } from "../routes/demo-routes.js";
 import { makeDeviceWorkRouteHandler } from "../routes/device-work-routes.js";
 import { makeDevicesRouteHandler } from "../routes/devices-routes.js";
 import { makeDiagnosticsRouteHandler } from "../routes/diagnostics-routes.js";
-import { makeEdgeAnswerRouteHandler } from "../routes/edge-answer-routes.js";
 import { EDGES_PATH, makeEdgesRouteHandler } from "../routes/edges-routes.js";
 import {
   ENRICH_PROFILES_PREFIX,
@@ -206,6 +205,7 @@ import {
   makeEnrichSearchRouteHandler,
 } from "../routes/enrich-search-routes.js";
 import { makeGatewayInfoRouteHandler } from "../routes/gateway-info-routes.js";
+import { GRANTS_PATH, makeGrantRouteHandler } from "../routes/grant-routes.js";
 import { makeHarnessesRouteHandler } from "../routes/harnesses-routes.js";
 import type { HarnessAcpCapabilities } from "../routes/harnesses-routes.js";
 import { makeHealthRouteHandler } from "../routes/health-routes.js";
@@ -273,6 +273,7 @@ import { GatewayDatabase } from "./gateway-db.js";
 import { buildDiagnosticsBundle } from "./gateway-diagnostics.js";
 import { GatewayLogStore } from "./gateway-log-store.js";
 import { GatewayPerformanceMonitor } from "./gateway-performance.js";
+import { createGrantRefreshDoorbell } from "./grant-fulfillment.js";
 import {
   formatHardwareProfileDetail,
   resolveGatewayHardwareProfile,
@@ -308,7 +309,7 @@ import {
   pullPeerCommons,
   refusePeerCommonsInvitation,
 } from "./peer-commons-client.js";
-import type { PeerDial } from "./peer-edge-give-client.js";
+import type { PeerDial } from "./peer-link-client.js";
 import { createPeerPlaneSweep } from "./peer-plane-sweep.js";
 import { announceLocalRoutes } from "./peer-route-announce.js";
 import { PowerContextMonitor } from "./power-context.js";
@@ -3843,8 +3844,29 @@ export async function buildGateway(
     armNotificationsDoorbellWindow(vaultId);
   };
 
+  /*
+   * The grant plane's reach on this host (#825): every mounted vault, and
+   * nothing else. `undefined` here is a fact about what this gateway has
+   * mounted, never about the grant — the engine reports it as such.
+   */
+  const grantFulfillmentHost = {
+    vaultFor: (vaultId: string) => vaultRegistry.get(vaultId)?.db,
+    logger: health.loggerFor("share", logger),
+  };
+  /*
+   * View grants sync forward (ruling G-view), so a committed write in an
+   * origin vault is what re-projects them. The doorbell coalesces a burst of
+   * commits into one pass and swallows its own failures: a share that could
+   * not be carried is durable state on the fulfillment rows, never a reason
+   * for the write that triggered it to look like it failed.
+   */
+  const grantRefreshDoorbell = createGrantRefreshDoorbell({
+    host: grantFulfillmentHost,
+  });
+
   provenanceDoorbell = (vaultId, entityTypes) => {
     ringNotificationsDoorbell(vaultId);
+    grantRefreshDoorbell.ring(vaultId);
     runWithVaultContext({ vaultId }, () =>
       schedulers.get(vaultId)?.nudge(entityTypes)
     );
@@ -4660,6 +4682,32 @@ export async function buildGateway(
           }),
       })
     ),
+    // The grant plane (#825): the owner's standing shares of this vault's
+    // subjects, and the fulfillment state behind each one. Mounted BEFORE the
+    // generic `_vault` handler (same prefix family).
+    forRoutePrefixes(
+      GRANTS_PATH,
+      makeGrantRouteHandler({
+        enrollments: enrollmentStore,
+        currentVault: () => {
+          // `current()` throws when this host has no vault for the request's
+          // scope; the grant route answers that as a state (409) rather than
+          // as a fault, because "nothing is mounted" is a fact about the host.
+          let plane;
+          try {
+            plane = vaultRegistry.current();
+          } catch {
+            return undefined;
+          }
+          return {
+            vaultId: plane.boot.vaultId,
+            db: plane.db,
+            ownerPartyId: plane.boot.ownerPartyId,
+          };
+        },
+        host: grantFulfillmentHost,
+      })
+    ),
     // Blob custody (issue #296): staged uploads in, consent-checked +
     // Range-capable bytes out. Mounted BEFORE the generic `_vault`
     // handler (same prefix family).
@@ -4959,7 +5007,6 @@ export async function buildGateway(
     enrollments: enrollmentStore,
     links: vaultLinksStore,
     vaultFor: (vaultId) => vaultRegistry.get(vaultId)?.db,
-    ...(options.peerPlane?.dial ? { peerDial: options.peerPlane.dial } : {}),
   });
   const commonsHandler = makeCommonsRouteHandler({
     enrollments: enrollmentStore,
@@ -5072,15 +5119,6 @@ export async function buildGateway(
       return invitePeerToCommons({ dial, route: link.route, invitation });
     },
   });
-  // The D9 answer route (#726 P3 decision 9) — a same-machine owner-tier
-  // surface, mounted like any other route, distinct from the peer plane.
-  const edgeAnswerHandler = makeEdgeAnswerRouteHandler({
-    gatewayDatabase,
-    enrollments: enrollmentStore,
-    links: vaultLinksStore,
-    vaultFor: (vaultId) => vaultRegistry.get(vaultId)?.db,
-    ...(options.peerPlane?.dial ? { peerDial: options.peerPlane.dial } : {}),
-  });
   /*
    * The peer plane (#726 P3 decision 6). Mounted OUTSIDE the prefix registry
    * on purpose: every route in there resolves a proved DEVICE first, and a
@@ -5098,9 +5136,6 @@ export async function buildGateway(
         localRoute: options.peerPlane.localRoute,
         localLabel: () => os.hostname().replace(/\.local$/u, ""),
         budget: createTokenBucket(PEER_PLANE_BUDGET),
-        // The remote-give frames (#726 P3 decision 7) — same vault resolver
-        // and gateway.db the same-machine edge plane already uses.
-        vaultFor: (vaultId) => vaultRegistry.get(vaultId)?.db,
         commonsVaultFor: (vaultId) => vaultRegistry.get(vaultId)?.db,
         commonsGatewayFor: (vaultId) => vaultRegistry.get(vaultId)?.gateway,
         commonsCredentialFor: (vaultId) => {
@@ -5113,13 +5148,12 @@ export async function buildGateway(
               }
             : undefined;
         },
-        gatewayDatabase,
       })
     : undefined;
   /*
-   * Peer-plane background delivery (#726 P3 gaps 2 & 3): drains
-   * the ONE share outbox (`share_effects`: a give's ORIGINAL bytes, a D9
-   * 'refuse' the origin has not heard yet, a give the peer was offline for)
+   * Peer-plane background maintenance (#726 P3 gaps 2 & 3): drains
+   * the ONE share outbox (`share_effects` — since #825 a same-owner
+   * placement whose vaults were not both open when it was asked for)
    * on the gateway's own clock
    * rather than never — same posture as the outbox sweep below (bounded rows
    * per tick, backs off on failure, never throws out of the timer). `dial`
@@ -5310,14 +5344,6 @@ export async function buildGateway(
     if (
       url.pathname === COMMONS_RECOVERY_PATH &&
       (await commonsRecoveryHandler(req, res))
-    )
-      return true;
-    // The D9 answer surface (#726 P3 decision 9): `/centraid/_gateway/edges/pending`
-    // and `/centraid/_gateway/edges/:edgeId/answer` — sub-paths `edgesHandler`
-    // itself never matches (it checks exact equality against `EDGES_PATH`).
-    if (
-      url.pathname.startsWith(`${EDGES_PATH}/`) &&
-      (await edgeAnswerHandler(req, res))
     )
       return true;
     if (
@@ -5524,6 +5550,7 @@ export async function buildGateway(
     for (const open of notificationsDoorbellWindows.values())
       clearTimeout(open.timer);
     notificationsDoorbellWindows.clear();
+    grantRefreshDoorbell.stop();
     // Await the in-flight backup run (if any): its post-registration steps
     // write shipper + backup state, and the vault registry teardown below
     // closes the very planes it would touch.

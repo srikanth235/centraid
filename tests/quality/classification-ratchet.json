@@ -1,10 +1,10 @@
 {
-  "approvedDeviation": "#821 registers nine mobile People law tags in tests/matrix.json#laws after the #822 whole-file fingerprint re-pin. Qualities, demonstratedRed, and matrixGovernanceFingerprint are unchanged. Prior: #822.",
+  "approvedDeviation": "#825 re-pins packages/server/src/routes/route-security.ts after the grant-routes owner-tier row. Qualities, demonstratedRed, and matrixGovernanceFingerprint are unchanged. Prior: #821.",
   "matrixGovernanceFingerprint": "8657a0b1943b8244ebf0632ca4c4f4ede4e22ee034662db59fc2f39058a34737",
   "fingerprints": {
     "packages/server/src/acp/backends/acp/vault-mcp-server.ts": "62893489b538f861feb46200dc69a53a7ce02b0809224b93f74e2f39fc32276d",
     "packages/server/src/automation/manifest/manifest.ts": "0e2b3c0a31d39907e2e2ae860bb3bdbf0c66e683e71dc59d20aaf14ff5ef220f",
-    "packages/server/src/routes/route-security.ts": "a73429d277d1532e69fcf5bebf1cd00899b318ff8326a4ff8b06dc51b308eef0",
+    "packages/server/src/routes/route-security.ts": "c2fd8dcb6a9687552e4550e3496085b28c1498034472eb6f1173027b4300d82c",
     "packages/server/src/serve/health-registry.ts": "d1f3fc416ecbe43af2ab4b091fecf3b1041590e52f2002a242e5031c65c9fd04",
     "packages/vault/src/schema/sealed.ts": "40fba400b21048b193006c3e81d063e0fdfb79cfe1dd3b4b90b94bd44547ecc0",
     "tests/quality/fault-points.ts": "805c9c9611cee6a209cba5ff3aa0365e70bb3a3bbbc6e2383cecdd07f50f570e",
