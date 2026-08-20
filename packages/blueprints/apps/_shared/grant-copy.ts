@@ -65,7 +65,7 @@ export function deliveryLabel(delivery: GrantDelivery): string {
       return "Removal sent";
     case "removed":
       return "Removed";
-    default:
+    case "none":
       return "Not sent yet";
   }
 }
@@ -87,7 +87,7 @@ export function reachLabel(reach: GrantReach): string {
       return "Link ended";
     case "never-reached":
       return "Not reached yet";
-    default:
+    case "unknown":
       return "Checking…";
   }
 }
@@ -101,7 +101,8 @@ export function reachNote(reach: GrantReach): string | null {
       return "The link to their vault ended; nothing new can be delivered.";
     case "never-reached":
       return "Sharing sends an invitation first.";
-    default:
+    case "live":
+    case "unknown":
       return null;
   }
 }

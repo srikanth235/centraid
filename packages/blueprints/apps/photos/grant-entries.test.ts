@@ -59,7 +59,7 @@ describe("no app-private share plumbing remains under apps/photos", () => {
         )
       )
     );
-    expect([...subjects].sort()).toStrictEqual([
+    expect([...subjects].sort((a, b) => a.localeCompare(b))).toStrictEqual([
       "core.collection",
       "media.asset",
     ]);

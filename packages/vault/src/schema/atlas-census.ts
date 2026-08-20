@@ -112,6 +112,17 @@ export function atlasCensus(
   let populatedKinds = 0;
 
   for (const entry of atlasTables()) {
+    // Grant-plane tables ride the canonical registry (export/replica) but
+    // are not COUNTed on Atlas first paint. Their row counts belong with
+    // the graph, which is already loaded after first paint; the grant
+    // surfaces already answer "how many grants". Two extra COUNT(*) would
+    // push the first-paint SQL budget past 140 (#825).
+    if (
+      entry.logical === "share.grant" ||
+      entry.logical === "share.fulfillment"
+    ) {
+      continue;
+    }
     const db = entry.file === "vault" ? vault : journal;
     const rows = countRows(db, entry.physical);
     const size = method === "dbstat" ? bytesOf.get(entry.physical) : undefined;
