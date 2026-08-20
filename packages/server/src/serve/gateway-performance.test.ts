@@ -57,6 +57,29 @@ describe(GatewayPerformanceMonitor, () => {
     expect(histogram.enabled).toBe(false);
   });
 
+  it("resetMeasurement restarts the rolling window so a leftover timer cannot close a handful of samples as peak", async () => {
+    const clock = useFakeClock();
+    const histogram = new FakeHistogram();
+    const monitor = new GatewayPerformanceMonitor({
+      histogram,
+      resolutionMs: 20,
+      sampleWindowMs: 1000,
+      sampleIntervalMs: 1000,
+    });
+    monitor.resetMeasurement();
+    histogram.count = 6;
+    histogram.p99 = 503_000_000;
+    histogram.max = 503_000_000;
+    await clock.advance(50);
+    expect(monitor.snapshot().eventLoopLagPeakP99Ms).toBe(0);
+    histogram.count = 50;
+    histogram.p99 = 40_000_000;
+    histogram.max = 40_000_000;
+    await clock.advance(1000);
+    expect(monitor.snapshot().eventLoopLagPeakP99Ms).toBe(20);
+    monitor.close();
+  });
+
   it("subtracts the sampling interval so an idle histogram reports zero lag", () => {
     const histogram = new FakeHistogram();
     histogram.max = 20_000_000;

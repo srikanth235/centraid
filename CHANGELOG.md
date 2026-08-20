@@ -72,6 +72,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Fixed
 
+- `main` CI after the People/Docs binding-layer land: pending-overlay locators accept both the People bar `Add` (shell titlebar) and first-run `Add person` without a strict-mode collision; the rust byte-plane drains an unauthorized `/v1/hash` POST so a 512KiB `fetch` gets 403 instead of `EPIPE`; `bun install` retries tarball extract flakes; and the gateway low-end lag peak is a completed window after the measurement epoch rather than a leftover handful of samples ([#827](https://github.com/srikanth235/centraid/issues/827)).
 - Docs Preview opens the reading sheet as an article named for the file, with the title on the paper and the body paragraphs painted, so the north-star journey can find `lease-notes.txt` after a PWA reload ([#822](https://github.com/srikanth235/centraid/issues/822)).
 - `main` CI after the Docs/System binding-layer land: web typecheck accepts the health-module mock, and the matrix fingerprint is re-pinned for the two pending-overlay flow-name edits ([#822](https://github.com/srikanth235/centraid/issues/822)).
 - A handler that exceeds its deadline now fails closed on that deadline instead of waiting for the worker thread to exit, so a hung query cannot hold the admission slot or stall the next dispatch ([#811](https://github.com/srikanth235/centraid/issues/811)).

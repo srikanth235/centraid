@@ -13,6 +13,13 @@ import {
   waitForHome,
 } from "./fixtures";
 
+/** Roster bar verb is `Add` on the shell titlebar (outside `inline-app-view`);
+ *  first-run commit is `Add person` inside the view. Either means the route
+ *  booted. Both can be visible at once, so take the first match. */
+function peopleNewPersonControl(page: Page) {
+  return page.getByRole("button", { name: /^Add(?: person)?$/u }).first();
+}
+
 async function openFirstParty(page: Page, name: string): Promise<void> {
   await openAppFromPalette(page, name);
   await expect(page.getByTestId("inline-app-view")).toBeVisible();
@@ -231,9 +238,7 @@ test("production Tally, Tasks, and Agenda pending rows survive an offline Electr
     // People is restored (#821): the roster is live, so the New-person
     // control is the observable that the route booted — not the v11 wall.
     await openFirstParty(page, "People");
-    await expect(
-      page.getByRole("button", { name: /^Add(?: person)?$/u })
-    ).toBeVisible();
+    await expect(peopleNewPersonControl(page)).toBeVisible();
 
     await openFirstParty(page, "Tally");
     await page.getByText("Offline Journey", { exact: true }).first().click();
@@ -284,9 +289,7 @@ test("production Tally, Tasks, and Agenda pending rows survive an offline Electr
     await expect(page.locator(".kit-pending-chip")).toHaveText("queued");
 
     await openFirstParty(page, "People");
-    await expect(
-      page.getByRole("button", { name: /^Add(?: person)?$/u })
-    ).toBeVisible();
+    await expect(peopleNewPersonControl(page)).toBeVisible();
 
     await openFirstParty(page, "Tally");
     await page.getByText("Offline Journey", { exact: true }).first().click();

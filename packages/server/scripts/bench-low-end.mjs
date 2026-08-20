@@ -126,6 +126,42 @@ async function runInternal() {
       "content-type": "application/json",
     };
 
+    const insert = async (shape, label) => {
+      const now = new Date().toISOString();
+      const response = await fetch(
+        `${handle.url}/centraid/_vault/atlas/browse/insert`,
+        {
+          method: "POST",
+          headers,
+          body: JSON.stringify(
+            shape === "core.party"
+              ? {
+                  table: "core.party",
+                  values: {
+                    kind: "person",
+                    display_name: label,
+                    created_at: now,
+                    updated_at: now,
+                    ontology_version: "1.3",
+                  },
+                }
+              : {
+                  table: "core.place",
+                  values: {
+                    name: label,
+                    kind: "venue",
+                    created_at: now,
+                  },
+                }
+          ),
+        }
+      );
+      if (!response.ok)
+        throw new Error(
+          `warmup write failed: ${response.status} ${await response.text()}`
+        );
+    };
+
     // Warm routing, auth, prepared statements, and the native lag histogram
     // without adding unmeasured writes to the fsync denominator.
     await Promise.all(
@@ -139,6 +175,10 @@ async function runInternal() {
           );
       })
     );
+    // The measured mix is atlas.insert, not status. Compile those statements
+    // and one SQLite write of each shape before the lag epoch starts.
+    await insert("core.party", "Gateway benchmark warmup party");
+    await insert("core.place", "Gateway benchmark warmup place");
 
     // Boot/install prewarming has its own latency metrics. Start the CI lag
     // epoch here so peak p99 describes the authenticated write workload, not
@@ -224,6 +264,13 @@ async function runInternal() {
       procBeforeWrites && procAfterWrites
         ? procAfterWrites.write_bytes - procBeforeWrites.write_bytes
         : null;
+
+    // Peak p99 is a completed rolling window. Wait one sample interval so the
+    // window that covered the writes can close instead of snapshotting a
+    // handful of in-progress samples.
+    await new Promise((resolve) => {
+      setTimeout(resolve, 1_100);
+    });
 
     const healthResponse = await fetch(
       `${handle.url}/centraid/_gateway/health`,
