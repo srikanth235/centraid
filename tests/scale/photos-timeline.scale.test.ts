@@ -18,6 +18,7 @@ import {
 
 import { ensureConversationLedger } from "../../packages/server/src/engine/stores/gateway-db.js";
 import { rigDriftBudgetMs } from "../helpers/rig-budgets.js";
+import { year3SchemaFingerprint } from "../helpers/year3-schema-fingerprint.js";
 
 // Photos-specific companion to large-vault.scale.test.ts (issue #721 C1):
 // that rig proves the whole-vault "daily use" mix stays bounded at 10k
@@ -96,7 +97,8 @@ describe("photos-timeline.scale", () => {
           seeded.close();
         }
       },
-      profile
+      profile,
+      year3SchemaFingerprint()
     );
     const workingDir = await tempDir("photos-timeline-year3-working-");
     await cp(materialized.dir, workingDir, { recursive: true });

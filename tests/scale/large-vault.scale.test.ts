@@ -18,6 +18,7 @@ import {
 
 import { ensureConversationLedger } from "../../packages/server/src/engine/stores/gateway-db.js";
 import { rigDriftBudgetMs } from "../helpers/rig-budgets.js";
+import { year3SchemaFingerprint } from "../helpers/year3-schema-fingerprint.js";
 
 const OWNER = "tests/scale/large-vault.scale.test.ts";
 const PHOTO_COUNT = 10_000;
@@ -75,7 +76,8 @@ describe("large-vault.scale", () => {
           seeded.close();
         }
       },
-      profile
+      profile,
+      year3SchemaFingerprint()
     );
     const workingDir = await tempDir("large-vault-year3-working-");
     await cp(materialized.dir, workingDir, { recursive: true });

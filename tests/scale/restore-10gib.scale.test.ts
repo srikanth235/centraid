@@ -31,6 +31,7 @@ import {
 
 import { ensureConversationLedger } from "../../packages/server/src/engine/stores/gateway-db.js";
 import { rigDriftBudgetMs } from "../helpers/rig-budgets.js";
+import { year3SchemaFingerprint } from "../helpers/year3-schema-fingerprint.js";
 
 /**
  * YEAR-3 RESTORE (issue #659 S3).
@@ -147,7 +148,8 @@ describe("restore-10gib.scale", () => {
             seeded.close();
           }
         },
-        YEAR3
+        YEAR3,
+        year3SchemaFingerprint()
       );
       await cp(materialized.dir, sourceDir, { recursive: true });
       const db = openVaultDb({ dir: sourceDir, sealKey: YEAR3_SEAL_KEY });

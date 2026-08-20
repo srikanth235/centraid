@@ -34,13 +34,22 @@ const API_URL = "http://127.0.0.1:48765";
 const ADMIN_TOKEN = "centraid-web-e2e-token";
 const CONTROL_SESSION = "web-e2e-control-session";
 // The app-open subject: a bundled inline app, opened from the palette like any
-// other. Tasks is a plain first-party route that mounts on the web seat (Locker
-// refuses that seat, docs/blueprint-seats.md S5; Photos is the heaviest and its
-// own byte story), so what this probe fences is the shell's per-app lazy-chunk
-// cost with the least product-specific noise on top. Changing this app
-// re-seeds the appOpen ceilings — measure before you swap it.
-const APP_ID = "tasks";
-const APP_NAME = "Tasks";
+// other. What this probe fences is the shell's per-app lazy-chunk cost, so the
+// subject must be an app that HAS an interface to download.
+//
+// It was Tasks until #831 removed the Agenda/Notes/Tally/Tasks interfaces
+// wholesale pending a ground-up redesign — their `Root` now paints one empty
+// element. That left this probe measuring a hollow route: the lazy chunk fell
+// to 7_346 B and tripped `minEncodedBytes`, which is exactly the vacuity the
+// floor exists to catch. #831 retargeted the desktop/web offline journeys onto
+// Docs for this same reason and did not reach this spec; it does now.
+//
+// Docs is the remaining plain first-party route that mounts on the web seat
+// (Locker refuses that seat, docs/blueprint-seats.md S5; Photos is the heaviest
+// and its own byte story). The appOpen ceilings below are re-seeded onto it —
+// changing this app again re-seeds them once more, so measure before you swap.
+const APP_ID = "docs";
+const APP_NAME = "Docs";
 const GATEWAY_ENDPOINT_ID = "web-e2e-gateway";
 const GATEWAY_ENDPOINT_TICKET = "web-e2e-control-transport";
 
@@ -300,15 +309,39 @@ async function establishSession(page: Page): Promise<void> {
       vault: enrolled.vaultId!,
     }
   );
+  // Wait for the SW to CONTROL this client BEFORE reloading, not after. The
+  // reload below is what the warm-shell measurement reads, and "warm" is
+  // defined as the SW/HTTP caches answering it — so the worker has to be in
+  // charge when that load's subresource requests go out. Polling for
+  // `controller` only after the reload let the two race: the first visit
+  // installs the SW while the page is still uncontrolled, and if the reload
+  // won that race its requests bypassed the SW entirely. Most hashed assets
+  // survived that on the browser HTTP cache and still reported 0 wire bytes,
+  // which is why this hid for so long, but the sqlite worker script did not —
+  // it came back over the wire at 67_300 B and pushed the warm/cold ratio to
+  // 0.1505 against a 0.15 ceiling, failing web-e2e roughly one run in four
+  // (#676). Waiting here makes the warm load genuinely service-worker-served,
+  // which is the thing the ratio claims to prove.
+  await expect
+    .poll(() =>
+      page.evaluate(() => navigator.serviceWorker.controller !== null)
+    )
+    .toBe(true);
   await page.reload();
   // Home is the springboard (#708); apps open via the palette, not a library
-  // card. Wait for the shell, then confirm the service worker.
+  // card. Wait for the shell, then re-confirm the service worker — a reload
+  // starts the new document uncontrolled for a moment even when a live SW is
+  // already claimed.
   await expect(page.locator('nav[aria-label="Apps"]').first()).toBeVisible();
   await expect
     .poll(() =>
       page.evaluate(() => navigator.serviceWorker.controller !== null)
     )
     .toBe(true);
+  // Settle before anyone measures, exactly as the cold path does: the replica
+  // bootstrap spawns the sqlite worker asynchronously, so without this its
+  // entry lands on either side of the warm window from run to run.
+  await settleResourceTimeline(page, 5_000);
 }
 
 /**
@@ -457,6 +490,17 @@ test("app-open waterfall — shell + inline app route, cold vs warm", async ({
   // is why the ratio ceiling is a regression fence here, not a cache proof:
   // what it catches is a change that makes re-opening an app re-download it.
   const cold = await openAppAndMeasure(page);
+  // UI evidence for the subject change (#676). This probe opened Tasks until
+  // #831 removed that interface, and the numbers above are now Docs' numbers —
+  // a reviewer reading a re-seeded byte ceiling should be able to SEE that the
+  // app the ceiling describes actually mounts, rather than take the assertions'
+  // word for it. Captured on the cold open, before goHome() unmounts it.
+  const uiImpactDir = path.resolve(here, "../../../../artifacts/e2e/ui-impact");
+  await fs.mkdir(uiImpactDir, { recursive: true });
+  await page.screenshot({
+    path: path.join(uiImpactDir, "web-app-open-docs.png"),
+    fullPage: true,
+  });
   await goHome(page);
   const warm = await openAppAndMeasure(page);
   // The warm/cold ratio rides ENCODED bytes, not wire bytes: wire bytes are 0

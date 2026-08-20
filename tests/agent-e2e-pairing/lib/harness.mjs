@@ -32,10 +32,16 @@ import {
 
 const __dirname = import.meta.dirname;
 const REPO_ROOT = path.resolve(__dirname, "..", "..", "..");
+// The `centraid-gateway` bin ships from @centraid/server (packages/server) —
+// keep this in step with lib/docker-harness.mjs's GATEWAY_CLI_REL and with the
+// dist/cli/* imports above. A stale path here does not fail loudly: ensureBuilt
+// only checks for the file, so a miss reruns the scoped build, finds the file
+// still absent at the wrong path, and the daemon dies with MODULE_NOT_FOUND
+// long after the build "succeeded".
 const GATEWAY_CLI = path.join(
   REPO_ROOT,
   "packages",
-  "gateway",
+  "server",
   "dist",
   "cli",
   "cli.js"

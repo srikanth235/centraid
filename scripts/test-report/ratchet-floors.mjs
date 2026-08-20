@@ -559,6 +559,33 @@ function parseArgs(argv) {
 }
 
 /**
+ * Read the WHOLE `approvedDeviation` string literal out of a source file.
+ *
+ * Terminates on the matching closing quote, not on the first quote character
+ * of any kind. The original pattern was ``['"`][^'"`]+['"`]``, which stops dead
+ * at the first inner quote — and these ledgers routinely quote a command or a
+ * filename in backticks. `apps/web/tests/e2e/perf-budgets.ts` does so in its
+ * second sentence, so only a 1,653-character prefix was ever compared and every
+ * entry after that point was invisible to this gate.
+ *
+ * That failed in the DANGEROUS direction. Appending a fresh rationale is the
+ * documented way to waive a widening, and an author who did exactly that saw
+ * the ratchet reject it anyway, because base and head both truncated to the
+ * same unchanged prefix. Reading the full literal makes the ledger the author
+ * wrote the ledger the gate compares (#676).
+ *
+ * @param {string} text Source text to scan.
+ * @returns {string} The literal's contents, or "" when absent.
+ */
+export function extractApprovedDeviationLiteral(text) {
+  const waiver =
+    /approvedDeviation\s*[:=]\s*(?<quote>['"`])(?<deviation>(?:\\.|(?!\k<quote>)[\s\S])*)\k<quote>/u.exec(
+      text ?? ""
+    );
+  return waiver?.groups?.deviation ?? "";
+}
+
+/**
  * Load flattened budget numbers from a working-tree or base-ref source.
  * @param {string} absPath Absolute path on disk for head.
  * @param {{ path: string; exportName?: string }} source Source descriptor.
@@ -574,10 +601,7 @@ function loadBudgetSource(absPath, source, ref) {
   }
   if (!text) return { numbers: {}, approvedDeviation: "" };
 
-  let approvedDeviation = "";
-  const waiver =
-    /approvedDeviation\s*[:=]\s*['"`](?<deviation>[^'"`]+)['"`]/u.exec(text);
-  if (waiver?.groups?.deviation) approvedDeviation = waiver.groups.deviation;
+  let approvedDeviation = extractApprovedDeviationLiteral(text);
 
   if (source.path.endsWith(".json")) {
     try {

@@ -5,6 +5,7 @@ import {
   diffMinimumTests,
   diffMutationFloors,
   diffPerfBudgetNumbers,
+  extractApprovedDeviationLiteral,
   extractBudgetNumbersFromSource,
   flattenBudgetNumbers,
   isBudgetFloorKey,
@@ -239,6 +240,50 @@ describe("diffMinimumTests", () => {
     const base = { flows: [{ id: "a", minimumTests: 10 }] };
     const head = { flows: [{ id: "a", minimumTests: 12 }] };
     expect(diffMinimumTests(base, head)).toEqual([]);
+  });
+});
+
+describe(extractApprovedDeviationLiteral, () => {
+  test("reads past inner backticks to the matching closing quote", () => {
+    // The regression that made this gate unusable: the ledger quotes a command
+    // in backticks early on, the old pattern stopped there, and every entry
+    // appended afterwards was invisible — so base and head compared equal and
+    // an author who DID disclose their widening was still rejected (#676).
+    const source =
+      'export const approvedDeviation =\n  "ran `bun run build` first. #676 widened maxEncodedBytes 120000 -> 240000.";';
+    const read = extractApprovedDeviationLiteral(source);
+    expect(read).toContain("#676");
+    expect(read).toContain("bun run build");
+  });
+
+  test("appending a new entry changes what the gate compares", () => {
+    const before =
+      'export const approvedDeviation = "measured with `bun run build`.";';
+    const after =
+      'export const approvedDeviation = "measured with `bun run build`. Then #676.";';
+    expect(extractApprovedDeviationLiteral(after)).not.toBe(
+      extractApprovedDeviationLiteral(before)
+    );
+  });
+
+  test("single and double quoted literals may hold the other quote", () => {
+    expect(
+      extractApprovedDeviationLiteral(
+        `export const approvedDeviation = 'the "cold" shell budget';`
+      )
+    ).toBe('the "cold" shell budget');
+    expect(
+      extractApprovedDeviationLiteral(
+        `export const approvedDeviation = "the 'cold' shell budget";`
+      )
+    ).toBe("the 'cold' shell budget");
+  });
+
+  test("an absent ledger reads as empty, never as a waiver", () => {
+    expect(extractApprovedDeviationLiteral("export const budgets = {};")).toBe(
+      ""
+    );
+    expect(extractApprovedDeviationLiteral("")).toBe("");
   });
 });
 

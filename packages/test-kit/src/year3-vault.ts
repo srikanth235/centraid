@@ -252,9 +252,44 @@ export function year3VaultProfile(
   };
 }
 
-export function year3FixtureCacheKey(profile: Year3VaultProfile): string {
+/**
+ * Fingerprint of the SCHEMA a cached fixture was generated against.
+ *
+ * A cached fixture is a real SQLite vault on disk, so it is only reusable by a
+ * build whose schema still matches the one that wrote it. The profile below
+ * describes the fixture's SHAPE (row counts, seed) and says nothing about its
+ * schema, and `YEAR3_FIXTURE_VERSION` is hand-maintained — so before this
+ * existed, adding a table to the fresh-schema rung left every cached fixture
+ * looking valid while being unopenable. That is not hypothetical: the nightly
+ * `restore-year3` job failed every night with `no such table:
+ * main.enrich_policy_rule` out of `openVaultDb`, because `actions/cache`
+ * restored the same pre-`enrich_policy_rule` fixture into each run (#676).
+ * Bumping the hand-maintained version would have cleared it once and left the
+ * next schema change to rediscover it the same way.
+ *
+ * `@centraid/test-kit` must not depend on `@centraid/vault` (see src/vault.ts —
+ * the dependency runs the other way), so the schema cannot be hashed here. The
+ * caller, which already imports the vault, passes its own fingerprint instead;
+ * `tests/helpers/year3-schema-fingerprint.ts` derives one from the migration
+ * ladder so any schema edit invalidates the cache with no one having to
+ * remember.
+ *
+ * Optional, and absent means "unfingerprinted" rather than "no schema": a
+ * caller that omits it keeps the old key exactly, so an in-process fixture with
+ * no durable cache does not have to care.
+ */
+export function year3FixtureCacheKey(
+  profile: Year3VaultProfile,
+  schemaFingerprint?: string
+): string {
   return createHash("sha256")
-    .update(JSON.stringify({ version: YEAR3_FIXTURE_VERSION, ...profile }))
+    .update(
+      JSON.stringify({
+        version: YEAR3_FIXTURE_VERSION,
+        ...profile,
+        ...(schemaFingerprint ? { schemaFingerprint } : {}),
+      })
+    )
     .digest("hex");
 }
 
@@ -262,13 +297,18 @@ export function year3FixtureCacheKey(profile: Year3VaultProfile): string {
  * Materialize a generated fixture once under a content-addressed cache.
  * `generate` must close its handles after checkpointing; the atomic rename
  * means readers never copy a live SQLite database beside an uncheckpointed WAL.
+ *
+ * Pass `schemaFingerprint` whenever the cache outlives the process (the nightly
+ * jobs restore `artifacts/year3-cache` through `actions/cache`), or a schema
+ * change will silently reuse a fixture the current build cannot open.
  */
 export async function materializeYear3Fixture(
   cacheRoot: string,
   generate: (targetDir: string) => Promise<void>,
-  profile = year3VaultProfile()
+  profile = year3VaultProfile(),
+  schemaFingerprint?: string
 ): Promise<{ dir: string; cacheHit: boolean }> {
-  const key = year3FixtureCacheKey(profile);
+  const key = year3FixtureCacheKey(profile, schemaFingerprint);
   const dir = path.join(cacheRoot, key);
   const ready = path.join(dir, "READY.json");
   try {
