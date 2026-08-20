@@ -127,9 +127,21 @@ Realized here, word for word: Revoking a grant stops sync and drives fulfillment
 
 Realized across the waves and closed by the waves-5–7 audit fixes, word for word: Absent-never-empty holds everywhere grants are read (`null` vs `[]` distinguished on every surface). Schema (a member with no binding gets no fulfillment row), engine (unmounted origin is a shape, not `[]`), routes (`channel: null` ≠ severed ≠ `grants: []`; unknown grant 404; unknown audience `audience_not_found`), kit (unknown ≠ never-reached ≠ empty; in-flight registry claims nothing; unknown audience its own sentence), and finally the app hosts (a failed roster read speaks "could not be read just now", never "there is nobody to share with"; unread ≠ empty on every seat, each with a test). The one disclosed boundary: subject ids are app-polymorphic, so the subject-first listing cannot existence-check at the route layer — stated in the route header, the protocol doc, and here.
 
+Realized here, word for word: `docs/decisions.md` records the eight rulings + supersessions; glossary, `ARCHITECTURE.md`, protocol docs updated in the same waves that change the facts.
+
+Realized here, word for word: One receipt (`receipts/issue--sharing-grant-plane.md`) with per-wave crosswalk and a fresh-context adversarial audit.
+
+### CI close-out — quality knobs, file coverage, hygiene splits
+
+- `tests/quality/classification-ratchet.json`: re-pin `packages/server/src/routes/route-security.ts` after the grant-routes owner-tier row. Qualities, demonstratedRed, and `matrixGovernanceFingerprint` are unchanged.
+- File-size-limit splits (no waivers): `apps/mobile/src/kit/share/GrantSheet.styles.ts` and `apps/mobile/src/kit/share/GrantSheetConfirm.tsx` from the native sheet; `packages/blueprints/apps/_shared/grant-sheet-harness.ts` and `packages/blueprints/apps/_shared/GrantSheet.claims.test.tsx` from the web sheet suite; `packages/blueprints/apps/people/components/PeopleRouteBody.tsx` from the People orchestrator. `packages/blueprints/src/state-honesty.test.ts` now reads that route map for the eight `!loaded` gates.
+- Also touched (full paths the wave lists did not spell): `CHANGELOG.md`, `apps/desktop/tests/e2e/fixtures.ts`, `apps/mobile/package.json`, `apps/mobile/lazy-screens.tsx`, `apps/mobile/navigators.tsx`, `apps/mobile/src/apps/docs/useDocsGrantAudiences.test.tsx`, `apps/mobile/src/apps/people/PersonGrants.test.tsx`, `apps/mobile/src/apps/people/people-model.test.ts`, `apps/mobile/src/apps/people/people-model.ts`, `apps/mobile/src/apps/people/people-share-model.ts`, `apps/mobile/src/apps/photos/photo-grants.test.tsx`, `apps/mobile/src/apps/photos/photos-vaults.ts`, `apps/mobile/src/apps/photos/use-photo-selection-share.test.tsx`, `apps/mobile/src/lib/replica/links-transport.ts`, `apps/mobile/src/navigation.ts`, `apps/mobile/src/screens/SharingLinkRow.tsx`, `apps/mobile/src/screens/data/VaultSections.tsx`, `packages/blueprints/apps/_shared/share-kit.ts`, `packages/blueprints/apps/people/queries/_shared.ts`, `packages/blueprints/apps/people/queries/person.ts`, `packages/blueprints/apps/people/queries/share-links.test.ts`, `packages/blueprints/src/photos-selection-bar.test.ts`, `packages/client/src/gateway-client.ts`, `packages/client/src/react/screens/HouseholdScreen.test.tsx`, `packages/client/src/react/screens/HouseholdScreen.tsx`, `packages/client/src/react/shell/routes/HouseholdRoute.tsx`, `packages/server/src/cli/endpoint-host.ts`, `packages/server/src/routes/edges-reconcile.ts`, `packages/server/src/routes/vault-links-ticket-routes.test.ts`, `packages/server/src/serve/commons-observability.test.ts`, `packages/server/src/serve/gateway-db.test.ts`, `packages/server/src/serve/gateway-db.ts`, `packages/server/src/serve/peer-commons-client.ts`, `packages/server/src/serve/peer-commons-pull.test.ts`, `packages/server/src/serve/peer-commons-sweep.test.ts`, `packages/server/src/serve/peer-commons-sweep.ts`, `packages/server/src/serve/peer-dial.ts`, `packages/server/src/serve/peer-link-client.ts`, `packages/server/src/serve/peer-plane-sweep.ts`, `packages/server/src/serve/peer-route-announce.test.ts`, `packages/server/src/serve/peer-route-announce.ts`, `packages/server/src/serve/share-coordinator.test.ts`, `packages/server/src/serve/share-edge-store.ts`, `packages/server/src/serve/share-receipt-authority.contract.test.ts`, `receipts/issue-825-sharing-grant-plane.md`.
+
 ## Decisions
 
 The judgment calls the diff cannot show.
+
+#825 re-pins packages/server/src/routes/route-security.ts after the grant-routes owner-tier row. Qualities, demonstratedRed, and matrixGovernanceFingerprint are unchanged. Prior: #821.
 
 **Rulings land ahead of code, deliberately.** Wave 0 records the #825 decisions as current answers while the grant tables do not exist yet; the issue's execution plan orders it so ("docs coherent before any code moves"), and the G-section says so in one line. Glossary Code cells name the table names the schema wave ships (`share_grant`, `share_fulfillment`), not file paths that do not exist yet.
 
@@ -293,6 +305,9 @@ bun run check:reachability                # ok — 218 capabilities across 8 mod
 bun run check:ui-receipt                  # evidence verified
 bun run test:hygiene-ratchet              # 1301 test files at budget
 bun run format:check && bun run lint      # both green (4450 files)
+# CI close-out (quality knobs + hygiene splits):
+bun run lint:quality-knobs                # exit 0 — route-security.ts fingerprint re-pinned
+bash .governance/run.sh                   # commit-issue-receipt-match, receipt-per-issue, repo-hygiene
 ```
 
 Link integrity: every relative link added resolves (`decisions.md#sharing-v1--the-grant-plane-825` anchor matches the file's em-dash slug convention; `../packages/vault/src/share/{commons-routing,read-closure,project-closure}.ts` all exist).
@@ -382,3 +397,7 @@ Verdict (wave 4, post-fix): PASS — 126 kit tests green across 15 shared-kit fi
 ### Final close-out attestation — PASS
 
 A fresh-context auditor was handed the complete receipt, the full branch diff (185 files, +16008/−4555), and the live tree, defaulting to REFUTED under uncertainty. Verdict: **PASS, no material findings.** Every checked item's crosswalk was verified against the tree (all 22 named test files exist and their suites run green; all named deletions confirmed absent); the file lists are accurate in both directions for waves 0–7 and summarized-but-not-false for wave 8; all five recorded REFUTED rounds describe fixes demonstrably in the tree that do what they claim (the seam actor-grant filter, the derived revoke sentence, the migration refusal-decomposition, the drain module with its post-schema ordering, the roster failed-vs-empty seam); the Verification block reproduces exactly under the repo's own scripts with no undisclosed red (the only failures are the three pre-agreed environment reds); the commons steward/quota/recovery invariant is proven rather than merely unmodified (the delegation test asserts exactly one `share_commons_op`); and the swept docs make no claim the code does not support. Three narration-level minors — wave 8's summary omitting `gateway-schema.ts` (the durable half of the drain) and the web-seat roster-fix suites, seven wave-time line counts drifted by later waves, and a missing CHANGELOG entry — were fixed in the close-out commit; none would have misled a reader about what the branch does.
+
+### CI close-out — hygiene and receipt coverage
+
+A follow-up pass split three files that had crossed the 625-line hygiene limit (native `GrantSheet.tsx` confirm+styles, web `GrantSheet.test.tsx` claims suite, People `app-root.tsx` shelf→route map), re-pinned the `route-security.ts` quality-knob fingerprint, and named every remaining changed path in this receipt. Product behavior is unchanged. Verdict: **PASS** for the CI-only delta — splits follow existing GrantSheet / People seams; no file-size-limit waiver.

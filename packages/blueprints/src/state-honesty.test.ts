@@ -48,10 +48,15 @@ describe("blueprint state honesty", () => {
       expect(source, route).toContain(gate);
     }
     // …and the orchestrator hands all eight the same `!loaded` gate, so no
-    // screen can invent a second answer to "has a read landed".
+    // screen can invent a second answer to "has a read landed". The shelf →
+    // route map lives in PeopleRouteBody; app-root still owns `loaded`.
     const root = read("people/app-root.tsx");
-    for (const [route] of routes) expect(root, route).toContain(`<${route}`);
-    expect(root.match(/loading=\{!loaded\}/gu)).toHaveLength(routes.length);
+    expect(root).toContain("<PeopleRouteBody");
+    expect(root).toContain("loaded={loaded}");
+    const body = read("people/components/PeopleRouteBody.tsx");
+    for (const [route] of routes) expect(body, route).toContain(`<${route}`);
+    expect(body).toContain("const loading = !props.loaded");
+    expect(body.match(/loading=\{loading\}/gu)).toHaveLength(routes.length);
   });
 
   // The file that carries the recovery action, per app. It is the chrome for

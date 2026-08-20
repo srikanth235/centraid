@@ -17,7 +17,7 @@
  */
 
 import React, { useEffect, useMemo, useState } from "react";
-import { Modal, Pressable, ScrollView, StyleSheet, View } from "react-native";
+import { Modal, Pressable, ScrollView, View } from "react-native";
 
 import { NOBODY_TO_SHARE_WITH } from "@centraid/blueprints/apps/_shared/grant-audiences";
 import {
@@ -34,10 +34,7 @@ import {
   reachLabel,
   reachNote,
   REGISTRY_UNREADABLE,
-  REVOKE_CANCEL_ACTION,
   REVOKE_CONFIRM_ACTION,
-  revokeConfirmBody,
-  revokeConfirmTitle,
   subjectNotOfferable,
 } from "@centraid/blueprints/apps/_shared/grant-copy";
 import type {
@@ -66,8 +63,10 @@ import type {
 import { Text } from "../components/NativeText";
 import TopSafeArea from "../components/TopSafeArea";
 import { useReplica } from "../replica/ReplicaProvider";
-import { borders, radii, spacing, t, useTheme } from "../theme";
+import { useTheme } from "../theme";
 import { nativeGrantDoor } from "./grants-transport";
+import { styles } from "./GrantSheet.styles";
+import { GrantSheetConfirm } from "./GrantSheetConfirm";
 
 export interface GrantSheetProps {
   visible: boolean;
@@ -352,36 +351,14 @@ export default function GrantSheet(props: GrantSheetProps): React.JSX.Element {
   );
 
   const confirmView = confirming ? (
-    <View style={styles.section}>
-      <Text style={[styles.title, { color: colors.text }]}>
-        {revokeConfirmTitle(audienceLabelFor(confirming, props.audiences))}
-      </Text>
-      <Text style={[styles.reading, { color: colors.text }]}>
-        {revokeConfirmBody(
-          audienceLabelFor(confirming, props.audiences),
-          subjectNoun(confirming.subjectType)
-        )}
-      </Text>
-      <View style={styles.confirmRow}>
-        <Pressable
-          accessibilityRole="button"
-          onPress={() => setConfirming(null)}
-          style={[styles.pill, { borderColor: colors.line }]}
-        >
-          <Text style={{ color: colors.text }}>{REVOKE_CANCEL_ACTION}</Text>
-        </Pressable>
-        {/* Destructive is OUTLINED in `--net`, never a fill. */}
-        <Pressable
-          accessibilityRole="button"
-          accessibilityState={{ disabled: busy }}
-          disabled={busy}
-          onPress={() => void revoke(confirming)}
-          style={[styles.pill, { borderColor: colors.net }]}
-        >
-          <Text style={{ color: colors.net }}>{REVOKE_CONFIRM_ACTION}</Text>
-        </Pressable>
-      </View>
-    </View>
+    <GrantSheetConfirm
+      audienceLabel={audienceLabelFor(confirming, props.audiences)}
+      busy={busy}
+      colors={colors}
+      onCancel={() => setConfirming(null)}
+      onConfirm={() => void revoke(confirming)}
+      subjectNoun={subjectNoun(confirming.subjectType)}
+    />
   ) : null;
 
   return (
@@ -614,57 +591,3 @@ export default function GrantSheet(props: GrantSheetProps): React.JSX.Element {
     </Modal>
   );
 }
-
-const styles = StyleSheet.create({
-  body: { paddingBottom: spacing[4] },
-  confirmRow: { flexDirection: "row", gap: spacing[2] },
-  eyebrow: t("eyebrow"),
-  fixedSubject: t("bodyStrong"),
-  footer: { paddingHorizontal: spacing[4], paddingVertical: spacing[3] },
-  header: {
-    alignItems: "flex-start",
-    flexDirection: "row",
-    gap: spacing[3],
-    justifyContent: "space-between",
-    paddingHorizontal: spacing[4],
-    paddingVertical: spacing[3],
-  },
-  note: t("small"),
-  pill: {
-    borderRadius: radii.md,
-    borderWidth: borders.hairline,
-    minHeight: 44,
-    justifyContent: "center",
-    paddingHorizontal: spacing[3],
-    paddingVertical: spacing[2],
-  },
-  pillRow: { flexDirection: "row", gap: spacing[2] },
-  reachState: t("annotLabelOn"),
-  reading: t("reading"),
-  row: {
-    alignItems: "center",
-    borderRadius: radii.md,
-    borderWidth: borders.hairline,
-    flexDirection: "row",
-    gap: spacing[3],
-    justifyContent: "space-between",
-    marginBottom: spacing[2],
-    minHeight: 58,
-    paddingHorizontal: spacing[3],
-    paddingVertical: spacing[2],
-  },
-  rowCopy: { flex: 1, minWidth: 0 },
-  safe: { flex: 1 },
-  section: {
-    gap: spacing[2],
-    paddingHorizontal: spacing[4],
-    paddingTop: spacing[3],
-  },
-  shareButton: {
-    alignItems: "center",
-    borderRadius: radii.md,
-    justifyContent: "center",
-    minHeight: 46,
-  },
-  title: t("title"),
-});

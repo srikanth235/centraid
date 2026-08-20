@@ -32,7 +32,7 @@ import {
   useRef,
   useState,
 } from "react";
-import type { ReactElement, ReactNode } from "react";
+import type { ReactElement } from "react";
 
 import {
   observeWidth,
@@ -45,14 +45,7 @@ import { libraryReachability } from "../_shared/view-state-kit.ts";
 import type { InlineAppProps } from "../inline-types.ts";
 import { Chrome } from "./Chrome.tsx";
 import { ConfirmHost } from "./components/ConfirmHost.tsx";
-import { EditRoute } from "./components/EditRoute.tsx";
-import { LogRoute } from "./components/LogRoute.tsx";
-import { MergeRoute } from "./components/MergeRoute.tsx";
-import { PersonRoute } from "./components/PersonRoute.tsx";
-import { RosterRoute } from "./components/RosterRoute.tsx";
-import { SearchRoute } from "./components/SearchRoute.tsx";
-import { TouchRoute } from "./components/TouchRoute.tsx";
-import { TrashRoute } from "./components/TrashRoute.tsx";
+import { PeopleRouteBody } from "./components/PeopleRouteBody.tsx";
 import { appBar, bandClaim } from "./frame.tsx";
 import { createLogic } from "./logic.ts";
 import { STATUS } from "./people-copy.ts";
@@ -62,7 +55,6 @@ import {
   MERGE,
   PERSON,
   SEARCH,
-  TOUCH,
   TRASH,
   shelfFromSegment,
 } from "./shelves.ts";
@@ -320,180 +312,107 @@ export function Root({
   // `loading` is passed at every call site rather than folded into `base`:
   // "a read has not landed yet" is the gate every empty state in the app sits
   // behind, and the honesty test for it reads the JSX (`src/state-honesty.test.ts`).
-  const base = { offline, narrow };
-  let routeBody: ReactNode;
-  if (state.shelf === TOUCH) {
-    routeBody = (
-      <TouchRoute
-        {...base}
-        loading={!loaded}
-        dashboard={data.dashboard}
-        onSelectTile={(tile) => {
-          // Every tile lands on the roster under the filter it names — the
-          // two link tiles included, which is what makes `Vaults` and
-          // `To link` navigations rather than badges.
-          if (tile === "starred") selectFilter("starred");
-          else if (tile === "reconnect") selectFilter("due");
-          else if (tile === "linked") selectFilter("linked");
-          else if (tile === "to_link") selectFilter("unlinked");
-          else selectFilter("all");
-          navigate(null);
-        }}
-        onOpenPerson={openPerson}
-        onLog={openLog}
-      />
-    );
-  } else if (state.shelf === SEARCH) {
-    routeBody = (
-      <SearchRoute
-        {...base}
-        loading={!loaded}
-        term={state.search}
-        status={state.searchStatus}
-        results={state.searchResults ?? []}
-        filter={state.filter}
-        onTermChange={handleTermChange}
-        onClear={handleClearSearch}
-        onSelectFilter={selectFilter}
-        onOpenPerson={openPerson}
-        onToggleStar={(person) => void writes.toggleStar(person)}
-        inputRef={(el) => {
-          searchInputRef.current = el;
-        }}
-      />
-    );
-  } else if (state.shelf === PERSON) {
-    routeBody = (
-      <PersonRoute
-        {...base}
-        loading={!loaded}
-        person={data.person}
-        collapsed={state.collapsed}
-        composer={state.composer}
-        onToggleSection={handleToggleSection}
-        onOpenComposer={(key: ComposerKey) => {
-          state.composer = {
-            key,
-            value: "",
-            label: "",
-            kind: "phone",
-            monthDay: "01-01",
-          };
-          bump();
-        }}
-        onComposerChange={composerChange}
-        onComposerSave={composerSave}
-        onComposerCancel={() => {
-          state.composer = null;
-          bump();
-        }}
-        onLog={() => data.person && openLog(data.person.party_id)}
-        onEdit={openEdit}
-        onToggleStar={() => data.person && void writes.toggleStar(data.person)}
-        onToggleReminder={(dateId, label) => {
-          const date = data.person?.dates.find((d) => d.date_id === dateId);
-          void writes.toggleReminder(dateId, label, date?.reminder_on ?? false);
-        }}
-        onDeleteChannel={(channel) => void writes.deleteChannel(channel)}
-        roster={data.people}
-        onStatus={(message) => {
-          // A share or a revoke is an OUTCOME, so it holds the line exactly as
-          // a People write's own outcome does, until the member navigates.
-          outcomeHeld.current = true;
-          publishOutcome(frame, { text: message });
-        }}
-        onTrash={() => {
-          if (!data.person) return;
-          state.confirm = { kind: "trash", party_id: data.person.party_id };
-          bump();
-        }}
-        onMerge={() => navigate(MERGE, state.personId)}
-      />
-    );
-  } else if (state.shelf === LOG) {
-    routeBody = (
-      <LogRoute
-        {...base}
-        loading={!loaded}
-        person={data.person ?? logic.personRow(state.personId)}
-        draft={state.log}
-        onChange={logChange}
-        onSave={() => {
-          const draft = state.log;
-          const name = data.person?.name ?? "";
-          if (!draft) return;
-          void writes.logTouch(draft, name);
-          handleBack();
-        }}
-        onCancel={handleBack}
-      />
-    );
-  } else if (state.shelf === EDIT) {
-    routeBody = (
-      <EditRoute
-        {...base}
-        loading={!loaded}
-        draft={state.draft}
-        mode={state.draft?.party_id ? "edit" : "new"}
-        onChange={draftChange}
-        onSave={() => {
-          const draft = state.draft;
-          if (!draft) return;
-          void writes.savePerson(draft, data.person);
-          handleBack();
-        }}
-        onCancel={handleBack}
-      />
-    );
-  } else if (state.shelf === TRASH) {
-    routeBody = (
-      <TrashRoute
-        {...base}
-        loading={!loaded}
-        people={data.trash}
-        onRestore={(person) => void writes.restorePerson(person)}
-      />
-    );
-  } else if (state.shelf === MERGE) {
-    routeBody = (
-      <MergeRoute
-        {...base}
-        loading={!loaded}
-        keep={data.person}
-        candidates={logic.mergeCandidates()}
-        source={logic.personRow(state.mergeSourceId)}
-        merged={state.merged}
-        onPickSource={(partyId) => {
-          state.mergeSourceId = partyId;
-          bump();
-        }}
-        onMerge={() => {
-          if (!data.person || !state.mergeSourceId) return;
-          state.confirm = {
-            kind: "merge",
-            party_id: data.person.party_id,
-            source_party_id: state.mergeSourceId,
-          };
-          bump();
-        }}
-        onCancel={handleBack}
-      />
-    );
-  } else {
-    routeBody = (
-      <RosterRoute
-        {...base}
-        loading={!loaded}
-        people={data.people}
-        linksAvailable={data.linksAvailable}
-        filter={state.filter}
-        onSelectFilter={selectFilter}
-        onOpenPerson={openPerson}
-        onToggleStar={(person) => void writes.toggleStar(person)}
-        onAddPerson={openNew}
-      />
-    );
-  }
+  const routeBody = (
+    <PeopleRouteBody
+      data={data}
+      loaded={loaded}
+      mergeCandidates={() => logic.mergeCandidates()}
+      narrow={narrow}
+      offline={offline}
+      onAddPerson={openNew}
+      onCancel={handleBack}
+      onClearSearch={handleClearSearch}
+      onComposerCancel={() => {
+        state.composer = null;
+        bump();
+      }}
+      onComposerChange={composerChange}
+      onComposerSave={composerSave}
+      onDeleteChannel={(channel) => void writes.deleteChannel(channel)}
+      onDraftChange={draftChange}
+      onDraftSave={() => {
+        const draft = state.draft;
+        if (!draft) return;
+        void writes.savePerson(draft, data.person);
+        handleBack();
+      }}
+      onEdit={openEdit}
+      onLogChange={logChange}
+      onLogPerson={openLog}
+      onLogSave={() => {
+        const draft = state.log;
+        const name = data.person?.name ?? "";
+        if (!draft) return;
+        void writes.logTouch(draft, name);
+        handleBack();
+      }}
+      onMerge={() => navigate(MERGE, state.personId)}
+      onMergeConfirm={() => {
+        if (!data.person || !state.mergeSourceId) return;
+        state.confirm = {
+          kind: "merge",
+          party_id: data.person.party_id,
+          source_party_id: state.mergeSourceId,
+        };
+        bump();
+      }}
+      onOpenComposer={(key: ComposerKey) => {
+        state.composer = {
+          key,
+          value: "",
+          label: "",
+          kind: "phone",
+          monthDay: "01-01",
+        };
+        bump();
+      }}
+      onOpenPerson={openPerson}
+      onPersonLog={() => data.person && openLog(data.person.party_id)}
+      onPersonToggleStar={() =>
+        data.person && void writes.toggleStar(data.person)
+      }
+      onPickSource={(partyId) => {
+        state.mergeSourceId = partyId;
+        bump();
+      }}
+      onRestore={(person) => void writes.restorePerson(person)}
+      onSelectFilter={selectFilter}
+      onSelectTile={(tile) => {
+        // Every tile lands on the roster under the filter it names — the
+        // two link tiles included, which is what makes `Vaults` and
+        // `To link` navigations rather than badges.
+        if (tile === "starred") selectFilter("starred");
+        else if (tile === "reconnect") selectFilter("due");
+        else if (tile === "linked") selectFilter("linked");
+        else if (tile === "to_link") selectFilter("unlinked");
+        else selectFilter("all");
+        navigate(null);
+      }}
+      onStatus={(message) => {
+        // A share or a revoke is an OUTCOME, so it holds the line exactly as
+        // a People write's own outcome does, until the member navigates.
+        outcomeHeld.current = true;
+        publishOutcome(frame, { text: message });
+      }}
+      onTermChange={handleTermChange}
+      onToggleReminder={(dateId, label) => {
+        const date = data.person?.dates.find((d) => d.date_id === dateId);
+        void writes.toggleReminder(dateId, label, date?.reminder_on ?? false);
+      }}
+      onToggleSection={handleToggleSection}
+      onToggleStar={(person) => void writes.toggleStar(person)}
+      onTrash={() => {
+        if (!data.person) return;
+        state.confirm = { kind: "trash", party_id: data.person.party_id };
+        bump();
+      }}
+      personRow={(partyId) => logic.personRow(partyId)}
+      searchInputRef={(el) => {
+        searchInputRef.current = el;
+      }}
+      state={state}
+    />
+  );
 
   // ---- the two modal confirms ----
 
