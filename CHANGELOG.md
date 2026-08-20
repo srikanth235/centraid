@@ -74,6 +74,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Fixed
 
+- Grant-plane CI: keep `window.centraid.grants` off the signed-in Home warm shell (lazy `grant-wire`) and clear the inline bridge on Home so a leftover install cannot hang goHome; `maxWarmToColdByteRatio` stays 0.15 ([#825](https://github.com/srikanth235/centraid/issues/825)).
 - Grant-plane CI: re-pin the `route-security.ts` quality-knob fingerprint, name every changed path in the #825 receipt, and split the native grant sheet, its web test suite, and People's app-root at existing seams so none of them sits over the file-size limit ([#825](https://github.com/srikanth235/centraid/issues/825)).
 - `main` CI after the People/Docs binding-layer land: pending-overlay locators accept both the People bar `Add` (shell titlebar) and first-run `Add person` without a strict-mode collision; the rust byte-plane drains an unauthorized `/v1/hash` POST so a 512KiB `fetch` gets 403 instead of `EPIPE`; `bun install` retries tarball extract flakes; and the gateway low-end lag peak is a completed window after the measurement epoch rather than a leftover handful of samples ([#827](https://github.com/srikanth235/centraid/issues/827)).
 - Docs Preview opens the reading sheet as an article named for the file, with the title on the paper and the body paragraphs painted, so the north-star journey can find `lease-notes.txt` after a PWA reload ([#822](https://github.com/srikanth235/centraid/issues/822)).

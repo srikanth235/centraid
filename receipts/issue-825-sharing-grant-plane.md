@@ -153,6 +153,19 @@ No new files this round.
 
 `packages/core/src/protocol/routes.test.ts` — sibling case for `ROUTES.vaultGrants`, `ROUTES.vaultGrantSubjects`, `vaultGrantPath`, and `vaultGrantRevokePath` (same encode-via-the-caller shape as `vaultConnectionPath`). The 98% protocol-tree line floor is unchanged.
 
+### CI — keep grant-plane off the warm Home shell
+
+`client-e2e / web-e2e` on run 32358286539 (`perf-waterfall.spec.ts` app-open waterfall):
+
+- Attempt 1: `goHome` hung 10s on `window.centraid === undefined` with Home already painted (`heading "Home"`, `region "Your apps"`). Teardown restored a published predecessor whose install never armed a cleanup (discarded `useState` initializer / remount stack).
+- Retry: goHome passed; `shell warm/cold byte ratio` 0.150778 > 0.15. PWA WATERFALL SUMMARY: shell cold requests=15 transfer=446350B; shell warm requests=17 transfer=67300B (ratio 0.151). `maxWarmToColdByteRatio` stays 0.15.
+
+Fix:
+
+- `packages/client/src/react/blueprints/centraid-inline.ts` — `grants` methods `import()` `./grant-wire.js` on first call so signed-in Home/Tasks do not pull grant-wire into the eager graph; teardown clears the live client and never restores a client this module published.
+- `packages/client/src/react/blueprints/centraid-inline.test.ts` — discarded-predecessor teardown, grant-plane `subjects()` through the host bridge.
+- `CHANGELOG.md` — Unreleased Fixed names the waterfall keep-off-shell change.
+
 - Also touched (full paths the wave lists did not spell): `CHANGELOG.md`, `packages/vault/src/schema/atlas-census.ts`, `packages/vault/src/schema/atlas-census.test.ts`, `packages/blueprints/manifest.json`, `apps/desktop/tests/e2e/fixtures.ts`, `apps/mobile/package.json`, `apps/mobile/lazy-screens.tsx`, `apps/mobile/navigators.tsx`, `apps/mobile/src/apps/docs/useDocsGrantAudiences.test.tsx`, `apps/mobile/src/apps/people/PersonGrants.test.tsx`, `apps/mobile/src/apps/people/people-model.test.ts`, `apps/mobile/src/apps/people/people-model.ts`, `apps/mobile/src/apps/people/people-share-model.ts`, `apps/mobile/src/apps/photos/photo-grants.test.tsx`, `apps/mobile/src/apps/photos/photos-vaults.ts`, `apps/mobile/src/apps/photos/use-photo-selection-share.test.tsx`, `apps/mobile/src/lib/replica/links-transport.ts`, `apps/mobile/src/navigation.ts`, `apps/mobile/src/screens/SharingLinkRow.tsx`, `apps/mobile/src/screens/data/VaultSections.tsx`, `packages/blueprints/apps/_shared/share-kit.ts`, `packages/blueprints/apps/people/queries/_shared.ts`, `packages/blueprints/apps/people/queries/person.ts`, `packages/blueprints/apps/people/queries/share-links.test.ts`, `packages/blueprints/src/photos-selection-bar.test.ts`, `packages/client/src/gateway-client.ts`, `packages/client/src/react/screens/HouseholdScreen.test.tsx`, `packages/client/src/react/screens/HouseholdScreen.tsx`, `packages/client/src/react/shell/routes/HouseholdRoute.tsx`, `packages/server/src/cli/endpoint-host.ts`, `packages/server/src/routes/edges-reconcile.ts`, `packages/server/src/routes/vault-links-ticket-routes.test.ts`, `packages/server/src/serve/commons-observability.test.ts`, `packages/server/src/serve/gateway-db.test.ts`, `packages/server/src/serve/gateway-db.ts`, `packages/server/src/serve/peer-commons-client.ts`, `packages/server/src/serve/peer-commons-pull.test.ts`, `packages/server/src/serve/peer-commons-sweep.test.ts`, `packages/server/src/serve/peer-commons-sweep.ts`, `packages/server/src/serve/peer-dial.ts`, `packages/server/src/serve/peer-link-client.ts`, `packages/server/src/serve/peer-plane-sweep.ts`, `packages/server/src/serve/peer-route-announce.test.ts`, `packages/server/src/serve/peer-route-announce.ts`, `packages/server/src/serve/share-coordinator.test.ts`, `packages/server/src/serve/share-edge-store.ts`, `packages/server/src/serve/share-receipt-authority.contract.test.ts`, `receipts/issue-825-sharing-grant-plane.md`.
 
 ## Decisions
@@ -336,6 +349,13 @@ bash .governance/run.sh                   # commit-issue-receipt-match, receipt-
 # had no caller in packages/core (index.ts is coverage-excluded). Floor not lowered.
 bun run --cwd packages/core test src/protocol/routes.test.ts
 bash .governance/run.sh
+# CI web-e2e waterfall (run 32358286539, job 96392202137) — ratio fence not widened:
+#   shell cold:  requests=15 transfer=446350B
+#   shell warm:  requests=17 transfer=67300B (ratio 0.151)  # failed 0.150778 > 0.15
+#   goHome hang: Home painted, window.centraid still set
+bun run --cwd packages/client test src/react/blueprints/centraid-inline.test.ts src/react/blueprints/grant-wire.test.ts
+# 2 files, 32 passed (centraid-inline 25 including discarded-predecessor + grants.subjects; grant-wire 7)
+# client typecheck in this worktree needs packages/design dist; CI turbo builds deps. No new type errors in the touched files.
 ```
 
 Link integrity: every relative link added resolves (`decisions.md#sharing-v1--the-grant-plane-825` anchor matches the file's em-dash slug convention; `../packages/vault/src/share/{commons-routing,read-closure,project-closure}.ts` all exist).

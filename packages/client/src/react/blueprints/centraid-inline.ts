@@ -33,11 +33,11 @@ import {
   readJson,
   VAULT_HEADER,
 } from "../../gateway-client-core.js";
+import type { GatewayAuth } from "../../gateway-client-core.js";
 import type { ReplicaShellSession } from "../../replica/shell-session.js";
 import type { ReplicaInvalidation } from "../../replica/types.js";
 import { authorizeBlobText, authorizeBlobUrl } from "./blob-auth.js";
 import { stageBlob, stageDerivative } from "./blob-staging.js";
-import { grantBridge } from "./grant-wire.js";
 import type { GrantBridge } from "./grant-wire.js";
 import { runInlineQuery } from "./inlineQueryCtx.js";
 import { placementWireFromEdge } from "./placement-wire.js";
@@ -557,6 +557,29 @@ interface InlineClientControls {
 const controls = new WeakMap<object, InlineClientControls>();
 
 /**
+ * Grant-plane transport stays off the eager shell graph. `App.tsx` pulls
+ * `centraid-inline` on signed-in Home; a static `grant-wire` import put
+ * protocol helpers on that path. Methods `import()` the module on first
+ * call so Tasks/Home never pay it.
+ */
+function lazyGrantBridge(getAuth: () => Promise<GatewayAuth>): GrantBridge {
+  let pending: Promise<GrantBridge> | undefined;
+  const loaded = (): Promise<GrantBridge> =>
+    (pending ??= import("./grant-wire.js").then((mod) =>
+      mod.grantBridge(getAuth)
+    ));
+  return {
+    subjects: async () => (await loaded()).subjects(),
+    forParty: async (partyId) => (await loaded()).forParty(partyId),
+    forAudience: async (kind, id) => (await loaded()).forAudience(kind, id),
+    forSubject: async (subjectType, subjectId) =>
+      (await loaded()).forSubject(subjectType, subjectId),
+    create: async (request) => (await loaded()).create(request),
+    revoke: async (grantId) => (await loaded()).revoke(grantId),
+  };
+}
+
+/**
  * Hydrate one more scope into an already-installed client. Returns false when
  * the object is not a client this module built. Existing `onChange` listeners
  * are extended to the new scope and then told it arrived, so an app refetches
@@ -938,10 +961,10 @@ export function createInlineCentraidClient(
       return loadLinkDestinations(primary.scope.id);
     },
 
-    // One door, built once: the grant plane is owner-tier and vault-scoped to
-    // the ACTIVE vault, so it takes no scope argument — the vault header
-    // `doFetch` stamps is what addresses it.
-    grants: grantBridge(auth),
+    // One door. Transport loads on first call so Home/Tasks stay off the
+    // grant-plane chunk (see `lazyGrantBridge`). The vault header `doFetch`
+    // stamps is what addresses it — no scope argument.
+    grants: lazyGrantBridge(auth),
 
     describe() {
       // Manifests ship in the shell bundle; no inline app reads describe on the
@@ -1015,10 +1038,15 @@ export interface InstallInlineCentraidOptions extends CreateInlineCentraidOption
   onInstalled?: (client: InlineCentraidClient) => void;
 }
 
-const installStacks = new WeakMap<
-  object,
-  { stack: unknown[]; original: unknown }
->();
+/** Clients this module has published. Restoring one on teardown is the
+ * goHome hang: Home is painted, `window.centraid` still names a client. */
+const publishedClients = new WeakSet<object>();
+
+function isPublishedClient(value: unknown): boolean {
+  return (
+    typeof value === "object" && value !== null && publishedClients.has(value)
+  );
+}
 
 /** Install `window.centraid` for one inline app mount; returns the teardown. */
 export function installInlineCentraid(
@@ -1028,25 +1056,16 @@ export function installInlineCentraid(
     centraid?: unknown;
   };
   const client = createInlineCentraidClient(options);
-  const held = installStacks.get(target) ?? {
-    stack: [],
-    original: target.centraid,
-  };
-  held.stack.push(client);
-  installStacks.set(target, held);
+  const previous = target.centraid;
+  publishedClients.add(client);
   target.centraid = client;
   options.onInstalled?.(client);
   return () => {
-    // Scope-set remounts install the new client before the old mount's
-    // cleanup runs. A last-writer `previous` restore then puts the stale
-    // client back on `window` after the live mount unmounts (Home), so
-    // goHome's `window.centraid === undefined` poll hangs. The stack is the
-    // live installs; teardown publishes the remaining top, or the original.
-    const current = installStacks.get(target);
-    if (!current) return;
-    const index = current.stack.lastIndexOf(client);
-    if (index >= 0) current.stack.splice(index, 1);
-    target.centraid = current.stack.at(-1) ?? current.original;
-    if (current.stack.length === 0) installStacks.delete(target);
+    // Scope-set remounts (and discarded useState initializers whose teardown
+    // never armed) install a successor while this client is still published.
+    // Only the live client may clear the slot; never restore a client this
+    // module published — that leaves `window.centraid` set after Home.
+    if (target.centraid !== client) return;
+    target.centraid = isPublishedClient(previous) ? undefined : previous;
   };
 }
