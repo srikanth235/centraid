@@ -258,7 +258,7 @@ untouched.
 
 ### Crosswalk against the checklist
 
-Every checked item above, and where its work landed. The trees that follow group the same change set by surface, and `## Files changed` lists every path in full.
+Every checked item above, and where its work landed. The trees that follow cover every file committed since `e40f060e`, grouped by surface, and `## Files changed` lists each of those paths in full.
 
 - Four rulings land in `docs/decisions.md` as `## Rebuilding Agenda, Notes and Tasks (#834)` — R-northstar, R-journal, R-daycontext, R-shelf-scope → Stage 0, in the section named; the same section carries the amendment recording that the three apps left `AWAITING_HANDOFF` on both surfaces.
 - Tasks' north star reads Todoist and only Todoist in `docs/blueprint-seats.md`, `packages/blueprints/apps/tasks/app.json` and `packages/blueprints/index.json` → Stage 0; the catalogue copy moved to the manifest's answer and `packages/blueprints/manifest.json` was regenerated over it.
@@ -284,10 +284,6 @@ Every checked item above, and where its work landed. The trees that follow group
 - `check:ui-receipt` evidence: a changed e2e harness emitting under `artifacts/e2e/ui-impact/` → `apps/web/tests/e2e/rebuilt-apps.spec.ts` (new), emitting `artifacts/e2e/ui-impact/issue-834-tasks-board.png` and `artifacts/e2e/ui-impact/issue-834-agenda-day-context.png`.
 - Docs to current state — `docs/blueprint-seats.md`, `docs/decisions.md`, `docs/glossary.md`, `docs/design-divergences.md`, `CHANGELOG.md`, and one `QUALITY.md` observation → all six files land in this change set; the **Rulings and docs** tree below says what each one gained.
 - `bun run check:push` across the finished waves (results and the three environment reds in `## Verification`) → the gate results are below, each red named and explained rather than left as a bare number.
-
-### The trees, by surface
-
-Every file committed since `e40f060e`, by tree.
 
 ### Rulings and docs
 
