@@ -81,7 +81,9 @@ function firstReminder(json: string | null | undefined): number | null {
   try {
     const parsed = JSON.parse(json) as { minutes_before?: number }[];
     const first = Array.isArray(parsed) ? parsed[0] : undefined;
-    return typeof first?.minutes_before === "number" ? first.minutes_before : null;
+    return typeof first?.minutes_before === "number"
+      ? first.minutes_before
+      : null;
   } catch {
     return null;
   }
@@ -156,7 +158,9 @@ export function EventEditor(props: EventEditorProps): ReactNode {
       ...(rrule ? { rrule } : {}),
       // An unsafe scheme never leaves this form: the same allowlist that
       // refuses to paint it refuses to store it.
-      ...(safeExternalUrl(conferencing) ? { conferencing_uri: conferencing } : {}),
+      ...(safeExternalUrl(conferencing)
+        ? { conferencing_uri: conferencing }
+        : {}),
     });
   };
 

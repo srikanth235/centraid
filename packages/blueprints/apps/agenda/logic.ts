@@ -51,7 +51,13 @@ function isHeld(status: string | undefined): boolean {
   return status === "queued" || status === "in-flight" || status === "sending";
 }
 
-export function createLogic({ state, data, frame, render, refresh }: LogicDeps) {
+export function createLogic({
+  state,
+  data,
+  frame,
+  render,
+  refresh,
+}: LogicDeps) {
   /** The in-pane notice, driven imperatively so React never clobbers it. */
   function notice(text: string): void {
     const el = document.querySelector<HTMLElement>("#noticeBanner");
@@ -126,9 +132,7 @@ export function createLogic({ state, data, frame, render, refresh }: LogicDeps) 
       const newId = outcome.output?.event_id as string | undefined;
       publishOutcome(frame, {
         text: OUTCOME_PROPOSED,
-        ...(newId
-          ? { undo: () => void cancelEvent(newId) }
-          : {}),
+        ...(newId ? { undo: () => void cancelEvent(newId) } : {}),
       });
     } else narrateHeld(outcome);
     return outcome;

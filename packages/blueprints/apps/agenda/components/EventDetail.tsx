@@ -16,8 +16,8 @@ import type { ReactNode } from "react";
 
 import { PendingWriteActions } from "../../_shared/PendingWriteActions.tsx";
 import { displayText } from "../../_shared/untrusted.ts";
-import { eventTitle, fmtTime } from "../format.ts";
 import type { RsvpAnswer } from "../edits.ts";
+import { eventTitle, fmtTime } from "../format.ts";
 import type { AgEvent, Attendee } from "../types.ts";
 import {
   ATTACH,
@@ -243,7 +243,11 @@ export function EventDetail(props: EventDetailProps): ReactNode {
         {/* The panel's one filled control: the way to change this event. A
             repeating one opens the scope panel on the way, so this button
             never decides the scope on the member's behalf. */}
-        <button type="button" className="kit-btn primary" onClick={props.onEdit}>
+        <button
+          type="button"
+          className="kit-btn primary"
+          onClick={props.onEdit}
+        >
           {QUICK_EDIT}
         </button>
       </footer>

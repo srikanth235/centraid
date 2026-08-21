@@ -38,7 +38,11 @@ export interface MiniMonthProps {
 }
 
 export function MiniMonth(props: MiniMonthProps): ReactNode {
-  const first = new Date(props.anchor.getFullYear(), props.anchor.getMonth(), 1);
+  const first = new Date(
+    props.anchor.getFullYear(),
+    props.anchor.getMonth(),
+    1
+  );
   const gridStart = startOfWeek(first);
   const busy = new Set(
     props.events.map((ev) => localDayKey(new Date(ev.dtstart)))

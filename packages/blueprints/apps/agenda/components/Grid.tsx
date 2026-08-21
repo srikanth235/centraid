@@ -15,15 +15,16 @@
 import { useEffect, useRef } from "react";
 import type { ReactNode } from "react";
 
-import {
-  eventTitle,
-  fmtHour,
-  fmtTime,
-  localDayKey,
-} from "../format.ts";
+import { eventTitle, fmtHour, fmtTime, localDayKey } from "../format.ts";
 import type { AgEvent, DaySegment } from "../types.ts";
 import { ALL_DAY, CONTINUES, NOW } from "../view-copy.ts";
-import { layoutDay, nowLineMinutes, rowKey, segmentBox, splitDay } from "../views.ts";
+import {
+  layoutDay,
+  nowLineMinutes,
+  rowKey,
+  segmentBox,
+  splitDay,
+} from "../views.ts";
 import { CalendarDot, Num, PendingMark, Safe } from "./Shared.tsx";
 
 import styles from "./Grid.module.css";
@@ -162,7 +163,9 @@ export function MonthGrid(props: MonthGridProps): ReactNode {
               type="button"
               className={styles.cellAdd}
               aria-label={`New event on ${date.toLocaleDateString(undefined, { month: "long", day: "numeric" })}`}
-              onClick={() => props.onQuickAdd(new Date(date.getTime() + 9 * 60 * 60 * 1000))}
+              onClick={() =>
+                props.onQuickAdd(new Date(date.getTime() + 9 * 60 * 60 * 1000))
+              }
             >
               +
             </button>
@@ -208,7 +211,11 @@ export function TimeGrid(
       <div className={styles.timeHeads}>
         <div className={styles.gutterHead} aria-hidden="true" />
         {props.days.map((dayKey) => (
-          <DayHead key={dayKey} dayKey={dayKey} {...(props.dayRibbon ? { dayRibbon: props.dayRibbon } : {})} />
+          <DayHead
+            key={dayKey}
+            dayKey={dayKey}
+            {...(props.dayRibbon ? { dayRibbon: props.dayRibbon } : {})}
+          />
         ))}
       </div>
 
@@ -336,7 +343,9 @@ function DayColumn({
           style={{ top: `${(nowMinutes / MINUTES_IN_DAY) * 100}%` }}
         >
           <span className={styles.nowText}>
-            <Num>{fmtTime(new Date(dayStart.getTime() + nowMinutes * 60_000))}</Num>
+            <Num>
+              {fmtTime(new Date(dayStart.getTime() + nowMinutes * 60_000))}
+            </Num>
           </span>
           <span className="kit-sr-only">{NOW}</span>
         </div>

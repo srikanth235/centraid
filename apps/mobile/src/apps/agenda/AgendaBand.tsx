@@ -56,14 +56,20 @@ export default function AgendaBand({
 
   if (band.owner !== "app") {
     return (
-      <View style={[styles.band, { paddingBottom: BAND_INSET + insets.bottom }]}>
+      <View
+        style={[styles.band, { paddingBottom: BAND_INSET + insets.bottom }]}
+      >
         <Pressable
           accessibilityRole="button"
           accessibilityLabel={AGENDA_BAND_CAPSULE.label}
           onPress={onHome}
           style={[styles.capsule, { width: AGENDA_BAND_CAPSULE.size }]}
         >
-          <Icon name={AGENDA_BAND_CAPSULE.icon} size={19} color={colors.textSoft} />
+          <Icon
+            name={AGENDA_BAND_CAPSULE.icon}
+            size={19}
+            color={colors.textSoft}
+          />
         </Pressable>
       </View>
     );

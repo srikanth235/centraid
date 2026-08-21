@@ -85,7 +85,9 @@ export function Chrome(props: ChromeProps): ReactNode {
           where the band carries the views and the More sheet carries these. */}
       {props.narrow ? null : (
         <aside className={styles.rail} aria-label="Agenda rail">
-          <section className={styles.railSection}>{props.slots.miniMonth}</section>
+          <section className={styles.railSection}>
+            {props.slots.miniMonth}
+          </section>
           <section className={styles.railSection} aria-label={RAIL_CALENDARS}>
             <h2 className={styles.railLabel}>{RAIL_CALENDARS}</h2>
             {props.slots.calendars}

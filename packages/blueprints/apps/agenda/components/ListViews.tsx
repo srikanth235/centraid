@@ -44,7 +44,9 @@ export interface ListViewProps {
 
 /** Is this held write a cancellation the vault is holding? That row keeps its
  *  place on the agenda and says what is held, rather than vanishing. */
-function isHeldCancel(pending: { status: string; action: string } | undefined): boolean {
+function isHeldCancel(
+  pending: { status: string; action: string } | undefined
+): boolean {
   return (
     pending?.action === "cancel-event" &&
     (pending.status === "queued" ||
@@ -82,7 +84,10 @@ function Row({
         <Num>{segment.spansAll ? ALL_DAY : fmtTime(ev.dtstart)}</Num>
       </span>
       <span className={styles.rowText}>
-        <span className={styles.rowTitle} data-tentative={String(ev.status === "tentative")}>
+        <span
+          className={styles.rowTitle}
+          data-tentative={String(ev.status === "tentative")}
+        >
           <Safe value={eventTitle(ev)} />
         </span>
         {ev.snippet ? <Snippet snippet={ev.snippet} /> : null}
@@ -118,7 +123,10 @@ export function ListView(props: ListViewProps): ReactNode {
         const date = new Date(`${dayKey}T00:00:00`);
         return (
           <section key={dayKey} className={styles.day}>
-            <div className={styles.rail} data-today={String(dayKey === todayKey)}>
+            <div
+              className={styles.rail}
+              data-today={String(dayKey === todayKey)}
+            >
               <span className={styles.railNum}>
                 <Num>{date.getDate()}</Num>
               </span>

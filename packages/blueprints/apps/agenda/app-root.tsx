@@ -316,9 +316,17 @@ export function Root({
       const shown = resolveView(current.view, compact || narrow);
       current.anchorDay =
         shown === "week"
-          ? new Date(anchor.getFullYear(), anchor.getMonth(), anchor.getDate() + direction * 7)
+          ? new Date(
+              anchor.getFullYear(),
+              anchor.getMonth(),
+              anchor.getDate() + direction * 7
+            )
           : shown === "day"
-            ? new Date(anchor.getFullYear(), anchor.getMonth(), anchor.getDate() + direction)
+            ? new Date(
+                anchor.getFullYear(),
+                anchor.getMonth(),
+                anchor.getDate() + direction
+              )
             : new Date(anchor.getFullYear(), anchor.getMonth() + direction, 1);
       void load();
     },
@@ -445,7 +453,9 @@ export function Root({
   const selected = state.selectedId
     ? findEvent(data.events, state.selectedId)
     : null;
-  const editing = state.editorId ? findEvent(data.events, state.editorId) : null;
+  const editing = state.editorId
+    ? findEvent(data.events, state.editorId)
+    : null;
   const searching = state.search.trim() !== "";
 
   let canvas: ReactNode;
@@ -521,7 +531,11 @@ export function Root({
         {readFailedState ? (
           <>
             <span>{STATE_READ_FAILED}</span>
-            <button type="button" className="kit-btn" onClick={() => void load()}>
+            <button
+              type="button"
+              className="kit-btn"
+              onClick={() => void load()}
+            >
               {STATE_REFRESH}
             </button>
           </>

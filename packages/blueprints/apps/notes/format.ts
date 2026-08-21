@@ -238,6 +238,27 @@ export function daysLeft(
   return Math.max(0, Math.ceil((stamp - now) / DAY_MS));
 }
 
+/**
+ * Did two writes land on this note at the same instant?
+ *
+ * This is the ONE observable form of "two devices changed this passage" the
+ * vault actually hands over: the version chain is append-only and each link
+ * carries when it was asserted, so two entries stamped identically are two
+ * writes that did not see each other. The conflict panel is drawn from THIS
+ * and never from a guess — a state nobody can verify is a state this app may
+ * not claim.
+ */
+export function hasConcurrentVersions(
+  versions: ReadonlyArray<{ asserted_at: string }>
+): boolean {
+  const seen = new Set<string>();
+  for (const version of versions) {
+    if (seen.has(version.asserted_at)) return true;
+    seen.add(version.asserted_at);
+  }
+  return false;
+}
+
 /** What a card with no text to preview is holding instead (§5's placeholder
  *  rule) — the gallery never becomes a wall of broken thumbnails. */
 export type Placeholder = "screenshot" | "link-only" | "audio" | null;

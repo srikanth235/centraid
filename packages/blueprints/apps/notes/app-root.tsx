@@ -44,6 +44,7 @@ import {
   VoiceRoute,
   WindowEnd,
 } from "./components/States.tsx";
+import { hasConcurrentVersions } from "./format.ts";
 import { appBar, bandClaim } from "./frame.tsx";
 import {
   createLogic,
@@ -621,7 +622,10 @@ export function Root({
           onRefresh={() => void core.refresh()}
         />
       ) : null}
-      {shelf === NOTE && openNote && (openNote.references ?? []).length > 1 ? (
+      {/* Two writes stamped at the same instant in the append-only chain —
+          the only evidence of a conflict this vault hands over. Both bodies
+          are already kept, so the panel reports and offers no fill. */}
+      {shelf === NOTE && hasConcurrentVersions(state.versions ?? []) ? (
         <Conflict onOpenHistory={() => go(HISTORY)} />
       ) : null}
       {shelf === SEARCH ? (

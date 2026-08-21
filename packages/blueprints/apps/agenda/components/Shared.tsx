@@ -69,7 +69,12 @@ export function JoinLink({
   const href = safeExternalUrl(uri);
   if (!href) return null;
   return (
-    <a className="kit-btn" href={href} rel="noreferrer noopener" target="_blank">
+    <a
+      className="kit-btn"
+      href={href}
+      rel="noreferrer noopener"
+      target="_blank"
+    >
       {label}
     </a>
   );
@@ -80,7 +85,11 @@ export function JoinLink({
  * rule and the words. Never a spinner and never a badge — the row says what is
  * true about itself, in place.
  */
-export function PendingMark({ text = PENDING_MARK }: { text?: string }): ReactNode {
+export function PendingMark({
+  text = PENDING_MARK,
+}: {
+  text?: string;
+}): ReactNode {
   return <span className={styles.pendingMark}>{text}</span>;
 }
 

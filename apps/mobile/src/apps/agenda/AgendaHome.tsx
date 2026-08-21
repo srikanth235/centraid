@@ -21,25 +21,25 @@ import type { ListRenderItemInfo } from "react-native";
 
 import { readPendingOverlay } from "@centraid/blueprints/apps/_shared/pending-overlay";
 
+import { useBandOwner } from "../../kit/band/band-owner";
 import Icon from "../../kit/components/Icon";
 import { Text, TextInput } from "../../kit/components/NativeText";
 import OptionSheet from "../../kit/components/OptionSheet";
 import TopSafeArea from "../../kit/components/TopSafeArea";
-import { useBandOwner } from "../../kit/band/band-owner";
 import { useReplica } from "../../kit/replica/ReplicaProvider";
+import ReplicaStateCard from "../../kit/replica/ReplicaStateCard";
+import ReplicaStatusBar from "../../kit/replica/ReplicaStatusBar";
 import {
   surfaceWriteFailure,
   surfaceWriteOutcome,
 } from "../../kit/replica/write-outcome";
-import ReplicaStateCard from "../../kit/replica/ReplicaStateCard";
-import ReplicaStatusBar from "../../kit/replica/ReplicaStatusBar";
 import { t, useTheme } from "../../kit/theme";
 import type { ThemeColors } from "../../kit/theme";
 import type { AgendaScreenProps } from "../../navigation";
+import type { AgendaBandDestinationKey } from "./agenda-band";
 import AgendaBand from "./AgendaBand";
 import AgendaCreateModal from "./AgendaCreateModal";
 import type { AgendaCreateInput } from "./AgendaCreateModal";
-import type { AgendaBandDestinationKey } from "./agenda-band";
 import { styles } from "./AgendaHome.styles";
 import type { NativeAgendaEvent } from "./useAgenda";
 import { useAgenda } from "./useAgenda";
@@ -388,7 +388,10 @@ const AgendaDayRow = memo(
     return (
       <View style={[styles.dayRow, { borderTopColor: colors.line }]}>
         <View
-          style={[styles.dateCol, isToday ? { backgroundColor: colors.bgElev } : null]}
+          style={[
+            styles.dateCol,
+            isToday ? { backgroundColor: colors.bgElev } : null,
+          ]}
         >
           <Text
             style={[
@@ -440,10 +443,13 @@ function AgendaEventCard({
   return (
     <Pressable
       accessibilityRole="button"
-      accessibilityLabel={`${event.summary}, ${new Intl.DateTimeFormat(undefined, {
-        hour: "numeric",
-        minute: "2-digit",
-      }).format(new Date(event.start))}`}
+      accessibilityLabel={`${event.summary}, ${new Intl.DateTimeFormat(
+        undefined,
+        {
+          hour: "numeric",
+          minute: "2-digit",
+        }
+      ).format(new Date(event.start))}`}
       onPress={() => onOpen(event)}
       style={[
         styles.eventCard,
@@ -465,7 +471,9 @@ function AgendaEventCard({
         </Text>
       ) : null}
       {pending ? (
-        <View style={[styles.pendingMark, { borderStartColor: colors.textFaint }]}>
+        <View
+          style={[styles.pendingMark, { borderStartColor: colors.textFaint }]}
+        >
           <Text style={[styles.pendingText, { color: colors.textSoft }]}>
             {heldCancel ? "cancel asked" : "not in the vault yet"}
           </Text>

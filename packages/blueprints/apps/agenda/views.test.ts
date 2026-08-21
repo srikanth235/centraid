@@ -26,11 +26,19 @@ import {
 
 /** A local-time instant, so these assertions do not depend on the runner's
  *  zone the way a hardcoded `Z` string would. */
-function at(year: number, month: number, day: number, hour = 0, minute = 0): string {
+function at(
+  year: number,
+  month: number,
+  day: number,
+  hour = 0,
+  minute = 0
+): string {
   return new Date(year, month - 1, day, hour, minute).toISOString();
 }
 
-function event(partial: Partial<AgEvent> & { event_id: string; dtstart: string }): AgEvent {
+function event(
+  partial: Partial<AgEvent> & { event_id: string; dtstart: string }
+): AgEvent {
   return { summary: "Something", ...partial };
 }
 
@@ -102,7 +110,11 @@ describe("each view reads a bounded window", () => {
 describe("bucketing puts an event on one day", () => {
   it("keys a timed event by its own local day", () => {
     const buckets = bucketByDay([
-      event({ event_id: "e1", dtstart: at(2026, 8, 21, 9), dtend: at(2026, 8, 21, 10) }),
+      event({
+        event_id: "e1",
+        dtstart: at(2026, 8, 21, 9),
+        dtend: at(2026, 8, 21, 10),
+      }),
     ]);
     expect([...buckets.keys()]).toStrictEqual(["2026-08-21"]);
     expect(buckets.get("2026-08-21")?.[0]?.clamped).toBe(false);
@@ -112,7 +124,11 @@ describe("bucketing puts an event on one day", () => {
     // The deliberate v1 bound: one row on one day, said in words, rather than
     // a bar reaching across columns.
     const buckets = bucketByDay([
-      event({ event_id: "e2", dtstart: at(2026, 8, 21, 22), dtend: at(2026, 8, 23, 9) }),
+      event({
+        event_id: "e2",
+        dtstart: at(2026, 8, 21, 22),
+        dtend: at(2026, 8, 23, 9),
+      }),
     ]);
     expect([...buckets.keys()]).toStrictEqual(["2026-08-21"]);
     const segment = buckets.get("2026-08-21")?.[0];
@@ -128,7 +144,11 @@ describe("bucketing puts an event on one day", () => {
         dtend: at(2026, 8, 21, 23, 59),
         recurrence_semantics: "all-day",
       }),
-      event({ event_id: "timed", dtstart: at(2026, 8, 21, 9), dtend: at(2026, 8, 21, 10) }),
+      event({
+        event_id: "timed",
+        dtstart: at(2026, 8, 21, 9),
+        dtend: at(2026, 8, 21, 10),
+      }),
     ]);
     const split = splitDay(buckets.get("2026-08-21") ?? []);
     expect(split.allDay.map((s) => s.ev.event_id)).toStrictEqual(["whole"]);
@@ -146,16 +166,30 @@ describe("bucketing puts an event on one day", () => {
   });
 
   it("drops a row whose start the vault could not parse rather than guessing", () => {
-    expect(bucketByDay([event({ event_id: "bad", dtstart: "not a date" })]).size).toBe(0);
+    expect(
+      bucketByDay([event({ event_id: "bad", dtstart: "not a date" })]).size
+    ).toBe(0);
   });
 });
 
 describe("overlaps take side-by-side columns", () => {
   it("splits a cluster evenly and leaves a lone event whole", () => {
     const buckets = bucketByDay([
-      event({ event_id: "a", dtstart: at(2026, 8, 21, 9), dtend: at(2026, 8, 21, 11) }),
-      event({ event_id: "b", dtstart: at(2026, 8, 21, 10), dtend: at(2026, 8, 21, 12) }),
-      event({ event_id: "c", dtstart: at(2026, 8, 21, 15), dtend: at(2026, 8, 21, 16) }),
+      event({
+        event_id: "a",
+        dtstart: at(2026, 8, 21, 9),
+        dtend: at(2026, 8, 21, 11),
+      }),
+      event({
+        event_id: "b",
+        dtstart: at(2026, 8, 21, 10),
+        dtend: at(2026, 8, 21, 12),
+      }),
+      event({
+        event_id: "c",
+        dtstart: at(2026, 8, 21, 15),
+        dtend: at(2026, 8, 21, 16),
+      }),
     ]);
     const laid = layoutDay(buckets.get("2026-08-21") ?? []);
     const byId = new Map(laid.map((s) => [s.ev.event_id, s]));
@@ -170,7 +204,7 @@ describe("overlaps take side-by-side columns", () => {
     ]);
     const box = segmentBox((buckets.get("2026-08-21") ?? [])[0]!);
     expect(box.height).toBeGreaterThan(0);
-    expect(box.top).toBeCloseTo((9 * 60) / (24 * 60) * 100, 5);
+    expect(box.top).toBeCloseTo(((9 * 60) / (24 * 60)) * 100, 5);
   });
 });
 
@@ -186,7 +220,9 @@ describe("waiting on is the answers still owed", () => {
   const answered = event({
     event_id: "answered",
     dtstart: at(2026, 8, 21, 11),
-    attendees: [{ party_id: "me", name: "You", partstat: "accepted", is_you: true }],
+    attendees: [
+      { party_id: "me", name: "You", partstat: "accepted", is_you: true },
+    ],
   });
   const notMine = event({
     event_id: "theirs",
@@ -195,9 +231,9 @@ describe("waiting on is the answers still owed", () => {
   });
 
   it("keeps only the events the owner has not answered", () => {
-    expect(waitingOn([invited, answered, notMine]).map((ev) => ev.event_id)).toStrictEqual([
-      "invite",
-    ]);
+    expect(
+      waitingOn([invited, answered, notMine]).map((ev) => ev.event_id)
+    ).toStrictEqual(["invite"]);
   });
 
   it("reads a missing partstat as unanswered, not as an answer", () => {
@@ -218,13 +254,19 @@ describe("row identity and calendar visibility", () => {
       instance_key: "series:2026-08-21T09:00:00Z",
     });
     expect(rowKey(occurrence)).toBe("series:2026-08-21T09:00:00Z");
-    expect(findEvent([occurrence], "series:2026-08-21T09:00:00Z")).toBe(occurrence);
+    expect(findEvent([occurrence], "series:2026-08-21T09:00:00Z")).toBe(
+      occurrence
+    );
     expect(findEvent([occurrence], "series")).toBe(occurrence);
     expect(findEvent([occurrence], "other")).toBeNull();
   });
 
   it("hides a calendar's rows without hiding the rows that have none", () => {
-    const onCal = event({ event_id: "on", dtstart: at(2026, 8, 21), calendar_id: "work" });
+    const onCal = event({
+      event_id: "on",
+      dtstart: at(2026, 8, 21),
+      calendar_id: "work",
+    });
     const noCal = event({ event_id: "off", dtstart: at(2026, 8, 21) });
     expect(
       visibleEvents([onCal, noCal], new Set(["work"])).map((ev) => ev.event_id)

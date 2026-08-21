@@ -644,7 +644,9 @@ export function describeAppBoot(
             const askToCancel = (): HTMLButtonElement | undefined =>
               Array.from(
                 document.querySelectorAll<HTMLButtonElement>("button")
-              ).find((button) => button.textContent?.trim() === "Ask to cancel");
+              ).find(
+                (button) => button.textContent?.trim() === "Ask to cancel"
+              );
 
             await waitFor(
               () => eventRow() !== null,

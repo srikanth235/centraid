@@ -38,7 +38,10 @@ describe("the scope panel maps a press to one edit-occurrence ask", () => {
   });
 
   it("falls back to the row's own start where there is no instance identity", () => {
-    const oneOff: AgEvent = { event_id: "lunch", dtstart: "2026-08-21T12:00:00.000Z" };
+    const oneOff: AgEvent = {
+      event_id: "lunch",
+      dtstart: "2026-08-21T12:00:00.000Z",
+    };
     expect(
       occurrenceEdit({ event: oneOff, scope: "occurrence", intent: "edit" })
         ?.original_start
@@ -64,10 +67,12 @@ describe("the scope panel maps a press to one edit-occurrence ask", () => {
   });
 
   it("REFUSES to skip a whole series, so no control is drawn for it", () => {
-    expect(occurrenceEdit({ event: series, scope: "series", intent: "skip" })).toBeNull();
-    expect(occurrenceEdit({ event: series, scope: "future", intent: "skip" })?.scope).toBe(
-      "future"
-    );
+    expect(
+      occurrenceEdit({ event: series, scope: "series", intent: "skip" })
+    ).toBeNull();
+    expect(
+      occurrenceEdit({ event: series, scope: "future", intent: "skip" })?.scope
+    ).toBe("future");
   });
 
   it("asks the scope question only of a repeating event", () => {
@@ -79,7 +84,9 @@ describe("the scope panel maps a press to one edit-occurrence ask", () => {
         is_recurrence_instance: true,
       })
     ).toBe(true);
-    expect(needsScopePanel({ event_id: "lunch", dtstart: series.dtstart })).toBe(false);
+    expect(
+      needsScopePanel({ event_id: "lunch", dtstart: series.dtstart })
+    ).toBe(false);
   });
 });
 
@@ -122,7 +129,11 @@ describe("an RSVP is projected back into the guest list", () => {
         instance_key: "standup:2",
         attendees: guests,
       },
-      { event_id: "other", dtstart: "2026-08-21T14:00:00.000Z", attendees: guests },
+      {
+        event_id: "other",
+        dtstart: "2026-08-21T14:00:00.000Z",
+        attendees: guests,
+      },
     ];
     const next = projectRsvpInto(rows, "standup", "me", "tentative");
     expect(next[0]?.attendees?.[0]?.partstat).toBe("tentative");

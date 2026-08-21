@@ -25,14 +25,13 @@
   letter-spacing: normal;
 }
 
-/* Agenda's identity is FOREST — the slot `apps.ts` assigns it on the identity
-   wheel and what `app.json`'s colorKey already says. It is the wheel slot and
-   nothing else: the neutrals are the system's own paper, and no control in
-   this app takes the hue. The rule doubles the class so it beats the shell's
-   injected scope block. */
-.shell.shell {
-  --app-hue: var(--c-forest);
-}
+/* Agenda's identity is FOREST. It is NOT declared here: `app.json`'s
+   `colorKey` already says so and the shell's injected scope block sets the
+   identity token from it, so a re-declaration in this file would shadow the
+   system's own property and stop tracking theme changes. Nothing in this app
+   reads the hue anyway — the identity mark is the shell's icon chip, and the
+   calendar dot is a per-calendar content marker derived from the shared
+   identity wheel in `format.ts`, never from the app's own hue. */
 
 /* ---------- The rail ---------- */
 

@@ -9,6 +9,7 @@ import {
   checkStats,
   daysLeft,
   deriveTitle,
+  hasConcurrentVersions,
   placeholderOf,
   promote,
   tallyLabel,
@@ -109,6 +110,27 @@ describe("age and custody", () => {
   test("a row with no purge date counts down from nothing", () => {
     expect(daysLeft(undefined, now)).toBeNull();
     expect(daysLeft("2026-09-01T12:00:00Z", now)).toBe(11);
+  });
+});
+
+describe("the conflict signal", () => {
+  test("two writes stamped at the same instant are a conflict", () => {
+    expect(
+      hasConcurrentVersions([
+        { asserted_at: "2026-08-20T09:00:00Z" },
+        { asserted_at: "2026-08-20T09:00:00Z" },
+      ])
+    ).toBe(true);
+  });
+
+  test("an ordinary chain is not one, however long", () => {
+    expect(
+      hasConcurrentVersions([
+        { asserted_at: "2026-08-20T09:00:00Z" },
+        { asserted_at: "2026-08-19T09:00:00Z" },
+        { asserted_at: "2026-03-04T09:00:00Z" },
+      ])
+    ).toBe(false);
   });
 });
 

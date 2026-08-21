@@ -29,7 +29,10 @@ export function occurrenceEdit(input: {
   event: Pick<AgEvent, "event_id" | "dtstart" | "original_start">;
   scope: EditScope;
   intent: EditIntent;
-  changes?: Pick<OccurrenceEditPayload, "dtstart" | "dtend" | "summary" | "description">;
+  changes?: Pick<
+    OccurrenceEditPayload,
+    "dtstart" | "dtend" | "summary" | "description"
+  >;
 }): OccurrenceEditPayload | null {
   const { event, scope, intent } = input;
   if (intent === "skip" && scope === "series") return null;

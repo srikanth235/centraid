@@ -203,7 +203,9 @@ export default function AgendaCreateModal({
           <View style={styles.chipRow}>
             {parties.map((party) => {
               const id = String(party["party_id"] ?? "");
-              const name = String(party["display_name"] ?? party["name"] ?? "Person");
+              const name = String(
+                party["display_name"] ?? party["name"] ?? "Person"
+              );
               const on = guests.has(id);
               return (
                 <Pressable

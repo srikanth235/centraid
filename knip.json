@@ -124,10 +124,7 @@
         "navigators.tsx",
         "scripts/*.mjs"
       ],
-      "ignoreDependencies": [
-        "@babel/core",
-        "expo-system-ui"
-      ]
+      "ignoreDependencies": ["@babel/core", "expo-system-ui"]
     },
     "apps/oauth-worker": {
       "entry": ["src/worker.ts"],

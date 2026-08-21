@@ -299,7 +299,9 @@ export default function AgendaEventEditor({
           ) : null}
 
           <View style={styles.field}>
-            <Text style={[styles.label, { color: colors.textSoft }]}>Title</Text>
+            <Text style={[styles.label, { color: colors.textSoft }]}>
+              Title
+            </Text>
             <TextInput
               value={summary}
               onChangeText={setSummary}
@@ -311,7 +313,9 @@ export default function AgendaEventEditor({
           </View>
 
           <View style={styles.field}>
-            <Text style={[styles.label, { color: colors.textSoft }]}>Notes</Text>
+            <Text style={[styles.label, { color: colors.textSoft }]}>
+              Notes
+            </Text>
             <TextInput
               value={description}
               onChangeText={setDescription}
@@ -343,8 +347,11 @@ export default function AgendaEventEditor({
             </Text>
             <View style={styles.chipRow}>
               {REPEATS.map((option) =>
-                chip(option.rrule || "none", option.label, rrule === option.rrule, () =>
-                  setRrule(option.rrule)
+                chip(
+                  option.rrule || "none",
+                  option.label,
+                  rrule === option.rrule,
+                  () => setRrule(option.rrule)
                 )
               )}
             </View>

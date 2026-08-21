@@ -12,10 +12,11 @@ import path from "node:path";
 
 import { describe, expect, it } from "vitest";
 
-import * as copy from "./view-copy.ts";
 import type { ViewKind } from "./types.ts";
+import * as copy from "./view-copy.ts";
 
-const BANNED = /\b(?:please|successfully|simply|in order to|you can|we're sorry)\b/iu;
+const BANNED =
+  /\b(?:please|successfully|simply|in order to|you can|we're sorry)\b/iu;
 
 /** Two or more sentences: an internal boundary plus a terminated tail. */
 function sentenceCount(text: string): number {

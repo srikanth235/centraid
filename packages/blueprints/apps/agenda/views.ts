@@ -75,7 +75,10 @@ export function nowAnchor(anchorDay: Date, now: Date = new Date()): number {
 
 /** Minutes from midnight to `now`, or null when `now` is not on this day —
  *  the now line is drawn on exactly one column, never on all of them. */
-export function nowLineMinutes(dayKey: string, now: Date = new Date()): number | null {
+export function nowLineMinutes(
+  dayKey: string,
+  now: Date = new Date()
+): number | null {
   if (localDayKey(now) !== dayKey) return null;
   return now.getHours() * 60 + now.getMinutes();
 }
@@ -127,7 +130,9 @@ export function rangeForView(
 
 /** The 42 days a month grid draws, as local day keys. */
 export function monthGridDays(anchor: Date): string[] {
-  const start = startOfWeek(new Date(anchor.getFullYear(), anchor.getMonth(), 1));
+  const start = startOfWeek(
+    new Date(anchor.getFullYear(), anchor.getMonth(), 1)
+  );
   return Array.from({ length: 42 }, (_, index) =>
     localDayKey(
       new Date(start.getFullYear(), start.getMonth(), start.getDate() + index)
@@ -163,7 +168,9 @@ export function isAllDay(ev: AgEvent): boolean {
  * rule and the schedule's grouping all at once, which is a design decision
  * and not an implementation detail.
  */
-export function bucketByDay(list: readonly AgEvent[]): Map<string, DaySegment[]> {
+export function bucketByDay(
+  list: readonly AgEvent[]
+): Map<string, DaySegment[]> {
   const map = new Map<string, DaySegment[]>();
   for (const ev of list) {
     const start = new Date(ev.dtstart);
@@ -179,7 +186,9 @@ export function bucketByDay(list: readonly AgEvent[]): Map<string, DaySegment[]>
       segEnd: Math.min(end.getTime(), dayEnd),
       startsHere: true,
       endsHere: end.getTime() <= dayEnd,
-      spansAll: isAllDay(ev) || (start.getTime() <= dayStart && end.getTime() >= dayEnd),
+      spansAll:
+        isAllDay(ev) ||
+        (start.getTime() <= dayStart && end.getTime() >= dayEnd),
       clamped: end.getTime() > dayEnd,
     };
     const bucket = map.get(key);
@@ -235,7 +244,10 @@ export function layoutDay(items: readonly DaySegment[]): LaidSegment[] {
 }
 
 /** A segment's position inside a day column, as two percentages of the day. */
-export function segmentBox(segment: DaySegment): { top: number; height: number } {
+export function segmentBox(segment: DaySegment): {
+  top: number;
+  height: number;
+} {
   const dayStart = startOfDay(new Date(segment.segStart)).getTime();
   const top = ((segment.segStart - dayStart) / DAY_MS) * 100;
   const raw = ((segment.segEnd - segment.segStart) / DAY_MS) * 100;
@@ -272,7 +284,9 @@ export function waitingOn(list: readonly AgEvent[]): AgEvent[] {
 }
 
 export function isUnanswered(partstat: string | undefined): boolean {
-  return partstat === undefined || partstat === "" || partstat === "needs-action";
+  return (
+    partstat === undefined || partstat === "" || partstat === "needs-action"
+  );
 }
 
 /** The owner's own guest row on an event, if they are on the guest list. */
