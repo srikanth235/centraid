@@ -1,0 +1,138 @@
+# Issue #839 — promise-driven robustness: close the gap between designed states and proven states
+
+GitHub issue: [#839](https://github.com/srikanth235/centraid/issues/839)
+
+Umbrella issue worked by orchestration ([docs/multi-agent.md](../docs/multi-agent.md)):
+one receipt, no child issues; slices are sub-agents and commit waves under this
+umbrella. Sixteen gaps (G1–G16) across six waves. Every floor in this receipt
+was ratcheted from a measured run, never asserted; no gate was weakened to go
+green.
+
+## Checklist
+
+Wave 0 — encode the shape (G6, G7, G14, G16):
+
+- [x] Every `app.json` declares a `states` block (designed + excluded) over the
+  seven canonical designed states; the manifest validator enforces it as a
+  closed partition
+- [x] Coverage floors: tasks/agenda/notes graduated out of the blueprint blend,
+  blend re-seeded from a measured run, first `apps/mobile` floors (pure-logic
+  scope) — no number decreases
+- [ ] `tests/matrix.json` gains seats, appSeats (Grid B), appStates (Grid D),
+  engineRegistry, and consentLedger blocks; `validate-matrix.mjs` enforces
+  them; report renders Grid B/D skeletons
+
+Wave 1 — name the flows (G6, G7):
+
+- [ ] App admission contract stated for all eight apps
+- [ ] Every designed state has a named owner per seat, or a tracked gap
+- [ ] Tally rows grey-with-citation (#831), never silently absent
+
+Wave 2 — raise the adversaries (G4, G5, G9, G10):
+
+- [ ] Mutation seeds extended over the blueprint app layer and mobile logic
+- [ ] Scope-denial sweep generated from the 37 app.json manifests
+- [ ] Egress-dispatch law; policy-cascade property suite
+- [ ] Fuzz runner + committed crasher corpus, wired to a nightly lane
+
+Wave 3 — prove the joins (G1, G2, G3, G11, G12):
+
+- [ ] Join rig: one gateway + N in-process seats; grant verbs in the seeded
+  simulator; revocation propagation and parked lifecycle owned
+- [ ] Version-skew lane; time zoo under the fake clock
+
+Wave 4 — own the devices (G8):
+
+- [ ] Maestro roster extended beyond photos; device-only claims named
+
+Wave 5 — close the contract (G13, G15, G16):
+
+- [ ] Report v2: verdict strip, attention queue, grids B–G, consent ledger
+- [ ] Derived lane lists; zero-grey everywhere; RTL+CJK gallery lane
+- [ ] Docs pass (TESTING.md, decisions.md, glossary)
+
+## What changed
+
+### Wave 0 — encode the shape
+
+**W0-B — designed-state blocks in the app manifests.** Each of the eight
+`packages/blueprints/apps/*/app.json` gains a `states` block (sibling of
+`seats`): `designed` enumerates which of the seven canonical designed states
+(`dayone, pending, offline, stale, conflict, parked, denied`) the app claims;
+`excluded` is reserved for structural unrepresentability and requires a reason
+and citation per entry. `packages/server/src/engine/registry/manifest.ts` gains
+`CANONICAL_DESIGNED_STATES`, the schema for the block
+(`additionalProperties: false`), and a closed-partition cross-check: every
+canonical state sits in exactly one of designed/excluded.
+`packages/blueprints/scripts/build-manifest.mjs` folds the block into the
+gallery `manifest.json` beside seats. New suite
+`packages/blueprints/src/app-states.test.ts` (27 tests) round-trips every app
+through the real validator; `manifest.test.ts` gains ten cases.
+
+**W0-A — coverage floors (G14).** `tests/coverage-floors.json`: the blueprint
+blend key is replaced by `{_shared,docs,locker,people,tally}` at 41/33;
+tasks (37/25), agenda (40/30), notes (39/27) graduate to their own scopes;
+`apps/mobile/src/lib/**` (56/48) and `apps/mobile/src/**/*-model.ts` (86/72)
+are the first mobile floors. All seeded ~2 points under a 2026-08-21 measured
+run whose path-filtered method can only under-measure (cross-checked within
+0.2pt of the full-run number recorded on #839). The `approvedDeviation`
+paragraph records the method and the blend-key replacement waiver. TESTING.md
+Layer 5 and the floors table updated; the stale "mobile is deliberately
+ungated" comment in `vitest.config.ts` rescoped to screens.
+
+**W0-C — matrix schema v2 + report grid skeletons.** (In flight — filled in on
+wave completion.)
+
+## Out of scope
+
+- Fixing the pre-existing product defects the new adversaries surface — those
+  become their own issues, linked from the report's auto-filed lane (Wave 5).
+- The N−1 client artifact for version skew: the protocol window is a single
+  point today (v3 = min 3), so the skew lane can only assert the update wall;
+  producing a pinned-old-client artifact is a release-pipeline change.
+- Unparking: parked payloads settle (`settleDurableParkedPayload`), they do
+  not unpark; the rig tests the lifecycle that exists.
+
+## Decisions
+
+- **Floors from filtered runs are legal when the filter can only
+  under-measure.** A positional-path vitest coverage run keeps the repo root
+  as the untested-file expansion root, so all denominators stay whole;
+  cross-package suites can only add coverage. Never filter with `--project`
+  for coverage: it collapses the roots and silently over-measures.
+- **The blend-key replacement is a scope rename, not a weakening**: every tree
+  the old key governed is still floored, and every floor over those trees
+  rises.
+- **Two mobile keys, not one brace**: `lib/**` and `**/*-model.ts` are 30
+  points apart; blending them would waste the view-model surface's strength.
+  They deliberately overlap on one file; vitest gives each key its own
+  coverage map.
+- The check pipeline itself is not restructured by this issue: new artifacts
+  register with the gates that already exist (validate-matrix,
+  validate-nightly-wiring, lint-e2e-flows, mutation floors). The one genuinely
+  new gate home is the Wave 2 fuzz runner's nightly lane.
+
+## Verification
+
+Filled per wave; the final gate run happens once after all waves:
+
+```
+bun run check:pr
+```
+
+Wave 0 (interim, per slice):
+
+```
+bun run test:ratchet          # ok — blend replacement waived by changed approvedDeviation
+node scripts/test-report/validate-matrix.mjs   # exit 0
+bun run test:report:smoke     # ok
+```
+
+## Audit
+
+Fresh-context audit sub-agents run per wave; the verdicts land here with the
+final wave. (Pending — Wave 0 audit runs when W0-C completes.)
+
+## Session
+
+<!-- Session identifiers are maintained by the agent-session-identity pre-commit hook. -->
