@@ -141,6 +141,8 @@ const enrichmentLive = buildEnrichmentLive(enrichmentLiveResult, {
   runUrl,
 });
 const appEngineGrid = buildAppEngineGrid(matrix, evidence);
+const appSeatGrid = buildAppSeatGrid(matrix);
+const appStateGrid = buildAppStateGrid(matrix);
 // #781 — reclassify registered no-lane absences AFTER normal cell states are
 // derived, so real evidence always wins and only enumerated no-evidence cells
 // become expected-grey (void the moment their lane has a start marker).
@@ -284,6 +286,8 @@ const model = {
   generatedAt: new Date().toISOString(),
   matrix,
   appEngineGrid,
+  appSeatGrid,
+  appStateGrid,
   enrichmentLive,
   cells,
   qualities,
@@ -731,6 +735,93 @@ function buildAppEngineGrid(manifest, evidenceItems) {
       }),
     })),
   };
+}
+
+/**
+ * Grid B — blueprint app × seat (#839 Wave 0, gap G6).
+ *
+ * These cells are DECLARATIONS, not health: an app × seat cell names the
+ * journey that owns that seat, and no lane reports per-seat evidence yet
+ * (Wave 1 names the flows). So an owned cell renders neutral — "an owner is
+ * declared" — and is deliberately NOT green, which in this report means
+ * "evidence ran and passed". Nothing here reaches `buildCells`, so the
+ * nightly zero-grey contract is untouched by design.
+ */
+function buildAppSeatGrid(manifest) {
+  const seats = manifest.seats ?? [];
+  return {
+    seats,
+    apps: (manifest.appSeats?.apps ?? []).map((app) => ({
+      id: app.id,
+      cells: seats.map((seat) => {
+        const declared = app.seats?.[seat.id];
+        if (declared?.status === "owned")
+          return {
+            seat: seat.id,
+            state: "declared",
+            detail: declared.owner,
+            tier: declared.tier,
+          };
+        if (declared?.status === "skip")
+          return {
+            seat: seat.id,
+            state: "skipped",
+            detail: `${declared.reason} (${declared.citation})`,
+            tier: declared.citation,
+          };
+        return {
+          seat: seat.id,
+          state: "unowned",
+          detail: `no seat owner yet — tracked by #${declared?.trackingIssue ?? "?"}`,
+          tier: `#${declared?.trackingIssue ?? "?"}`,
+        };
+      }),
+    })),
+  };
+}
+
+/**
+ * Grid D — blueprint app × designed state (#839 Wave 0, gap G7). Same
+ * declaration-not-health rule as grid B; the partition mirrors each app's
+ * `app.json#states`, so an `excluded` cell is a structural exclusion the
+ * manifest itself carries, never an unbuilt state in disguise.
+ */
+function buildAppStateGrid(manifest) {
+  const states = manifest.appStates?.states ?? [];
+  const trackingIssue = manifest.appStates?.trackingIssue;
+  return {
+    states,
+    apps: (manifest.appStates?.apps ?? []).map((app) => ({
+      id: app.id,
+      cells: states.map((state) => {
+        const declared = app.states?.[state.id];
+        if (declared?.status === "owned")
+          return { state: state.id, status: "declared", detail: declared.owner };
+        if (declared?.status === "excluded")
+          return {
+            state: state.id,
+            status: "skipped",
+            detail: "structurally excluded by this app's manifest",
+          };
+        return {
+          state: state.id,
+          status: "unowned",
+          detail: `no owner yet — tracked by #${trackingIssue ?? "?"}`,
+        };
+      }),
+    })),
+  };
+}
+
+/** Fold either app-axis grid into its {declared, unowned, skipped} counts. */
+function countAxisCells(grid) {
+  const counts = { declared: 0, unowned: 0, skipped: 0 };
+  for (const app of grid.apps ?? [])
+    for (const cell of app.cells ?? []) {
+      const state = cell.state ?? cell.status;
+      if (state in counts) counts[state] += 1;
+    }
+  return counts;
 }
 
 function buildCells(

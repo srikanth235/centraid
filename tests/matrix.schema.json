@@ -14,7 +14,12 @@
     "dimensions",
     "surfaces",
     "flows",
-    "appEngines"
+    "appEngines",
+    "seats",
+    "appSeats",
+    "appStates",
+    "engineRegistry",
+    "consentLedger"
   ],
   "properties": {
     "version": { "type": "integer", "minimum": 1 },
@@ -246,6 +251,214 @@
           }
         }
       }
+    },
+    "seats": {
+      "type": "array",
+      "minItems": 3,
+      "maxItems": 3,
+      "items": {
+        "type": "object",
+        "required": ["id", "label", "doctrine"],
+        "additionalProperties": false,
+        "properties": {
+          "id": { "enum": ["origin", "custodian", "viewer"] },
+          "label": { "type": "string", "minLength": 1 },
+          "doctrine": { "type": "string", "minLength": 1 }
+        }
+      }
+    },
+    "appSeats": {
+      "type": "object",
+      "required": ["apps"],
+      "additionalProperties": false,
+      "properties": {
+        "apps": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "object",
+            "required": ["id", "seats"],
+            "additionalProperties": false,
+            "properties": {
+              "id": { "type": "string", "minLength": 1 },
+              "seats": {
+                "type": "object",
+                "required": ["origin", "custodian", "viewer"],
+                "additionalProperties": false,
+                "properties": {
+                  "origin": { "$ref": "#/$defs/appSeatCell" },
+                  "custodian": { "$ref": "#/$defs/appSeatCell" },
+                  "viewer": { "$ref": "#/$defs/appSeatCell" }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "appStates": {
+      "type": "object",
+      "required": ["trackingIssue", "states", "apps"],
+      "additionalProperties": false,
+      "properties": {
+        "trackingIssue": { "type": "string", "minLength": 1 },
+        "states": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "object",
+            "required": ["id", "label"],
+            "additionalProperties": false,
+            "properties": {
+              "id": { "type": "string", "minLength": 1 },
+              "label": { "type": "string", "minLength": 1 }
+            }
+          }
+        },
+        "apps": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "object",
+            "required": ["id", "states"],
+            "additionalProperties": false,
+            "properties": {
+              "id": { "type": "string", "minLength": 1 },
+              "states": {
+                "type": "object",
+                "minProperties": 1,
+                "additionalProperties": { "$ref": "#/$defs/appStateCell" }
+              }
+            }
+          }
+        }
+      }
+    },
+    "engineRegistry": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": [
+          "id",
+          "label",
+          "source",
+          "propertyFlow",
+          "mutationSeed",
+          "appEngineColumn"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "id": { "type": "string", "minLength": 1 },
+          "label": { "type": "string", "minLength": 1 },
+          "source": {
+            "type": "array",
+            "minItems": 1,
+            "items": { "type": "string", "minLength": 1 }
+          },
+          "propertyFlow": { "type": ["string", "null"], "minLength": 1 },
+          "mutationSeed": { "type": ["string", "null"], "minLength": 1 },
+          "appEngineColumn": { "type": "boolean" }
+        }
+      }
+    },
+    "consentLedger": {
+      "type": "array",
+      "minItems": 8,
+      "maxItems": 8,
+      "items": {
+        "type": "object",
+        "required": [
+          "id",
+          "label",
+          "enforcement",
+          "refusalGrammar",
+          "adversary",
+          "seats",
+          "note"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "id": { "type": "string", "minLength": 1 },
+          "label": { "type": "string", "minLength": 1 },
+          "enforcement": {
+            "type": "array",
+            "minItems": 1,
+            "items": { "type": "string", "minLength": 1 }
+          },
+          "refusalGrammar": { "type": "string", "minLength": 1 },
+          "adversary": {
+            "type": "object",
+            "required": ["owner", "flow"],
+            "additionalProperties": false,
+            "properties": {
+              "owner": { "type": ["string", "null"], "minLength": 1 },
+              "flow": { "type": ["string", "null"], "minLength": 1 },
+              "trackingIssue": { "type": "string", "minLength": 1 }
+            }
+          },
+          "seats": {
+            "type": "array",
+            "minItems": 1,
+            "items": { "enum": ["origin", "custodian", "viewer"] }
+          },
+          "note": { "type": "string", "minLength": 1 }
+        }
+      }
+    }
+  },
+  "$defs": {
+    "appSeatCell": {
+      "oneOf": [
+        {
+          "type": "object",
+          "required": ["status", "owner", "tier"],
+          "additionalProperties": false,
+          "properties": {
+            "status": { "const": "owned" },
+            "owner": { "type": "string", "minLength": 1 },
+            "tier": { "type": "string", "minLength": 1 }
+          }
+        },
+        {
+          "type": "object",
+          "required": ["status", "trackingIssue"],
+          "additionalProperties": false,
+          "properties": {
+            "status": { "const": "gap" },
+            "trackingIssue": { "type": "string", "minLength": 1 }
+          }
+        },
+        {
+          "type": "object",
+          "required": ["status", "reason", "citation"],
+          "additionalProperties": false,
+          "properties": {
+            "status": { "const": "skip" },
+            "reason": { "type": "string", "minLength": 1 },
+            "citation": { "type": "string", "minLength": 1 }
+          }
+        }
+      ]
+    },
+    "appStateCell": {
+      "oneOf": [
+        {
+          "type": "object",
+          "required": ["status", "owner"],
+          "additionalProperties": false,
+          "properties": {
+            "status": { "const": "owned" },
+            "owner": { "type": "string", "minLength": 1 }
+          }
+        },
+        {
+          "type": "object",
+          "required": ["status"],
+          "additionalProperties": false,
+          "properties": { "status": { "enum": ["gap", "excluded"] } }
+        }
+      ]
     }
   }
 }

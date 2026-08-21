@@ -609,6 +609,10 @@
     "791": {
       "url": "https://github.com/srikanth235/centraid/issues/791",
       "state": "open"
+    },
+    "839": {
+      "url": "https://github.com/srikanth235/centraid/issues/839",
+      "state": "open"
     }
   },
   "gaps": {
@@ -2196,6 +2200,770 @@
       }
     ]
   },
+  "seats": [
+    {
+      "id": "origin",
+      "label": "Mobile · origin",
+      "doctrine": "docs/blueprint-seats.md#the-three-seats"
+    },
+    {
+      "id": "custodian",
+      "label": "Desktop · custodian",
+      "doctrine": "docs/blueprint-seats.md#the-three-seats"
+    },
+    {
+      "id": "viewer",
+      "label": "Web / PWA · viewer",
+      "doctrine": "docs/blueprint-seats.md#the-three-seats"
+    }
+  ],
+  "appSeats": {
+    "apps": [
+      {
+        "id": "agenda",
+        "seats": {
+          "origin": {
+            "status": "gap",
+            "trackingIssue": "839"
+          },
+          "custodian": {
+            "status": "gap",
+            "trackingIssue": "839"
+          },
+          "viewer": {
+            "status": "gap",
+            "trackingIssue": "839"
+          }
+        }
+      },
+      {
+        "id": "docs",
+        "seats": {
+          "origin": {
+            "status": "gap",
+            "trackingIssue": "839"
+          },
+          "custodian": {
+            "status": "gap",
+            "trackingIssue": "839"
+          },
+          "viewer": {
+            "status": "gap",
+            "trackingIssue": "839"
+          }
+        }
+      },
+      {
+        "id": "locker",
+        "seats": {
+          "origin": {
+            "status": "gap",
+            "trackingIssue": "839"
+          },
+          "custodian": {
+            "status": "gap",
+            "trackingIssue": "839"
+          },
+          "viewer": {
+            "status": "skip",
+            "reason": "Locker declares seats.disabledOn [\"viewer\"]; the PWA seat refuses at the mount path instead of rendering the app, so there is no viewer journey to own.",
+            "citation": "docs/blueprint-seats.md#per-app-seat-profile-machine-readable"
+          }
+        }
+      },
+      {
+        "id": "notes",
+        "seats": {
+          "origin": {
+            "status": "gap",
+            "trackingIssue": "839"
+          },
+          "custodian": {
+            "status": "gap",
+            "trackingIssue": "839"
+          },
+          "viewer": {
+            "status": "gap",
+            "trackingIssue": "839"
+          }
+        }
+      },
+      {
+        "id": "people",
+        "seats": {
+          "origin": {
+            "status": "gap",
+            "trackingIssue": "839"
+          },
+          "custodian": {
+            "status": "gap",
+            "trackingIssue": "839"
+          },
+          "viewer": {
+            "status": "gap",
+            "trackingIssue": "839"
+          }
+        }
+      },
+      {
+        "id": "photos",
+        "seats": {
+          "origin": {
+            "status": "owned",
+            "owner": "tests/agent-e2e-mobile/flows/photos-library.mjs",
+            "tier": "e2e"
+          },
+          "custodian": {
+            "status": "gap",
+            "trackingIssue": "839"
+          },
+          "viewer": {
+            "status": "owned",
+            "owner": "apps/web/tests/e2e/photos-grants.spec.ts",
+            "tier": "e2e"
+          }
+        }
+      },
+      {
+        "id": "tally",
+        "seats": {
+          "origin": {
+            "status": "skip",
+            "reason": "Tally's rendered surface is held on every seat pending a ground-up redesign; the app.json doors stay live, the interface does not.",
+            "citation": "#831"
+          },
+          "custodian": {
+            "status": "skip",
+            "reason": "Tally's rendered surface is held on every seat pending a ground-up redesign; the app.json doors stay live, the interface does not.",
+            "citation": "#831"
+          },
+          "viewer": {
+            "status": "skip",
+            "reason": "Tally's rendered surface is held on every seat pending a ground-up redesign; the app.json doors stay live, the interface does not.",
+            "citation": "#831"
+          }
+        }
+      },
+      {
+        "id": "tasks",
+        "seats": {
+          "origin": {
+            "status": "gap",
+            "trackingIssue": "839"
+          },
+          "custodian": {
+            "status": "gap",
+            "trackingIssue": "839"
+          },
+          "viewer": {
+            "status": "gap",
+            "trackingIssue": "839"
+          }
+        }
+      }
+    ]
+  },
+  "appStates": {
+    "trackingIssue": "839",
+    "states": [
+      {
+        "id": "dayone",
+        "label": "Day one"
+      },
+      {
+        "id": "pending",
+        "label": "Pending write"
+      },
+      {
+        "id": "offline",
+        "label": "Offline"
+      },
+      {
+        "id": "stale",
+        "label": "Stale"
+      },
+      {
+        "id": "conflict",
+        "label": "Conflict"
+      },
+      {
+        "id": "parked",
+        "label": "Parked"
+      },
+      {
+        "id": "denied",
+        "label": "Denied"
+      }
+    ],
+    "apps": [
+      {
+        "id": "agenda",
+        "states": {
+          "dayone": {
+            "status": "gap"
+          },
+          "pending": {
+            "status": "gap"
+          },
+          "offline": {
+            "status": "gap"
+          },
+          "stale": {
+            "status": "gap"
+          },
+          "conflict": {
+            "status": "gap"
+          },
+          "parked": {
+            "status": "owned",
+            "owner": "packages/blueprints/apps/agenda/view-copy.test.ts"
+          },
+          "denied": {
+            "status": "owned",
+            "owner": "packages/blueprints/apps/agenda/view-copy.test.ts"
+          }
+        }
+      },
+      {
+        "id": "docs",
+        "states": {
+          "dayone": {
+            "status": "gap"
+          },
+          "pending": {
+            "status": "gap"
+          },
+          "offline": {
+            "status": "gap"
+          },
+          "stale": {
+            "status": "gap"
+          },
+          "conflict": {
+            "status": "gap"
+          },
+          "parked": {
+            "status": "gap"
+          },
+          "denied": {
+            "status": "gap"
+          }
+        }
+      },
+      {
+        "id": "locker",
+        "states": {
+          "dayone": {
+            "status": "gap"
+          },
+          "pending": {
+            "status": "gap"
+          },
+          "offline": {
+            "status": "gap"
+          },
+          "stale": {
+            "status": "gap"
+          },
+          "conflict": {
+            "status": "gap"
+          },
+          "parked": {
+            "status": "gap"
+          },
+          "denied": {
+            "status": "gap"
+          }
+        }
+      },
+      {
+        "id": "notes",
+        "states": {
+          "dayone": {
+            "status": "owned",
+            "owner": "packages/blueprints/src/state-honesty.test.ts"
+          },
+          "pending": {
+            "status": "gap"
+          },
+          "offline": {
+            "status": "gap"
+          },
+          "stale": {
+            "status": "gap"
+          },
+          "conflict": {
+            "status": "owned",
+            "owner": "packages/blueprints/apps/notes/view-copy.test.ts"
+          },
+          "parked": {
+            "status": "gap"
+          },
+          "denied": {
+            "status": "owned",
+            "owner": "packages/blueprints/apps/notes/view-copy.test.ts"
+          }
+        }
+      },
+      {
+        "id": "people",
+        "states": {
+          "dayone": {
+            "status": "gap"
+          },
+          "pending": {
+            "status": "gap"
+          },
+          "offline": {
+            "status": "gap"
+          },
+          "stale": {
+            "status": "gap"
+          },
+          "conflict": {
+            "status": "gap"
+          },
+          "parked": {
+            "status": "gap"
+          },
+          "denied": {
+            "status": "gap"
+          }
+        }
+      },
+      {
+        "id": "photos",
+        "states": {
+          "dayone": {
+            "status": "gap"
+          },
+          "pending": {
+            "status": "gap"
+          },
+          "offline": {
+            "status": "gap"
+          },
+          "stale": {
+            "status": "gap"
+          },
+          "conflict": {
+            "status": "gap"
+          },
+          "parked": {
+            "status": "gap"
+          },
+          "denied": {
+            "status": "gap"
+          }
+        }
+      },
+      {
+        "id": "tally",
+        "states": {
+          "dayone": {
+            "status": "gap"
+          },
+          "pending": {
+            "status": "gap"
+          },
+          "offline": {
+            "status": "gap"
+          },
+          "stale": {
+            "status": "gap"
+          },
+          "conflict": {
+            "status": "gap"
+          },
+          "parked": {
+            "status": "gap"
+          },
+          "denied": {
+            "status": "gap"
+          }
+        }
+      },
+      {
+        "id": "tasks",
+        "states": {
+          "dayone": {
+            "status": "owned",
+            "owner": "packages/blueprints/apps/tasks/logic.test.ts"
+          },
+          "pending": {
+            "status": "gap"
+          },
+          "offline": {
+            "status": "gap"
+          },
+          "stale": {
+            "status": "gap"
+          },
+          "conflict": {
+            "status": "gap"
+          },
+          "parked": {
+            "status": "gap"
+          },
+          "denied": {
+            "status": "owned",
+            "owner": "packages/blueprints/apps/tasks/logic.test.ts"
+          }
+        }
+      }
+    ]
+  },
+  "engineRegistry": [
+    {
+      "id": "placement",
+      "label": "Placement",
+      "source": [
+        "packages/blueprints/apps/_shared/placement-registry.ts"
+      ],
+      "propertyFlow": null,
+      "mutationSeed": null,
+      "appEngineColumn": true
+    },
+    {
+      "id": "custody",
+      "label": "Byte custody",
+      "source": [
+        "packages/vault/src/gateway/custody.ts",
+        "packages/vault/src/blob/custody-proven.ts"
+      ],
+      "propertyFlow": "blob-custody-properties",
+      "mutationSeed": "packages/vault",
+      "appEngineColumn": true
+    },
+    {
+      "id": "consent",
+      "label": "Consent gateway",
+      "source": [
+        "packages/vault/src/gateway/consent.ts",
+        "packages/blueprints/apps/_shared/consent-gate.ts"
+      ],
+      "propertyFlow": null,
+      "mutationSeed": null,
+      "appEngineColumn": true
+    },
+    {
+      "id": "triage",
+      "label": "Triage session",
+      "source": [
+        "packages/blueprints/apps/_shared/triage-session.ts"
+      ],
+      "propertyFlow": null,
+      "mutationSeed": null,
+      "appEngineColumn": true
+    },
+    {
+      "id": "search",
+      "label": "Search scaffold",
+      "source": [
+        "packages/blueprints/apps/_shared/search-scaffold.ts",
+        "packages/vault/src/gateway/search.ts"
+      ],
+      "propertyFlow": null,
+      "mutationSeed": null,
+      "appEngineColumn": true
+    },
+    {
+      "id": "enrichment",
+      "label": "Enrichment boundary",
+      "source": [
+        "packages/server/src/automation/fire/enrich-gate.ts"
+      ],
+      "propertyFlow": null,
+      "mutationSeed": null,
+      "appEngineColumn": true
+    },
+    {
+      "id": "pendingOverlay",
+      "label": "Pending-write overlay",
+      "source": [
+        "packages/blueprints/apps/_shared/pending-overlay.ts"
+      ],
+      "propertyFlow": null,
+      "mutationSeed": null,
+      "appEngineColumn": true
+    },
+    {
+      "id": "recurrence",
+      "label": "Recurrence and timezone",
+      "source": [
+        "packages/core/src/time/recurrence.ts",
+        "packages/core/src/time/timezone.ts"
+      ],
+      "propertyFlow": null,
+      "mutationSeed": "packages/core/src/time",
+      "appEngineColumn": false
+    },
+    {
+      "id": "sharing-grants",
+      "label": "Sharing grants",
+      "source": [
+        "packages/vault/src/grant/grant-store.ts",
+        "packages/vault/src/grant/fulfillment.ts",
+        "packages/blueprints/apps/_shared/grant-plane.ts"
+      ],
+      "propertyFlow": null,
+      "mutationSeed": null,
+      "appEngineColumn": false
+    },
+    {
+      "id": "scope-commons",
+      "label": "Scope commons",
+      "source": [
+        "packages/vault/src/share/commons-chain.ts",
+        "packages/blueprints/apps/_shared/scope-merge.ts"
+      ],
+      "propertyFlow": "commons-convergence-properties",
+      "mutationSeed": null,
+      "appEngineColumn": false
+    },
+    {
+      "id": "selection",
+      "label": "Selection engine",
+      "source": [
+        "packages/blueprints/apps/_shared/selection-engine.ts"
+      ],
+      "propertyFlow": null,
+      "mutationSeed": null,
+      "appEngineColumn": false
+    },
+    {
+      "id": "reachability",
+      "label": "Handler reachability",
+      "source": [
+        "scripts/check-share-reachability.mjs",
+        "packages/blueprints/src/handler-reachability.test.ts"
+      ],
+      "propertyFlow": null,
+      "mutationSeed": null,
+      "appEngineColumn": false
+    },
+    {
+      "id": "refusal-grammar",
+      "label": "Refusal grammar",
+      "source": [
+        "packages/vault/src/gateway/consent.ts",
+        "packages/server/src/enrich/engine-profiles.ts"
+      ],
+      "propertyFlow": null,
+      "mutationSeed": null,
+      "appEngineColumn": false
+    },
+    {
+      "id": "untrusted-rendering",
+      "label": "Untrusted rendering",
+      "source": [
+        "packages/blueprints/apps/_shared/untrusted.ts"
+      ],
+      "propertyFlow": null,
+      "mutationSeed": null,
+      "appEngineColumn": false
+    },
+    {
+      "id": "push",
+      "label": "Push and notifications",
+      "source": [
+        "packages/server/src/push/web-push.ts",
+        "apps/mobile/src/lib/notifications-plan.ts"
+      ],
+      "propertyFlow": null,
+      "mutationSeed": null,
+      "appEngineColumn": false
+    },
+    {
+      "id": "enrollment",
+      "label": "Enrollment",
+      "source": [
+        "packages/server/src/serve/enrollment-store.ts"
+      ],
+      "propertyFlow": null,
+      "mutationSeed": null,
+      "appEngineColumn": false
+    },
+    {
+      "id": "replica-outbox",
+      "label": "Replica outbox",
+      "source": [
+        "packages/client/src/replica/intents.ts"
+      ],
+      "propertyFlow": "replica-intent-properties",
+      "mutationSeed": "packages/client/src/replica",
+      "appEngineColumn": false
+    },
+    {
+      "id": "policy-cascade",
+      "label": "Enrichment policy cascade",
+      "source": [
+        "packages/server/src/automation/fire/enrich-resolve.ts"
+      ],
+      "propertyFlow": null,
+      "mutationSeed": null,
+      "appEngineColumn": false
+    },
+    {
+      "id": "protocol-handshake",
+      "label": "Protocol handshake",
+      "source": [
+        "packages/core/src/protocol/handshake.ts"
+      ],
+      "propertyFlow": "protocol-handshake-properties",
+      "mutationSeed": "packages/core/src/protocol",
+      "appEngineColumn": false
+    }
+  ],
+  "consentLedger": [
+    {
+      "id": "vault-consent-gateway",
+      "label": "Vault consent gateway",
+      "enforcement": [
+        "packages/vault/src/gateway/consent.ts"
+      ],
+      "refusalGrammar": "packages/vault/src/gateway/consent.ts#ConsentDeny",
+      "adversary": {
+        "owner": "packages/vault/src/gateway/gateway.contract.test.ts",
+        "flow": null
+      },
+      "seats": [
+        "origin",
+        "custodian",
+        "viewer"
+      ],
+      "note": "The closed deny set every seat inherits; the contract suite exercises it, no generated denial sweep does."
+    },
+    {
+      "id": "app-scope-manifests",
+      "label": "App scope manifests",
+      "enforcement": [
+        "packages/vault/src/gateway/execution.ts",
+        "packages/server/src/engine/registry/manifest.ts"
+      ],
+      "refusalGrammar": "execution manifest does not declare <scope>",
+      "adversary": {
+        "owner": null,
+        "flow": null,
+        "trackingIssue": "839"
+      },
+      "seats": [
+        "origin",
+        "custodian",
+        "viewer"
+      ],
+      "note": "Gap G4: no generated command × missing-scope denial sweep exists yet (#839 Wave 2)."
+    },
+    {
+      "id": "grant-plane",
+      "label": "Grant plane",
+      "enforcement": [
+        "packages/vault/src/grant/grant-store.ts",
+        "packages/vault/src/grant/fulfillment.ts",
+        "packages/blueprints/apps/_shared/grant-plane.ts"
+      ],
+      "refusalGrammar": "packages/vault/src/grant/grant-store.ts#UnofferableSubjectError",
+      "adversary": {
+        "owner": "packages/vault/src/grant/fulfillment.test.ts",
+        "flow": null
+      },
+      "seats": [
+        "origin",
+        "custodian",
+        "viewer"
+      ],
+      "note": "Create/revoke/fulfil and the view|edit capability split are owned; revocation PROPAGATION across seats is not (gap G2, #839 Wave 3)."
+    },
+    {
+      "id": "enrichment-egress-policy",
+      "label": "Enrichment egress policy",
+      "enforcement": [
+        "packages/server/src/automation/fire/enrich-resolve.ts",
+        "packages/server/src/enrich/egress-consent-lookup.ts"
+      ],
+      "refusalGrammar": "packages/server/src/enrich/engine-profiles.ts#delegateRefusalReason",
+      "adversary": {
+        "owner": "packages/server/src/automation/fire/enrich-resolve.test.ts",
+        "flow": null
+      },
+      "seats": [
+        "custodian"
+      ],
+      "note": "The cascade and the egress ceiling fail closed on undefined; example-based only, no property suite over the fold (#839 Wave 2)."
+    },
+    {
+      "id": "enrich-consent-ui",
+      "label": "Enrichment consent surface",
+      "enforcement": [
+        "packages/blueprints/apps/_shared/consent-gate.ts",
+        "packages/blueprints/apps/_shared/ConsentGate.tsx"
+      ],
+      "refusalGrammar": "packages/blueprints/apps/_shared/consent-gate.ts#AnswerAvailability",
+      "adversary": {
+        "owner": "packages/blueprints/apps/_shared/consent-gate.test.ts",
+        "flow": null
+      },
+      "seats": [
+        "custodian",
+        "viewer"
+      ],
+      "note": "The closed ENRICH_DOMAINS union and the on-device/off-device answer split; mobile draws its own consent surface."
+    },
+    {
+      "id": "device-sessions-pairing",
+      "label": "Device sessions and pairing",
+      "enforcement": [
+        "packages/server/src/serve/web-control-sessions.ts",
+        "packages/server/src/serve/enrollment-store.ts"
+      ],
+      "refusalGrammar": "packages/server/src/serve/web-control-sessions.ts#WebControlSessions",
+      "adversary": {
+        "owner": "packages/server/src/serve/revocation-severs-planes.test.ts",
+        "flow": null
+      },
+      "seats": [
+        "origin",
+        "custodian",
+        "viewer"
+      ],
+      "note": "Pairing tickets and session revocation sever both planes; the contract suite owns it."
+    },
+    {
+      "id": "os-device-permissions",
+      "label": "OS device permissions",
+      "enforcement": [
+        "apps/mobile/src/apps/photos/PhotoAccessPanel.tsx",
+        "apps/mobile/src/lib/notifications-core.ts"
+      ],
+      "refusalGrammar": "the OS grant is read, never assumed; a denied grant renders the app's denied state rather than an empty library",
+      "adversary": {
+        "owner": "tests/agent-e2e-mobile/flows/photos-permissions.mjs",
+        "flow": "mobile-photos-permissions"
+      },
+      "seats": [
+        "origin"
+      ],
+      "note": "Gap G8: one of eight apps has a device flow; contacts, biometrics and notification grants are unowned (#839 Wave 4)."
+    },
+    {
+      "id": "provider-egress-ban",
+      "label": "Provider egress ban",
+      "enforcement": [
+        "packages/blueprints/src/no-inference-client.test.ts"
+      ],
+      "refusalGrammar": "structural — the ban is an import-graph law, so there is no refusal string to say",
+      "adversary": {
+        "owner": "packages/blueprints/src/no-inference-client.test.ts",
+        "flow": "blueprint-enrichment-law"
+      },
+      "seats": [
+        "origin",
+        "custodian",
+        "viewer"
+      ],
+      "note": "The SDK-import ban is owned by [law:recognition-self-contained]; the dispatch-path law is gap G5 (#839 Wave 2)."
+    }
+  ],
   "flows": [
     {
       "id": "blueprint-placement-law",
