@@ -107,7 +107,22 @@ seat profile's `disabledOn`. The synthetic-root harnesses in
 `scripts/mutation/` into the fixture root since the validator now imports the
 seed catalog.
 
-## Out of scope
+**Wave 0 audit fixes.** A fresh-context audit (PASS on all three slices,
+sabotage-tested) surfaced fixes, applied by a fixer slice: the app-axes
+validation lifted into `scripts/test-report/validate-app-axes.mjs` (with
+`matrix-fixture.mjs`, `report-fixture-root.mjs`, and split suites
+`validate-matrix-app-axes.test.mjs` / `generate-app-grids.test.mjs`) so every
+file sits under the 625-line hygiene ceiling; `appStates.notes.conflict`
+demoted to gap (conflict is unbuilt everywhere — a copy test cannot own it)
+with a `copy-owners` note scoping what copy-level owners prove; the Grid B
+legend reworded from "journey" to "proof" and its skip count labeled
+held/excluded; missing-`reason` exclusion rejections tested in
+`manifest.test.ts`; the dead exclusion loop in `app-states.test.ts` replaced
+by the pin alone; blend provenance re-measured (44.12/36.31 five-tree,
+42.94/33.95 eight-tree) with the exact reproduction command recorded — no
+numeric floor changed; `docs/blueprint-seats.md` gains a Designed states
+subsection and `docs/traps/coverage-run-filters.md` records the `--project`
+coverage footgun.
 
 - Fixing the pre-existing product defects the new adversaries surface — those
   become their own issues, linked from the report's auto-filed lane (Wave 5).
