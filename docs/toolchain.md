@@ -73,6 +73,8 @@ On the Free plan, the custom Centraid profile and gate can be created but cannot
 
 ### Re-apply after policy changes
 
+CI applies this on every push to `main` that touches the configurator, weekly, and on manual dispatch — [`.github/workflows/sonarcloud.yml`](../.github/workflows/sonarcloud.yml), gated on the optional `SONAR_TOKEN` secret (skipped with an explicit notice when absent). Analysis itself stays Autoscan; no CI scanner runs. Locally:
+
 ```sh
 export SONAR_TOKEN=$(security find-generic-password -s sonarqube-cli -w)
 bun run scripts/ci/configure-sonarcloud.mjs

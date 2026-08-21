@@ -546,6 +546,10 @@
       "url": "https://github.com/srikanth235/centraid/issues/470",
       "state": "closed"
     },
+    "842": {
+      "url": "https://github.com/srikanth235/centraid/issues/842",
+      "state": "open"
+    },
     "471": {
       "url": "https://github.com/srikanth235/centraid/issues/471",
       "state": "closed"
@@ -786,7 +790,7 @@
     "mobile.offline": "tests/agent-e2e-mobile/flows/native-v0-resilience.mjs proves the current happy path; missing disconnect/reconnect recovery evidence. Tracked under #781 (originally #656).",
     "tunnel-pairing.correctness": "packages/tunnel/src/tunnel.integration.test.ts proves the current happy path; missing negative and boundary cases. Tracked under #781 (originally #656).",
     "tunnel-pairing.concurrency": "packages/tunnel/src/tunnel.integration.test.ts proves the current happy path; missing multi-actor interleaving evidence. Tracked under #781 (originally #656).",
-    "tunnel-pairing.security": "tests/agent-e2e-pairing/flows/pairing-ticket-hygiene.mjs proves the current happy path; missing adversarial input and authorization cases. Tracked under #781 (originally #656).",
+    "tunnel-pairing.security": "tests/agent-e2e-pairing/flows/pairing-ticket-hygiene.mjs proves the current happy path; adversarial peer-target input now covered by tunnel-peer-target-differential (JS↔Rust↔route-layer differential, #842 W2.1); authorization cases still missing. Tracked under #781 (originally #656).",
     "tunnel-pairing.compat": "packages/tunnel/src/wire-conformance.contract.test.ts proves the current happy path; missing migration and version-skew fixtures. Tracked under #781 (originally #656).",
     "vault-core.accessibility": "This service/storage surface has no standalone interactive UI. Its user-visible output is projected into the shared shell and first-party apps, whose real browser accessibility trees are scanned by apps/web/tests/e2e/accessibility.spec.ts. Remaining per-surface negative-state depth is tracked under #781.",
     "blob-custody.accessibility": "This service/storage surface has no standalone interactive UI. Its user-visible output is projected into the shared shell and first-party apps, whose real browser accessibility trees are scanned by apps/web/tests/e2e/accessibility.spec.ts. Remaining per-surface negative-state depth is tracked under #781.",
@@ -3383,6 +3387,15 @@
       "tier": "unit",
       "owner": "packages/tunnel/src/wire-properties.test.ts",
       "minimumTests": 5
+    },
+    {
+      "id": "tunnel-peer-target-differential",
+      "name": "Peer-plane target guard differential (JS ↔ Rust ↔ route layer)",
+      "surface": "tunnel-pairing",
+      "dimension": "security",
+      "tier": "unit",
+      "owner": "packages/tunnel/src/peer-target-differential.test.ts",
+      "minimumTests": 9
     },
     {
       "id": "replica-payload-hash-properties",

@@ -412,6 +412,15 @@ jobs:
             exit 1
           fi
           bun run test:suite-wall-clock
+      # #842 W0.3 — no file may report zero collected tests. A suite that throws
+      # while LOADING registers no test at all, so every counting gate here —
+      # matrix minimumTests floors, the skip budget, the quarantine ledger, the
+      # coverage floors — sees a smaller universe rather than a violated one, and
+      # the suite reads as absent instead of red. It scores the same vitest JSON
+      # report `bun run coverage` just wrote; `--require-report` makes a missing
+      # artifact fail this lane rather than pass as "not measured".
+      - name: No test file failed to collect
+        run: bun run test:collection-tripwire -- --require-report
       # #532 — changed-line coverage vs origin/main must be ≥80% (or approvedDeviation).
       - name: Fetch origin/main for diff coverage
         run: git fetch --no-tags origin main 2>/dev/null || true

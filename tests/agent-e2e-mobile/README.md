@@ -98,7 +98,7 @@ await runFlow("my-flow", async (ctx) => {
 ---
 - launchApp: { clearState: true }
 - extendedWaitUntil:
-    visible: { text: "Home ready" }
+    visible: { text: "All apps and places" }
     timeout: ${FIRST_LAUNCH_TIMEOUT_MS}
 - takeScreenshot: home
 `,

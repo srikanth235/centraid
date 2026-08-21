@@ -27,6 +27,13 @@ import { readdirSync, readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 
 import {
+  ConversationStore,
+  makeJournalDbProvider,
+  ProviderEgressConsentStore,
+} from "@centraid/server/engine";
+import type { RunTurnFn } from "@centraid/server/engine";
+import { tempDir } from "@centraid/test-kit/temp-dir";
+import {
   bootstrapVault,
   createGateway,
   createGrant,
@@ -38,19 +45,11 @@ import {
   registerScheduleCommands,
 } from "@centraid/vault";
 import type { Credential, Gateway, VaultDb } from "@centraid/vault";
-import {
-  ConversationStore,
-  makeJournalDbProvider,
-  ProviderEgressConsentStore,
-} from "@centraid/server/engine";
-import type { RunTurnFn } from "@centraid/server/engine";
-import { tempDir } from "@centraid/test-kit/temp-dir";
 
 import { startLiveDispatch } from "../automation/run-automation-live-dispatch.js";
-import type { LiveDispatch } from "../automation/run-automation-live-dispatch.js";
+import { runFake, vaultToolContext } from "../backends/acp/test-fixtures.js";
 import type { HarnessKind } from "../types.js";
 import { runVaultInvokeTool, runVaultSqlTool } from "../vault-sql-tool.js";
-import { runFake, vaultToolContext } from "../backends/acp/test-fixtures.js";
 
 const PURPOSE = "dpv:ServiceProvision";
 
@@ -268,6 +267,7 @@ export async function applyAttempt(
  * content-independent, so the dispatch is refused and the grant set unchanged.
  */
 async function applyEgressAttempt(provider: string): Promise<AttemptOutcome> {
+  const kind = provider as HarnessKind;
   const workdir = await tempDir("acp-inject-egress-");
   const journalDbFile = `${workdir}/journal.db`;
   const automationRef = "demo/nightly";
@@ -277,17 +277,22 @@ async function applyEgressAttempt(provider: string): Promise<AttemptOutcome> {
   // The live ladder holds codex only; the injected provider is not a member.
   const consent = new ProviderEgressConsentStore(
     makeJournalDbProvider(journalDbFile),
-    (kind) => kind === "codex"
+    (member) => member === "codex"
   );
-  const before = consent.has(automationRef, provider, "automations");
-  const runTurn = vi_fnNoop();
+  const before = consent.has(automationRef, kind, "automations");
+  // The egress gate refuses an unlisted provider BEFORE the turn runs, so this
+  // no-op turn body must never be reached for a widening payload.
+  const runTurn: RunTurnFn = async (input) => {
+    input.onEvent({ type: "final", text: "ok" });
+    return { harnessKind: "codex" };
+  };
   const dispatch = await startLiveDispatch({
     workdir,
     runId: "run-inject",
     automationRef,
     journalDbFile,
     runTurn,
-    harness: provider as HarnessKind,
+    harness: kind,
     providerEgressConsent: consent,
     consentSource: "ladder",
     onLog: () => undefined,
@@ -309,7 +314,7 @@ async function applyEgressAttempt(provider: string): Promise<AttemptOutcome> {
   } finally {
     await dispatch.close().catch(() => undefined);
   }
-  const after = consent.has(automationRef, provider, "automations");
+  const after = consent.has(automationRef, kind, "automations");
   if (before || after)
     return { kind: "executed", detail: "egress consent set widened" };
   return refused
@@ -317,26 +322,10 @@ async function applyEgressAttempt(provider: string): Promise<AttemptOutcome> {
     : { kind: "executed", detail: "dispatch was not refused" };
 }
 
-/**
- * A no-op `RunTurnFn` — the egress gate refuses an unlisted provider BEFORE the
- * turn runs, so this must never be reached for the widening payloads. Kept out
- * of a `vitest` import so the harness module stays import-clean.
- */
-function vi_fnNoop(): RunTurnFn {
-  return (async (input) => {
-    input.onEvent({ type: "final", text: "ok" });
-    return { harnessKind: "codex" };
-  }) as unknown as RunTurnFn;
-}
-
 /** How many `core_party` rows carry this display name (for "no write" checks). */
 export function partyCountByName(db: VaultDb, displayName: string): number {
   const row = db.vault
-    .prepare(
-      "SELECT count(*) AS n FROM core_party WHERE display_name = ?"
-    )
+    .prepare("SELECT count(*) AS n FROM core_party WHERE display_name = ?")
     .get(displayName) as { n: number };
   return row.n;
 }
-
-export type { LiveDispatch };

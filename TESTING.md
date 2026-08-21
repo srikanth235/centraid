@@ -166,6 +166,10 @@ It measures the sum of per-file durations from the vitest JSON report rather tha
 
 The lane that enforces it is CI `verify`, in the step immediately after `bun run coverage` writes `artifacts/test-results/vitest.json`; `check:full` runs it at the same point locally. That step asserts the report exists before invoking the gate, because the "not measured" exit-0 above is right on a laptop and wrong in the lane that enforces the ceiling — a missing report there means the wiring rotted, not that the suite met its budget.
 
+### Collection-error tripwire (#842 W0.3)
+
+A test file that throws while it is being _loaded_ registers no `test()` at all. Vitest reports it as one failed file with a message and an empty `assertionResults` array, and every counting gate here — matrix `minimumTests` floors, the skip budget, the quarantine ledger, the coverage floors — then sees a smaller universe rather than a violated one, so the suite reads as absent instead of red. `bun run test:collection-tripwire` reads `artifacts/test-results/vitest.json` and fails on exactly that shape; the CI `verify` lane runs it with `--require-report` so a missing artifact fails rather than passing as "not measured". An ordinary red (a failed file _with_ a failed assertion) and a wholly skipped file are not its business. Quarantining or deleting the offender is not a fix — it hides the gap the file leaves.
+
 ### Test-kit seams (#656 Layer 4)
 
 The kit path is enforced, not merely recommended. In test files, oxlint bans raw `fs.mkdtemp*` (use `tempDir()` / `tempDirSync()`), `vi.useFakeTimers` / `vi.setSystemTime` / `vi.useRealTimers` (use `useFakeClock()`), and `Math.random()` (use `seededRandom()`). `bootstrappedVault()` exists so the shortest path to a vault fixture is also the correct one.
@@ -527,7 +531,7 @@ Nightly StrykerJS (`@stryker-mutator/vitest-runner`) on 24 property-defended see
 - `packages/tunnel` (wire frame / pair QR / sanitize)
 - `packages/server/src/engine` (pricing cost formula)
 
-Package-local Stryker configs (`stryker.config.mjs` + `vitest.mutation.config.ts`) mutate the property-defended modules. [`scripts/mutation/seeds.mjs`](scripts/mutation/seeds.mjs) is canonical for where each seed's config lives: the runner resolves `seed.cwd` + `seed.config` and spawns Stryker there. The eight root pointers under `tests/mutation/` predate that seed list, cover eight of the twenty-four seeds, and are read by nothing — do not add a ninth expecting it to run. `bun run test:mutation` writes `artifacts/mutation/scores.json` for the test-health report. Floors live in `tests/mutation-floors.json` and ratchet up-only (measured 2026-07-23/24 — see file comment).
+Package-local Stryker configs (`stryker.config.mjs` + `vitest.mutation.config.ts`) mutate the property-defended modules. [`scripts/mutation/seeds.mjs`](scripts/mutation/seeds.mjs) is canonical for where each seed's config lives: the runner resolves `seed.cwd` + `seed.config` and spawns Stryker there. The eight root pointers formerly under `tests/mutation/` were deleted in #842 W0.6: they indexed only eight of the twenty-four seeds and were read by nothing. `scripts/mutation/seeds.mjs` is the only catalog — do not add a pointer file expecting it to run. `bun run test:mutation` writes `artifacts/mutation/scores.json` for the test-health report. Floors live in `tests/mutation-floors.json` and ratchet up-only (measured 2026-07-23/24 — see file comment).
 
 **Per-PR mutation** (`bun run test:mutation:pr` / CI job `mutation-pr`): runs Stryker only for seeds whose `watch` paths intersect `git diff origin/main...HEAD` (or all seeds when mutation infra / floors change), then **enforces** floors on measured packages. Unrelated PRs skip Stryker in ~1s. Nightly runs the full 24-seed lane.
 
