@@ -133,6 +133,18 @@
         "originActs": [],
         "disabledOn": [],
         "northStar": "google-calendar"
+      },
+      "states": {
+        "designed": [
+          "dayone",
+          "pending",
+          "offline",
+          "stale",
+          "conflict",
+          "parked",
+          "denied"
+        ],
+        "excluded": []
       }
     },
     {
@@ -262,6 +274,18 @@
         "originActs": [],
         "disabledOn": [],
         "northStar": "todoist"
+      },
+      "states": {
+        "designed": [
+          "dayone",
+          "pending",
+          "offline",
+          "stale",
+          "conflict",
+          "parked",
+          "denied"
+        ],
+        "excluded": []
       }
     },
     {
@@ -416,6 +440,18 @@
         "originActs": [],
         "disabledOn": [],
         "northStar": "google-contacts"
+      },
+      "states": {
+        "designed": [
+          "dayone",
+          "pending",
+          "offline",
+          "stale",
+          "conflict",
+          "parked",
+          "denied"
+        ],
+        "excluded": []
       }
     },
     {
@@ -558,6 +594,18 @@
         ],
         "disabledOn": [],
         "northStar": "apple-notes"
+      },
+      "states": {
+        "designed": [
+          "dayone",
+          "pending",
+          "offline",
+          "stale",
+          "conflict",
+          "parked",
+          "denied"
+        ],
+        "excluded": []
       }
     },
     {
@@ -831,6 +879,18 @@
         ],
         "disabledOn": [],
         "northStar": "google-photos"
+      },
+      "states": {
+        "designed": [
+          "dayone",
+          "pending",
+          "offline",
+          "stale",
+          "conflict",
+          "parked",
+          "denied"
+        ],
+        "excluded": []
       }
     },
     {
@@ -1035,6 +1095,18 @@
         ],
         "disabledOn": [],
         "northStar": "google-drive"
+      },
+      "states": {
+        "designed": [
+          "dayone",
+          "pending",
+          "offline",
+          "stale",
+          "conflict",
+          "parked",
+          "denied"
+        ],
+        "excluded": []
       }
     },
     {
@@ -1134,6 +1206,18 @@
           "viewer"
         ],
         "northStar": "1password"
+      },
+      "states": {
+        "designed": [
+          "dayone",
+          "pending",
+          "offline",
+          "stale",
+          "conflict",
+          "parked",
+          "denied"
+        ],
+        "excluded": []
       }
     },
     {
@@ -1212,6 +1296,18 @@
         ],
         "disabledOn": [],
         "northStar": "splitwise"
+      },
+      "states": {
+        "designed": [
+          "dayone",
+          "pending",
+          "offline",
+          "stale",
+          "conflict",
+          "parked",
+          "denied"
+        ],
+        "excluded": []
       }
     },
     {

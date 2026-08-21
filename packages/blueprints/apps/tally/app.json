@@ -775,5 +775,17 @@
     "originActs": ["camera"],
     "disabledOn": [],
     "northStar": "splitwise"
+  },
+  "states": {
+    "designed": [
+      "dayone",
+      "pending",
+      "offline",
+      "stale",
+      "conflict",
+      "parked",
+      "denied"
+    ],
+    "excluded": []
   }
 }

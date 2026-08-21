@@ -71,15 +71,21 @@ const templates = await Promise.all(
     // InlineAppRoute.tsx (packages/client) also can't import app.json
     // directly, and this manifest is already the one thing it fetches.
     let seats;
+    // The designed-state partition (issue #839 G7) rides along for the same
+    // reason: the shell and the test report want "which of the seven states
+    // does this app owe a member" without a second fetch per app.
+    let states;
     try {
       const rawLocal = await fs.readFile(path.join(dir, "app.json"), "utf8");
       const parsed = JSON.parse(rawLocal);
       if (Array.isArray(parsed?.knobs)) appKnobs = parsed.knobs;
       if (parsed?.seats && typeof parsed.seats === "object")
         seats = parsed.seats;
+      if (parsed?.states && typeof parsed.states === "object")
+        states = parsed.states;
     } catch {
-      /* template has no parseable app.json or no knobs/seats — fine, the
-       popover just shows manage actions and the app mounts unrestricted */
+      /* template has no parseable app.json or no knobs/seats/states — fine,
+       the popover just shows manage actions and the app mounts unrestricted */
     }
     // `kind` is declared explicitly in index.json (`'automation'` for an
     // automation app); a normal UI app omits it and defaults to `'app'`.
@@ -90,6 +96,7 @@ const templates = await Promise.all(
       files,
       ...(appKnobs ? { appKnobs } : {}),
       ...(seats ? { seats } : {}),
+      ...(states ? { states } : {}),
     };
   })
 );

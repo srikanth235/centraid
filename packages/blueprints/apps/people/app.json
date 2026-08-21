@@ -882,5 +882,17 @@
     "originActs": [],
     "disabledOn": [],
     "northStar": "google-contacts"
+  },
+  "states": {
+    "designed": [
+      "dayone",
+      "pending",
+      "offline",
+      "stale",
+      "conflict",
+      "parked",
+      "denied"
+    ],
+    "excluded": []
   }
 }

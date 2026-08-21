@@ -689,5 +689,17 @@
     "originActs": ["autofill"],
     "disabledOn": ["viewer"],
     "northStar": "1password"
+  },
+  "states": {
+    "designed": [
+      "dayone",
+      "pending",
+      "offline",
+      "stale",
+      "conflict",
+      "parked",
+      "denied"
+    ],
+    "excluded": []
   }
 }
