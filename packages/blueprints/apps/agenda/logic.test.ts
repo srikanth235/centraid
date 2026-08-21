@@ -275,12 +275,21 @@ describe("proposing an event", () => {
     expect(app.setStatus).toHaveBeenCalledWith(OUTCOME_PARKED, {});
   });
 
+  // Spelled out rather than looped: each case installs its own
+  // `window.centraid`, so the three writes have to be driven one after the
+  // other against the global they each just claimed.
   it("says the write is on this device when it is still held here", async () => {
-    for (const status of ["queued", "in-flight", "sending"]) {
-      const app = harness({ write: async () => ({ status }) });
-      await app.logic.proposeEvent({ summary: "Dentist" } as never);
-      expect(app.setStatus).toHaveBeenCalledWith(OUTCOME_QUEUED, {});
-    }
+    const queued = harness({ write: async () => ({ status: "queued" }) });
+    await queued.logic.proposeEvent({ summary: "Dentist" } as never);
+    expect(queued.setStatus).toHaveBeenCalledWith(OUTCOME_QUEUED, {});
+
+    const inFlight = harness({ write: async () => ({ status: "in-flight" }) });
+    await inFlight.logic.proposeEvent({ summary: "Dentist" } as never);
+    expect(inFlight.setStatus).toHaveBeenCalledWith(OUTCOME_QUEUED, {});
+
+    const sending = harness({ write: async () => ({ status: "sending" }) });
+    await sending.logic.proposeEvent({ summary: "Dentist" } as never);
+    expect(sending.setStatus).toHaveBeenCalledWith(OUTCOME_QUEUED, {});
   });
 
   it("says nothing on the status line for an outright refusal", async () => {
@@ -324,7 +333,7 @@ describe("RSVP paints before the vault answers", () => {
     { party_id: "p-other", name: "Ravi", partstat: "accepted" },
   ];
 
-  function loaded() {
+  function loaded(over: Parameters<typeof harness>[0] = {}) {
     return harness({
       data: {
         events: [event({ event_id: "e1", attendees: [...guests] })],
@@ -334,6 +343,7 @@ describe("RSVP paints before the vault answers", () => {
         search: "dentist",
         searchResults: [event({ event_id: "e1", attendees: [...guests] })],
       },
+      ...over,
     });
   }
 
@@ -350,17 +360,20 @@ describe("RSVP paints before the vault answers", () => {
     }
   });
 
-  it("repaints before the write, not after it", async () => {
-    const app = loaded();
-    const order: string[] = [];
-    app.render.mockImplementation(() => order.push("render"));
-    app.write.mockImplementation(async () => {
-      order.push("write");
-      return { status: "executed" };
+  // A member who presses Going and watches the row stay "No answer yet" for a
+  // round trip has been told the press did nothing — so the projection has to
+  // be on screen BEFORE the command leaves, not after it settles.
+  it("has already painted the answer by the time the write goes out", async () => {
+    let paintedAtWrite: string | undefined;
+    const app: Harness = loaded({
+      write: async () => {
+        paintedAtWrite = app.data.events[0]?.attendees?.[0]?.partstat;
+        return { status: "executed" };
+      },
     });
     await app.logic.respondRsvp("e1", "p-me", "declined");
-    expect(order[0]).toBe("render");
-    expect(order).toContain("write");
+    expect(paintedAtWrite).toBe("declined");
+    expect(app.render).toHaveBeenCalledWith();
   });
 
   it("sends the answer as a typed command and names it back on the receipt", async () => {

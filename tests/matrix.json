@@ -2678,7 +2678,7 @@
       "label": "Triage session",
       "source": ["packages/blueprints/apps/_shared/triage-session.ts"],
       "propertyFlow": null,
-      "mutationSeed": null,
+      "mutationSeed": "packages/blueprints/apps/_shared/triage",
       "appEngineColumn": true
     },
     {
@@ -2689,7 +2689,7 @@
         "packages/vault/src/gateway/search.ts"
       ],
       "propertyFlow": null,
-      "mutationSeed": null,
+      "mutationSeed": "packages/blueprints/apps/_shared/search-scaffold",
       "appEngineColumn": true
     },
     {
@@ -2705,7 +2705,7 @@
       "label": "Pending-write overlay",
       "source": ["packages/blueprints/apps/_shared/pending-overlay.ts"],
       "propertyFlow": null,
-      "mutationSeed": null,
+      "mutationSeed": "packages/blueprints/apps/_shared/pending-overlay",
       "appEngineColumn": true
     },
     {
@@ -2747,7 +2747,7 @@
       "label": "Selection engine",
       "source": ["packages/blueprints/apps/_shared/selection-engine.ts"],
       "propertyFlow": null,
-      "mutationSeed": null,
+      "mutationSeed": "packages/blueprints/apps/_shared/selection",
       "appEngineColumn": false
     },
     {
