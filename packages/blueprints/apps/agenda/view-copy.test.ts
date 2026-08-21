@@ -58,8 +58,12 @@ describe("Agenda's copy", () => {
     // Asserting the values, not their truthiness: a label is the word the
     // switcher segment shows and a unit is the noun the app-bar count is
     // spoken in, so an empty string is as wrong as a missing key.
-    expect(Object.keys(copy.VIEW_LABELS).toSorted()).toEqual(views.toSorted());
-    expect(Object.keys(copy.VIEW_UNITS).toSorted()).toEqual(views.toSorted());
+    expect(Object.keys(copy.VIEW_LABELS).toSorted()).toStrictEqual(
+      views.toSorted()
+    );
+    expect(Object.keys(copy.VIEW_UNITS).toSorted()).toStrictEqual(
+      views.toSorted()
+    );
     for (const view of views) {
       expect(copy.VIEW_LABELS[view].length, view).toBeGreaterThan(0);
       expect(copy.VIEW_UNITS[view].length, view).toBeGreaterThan(0);

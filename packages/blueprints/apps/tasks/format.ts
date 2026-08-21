@@ -12,13 +12,10 @@
 import type { Task } from "./types.ts";
 import { familyProgress, missedLabel, sittingSince } from "./view-copy.ts";
 import {
-  dayKey,
   daysBetween,
   dueLabel,
-  isDateOnly,
   isOverdueWhen,
   monthName,
-  timeOfDay,
   weekdayName,
 } from "./when.ts";
 
@@ -31,11 +28,11 @@ export {
   daysBetween,
   dueLabel,
   isDateOnly,
+  isOverdueWhen,
   monthName,
   timeOfDay,
   weekdayName,
-};
-export { isOverdueWhen } from "./when.ts";
+} from "./when.ts";
 
 /** Is this row past its moment? The one question overdue tone is drawn from. */
 export function isOverdue(task: Task, now: string): boolean {

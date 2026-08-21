@@ -14,7 +14,7 @@ import { landsToday } from "./when.ts";
 // `landsToday` lives in `when.ts` — the import-free leaf the shell's Home tile
 // and the phone read too (#834) — and is re-exported here so every caller of
 // `logic.ts` is unchanged and there is still exactly one definition.
-export { landsToday };
+export { landsToday } from "./when.ts";
 
 const OPEN = new Set(["needs-action", "in-process"]);
 

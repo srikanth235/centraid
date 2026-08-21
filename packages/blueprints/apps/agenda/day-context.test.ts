@@ -43,10 +43,10 @@ const OFF = (over: Partial<LayerState>): LayerState => ({
   ...over,
 });
 
-describe("ribbonsFor", () => {
+describe(ribbonsFor, () => {
   it("keys a birthday by its month and day, whatever the year", () => {
     const facts = ribbonsFor("2026-03-12", DATA, ALL_LAYERS_ON);
-    expect(facts).toEqual([
+    expect(facts).toStrictEqual([
       { kind: "birthday", id: "p1", text: "Dana Okafor", inner: true },
     ]);
     // The same birthday, a year later — the fact carries no year.
@@ -54,27 +54,31 @@ describe("ribbonsFor", () => {
   });
 
   it("puts a holiday on its exact day and nothing else", () => {
-    expect(ribbonsFor("2026-03-06", DATA, ALL_LAYERS_ON)).toEqual([
+    expect(ribbonsFor("2026-03-06", DATA, ALL_LAYERS_ON)).toStrictEqual([
       { kind: "holiday", id: "2026-03-06", text: "Commonwealth Day" },
     ]);
-    expect(ribbonsFor("2027-03-06", DATA, ALL_LAYERS_ON)).toEqual([]);
+    expect(ribbonsFor("2027-03-06", DATA, ALL_LAYERS_ON)).toStrictEqual([]);
   });
 
   it("draws nothing on a day nothing lands on", () => {
-    expect(ribbonsFor("2026-03-13", DATA, ALL_LAYERS_ON)).toEqual([]);
+    expect(ribbonsFor("2026-03-13", DATA, ALL_LAYERS_ON)).toStrictEqual([]);
   });
 
   it("removes a layer's facts when the layer is off, and nothing else", () => {
-    expect(ribbonsFor("2026-03-12", DATA, OFF({ bdays: false }))).toEqual([]);
+    expect(ribbonsFor("2026-03-12", DATA, OFF({ bdays: false }))).toStrictEqual(
+      []
+    );
     // The holiday layer is untouched by the birthday switch.
     expect(ribbonsFor("2026-03-06", DATA, OFF({ bdays: false }))).toHaveLength(
       1
     );
-    expect(ribbonsFor("2026-03-06", DATA, OFF({ hols: false }))).toEqual([]);
+    expect(ribbonsFor("2026-03-06", DATA, OFF({ hols: false }))).toStrictEqual(
+      []
+    );
   });
 });
 
-describe("ribbonLabel", () => {
+describe(ribbonLabel, () => {
   it("says the one fact by name", () => {
     expect(ribbonLabel(ribbonsFor("2026-03-12", DATA, ALL_LAYERS_ON))).toBe(
       "Dana Okafor"
@@ -118,7 +122,7 @@ describe("the due shelf", () => {
   it("empties with its layer — the shelf goes, the ribbons stay", () => {
     const layers = OFF({ due: false });
     expect(dueCountFor("2026-03-19", DATA, layers)).toBe(0);
-    expect(dueTasksFor("2026-03-19", DATA, layers)).toEqual([]);
+    expect(dueTasksFor("2026-03-19", DATA, layers)).toStrictEqual([]);
     expect(ribbonsFor("2026-03-19", DATA, layers)).toHaveLength(3);
   });
 
@@ -137,7 +141,9 @@ describe("the due shelf", () => {
 
 describe("a read that did not land", () => {
   it("decorates nothing rather than breaking the rail", () => {
-    expect(ribbonsFor("2026-03-19", NO_DAY_CONTEXT, ALL_LAYERS_ON)).toEqual([]);
+    expect(
+      ribbonsFor("2026-03-19", NO_DAY_CONTEXT, ALL_LAYERS_ON)
+    ).toStrictEqual([]);
     expect(dueCountFor("2026-03-19", NO_DAY_CONTEXT, ALL_LAYERS_ON)).toBe(0);
     expect(hasAnyContext(NO_DAY_CONTEXT)).toBe(false);
     expect(hasAnyContext(DATA)).toBe(true);
@@ -150,9 +156,9 @@ describe("member prefs", () => {
     const prefs = createMemberPrefs(() => {
       changes += 1;
     });
-    expect(prefs.read().layers).toEqual(ALL_LAYERS_ON);
+    expect(prefs.read().layers).toStrictEqual(ALL_LAYERS_ON);
     prefs.toggleLayer("due");
-    expect(prefs.read().layers).toEqual({
+    expect(prefs.read().layers).toStrictEqual({
       bdays: true,
       due: false,
       hols: true,

@@ -303,7 +303,7 @@ export function Root({
     [data.projects]
   );
 
-  const pendingWrites = data.open.filter((task) =>
+  const pendingWriteCount = data.open.filter((task) =>
     readPendingOverlay(task as unknown as Record<string, unknown>)
   ).length;
 
@@ -977,7 +977,7 @@ export function Root({
                   : null
               }
               onRetry={() => void refresh()}
-              pendingWrites={pendingWrites}
+              pendingWriteCount={pendingWriteCount}
             />
           ),
           scroll,

@@ -48,7 +48,7 @@ describe("reading a birth date", () => {
   });
 });
 
-describe("planBirthdayNotifications", () => {
+describe(planBirthdayNotifications, () => {
   it("notifies the inner circle at the member's lead", () => {
     const plan = planBirthdayNotifications({
       people: [DANA, RUTH],
@@ -74,7 +74,7 @@ describe("planBirthdayNotifications", () => {
       people: [{ ...RUTH, inner: false }],
       now: NOW,
     });
-    expect(plan).toEqual([]);
+    expect(plan).toStrictEqual([]);
   });
 
   it("moves with the lead the member chose", () => {
@@ -106,7 +106,7 @@ describe("planBirthdayNotifications", () => {
       leadDays: 2,
       now: new Date(2026, 2, 11, 8),
     });
-    expect(plan).toEqual([]);
+    expect(plan).toStrictEqual([]);
   });
 
   it("schedules a person's year exactly once", () => {
@@ -121,7 +121,7 @@ describe("planBirthdayNotifications", () => {
       now: NOW,
       delivered: new Set(first.map((row) => row.key)),
     });
-    expect(again).toEqual([]);
+    expect(again).toStrictEqual([]);
   });
 
   it("uses the default lead when the member has chosen none", () => {
@@ -139,6 +139,6 @@ describe("the tap", () => {
         kind: "birthday",
         partyId: "p-dana",
       })
-    ).toEqual({ kind: "open-person", partyId: "p-dana" });
+    ).toStrictEqual({ kind: "open-person", partyId: "p-dana" });
   });
 });

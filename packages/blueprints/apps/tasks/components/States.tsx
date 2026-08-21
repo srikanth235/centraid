@@ -116,11 +116,11 @@ export interface NoticesProps {
   partial?: { vault: string; own: number } | null;
   onRetry?: () => void;
   /** How many writes are still on this device. */
-  pendingWrites?: number;
+  pendingWriteCount?: number;
 }
 
 export function Notices(props: NoticesProps): ReactNode {
-  const pending = props.pendingWrites ?? 0;
+  const pending = props.pendingWriteCount ?? 0;
   return (
     <>
       {props.absence ? (

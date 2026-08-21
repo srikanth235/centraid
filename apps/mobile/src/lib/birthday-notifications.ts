@@ -19,7 +19,10 @@ import {
   birthdayNotificationTitle,
 } from "@centraid/blueprints/apps/agenda/day-context-copy";
 
-export { BIRTHDAY_LEADS, BIRTHDAY_LEAD_DEFAULT_DAYS };
+export {
+  BIRTHDAY_LEAD_DEFAULT_DAYS,
+  BIRTHDAY_LEADS,
+} from "@centraid/blueprints/apps/agenda/day-context-copy";
 
 /** One person the phone may notify about. */
 export interface BirthdayPerson {

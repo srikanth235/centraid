@@ -9,7 +9,7 @@ import {
 /** A Wednesday, so every weekday case has both directions around it. */
 const NOW = new Date(2026, 2, 11);
 
-describe("dateFromLine", () => {
+describe(dateFromLine, () => {
   it("reads an explicit calendar day", () => {
     expect(dateFromLine("Sign the transfer 2026-04-02", NOW)).toBe(
       "2026-04-02"
@@ -43,7 +43,7 @@ describe("dateFromLine", () => {
   });
 });
 
-describe("wantsDate", () => {
+describe(wantsDate, () => {
   it("offers the control on an open line that names a day", () => {
     expect(
       wantsDate({ text: "Ring the roofer tomorrow", checked: false })
@@ -70,7 +70,7 @@ describe("wantsDate", () => {
   });
 });
 
-describe("sendToTasksPayload", () => {
+describe(sendToTasksPayload, () => {
   it("carries the line's words, its date and the note it came from", () => {
     expect(
       sendToTasksPayload({
@@ -79,7 +79,7 @@ describe("sendToTasksPayload", () => {
         text: "  Ring the roofer tomorrow  ",
         now: NOW,
       })
-    ).toEqual({
+    ).toStrictEqual({
       title: "Ring the roofer tomorrow",
       due_at: "2026-03-12",
       note_id: "note-1",

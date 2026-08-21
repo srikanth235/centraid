@@ -54,9 +54,9 @@ const TASKS: ContextRow[] = [
   { task_id: "t4", status: "needs-action", title: "Read the lease schedule" },
 ];
 
-describe("birthdaysOn", () => {
+describe(birthdaysOn, () => {
   it("matches an annual MM-DD, whatever year the row stores", () => {
-    expect(birthdaysOn("2026-03-12", PARTIES, new Set())).toEqual([
+    expect(birthdaysOn("2026-03-12", PARTIES, new Set())).toStrictEqual([
       { id: "p-dana", inner: false, text: "Dana Okafor" },
     ]);
     expect(birthdaysOn("2031-03-12", PARTIES, new Set())).toHaveLength(1);
@@ -65,18 +65,20 @@ describe("birthdaysOn", () => {
   it("marks only a starred person as inner circle", () => {
     const facts = birthdaysOn("2026-03-12", PARTIES, new Set(["p-dana"]));
     expect(facts[0]?.inner).toBe(true);
-    expect(birthdaysOn("2026-03-19", PARTIES, new Set(["p-dana"]))).toEqual([
+    expect(
+      birthdaysOn("2026-03-19", PARTIES, new Set(["p-dana"]))
+    ).toStrictEqual([
       { id: "p-owen", inner: false, text: "Owen Pryce" },
       { id: "p-ruth", inner: false, text: "Ruth Vance" },
     ]);
   });
 
   it("leaves organisations and empty days alone", () => {
-    expect(birthdaysOn("2026-03-13", PARTIES, new Set())).toEqual([]);
+    expect(birthdaysOn("2026-03-13", PARTIES, new Set())).toStrictEqual([]);
   });
 });
 
-describe("ribbonLabel", () => {
+describe(ribbonLabel, () => {
   it("names one person and collapses several into a count", () => {
     expect(ribbonLabel(birthdaysOn("2026-03-12", PARTIES, new Set()))).toBe(
       "Dana Okafor"
@@ -88,10 +90,10 @@ describe("ribbonLabel", () => {
   });
 });
 
-describe("dueOn", () => {
+describe(dueOn, () => {
   it("keys open tasks to their day, in both stored shapes", () => {
     const rows = dueOn("2026-03-19", TASKS);
-    expect(rows.map((row) => row.taskId)).toEqual(["t1", "t2"]);
+    expect(rows.map((row) => row.taskId)).toStrictEqual(["t1", "t2"]);
     expect(shelfLabel(rows.length)).toBe("2 due");
   });
 
@@ -108,7 +110,7 @@ describe("dueOn", () => {
   });
 });
 
-describe("starredParties", () => {
+describe(starredParties, () => {
   const schemes: ContextRow[] = [
     { scheme_id: "s1", uri: "https://centraid.dev/schemes/flags" },
     { scheme_id: "s2", uri: "https://centraid.dev/schemes/tags" },
@@ -124,7 +126,9 @@ describe("starredParties", () => {
   ];
 
   it("reads exactly the starred party edges", () => {
-    expect([...starredParties(schemes, concepts, tags)]).toEqual(["p-dana"]);
+    expect([...starredParties(schemes, concepts, tags)]).toStrictEqual([
+      "p-dana",
+    ]);
   });
 
   it("says nobody rather than guessing when the vault has no flags", () => {
@@ -133,7 +137,7 @@ describe("starredParties", () => {
   });
 });
 
-describe("dayKeyOf", () => {
+describe(dayKeyOf, () => {
   it("keys a local date without crossing a timezone", () => {
     expect(dayKeyOf(new Date(2026, 2, 1, 23, 30))).toBe("2026-03-01");
   });

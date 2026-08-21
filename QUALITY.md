@@ -2,6 +2,22 @@
 
 ## Open
 
+- **A parallel wave leaves repo-wide gates unrun, and only the sweep finds
+  out.** The three #834 wave slices each verified their own tree (per-tree
+  `oxlint` over changed files, per-package typecheck, per-app suites) and
+  reported clean; the wave-3 sweep then found four reds none of them could
+  have seen — a manifest/pending-overlay law disagreement in
+  `packages/blueprints` (a new action with no projection row), eleven root
+  `bun run lint` findings across the wave trees, an
+  `lint:engine-conformance` vocabulary hit, and a U4 copy flag on a string
+  written during the sweep itself. Each was cheap to fix and none needed a
+  gate knob, but they arrived at the end of the umbrella rather than inside
+  the slice that caused them. The norm worth considering
+  ([docs/multi-agent.md](docs/multi-agent.md)): a slice's exit condition is
+  the repo-wide gate for the lanes its tree participates in — at minimum
+  `bun run lint` and the owning package's whole `test` — not the subset of
+  files it touched.
+
 - **A place shared into an audience scope may be phrased against the wrong
   Home.** #816 made "what leaves with a copy" a decided question for the OS
   share path (`share-place.ts`: a chosen precision, GPS stripped below the

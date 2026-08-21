@@ -24,7 +24,7 @@ import type {
   Note,
   NoteVersion,
 } from "./types.ts";
-import { RENAME_REFUSAL, notebookDeleted, sentToTasks } from "./view-copy.ts";
+import { RENAME_REFUSAL, notebookDeleted } from "./view-copy.ts";
 
 /** A vault predicate, translated into the product's own sentence. The
  *  gateway stringifies a failed precondition as `"name: column op value"`,

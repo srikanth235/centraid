@@ -10,10 +10,13 @@
 import type { ReactNode } from "react";
 
 import { displayText } from "../../_shared/untrusted.ts";
-import type { DueTask, RibbonFact } from "../day-context.ts";
+import type {
+  DueTask,
+  LayerId,
+  LayerState,
+  RibbonFact,
+} from "../day-context.ts";
 import { ribbonLabel, shelfLabel } from "../day-context.ts";
-import type { LayerId } from "../day-context.ts";
-import type { LayerState } from "../day-context.ts";
 import {
   LAYERS,
   LAYERS_READ_ONLY,

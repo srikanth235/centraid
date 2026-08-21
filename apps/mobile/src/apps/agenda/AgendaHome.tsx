@@ -431,9 +431,9 @@ export default function AgendaHome({
         }))}
         onSelect={(id) => {
           setLeadOpen(false);
-          const days = Number(id);
-          if (!Number.isFinite(days)) return;
-          setLeadDays(days);
+          const chosenLead = Number(id);
+          if (!Number.isFinite(chosenLead)) return;
+          setLeadDays(chosenLead);
           void AsyncStorage.setItem(BIRTHDAY_LEAD_KEY, id).catch(
             () => undefined
           );
