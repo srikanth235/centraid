@@ -91,13 +91,18 @@ export const MORE_DESTINATIONS: readonly Shelf[] = [
 
 /** The route round trip and the band's active tab (`_shared/shelves.ts`):
  *  `photos` or `photos/<sub>`, one destination either way (§16). */
-export const { shelfFromSegment, shelfRoute, shelfFromRoute, bandActiveId } =
-  createShelfRoutes({
-    route: "photos",
-    routed: ROUTED,
-    band: BAND_DESTINATIONS,
-    rootBandId: "library",
-  });
+export const {
+  countKey,
+  shelfFromSegment,
+  shelfRoute,
+  shelfFromRoute,
+  bandActiveId,
+} = createShelfRoutes({
+  route: "photos",
+  routed: ROUTED,
+  band: BAND_DESTINATIONS,
+  rootBandId: "library",
+});
 
 /** The shelves that paint something OTHER than the justified timeline: a card
  *  grid, a map, circular cards, clusters, a query box. */

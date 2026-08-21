@@ -37,6 +37,7 @@ import type { ReactNode } from "react";
 import { displayText } from "../../_shared/untrusted.ts";
 import { PLACE_MENU, foldersCaption } from "../drive-copy.ts";
 import type { Crumb } from "../drive-copy.ts";
+import { folderCounts, unfiledCount } from "../folder-counts.ts";
 import { FOLDER_ICON_LG, I } from "../icons.ts";
 import { folderShelf } from "../shelves.ts";
 import type { ShelfId } from "../shelves.ts";
@@ -165,13 +166,17 @@ export function FoldersRoute({
     setSortDir(key === "name" ? 1 : -1);
   };
 
-  const unfiled = activeDocs.filter((d) => !d.folder_id).length;
+  // Both numbers come from `folder-counts.ts`, which the NAVIGATION RAIL reads
+  // too (v16 §3: a count that disagrees with its shelf header is a defect).
+  // This screen owned the expression while it was the only surface drawing a
+  // folder's count; two surfaces deriving it separately is how they come to
+  // disagree the first time either is edited.
+  const unfiled = unfiledCount(activeDocs);
   const rows = useMemo<CountedFolder[]>(() => {
+    const perFolder = folderCounts(folders, activeDocs);
     const counted = folders.map((folder) => ({
       folder,
-      count: activeDocs.filter(
-        (d) => (d.folder_id ?? null) === folder.folder_id
-      ).length,
+      count: perFolder.get(folder.folder_id) ?? 0,
     }));
     // Ties break on the name, so an order is never arbitrary: two folders
     // holding three documents each sit A before B, both ways round.

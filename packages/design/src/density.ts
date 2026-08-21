@@ -90,6 +90,32 @@ export const metrics = {
    * Settings at the foot, which is where a member reaches for them.
    */
   stem: 240,
+  /**
+   * The APP navigation rail — an app's own destinations, on the leading edge
+   * of its content area, under a pointer (v16 §3).
+   *
+   * It is not a second stem and it is not the stem's width: the stem answers
+   * WHICH APP at 240 and never moves, while this column answers WHERE IN IT
+   * and is drawn only by an app with more than four destinations of its own.
+   * 232 is the reference's `S.rail`; it is narrower than the stem because it
+   * holds a label and a count rather than an identity block and a launcher.
+   *
+   * Pointer only, so there is no touch rung to pair with it: on touch the same
+   * destinations are the app band or the shelf strip, and an app that hid one
+   * of them behind this width would be hiding a destination.
+   */
+  appRail: 232,
+  /**
+   * A row in that rail, UNDER A POINTER. On touch the rail is not drawn, and
+   * anywhere it is a target rather than a pointer row it takes `row` — 44 is
+   * the floor and this rung may never be spent on a finger.
+   *
+   * 30 rather than `segmented`'s 28 or `control`'s 34: a rail row is a
+   * destination in a scannable column, not a control, so it sits between the
+   * two — tight enough that eight destinations and a group head fit above the
+   * fold at 1090, tall enough that the label keeps its leading.
+   */
+  appRailRow: 30,
 } as const;
 
 export type MetricKey = keyof typeof metrics;

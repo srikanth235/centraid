@@ -109,6 +109,7 @@ export const BAND_DESTINATIONS: readonly BandDestination[] = [
  *  `docs` or `docs/<sub>`, one destination either way (§1.1). One folder lights
  *  **Folders**, the shelf it is a sub-state of. */
 export const {
+  countKey,
   shelfFromSegment,
   shelfSegment,
   shelfRoute,

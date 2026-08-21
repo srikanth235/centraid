@@ -88,6 +88,18 @@ export function createShelfRoutes(config: ShelfRouteConfig) {
   };
 
   return {
+    /**
+     * A shelf's key in a COUNTS map (v16 §3, "counts read from the same source
+     * the shelf headers read").
+     *
+     * The root shelf's id is `null`, which is not a string and cannot key a
+     * map; the band already has a name for it (`library`, `list`), so that is
+     * the name the counts use rather than a third one invented per surface.
+     * One key function, written by whoever builds the map and read by the
+     * strip, the More sheet and the navigation rail, is what makes "the three
+     * surfaces cannot disagree" a property of the code rather than a promise.
+     */
+    countKey: (id: ShelfId): string => id ?? rootBandId,
     shelfFromSegment,
     shelfSegment,
     shelfRoute: (id: ShelfId): string => {

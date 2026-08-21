@@ -660,6 +660,42 @@ const roleTable: RoleDef[] = [
     }
   ),
   role(
+    "--w-app-rail",
+    "component",
+    "The app navigation rail — an app's own destinations beside its content, under a pointer. Not a second stem: the stem answers which app at --w-stem and never moves, this column answers where in it. Fixed, never resizable, mirrors under RTL.",
+    "geometry only",
+    blueprintSurfaces,
+    {
+      blueprint: scalar(`${metrics.appRail}px`),
+      native: unsupported(
+        "Touch draws the app band or the shelf strip, never a rail."
+      ),
+      shell: unsupported(
+        "The shell's own column is the stem, not an app rail."
+      ),
+    }
+  ),
+  role(
+    "--h-app-rail-row",
+    "component",
+    "One row in the app navigation rail: 30 under a pointer, and the 44 row rung wherever the rail is drawn on a coarse surface, because a destination a finger reaches is a target first.",
+    "geometry only",
+    blueprintSurfaces,
+    {
+      // The ROOT value is the touch rung, and `(pointer: fine)` steps it down
+      // to 30 — the same touch-first shape `--target-min` and `--w-key-col`
+      // take, and for the same reason: a surface that has not proved it has a
+      // pointer keeps the floor.
+      blueprint: scalar(`${metrics.row}px`),
+      native: unsupported(
+        "Touch draws the app band or the shelf strip, never a rail."
+      ),
+      shell: unsupported(
+        "The shell's own column is the stem, not an app rail."
+      ),
+    }
+  ),
+  role(
     "--density-row",
     "component",
     "The row height for the declared density tier. Tiers scale row height and content padding ONLY.",

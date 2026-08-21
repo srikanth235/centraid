@@ -129,6 +129,12 @@ function lightProps(): Record<string, string> {
     "--h-control": `${metrics.control}px`,
     "--h-row": `${metrics.row}px`,
     "--h-segmented": `${metrics.segmented}px`,
+    // The app navigation rail (v16). Its width is one number on every seat
+    // that draws it; its ROW is touch-first like `--target-min` — the 44 rung
+    // here, stepped down to `metrics.appRailRow` under `(pointer: fine)` — so
+    // a coarse surface that draws the rail at all draws it as targets.
+    "--w-app-rail": `${metrics.appRail}px`,
+    "--h-app-rail-row": `${metrics.row}px`,
     "--density-row": `${DENSITY_TIERS.comfortable.row}px`,
     "--density-pad": `${DENSITY_TIERS.comfortable.pad}px`,
     "--o-disabled": "0.45",
@@ -176,6 +182,7 @@ export function toBlueprintCss(): string {
   const pointerProps: Record<string, string> = {
     "--page-margin": `${pageMargin.desktop}px`,
     "--target-min": `${metrics.control}px`,
+    "--h-app-rail-row": `${metrics.appRailRow}px`,
   };
   for (const [key, value] of Object.entries(blueprintType)) {
     pointerProps[`--t-${typeKeyToKebab(key)}`] = blueprintTypeShorthand(value);
