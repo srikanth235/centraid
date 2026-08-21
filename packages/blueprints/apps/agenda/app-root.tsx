@@ -368,10 +368,22 @@ export function Root({
     bump();
   }, []);
 
+  /** The app bar's own New event: a composer with no slot behind it. */
   const openCreate = useCallback(() => {
     ensureParties();
     stateRef.current.createOpen = true;
     stateRef.current.quick = null;
+    bump();
+  }, [ensureParties]);
+
+  /**
+   * Edit, from a quick-add draft. THE DRAFT SURVIVES: the whole point of the
+   * flow is that a title typed on a slot is carried into the full editor,
+   * so clearing it here would make Edit mean "start again".
+   */
+  const openCreateFromQuick = useCallback(() => {
+    ensureParties();
+    stateRef.current.createOpen = true;
     bump();
   }, [ensureParties]);
 
@@ -600,7 +612,7 @@ export function Root({
 
   const overlays: ReactNode = (
     <>
-      {state.quick ? (
+      {state.quick && !state.createOpen ? (
         <QuickAdd
           draft={state.quick}
           onTitle={(title) => {
@@ -618,7 +630,7 @@ export function Root({
               calendar_id: data.calendars[0]?.calendar_id ?? "",
             });
           }}
-          onEdit={openCreate}
+          onEdit={openCreateFromQuick}
           onDiscard={closeOverlays}
         />
       ) : null}
@@ -723,18 +735,21 @@ export function Root({
             />
           ) : null,
           overlays,
-          moreSheet:
-            moreOpen && (compact || narrow) ? (
-              <MoreSheet
-                calendars={data.calendars}
-                hidden={state.hiddenCals}
-                hueFor={hueFor}
-                search={state.search}
-                onToggleCalendar={toggleCalendar}
-                onSearch={(value) => logic.applySearchInput(value)}
-                onClose={() => setMoreOpen(false)}
-              />
-            ) : null,
+          // The sheet carries the SEARCH FIELD and the calendar filters. On
+          // compact it is the band's sixth slot; on a pointer surface it is
+          // where the app bar's Search control leads, because the rail beside
+          // it holds the filters but has no field.
+          moreSheet: moreOpen ? (
+            <MoreSheet
+              calendars={data.calendars}
+              hidden={state.hiddenCals}
+              hueFor={hueFor}
+              search={state.search}
+              onToggleCalendar={toggleCalendar}
+              onSearch={(value) => logic.applySearchInput(value)}
+              onClose={() => setMoreOpen(false)}
+            />
+          ) : null,
         }}
       />
     </div>

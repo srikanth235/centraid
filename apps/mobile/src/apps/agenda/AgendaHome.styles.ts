@@ -66,5 +66,5 @@ export const styles = StyleSheet.create({
    *  reading edge. Drawn on the Day surface only. */
   nowLine: { alignItems: "center", flexDirection: "row", gap: 6 },
   nowRule: { flex: 1, height: 1 },
-  nowText: { ...t("annotLabel") },
+  nowText: { ...t("annotLabel"), fontVariant: ["tabular-nums"] as const },
 });

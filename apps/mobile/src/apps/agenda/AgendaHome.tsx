@@ -384,7 +384,12 @@ const AgendaDayRow = memo(
     colors: ThemeColors;
     onOpen: (event: NativeAgendaEvent) => void;
   }): React.JSX.Element => {
-    const isToday = day.date.toDateString() === new Date().toDateString();
+    const now = new Date();
+    const isToday = day.date.toDateString() === now.toDateString();
+    // The first row that has not started yet — where "now" sits in a list.
+    const nowSlot = day.events.findIndex(
+      (event) => Date.parse(event.start) > now.getTime()
+    );
     return (
       <View style={[styles.dayRow, { borderTopColor: colors.line }]}>
         <View
@@ -408,20 +413,44 @@ const AgendaDayRow = memo(
           </Text>
         </View>
         <View style={styles.eventsCol}>
-          {day.events.map((event) => (
-            <AgendaEventCard
-              key={event.instanceKey}
-              event={event}
-              colors={colors}
-              onOpen={onOpen}
-            />
+          {day.events.map((event, index) => (
+            <React.Fragment key={event.instanceKey}>
+              {/* THE NOW LINE, on the one day that is today: a hairline in
+                  the attention tone carrying the current time, drawn before
+                  the first event that has not started yet. A list has no
+                  vertical time axis to place it on, so "between the last past
+                  row and the next one" is where now actually is. */}
+              {isToday && nowSlot === index ? (
+                <NowLine colors={colors} />
+              ) : null}
+              <AgendaEventCard event={event} colors={colors} onOpen={onOpen} />
+            </React.Fragment>
           ))}
+          {isToday && nowSlot === day.events.length ? (
+            <NowLine colors={colors} />
+          ) : null}
         </View>
       </View>
     );
   }
 );
 AgendaDayRow.displayName = "AgendaDayRow";
+
+/** The now line. Its time is a numeric, so it carries the tabular figures the
+ *  system gives every number. */
+function NowLine({ colors }: { colors: ThemeColors }): React.JSX.Element {
+  return (
+    <View style={styles.nowLine} accessibilityLabel="Now">
+      <Text style={[styles.nowText, { color: colors.seam }]}>
+        {new Intl.DateTimeFormat(undefined, {
+          hour: "numeric",
+          minute: "2-digit",
+        }).format(new Date())}
+      </Text>
+      <View style={[styles.nowRule, { backgroundColor: colors.seam }]} />
+    </View>
+  );
+}
 
 function AgendaEventCard({
   event,
