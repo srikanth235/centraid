@@ -181,7 +181,7 @@ describe("restore-drill", () => {
   test("a real backup restores to a vault the drill judges USABLE", async () => {
     const m = await makeMachine(await providerServer(), "drill-green");
     const sha = attachPhoto(m.plane);
-    await expect(fs.stat(casPathFor(m.plane, sha))).resolves.toBeTruthy();
+    expect((await fs.stat(casPathFor(m.plane, sha))).size).toBeGreaterThan(0);
 
     await m.service.runBackup(m.vaultId);
     // The whole drill — structural half plus depth half — on the product path.
@@ -191,7 +191,11 @@ describe("restore-drill", () => {
 
     const target = (await m.service.status())[m.vaultId];
     expect(target?.lastRestoreVerifyError).toBeUndefined();
-    expect(target?.lastRestoreVerifiedAt).toBeTruthy();
+    // A real ISO instant, not merely a non-empty string: the health probe and
+    // the 14-day staleness window in backup-health.ts both parse this.
+    expect(
+      Number.isFinite(Date.parse(target?.lastRestoreVerifiedAt ?? ""))
+    ).toBe(true);
     // A drilled backup reports its own health, and it is not merely 'not red'.
     await expect(backupsHealth(m)).resolves.toBe("ok");
   }, 60_000);

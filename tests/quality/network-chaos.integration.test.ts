@@ -66,7 +66,7 @@ import type { NetworkFaultId } from "./network-faults.js";
 // Every case boots a real vault, a real app registry, and two real iroh
 // endpoints; the throttled and fragmented faults then push a few hundred bytes
 // through in metered pieces. Well above the node default, deliberately ABOVE
-// its file budget rather than a per-test cap under it (TESTING.md).
+// its file budget rather than a per-test cap under that budget, per TESTING.md.
 vi.setConfig({ testTimeout: 120_000, hookTimeout: 120_000 });
 
 /** One chaotic attempt, then at most one on the recovered link. */
@@ -83,8 +83,8 @@ const AMPLIFICATION_FACTOR = 8;
 
 const worlds: ChaosIntentWorld[] = [];
 
-async function world(): Promise<ChaosIntentWorld> {
-  const opened = await openChaosIntentWorld();
+async function world(label: string): Promise<ChaosIntentWorld> {
+  const opened = await openChaosIntentWorld(label);
   worlds.push(opened);
   return opened;
 }
@@ -105,6 +105,10 @@ interface DriveResult {
   /** The largest single request body this drive put on the wire. */
   readonly payloadBytes: number;
   readonly failures: string[];
+  /** Every wire outcome status this drive saw, in order. */
+  readonly outcomes: string[];
+  /** The last response body verbatim — the diagnosis a red run needs. */
+  readonly lastBody: string;
 }
 
 /**
@@ -125,6 +129,8 @@ async function driveIntent(
   let sentBytes = 0;
   let payloadBytes = 0;
   const failures: string[] = [];
+  const outcomes: string[] = [];
+  let lastBody = "";
   let settled = false;
   while (!settled && attempts < MAX_ATTEMPTS) {
     // oxlint-disable-next-line no-await-in-loop -- one attempt at a time
@@ -150,9 +156,9 @@ async function driveIntent(
         headers: { "content-type": "application/json" },
         body: payload,
       });
-      const parsed = JSON.parse(answer.body.toString("utf8")) as {
-        outcome: IntentOutcome;
-      };
+      lastBody = answer.body.toString("utf8");
+      const parsed = JSON.parse(lastBody) as { outcome: IntentOutcome };
+      outcomes.push(String(parsed.outcome.status));
       // oxlint-disable-next-line no-await-in-loop -- one attempt at a time
       await queue.awaitingChange(intentId);
       // oxlint-disable-next-line no-await-in-loop -- one attempt at a time
@@ -167,7 +173,15 @@ async function driveIntent(
       dial.close();
     }
   }
-  return { attempts, streams, sentBytes, payloadBytes, failures };
+  return {
+    attempts,
+    streams,
+    sentBytes,
+    payloadBytes,
+    failures,
+    outcomes,
+    lastBody,
+  };
 }
 
 const seed = resolveChaosSeed();
@@ -187,8 +201,10 @@ describe("seeded network-chaos lane: replay and honesty", () => {
     );
     // Cover mode is a permutation: every fault exactly once, never a subset.
     expect(
-      [...chaosSchedule(catalog, seed).map((e) => e.fault)].sort()
-    ).toEqual([...catalog].sort());
+      chaosSchedule(catalog, seed)
+        .map((entry) => entry.fault)
+        .sort()
+    ).toStrictEqual([...catalog].sort());
     const sampled = chaosSchedule(catalog, 42, {
       mode: "sample",
       iterations: 17,
@@ -238,7 +254,7 @@ describe("seeded network-chaos lane: the tunnel plane under adversity", () => {
     ])
   )("%s", async (_name, entry) => {
     const fault = NETWORK_FAULT_BY_ID[entry.fault];
-    const chaos = await world();
+    const chaos = await world(`${entry.fault}-${entry.step}`);
     const queue = chaosIntentQueue();
     // Seeded per case from (seed, step): every draw the shim makes is
     // reproducible from the coordinate in this test's own name.
@@ -278,17 +294,28 @@ describe("seeded network-chaos lane: the tunnel plane under adversity", () => {
         await chaos.restartGatewayEndpoint();
       else await chaos.rebindClient();
       await submit(1);
-      // Identity is not address: both endpoints kept their keys, so the seat
-      // is the same principal on the far side of the move.
-      expect(
-        chaos.gatewayEndpointId(),
-        "gateway identity across the move"
-      ).toBe(gatewayBefore);
-      expect(chaos.deviceEndpointId(), "device identity across the move").toBe(
-        deviceBefore
-      );
     } else {
       await submit(0);
+    }
+
+    // Identity is not address: both endpoints kept their keys, so a seat that
+    // moved is the same principal on the far side of the move — and a seat
+    // that did not move is trivially unchanged.
+    expect(chaos.gatewayEndpointId(), "gateway identity across the case").toBe(
+      gatewayBefore
+    );
+    expect(chaos.deviceEndpointId(), "device identity across the case").toBe(
+      deviceBefore
+    );
+
+    // The wire outcome is asserted where it ARRIVES, so a backend that never
+    // settled (a worker that failed to start, a dispatch that errored) names
+    // itself here instead of surfacing later as an unexplained empty vault.
+    for (const drive of drives) {
+      expect(
+        drive.outcomes.at(-1),
+        `last wire outcome under ${entry.fault}: ${drive.lastBody || drive.failures.join(" | ")}`
+      ).toBe("executed");
     }
 
     // NO DATA LOSS — every acknowledged write is in the vault, and NO
@@ -324,18 +351,24 @@ describe("seeded network-chaos lane: the tunnel plane under adversity", () => {
         `bytes on the wire vs a ${drive.payloadBytes}-byte payload (amplification ceiling)`
       ).toBeLessThanOrEqual(AMPLIFICATION_FACTOR * drive.payloadBytes);
     }
-    // The two ambiguous faults MUST actually have failed an attempt; a shim
-    // that quietly stopped injecting would otherwise pass this whole case.
-    if (
+    // The two ambiguous faults MUST actually have interrupted an attempt, and
+    // the other six must NOT have: a shim that quietly stopped injecting, or
+    // one that injected where it should not, fails here rather than passing
+    // this whole case on a link that was never actually hostile.
+    const interrupting =
       entry.fault === "abort-mid-request" ||
-      entry.fault === "disconnect-mid-response"
-    ) {
-      expect(
-        drives[0]?.failures[0],
-        `${entry.fault} never actually interrupted the request`
-      ).toContain(`chaos[${entry.fault}]`);
-      expect(drives[0]?.attempts).toBe(2);
-    }
+      entry.fault === "disconnect-mid-response";
+    const injected = drives[0]!.failures.filter((failure) =>
+      failure.includes(`chaos[${entry.fault}]`)
+    ).length;
+    expect(
+      injected,
+      `${entry.fault} injection count on the first attempt`
+    ).toBe(interrupting ? 1 : 0);
+    expect(
+      drives[0]!.attempts,
+      `attempts on the first write under ${entry.fault}`
+    ).toBe(interrupting ? 2 : 1);
   });
 
   /*
@@ -347,7 +380,7 @@ describe("seeded network-chaos lane: the tunnel plane under adversity", () => {
    * wall-clock wait.
    */
   test("a declared-huge header frame is refused at the cap and does not wedge the link", async () => {
-    const chaos = await world();
+    const chaos = await world("header-frame-cap");
     const rng = seededRandom(seed);
     const dial = await chaos.dial("recovered", rng);
 
@@ -356,6 +389,20 @@ describe("seeded network-chaos lane: the tunnel plane under adversity", () => {
     const stalled = await dial.connection.openBi();
     await stalled.send.writeAll([0x40, 0, 0, 0]);
     await stalled.send.writeAll([0x7b, 0x22, 0x74, 0x22]);
+
+    // Refused on the DECLARED length: the answer arrives after four body
+    // bytes, so the gateway never allocated toward the gigabyte it was told
+    // to expect. Read the refusal frame by hand — it is the whole claim.
+    const refusalLength = Buffer.from(
+      await stalled.recv.readExact(4)
+    ).readUInt32BE(0);
+    expect(refusalLength).toBeLessThanOrEqual(4096);
+    const refusal = JSON.parse(
+      Buffer.from(await stalled.recv.readExact(refusalLength)).toString("utf8")
+    ) as { status: number };
+    expect(refusal.status, "an over-cap header frame must be refused").toBe(
+      400
+    );
 
     // A fresh, well-formed write on a NEW stream still lands: the parked read
     // consumed neither the connection nor the gateway.

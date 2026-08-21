@@ -71,12 +71,12 @@ async function world(): Promise<ComponentChaosWorld> {
   return opened;
 }
 
-afterEach(async () => {
+async function closeWorlds(): Promise<void> {
   for (const opened of worlds.splice(0)) {
     // oxlint-disable-next-line no-await-in-loop -- one world torn down at a time
     await opened.close();
   }
-});
+}
 
 const iso = (offsetMs: number): string => new Date(T0 + offsetMs).toISOString();
 
@@ -421,8 +421,10 @@ describe("seeded composition-chaos lane: replay and coverage", () => {
     );
     // Cover mode is a permutation, so no fault can quietly leave the lane.
     expect(
-      [...chaosSchedule(COMPONENT_FAULT_IDS, 7).map((e) => e.fault)].sort()
-    ).toEqual([...COMPONENT_FAULT_IDS].sort());
+      chaosSchedule(COMPONENT_FAULT_IDS, 7)
+        .map((entry) => entry.fault)
+        .sort()
+    ).toStrictEqual([...COMPONENT_FAULT_IDS].sort());
   });
 
   // Every component #842 W3.2 names is degraded by at least one fault, and
@@ -445,6 +447,8 @@ describe("seeded composition-chaos lane: replay and coverage", () => {
 });
 
 describe("seeded composition-chaos lane: components die mid-work", () => {
+  afterEach(closeWorlds);
+
   test.each(
     schedule.map((entry): [string, ChaosScheduleEntry<ComponentFaultId>] => [
       `${entry.fault} (${replayLabel(entry)}) converges rather than corrupting or wedging`,

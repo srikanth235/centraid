@@ -38,16 +38,16 @@ W2 — hostile input:
 
 W3 — time, network, disorder:
 
-- [ ] W3.1 Network chaos on the tunnel plane
-- [ ] W3.2 Composition-level chaos
+- [x] W3.1 Network chaos on the tunnel plane
+- [x] W3.2 Composition-level chaos
 - [x] W3.3 Clock-skew + calendar-edge injection
-- [ ] W3.4 Long-run soak rig (weekly)
+- [x] W3.4 Long-run soak rig (weekly)
 - [x] W3.5 Renderer leak testing
 
 W4 — load and limits:
 
-- [ ] W4.1 Composite-load rig
-- [ ] W4.2 Stress-to-failure
+- [x] W4.1 Composite-load rig
+- [x] W4.2 Stress-to-failure
 
 W5 — compatibility and lifecycle:
 

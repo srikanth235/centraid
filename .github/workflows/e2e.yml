@@ -885,6 +885,13 @@ jobs:
         env:
           CENTRAID_YEAR3_CACHE_DIR: artifacts/year3-cache
         run: bun run test:scale
+      # #842 W3.1/W3.2 — the seeded chaos lanes run on every PR in `cover` mode
+      # (every fault exactly once, ~18 s). Here they run in `sample` mode, so
+      # the nightly draws ~5 times per fault against a different part of the
+      # seeded space. ~68 s.
+      - id: chaos
+        continue-on-error: true
+        run: bun run test:chaos:sweep
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         if: always()
         with:
@@ -896,9 +903,11 @@ jobs:
         run: |
           echo "perf=${{ steps.perf.outcome }}"
           echo "scale=${{ steps.scale.outcome }}"
+          echo "chaos=${{ steps.chaos.outcome }}"
           if [ "${{ steps.perf.outcome }}" != "success" ] || \
-             [ "${{ steps.scale.outcome }}" != "success" ]; then
-            echo "::error::Nightly performance/scale lane failed"
+             [ "${{ steps.scale.outcome }}" != "success" ] || \
+             [ "${{ steps.chaos.outcome }}" != "success" ]; then
+            echo "::error::Nightly performance/scale/chaos lane failed"
             exit 1
           fi
 

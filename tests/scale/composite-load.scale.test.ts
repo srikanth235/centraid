@@ -47,11 +47,15 @@ import { rigDriftBudgetMs } from "../helpers/rig-budgets.js";
  *      lanes (harness turn dispatch and the automation missed-window scan) so
  *      the CPU is contended the way a real gateway's is.
  *
- * The budget is therefore a RATIO, not a duration: `compositeP95 / soloP95` per
- * lane. A ratio is the only form of this budget that survives moving between a
- * developer laptop and a CI runner, and it is the number that answers the
- * actual product question — does putting the household's activities together
- * cost more than the sum of their parts?
+ * The headline budget is therefore a RATIO, not a duration —
+ * `compositeMs / soloMs` — because a ratio measured on the same host in the
+ * same run is the only form of this budget that survives moving between a
+ * developer laptop and a CI runner, and because it answers the actual product
+ * question: does putting the household's activities together cost more than
+ * doing them one after another? The second gate is an absolute ceiling on the
+ * slowest lane under composition, which is the starvation check. See the
+ * comment at `worstByFactor` below for why the obvious third candidate — a
+ * per-lane p95 ratio — is published but deliberately NOT gated.
  *
  * Refusals are permitted and are NOT failures — a gateway that sheds load with
  * a typed refusal is behaving correctly (that is W4.2's subject). What fails

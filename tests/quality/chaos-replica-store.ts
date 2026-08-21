@@ -22,7 +22,7 @@ import type {
   ReplicaSqliteDriver,
 } from "../../packages/client/src/replica/store-core.js";
 
-export class FileSqliteDriver implements ReplicaSqliteDriver {
+class FileSqliteDriver implements ReplicaSqliteDriver {
   private readonly db: DatabaseSync;
 
   constructor(file: string) {

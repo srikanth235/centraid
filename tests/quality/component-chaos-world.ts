@@ -159,5 +159,3 @@ export async function openComponentChaosWorld(): Promise<ComponentChaosWorld> {
     },
   };
 }
-
-export { DEVICE_ID as CHAOS_DEVICE_ID };

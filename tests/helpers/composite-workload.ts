@@ -52,15 +52,23 @@ export function mulberry32(seed: number): () => number {
   };
 }
 
-/** Deterministic, incompressible-enough payload bytes for the blob lane. */
-export function seededBytes(seed: number, size: number): Buffer {
+/**
+ * Deterministic, incompressible-enough payload bytes for the blob lane. Built
+ * on a plain `ArrayBuffer` rather than `Buffer.allocUnsafe` so the result is a
+ * `Uint8Array<ArrayBuffer>` — the shape `fetch` accepts as a `BodyInit`.
+ */
+export function seededBytes(
+  seed: number,
+  size: number
+): Uint8Array<ArrayBuffer> {
   let state = (seed * 2_654_435_761) >>> 0;
-  const out = Buffer.allocUnsafe(size);
+  const buffer = new ArrayBuffer(size);
+  const view = new DataView(buffer);
   for (let offset = 0; offset + 4 <= size; offset += 4) {
     state = (state * 1_664_525 + 1_013_904_223) >>> 0;
-    out.writeUInt32LE(state, offset);
+    view.setUint32(offset, state, true);
   }
-  return out;
+  return new Uint8Array(buffer);
 }
 
 /** Nearest-rank percentile over an unsorted sample array. Empty ⇒ NaN. */
@@ -229,9 +237,10 @@ async function drive(
     { length: Math.max(1, Math.min(concurrency, ops)) },
     async () => {
       for (let index = next++; index < ops; index = next++) {
-        // oxlint-disable-next-line no-await-in-loop -- this IS the concurrency
-        // limiter: each worker holds exactly one op in flight at a time, so
-        // `concurrency` workers keep exactly `concurrency` requests open.
+        // This IS the concurrency limiter: each worker holds exactly one op
+        // in flight at a time, so `concurrency` workers keep exactly
+        // `concurrency` requests open against the gateway.
+        // oxlint-disable-next-line no-await-in-loop
         record(result, await operation(index));
       }
     }
@@ -393,9 +402,9 @@ export async function gatewayDbBytes(dataDir: string): Promise<number> {
     for (const entry of entries) {
       const full = path.join(dir, entry.name);
       if (entry.isDirectory()) {
-        // oxlint-disable-next-line no-await-in-loop -- depth-first walk of a
-        // handful of gateway directories; parallel readdir would buy nothing
-        // and make the accumulated file list order-dependent.
+        // Depth-first walk of a handful of gateway directories; a parallel
+        // readdir would buy nothing and make the file list order-dependent.
+        // oxlint-disable-next-line no-await-in-loop
         await walk(full);
       } else if (/\.db(?:-wal|-shm)?$/u.test(entry.name)) {
         files.push(full);

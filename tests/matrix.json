@@ -72,6 +72,21 @@
       "seed": "drop a required lane from tests/mobile-resource-evidence.json, or move a derived row's value outside its recorded tolerance",
       "failure": "'lane ios/cold-start-ms has no row — a lane is measured or blocked-with-a-reason, never absent', or the recompute reports ledger v ±25% but measured n"
     },
+    "P4": {
+      "command": "node node_modules/vitest/vitest.mjs run --config vitest.scale.config.ts tests/scale/composite-load.scale.test.ts",
+      "seed": "tighten metrics.compositeLoadFactor.ceilingWorstLaneP95Ms in tests/experience-budgets/gateway.json from 3500 to 300",
+      "failure": "lane starvation: write p95 reached 1551.0 ms under composition (solo 278.2 ms), ceiling 300 ms"
+    },
+    "R5": {
+      "command": "node node_modules/vitest/vitest.mjs run --config vitest.scale.config.ts tests/scale/stress-to-failure.scale.test.ts",
+      "seed": "drop `busy: true` from the admission-refusal return in packages/server/src/engine/handlers/handler-runner.ts (and the built dist copy, which is what serve() loads)",
+      "failure": "overload may only be shed with 429 or 503; saw 500/HANDLER_ERROR"
+    },
+    "L5": {
+      "command": "node node_modules/vitest/vitest.mjs run --config vitest.scale.config.ts tests/scale/long-run-soak.scale.test.ts",
+      "seed": "tighten metrics.soakDegradation.ceilingOpenDescriptors in tests/experience-budgets/gateway.json from 256 to 16",
+      "failure": "descriptor ceiling: peaked at 80 open descriptors, ceiling 16"
+    },
     "L4": {
       "command": "bunx playwright test -c tests/e2e/playwright.config.ts renderer-leak.spec.ts   # cwd apps/web",
       "seed": "register one window listener (or one setInterval) per open/close cycle",
@@ -476,6 +491,17 @@
           "redLastDemonstrated": "2026-08-11"
         },
         {
+          "id": "R5",
+          "name": "graceful degradation past the knee",
+          "owner": "tests/scale/stress-to-failure.scale.test.ts",
+          "evidence": "overload is shed only with 429 or 503; notes committed equals 2xx responses exactly; the vault stays integrity- and fk-clean and the first request after load drops is served",
+          "lane": "nightly",
+          "wallClockCost": "medium",
+          "knob": "packages/server/src/engine/handlers/worker-admission.ts",
+          "governance": "tighten-only",
+          "redLastDemonstrated": "2026-08-21"
+        },
+        {
           "id": "D3",
           "name": "direct typed native theme lowering",
           "owner": "apps/mobile/src/kit/theme/native.test.ts",
@@ -525,6 +551,17 @@
           "knob": "tests/quality/unbounded-query-waivers.json",
           "governance": "waiver-gated",
           "redLastDemonstrated": "2026-08-01"
+        },
+        {
+          "id": "P4",
+          "name": "budgets hold under composite household load",
+          "owner": "tests/scale/composite-load.scale.test.ts",
+          "evidence": "the whole household run together costs about the same wall clock as the lanes run one at a time; worst-lane p95 under composition stays under an absolute ceiling",
+          "lane": "nightly",
+          "wallClockCost": "medium",
+          "knob": "tests/experience-budgets/gateway.json",
+          "governance": "tighten-only",
+          "redLastDemonstrated": "2026-08-21"
         },
         {
           "id": "D4",
@@ -710,6 +747,17 @@
           "lane": "playwright",
           "wallClockCost": "low",
           "knob": "apps/web/tests/e2e/leak-budgets.ts",
+          "governance": "tighten-only",
+          "redLastDemonstrated": "2026-08-21"
+        },
+        {
+          "id": "L5",
+          "name": "no creep under continuous use",
+          "owner": "tests/scale/long-run-soak.scale.test.ts",
+          "evidence": "RSS, open-descriptor, database and latency growth measured across looped household cycles; growth ceilings assert at the declared soak duration, the always-true invariants at every duration",
+          "lane": "nightly",
+          "wallClockCost": "high",
+          "knob": "tests/experience-budgets/gateway.json",
           "governance": "tighten-only",
           "redLastDemonstrated": "2026-08-21"
         },
@@ -925,7 +973,7 @@
     "web.compat": "Partial: pairing persistence and primary-first multi-vault retention are covered by apps/web/src/web-host.test.ts; web storage/version-skew fixtures remain tracked under #781 (originally #656).",
     "mobile.contracts": "apps/mobile/src/lib/replica/mobile-gateway-compatibility.test.ts states the update-wall contract, but apps/mobile has no coverage floor behind it and the same file also carries the compat claim. Tracked under #781 (originally #656).",
     "mobile.compat": "Shares its only owner with mobile.contracts and has no coverage floor behind it; old-app/new-gateway skew is proven in one direction only. Tracked under #781 (originally #656).",
-    "tunnel-pairing.durability": "Skip: pairing tickets are intentionally ephemeral; hygiene journey burns wrong-secret/expiry. Durable custody is vault/blob, not tickets.",
+    "tunnel-pairing.durability": "Was `skip` — durability read as not-applicable to a transport. #842 W3.1 made it applicable: tests/quality/network-chaos.integration.test.ts drives eight injected fault shapes (latency, jitter, fragmentation, asymmetric bandwidth, mid-request abort, mid-response disconnect, endpoint restart, address rebind) over a REAL iroh connection against the replica intent plane, and asserts the no-loss / apply-exactly-once / converge laws on real schedule_task and replica_intent_outcome rows. Byte-level loss and reorder are deliberately absent: QUIC converts those into delay, delivery, or connection failure, so injecting them would model a corrupt QUIC implementation rather than a lossy network. The two netem-tier faults that would need a privileged runner are declared, excluded from the schedule, and cannot be claimed for free. Partial rather than solid: no coverage floor gates the workspace that owns the rig, so the cell rests on the lane alone.",
     "tunnel-pairing.scalability": "Owned by tests/scale/tunnel-pairs.scale.test.ts; records a nightly scalability budget and durable numeric measurements.",
     "extension.correctness": "Owned by apps/extension/src/origin-matching.test.ts: loopback origin matching accepts true 127.0.0.0/8 and rejects lookalike hostnames. Malformed cross-context payload handling has no owner. Tracked under #781 (originally #656).",
     "extension.contracts": "Owned by apps/extension/src/credential-gesture.test.ts: only a browser-trusted gesture releases a credential and secret-bearing message properties are dropped after use. Browser-version and gateway protocol-skew fixtures have no owner. Tracked under #781 (originally #656).",
@@ -1455,7 +1503,10 @@
       "owner": "packages/tunnel/src/wire-conformance.contract.test.ts",
       "tier": "contract"
     },
-    "tunnel-pairing.durability": null,
+    "tunnel-pairing.durability": {
+      "owner": "tests/quality/network-chaos.integration.test.ts",
+      "tier": "integration"
+    },
     "tunnel-pairing.concurrency": {
       "owner": "packages/tunnel/src/tunnel.integration.test.ts",
       "tier": "integration"
@@ -1851,7 +1902,7 @@
       "assessment": {
         "correctness": "partial",
         "contracts": "solid",
-        "durability": "skip",
+        "durability": "partial",
         "concurrency": "partial",
         "performance": "solid",
         "scalability": "solid",
@@ -4347,6 +4398,51 @@
       "tier": "integration",
       "owner": "tests/quality/mobile-resource-evidence.test.ts",
       "minimumTests": 4
+    },
+    {
+      "id": "composite-household-load",
+      "name": "Sync, search, writes, blob ingest, turns and automations hold their budgets when run together",
+      "surface": "gateway",
+      "dimension": "scalability",
+      "tier": "scale",
+      "owner": "tests/scale/composite-load.scale.test.ts",
+      "minimumTests": 1
+    },
+    {
+      "id": "stress-to-failure-knee",
+      "name": "Past the knee the gateway refuses by name, keeps the vault intact, and recovers",
+      "surface": "gateway",
+      "dimension": "concurrency",
+      "tier": "scale",
+      "owner": "tests/scale/stress-to-failure.scale.test.ts",
+      "minimumTests": 1
+    },
+    {
+      "id": "long-run-soak",
+      "name": "A long-lived gateway under continuous household use does not creep in memory, descriptors, DB size or latency",
+      "surface": "gateway",
+      "dimension": "performance",
+      "tier": "scale",
+      "owner": "tests/scale/long-run-soak.scale.test.ts",
+      "minimumTests": 1
+    },
+    {
+      "id": "tunnel-network-chaos",
+      "name": "The tunnel plane loses nothing, applies once, and converges under injected network adversity",
+      "surface": "tunnel-pairing",
+      "dimension": "durability",
+      "tier": "integration",
+      "owner": "tests/quality/network-chaos.integration.test.ts",
+      "minimumTests": 4
+    },
+    {
+      "id": "composition-component-chaos",
+      "name": "A gateway, replica, automation worker or model runtime that dies mid-work converges rather than corrupting or wedging",
+      "surface": "gateway",
+      "dimension": "durability",
+      "tier": "integration",
+      "owner": "tests/quality/component-chaos.integration.test.ts",
+      "minimumTests": 3
     },
     {
       "id": "app-engine-handler-budget",

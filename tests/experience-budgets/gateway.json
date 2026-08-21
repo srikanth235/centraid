@@ -117,13 +117,28 @@
     },
     "soakDegradation": {
       "status": "measured",
-      "volume": "TBD",
-      "probe": "tests/scale/long-run-soak.scale.test.ts",
-      "declaredSoakMinutes": 30,
-      "ceilingLatencyCreepFactor": 100,
-      "ceilingRssGrowthBytesPerCycle": 1000000000,
-      "ceilingOpenDescriptors": 100000,
-      "ceilingDescriptorGrowth": 100000
+      "volume": "one long-lived serve() gateway driven in a loop; each cycle is 3 ops on each of five lanes (windowed replica bootstrap, Notes search, Notes create-note, 64 KiB blob staging, Atlas ref-search) at 2 in flight per lane. A 10-minute run is 483 cycles / 7,245 ops / ~1,450 notes and ~1,450 CAS objects accumulated. The first 3 cycles are discarded as warm-up.",
+      "probe": "tests/scale/long-run-soak.scale.test.ts (CENTRAID_SOAK_MINUTES; defaults to 0.75 so the rig always runs on the nightly scale lane, weekly lane sets hours)",
+      "declaredSoakMinutes": 10,
+      "ceilingLatencyCreepFactor": 3,
+      "ceilingRssGrowthBytesPerCycle": 65536,
+      "ceilingOpenDescriptors": 256,
+      "ceilingDescriptorGrowth": 96,
+      "_provenance": {
+        "at": "2026-08-21",
+        "host": "linux x64, 4 vCPU Intel Xeon @ 2.10 GHz, 15.7 GiB RAM, shared dev container under sibling agent load; node v22.22.2",
+        "runs": "one 10-minute run (483 cycles, 7,245 ops) plus one 0.75-minute run (41 cycles, 615 ops)",
+        "observedLatencyCreepFactor": [1.52, 1.7],
+        "observedRssSlopeBytesPerCycle": [20399, 1192991],
+        "observedRssMiB": "375.7 -> 455.7 over the 10-minute run",
+        "observedHeapSlopeBytesPerCycle": -135447,
+        "observedArrayBufferSlopeBytesPerCycle": -20080,
+        "observedMaxOpenDescriptors": [83, 85],
+        "observedDescriptorSpread": [24, 26],
+        "observedGatewaySqliteSlopeBytesPerCycle": 115687,
+        "note": "MEASURED, and the shape matters more than any single number. RSS slope is 20.4 kB/cycle over 10 minutes against 1.19 MB/cycle over 45 seconds — a 58x DROP as the run lengthens, which is what warm-up amortizing looks like and NOT what a leak looks like; a leak's per-cycle slope is flat or rising. heapUsed and arrayBuffers both trend NEGATIVE over the long run (GC reclaiming), and open descriptors are bounded (peak 83, spread 24) across 7,245 ops. TWO HONEST CAVEATS. (1) declaredSoakMinutes is 10 because ten minutes is the longest run these ceilings were actually derived from — a genuine multi-day soak has never been executed (see the blocked-external note on #842 W3.4); the weekly lane's multi-hour setting is what turns these into a real distribution. (2) The latency-creep axis is CONFOUNDED BY THE WORKLOAD: every cycle adds three notes and three CAS objects, and the Notes library query the cycle runs reads back the whole notebook, so part of the 1.52x is the vault legitimately getting bigger rather than the gateway getting slower. It is kept because a step change in it is still worth seeing, and the ceiling is sized to allow the workload's own accumulation. A leak-only latency axis needs a fixed-size-corpus cycle and is not yet built. gatewaySqliteSlopeBytesPerCycle (116 kB/cycle, 36 MB -> 158 MB over the run) is PUBLISHED BUT NOT GATED for the same reason — the DB is supposed to grow when the workload writes; a bloat gate needs a bytes-per-committed-write normalisation this rig does not yet compute.",
+        "headroom": "latency creep ~2x the worst observed (1.70); RSS slope ~3.2x the 10-minute observation (a 45-second run is warm-up-dominated and would breach it, which is exactly why the growth ceilings only assert at or above declaredSoakMinutes); descriptors ~3x peak and ~4x spread. Tighten-only."
+      }
     },
     "stressRecovery": {
       "status": "measured",

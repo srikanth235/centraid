@@ -50,7 +50,7 @@ export interface ChaosLinkOptions {
 }
 
 /** Thrown by an injected fault, so a chaos failure is never a mystery. */
-export class ChaosFaultError extends Error {
+class ChaosFaultError extends Error {
   constructor(
     readonly fault: ChaosFaultSetting,
     detail: string

@@ -11,12 +11,12 @@
  * Both chaos lanes therefore run a real registered app through the real
  * dispatcher, in a real worker.
  *
- * NOTE ON THE RUNTIME: the worker loads its module graph through the esbuild
- * loader hook the app-engine worker registers, which is a NODE hook. Run these
- * lanes with `node node_modules/vitest/vitest.mjs` (what `bun run
- * test:qualities` does), not with `bunx vitest` — under the bun runtime the
- * handler worker cannot resolve its own graph and every dispatch reports
- * HANDLER_ERROR. That is a property of the harness, not of this rig.
+ * NOTE ON THE RUNTIME: the handler worker resolves its own module graph, so
+ * these lanes need a tree whose workspace `dist` output exists (`bun run
+ * build`). On an unbuilt tree every dispatch reports HANDLER_ERROR and the
+ * lane's wire-outcome assertion prints that body verbatim rather than failing
+ * as an unexplained empty vault — a harness state, not a product defect. The
+ * canonical invocation is `bun run test:qualities`.
  */
 
 import { promises as fs } from "node:fs";

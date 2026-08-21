@@ -50,20 +50,9 @@ Missed fires during gateway downtime are still not backfilled (#149). DST policy
 
 ## Multiple devices, one schedule
 
-Devices sharing a vault share one cursor row, so the schedule is owned by
-whichever device's clock is furthest ahead. A device running behind reads a
-window whose start has already been committed past — an inverted window, which
-reads as "nothing due" — so it neither re-delivers a minute the leading device
-already fired nor delivers one of its own. That is what keeps the no-double-fire
-law true across devices without any coordination between them, and it is the
-reason a lagging device looks idle rather than broken.
+Devices sharing a vault share one cursor row, so the schedule is owned by whichever device's clock is furthest ahead. A device running behind reads a window whose start has already been committed past — an inverted window, which reads as "nothing due" — so it neither re-delivers a minute the leading device already fired nor delivers one of its own. That is what keeps the no-double-fire law true across devices without any coordination between them, and it is the reason a lagging device looks idle rather than broken.
 
-The cost is the other half of the same coin: a device far enough behind never
-fires at all while a leading device is present. This is characterised (not
-pinned — it contradicts no ruling) in
-`packages/server/src/automation/fire/clock-adversity-cron.test.ts`, so a future
-change that lets a lagging device sweep its own window turns that exact
-configuration into a visible double fire rather than a silent one.
+The cost is the other half of the same coin: a device far enough behind never fires at all while a leading device is present. This is characterised (not pinned — it contradicts no ruling) in `packages/server/src/automation/fire/clock-adversity-cron.test.ts`, so a future change that lets a lagging device sweep its own window turns that exact configuration into a visible double fire rather than a silent one.
 
 ## Code pointers
 

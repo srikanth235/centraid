@@ -129,6 +129,21 @@
       "lane": "scale",
       "volume": "manifests at 25k / 50k / 100k chunk-index entries — size growth bound"
     },
+    "tests/scale/composite-load.scale.test.ts": {
+      "lane": "scale",
+      "volume": "20 ops on each of five HTTP lanes (windowed replica bootstrap, Notes search, Notes create-note, 64 KiB blob staging, Atlas ref-search) at 2 in flight, run once one-lane-at-a-time and once all together, plus 128 harness turn dispatches and a 200-automation missed-window scan during the together phase — one real serve() gateway, empty vault, eight bundled apps",
+      "_noBudgetMs": "Deliberate. The ceilings are a RATIO and an absolute worst-lane p95, not a rig duration: `compositeLoadFactor` in tests/experience-budgets/gateway.json (ceilingThroughputFactor 2, ceilingWorstLaneP95Ms 3500), both asserted in the rig body and both tighten-only there. Total wall clock was 4.3-10.2 s across five 2026-08-21 runs on a contended 4-vCPU container — a 2.4x spread that is host contention, so an absolute duration ceiling here would fence the runner, not the product. The 30-sample/1.5x drift gate is the duration gate."
+    },
+    "tests/scale/stress-to-failure.scale.test.ts": {
+      "lane": "scale",
+      "volume": "concurrency ladder 1/2/4/8/16/32/64/128 against the app-handler plane (255 requests) plus a 64-wide concurrent create-note write storm, then one recovery request and isolated integrity_check / foreign_key_check on the vault",
+      "_noBudgetMs": "Deliberate — this rig deliberately runs PAST the knee, so its wall clock is dominated by how long the admission queue holds refused work (WORKER_MAX_QUEUE_WAIT_MS is 10 s). What it gates is the SHAPE of the failure: typed refusals only, 429/503 only, no dropped connections, notes committed == 2xx responses exactly, integrity ok, and recovery inside stressRecovery.ceilingRecoveryMs (1000 ms) in tests/experience-budgets/gateway.json. Ladder duration is fenced by the 30-sample/1.5x drift gate."
+    },
+    "tests/scale/long-run-soak.scale.test.ts": {
+      "lane": "scale",
+      "volume": "one long-lived serve() gateway looped for CENTRAID_SOAK_MINUTES (default 0.75 on the nightly lane = 22-54 cycles / 330-810 ops; the weekly lane sets hours). Each cycle is 3 ops on each of five lanes; samples RSS/heap/external/arrayBuffers, open descriptors, total gateway SQLite bytes and per-cycle wall clock",
+      "_noBudgetMs": "Deliberate — the rig's duration is an INPUT (CENTRAID_SOAK_MINUTES), so a wall-clock ceiling on it would be circular. The ceilings are the growth ceilings in `soakDegradation` (tests/experience-budgets/gateway.json) and the recorded drift series is the latency-creep FACTOR (last third / first third of post-warm-up cycles), not a duration."
+    },
     "tests/scale/restore-10gib.scale.test.ts": {
       "lane": "scale",
       "volume": "YEAR-3: 10 GiB of CAS bytes (CENTRAID_SCALE_RESTORE_GIB, default 10) across 4 MiB objects + 5,000 core_party rows + one content row per object — backup, restore, then foreign_key_check and integrity_check timed in ISOLATION on the restored vault.db",

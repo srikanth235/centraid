@@ -18,6 +18,7 @@
  * exist to test, and it is reproducible across runs.
  */
 
+import { createHash } from "node:crypto";
 import { promises as fs } from "node:fs";
 import { createServer } from "node:http";
 import type { AddressInfo, Server } from "node:net";
@@ -52,9 +53,18 @@ const LOOPBACK_TOKEN = "network-chaos-loopback-secret";
 const DEVICE_HEADER = "x-centraid-chaos-device";
 export const INTENT_PATH = "/centraid/_vault/replica/intents";
 
-/** Fixed identities: a rebind must change the ADDRESS and nothing else. */
-const GATEWAY_SECRET = new Uint8Array(32).fill(0xa5);
-const DEVICE_SECRET = new Uint8Array(32).fill(0x5a);
+/**
+ * Endpoint identities are FIXED WITHIN a world (so a rebind changes the
+ * address and nothing else) and DISTINCT BETWEEN worlds (so two cases can
+ * never bind the same EndpointId — a shared identity across an endpoint that
+ * is still tearing down is a real cross-test race, not a retryable blip).
+ * Derived from the case label, so both properties hold and both are replayable.
+ */
+function endpointSecret(role: string, label: string): Uint8Array {
+  return new Uint8Array(
+    createHash("sha256").update(`centraid.chaos.${role}.${label}`).digest()
+  );
+}
 
 const silentLogger = {
   info: () => undefined,
@@ -75,8 +85,6 @@ export interface ChaosIntentWorld {
   deviceEndpointId: () => string;
   /** The gateway's stable transport identity — survives every restart. */
   gatewayEndpointId: () => string;
-  /** The gateway's CURRENT dial ticket (address data, refreshed per call). */
-  ticket: () => string;
   dial: (fault: ChaosFaultSetting, rng: SeededRandom) => Promise<ChaosDial>;
   /** Close the gateway endpoint and rebind it on the same secret key. */
   restartGatewayEndpoint: () => Promise<void>;
@@ -94,7 +102,12 @@ export function chaosIntentQueue(): IntentQueue {
   return new IntentQueue(SqliteIntentStore.create(new NodeSqliteDriver()));
 }
 
-export async function openChaosIntentWorld(): Promise<ChaosIntentWorld> {
+/** `label` names the case; it seeds this world's two endpoint identities. */
+export async function openChaosIntentWorld(
+  label: string
+): Promise<ChaosIntentWorld> {
+  const gatewaySecret = endpointSecret("gateway", label);
+  const deviceSecret = endpointSecret("device", label);
   const vaultDir = await tempDir("chaos-net-vault-");
 
   const plane = openVaultPlane({
@@ -137,7 +150,7 @@ export async function openChaosIntentWorld(): Promise<ChaosIntentWorld> {
 
   const bindEndpoint = (): Promise<GatewayEndpointHandle> =>
     startGatewayEndpoint({
-      secretKey: GATEWAY_SECRET,
+      secretKey: gatewaySecret,
       upstream: () => ({ baseUrl, token: LOOPBACK_TOKEN }),
       // Admission is by transport identity, and the device secret is fixed —
       // so a rebound client is the SAME principal, which is the law the
@@ -149,7 +162,7 @@ export async function openChaosIntentWorld(): Promise<ChaosIntentWorld> {
     });
 
   let client: TunnelClient = await createTunnelClient({
-    secretKey: DEVICE_SECRET,
+    secretKey: deviceSecret,
     relays: "disabled",
   });
   const deviceId = client.endpointId;
@@ -161,7 +174,6 @@ export async function openChaosIntentWorld(): Promise<ChaosIntentWorld> {
     deviceEndpointId: () => client.endpointId,
     gatewayEndpointId: () =>
       inspectEndpointTicket(endpoint.ticket()).endpointId,
-    ticket: () => endpoint.ticket(),
     dial: async (fault, rng) => {
       const raw = await client.connect(endpoint.ticket());
       const dropped = { done: false };
@@ -190,7 +202,7 @@ export async function openChaosIntentWorld(): Promise<ChaosIntentWorld> {
     rebindClient: async () => {
       await client.close();
       client = await createTunnelClient({
-        secretKey: DEVICE_SECRET,
+        secretKey: deviceSecret,
         relays: "disabled",
       });
     },

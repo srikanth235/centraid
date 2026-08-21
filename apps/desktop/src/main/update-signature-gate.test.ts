@@ -138,7 +138,12 @@ describe(fetchUpdateTrust, () => {
         reason: "signature-verified",
       }
     );
-    expect(fetchText).toHaveBeenCalledTimes(2);
+    // Stronger than a call count: the gate must fetch the manifest and its
+    // detached signature, and nothing else.
+    expect(fetchText.mock.calls.map((call) => call[0])).toStrictEqual([
+      manifestUrl,
+      signatureUrl,
+    ]);
   });
 
   test("REFUSAL: the signature asset 404s (an unsigned release)", async () => {
@@ -215,7 +220,10 @@ describe(fetchUpdateTrust, () => {
 
 describe(admitDownloadedUpdate, () => {
   test("returns true and logs the admitted verdict", async () => {
-    const info = vi.spyOn(console, "info").mockImplementation(() => {});
+    const lines: string[] = [];
+    const info = vi
+      .spyOn(console, "info")
+      .mockImplementation((line: unknown) => void lines.push(String(line)));
     const fetchText = fetcherFor({
       [manifestUrl]: manifestText,
       [signatureUrl]: signatureText,
@@ -223,19 +231,20 @@ describe(admitDownloadedUpdate, () => {
     await expect(admitDownloadedUpdate(gateInput(fetchText))).resolves.toBe(
       true
     );
-    expect(info).toHaveBeenCalledWith(expect.stringContaining("admitted"));
+    expect(lines.join("\n")).toContain("admitted");
     info.mockRestore();
   });
 
   test("REFUSAL is loud: false plus an error line naming the reason", async () => {
-    const error = vi.spyOn(console, "error").mockImplementation(() => {});
+    const lines: string[] = [];
+    const error = vi
+      .spyOn(console, "error")
+      .mockImplementation((line: unknown) => void lines.push(String(line)));
     const fetchText = fetcherFor({ [manifestUrl]: manifestText });
     await expect(admitDownloadedUpdate(gateInput(fetchText))).resolves.toBe(
       false
     );
-    expect(error).toHaveBeenCalledWith(
-      expect.stringContaining("REFUSED (missing-signature)")
-    );
+    expect(lines.join("\n")).toContain("REFUSED (missing-signature)");
     error.mockRestore();
   });
 });
@@ -267,7 +276,10 @@ describe("shipped trust anchors (#842 W6.1 blocked-external)", () => {
     // could legitimately trust. Enrolling a key flips this test, and the flip
     // is the review signal that signed updates went live.
     expect(TRUSTED_RELEASE_KEYS).toHaveLength(0);
-    const error = vi.spyOn(console, "error").mockImplementation(() => {});
+    const lines: string[] = [];
+    const error = vi
+      .spyOn(console, "error")
+      .mockImplementation((line: unknown) => void lines.push(String(line)));
     await expect(
       admitDownloadedUpdate({
         packaged: true,
@@ -279,9 +291,7 @@ describe("shipped trust anchors (#842 W6.1 blocked-external)", () => {
         }),
       })
     ).resolves.toBe(false);
-    expect(error).toHaveBeenCalledWith(
-      expect.stringContaining("REFUSED (no-trust-anchor)")
-    );
+    expect(lines.join("\n")).toContain("REFUSED (no-trust-anchor)");
     error.mockRestore();
   });
 });

@@ -9,7 +9,11 @@
       "method": "blocked-external",
       "value": null,
       "unit": "%/h",
-      "device": { "model": "unknown", "os": "unknown", "class": "phone-current" },
+      "device": {
+        "model": "unknown",
+        "os": "unknown",
+        "class": "phone-current"
+      },
       "at": "2026-08-21",
       "evidence": "https://github.com/srikanth235/centraid/issues/842",
       "blockedReason": "Battery drain is only observable on physical hardware. The iOS Simulator reports no battery state, and no host-side proxy for it exists — a number derived here would be fabricated, not measured.",
@@ -23,7 +27,11 @@
       "method": "blocked-external",
       "value": null,
       "unit": "MB",
-      "device": { "model": "unknown", "os": "unknown", "class": "phone-current" },
+      "device": {
+        "model": "unknown",
+        "os": "unknown",
+        "class": "phone-current"
+      },
       "at": "2026-08-21",
       "evidence": "https://github.com/srikanth235/centraid/issues/842",
       "blockedReason": "The jetsam limit that decides whether a photo import survives backgrounding is a device property. A simulator process inherits the host's memory ceiling, so a simulator number cannot predict the eviction this metric exists to predict.",
@@ -37,7 +45,11 @@
       "method": "blocked-external",
       "value": null,
       "unit": "ms",
-      "device": { "model": "unknown", "os": "unknown", "class": "phone-current" },
+      "device": {
+        "model": "unknown",
+        "os": "unknown",
+        "class": "phone-current"
+      },
       "at": "2026-08-21",
       "evidence": "https://github.com/srikanth235/centraid/issues/842",
       "blockedReason": "Cold start is dominated by device storage latency and dyld work that a simulator running on host NVMe does not reproduce; the simulator number is optimistic by a margin nobody has measured.",
@@ -51,7 +63,11 @@
       "method": "blocked-external",
       "value": null,
       "unit": "%/h",
-      "device": { "model": "unknown", "os": "unknown", "class": "phone-legacy" },
+      "device": {
+        "model": "unknown",
+        "os": "unknown",
+        "class": "phone-legacy"
+      },
       "at": "2026-08-21",
       "evidence": "https://github.com/srikanth235/centraid/issues/842",
       "blockedReason": "Android emulators report a synthetic battery. Doze and App Standby, which are exactly what a local-first background sync has to survive, do not behave the same way off hardware.",
@@ -65,7 +81,11 @@
       "method": "blocked-external",
       "value": null,
       "unit": "MB",
-      "device": { "model": "unknown", "os": "unknown", "class": "phone-legacy" },
+      "device": {
+        "model": "unknown",
+        "os": "unknown",
+        "class": "phone-legacy"
+      },
       "at": "2026-08-21",
       "evidence": "https://github.com/srikanth235/centraid/issues/842",
       "blockedReason": "The low-memory killer threshold is set per device from total RAM; an emulator configured with host memory never reaches it, so an emulator run cannot fail the way a real one does.",
@@ -79,7 +99,11 @@
       "method": "blocked-external",
       "value": null,
       "unit": "ms",
-      "device": { "model": "unknown", "os": "unknown", "class": "phone-legacy" },
+      "device": {
+        "model": "unknown",
+        "os": "unknown",
+        "class": "phone-legacy"
+      },
       "at": "2026-08-21",
       "evidence": "https://github.com/srikanth235/centraid/issues/842",
       "blockedReason": "Cold start on the legacy device class is the number the product's claim rests on, and it is governed by eMMC read latency and ART startup work that no emulator on host hardware reproduces.",
@@ -93,7 +117,11 @@
       "method": "derived",
       "value": 9635840,
       "unit": "bytes per 1000 core_content_item rows",
-      "device": { "model": "ci-linux-x64", "os": "linux", "class": "host-proxy" },
+      "device": {
+        "model": "ci-linux-x64",
+        "os": "linux",
+        "class": "host-proxy"
+      },
       "at": "2026-08-21",
       "evidence": "tests/quality/mobile-resource-evidence.test.ts",
       "recomputedBy": "tests/quality/mobile-resource-evidence.test.ts",
@@ -107,7 +135,11 @@
       "method": "derived",
       "value": 550491,
       "unit": "bytes",
-      "device": { "model": "ci-linux-x64", "os": "linux", "class": "host-proxy" },
+      "device": {
+        "model": "ci-linux-x64",
+        "os": "linux",
+        "class": "host-proxy"
+      },
       "at": "2026-08-21",
       "evidence": "tests/quality/mobile-resource-evidence.test.ts",
       "recomputedBy": "tests/quality/mobile-resource-evidence.test.ts",
@@ -121,7 +153,11 @@
       "method": "derived",
       "value": 2462,
       "unit": "bytes",
-      "device": { "model": "ci-linux-x64", "os": "linux", "class": "host-proxy" },
+      "device": {
+        "model": "ci-linux-x64",
+        "os": "linux",
+        "class": "host-proxy"
+      },
       "at": "2026-08-21",
       "evidence": "tests/quality/mobile-resource-evidence.test.ts",
       "recomputedBy": "tests/quality/mobile-resource-evidence.test.ts",

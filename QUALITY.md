@@ -2,6 +2,31 @@
 
 ## Open
 
+- **`countDeclaredTests` counts prose.** The regex in
+  `scripts/test-report/matrix-grades.mjs` is `\b(?:test|it)(?:\.\w+)*\s*\(`,
+  which matches the ordinary English `it (` inside a comment — #842 W3.1 had a
+  comment reading "…a per-test cap under it (TESTING.md)" counted as a fifth
+  test declaration. The slice reworded its comment, but the consequence is
+  general: any `minimumTests` floor seeded from a file whose comments contain
+  `it (` or `test (` is inflated by that much, and the floor then reads as
+  satisfied by tests that do not exist. Not pinned — no invariant is violated
+  and no current floor is known to be wrong — but a floor derived from a
+  miscount is a floor that cannot bite. Fixing it means either excluding
+  comments from the scan or requiring the match to start a statement.
+
+- **Cheap gateway reads are starved by app-engine worker spawns under
+  composition.** With sync, search, writes, blob ingest, turns and automations
+  running together on a 4-vCPU host (`WORKER_MAX_CONCURRENT` = 2),
+  `GET /centraid/_vault/atlas/browse/ref-search` goes from ~5 ms p95 solo to
+  217–444 ms p95 — ×27–66 — while the heavier lanes degrade only ×3–5. Nothing
+  is refused and every result is correct, so this is a fairness observation
+  rather than a defect against any current ruling:
+  `tests/scale/composite-load.scale.test.ts` publishes the per-lane factors and
+  deliberately gates only the aggregate throughput factor and an absolute
+  worst-lane p95, because a ratio over a ~5 ms denominator fences scheduler
+  noise rather than the product. Worth an issue if in-gateway reads should get
+  priority over worker-backed handler work (#842 W4.1).
+
 - **The desktop crash log is correct as a local file and wrong the moment
   anything shares it.** `apps/desktop/src/main/crash-log-core.ts`'s
   `toCrashRecord` writes the raw error message and the full stack — absolute

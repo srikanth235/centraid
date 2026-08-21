@@ -16,6 +16,7 @@ const enrichmentLivePath = path.join(
   root,
   ".github/workflows/enrichment-live-weekly.yml"
 );
+const soakWeeklyPath = path.join(root, ".github/workflows/soak-weekly.yml");
 
 const requiredFlowScripts = [
   "tests/agent-e2e-pairing/flows/device-pairing-lifecycle.mjs",
@@ -296,6 +297,26 @@ for (const required of [
   if (!enrichmentLive.includes(required))
     errors.push(`enrichment-live-weekly.yml missing ${required}`);
 }
+// #842 W3.4 — the four-hour soak. The nightly scale lane already runs this
+// rig at its 0.75-minute default, so the ONLY thing that makes the weekly lane
+// worth a 300-minute runner is the duration override: a weekly job that
+// silently fell back to the nightly default would repeat the nightly and prove
+// nothing. That is why the literal is checked, exactly as the join lane's
+// CENTRAID_JOIN_SEATS floor is.
+const soakWeekly = await readFile(soakWeeklyPath, "utf8").catch(() => "");
+for (const required of [
+  "schedule:",
+  "workflow_dispatch:",
+  "tests/scale/long-run-soak.scale.test.ts",
+  'CENTRAID_SOAK_MINUTES: "240"',
+  "scripts/ci/file-tracking-issue.mjs",
+  "[soak] weekly four-hour soak red",
+  "within 24 hours or before the next scheduled run",
+]) {
+  if (!soakWeekly.includes(required))
+    errors.push(`soak-weekly.yml missing ${required}`);
+}
+
 for (const required of [
   "Restore latest weekly real-model evidence",
   [
@@ -418,6 +439,6 @@ if (errors.length) {
   process.exitCode = 1;
 } else {
   console.log(
-    "nightly-wiring: e2e.yml owns pairing lifecycle, ticket-hygiene, cross-network-relay, mutation-testing, fuzz-parsers, dast-scan, and protocol-join; standalone pairing-relay-e2e removed"
+    "nightly-wiring: e2e.yml owns pairing lifecycle, ticket-hygiene, cross-network-relay, mutation-testing, fuzz-parsers, dast-scan, and protocol-join; weekly enrichment-live and soak lanes wired; standalone pairing-relay-e2e removed"
   );
 }
