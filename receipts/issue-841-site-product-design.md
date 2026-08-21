@@ -131,3 +131,13 @@ Rendered check over the assembled `dist/site` (headless Chromium, `/`, `/docs/`,
 ## Audit
 
 PASS - Each checklist item maps to a named file. The things this change does NOT do — pointing `lint:design-tokens` at the site, flipping the remaining teal artwork, and sweeping the docs pillars' own copy — are stated in Out of scope, and the first two are recorded in [decisions.md](../docs/decisions.md) and [design-divergences.md](../docs/design-divergences.md); none is disguised as complete. Every product claim the rewritten page makes was checked against the docs that own it — seats against [blueprint-seats.md](../docs/blueprint-seats.md), sharing against [#825](https://github.com/srikanth235/centraid/issues/825), projections against [#834](https://github.com/srikanth235/centraid/issues/834), positioning against [decisions.md](../docs/decisions.md) § Product positioning — and the claims that outran the product were cut rather than reworded. No gate, budget or allowlist was weakened: the new check is additive and the existing zero-debt budget is untouched.
+
+## Session
+
+<!-- Session identifiers are maintained by the agent-session-identity pre-commit hook. -->
+
+### Identifiers
+
+| date | harness | session |
+| --- | --- | --- |
+| 2026-08-21 | claude-code | d1375e41-1da7-5e45-82e8-a8fcfb08a04a |
