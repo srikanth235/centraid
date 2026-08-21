@@ -467,8 +467,3 @@ export function runIntegrityScrub(
 export function hasError(findings: readonly IntegrityFinding[]): boolean {
   return findings.some((f) => f.level === "error");
 }
-
-/** True when any finding is a warning (and none is an error). */
-export function hasWarning(findings: readonly IntegrityFinding[]): boolean {
-  return findings.some((f) => f.level === "warning");
-}

@@ -4034,6 +4034,24 @@
       "minimumTests": 2
     },
     {
+      "id": "backup-restore-drill",
+      "name": "A real backup restores to a vault proved usable, and a broken one is caught",
+      "surface": "backup-restore",
+      "dimension": "durability",
+      "tier": "integration",
+      "owner": "packages/server/src/backup/restore-drill.integration.test.ts",
+      "minimumTests": 3
+    },
+    {
+      "id": "backup-restore-drill-grading",
+      "name": "Restore-drill census grading and deterministic sampling",
+      "surface": "backup-restore",
+      "dimension": "correctness",
+      "tier": "unit",
+      "owner": "packages/server/src/backup/restore-drill.test.ts",
+      "minimumTests": 8
+    },
+    {
       "id": "app-engine-handler-budget",
       "name": "Isolated handler dispatch stays inside the nightly ceiling",
       "surface": "app-engine",

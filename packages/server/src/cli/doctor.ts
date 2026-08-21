@@ -22,11 +22,8 @@
 
 import path from "node:path";
 
-import { hasError, runIntegrityScrub } from "../doctor/integrity-checks.js";
-import type {
-  DoctorVaultTarget,
-  IntegrityFinding,
-} from "../doctor/integrity-checks.js";
+import { hasError, runIntegrityScrub } from "../doctor/index.js";
+import type { DoctorVaultTarget, IntegrityFinding } from "../doctor/index.js";
 import { GatewayDatabase, GatewayLockError } from "../serve/gateway-db.js";
 import {
   openVaultRegistry,

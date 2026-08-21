@@ -25,7 +25,7 @@ W1 — the bytes survive:
 
 - [x] W1.1 Seeded crash-consistency lane over every registered fault point
 - [x] W1.2 `centraid doctor` (CLI verb + surface) + scheduled scrub
-- [ ] W1.3 Automated restore drill (in-product + CI)
+- [x] W1.3 Automated restore drill (in-product + CI)
 - [x] W1.4 Backup-format archaeology corpus
 - [x] W1.5 Schema-migration corpus
 
@@ -187,6 +187,44 @@ the sweep's single matrix flow (floor 18) became three flows on `gateway.securit
 the closed-grammar file. TESTING.md, docs/decisions.md (A-pinned += the two W2.1
 pins), docs/toolchain.md, the e2e README/AGENTS, and knip.json updated to current
 state.
+
+### Wave C — chaos and load (W3–W4), supply chain (W6–W7), field (W8)
+
+**W1.3 — the restore drill learns to judge the restored vault usable.** The
+in-product drill already existed (`BackupService.runRestoreVerify`, #408 G9): it
+takes a real backup through the real product path, restores it to a scratch dir and
+runs `verifyRestoredPair`. What it could not do is notice a restore that opened
+cleanly and was empty — `integrity_check` is a statement about b-tree pages, not
+rows. `packages/server/src/backup/restore-drill.ts` adds the two laws that ask the
+usability question, and rides the existing `policy.verifyEveryDays` cadence and the
+existing `backup restore-verify` verb rather than adding a second clock the two
+could disagree on. `restored-blob-coverage`: every blob sha the *restored* model
+still claims must resolve as materialized CAS, as replicated to the durable remote
+tier per the restored vault's own `blob_replica`, or as a lazy restore's
+`skipBlob` — a sha in none of the three is a surviving row whose bytes are gone, and
+is an error. Evidence is read from the restored vault only: a restore is judged by
+what the restored bytes alone can prove. `restored-census`: zero parties is an error
+(founding enrols the owner party, so no instant a snapshot could capture is
+partyless — zero is an empty shell, not a stale vault), while a spine table
+non-empty live and empty restored is a warning, because a legitimately stale
+snapshot restores fewer rows *truthfully* and a drill that cries wolf gets ignored;
+an unmounted plane warns naming that reason rather than passing silently. The CAS
+sample is drawn with `seededRandom` keyed on `${vaultId}:${seq}`, so a failing drill
+replays over the identical sample. The `cas-rehash` and `replica-journal` checks are
+imported from W1.2's doctor library, not reimplemented — that import is what now
+consumes the two exports knip had listed as unused. Errors join the run's `problems`
+so the run throws and `lastRestoreVerifyError` persists (without which the health
+probe recomputes from state and flips green at the next tick); warnings join the
+degraded branch beside dangling receipts. Two red lanes prove it: sabotaging the
+product to drop `drillErrors` shows **both provably broken vaults restore-verify
+green without the drill**, and the empty-shell test sabotages the source into an
+FK-clean state (cascade discovered from `PRAGMA foreign_key_check`, not hard-coded)
+and asserts the thrown message matches `/EMPTY SHELL/` and *not*
+`/integrity|fk violation|placebo|wal/` — that negative assertion is the proof the
+drill, and nothing pre-existing, caught it. Only CI can sabotage a real vault and
+demand the alarm, so both red lanes live there; the in-product drill only ever meets
+a healthy store. Registered as `backup-restore-drill` (durability, integration,
+floor 3) and `backup-restore-drill-grading` (correctness, unit, floor 8).
 
 ## Blocked-external register
 

@@ -26,11 +26,12 @@
  *     sha in none of the three is unrecoverable: the row survives the restore
  *     and its bytes do not.
  *   - `restored-census`  the durable content spine (parties, content items,
- *     media assets, consent receipts) must not restore EMPTY out of a source
- *     that holds rows. A snapshot is a point in the past, so the restored
- *     counts are legitimately BEHIND the live ones — but a table that falls
- *     from "has rows" to zero is the empty-shell restore, the exact failure
- *     "a file appeared" describes.
+ *     media assets, consent receipts). A restore with zero parties is an
+ *     EMPTY SHELL and fails outright — founding enrols the owner party, so no
+ *     instant a snapshot could capture is partyless. A spine table that holds
+ *     rows live and none in the restore DEGRADES instead of failing: a
+ *     snapshot is a point in the past and a stale one restores fewer rows
+ *     truthfully.
  *   - `cas-rehash` / `replica-journal`  reused verbatim from the doctor
  *     integrity-scrub library (`../doctor`, issue #839 W1.2). The scrub asks
  *     these of a LIVE vault; a restored pair is a vault too, and it is the one
@@ -54,12 +55,14 @@ import { DatabaseSync } from "node:sqlite";
 import {
   FsBlobStore,
   ReplicaIndex,
-  checkCasRehash,
-  checkReplicaJournalConsistency,
   readBlobStoreSettings,
   shaOfBlobUri,
 } from "@centraid/vault";
 
+import {
+  checkCasRehash,
+  checkReplicaJournalConsistency,
+} from "../doctor/index.js";
 import type {
   FindingLevel,
   IntegrityCheckName,
@@ -161,14 +164,26 @@ export function spineCensus(
 const SPINE_KEYS = ["party", "content", "media", "receipt"] as const;
 
 /**
- * A restored spine table that is EMPTY while the source holds rows is the
- * empty-shell restore. Only that cliff is an error: a restored count merely
- * BEHIND the source is the snapshot being a point in the past, which is the
- * whole point of a snapshot.
+ * Two graded verdicts, and the grading is the whole design.
+ *
+ * ERROR — `party = 0`. Founding enrolls the host device's owner party, so
+ * every founded vault holds at least one `core_party` row for the rest of its
+ * life, at every point in time a snapshot could have captured. A restored pair
+ * with zero parties is therefore not a stale vault, it is an EMPTY SHELL: two
+ * structurally perfect databases with nobody in them. `integrity_check`,
+ * `foreign_key_check` and the receipt cross-check all pass on it, which is
+ * exactly why the drill has to be the one to say so.
+ *
+ * WARNING — a spine table that holds rows in the live source and none in the
+ * restore. This is NOT promoted to an error, for the same reason the existing
+ * dangling-receipt degrade is not: a snapshot is a point in the past, and a
+ * legitimately stale one taken before the owner ever added a photo restores
+ * zero media rows truthfully. It needs eyes, not an alarm — and a drill that
+ * cries wolf is a drill its owner learns to ignore.
  *
  * With no source census (the vault's plane is not mounted, so there is nothing
- * to compare against) the check reports a WARNING naming that reason — never a
- * silent pass. A drill that cannot make its comparison must say so.
+ * to compare against) the check WARNS naming that reason — never a silent
+ * pass. A drill that could not make its comparison must say so.
  */
 export function checkRestoredCensus(input: {
   readonly vaultId: string;
@@ -176,13 +191,24 @@ export function checkRestoredCensus(input: {
   readonly source?: SpineCensus | undefined;
 }): RestoreDrillFinding {
   const shown = SPINE_KEYS.map((k) => `${k}=${input.restored[k]}`).join(" ");
+  if (input.restored.party === 0) {
+    return finding(
+      "restored-census",
+      "error",
+      `${input.vaultId}: restored vault is an EMPTY SHELL (${shown}) — ` +
+        "founding enrolls the owner party, so a founded vault is never " +
+        "partyless at any instant a snapshot could capture; these two " +
+        "databases open, pass every structural check, and hold nobody",
+      input.vaultId
+    );
+  }
   if (!input.source) {
     return finding(
       "restored-census",
       "warning",
       `${input.vaultId}: restored census (${shown}) could not be compared — ` +
-        "the source vault's plane is not mounted, so an empty-shell restore " +
-        "would go unnoticed this run",
+        "the source vault's plane is not mounted, so a spine table that " +
+        "restored empty would go unnoticed this run",
       input.vaultId
     );
   }
@@ -200,12 +226,12 @@ export function checkRestoredCensus(input: {
   }
   return finding(
     "restored-census",
-    "error",
-    `${input.vaultId}: restored vault is an empty shell — ` +
+    "warning",
+    `${input.vaultId}: ` +
       emptied
         .map((k) => `${k} restored 0 of ${source[k]} live row(s)`)
         .join("; ") +
-      "; the databases open and pass every structural check, and the data is gone",
+      " — a snapshot older than the rows explains this; anything else needs eyes",
     input.vaultId
   );
 }
@@ -278,7 +304,7 @@ export function checkRestoredBlobCoverage(
     );
   }
   const remote = new ReplicaIndex(input.vault).all();
-  const skipped = new Set(input.skippedBlobs ?? []);
+  const skipped = new Set<string>(input.skippedBlobs);
   const missing: string[] = [];
   for (const sha of claimed) {
     if (input.restoredShas.has(sha)) continue;
