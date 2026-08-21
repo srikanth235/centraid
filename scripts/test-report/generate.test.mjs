@@ -35,11 +35,60 @@ const CAPTURED_MS = Date.parse(CAPTURED_AT);
 const OWNER = "owners/unit-owner.mjs";
 const CELL_ID = "vault:correctness";
 
+/** The eight consent layers the ledger must always carry, minimally shaped. */
+function consentLedgerFixture() {
+  return Array.from({ length: 8 }, (_, index) => ({
+    id: `layer-${index}`,
+    label: `Layer ${index}`,
+    enforcement: [OWNER],
+    refusalGrammar: "refuses in words",
+    adversary: { owner: OWNER, flow: null },
+    seats: ["origin"],
+    note: "fixture layer",
+  }));
+}
+
+/**
+ * Grid B and grid D rows for a fixture whose synthetic root bundles `appIds`.
+ * Both grids are total and closed, so a fixture that bundles an app owes it a
+ * cell for every seat and every declared state.
+ * @param {string[]} appIds Bundled blueprint ids.
+ * @param {string[]} [stateIds] Designed states the fixture manifests declare.
+ */
+function appAxesFor(appIds, stateIds = ["dayone"]) {
+  return {
+    appSeats: {
+      apps: appIds.map((id) => ({
+        id,
+        seats: Object.fromEntries(
+          ["origin", "custodian", "viewer"].map((seat) => [
+            seat,
+            { status: "gap", trackingIssue: "839" },
+          ])
+        ),
+      })),
+    },
+    appStates: {
+      trackingIssue: "839",
+      states: stateIds.map((id) => ({ id, label: id })),
+      apps: appIds.map((id) => ({
+        id,
+        states: Object.fromEntries(
+          stateIds.map((state) => [state, { status: "gap" }])
+        ),
+      })),
+    },
+  };
+}
+
 function baseMatrix() {
   return {
     version: 1,
     notes: {},
     workspaceSurfaces: {},
+    trackingIssues: {
+      839: { url: "https://example.invalid/839", state: "open" },
+    },
     dimensions: [{ id: "correctness", label: "Correctness", lane: "unit" }],
     surfaces: [
       { id: "vault", label: "Vault", assessment: { correctness: "solid" } },
@@ -51,6 +100,31 @@ function baseMatrix() {
       apps: [],
       seatDoctrine: "docs/blueprint-seats.md#engine-contracts",
     },
+    // #839 Wave 0 — the app-shaped axes. The fixture keeps the app rows empty
+    // (the synthetic root bundles no blueprints) so each grid's density rule
+    // is satisfied trivially and the grids still render.
+    seats: ["origin", "custodian", "viewer"].map((id) => ({
+      id,
+      label: id,
+      doctrine: "docs/blueprint-seats.md#the-three-seats",
+    })),
+    appSeats: { apps: [] },
+    appStates: {
+      trackingIssue: "839",
+      states: [{ id: "dayone", label: "Day one" }],
+      apps: [],
+    },
+    engineRegistry: [
+      {
+        id: "engine",
+        label: "Engine",
+        source: [OWNER],
+        propertyFlow: null,
+        mutationSeed: null,
+        appEngineColumn: false,
+      },
+    ],
+    consentLedger: consentLedgerFixture(),
   };
 }
 
@@ -66,6 +140,14 @@ function makeFixtureRoot(options = {}) {
     path.join(root, "scripts/test-report"),
     { recursive: true }
   );
+  // `validate-matrix.mjs` reads the mutation seed catalog to check every
+  // engine-registry row's declared adversary seed, so the synthetic root needs
+  // it beside the generator.
+  cpSync(
+    path.join(realRoot, "scripts/mutation"),
+    path.join(root, "scripts/mutation"),
+    { recursive: true }
+  );
   writeFileSync(
     path.join(root, "package.json"),
     `${JSON.stringify({ name: "report-fixture", workspaces: { packages: [] } }, null, 2)}\n`
@@ -78,13 +160,22 @@ function makeFixtureRoot(options = {}) {
   mkdirSync(path.join(root, "docs"), { recursive: true });
   writeFileSync(
     path.join(root, "docs/blueprint-seats.md"),
-    "## Engine contracts\n"
+    "## Engine contracts\n\n## The three seats\n"
   );
   const fixtureMatrix = options.matrix ?? baseMatrix();
+  // Every bundled app carries the states block grid D mirrors (#839 Wave 0),
+  // so the synthetic manifests carry one too.
+  const manifestStates = options.appManifestStates ?? {
+    designed: (fixtureMatrix.appStates?.states ?? []).map((state) => state.id),
+    excluded: [],
+  };
   for (const app of fixtureMatrix.appEngines?.apps ?? []) {
     const appRoot = path.join(root, "packages/blueprints/apps", app.id);
     mkdirSync(appRoot, { recursive: true });
-    writeFileSync(path.join(appRoot, "app.json"), "{}\n");
+    writeFileSync(
+      path.join(appRoot, "app.json"),
+      `${JSON.stringify({ states: manifestStates }, null, 2)}\n`
+    );
   }
   writeFileSync(
     path.join(root, "matrix.json"),
@@ -253,6 +344,17 @@ describe("apps × engines grid", () => {
     const root = makeFixtureRoot({
       matrix: {
         ...baseMatrix(),
+        ...appAxesFor(["locker"]),
+        engineRegistry: [
+          {
+            id: "consent",
+            label: "Consent",
+            source: [OWNER],
+            propertyFlow: null,
+            mutationSeed: null,
+            appEngineColumn: true,
+          },
+        ],
         appEngines: {
           seatDoctrine: "docs/blueprint-seats.md#engine-contracts",
           engines: [
@@ -573,3 +675,101 @@ describe("perf and scale trends", () => {
  * NAMED, budgeted absence on nightly instead of unfixable red noise — and the
  * exemption voids itself the night the accessibility lane first runs.
  */
+
+/**
+ * #839 Wave 0 — grids B and D. Their cells are DECLARATIONS, not evidence, so
+ * the contract is: they render, they carry their citation, and they change
+ * nothing about cell health — the nightly zero-grey contract must not move
+ * because a seat or a state has no owner yet.
+ */
+describe("app × seat and app × designed state grids", () => {
+  /** A fixture bundling one app, with one owned seat and one held seat. */
+  function axesMatrix() {
+    const axes = appAxesFor(["locker"], ["dayone", "denied"]);
+    axes.appSeats.apps[0].seats.custodian = {
+      status: "owned",
+      owner: OWNER,
+      tier: "e2e",
+    };
+    axes.appSeats.apps[0].seats.viewer = {
+      status: "skip",
+      reason: "Locker declares seats.disabledOn viewer.",
+      citation: "docs/blueprint-seats.md#the-three-seats",
+    };
+    axes.appStates.apps[0].states.denied = { status: "owned", owner: OWNER };
+    return {
+      ...baseMatrix(),
+      ...axes,
+      appEngines: {
+        seatDoctrine: "docs/blueprint-seats.md#engine-contracts",
+        engines: [],
+        apps: [{ id: "locker", engines: {} }],
+      },
+    };
+  }
+
+  test("renders both grids, with owners declared and gaps citing their issue", () => {
+    const root = makeFixtureRoot({
+      matrix: axesMatrix(),
+      appManifestStates: { designed: ["dayone", "denied"], excluded: [] },
+    });
+    const result = runGenerate(root);
+    expect(result.status).toBe(0);
+    expect(result.html).toContain("Blueprint app × seat");
+    expect(result.html).toContain("Blueprint app × designed state");
+    // A declared owner is neutral, never the green that means "evidence ran".
+    expect(result.html).toContain('class="metric axis-declared"');
+    expect(result.html).toContain('class="metric axis-unowned"');
+    expect(result.html).toContain("Locker declares seats.disabledOn viewer.");
+    expect(result.html).toContain("no seat owner yet — tracked by #839");
+    expect(result.html).toContain("no owner yet — tracked by #839");
+  });
+
+  test("counts the declarations without touching cell health", () => {
+    const root = makeFixtureRoot({
+      matrix: axesMatrix(),
+      appManifestStates: { designed: ["dayone", "denied"], excluded: [] },
+    });
+    const withGrids = runGenerate(root);
+    expect(withGrids.summary.appSeatCells).toEqual({
+      declared: 1,
+      unowned: 1,
+      skipped: 1,
+    });
+    expect(withGrids.summary.appStateCells).toEqual({
+      declared: 1,
+      unowned: 1,
+      skipped: 0,
+    });
+    // The same run with no app axes at all reports identical cell health: the
+    // grids are additive reporting, never an input to the zero-grey contract.
+    const plain = runGenerate(makeFixtureRoot());
+    expect(withGrids.summary.cellsMissing).toBe(plain.summary.cellsMissing);
+    expect(withGrids.summary.cellsExpectedGrey).toBe(
+      plain.summary.cellsExpectedGrey
+    );
+    expect(withGrids.summary.missingCellIds).toEqual(
+      plain.summary.missingCellIds
+    );
+  });
+
+  test("an excluded state renders as a structural exclusion, not a gap", () => {
+    const matrix = axesMatrix();
+    matrix.appStates.apps[0].states.denied = { status: "excluded" };
+    const root = makeFixtureRoot({
+      matrix,
+      appManifestStates: {
+        designed: ["dayone"],
+        excluded: [
+          { state: "denied", reason: "no read path", citation: "docs/x.md" },
+        ],
+      },
+    });
+    const result = runGenerate(root);
+    expect(result.status).toBe(0);
+    expect(result.html).toContain(
+      "structurally excluded by this app's manifest"
+    );
+    expect(result.summary.appStateCells.skipped).toBe(1);
+  });
+});

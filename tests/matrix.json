@@ -2617,9 +2617,7 @@
     {
       "id": "placement",
       "label": "Placement",
-      "source": [
-        "packages/blueprints/apps/_shared/placement-registry.ts"
-      ],
+      "source": ["packages/blueprints/apps/_shared/placement-registry.ts"],
       "propertyFlow": null,
       "mutationSeed": null,
       "appEngineColumn": true
@@ -2649,9 +2647,7 @@
     {
       "id": "triage",
       "label": "Triage session",
-      "source": [
-        "packages/blueprints/apps/_shared/triage-session.ts"
-      ],
+      "source": ["packages/blueprints/apps/_shared/triage-session.ts"],
       "propertyFlow": null,
       "mutationSeed": null,
       "appEngineColumn": true
@@ -2670,9 +2666,7 @@
     {
       "id": "enrichment",
       "label": "Enrichment boundary",
-      "source": [
-        "packages/server/src/automation/fire/enrich-gate.ts"
-      ],
+      "source": ["packages/server/src/automation/fire/enrich-gate.ts"],
       "propertyFlow": null,
       "mutationSeed": null,
       "appEngineColumn": true
@@ -2680,9 +2674,7 @@
     {
       "id": "pendingOverlay",
       "label": "Pending-write overlay",
-      "source": [
-        "packages/blueprints/apps/_shared/pending-overlay.ts"
-      ],
+      "source": ["packages/blueprints/apps/_shared/pending-overlay.ts"],
       "propertyFlow": null,
       "mutationSeed": null,
       "appEngineColumn": true
@@ -2724,9 +2716,7 @@
     {
       "id": "selection",
       "label": "Selection engine",
-      "source": [
-        "packages/blueprints/apps/_shared/selection-engine.ts"
-      ],
+      "source": ["packages/blueprints/apps/_shared/selection-engine.ts"],
       "propertyFlow": null,
       "mutationSeed": null,
       "appEngineColumn": false
@@ -2756,9 +2746,7 @@
     {
       "id": "untrusted-rendering",
       "label": "Untrusted rendering",
-      "source": [
-        "packages/blueprints/apps/_shared/untrusted.ts"
-      ],
+      "source": ["packages/blueprints/apps/_shared/untrusted.ts"],
       "propertyFlow": null,
       "mutationSeed": null,
       "appEngineColumn": false
@@ -2777,9 +2765,7 @@
     {
       "id": "enrollment",
       "label": "Enrollment",
-      "source": [
-        "packages/server/src/serve/enrollment-store.ts"
-      ],
+      "source": ["packages/server/src/serve/enrollment-store.ts"],
       "propertyFlow": null,
       "mutationSeed": null,
       "appEngineColumn": false
@@ -2787,9 +2773,7 @@
     {
       "id": "replica-outbox",
       "label": "Replica outbox",
-      "source": [
-        "packages/client/src/replica/intents.ts"
-      ],
+      "source": ["packages/client/src/replica/intents.ts"],
       "propertyFlow": "replica-intent-properties",
       "mutationSeed": "packages/client/src/replica",
       "appEngineColumn": false
@@ -2797,9 +2781,7 @@
     {
       "id": "policy-cascade",
       "label": "Enrichment policy cascade",
-      "source": [
-        "packages/server/src/automation/fire/enrich-resolve.ts"
-      ],
+      "source": ["packages/server/src/automation/fire/enrich-resolve.ts"],
       "propertyFlow": null,
       "mutationSeed": null,
       "appEngineColumn": false
@@ -2807,9 +2789,7 @@
     {
       "id": "protocol-handshake",
       "label": "Protocol handshake",
-      "source": [
-        "packages/core/src/protocol/handshake.ts"
-      ],
+      "source": ["packages/core/src/protocol/handshake.ts"],
       "propertyFlow": "protocol-handshake-properties",
       "mutationSeed": "packages/core/src/protocol",
       "appEngineColumn": false
@@ -2819,19 +2799,13 @@
     {
       "id": "vault-consent-gateway",
       "label": "Vault consent gateway",
-      "enforcement": [
-        "packages/vault/src/gateway/consent.ts"
-      ],
+      "enforcement": ["packages/vault/src/gateway/consent.ts"],
       "refusalGrammar": "packages/vault/src/gateway/consent.ts#ConsentDeny",
       "adversary": {
         "owner": "packages/vault/src/gateway/gateway.contract.test.ts",
         "flow": null
       },
-      "seats": [
-        "origin",
-        "custodian",
-        "viewer"
-      ],
+      "seats": ["origin", "custodian", "viewer"],
       "note": "The closed deny set every seat inherits; the contract suite exercises it, no generated denial sweep does."
     },
     {
@@ -2847,11 +2821,7 @@
         "flow": null,
         "trackingIssue": "839"
       },
-      "seats": [
-        "origin",
-        "custodian",
-        "viewer"
-      ],
+      "seats": ["origin", "custodian", "viewer"],
       "note": "Gap G4: no generated command × missing-scope denial sweep exists yet (#839 Wave 2)."
     },
     {
@@ -2867,11 +2837,7 @@
         "owner": "packages/vault/src/grant/fulfillment.test.ts",
         "flow": null
       },
-      "seats": [
-        "origin",
-        "custodian",
-        "viewer"
-      ],
+      "seats": ["origin", "custodian", "viewer"],
       "note": "Create/revoke/fulfil and the view|edit capability split are owned; revocation PROPAGATION across seats is not (gap G2, #839 Wave 3)."
     },
     {
@@ -2886,9 +2852,7 @@
         "owner": "packages/server/src/automation/fire/enrich-resolve.test.ts",
         "flow": null
       },
-      "seats": [
-        "custodian"
-      ],
+      "seats": ["custodian"],
       "note": "The cascade and the egress ceiling fail closed on undefined; example-based only, no property suite over the fold (#839 Wave 2)."
     },
     {
@@ -2903,10 +2867,7 @@
         "owner": "packages/blueprints/apps/_shared/consent-gate.test.ts",
         "flow": null
       },
-      "seats": [
-        "custodian",
-        "viewer"
-      ],
+      "seats": ["custodian", "viewer"],
       "note": "The closed ENRICH_DOMAINS union and the on-device/off-device answer split; mobile draws its own consent surface."
     },
     {
@@ -2921,11 +2882,7 @@
         "owner": "packages/server/src/serve/revocation-severs-planes.test.ts",
         "flow": null
       },
-      "seats": [
-        "origin",
-        "custodian",
-        "viewer"
-      ],
+      "seats": ["origin", "custodian", "viewer"],
       "note": "Pairing tickets and session revocation sever both planes; the contract suite owns it."
     },
     {
@@ -2940,27 +2897,19 @@
         "owner": "tests/agent-e2e-mobile/flows/photos-permissions.mjs",
         "flow": "mobile-photos-permissions"
       },
-      "seats": [
-        "origin"
-      ],
+      "seats": ["origin"],
       "note": "Gap G8: one of eight apps has a device flow; contacts, biometrics and notification grants are unowned (#839 Wave 4)."
     },
     {
       "id": "provider-egress-ban",
       "label": "Provider egress ban",
-      "enforcement": [
-        "packages/blueprints/src/no-inference-client.test.ts"
-      ],
+      "enforcement": ["packages/blueprints/src/no-inference-client.test.ts"],
       "refusalGrammar": "structural — the ban is an import-graph law, so there is no refusal string to say",
       "adversary": {
         "owner": "packages/blueprints/src/no-inference-client.test.ts",
         "flow": "blueprint-enrichment-law"
       },
-      "seats": [
-        "origin",
-        "custodian",
-        "viewer"
-      ],
+      "seats": ["origin", "custodian", "viewer"],
       "note": "The SDK-import ban is owned by [law:recognition-self-contained]; the dispatch-path law is gap G5 (#839 Wave 2)."
     }
   ],

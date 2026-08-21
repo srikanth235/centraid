@@ -118,7 +118,8 @@ async function validateAppAxes(matrix, options, flowIds) {
     errors.push("matrix has no seats registry");
   } else {
     if (
-      JSON.stringify([...seatIds].sort()) !== JSON.stringify([...SEAT_IDS].sort())
+      JSON.stringify([...seatIds].sort()) !==
+      JSON.stringify([...SEAT_IDS].sort())
     ) {
       errors.push(
         `matrix seats must be exactly ${SEAT_IDS.join(", ")}; got ${seatIds.join(", ") || "(none)"}`
@@ -146,7 +147,8 @@ async function validateAppAxes(matrix, options, flowIds) {
       );
     }
     const anchors = anchorCache.get(docPath);
-    if (!anchors) return `${label} citation document does not exist: ${docPath}`;
+    if (!anchors)
+      return `${label} citation document does not exist: ${docPath}`;
     return anchors.has(anchor)
       ? null
       : `${label} citation anchor does not exist: ${citation}`;
@@ -243,9 +245,7 @@ async function validateAppAxes(matrix, options, flowIds) {
       errors.push("appStates declares a duplicated designed state");
     for (const state of appStates.states ?? [])
       if (!state?.label?.trim())
-        errors.push(
-          `appStates state ${state?.id ?? "(missing)"} has no label`
-        );
+        errors.push(`appStates state ${state?.id ?? "(missing)"} has no label`);
     const declared = new Set();
     for (const app of appStates.apps) {
       if (!app?.id || declared.has(app.id))
@@ -263,7 +263,9 @@ async function validateAppAxes(matrix, options, flowIds) {
             await readFile(path.join(cwd, manifestPath), "utf8")
           ).states;
         } catch {
-          errors.push(`appStates ${app?.id} has no manifest at ${manifestPath}`);
+          errors.push(
+            `appStates ${app?.id} has no manifest at ${manifestPath}`
+          );
         }
         if (
           manifestStates &&
@@ -331,21 +333,31 @@ async function validateAppAxes(matrix, options, flowIds) {
     for (const engine of registry) {
       const label = `engineRegistry ${engine?.id ?? "(missing)"}`;
       if (!engine?.id || ids.has(engine.id))
-        errors.push(`engineRegistry id missing or duplicated: ${engine?.id ?? "(missing)"}`);
+        errors.push(
+          `engineRegistry id missing or duplicated: ${engine?.id ?? "(missing)"}`
+        );
       ids.add(engine?.id);
       if (!engine?.label?.trim()) errors.push(`${label} has no label`);
       if (!Array.isArray(engine?.source) || !engine.source.length)
         errors.push(`${label} names no source`);
       for (const source of engine?.source ?? []) {
-        if (typeof source !== "string" || path.isAbsolute(source) || source.includes(".."))
+        if (
+          typeof source !== "string" ||
+          path.isAbsolute(source) ||
+          source.includes("..")
+        )
           errors.push(`${label} source must be a repository-relative path`);
         else if (checkFiles && !(await fileExists(cwd, source)))
           errors.push(`${label} source does not exist: ${source}`);
       }
       if (engine?.propertyFlow != null && !flowIds.has(engine.propertyFlow))
-        errors.push(`${label} references unknown property flow ${engine.propertyFlow}`);
+        errors.push(
+          `${label} references unknown property flow ${engine.propertyFlow}`
+        );
       if (engine?.mutationSeed != null && !seedIds.has(engine.mutationSeed))
-        errors.push(`${label} references unknown mutation seed ${engine.mutationSeed}`);
+        errors.push(
+          `${label} references unknown mutation seed ${engine.mutationSeed}`
+        );
       if (typeof engine?.appEngineColumn !== "boolean")
         errors.push(`${label} does not say whether it is an appEngines column`);
     }
@@ -377,7 +389,9 @@ async function validateAppAxes(matrix, options, flowIds) {
     for (const layer of ledger) {
       const label = `consentLedger ${layer?.id ?? "(missing)"}`;
       if (!layer?.id || ids.has(layer.id))
-        errors.push(`consentLedger id missing or duplicated: ${layer?.id ?? "(missing)"}`);
+        errors.push(
+          `consentLedger id missing or duplicated: ${layer?.id ?? "(missing)"}`
+        );
       ids.add(layer?.id);
       if (!layer?.label?.trim()) errors.push(`${label} has no label`);
       if (!Array.isArray(layer?.enforcement) || !layer.enforcement.length)
@@ -388,7 +402,9 @@ async function validateAppAxes(matrix, options, flowIds) {
           path.isAbsolute(enforcement) ||
           enforcement.includes("..")
         )
-          errors.push(`${label} enforcement must be a repository-relative path`);
+          errors.push(
+            `${label} enforcement must be a repository-relative path`
+          );
         else if (checkFiles && !(await fileExists(cwd, enforcement)))
           errors.push(`${label} enforcement does not exist: ${enforcement}`);
       }
@@ -397,7 +413,11 @@ async function validateAppAxes(matrix, options, flowIds) {
       const symbolRef = /^(?<file>[\w./-]+\.[a-z]+)#/u.exec(
         String(layer?.refusalGrammar ?? "")
       );
-      if (symbolRef && checkFiles && !(await fileExists(cwd, symbolRef.groups.file)))
+      if (
+        symbolRef &&
+        checkFiles &&
+        !(await fileExists(cwd, symbolRef.groups.file))
+      )
         errors.push(
           `${label} refusal grammar points at a file that does not exist: ${symbolRef.groups.file}`
         );
@@ -406,14 +426,27 @@ async function validateAppAxes(matrix, options, flowIds) {
         errors.push(`${label} has no adversary record`);
       } else {
         if (adversary.owner != null) {
-          if (path.isAbsolute(adversary.owner) || adversary.owner.includes(".."))
-            errors.push(`${label} adversary owner must be a repository-relative path`);
+          if (
+            path.isAbsolute(adversary.owner) ||
+            adversary.owner.includes("..")
+          )
+            errors.push(
+              `${label} adversary owner must be a repository-relative path`
+            );
           else if (checkFiles && !(await fileExists(cwd, adversary.owner)))
-            errors.push(`${label} adversary owner does not exist: ${adversary.owner}`);
+            errors.push(
+              `${label} adversary owner does not exist: ${adversary.owner}`
+            );
         }
         if (adversary.flow != null && !flowIds.has(adversary.flow))
-          errors.push(`${label} adversary references unknown flow ${adversary.flow}`);
-        if (adversary.owner == null && adversary.flow == null && !openIssue(adversary.trackingIssue))
+          errors.push(
+            `${label} adversary references unknown flow ${adversary.flow}`
+          );
+        if (
+          adversary.owner == null &&
+          adversary.flow == null &&
+          !openIssue(adversary.trackingIssue)
+        )
           errors.push(
             `${label} has no adversary and cites no open tracking issue (#${adversary.trackingIssue ?? "none"})`
           );
@@ -425,7 +458,9 @@ async function validateAppAxes(matrix, options, flowIds) {
         if (!SEAT_IDS.includes(seatId))
           errors.push(`${label} binds unknown seat ${seatId}`);
       if (!layer?.note?.trim()) errors.push(`${label} has no note`);
-      for (const match of String(layer?.note ?? "").matchAll(/#(?<issue>\d+)/gu))
+      for (const match of String(layer?.note ?? "").matchAll(
+        /#(?<issue>\d+)/gu
+      ))
         if (!issues[match.groups.issue])
           errors.push(
             `${label} note cites unregistered issue #${match.groups.issue}; add it to trackingIssues with its state`
