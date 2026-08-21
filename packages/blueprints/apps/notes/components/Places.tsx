@@ -8,7 +8,7 @@
 import { useState } from "react";
 import type { ReactNode } from "react";
 
-import { displayText } from "../_shared/untrusted.ts";
+import { displayText } from "../../_shared/untrusted.ts";
 import { ageLabel, daysLeft, promote } from "../format.ts";
 import { BOOKS, JOURNAL, TAGS, notebookShelf } from "../shelves.ts";
 import type { ShelfId } from "../shelves.ts";

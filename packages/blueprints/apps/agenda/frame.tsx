@@ -82,10 +82,15 @@ export function barCount(state: AppBarState): ReactNode {
  */
 export function appBar(state: AppBarState): InlineAppBarContribution {
   const disabled = state.newDisabledReason !== undefined;
+  // Read off the state bag into locals: the bar's handlers are named for what
+  // they DO here, not for the contribution field they arrived in.
+  const handleToday = state.onToday;
+  const handleNew = state.onNew;
+  const handleSearch = state.onSearch;
   const actions: ReactNode = (
     <>
       {state.compact ? null : (
-        <div className="kit-seg" role="group" aria-label="View">
+        <fieldset className="kit-seg" aria-label="View">
           {POINTER_VIEWS.map((view) => (
             <button
               key={view}
@@ -96,9 +101,9 @@ export function appBar(state: AppBarState): InlineAppBarContribution {
               {VIEW_LABELS[view]}
             </button>
           ))}
-        </div>
+        </fieldset>
       )}
-      <button type="button" className="kit-btn" onClick={state.onToday}>
+      <button type="button" className="kit-btn" onClick={handleToday}>
         {TODAY}
       </button>
       <button
@@ -117,15 +122,15 @@ export function appBar(state: AppBarState): InlineAppBarContribution {
       >
         ›
       </button>
-      {!state.compact && state.onSearch ? (
-        <SearchBarButton label={SEARCH_LABEL} onSearch={state.onSearch} />
+      {!state.compact && handleSearch ? (
+        <SearchBarButton label={SEARCH_LABEL} onSearch={handleSearch} />
       ) : null}
       <button
         type="button"
         className={disabled ? "kit-btn" : "kit-btn primary"}
         disabled={disabled}
         title={state.newDisabledReason}
-        onClick={state.onNew}
+        onClick={handleNew}
       >
         {NEW_EVENT}
       </button>

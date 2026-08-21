@@ -7,8 +7,8 @@
 // currently saying", and the routes read it rather than each inventing one.
 import { showsEmptyState } from "../_shared/view-state-kit.ts";
 import { daysBetween, isOverdue } from "./format.ts";
-import { GROUPS, inboxMeta, overdueMeta } from "./view-copy.ts";
 import type { BoardData, ReentryBucket, Task, TaskGroup } from "./types.ts";
+import { GROUPS, inboxMeta, overdueMeta } from "./view-copy.ts";
 
 const OPEN = new Set(["needs-action", "in-process"]);
 
@@ -36,6 +36,13 @@ export function landsToday(task: Task, now: string): boolean {
 export function byDue(a: Task, b: Task): number {
   const left = a.next_due ?? a.due_at ?? "";
   const right = b.next_due ?? b.due_at ?? "";
+  // An undated task sorts LAST, never first: it carries no claim on a moment,
+  // and floating it to the top of a list would be exactly the visibility it has
+  // not earned (ruling 4).
+  if (left === "" || right === "") {
+    if (left !== right) return left === "" ? 1 : -1;
+    return a.title.localeCompare(b.title);
+  }
   if (left !== right) return left < right ? -1 : 1;
   return a.title.localeCompare(b.title);
 }
@@ -117,7 +124,11 @@ export function allGroups(rows: readonly Task[]): TaskGroup[] {
   const undated = open.filter((task) => !(task.due_at ?? task.next_due));
   const groups: TaskGroup[] = [];
   if (dated.length > 0) {
-    groups.push({ key: "dated", label: GROUPS.dated, rows: dated.toSorted(byDue) });
+    groups.push({
+      key: "dated",
+      label: GROUPS.dated,
+      rows: dated.toSorted(byDue),
+    });
   }
   if (undated.length > 0) {
     groups.push({
@@ -162,7 +173,9 @@ export function absence(
 ): { days: number; due: number } | null {
   const days = awayDays(rows, now);
   if (days < 7) return null;
-  const due = rows.filter((task) => isOpen(task) && isOverdue(task, now)).length;
+  const due = rows.filter(
+    (task) => isOpen(task) && isOverdue(task, now)
+  ).length;
   return due > 0 ? { days, due } : null;
 }
 
@@ -251,5 +264,8 @@ export function windowEnd(
   truncated: boolean
 ): { shown: number; total: number } | null {
   if (!truncated) return null;
-  return { shown: data.open.length, total: data.counts.open ?? data.open.length };
+  return {
+    shown: data.open.length,
+    total: data.counts.open ?? data.open.length,
+  };
 }

@@ -16,7 +16,6 @@ import { useEffect, useRef } from "react";
 import type { ReactNode } from "react";
 
 import {
-  DAY_MS,
   eventTitle,
   fmtHour,
   fmtTime,
@@ -120,7 +119,7 @@ export interface MonthGridProps extends GridCommonProps {
 
 export function MonthGrid(props: MonthGridProps): ReactNode {
   return (
-    <div className={styles.month} role="grid" aria-label="Month">
+    <div className={styles.month} aria-label="Month">
       {props.days.map((dayKey) => {
         const date = dayFromKey(dayKey);
         const segments = props.buckets.get(dayKey) ?? [];
@@ -128,7 +127,6 @@ export function MonthGrid(props: MonthGridProps): ReactNode {
           <div
             key={dayKey}
             className={styles.cell}
-            role="gridcell"
             data-outside={String(date.getMonth() !== props.anchorMonth)}
             data-today={String(dayKey === localDayKey(new Date()))}
           >
@@ -345,5 +343,3 @@ function DayColumn({
     </div>
   );
 }
-
-export { DAY_MS };

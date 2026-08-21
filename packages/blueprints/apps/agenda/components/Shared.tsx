@@ -9,7 +9,7 @@
 // does not make a `javascript:` href safe by escaping it.
 import type { ReactNode } from "react";
 
-import { displayText, safeExternalUrl } from "../_shared/untrusted.ts";
+import { displayText, safeExternalUrl } from "../../_shared/untrusted.ts";
 import { snippetSegments } from "../format.ts";
 import { PENDING_MARK } from "../view-copy.ts";
 

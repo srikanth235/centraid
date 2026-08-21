@@ -8,7 +8,7 @@
 import { useEffect, useRef } from "react";
 import type { ReactNode } from "react";
 
-import { displayText } from "../_shared/untrusted.ts";
+import { displayText } from "../../_shared/untrusted.ts";
 import { groupTargets } from "../powerbox.ts";
 import { MORE_SHELVES } from "../shelves.ts";
 import type { ShelfId } from "../shelves.ts";

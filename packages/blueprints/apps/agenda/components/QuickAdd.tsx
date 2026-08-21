@@ -46,7 +46,7 @@ export function QuickAdd(props: QuickAddProps): ReactNode {
   };
 
   return (
-    <div className={styles.quick} role="group" aria-label={QUICK_TITLE}>
+    <fieldset className={styles.quick} aria-label={QUICK_TITLE}>
       <span className={styles.when}>
         <Num>{fmtTime(props.draft.start)}</Num>
       </span>
@@ -79,6 +79,6 @@ export function QuickAdd(props: QuickAddProps): ReactNode {
       >
         {QUICK_ADD}
       </button>
-    </div>
+    </fieldset>
   );
 }

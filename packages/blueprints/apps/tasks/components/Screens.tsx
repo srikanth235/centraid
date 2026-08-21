@@ -7,8 +7,8 @@
 // phone actually say.
 import type { ReactNode } from "react";
 
-import { VaultAccessButton } from "../../_shared/VaultAccessButton.tsx";
 import { displayText } from "../../_shared/untrusted.ts";
+import { VaultAccessButton } from "../../_shared/VaultAccessButton.tsx";
 import type { Project, ReentryBucket, Section, Task } from "../types.ts";
 import {
   DENIED,
@@ -278,7 +278,13 @@ export function SearchRoute({
         <Board
           groups={
             rows.length > 0
-              ? [{ key: "hits", label: SEARCH_COPY.everywhere, rows: [...rows] }]
+              ? [
+                  {
+                    key: "hits",
+                    label: SEARCH_COPY.everywhere,
+                    rows: [...rows],
+                  },
+                ]
               : []
           }
           ctx={ctx}

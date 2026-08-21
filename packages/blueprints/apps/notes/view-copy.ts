@@ -89,9 +89,12 @@ export function historyStatus(versions: number): string {
   return `${versions} versions · restoring appends, it never rewrites`;
 }
 
-/** A cut list must never read as everything (§4's window-end state). */
+/** A cut list must never read as everything (§4's window-end state). The
+ *  counts are grouped by the member's own locale — the tabular/isolate pair
+ *  on the element is what keeps them from reordering under RTL. */
 export function windowEnd(shown: number, total: number): string {
-  return `${shown} of ${total} · this is a window, not the whole library`;
+  const group = new Intl.NumberFormat();
+  return `${group.format(shown)} of ${group.format(total)} · this is a window, not the whole library`;
 }
 export const WINDOW_END_VERB = "Show older";
 

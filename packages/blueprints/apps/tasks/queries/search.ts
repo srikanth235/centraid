@@ -122,7 +122,9 @@ export default async function searchHandler({ input, ctx }: HandlerArgs) {
           ? { anchor }
           : {}),
         now: nowIso,
-        ...(typeof completed === "string" ? { lastCompletedAt: completed } : {}),
+        ...(typeof completed === "string"
+          ? { lastCompletedAt: completed }
+          : {}),
       });
       return {
         recurrence_summary: ctx.time.describeRecurrence(rrule),

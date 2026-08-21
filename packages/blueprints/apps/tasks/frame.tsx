@@ -21,11 +21,7 @@ import type {
   InlineAppBarContribution,
   InlineBandClaim,
 } from "../inline-types.ts";
-import {
-  BAND_DESTINATIONS,
-  allowsQuickAdd,
-  bandActiveId,
-} from "./shelves.ts";
+import { BAND_DESTINATIONS, allowsQuickAdd, bandActiveId } from "./shelves.ts";
 import type { ShelfId } from "./shelves.ts";
 import { QUICK_ADD, shelfCopy } from "./view-copy.ts";
 
@@ -44,7 +40,10 @@ export interface AppBarState extends AppBarBase {
  *  rather than a zero the view had to invent. */
 export function barCount(state: AppBarState): ReactNode {
   if (state.count === null) return undefined;
-  return countLabel(state.count, shelfCopy(state.shelf, state.projectName).unit);
+  return countLabel(
+    state.count,
+    shelfCopy(state.shelf, state.projectName).unit
+  );
 }
 
 export function barTitle(state: AppBarState): string {

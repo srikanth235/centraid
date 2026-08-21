@@ -177,7 +177,8 @@ export const FIELDS = {
   notes: "Notes",
 } as const;
 
-export const ANCHOR_NOTE = "The one choice that decides what a missed period means.";
+export const ANCHOR_NOTE =
+  "The one choice that decides what a missed period means.";
 export const ANCHOR_CARDS = [
   {
     value: "scheduled" as const,
@@ -284,7 +285,8 @@ export function inboxMeta(count: number): string {
 export const QUICK_ADD = {
   pointerPlaceholder: "Name it so it still makes sense on Friday",
   touchPlaceholder: "What is it? Name it for Friday",
-  assistant: "Dates and repeats in words — “every other Friday, high priority”.",
+  assistant:
+    "Dates and repeats in words — “every other Friday, high priority”.",
   add: "Add",
 } as const;
 

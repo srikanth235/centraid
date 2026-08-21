@@ -11,8 +11,8 @@
 import { useEffect, useRef, useState } from "react";
 import type { ReactNode } from "react";
 
-import { PendingWriteActions } from "../_shared/PendingWriteActions.tsx";
-import { displayText, safeMediaUrl } from "../_shared/untrusted.ts";
+import { PendingWriteActions } from "../../_shared/PendingWriteActions.tsx";
+import { displayText, safeMediaUrl } from "../../_shared/untrusted.ts";
 import { bodySegments, promote, tallyLabel } from "../format.ts";
 import { resolveAnchor } from "../powerbox.ts";
 import type { Note, NoteAttachment, NoteReference } from "../types.ts";

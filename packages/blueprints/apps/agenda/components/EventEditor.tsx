@@ -17,7 +17,7 @@
 import { useEffect, useRef, useState } from "react";
 import type { ChangeEvent, ReactNode } from "react";
 
-import { displayText, safeExternalUrl } from "../_shared/untrusted.ts";
+import { displayText, safeExternalUrl } from "../../_shared/untrusted.ts";
 import { needsScopePanel, occurrenceEdit } from "../edits.ts";
 import type { EditScope } from "../edits.ts";
 import { toIsoUtc, toLocalInput } from "../format.ts";

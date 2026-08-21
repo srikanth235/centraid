@@ -145,4 +145,4 @@ export function snippetSegments(
     .filter((segment) => segment.text !== "");
 }
 
-export { localDayKey };
+export { localDayKey } from "@centraid/design/elements";

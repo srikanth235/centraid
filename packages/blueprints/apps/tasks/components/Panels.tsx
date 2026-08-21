@@ -15,7 +15,6 @@ import type { ReactNode } from "react";
 
 import { displayText } from "../../_shared/untrusted.ts";
 import type { ShelfId } from "../shelves.ts";
-import { shelfCopy } from "../view-copy.ts";
 import {
   CANCEL,
   MORE_ROWS,
@@ -23,6 +22,7 @@ import {
   QUICK_ADD,
   SHORTCUTS,
   landsInFoot,
+  shelfCopy,
 } from "../view-copy.ts";
 
 import styles from "./Board.module.css";
@@ -50,15 +50,22 @@ export interface QuickAddProps {
 }
 
 export function QuickAdd(props: QuickAddProps): ReactNode {
+  // The callback ref comes off `props` FIRST: a ref read from the props object
+  // taints every later `props.*` read for the React compiler (#573).
+  const { inputRef } = props;
   const chosen =
     props.scopes.find((scope) => scope.id === (props.landsIn ?? "")) ??
     props.scopes[0];
   const disabled = props.disabledReason !== undefined;
   return (
     <div className={styles.panelScrim}>
-      <div className={styles.panel} role="dialog" aria-label={QUICK_ADD.add}>
+      {/* A real `<dialog open>`: the panel stands in the flow under its own
+          scrim rather than taking the platform's modal layer, because capture
+          sits over the board it is filing into and the board must stay
+          readable. The tag carries the semantics a `role` would only claim. */}
+      <dialog open className={styles.panel} aria-label={QUICK_ADD.add}>
         <input
-          ref={props.inputRef}
+          ref={inputRef}
           className={`kit-input ${styles.captureField}`}
           data-touch={props.narrow ? "true" : undefined}
           placeholder={
@@ -127,7 +134,7 @@ export function QuickAdd(props: QuickAddProps): ReactNode {
         {props.disabledReason ? (
           <p className={styles.panelNote}>{props.disabledReason}</p>
         ) : null}
-      </div>
+      </dialog>
     </div>
   );
 }
@@ -141,7 +148,7 @@ export function MoreSheet({
 }): ReactNode {
   return (
     <div className={styles.sheetScrim}>
-      <div className={styles.sheet} role="dialog" aria-label="More">
+      <dialog open className={styles.sheet} aria-label="More">
         {MORE_ROWS.map((row) => (
           <button
             key={String(row.shelf)}
@@ -158,7 +165,7 @@ export function MoreSheet({
         <button type="button" className="kit-btn" onClick={onClose}>
           {CANCEL}
         </button>
-      </div>
+      </dialog>
     </div>
   );
 }
@@ -166,7 +173,7 @@ export function MoreSheet({
 export function Shortcuts({ onClose }: { onClose: () => void }): ReactNode {
   return (
     <div className={styles.sheetScrim}>
-      <div className={styles.sheet} role="dialog" aria-label="Keyboard">
+      <dialog open className={styles.sheet} aria-label="Keyboard">
         {SHORTCUTS.map((entry) => (
           <div key={entry.keys} className={styles.sheetRow}>
             <span className={`${styles.num} ${styles.keys}`}>{entry.keys}</span>
@@ -176,7 +183,7 @@ export function Shortcuts({ onClose }: { onClose: () => void }): ReactNode {
         <button type="button" className="kit-btn" onClick={onClose}>
           {CANCEL}
         </button>
-      </div>
+      </dialog>
     </div>
   );
 }

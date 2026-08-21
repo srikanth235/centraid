@@ -24,13 +24,22 @@ import {
 } from "react";
 import type { ReactElement, ReactNode } from "react";
 
-import { debounce, observeWidth, onDataChange, onFocusRefresh } from "@centraid/design/elements";
+import {
+  debounce,
+  observeWidth,
+  onDataChange,
+  onFocusRefresh,
+} from "@centraid/design/elements";
 
 import { publishOutcome } from "../_shared/app-frame.tsx";
 import { readPendingOverlay } from "../_shared/pending-overlay.ts";
-import { canWriteScope, mountedScopes, ownScopeId } from "../_shared/scope-kit.ts";
-import { libraryReachability } from "../_shared/view-state-kit.ts";
+import {
+  canWriteScope,
+  mountedScopes,
+  ownScopeId,
+} from "../_shared/scope-kit.ts";
 import type { ScopeSearchReach } from "../_shared/search-scaffold.ts";
+import { libraryReachability } from "../_shared/view-state-kit.ts";
 import type { InlineAppProps } from "../inline-types.ts";
 import { Chrome } from "./Chrome.tsx";
 import { Board } from "./components/Board.tsx";
@@ -49,8 +58,8 @@ import {
   SearchRoute,
 } from "./components/Screens.tsx";
 import { EmptyState, Notices } from "./components/States.tsx";
-import { appBar, bandClaim } from "./frame.tsx";
 import { dayKey, weekdayName } from "./format.ts";
+import { appBar, bandClaim } from "./frame.tsx";
 import {
   absence,
   allGroups,
@@ -277,7 +286,8 @@ export function Root({
   const scopes = mountedScopes();
   const own = ownScopeId(scopes);
   const projectById = useMemo(
-    () => new Map(data.projects.map((project) => [project.project_id, project])),
+    () =>
+      new Map(data.projects.map((project) => [project.project_id, project])),
     [data.projects]
   );
   const hueOf = useCallback(
@@ -286,7 +296,9 @@ export function Root({
       const index = data.projects.findIndex(
         (project) => project.project_id === projectId
       );
-      return index < 0 ? null : (PROJECT_HUES[index % PROJECT_HUES.length] ?? null);
+      return index < 0
+        ? null
+        : (PROJECT_HUES[index % PROJECT_HUES.length] ?? null);
     },
     [data.projects]
   );
@@ -348,7 +360,9 @@ export function Root({
       // outcome carries `next_due`, which the query already collapsed. It is
       // never re-derived here — one summariser, one answer.
       const text =
-        task.rrule && task.next_due ? doneNext(weekdayName(task.next_due)) : DONE;
+        task.rrule && task.next_due
+          ? doneNext(weekdayName(task.next_due))
+          : DONE;
       void window.centraid
         .write({
           action: "set-status",
@@ -493,7 +507,8 @@ export function Root({
         case "j":
         case "k": {
           const step = event.key === "j" ? 1 : -1;
-          const next = list[Math.max(0, Math.min(list.length - 1, index + step))];
+          const next =
+            list[Math.max(0, Math.min(list.length - 1, index + step))];
           bag.cursorId = next?.task_id ?? bag.cursorId;
           bump();
           break;
@@ -687,9 +702,7 @@ export function Root({
     if (shelf === LOGBOOK) {
       return (
         <LogbookRoute
-          groups={[
-            { key: "logbook", label: GROUPS.dated, rows: data.logbook },
-          ]}
+          groups={[{ key: "logbook", label: GROUPS.dated, rows: data.logbook }]}
           ctx={rowCtx}
           narrow={narrow}
           total={String(data.counts.closed ?? data.logbook.length)}

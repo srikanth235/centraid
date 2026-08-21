@@ -14,8 +14,8 @@
 // sentence that says who decides.
 import type { ReactNode } from "react";
 
-import { PendingWriteActions } from "../_shared/PendingWriteActions.tsx";
-import { displayText } from "../_shared/untrusted.ts";
+import { PendingWriteActions } from "../../_shared/PendingWriteActions.tsx";
+import { displayText } from "../../_shared/untrusted.ts";
 import { eventTitle, fmtTime } from "../format.ts";
 import type { RsvpAnswer } from "../edits.ts";
 import type { AgEvent, Attendee } from "../types.ts";
@@ -82,6 +82,10 @@ function GuestRow({ guest }: { guest: Attendee }): ReactNode {
 export function EventDetail(props: EventDetailProps): ReactNode {
   const ev = props.event;
   const mine = myAttendance(ev);
+  // The owner's own door. It is absent on a host that mounts no approvals
+  // surface, and then the panel says where the decision lives instead of
+  // drawing a control that goes nowhere.
+  const handleReviewInApprovals = window.centraid.openApprovals;
   const heldCancel =
     props.pending?.action === "cancel-event" &&
     (props.pending.status === "parked" ||
@@ -153,7 +157,7 @@ export function EventDetail(props: EventDetailProps): ReactNode {
       {mine ? (
         <section className={styles.rsvp} aria-label={RSVP_QUESTION}>
           <h3 className={styles.sectionLabel}>{RSVP_QUESTION}</h3>
-          <div className="kit-seg" role="group" aria-label={RSVP_QUESTION}>
+          <fieldset className="kit-seg" aria-label={RSVP_QUESTION}>
             {(Object.keys(RSVP_LABELS) as RsvpAnswer[]).map((answer) => (
               <button
                 key={answer}
@@ -164,7 +168,7 @@ export function EventDetail(props: EventDetailProps): ReactNode {
                 {RSVP_LABELS[answer]}
               </button>
             ))}
-          </div>
+          </fieldset>
         </section>
       ) : null}
 
@@ -203,11 +207,11 @@ export function EventDetail(props: EventDetailProps): ReactNode {
         <section className={styles.parked} aria-label={PARKED_CANCEL_TITLE}>
           <h3 className={styles.sectionLabel}>{PARKED_CANCEL_TITLE}</h3>
           <p className={styles.parkedBody}>{PARKED_CANCEL_BODY}</p>
-          {window.centraid.openApprovals ? (
+          {handleReviewInApprovals ? (
             <button
               type="button"
               className="kit-btn"
-              onClick={window.centraid.openApprovals}
+              onClick={handleReviewInApprovals}
             >
               {PARKED_CANCEL_REVIEW}
             </button>

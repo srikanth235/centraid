@@ -11,7 +11,6 @@
 import type { ReactNode } from "react";
 
 import { displayText } from "../../_shared/untrusted.ts";
-import type { Project } from "../types.ts";
 import type { ShelfId } from "../shelves.ts";
 import {
   ALL,
@@ -22,6 +21,7 @@ import {
   UPCOMING,
   projectShelf,
 } from "../shelves.ts";
+import type { Project } from "../types.ts";
 import { GROUPS, RAIL_HEADS, shelfCopy } from "../view-copy.ts";
 
 import styles from "./Board.module.css";
@@ -114,7 +114,9 @@ export function Rail(props: RailProps): ReactNode {
                 count={props.counts[projectShelf(project.project_id)] ?? 0}
                 hue={props.projectHue(project)}
                 current={props.current === projectShelf(project.project_id)}
-                onSelect={() => props.onSelect(projectShelf(project.project_id))}
+                onSelect={() =>
+                  props.onSelect(projectShelf(project.project_id))
+                }
               />
             ))}
           </div>

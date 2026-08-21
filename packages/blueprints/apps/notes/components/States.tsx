@@ -6,7 +6,7 @@
 // it read.
 import type { ReactNode } from "react";
 
-import { VaultAccessButton } from "../_shared/VaultAccessButton.tsx";
+import { VaultAccessButton } from "../../_shared/VaultAccessButton.tsx";
 import {
   CAPTURE_CUSTODY,
   CAPTURE_SCANNER,

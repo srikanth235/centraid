@@ -91,7 +91,11 @@ export function Chrome(props: ChromeProps): ReactNode {
         {props.slots.notices}
 
         {props.slots.toolbar ? (
-          <div className={styles.toolbar} role="toolbar" aria-label="Tasks view">
+          <div
+            className={styles.toolbar}
+            role="toolbar"
+            aria-label="Tasks view"
+          >
             {props.slots.toolbar}
           </div>
         ) : null}

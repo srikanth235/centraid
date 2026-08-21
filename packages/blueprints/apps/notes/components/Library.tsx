@@ -10,8 +10,8 @@
 // unfiled notes is a fact the member can look at.
 import type { ReactNode } from "react";
 
-import { PendingWriteActions } from "../_shared/PendingWriteActions.tsx";
-import { displayText } from "../_shared/untrusted.ts";
+import { PendingWriteActions } from "../../_shared/PendingWriteActions.tsx";
+import { displayText } from "../../_shared/untrusted.ts";
 import {
   ageLabel,
   placeholderLabel,

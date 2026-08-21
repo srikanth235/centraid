@@ -24,7 +24,7 @@ export interface MoreSheetProps {
 
 export function MoreSheet(props: MoreSheetProps): ReactNode {
   return (
-    <div className={styles.sheet} role="dialog" aria-label={RAIL_CALENDARS}>
+    <section className={styles.sheet} aria-label={RAIL_CALENDARS}>
       <div className={styles.head}>
         <label className={styles.searchField}>
           <span className="kit-sr-only">{SEARCH_LABEL}</span>
@@ -55,6 +55,6 @@ export function MoreSheet(props: MoreSheetProps): ReactNode {
         hueFor={props.hueFor}
         onToggle={props.onToggleCalendar}
       />
-    </div>
+    </section>
   );
 }

@@ -215,7 +215,9 @@ export function Editor(props: EditorProps): ReactNode {
               key={label}
               type="button"
               className="kit-chip"
-              aria-pressed={(task.effort_min ?? 0) === [0, 5, 15, 25, 60][index]}
+              aria-pressed={
+                (task.effort_min ?? 0) === [0, 5, 15, 25, 60][index]
+              }
               onClick={() => props.onEffort([0, 5, 15, 25, 60][index] ?? 0)}
             >
               {label}
@@ -317,8 +319,7 @@ export function Editor(props: EditorProps): ReactNode {
           label={FIELDS.landsIn}
           note={
             <>
-              <span>{HOME_VAULT_NOTE_A}</span>{" "}
-              <span>{HOME_VAULT_NOTE_B}</span>
+              <span>{HOME_VAULT_NOTE_A}</span> <span>{HOME_VAULT_NOTE_B}</span>
             </>
           }
         >

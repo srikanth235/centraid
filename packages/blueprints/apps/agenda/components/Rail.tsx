@@ -6,7 +6,7 @@
 // occupying it.
 import type { ReactNode } from "react";
 
-import { displayText } from "../_shared/untrusted.ts";
+import { displayText } from "../../_shared/untrusted.ts";
 import { localDayKey, startOfWeek } from "../format.ts";
 import type { AgEvent, Calendar } from "../types.ts";
 import { NEXT, PREVIOUS } from "../view-copy.ts";

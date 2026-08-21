@@ -16,8 +16,8 @@
 // label (apps/_shared/untrusted.ts).
 import type { ReactNode } from "react";
 
-import { PendingWriteActions } from "../../_shared/PendingWriteActions.tsx";
 import { readPendingOverlay } from "../../_shared/pending-overlay.ts";
+import { PendingWriteActions } from "../../_shared/PendingWriteActions.tsx";
 import { displayText } from "../../_shared/untrusted.ts";
 import { metaParts, priorityLevel } from "../format.ts";
 import type { Task } from "../types.ts";
@@ -63,7 +63,9 @@ function boxGlyph(task: Task, log: boolean): string {
 
 export function TaskRow(props: TaskRowProps): ReactNode {
   const { task } = props;
-  const pending = readPendingOverlay(task as unknown as Record<string, unknown>);
+  const pending = readPendingOverlay(
+    task as unknown as Record<string, unknown>
+  );
   const done = task.status === "completed" || task.status === "cancelled";
   const level = priorityLevel(task.priority);
   const parts = metaParts({

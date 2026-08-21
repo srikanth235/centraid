@@ -142,7 +142,10 @@ export function metaParts(input: {
     });
   }
   if (typeof task.remind_before_min === "number") {
-    parts.push({ text: `reminder ${task.remind_before_min} min`, numeric: true });
+    parts.push({
+      text: `reminder ${task.remind_before_min} min`,
+      numeric: true,
+    });
   }
   if (typeof task.effort_min === "number" && task.effort_min > 0) {
     parts.push({ text: `~${task.effort_min} min`, numeric: true });

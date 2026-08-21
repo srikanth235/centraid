@@ -32,7 +32,11 @@ import {
 
 import styles from "./Board.module.css";
 
-export type EmptyVariant = "day-one" | "all-done" | "nothing-scheduled" | "lens";
+export type EmptyVariant =
+  | "day-one"
+  | "all-done"
+  | "nothing-scheduled"
+  | "lens";
 
 export interface EmptyStateProps {
   variant: EmptyVariant;
@@ -71,7 +75,11 @@ export function EmptyState(props: EmptyStateProps): ReactNode {
         {sub ? <div className="kit-empty-sub">{sub}</div> : null}
         <div className={styles.emptyActs}>
           {props.onQuickAdd ? (
-            <button type="button" className="kit-btn" onClick={props.onQuickAdd}>
+            <button
+              type="button"
+              className="kit-btn"
+              onClick={props.onQuickAdd}
+            >
               {DAY_ONE_ACTS[0]}
             </button>
           ) : null}
