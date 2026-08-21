@@ -83,7 +83,7 @@ async function runDoctor(
   return { out: chunks.join(""), code };
 }
 
-describe("commandDoctor", () => {
+describe("doctor CLI verb", () => {
   const cleanup: (() => void)[] = [];
   afterEach(() => {
     while (cleanup.length) cleanup.pop()!();
@@ -110,7 +110,7 @@ describe("commandDoctor", () => {
     const { dataDir, vaultId, sha } = dataDirWithVault();
     const file = casFile(dataDir, vaultId, sha);
     const bytes = readFileSync(file);
-    bytes[0] = bytes[0]! ^ 0xff;
+    bytes.writeUInt8(bytes.readUInt8(0) ^ 0xff, 0);
     writeFileSync(file, bytes);
     const { out, code } = await runDoctor([
       "--data-dir",

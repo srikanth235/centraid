@@ -18,8 +18,8 @@
  * from the manifest, and the matching assertion fails — recorded in the receipt.
  */
 
-import { DatabaseSync } from "node:sqlite";
 import path from "node:path";
+import { DatabaseSync } from "node:sqlite";
 
 import { describe, expect, test } from "vitest";
 
@@ -111,14 +111,18 @@ describe("schema-migration corpus", () => {
           .user_version
       ).toBe(ahead);
       expect(
-        (db.prepare("PRAGMA integrity_check").get() as {
-          integrity_check: string;
-        }).integrity_check
+        (
+          db.prepare("PRAGMA integrity_check").get() as {
+            integrity_check: string;
+          }
+        ).integrity_check
       ).toBe("ok");
       expect(
-        (db.prepare("SELECT count(*) AS c FROM core_party").get() as {
-          c: number;
-        }).c
+        (
+          db.prepare("SELECT count(*) AS c FROM core_party").get() as {
+            c: number;
+          }
+        ).c
       ).toBe(EXPECTED_CENSUS.party);
     } finally {
       db.close();
@@ -132,10 +136,15 @@ describe("schema-migration corpus", () => {
     buildEpochPair(dirA, epoch);
     buildEpochPair(dirB, epoch);
     const { readFile } = await import("node:fs/promises");
-    for (const name of ["vault.db", "journal.db"]) {
-      const a = await readFile(path.join(dirA, name));
-      const b = await readFile(path.join(dirB, name));
-      expect(a.equals(b)).toBe(true);
-    }
+    const compared = await Promise.all(
+      ["vault.db", "journal.db"].map(async (name) => {
+        const [a, b] = await Promise.all([
+          readFile(path.join(dirA, name)),
+          readFile(path.join(dirB, name)),
+        ]);
+        return a.equals(b);
+      })
+    );
+    expect(compared).toStrictEqual([true, true]);
   });
 });

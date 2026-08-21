@@ -22,6 +22,11 @@
       "seed": "register /centraid/_new-surface without route metadata",
       "failure": "gateway boot coverage throws for the unclassified prefix"
     },
+    "T5": {
+      "command": "node scripts/security/dast-scan.mjs",
+      "seed": "point the scanner at a gateway with no Host check, a silent 200 on every verb, and a foreign origin reflected with credentials",
+      "failure": "177 host/header/cors/method findings, exit 1"
+    },
     "A6": {
       "command": "bun run scripts:test",
       "seed": "publish-guards returns an open nightly restore/export failure issue",
@@ -202,6 +207,17 @@
           "knob": "packages/server/src/routes/route-security.ts",
           "governance": "waiver-gated",
           "redLastDemonstrated": "2026-08-01"
+        },
+        {
+          "id": "T5",
+          "name": "booted-gateway HTTP posture (DAST)",
+          "owner": "scripts/security/dast-scan.mjs",
+          "evidence": "boot the real gateway → header/CORS/method/Host judges over the ROUTES table",
+          "lane": "dast",
+          "wallClockCost": "low",
+          "knob": "scripts/security/dast-known-findings.json",
+          "governance": "tighten-only",
+          "redLastDemonstrated": "2026-08-21"
         },
         {
           "id": "A6",
@@ -548,6 +564,10 @@
     },
     "842": {
       "url": "https://github.com/srikanth235/centraid/issues/842",
+      "state": "open"
+    },
+    "844": {
+      "url": "https://github.com/srikanth235/centraid/issues/844",
       "state": "open"
     },
     "471": {

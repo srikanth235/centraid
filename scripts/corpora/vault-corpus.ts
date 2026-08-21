@@ -21,22 +21,15 @@
  */
 
 import { createHash } from "node:crypto";
-import { DatabaseSync } from "node:sqlite";
 import path from "node:path";
+import { DatabaseSync } from "node:sqlite";
 
-import {
-  JOURNAL_MIGRATIONS,
-  VAULT_MIGRATIONS,
-  migrate,
-} from "@centraid/vault";
+import { JOURNAL_MIGRATIONS, VAULT_MIGRATIONS, migrate } from "@centraid/vault";
 
 import { registerContentTextFn } from "../../packages/vault/src/schema/fts.js";
 
 /** Number of vault schema epochs the ladder defines today (`user_version` 1..N). */
 export const VAULT_LADDER_LENGTH = VAULT_MIGRATIONS.length;
-
-/** Number of journal schema epochs (the journal ladder is short and epoch-flat). */
-export const JOURNAL_LADDER_LENGTH = JOURNAL_MIGRATIONS.length;
 
 /** Production vaults open at 8192 (`packages/vault/src/db.ts#openFile`); mirror it. */
 const PAGE_SIZE = 8192;
@@ -132,6 +125,24 @@ function seedJournal(db: DatabaseSync): void {
   db.exec("COMMIT");
 }
 
+/**
+ * The one baseline row the product schema mints nondeterministically:
+ * `replica_meta` is INSERTed by REPLICA_DDL with a random `epoch` UUID and
+ * `strftime('now')` timestamps (packages/vault/src/schema/replica.ts). A vault
+ * fixture that must be byte-reproducible pins those three fields to constants.
+ * This touches only the local replication-epoch marker of a THROWAWAY test
+ * vault — production vaults keep their real random epoch.
+ */
+function canonicalizeVault(db: DatabaseSync): void {
+  db.exec(
+    `UPDATE replica_meta
+       SET epoch = '00000000-0000-0000-0000-000000000000',
+           epoch_started_at = '${FIXED_TS}',
+           updated_at = '${FIXED_TS}'
+     WHERE singleton = 1`
+  );
+}
+
 export interface EpochPairPaths {
   dir: string;
   vaultFile: string;
@@ -168,6 +179,7 @@ export function buildEpochPair(dir: string, epoch: number): EpochPairPaths {
     migrate(journal, JOURNAL_MIGRATIONS);
     seedVault(vault);
     seedJournal(journal);
+    canonicalizeVault(vault);
     vault.exec("PRAGMA wal_checkpoint(TRUNCATE)");
     journal.exec("PRAGMA wal_checkpoint(TRUNCATE)");
   } finally {

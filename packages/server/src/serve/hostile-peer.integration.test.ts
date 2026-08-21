@@ -38,6 +38,7 @@ import type { AddressInfo } from "node:net";
 
 import { afterEach, describe, expect, test } from "vitest";
 
+import { peerHello, PEER_PROTOCOL_VERSION } from "@centraid/core/protocol";
 import { tempDir } from "@centraid/test-kit/temp-dir";
 import {
   createTunnelClient,
@@ -52,20 +53,12 @@ import type {
   GatewayEndpointHandle,
   TunnelClient,
 } from "@centraid/tunnel";
-import {
-  peerHello,
-  PEER_MIN_PROTOCOL_VERSION,
-  PEER_PROTOCOL_VERSION,
-} from "@centraid/core/protocol";
-import {
-  signWithVaultIdentity,
-  vaultIdentityPublicKey,
-} from "@centraid/vault";
+import { signWithVaultIdentity, vaultIdentityPublicKey } from "@centraid/vault";
 
 import { makePeerPlaneHandler } from "../routes/peer-plane.ts";
+import { GatewayDatabase } from "./gateway-db.ts";
 import { routeAssertionBytes } from "./peer-route-assertion.ts";
 import type { RouteClaim } from "./peer-route-assertion.ts";
-import { GatewayDatabase } from "./gateway-db.ts";
 import { VaultLinksStore } from "./vault-links-store.ts";
 
 const PEER_PROOF = "h".repeat(64);
@@ -115,11 +108,15 @@ async function closeEverything(): Promise<void> {
     worlds.splice(0).map(async (world) => {
       await world.client.close().catch(() => undefined);
       await world.endpoint.close().catch(() => undefined);
-      await new Promise<void>((resolve) => world.server.close(() => resolve()));
+      await new Promise<void>((resolve) => {
+        world.server.close(() => resolve());
+      });
     })
   );
   await Promise.all(
-    dataDirs.splice(0).map((dir) => fs.rm(dir, { recursive: true, force: true }))
+    dataDirs
+      .splice(0)
+      .map((dir) => fs.rm(dir, { recursive: true, force: true }))
   );
 }
 
@@ -162,7 +159,9 @@ async function hostileWorld(
       }
     });
   });
-  await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+  await new Promise<void>((resolve) => {
+    server.listen(0, "127.0.0.1", resolve);
+  });
   const baseUrl = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
 
   const endpoint = await startGatewayEndpoint({
@@ -194,9 +193,9 @@ async function hostileWorld(
     },
     linkRowCount: () =>
       (
-        database.db
-          .prepare("SELECT COUNT(*) AS n FROM vault_links")
-          .get() as { n: number }
+        database.db.prepare("SELECT COUNT(*) AS n FROM vault_links").get() as {
+          n: number;
+        }
       ).n,
     ticketRowCount: () =>
       (
@@ -238,9 +237,7 @@ async function ask(
     method: input.method,
     target: input.target,
     headers: { "content-type": "application/json" },
-    ...(input.body
-      ? { body: Buffer.from(JSON.stringify(input.body)) }
-      : {}),
+    ...(input.body ? { body: Buffer.from(JSON.stringify(input.body)) } : {}),
   });
   const text = response.body.toString("utf8");
   return {
@@ -267,9 +264,10 @@ function redeemBody(
 }
 
 /** A validly-signed route assertion moving PEER's vault to `endpointId` at `ts`. */
-function signedAssertion(endpointId: string, ts: number): RouteClaim & {
-  signature: string;
-} {
+function signedAssertion(
+  endpointId: string,
+  ts: number
+): Record<string, unknown> {
   const claim: RouteClaim = {
     vaultId: PEER.vaultId,
     endpointId,
@@ -310,7 +308,10 @@ describe("hostile peer: protocol-level state-machine abuse", () => {
       body: redeemBody(ticket),
     });
     expect(first.status).toBe(200);
-    expect(first.json).toMatchObject({ state: "linked", vaultId: HOST.vaultId });
+    expect(first.json).toMatchObject({
+      state: "linked",
+      vaultId: HOST.vaultId,
+    });
     // The link is real and the ticket is burned in the SAME transaction.
     expect(world.linkRowCount()).toBe(1);
     expect(world.ticketRowCount()).toBe(0);
@@ -363,9 +364,10 @@ describe("hostile peer: protocol-level state-machine abuse", () => {
   test("a version-refused handshake never burns the one-time ticket", async () => {
     const world = await hostileWorld();
     const ticket = world.links.tickets.mint(HOST.vaultId, HOST.publicKey);
+    const connection = await world.connect();
 
     const future = PEER_PROTOCOL_VERSION + 1;
-    const refused = await ask(world.connection, {
+    const refused = await ask(connection, {
       method: "POST",
       target: "/centraid/_peer/link/redeem",
       body: redeemBody(ticket, {
@@ -381,7 +383,7 @@ describe("hostile peer: protocol-level state-machine abuse", () => {
     expect(world.linkRowCount()).toBe(0);
 
     // Same ticket, now a compatible hello: it links, proving it was reclaimable.
-    const ok = await ask(world.connection, {
+    const ok = await ask(connection, {
       method: "POST",
       target: "/centraid/_peer/link/redeem",
       body: redeemBody(ticket),
@@ -403,7 +405,8 @@ describe("hostile peer: protocol-level state-machine abuse", () => {
   test("a duplicated route assertion is stale, never re-applied as fresh", async () => {
     const world = await hostileWorld();
     const ticket = world.links.tickets.mint(HOST.vaultId, HOST.publicKey);
-    await ask(world.connection, {
+    const connection = await world.connect();
+    await ask(connection, {
       method: "POST",
       target: "/centraid/_peer/link/redeem",
       body: redeemBody(ticket),
@@ -411,7 +414,7 @@ describe("hostile peer: protocol-level state-machine abuse", () => {
 
     const ts = Date.now() + 60_000;
     const assertion = signedAssertion(world.client.endpointId, ts);
-    const first = await ask(world.connection, {
+    const first = await ask(connection, {
       method: "POST",
       target: "/centraid/_peer/route/assert",
       body: assertion,
@@ -420,7 +423,7 @@ describe("hostile peer: protocol-level state-machine abuse", () => {
     const routeAfter = world.links.routeFor(PEER.vaultId);
     expect(routeAfter?.assertedAt).toBe(ts);
 
-    const replay = await ask(world.connection, {
+    const replay = await ask(connection, {
       method: "POST",
       target: "/centraid/_peer/route/assert",
       body: assertion,
@@ -441,15 +444,16 @@ describe("hostile peer: protocol-level state-machine abuse", () => {
   test("a stalled stream neither wedges the connection nor mints a link", async () => {
     const world = await hostileWorld();
     world.links.tickets.mint(HOST.vaultId, HOST.publicKey);
+    const connection = await world.connect();
 
     // A 4-byte big-endian length claiming 1024 bytes, then 3 bytes and silence.
-    const stalled = await world.connection.openBi();
+    const stalled = await connection.openBi();
     await stalled.send.writeAll([0, 0, 4, 0]);
     await stalled.send.writeAll([0x7b, 0x22, 0x74]); // `{"t`, never completed
     // Deliberately no finish() and no further bytes: the header read parks.
 
     // The connection is not consumed: a fresh stream answers as normal.
-    const hello = await ask(world.connection, {
+    const hello = await ask(connection, {
       method: "GET",
       target: "/centraid/_peer/link/hello",
     });
@@ -468,18 +472,18 @@ describe("hostile peer: protocol-level state-machine abuse", () => {
   test("a per-link request flood is bounded by the hygiene budget", async () => {
     const world = await hostileWorld({ budgetCapacity: 3 });
     world.links.tickets.mint(HOST.vaultId, HOST.publicKey);
+    const connection = await world.connect();
 
     const outcomes: WireAnswer[] = [];
     for (let index = 0; index < 4; index += 1) {
       // Sequential on purpose: the budget is a running count, and interleaving
       // would hide which request crossed the cap.
       // oxlint-disable-next-line no-await-in-loop -- one metered request at a time
-      outcomes.push(
-        await ask(world.connection, {
-          method: "GET",
-          target: "/centraid/_peer/link/hello",
-        })
-      );
+      const answer = await ask(connection, {
+        method: "GET",
+        target: "/centraid/_peer/link/hello",
+      });
+      outcomes.push(answer);
     }
     expect(outcomes.slice(0, 3).map((o) => o.status)).toStrictEqual([
       200, 200, 200,
@@ -506,20 +510,18 @@ describe("hostile peer: protocol-level state-machine abuse", () => {
     expect(world.links.tickets.hasPending(now0)).toBe(true);
     // ...and self-closes at expiry: the door is a function of the clock, so a
     // never-redeemed ticket cannot keep the plane open forever.
-    expect(
-      world.links.tickets.hasPending(now0 + 16 * 60 * 1000)
-    ).toBe(false);
+    expect(world.links.tickets.hasPending(now0 + 16 * 60 * 1000)).toBe(false);
 
     // An already-expired ticket cannot be claimed as fresh.
     const expired = world.links.tickets.mint(HOST.vaultId, HOST.publicKey, -1);
-    expect(world.links.tickets.claim(expired.ticketId, expired.secret)).toBe(
-      undefined
-    );
+    expect(
+      world.links.tickets.claim(expired.ticketId, expired.secret)
+    ).toBeUndefined();
     // The live one is still claimable — expiry reclaimed only the expired door.
     expect(world.links.tickets.hasPending()).toBe(true);
-    expect(
-      world.links.tickets.claim(live.ticketId, live.secret)
-    ).toMatchObject({ vaultId: HOST.vaultId });
+    expect(world.links.tickets.claim(live.ticketId, live.secret)).toMatchObject(
+      { vaultId: HOST.vaultId }
+    );
 
     // With no link and no live ticket, the real endpoint admits no peer: a
     // fresh dial's first request is refused at the transport, not served.
@@ -548,6 +550,8 @@ describe("hostile peer: the plane the abuses ride is confined", () => {
     expect(isPeerPlaneTarget("/centraid/_peer/route/assert")).toBe(true);
     expect(isPeerPlaneTarget("/centraid/_peer/link/hello")).toBe(true);
     expect(isPeerPlaneTarget("/centraid/_gateway/devices")).toBe(false);
-    expect(isPeerPlaneTarget("/centraid/_peer/../_gateway/devices")).toBe(false);
+    expect(isPeerPlaneTarget("/centraid/_peer/../_gateway/devices")).toBe(
+      false
+    );
   });
 });

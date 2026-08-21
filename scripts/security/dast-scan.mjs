@@ -67,10 +67,7 @@ const FOREIGN_ORIGIN = "http://evil.example";
 /** A stand-in bound shell origin for the credentialed-CORS posture probe. */
 const SHELL_ORIGIN = "http://127.0.0.1:4173";
 
-// ---------------------------------------------------------------------------
-// Judges — pure, exported, unit-tested with paired pass/sabotage cases.
-// Each returns a finding object (or null when the check does not apply).
-// ---------------------------------------------------------------------------
+// --- Judges: pure, exported, unit-tested with paired pass/sabotage cases. ---
 
 /**
  * @typedef {Object} Finding
@@ -238,10 +235,8 @@ export function judgeHostVerdict({ target, status, body }) {
   };
 }
 
-// ---------------------------------------------------------------------------
-// Transport — raw HTTP so we can send arbitrary methods and a custom Host
-// (undici's fetch forbids both). Mirrors the harness in http-server.test.ts.
-// ---------------------------------------------------------------------------
+// --- Transport: raw HTTP for arbitrary methods + a custom Host (fetch forbids
+//     both); mirrors the harness in http-server.test.ts. --------------------
 
 /**
  * @param {string} baseUrl Base URL of the target.
@@ -281,9 +276,7 @@ export function rawRequest(baseUrl, requestPath, opts = {}) {
   });
 }
 
-// ---------------------------------------------------------------------------
-// Probes — drive a booted target and collect findings from the judges.
-// ---------------------------------------------------------------------------
+// --- Probes: drive a booted target and collect findings from the judges. ----
 
 /**
  * Probe one live target (base URL + bearer token) across every check. When
@@ -346,9 +339,7 @@ export async function scanTarget({
   if (invalidHostBody) findings.push(invalidHostBody);
 
   // --- Cookie flags: assert on any Set-Cookie the surface emits. The core
-  //     control-plane API is bearer/token driven and emits none, so this is
-  //     vacuously clean here; the judge is exercised by the unit tests and
-  //     stays wired for any surface that starts setting cookies. -------------
+  //     control-plane API is token-driven and emits none (vacuously clean). ---
   const setCookie = authed200.headers["set-cookie"];
   if (Array.isArray(setCookie)) {
     for (const cookie of setCookie) {
@@ -362,9 +353,8 @@ export async function scanTarget({
     }
   }
 
-  // --- CORS probes. ----------------------------------------------------------
-  // Bearer intent + foreign origin: reflect-with-credentials is the decided
-  // posture (the token is not ambient).
+  // --- CORS probes. Bearer intent + foreign origin: reflect-with-credentials
+  //     is the decided posture (the token is not ambient). -------------------
   const bearerForeign = await rawRequest(baseUrl, "/centraid/_apps", {
     headers: { ...auth, origin: FOREIGN_ORIGIN },
   });
@@ -421,13 +411,10 @@ export async function scanTarget({
     );
   }
 
-  // --- Method fuzzing over every ROUTES entry. Every verb on every route must
-  //     be caught by the auth gate — never a silent 2xx. OPTIONS is the
-  //     preflight exception (answered 204 before auth). Each route also gets
-  //     one AUTHENTICATED unknown-verb probe: an undeclared verb must not
-  //     succeed silently even for the token holder. The probes are independent,
-  //     so they are built as a flat descriptor list and fired together; the
-  //     judged findings keep the descriptor order, so the summary is stable. --
+  // --- Method fuzzing over every ROUTES entry: every verb must be caught by
+  //     the auth gate — never a silent 2xx (OPTIONS is the 204 preflight
+  //     exception), plus one authenticated unknown-verb probe per route. The
+  //     probes are independent; fired together, judged in descriptor order. ---
   const methodProbes = routeEntries.flatMap(([name, routePath]) => [
     ...FUZZ_METHODS.map((method) => ({
       name,
@@ -463,9 +450,7 @@ export async function scanTarget({
   return findings;
 }
 
-// ---------------------------------------------------------------------------
-// Pin register + summary.
-// ---------------------------------------------------------------------------
+// --- Pin register + summary. -------------------------------------------------
 
 /** Load the pinned-findings register. */
 export function loadPinRegister(pinPath = KNOWN_FINDINGS_PATH) {
@@ -477,9 +462,8 @@ export function loadPinRegister(pinPath = KNOWN_FINDINGS_PATH) {
 }
 
 /**
- * Fold findings into a summary. A failed finding whose `pinKey` is registered
- * becomes `pinned` (reported, non-fatal); an unregistered failure is `failed`
- * and makes the lane red.
+ * Fold findings into a summary: a failed finding whose `pinKey` is registered
+ * becomes `pinned` (non-fatal); any other failure makes the lane red.
  */
 export function summarize(findings, pinRegister) {
   const failed = [];
@@ -509,9 +493,7 @@ export function summarize(findings, pinRegister) {
   };
 }
 
-// ---------------------------------------------------------------------------
-// Boot — the REAL gateway HTTP boundary, in-process, from the built server.
-// ---------------------------------------------------------------------------
+// --- Boot: the REAL gateway HTTP boundary, in-process, from built server. ----
 
 /**
  * Boot two gateways off one Runtime each and scan both: a bearer-only gateway
@@ -570,9 +552,7 @@ export async function bootAndScan() {
   }
 }
 
-// ---------------------------------------------------------------------------
-// CLI.
-// ---------------------------------------------------------------------------
+// --- CLI. --------------------------------------------------------------------
 
 function parseArgs(argv) {
   const out = { json: false };
