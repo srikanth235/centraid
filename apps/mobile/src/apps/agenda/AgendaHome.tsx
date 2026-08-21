@@ -190,14 +190,14 @@ export default function AgendaHome({
     }
   };
 
-  const refreshAgenda = useCallback(async (): Promise<void> => {
+  const refreshAgenda = async (): Promise<void> => {
     setRefreshing(true);
     try {
       await refresh?.();
     } finally {
       setRefreshing(false);
     }
-  }, [refresh]);
+  };
 
   const onDestination = (key: AgendaBandDestinationKey): void => {
     if (key === "search") {
@@ -220,13 +220,13 @@ export default function AgendaHome({
 
   const listData = agenda.connection === "unavailable" ? NO_DAYS : days;
   const emptyLine =
-    query.trim() !== ""
-      ? "Nothing matches that."
-      : surface === "waiting"
+    query.trim() === ""
+      ? surface === "waiting"
         ? "Nothing is waiting on your answer."
         : agenda.connection === "offline"
           ? "No cached events here — reconnect to check the vault."
-          : "Nothing on these days.";
+          : "Nothing on these days."
+      : "Nothing matches that.";
 
   return (
     // There is one page for the shell and every app in it — no per-app surface
