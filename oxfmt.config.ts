@@ -62,6 +62,9 @@ export default defineConfig({
     "QUALITY.md",
     // Generator-owned outputs with regeneration checks elsewhere in the repo.
     "apps/web/public/sw.js",
+    // The public site's token sheet is lowered from @centraid/design by
+    // scripts/site-tokens.mjs; `lint:site-tokens` asserts it byte-for-byte.
+    "scripts/*-site/public/assets/centraid-tokens.css",
     "scripts/docs-site/src/content/**",
     "packages/blueprints/manifest.json",
   ],

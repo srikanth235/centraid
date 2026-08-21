@@ -104,15 +104,18 @@ const jsonLdHtml = JSON.stringify(jsonLd);
 ---
 
 <!doctype html>
-<html lang="en" data-theme="paper">
+<html lang="en">
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    {/* Resolve the theme before first paint. The <html> default is `paper`, and
-        docs.js (bottom of body) also syncs it — but on a heavy page like the
-        ontology, docs.js runs late enough that the wrong-theme paint is visible
-        as a light→dark flash. Setting it here, blocking in <head>, means no page
-        ever paints the wrong theme. Keep the storage key in sync with docs.js. */}
+    {/* Resolve the theme before first paint. NO `data-theme` means "follow the
+        system", which the generated token sheet answers with its own
+        `prefers-color-scheme` block — so the attribute is set here only when
+        the visitor has actually chosen one. docs.js (bottom of body) also
+        syncs it, but on a heavy page like the ontology it runs late enough
+        that a wrong-theme paint is visible as a light→dark flash; setting it
+        here, blocking in <head>, means no page ever paints the wrong theme.
+        Keep the storage key and the legacy migration in sync with docs.js. */}
     <script is:inline>
       (() => {
         let theme;
@@ -121,9 +124,13 @@ const jsonLdHtml = JSON.stringify(jsonLd);
         } catch {
           /* storage blocked (private mode) — fall through to the media query */
         }
-        if (!theme)
-          theme = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'night' : 'paper';
-        document.documentElement.dataset.theme = theme;
+        // `paper`/`night` were this site's theme names before it moved onto
+        // the product's tokens; migrate a returning visitor's choice.
+        const legacy = { night: 'dark', paper: 'light' };
+        if (legacy[theme]) theme = legacy[theme];
+        if (theme === 'light' || theme === 'dark') {
+          document.documentElement.dataset.theme = theme;
+        }
       })();
     </script>
     <title>{title}</title>
@@ -139,8 +146,9 @@ const jsonLdHtml = JSON.stringify(jsonLd);
       )
     }
     <meta name="application-name" content="Centraid docs" />
-    <meta name="theme-color" content="#fbf7ef" media="(prefers-color-scheme: light)" />
-    <meta name="theme-color" content="#0d1118" media="(prefers-color-scheme: dark)" />
+    {/* The product's own two page grounds (packages/design's `--bg`). */}
+    <meta name="theme-color" content="#FDFDFC" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#0E0E0E" media="(prefers-color-scheme: dark)" />
     <meta data-pagefind-meta="label[content]" content={pageLabel} />
     <meta data-pagefind-meta="description[content]" content={description} />
     <meta data-pagefind-meta="keywords[content]" content={searchKeywords} />
@@ -162,12 +170,26 @@ const jsonLdHtml = JSON.stringify(jsonLd);
     <meta name="twitter:image" content={shareImage} />
     <meta name="twitter:image:alt" content="Centraid documentation" />
     <link rel="icon" href={asset('assets/centraid-mark.svg')} />
-    <link rel="preconnect" href="https://fonts.googleapis.com" />
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    {/* The one bundled face, served from this origin. Nothing here reaches a
+        font CDN: the product ships Instrument Sans with no network fetch, and
+        a local-first product's docs should not open with a third-party
+        request. The tokens must load BEFORE docs.css, which resolves every
+        colour, rung and duration through them. */}
     <link
-      href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,300..900;1,9..144,300..900&family=Newsreader:ital,opsz,wght@0,6..72,400..700;1,6..72,400..700&family=IBM+Plex+Mono:ital,wght@0,400;0,500;0,600;1,400&display=swap"
-      rel="stylesheet"
+      rel="preload"
+      as="font"
+      type="font/woff2"
+      href={`${base}assets/fonts/instrument-sans-latin-400-normal.woff2`}
+      crossorigin
     />
+    <link
+      rel="preload"
+      as="font"
+      type="font/woff2"
+      href={`${base}assets/fonts/instrument-sans-latin-600-normal.woff2`}
+      crossorigin
+    />
+    <link rel="stylesheet" href={asset('assets/centraid-tokens.css')} />
     <link rel="stylesheet" href={asset('assets/docs.css')} />
     {!noIndex && <script type="application/ld+json" set:html={jsonLdHtml}></script>}
     <slot name="head" />
