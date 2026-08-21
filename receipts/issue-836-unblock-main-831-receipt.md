@@ -82,6 +82,21 @@ not a ratchet, and the alternative — widening a floor or adding an exception �
 would have been the weakening this repo forbids. Nothing about what
 `web-offline-pending-row` must prove changes.
 
+**The classification ratchet is re-pinned, and the deviation note is the
+record.** `tests/quality/classification-ratchet.json` fingerprints
+`tests/matrix.json`, so editing that file — even to delete one spent key —
+makes the pin stale and `lint:quality-knobs` red. The pin is refreshed and
+`approvedDeviation` carries the reason, quoted here verbatim because the
+gate requires the note to appear in a changed receipt's `## Decisions`:
+
+#836 re-pins the `tests/matrix.json` fingerprint in
+`tests/quality/classification-ratchet.json` after removing the spent
+`replacesMinimumTestsFlow` marker from `web-offline-pending-row`. That key
+was a one-time rename claim checked against the merge base, and since #832
+merged the rename and the marker together it could only report an unknown
+predecessor — so the ratchet was red on `main` itself. No floor, quality,
+demonstratedRed or matrixGovernanceFingerprint value moves. Prior: #831.
+
 **The section is sourced, not invented.** An agent that never worked #831
 writing a fresh account of that change would be putting words in the receipt's
 mouth. Every bullet restates something already recorded in the same receipt or
