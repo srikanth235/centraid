@@ -47,8 +47,8 @@ Wave 4 — own the devices (G8):
 
 Wave 5 — close the contract (G13, G15, G16):
 
-- [ ] Report v2: verdict strip, attention queue, grids B–G, consent ledger
-- [ ] Derived lane lists; zero-grey everywhere; RTL+CJK gallery lane (lane: done)
+- [x] Report v2: verdict strip, attention queue, grids B–G, consent ledger
+- [x] Derived lane lists; zero-grey everywhere; RTL+CJK gallery lane
 - [x] Docs pass (TESTING.md, decisions.md, glossary)
 
 ## What changed
@@ -383,6 +383,32 @@ gains a known-divergence note under DST policy (the law stands; the
 double-fire pin flips when fixed). docs/glossary.md gains the adversary-lane
 vocabulary (fuzz lane, join lane, time zoo, device-only claim,
 provisional-local floor, pin, grant plane).
+
+**W5-A — report v2.** The nightly report opens with a briefing: a verdict
+strip (`shippable | degraded | red | no-evidence`, graded from the same cell
+states the detail shelf renders, with delta vs the last durable night), an
+attention queue ranked S1–S4 from the matrix's own `assessment` axis (a
+`solid` cell going red outranks everything; pinned fuzz findings rank S4;
+"newly" is gated on non-empty history so a first run cannot fake 135
+regressions), and the missing grids: E (join laws — 4 scripted from the
+protocol join lane + 5 simulation from the commons sim), F (adversary panel —
+24 mutation seeds × floors, 6 fuzz targets × corpus/crashers/known-findings,
+propertyFlow column showing 8 owned / 11 engines honestly holeless), G
+(journeys — 3 suites / 16 flows with budget-vs-enforced pinned to each
+runner's `BUDGET_MS`), and the consent-ledger render. New matrix blocks
+`joinLaws[9]` and `journeys` are derivation-locked by
+`validate-report-registries.mjs` (a law's `testName` must exist in its owner
+and the owner's `test(` count must equal the laws claimed; suite flow lists
+must equal each runner's `FLOWS` and their union must equal the flows
+directory on disk; budgets must equal the runners'). `historyPoint` extends
+additively (`verdict`, `appSeatCells`, `appStateCells`, `adversaryCounts`).
+S1/S2 entries flow into `summary.attentionQueue` and the existing
+auto-filed nightly issue via `report-cell-delta.mjs`. Root verified: report
+unit suite 28 files / 422 tests (was 23/338, none lost), validate-matrix and
+smoke green, and the budget-drift lock replicated red-then-green by hand.
+Six journeys run outside any aggregate budget and render as a visible
+`standalone` gap; `report-cell-delta.mjs` still has no unit test (debt for
+the final pass).
 
 **W5-C — RTL+CJK gallery fidelity lane.** `design:gallery` now renders the
 same `#ui-preview` surface under `dir="rtl"`/`lang="ar"` and again with the
