@@ -33,13 +33,13 @@
 
 .layerFrom {
   flex: none;
-  font: var(--t-annot);
+  font: var(--t-annot-label);
   color: var(--text-faint);
 }
 
 .layerNote {
   margin: 0;
-  font: var(--t-annot);
+  font: var(--t-annot-label);
   color: var(--text-faint);
   text-wrap: pretty;
 }
@@ -53,7 +53,7 @@
   max-inline-size: 100%;
   padding-inline: var(--sp-1);
   border-inline-start: 2px dotted var(--line);
-  font: var(--t-annot);
+  font: var(--t-annot-label);
   color: var(--text-soft);
   white-space: nowrap;
   overflow: hidden;
@@ -82,7 +82,7 @@
   background: transparent;
   padding: var(--sp-1);
   border-radius: var(--r-sm);
-  font: var(--t-annot);
+  font: var(--t-annot-label);
   color: var(--text-faint);
   cursor: pointer;
   white-space: nowrap;
@@ -110,7 +110,7 @@
   background: transparent;
   padding: var(--sp-1);
   border-inline-start: 2px dotted var(--line);
-  font: var(--t-annot);
+  font: var(--t-annot-label);
   color: var(--text-soft);
   white-space: nowrap;
   overflow: hidden;

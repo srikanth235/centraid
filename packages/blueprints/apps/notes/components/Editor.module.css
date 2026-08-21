@@ -103,7 +103,7 @@
 .toTask {
   flex: none;
   min-height: var(--target-min);
-  font: var(--t-annot);
+  font: var(--t-annot-label);
   color: var(--text-soft);
   text-decoration: underline;
   text-underline-offset: 3px;
