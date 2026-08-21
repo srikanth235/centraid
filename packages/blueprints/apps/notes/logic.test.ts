@@ -1,5 +1,3 @@
-// @vitest-environment jsdom
-//
 // Notes' vault IO, held to the sentences an outcome earns (#839 W2-1).
 //
 // EVERY WRITE HERE IS OPTIMISTIC, so the thing worth pinning is not "a command
@@ -13,6 +11,15 @@
 // The two debounced paths (`saveNote`, `runSearch`) are driven on fake timers
 // because their whole point is coalescing: a suite that awaited them directly
 // would prove nothing about the delay it exists to hold.
+//
+// NODE, NOT JSDOM, and deliberately so: this file is a mutation seed
+// (`stryker.notes.config.mjs`), and Stryker's vitest runner reports "No tests
+// were executed" for a jsdom project — a suite under the `@vitest-environment
+// jsdom` docblock defends nothing in the mutation lane. The browser surface
+// this module actually touches is three properties wide (one `querySelector`,
+// `textContent`, `hidden`) plus `window.centraid`, so it is stood up by hand
+// below; naming that surface exactly is the point, because anything this
+// module reaches for beyond it fails here rather than silently working.
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
@@ -74,6 +81,48 @@ function data(patch: Partial<AppData> = {}): AppData {
 type WriteOpts = { action: string; input?: Record<string, unknown> };
 type ReadOpts = { query: string; input?: Record<string, unknown> };
 
+/** The one element this app writes to imperatively. */
+interface BannerStub {
+  textContent: string;
+  hidden: boolean;
+}
+
+let banner: BannerStub | null = null;
+
+/** Stand up (or withhold) the frame's notice banner and the vault client. */
+function mountBanner(present = true): void {
+  banner = present ? { textContent: "", hidden: true } : null;
+  (globalThis as { document?: unknown }).document = {
+    querySelector: (selector: string) =>
+      selector === "#noticeBanner" ? banner : null,
+  };
+}
+
+/**
+ * A `FileReader` stand-in — Node has `File`/`Blob` but no `FileReader`. The
+ * two outcomes are what the app branches on: bytes in hand, or a device that
+ * could not read them.
+ */
+class StubFileReader {
+  result: string | null = null;
+  #handlers: Record<string, Array<() => void>> = { load: [], error: [] };
+
+  addEventListener(type: string, handler: () => void): void {
+    this.#handlers[type]?.push(handler);
+  }
+
+  readAsDataURL(file: { name?: string; unreadable?: boolean }): void {
+    queueMicrotask(() => {
+      if (file?.unreadable) {
+        for (const handler of this.#handlers.error ?? []) handler();
+        return;
+      }
+      this.result = `data:text/plain;base64,${btoa(String(file?.name ?? ""))}`;
+      for (const handler of this.#handlers.load ?? []) handler();
+    });
+  }
+}
+
 interface Harness {
   state: AppState;
   data: AppData;
@@ -102,10 +151,7 @@ function harness(
     over.write ?? (async () => ({ status: "executed" }) as VaultOutcome)
   );
   const read = vi.fn(over.read ?? (async () => ({})));
-  Object.defineProperty(window, "centraid", {
-    configurable: true,
-    value: { read, write },
-  });
+  (globalThis as { window?: unknown }).window = { centraid: { read, write } };
   const render = vi.fn();
   const refresh = vi.fn(async () => {});
   const status = vi.fn();
@@ -127,19 +173,23 @@ function harness(
     refresh,
     status,
     go,
-    banner: () => {
-      const el = document.querySelector<HTMLElement>("#noticeBanner");
-      return { text: el?.textContent ?? "", hidden: el?.hidden ?? true };
-    },
+    banner: () => ({
+      text: banner?.textContent ?? "",
+      hidden: banner?.hidden ?? true,
+    }),
   };
 }
 
 beforeEach(() => {
-  document.body.innerHTML = '<div id="noticeBanner" hidden></div>';
+  mountBanner();
+  (globalThis as { FileReader?: unknown }).FileReader = StubFileReader;
 });
 
 afterEach(() => {
   vi.useRealTimers();
+  delete (globalThis as { window?: unknown }).window;
+  delete (globalThis as { document?: unknown }).document;
+  delete (globalThis as { FileReader?: unknown }).FileReader;
 });
 
 describe("the notice banner is the app's only imperative surface", () => {
@@ -155,7 +205,7 @@ describe("the notice banner is the app's only imperative surface", () => {
   });
 
   it("is a no-op where the frame did not mount one", () => {
-    document.body.innerHTML = "";
+    mountBanner(false);
     const app = harness();
     expect(() => app.logic.notice("nowhere to put this")).not.toThrow();
   });
@@ -340,7 +390,12 @@ describe("opening a note pulls the body lazily", () => {
 describe("the version chain", () => {
   it("takes the query's rows as the chain", async () => {
     const rows = [
-      { content_id: "c2", body: "new", current: true, asserted_at: "2026-08-02" },
+      {
+        content_id: "c2",
+        body: "new",
+        current: true,
+        asserted_at: "2026-08-02",
+      },
       {
         content_id: "c1",
         body: "old",
@@ -516,7 +571,10 @@ describe("the small note commands", () => {
     const app = harness({ state: { noteId: "n1" } });
     await app.logic.deleteNote(note({ note_id: "n1" }));
     expect(app.state.noteId).toBeNull();
-    expect(app.status).toHaveBeenCalledWith("Moved to trash", expect.any(Function));
+    expect(app.status).toHaveBeenCalledWith(
+      "Moved to trash",
+      expect.any(Function)
+    );
   });
 
   it("leaves a different open note alone", async () => {
@@ -682,7 +740,11 @@ describe("tags, links and files", () => {
 
   it("sends a bare typed reference when no passage was selected", async () => {
     const app = harness();
-    await app.logic.linkNote("n1", { type: "task", id: "t9" }, null);
+    await app.logic.linkNote(
+      "n1",
+      { type: "task", id: "t9", title: "Oat milk", app: "tasks" },
+      null
+    );
     expect(app.write.mock.calls[0]?.[0].input).toStrictEqual({
       note_id: "n1",
       target_type: "task",
@@ -692,12 +754,16 @@ describe("tags, links and files", () => {
 
   it("carries the anchor when the member had a passage selected", async () => {
     const app = harness();
-    await app.logic.linkNote("n1", { type: "task", id: "t9" }, {
-      exact: "buy oat milk",
-      prefix: "remember to ",
-      suffix: " today",
-      start: 12,
-    });
+    await app.logic.linkNote(
+      "n1",
+      { type: "task", id: "t9", title: "Oat milk", app: "tasks" },
+      {
+        exact: "buy oat milk",
+        prefix: "remember to ",
+        suffix: " today",
+        start: 12,
+      }
+    );
     expect(app.write.mock.calls[0]?.[0].input).toStrictEqual({
       note_id: "n1",
       target_type: "task",
@@ -711,12 +777,16 @@ describe("tags, links and files", () => {
 
   it("drops an empty anchor rather than anchoring at nothing", async () => {
     const app = harness();
-    await app.logic.linkNote("n1", { type: "task", id: "t9" }, {
-      exact: "",
-      prefix: "",
-      suffix: "",
-      start: 0,
-    });
+    await app.logic.linkNote(
+      "n1",
+      { type: "task", id: "t9", title: "Oat milk", app: "tasks" },
+      {
+        exact: "",
+        prefix: "",
+        suffix: "",
+        start: 0,
+      }
+    );
     expect(app.write.mock.calls[0]?.[0].input).toStrictEqual({
       note_id: "n1",
       target_type: "task",
@@ -726,21 +796,19 @@ describe("tags, links and files", () => {
 
   it("pins a readable file to the note as an embedded data URI", async () => {
     const app = harness();
-    await app.logic.attachFile(
-      "n1",
-      new File(["hello"], "note.txt", { type: "text/plain" })
-    );
+    await app.logic.attachFile("n1", { name: "note.txt" } as unknown as File);
     const input = app.write.mock.calls[0]?.[0].input as Record<string, unknown>;
     expect(input.subject_id).toBe("n1");
     expect(input.title).toBe("note.txt");
     expect(input.role).toBe("embed");
-    expect(String(input.data_uri)).toMatch(/^data:text\/plain/u);
+    expect(String(input.data_uri)).toMatch(/^data:text\/plain;base64,/u);
   });
 
   it("says so on the status line when the device could not read the file", async () => {
     const app = harness();
     const unreadable = {
       name: "broken.bin",
+      unreadable: true,
     } as unknown as File;
     await app.logic.attachFile("n1", unreadable);
     expect(app.status).toHaveBeenCalledWith(
@@ -912,7 +980,9 @@ describe("search never claims an empty result it did not verify", () => {
 describe("the [[ powerbox probe", () => {
   it("asks for link targets once the typing settles", async () => {
     vi.useFakeTimers();
-    const targets = [{ type: "task", id: "t1", title: "Oat milk", app: "tasks" }];
+    const targets = [
+      { type: "task", id: "t1", title: "Oat milk", app: "tasks" },
+    ];
     const app = harness({ read: async () => ({ targets }) });
     app.logic.probeTargets("  oat  ");
     await vi.advanceTimersByTimeAsync(120);
@@ -982,17 +1052,15 @@ describe("the rows a route paints", () => {
   const appData = data({ notes: rows, trash: [note({ note_id: "gone" })] });
 
   it("paints the trash on the trash shelf and nothing else", () => {
-    expect(rowsFor(appData, state(), TRASH).map((r) => r.note_id)).toStrictEqual(
-      ["gone"]
-    );
+    expect(
+      rowsFor(appData, state(), TRASH).map((r) => r.note_id)
+    ).toStrictEqual(["gone"]);
   });
 
   it("sorts pinned first, then newest edited — and nothing else reorders it", () => {
-    expect(rowsFor(appData, state(), null).map((r) => r.note_id)).toStrictEqual([
-      "c",
-      "b",
-      "a",
-    ]);
+    expect(rowsFor(appData, state(), null).map((r) => r.note_id)).toStrictEqual(
+      ["c", "b", "a"]
+    );
   });
 
   it("narrows to the open notebook", () => {

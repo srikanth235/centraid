@@ -29,6 +29,9 @@ const requiredJobs = [
   "pairing-cross-network-relay:",
   // #532 — mutation scores must reach the report job via nightly-evidence-*.
   "mutation-testing:",
+  // #839 G10 — the fuzz lane is nightly-only and owns its own job; its summary
+  // reaches the report through the same nightly-evidence-* channel.
+  "fuzz-parsers:",
 ];
 
 const requiredArtifactNames = [
@@ -36,6 +39,7 @@ const requiredArtifactNames = [
   "nightly-evidence-pairing-ticket-hygiene",
   "nightly-evidence-pairing-cross-network-relay",
   "nightly-evidence-mutation",
+  "nightly-evidence-fuzz",
 ];
 
 const errors = [];
@@ -80,6 +84,7 @@ if (reportIdx === -1) {
     "pairing-ticket-hygiene",
     "pairing-cross-network-relay",
     "mutation-testing",
+    "fuzz-parsers",
   ]) {
     if (!reportChunk.includes(need)) {
       errors.push(`test-health-report needs must include ${need}`);
@@ -121,6 +126,43 @@ if (mutationJobIdx === -1) {
         "mutation-testing must upload path: artifacts/ next to nightly-evidence-mutation (preserves mutation/ prefix for generate.mjs)"
       );
     }
+  }
+}
+
+// #839 G10 — the fuzz lane is only worth having if its evidence and its
+// regression memory both survive. The summary must land at
+// artifacts/fuzz/summary.json after the report job's merge-multiple download
+// (same `path: artifacts/` rule as the mutation lane), and the job must replay
+// the committed crasher corpus even when the search itself went red — a
+// crasher that stops reproducing is news, not a reason to skip the check.
+const fuzzJobIdx = e2eCode.indexOf("fuzz-parsers:");
+if (fuzzJobIdx === -1) {
+  errors.push("e2e.yml missing fuzz-parsers job");
+} else {
+  const fuzzChunk = e2eCode.slice(fuzzJobIdx, fuzzJobIdx + 1_800);
+  if (!fuzzChunk.includes("bun run test:fuzz\n")) {
+    errors.push(
+      "fuzz-parsers job must run the full lane via bun run test:fuzz"
+    );
+  }
+  if (!fuzzChunk.includes("bun run test:fuzz:replay")) {
+    errors.push(
+      "fuzz-parsers job must replay the committed crasher corpus via bun run test:fuzz:replay"
+    );
+  }
+  if (/path:\s*artifacts\/fuzz\/?/u.test(fuzzChunk)) {
+    errors.push(
+      "fuzz-parsers must upload path: artifacts/ (not artifacts/fuzz/) so the summary stays at artifacts/fuzz/summary.json after merge-multiple download"
+    );
+  }
+  if (
+    !/name:\s*nightly-evidence-fuzz[\s\S]{0,200}?path:\s*artifacts\/?/u.test(
+      fuzzChunk
+    )
+  ) {
+    errors.push(
+      "fuzz-parsers must upload path: artifacts/ next to nightly-evidence-fuzz (preserves fuzz/ prefix for the report lane)"
+    );
   }
 }
 
@@ -281,6 +323,6 @@ if (errors.length) {
   process.exitCode = 1;
 } else {
   console.log(
-    "nightly-wiring: e2e.yml owns pairing lifecycle, ticket-hygiene, cross-network-relay, and mutation-testing; standalone pairing-relay-e2e removed"
+    "nightly-wiring: e2e.yml owns pairing lifecycle, ticket-hygiene, cross-network-relay, mutation-testing, and fuzz-parsers; standalone pairing-relay-e2e removed"
   );
 }

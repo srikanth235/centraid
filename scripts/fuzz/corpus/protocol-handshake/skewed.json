@@ -1,0 +1,17 @@
+{
+  "version": "9.9.9",
+  "protocolVersion": 99,
+  "minSupportedProtocol": 99,
+  "capabilities": {
+    "webSessions": true,
+    "devicePairing": true,
+    "tunnel": true,
+    "backupWal": true,
+    "assistOAuth": false,
+    "automationTurns": true,
+    "multiVaultReplica": true,
+    "crossVaultPlacements": true,
+    "automations": false,
+    "connectors": false
+  }
+}

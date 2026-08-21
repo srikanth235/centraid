@@ -12,7 +12,7 @@ on:
     inputs:
       # #496 C3 — re-run one broken lane without the full ~70-min graph.
       suite:
-        description: "Which suite to run (all | desktop | web | mobile | mobile-android | pairing | report | mutation)"
+        description: "Which suite to run (all | desktop | web | mobile | mobile-android | pairing | report | mutation | fuzz)"
         required: false
         default: "all"
         type: choice
@@ -25,6 +25,7 @@ on:
           - pairing
           - report
           - mutation
+          - fuzz
 
 # #496 C3 — overlapping schedule + dispatch must not double-run macOS.
 concurrency:
@@ -716,6 +717,49 @@ jobs:
           path: artifacts/
           retention-days: 14
 
+  # #839 G10 — mutation-based fuzzing of the parsers that eat bytes somebody
+  # else chose: the gateway handshake, the tunnel wire, the CBSF blob
+  # directory, WAL object keys, and the two FTS MATCH compilers. No fuzzing
+  # dependency exists in this repo and none may be added, so the engine is
+  # `scripts/fuzz/` itself: a seeded PRNG, a mutation table, and per-target
+  # invariants. Its own job (restore-year3 pattern) because a full lane is
+  # millions of executions that must not compete with the 30-minute
+  # quality-performance-scale budget, and because it must never touch the PR
+  # lane — the PR-path guard is `test:fuzz:replay`, which replays only the
+  # committed crashers and finishes in a second.
+  fuzz-parsers:
+    if: >
+      github.event_name != 'workflow_dispatch' || github.event.inputs.suite == 'all' || github.event.inputs.suite == 'report' || github.event.inputs.suite == 'fuzz'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: ./.github/actions/setup
+        with:
+          turbo-cache: "true"
+      # Five of the six targets are imported from each package's built dist,
+      # the same way scripts/design-gallery.mjs reads packages/design/dist.
+      - run: bun run build
+      # Fails on any finding whose class is not registered in
+      # scripts/fuzz/known-findings.json — registered ones are recorded defects
+      # pinned byte-for-byte by the replay suite below.
+      - name: Fuzz protocol, tunnel, blob, WAL, and search parsers
+        run: bun run test:fuzz
+      # Runs even when the search above found something new: the committed
+      # crasher corpus must keep replaying exactly as recorded.
+      - name: Replay committed crashers
+        if: always()
+        run: bun run test:fuzz:replay
+      # Upload `artifacts/` (not `artifacts/fuzz/`) so merge-multiple download
+      # into the report job keeps `fuzz/summary.json` — same reason as the
+      # mutation lane.
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        if: always()
+        with:
+          name: nightly-evidence-fuzz
+          path: artifacts/
+          retention-days: 14
+
   # #587 C1 — performance and scale are an independent parallel lane. New
   # rigs cannot consume the report job's 35-minute budget or prevent coverage
   # and report rendering from starting when this lane is red.
@@ -835,6 +879,7 @@ jobs:
         pairing-ticket-hygiene,
         pairing-cross-network-relay,
         mutation-testing,
+        fuzz-parsers,
         quality-performance-scale,
         restore-year3,
       ]

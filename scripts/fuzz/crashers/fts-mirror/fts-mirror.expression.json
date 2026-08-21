@@ -1,0 +1,10 @@
+{
+  "target": "fts-mirror",
+  "class": "fts-mirror.expression",
+  "kind": "invariant",
+  "message": "gateway compiled \"\\\"don't\\\"* \\\"quote\\\"* \\\"me\\\"*\" but replica compiled \"\\\"don\\\"* \\\"t\\\"* \\\"quote\\\"* \\\"me\\\"*\": \"don't \\\"quote\\\" me\"",
+  "seed": 839001,
+  "strategy": "corpus",
+  "inputBase64": "ZG9uJ3QgInF1b3RlIiBtZQ==",
+  "inputDigest": "b0775bdc0c2c1342"
+}
