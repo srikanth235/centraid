@@ -130,6 +130,13 @@ export interface World {
   parked: ParkedIntent[];
   trace: string[];
   failures: string[];
+  /**
+   * Invariant breaks the oracle has PINNED to a named, still-open product
+   * defect (issue #839) instead of failing on. Every entry names the defect;
+   * an unpinned break is always a failure. The list is printed with the
+   * report so a run never hides what it tolerated.
+   */
+  pinned: string[];
   stats: Record<string, number>;
   step: number;
   /** The share-grant plane (issue #839), when this program asked for one. */
@@ -152,6 +159,8 @@ export interface SimReport {
   seed: number;
   trace: string[];
   failures: string[];
+  /** See `World.pinned` — tolerated breaks, each naming its open defect. */
+  pinned: string[];
   stats: Record<string, number>;
 }
 
@@ -212,7 +221,8 @@ function attach(seat: Seat): void {
   });
   seat.gateway = createGateway(seat.db);
   registerTallyCommands(seat.gateway);
-  for (const commandName of seat.confirmGated) armConfirmGate(seat, commandName);
+  for (const commandName of seat.confirmGated)
+    armConfirmGate(seat, commandName);
 }
 
 /** Crash-restart: drop the SQLite handles mid-program and come back from the
@@ -349,6 +359,7 @@ export function createWorld(options: SimOptions): World {
     parked: [],
     trace: [],
     failures: [],
+    pinned: [],
     stats: {},
     step: 0,
   };

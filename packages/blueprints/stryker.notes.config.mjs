@@ -5,6 +5,8 @@ export default {
   vitest: { configFile: "vitest.notes.mutation.config.ts", related: false },
   testFiles: [
     "apps/notes/logic.test.ts",
+    "apps/notes/logic-commands.test.ts",
+    "apps/notes/logic-panes.test.ts",
     "apps/notes/format.test.ts",
     "apps/notes/shelves.test.ts",
     "apps/notes/send-to-tasks.test.ts",

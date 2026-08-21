@@ -32,9 +32,21 @@ export function toLocalInput(dateish: string | number | Date): string {
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
 }
 
-export function fmtTime(iso: string | number | Date): string {
+// LOCALE. Every formatter below reads the HOST's locale by default — that is
+// the product behaviour and it does not change: `locale` is an optional last
+// argument that defaults to `undefined`, which is exactly what
+// `toLocale*String` is handed today. It exists so the option bags here can be
+// pinned against a NAMED locale (a 12-hour locale reads "2:05 PM" where a
+// 24-hour one reads "14:05"), instead of against whatever ICU default the
+// machine running the suite happens to carry. See the time-zoo suite in
+// `format-locale.test.ts` (issue #839).
+
+export function fmtTime(
+  iso: string | number | Date,
+  locale?: Intl.LocalesArgument
+): string {
   try {
-    return new Date(iso).toLocaleTimeString(undefined, {
+    return new Date(iso).toLocaleTimeString(locale, {
       hour: "numeric",
       minute: "2-digit",
     });
@@ -44,16 +56,16 @@ export function fmtTime(iso: string | number | Date): string {
 }
 
 /** An hour of the day as the grid's rail label ("09", "14"). */
-export function fmtHour(hour: number): string {
-  return new Date(2000, 0, 1, hour).toLocaleTimeString(undefined, {
+export function fmtHour(hour: number, locale?: Intl.LocalesArgument): string {
+  return new Date(2000, 0, 1, hour).toLocaleTimeString(locale, {
     hour: "numeric",
   });
 }
 
-export function fmtDay(key: string): string {
+export function fmtDay(key: string, locale?: Intl.LocalesArgument): string {
   if (key === localDayKey(new Date())) return "Today";
   try {
-    return new Date(`${key}T00:00:00`).toLocaleDateString(undefined, {
+    return new Date(`${key}T00:00:00`).toLocaleDateString(locale, {
       weekday: "long",
       month: "short",
       day: "numeric",
@@ -64,7 +76,11 @@ export function fmtDay(key: string): string {
 }
 
 /** The heading over whichever range the current view is showing. */
-export function rangeLabel(view: string, anchor: Date): string {
+export function rangeLabel(
+  view: string,
+  anchor: Date,
+  locale?: Intl.LocalesArgument
+): string {
   if (view === "week") {
     const start = startOfWeek(anchor);
     const end = new Date(
@@ -73,16 +89,16 @@ export function rangeLabel(view: string, anchor: Date): string {
       start.getDate() + 6
     );
     const opts: Intl.DateTimeFormatOptions = { month: "short", day: "numeric" };
-    return `${start.toLocaleDateString(undefined, opts)} – ${end.toLocaleDateString(undefined, { ...opts, year: "numeric" })}`;
+    return `${start.toLocaleDateString(locale, opts)} – ${end.toLocaleDateString(locale, { ...opts, year: "numeric" })}`;
   }
   if (view === "day") {
-    return anchor.toLocaleDateString(undefined, {
+    return anchor.toLocaleDateString(locale, {
       weekday: "long",
       month: "long",
       day: "numeric",
     });
   }
-  return anchor.toLocaleDateString(undefined, {
+  return anchor.toLocaleDateString(locale, {
     month: "long",
     year: "numeric",
   });

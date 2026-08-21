@@ -23,8 +23,8 @@
 // The schedule and the grant oracle live in `commons-sim-grant.test-fixtures.ts`.
 
 import { createGrant, enrollAgent, enrollDevice } from "../bootstrap.js";
-import type { ShareFulfillmentState } from "../grant/grant-store.js";
 import type { Credential } from "../gateway/types.js";
+import type { ShareFulfillmentState } from "../grant/grant-store.js";
 import { uuidv7 } from "../ids.js";
 import type { Seat, World } from "./commons-sim-world.test-fixtures.js";
 import { NOW, armConfirmGate } from "./commons-sim-world.test-fixtures.js";
@@ -69,6 +69,12 @@ export interface ShareSlot {
   tampered: boolean;
   /** The grant was delivered at least once — a non-vacuity witness. */
   everDelivered: boolean;
+  /**
+   * A pass found the peer unreachable AFTER it had been delivered to, so the
+   * store's row fell back from `delivered` to `syncing`. This is the precise
+   * precondition of defect D1 (issue #839) — see `checkSeverance`.
+   */
+  reachLostAfterDelivery: boolean;
 }
 
 /** One durable parked payload the gateway minted, and how it ended. */
@@ -265,7 +271,11 @@ export function enrollPlaneAgent(seat: Seat): PlaneAgent {
 }
 
 function agentCredential(seat: Seat, agentId: string): Credential {
-  const device = enrollDevice(seat.db, seat.partyId, `sim-agent-host-${seat.index}`);
+  const device = enrollDevice(
+    seat.db,
+    seat.partyId,
+    `sim-agent-host-${seat.index}`
+  );
   return {
     kind: "agent",
     agentId,
@@ -291,7 +301,10 @@ export function freshConsentGrant(seat: Seat, agentPartyId: string): string {
  * Every slot starts with a live channel and a one-photograph album, so the
  * first `grant_fulfill` has something real to carry.
  */
-export function buildGrantPlane(world: World, albumsPerPair: number): GrantPlane {
+export function buildGrantPlane(
+  world: World,
+  albumsPerPair: number
+): GrantPlane {
   const seats = world.grants.map((grant) => grant.steward);
   const agents = new Map<number, PlaneAgent>();
   for (const seat of seats) {
@@ -315,6 +328,7 @@ export function buildGrantPlane(world: World, albumsPerPair: number): GrantPlane
           linked: true,
           tampered: false,
           everDelivered: false,
+          reachLostAfterDelivery: false,
         };
         bindSlotChannel(slot, true);
         addAlbumPhoto(slot, `${key}-p0`);
@@ -329,7 +343,10 @@ export function buildGrantPlane(world: World, albumsPerPair: number): GrantPlane
  * audience party is this slot's alone (isolation rule 1), so lighting it up
  * and putting it out is invisible to the commons rail.
  */
-export function bindSlotChannel(slot: ShareSlot, live: boolean): "bound" | "conflict" | "revoked" | "absent" {
+export function bindSlotChannel(
+  slot: ShareSlot,
+  live: boolean
+): "bound" | "conflict" | "revoked" | "absent" {
   const origin = slot.origin.db.vault;
   if (live) {
     const outcome = bindPartyToVault(origin, {

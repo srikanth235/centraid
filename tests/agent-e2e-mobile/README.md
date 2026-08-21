@@ -137,6 +137,52 @@ Authoring rules of thumb (carried over from desktop):
 | Committed regression (this dir) | `node flows/<slug>.mjs` → `maestro test` | flows that stabilized and you want runnable |
 | CI-grade native invariants | committed Maestro flows in this directory | hard runtime, gesture, accessibility, and OS-state claims that unit/component layers cannot falsify |
 
+## The committed roster
+
+| Suite / flow | What it owns |
+| --- | --- |
+| `flows/home-loads.mjs` | ticket-only onboarding renders on a cleared client |
+| `flows/native-v0-resilience.mjs` | all eight native covers open from Home, plus Settings and a process-restart smoke; Android additionally owns the airplane-mode pending-write restart |
+| `run-photos-suite.mjs` (5 flows) | the Photos seat: refused permission, library, viewer, search, select-and-write — budget in [flows/photos-budget.md](flows/photos-budget.md) |
+| `run-home-apps-suite.mjs` (5 flows) | the Docs, Agenda, Notes, Tasks and Locker seats — budget in [flows/home-apps-budget.md](flows/home-apps-budget.md) |
+| `flows/places-seat.mjs` | the Places shelf, map, and pin readout over real `geo_lat`/`geo_lng` rows |
+| `flows/cold-start.mjs`, `flows/scroll-frames.mjs`, `flows/volume-proof.mjs` | the three experience probes named by [tests/experience-budgets/mobile.json](../experience-budgets/mobile.json) |
+
+Tally has no journey here: it is held under issue #831.
+
+## Device-only claims
+
+The claims below are the reason this layer exists at all — each one is a fact about the **operating system's** behaviour, not the product's logic, so no unit, component, or Playwright layer can falsify it. Every row is written to be adoptable verbatim as a `tests/matrix.json` cell owner: the app, the seat or app-state it belongs to, the flow file that owns it, and the assertion that carries the claim.
+
+`Seat` values are `docs/blueprint-seats.md`'s three seats; **only `origin` (the phone) can own any row here** — that is what makes them device-only. `State` values are the matrix's app-state vocabulary (`dayone`, `pending`, `offline`, `stale`, `conflict`, `parked`, `denied`).
+
+### Owned
+
+| App · seat / state | Flow file | The assertion that carries it | Why only a device |
+| --- | --- | --- | --- |
+| photos · origin / `denied` | `flows/photos-permissions.mjs` | launched with `permissions: { all: deny }`, then `Photos cannot reach your camera roll`, `Allow access\|Open Settings`, and `Select` asserted **disabled** | The refusal is the OS's, not the app's. Nothing below the device can produce a real denied `MediaLibrary` authorization, and the takeover has to hold on an _empty_ vault — the state in which a fabricated grid would be indistinguishable from a working one. |
+| locker · origin / `denied` | `flows/locker-gate.mjs` | `Open Locker, locked` on Home (a **withheld** count, never `0`), then `Protect Locker` + `Create passphrase` asserted **disabled**, re-asserted after `ctx.restart()` | Two OS facts at once: that Home's launcher never read the one app it must not, and that no Locker session crossed a real process boundary. A component test renders whichever state it is handed; only killing the process proves nothing survived it. |
+| photos · origin | `run-photos-suite.mjs` | see [flows/photos-budget.md](flows/photos-budget.md) | native grid, viewer gestures, and selection writes on the real replica |
+| docs · origin | `flows/docs-drive.mjs` | `N · press and hold a row for quick actions`, then `Back to All`, then a band tap that **pops** (`assertNotVisible: "Back to All"` after landing on the Folders shelf) | The pop-not-push rule is a React Navigation stack fact. Both a push and a pop render the destination; only a real stack shows the second copy. |
+| agenda · origin | `flows/agenda-week.mjs` | `Go to today` + `New event`, then the Schedule surface's widened read carrying `Dinner with Maya` two days out, then the event screen's `Back to the agenda` | The Day and Schedule surfaces differ only by the size of the read (1 day vs 120); a fixture that hands both the same rows cannot tell them apart. |
+| notes · origin | `flows/notes-library.mjs` | `Open Mom's chili, written down properly` **and** the body preview under it | The row and the body are two separate replica reads joined on device. A dropped join is headings above empty previews — green on every fixture that pre-merges them. |
+| tasks · origin | `flows/tasks-board.mjs` | `Move all to today` + `N · nothing was deleted` on Today, then a nested subtask under its dated parent on Upcoming | The grouping arithmetic is pure and already covered; what is not is that the rows the phone's replica hands it are the vault's rows and land in the group the screen draws. |
+
+### Gaps — device-only and unowned
+
+Each row names what would own it, so it can be filed as a `gap` cell with a real acceptance test rather than a wish.
+
+| App · seat / state | Gap | What would own it | Blocker |
+| --- | --- | --- | --- |
+| photos · origin | camera-roll permission **granted**, including iOS's _limited library_ selection | a flow launching with `permissions: { medialibrary: allow }` against a simulator whose library was filled by `xcrun simctl addmedia`, asserting the import offer (`CameraRollImportOffer.tsx`) rather than the refusal panel | needs a seeded simulator photo library in CI; the refused path (owned above) needs none, which is why it landed first |
+| photos, docs · origin | **outbound share sheet** — `expo-sharing`'s `shareAsync` from the photo viewer (`src/apps/photos/photo-share.ts`) and the document export (`src/apps/docs/docs-export.ts`) | a flow that opens the share action and asserts the system sheet appeared and was dismissed without the app claiming a share it never made | the sheet is a system `UIActivityViewController`; its targets on a bare simulator are system apps only, so the assertion has to be about the sheet's appearance and the app's own post-dismiss state, not a delivered file |
+| docs, notes · origin / `pending` | **inbound share intent** — `expo-share-intent` (`src/kit/hooks/ShareIntentIngest.tsx`) receiving a file from another app | Android is the tractable side: `adb shell am start -a android.intent.action.SEND` with a staged file, then assert the ingest surface | iOS needs a second app to share _from_; Android can synthesize the intent, so this gap should be closed Android-first |
+| locker · origin | **biometric unlock** — `SecureStore` with `requireAuthentication: true` (`src/apps/locker/locker-device-auth.ts`) and the shell's device lock (`src/kit/security/AppLock.tsx` — `DEVICE LOCK` / `Centraid is locked`) | a flow that enrols the credential, backgrounds the app, and proves the OS prompt gated the reveal | **Maestro has no biometric control.** Android can be driven out of band (`adb -e emu finger touch <id>`); the iOS Simulator's Face ID enrolment/match is a Simulator.app menu action with no CLI Maestro can reach. Android-only until that changes. |
+| — · origin / `denied` | **notification permission and delivery** — `src/lib/notifications-core.ts` asks with `requestPermissionsAsync`, and a tapped notification carries a `centraid://` URL into `src/deep-links.ts` | a flow launched with `permissions: { notifications: allow }`, then `xcrun simctl push` (iOS) / `adb shell am broadcast` (Android) of a payload carrying a deep link, asserting the app lands on the named screen | the delivery half is out-of-band tooling the harness does not wrap yet; the permission half alone would be a vacuous cell |
+| locker · origin | the passphrase floor **transitioning** (a short passphrase still refused, a long one accepted) | a flow that types into the gate's field | the field is `secureTextEntry` (its value can never be read back) and its `accessibilityLabel` is on a React Native `TextInput`, which does not reach the iOS accessibility tree — see "Known caveats". It needs a relative-anchor selector validated against a live hierarchy, not one written out of the source. |
+| docs · origin | the reading surface carrying the **current** version's bytes | an assertion on a body line that exists only in the seeded second version | the reading view renders the whole markdown body as ONE multi-line text node, and Maestro anchors a text selector to the whole node with a regex whose `.` does not cross newlines. Needs a single-line surface or an on-disk read. |
+| tally · origin | the whole seat | a `tally-*.mjs` journey | held under issue #831 |
+
 ## Android setup
 
 The Android path is more stable than iOS at this stage (Maestro 2.x's UIAutomator2 driver hardens against Android API churn faster than its XCUITest driver against iOS 26.4). One-time setup:

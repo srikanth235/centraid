@@ -69,7 +69,14 @@ const appIdForPlatform = (platform) =>
  * wait, not a product-latency assertion, and nothing is proven by making it tight.
  */
 export const FIRST_LAUNCH_TIMEOUT_MS = 120_000;
-export const HOME_READY_MARKER = "Home ready";
+// The Home band's accessibility label (apps/mobile/src/screens/home/
+// HomeBand.tsx). The previous marker, "Home ready", was HomeStatusLine's
+// settled-state label until #789 replaced that component's copy with the
+// dynamic origin-health sentence — leaving every pairing flow waiting on a
+// string the app no longer renders (#839). This label is Home-only and
+// stable, but it is a render signal, not a settled signal: it appears when
+// the band mounts, which may precede tile settlement.
+export const HOME_READY_MARKER = "All apps and places";
 // An individual chunk owns one coherent user interaction. Fresh pairing is the
 // slowest legitimate chunk (~4 minutes on the reviewed CI runner); 12 minutes
 // leaves ample network/render headroom while still terminating a wedged

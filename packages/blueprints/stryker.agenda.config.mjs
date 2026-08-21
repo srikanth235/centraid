@@ -5,6 +5,7 @@ export default {
   vitest: { configFile: "vitest.agenda.mutation.config.ts", related: false },
   testFiles: [
     "apps/agenda/logic.test.ts",
+    "apps/agenda/logic-search.test.ts",
     "apps/agenda/edits.test.ts",
     "apps/agenda/views.test.ts",
     "apps/agenda/day-context.test.ts",

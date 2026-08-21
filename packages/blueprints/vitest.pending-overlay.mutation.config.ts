@@ -19,6 +19,7 @@ export default defineConfig({
     include: [
       "apps/_shared/pending-overlay.test.ts",
       "apps/_shared/pending-overlay-law.test.ts",
+      "apps/_shared/pending-overlay-presentation.test.ts",
     ],
     testTimeout: 60_000,
     expect: { requireAssertions: true },

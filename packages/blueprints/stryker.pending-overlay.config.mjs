@@ -9,6 +9,7 @@ export default {
   testFiles: [
     "apps/_shared/pending-overlay.test.ts",
     "apps/_shared/pending-overlay-law.test.ts",
+    "apps/_shared/pending-overlay-presentation.test.ts",
   ],
   // The one engine that decides what a member sees between pressing a control
   // and the vault answering (#738): which pending intent decorates which row,

@@ -12,7 +12,7 @@ on:
     inputs:
       # #496 C3 — re-run one broken lane without the full ~70-min graph.
       suite:
-        description: "Which suite to run (all | desktop | web | mobile | mobile-android | pairing | report | mutation | fuzz)"
+        description: "Which suite to run (all | desktop | web | mobile | mobile-android | pairing | report | mutation | fuzz | join)"
         required: false
         default: "all"
         type: choice
@@ -26,6 +26,7 @@ on:
           - report
           - mutation
           - fuzz
+          - join
 
 # #496 C3 — overlapping schedule + dispatch must not double-run macOS.
 concurrency:
@@ -868,6 +869,49 @@ jobs:
           path: artifacts/
           retention-days: 14
 
+  # #839 G11/G12 — the protocol JOIN lane. Every other suite that exercises two
+  # vaults talking to each other calls the vault package directly; nothing puts
+  # N seats on ONE gateway and makes them speak the real wire. This job runs
+  # `packages/server/src/serve/protocol-join-lane.test.ts` at WIDTH
+  # (CENTRAID_JOIN_SEATS), where each case boots a real `serve()` daemon, mounts
+  # N vaults, and opens one iroh tunnel client per seat.
+  #
+  # Its own job (restore-year3 pattern) for three reasons: N real iroh endpoints
+  # per case must not compete with the 30-minute quality-performance-scale
+  # budget protected by #587 C1; a correctness rig has no volume/duration
+  # descriptor, so tests/scale + quality-rig-budgets.json would mis-file it; and
+  # real QUIC transport is the one dependency here that can be environment
+  # sensitive, so a red join lane must not be able to mask coverage and report
+  # rendering. The suite still runs on the PR path at its 3-seat floor — this
+  # job widens it, it does not own it.
+  protocol-join:
+    if: >
+      github.event_name != 'workflow_dispatch' || github.event.inputs.suite == 'all' || github.event.inputs.suite == 'report' || github.event.inputs.suite == 'join'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: ./.github/actions/setup
+        with:
+          turbo-cache: "true"
+      - run: bun run build
+      # Five seats = one gateway with five mounted vaults and five live tunnel
+      # clients per case. The vitest JSON report IS the evidence: per-test
+      # durations for the join laws are what a widening seat count moves.
+      - name: Join lane — grant delivery, revocation severance, parked lifecycle, version skew
+        env:
+          CENTRAID_JOIN_SEATS: "5"
+        run: node node_modules/vitest/vitest.mjs run --project @centraid/server --reporter=default --reporter=json --outputFile=artifacts/join/summary.json protocol-join-lane
+      # Upload `artifacts/` (not `artifacts/join/`) so merge-multiple download
+      # into the report job keeps `join/summary.json` — same reason as the
+      # mutation and fuzz lanes.
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        if: always()
+        with:
+          name: nightly-evidence-join
+          path: artifacts/
+          retention-days: 14
+
   test-health-report:
     needs:
       [
@@ -882,6 +926,7 @@ jobs:
         fuzz-parsers,
         quality-performance-scale,
         restore-year3,
+        protocol-join,
       ]
     if: >
       always() && (
@@ -1130,6 +1175,7 @@ jobs:
         mutation-testing,
         quality-performance-scale,
         restore-year3,
+        protocol-join,
         test-health-report,
       ]
     # #557 — `cancelled` counts as red. A runner that dies or a job aborted

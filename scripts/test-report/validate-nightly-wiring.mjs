@@ -32,6 +32,10 @@ const requiredJobs = [
   // #839 G10 — the fuzz lane is nightly-only and owns its own job; its summary
   // reaches the report through the same nightly-evidence-* channel.
   "fuzz-parsers:",
+  // #839 G11/G12 — the protocol join lane (one gateway, N mounted vaults, one
+  // iroh client per seat) runs at width here; the PR path runs the same file at
+  // its 3-seat floor.
+  "protocol-join:",
 ];
 
 const requiredArtifactNames = [
@@ -40,6 +44,7 @@ const requiredArtifactNames = [
   "nightly-evidence-pairing-cross-network-relay",
   "nightly-evidence-mutation",
   "nightly-evidence-fuzz",
+  "nightly-evidence-join",
 ];
 
 const errors = [];
@@ -85,6 +90,7 @@ if (reportIdx === -1) {
     "pairing-cross-network-relay",
     "mutation-testing",
     "fuzz-parsers",
+    "protocol-join",
   ]) {
     if (!reportChunk.includes(need)) {
       errors.push(`test-health-report needs must include ${need}`);
@@ -162,6 +168,53 @@ if (fuzzJobIdx === -1) {
   ) {
     errors.push(
       "fuzz-parsers must upload path: artifacts/ next to nightly-evidence-fuzz (preserves fuzz/ prefix for the report lane)"
+    );
+  }
+}
+
+// #839 G11/G12 — the protocol JOIN lane. What makes this lane worth a job is
+// exactly what a well-meaning edit would drop first: it must run the join file
+// at WIDTH (a seat count the PR path does not pay for), and its per-test
+// durations must survive to the report as evidence. A job that ran the same
+// three-seat floor the PR lane already runs would be a duplicate, and a job
+// whose JSON report never reached artifacts/join/summary.json would be a lane
+// nobody can read afterwards.
+const joinJobIdx = e2eCode.indexOf("protocol-join:");
+if (joinJobIdx === -1) {
+  errors.push("e2e.yml missing protocol-join job");
+} else {
+  const joinChunk = e2eCode.slice(joinJobIdx, joinJobIdx + 1_800);
+  if (!joinChunk.includes("protocol-join-lane")) {
+    errors.push(
+      "protocol-join job must run packages/server/src/serve/protocol-join-lane.test.ts (filter: protocol-join-lane)"
+    );
+  }
+  if (
+    !/CENTRAID_JOIN_SEATS:\s*"[3-9]|CENTRAID_JOIN_SEATS:\s*"\d{2}/u.test(
+      joinChunk
+    )
+  ) {
+    errors.push(
+      "protocol-join job must set CENTRAID_JOIN_SEATS to at least 3 — a nightly join lane that does not widen the seat count only repeats the PR run"
+    );
+  }
+  if (!joinChunk.includes("--outputFile=artifacts/join/summary.json")) {
+    errors.push(
+      "protocol-join job must write its vitest JSON report to artifacts/join/summary.json (the lane's evidence)"
+    );
+  }
+  if (/path:\s*artifacts\/join\/?/u.test(joinChunk)) {
+    errors.push(
+      "protocol-join must upload path: artifacts/ (not artifacts/join/) so the summary stays at artifacts/join/summary.json after merge-multiple download"
+    );
+  }
+  if (
+    !/name:\s*nightly-evidence-join[\s\S]{0,200}?path:\s*artifacts\/?/u.test(
+      joinChunk
+    )
+  ) {
+    errors.push(
+      "protocol-join must upload path: artifacts/ next to nightly-evidence-join (preserves join/ prefix for the report lane)"
     );
   }
 }
@@ -323,6 +376,6 @@ if (errors.length) {
   process.exitCode = 1;
 } else {
   console.log(
-    "nightly-wiring: e2e.yml owns pairing lifecycle, ticket-hygiene, cross-network-relay, mutation-testing, and fuzz-parsers; standalone pairing-relay-e2e removed"
+    "nightly-wiring: e2e.yml owns pairing lifecycle, ticket-hygiene, cross-network-relay, mutation-testing, fuzz-parsers, and protocol-join; standalone pairing-relay-e2e removed"
   );
 }

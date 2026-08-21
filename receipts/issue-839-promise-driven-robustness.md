@@ -197,6 +197,68 @@ gateway's: mark-only queries are refused online but searched offline, and
 `don't` tokenizes to one prefix phrase online but two offline, so ranking and
 the 16-token bound apply to different token streams per plane).
 
+### Wave 3 — prove the joins (landed so far)
+
+**W3-C — time zoo (G12).** 113 tests across five files, all under the fake
+clock with zone bands read off the runtime's own tzdata, never assumed:
+`packages/server/src/automation/fire/time-zoo-cron.test.ts` and
+`time-zoo-calendar.test.ts` (cron/cursor DST gap-skips and overlap-fires-once
+per docs/cron-timezone.md, leap day including the Gregorian century rule, ISO
+week-53 via window tiling), `packages/core/src/time/time-zoo-recurrence.test.ts`
+and `time-zoo-zone-crossing.test.ts` (recurrence DST laws, leap-day clamping,
+and zone-crossing collapse: cutting a range at viewer-zone midnights or at 24
+seeded arbitrary instants reproduces the whole-range series exactly, from
+viewer zones including +05:45 and Chatham +12:45-with-DST), and
+`packages/blueprints/apps/agenda/format-locale.test.ts` (the host-locale
+surface pinned under named locales — en-US 12-hour vs en-GB/de-DE/ja-JP
+24-hour, NNBSP-normalised so pins are about locale decisions, not ICU
+versions). The zoo spans America/New_York, Europe/Dublin (negative DST),
+Australia/Lord_Howe (30-minute shift), and a fixed-offset control. The one
+product edit: agenda `format.ts` formatters gained an optional trailing
+`locale?: Intl.LocalesArgument` defaulting to today's exact behaviour (12
+call sites verified single-arg; `f(x) === f(x, undefined)` pinned). **Product
+defect found and pinned, not fixed:** a continuously-running gateway fires a
+cron automation TWICE across a DST fall-back — the wall-clock dedupe in
+`cron-cursor.ts:61` is call-local and the persisted cursor stores only a ms
+position, so the two absolute minutes sharing one wall clock land in separate
+one-minute tick windows; docs/cron-timezone.md:36 says once. Pinned in
+`time-zoo-cron.test.ts` with the defect named against #839; the recurrence
+side obeys the doctrine exactly everywhere.
+
+### Wave 4 — own the devices (landed so far)
+
+**W4-A — Maestro roster + device-only claims (G8).** Five new home-journey
+flows in `tests/agent-e2e-mobile/flows/` — `docs-drive` (pop-not-push
+navigation proven via `assertNotVisible`), `agenda-week` (Day→Schedule
+read-window widening), `notes-library` (the row/body two-read join),
+`tasks-board` (attention grouping + nested subtask under its dated parent),
+`locker-gate` (withheld Home count and the refusing gate re-asserted across a
+real process restart; Locker ships no seed by design, so the grid is seeded
+via docs) — plus `run-home-apps-suite.mjs` (one fresh pairing, four
+paired-state reuses, 10-minute first-land ceiling recorded in
+`flows/home-apps-budget.md` with a tighten-only instruction). Every asserted
+string is verified against `apps/mobile` source (selector evidence in the
+slice report); no tally flow (held, #831). All five registered in
+`scripts/lint-e2e-flows.mjs` (7→12 files, 66→101 steps) and dry-validated by
+executing each flow against a stub harness that YAML-parses every emitted
+chunk and rejects unknown Maestro commands — a rig proven non-vacuous by
+sabotage. On-device demonstration is pending the first CI run. README gains
+"The committed roster" and "Device-only claims" — the latter written so each
+row drops into the matrix verbatim in Wave 5, and naming the device-only
+gaps nothing owns yet (granted/limited camera-roll permission, share sheet
+both directions, biometrics — Maestro has no iOS biometric control —
+notification delivery). **Pre-existing break found and repaired at the root:
+`HOME_READY_MARKER` asserted "Home ready", a label #789 deleted when
+HomeStatusLine's copy became the dynamic origin-health sentence — every
+pairing flow was waiting on a string the app no longer renders. Repointed to
+the Home band's stable accessibility label with the caveat recorded that it
+is a render signal, not a settled signal.** Confirmed stale (reported, not
+fixed, pre-existing): 7 of 9 surface markers in `native-v0-resilience.mjs`
+have zero source hits post-#789/#831, and the unregistered
+`photos-permissions.mjs` carries a vacuous bare-"Home" assertion the linter
+would catch if the six photos flows were registered — both queued for the
+dormant-gate re-arm pass (#842 W0).
+
 ## Out of scope
 
 - Fixing the pre-existing product defects the new adversaries surface — those

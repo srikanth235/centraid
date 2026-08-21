@@ -29,10 +29,9 @@
 
 import { beforeEach, describe, expect, it } from "vitest";
 
+import type { AutomationTriggerCursor } from "@centraid/server/engine";
 import { useFakeClock } from "@centraid/test-kit/fake-clock";
 import { seededRandom } from "@centraid/test-kit/random";
-
-import type { AutomationTriggerCursor } from "@centraid/server/engine";
 
 import { wallClockFields, wallClockMinuteKey } from "../cron-timezone.js";
 import { dueInstants, readCronCursor } from "./cron-cursor.js";
@@ -174,7 +173,11 @@ function pinnedExpr(band: Band, minuteOfDay: number): string {
 function absoluteMatches(zone: string, expr: string, band: Band): Date[] {
   const centre = Date.parse(band.transitionUtc);
   const out: Date[] = [];
-  for (let t = centre - 20 * 3_600_000; t <= centre + 20 * 3_600_000; t += 60_000) {
+  for (
+    let t = centre - 20 * 3_600_000;
+    t <= centre + 20 * 3_600_000;
+    t += 60_000
+  ) {
     const candidate = new Date(t);
     if (cronMatches(expr, candidate, zone)) out.push(candidate);
   }

@@ -19,9 +19,8 @@
 
 import { beforeEach, describe, expect, it } from "vitest";
 
-import { useFakeClock } from "@centraid/test-kit/fake-clock";
-
 import type { AutomationTriggerCursor } from "@centraid/server/engine";
+import { useFakeClock } from "@centraid/test-kit/fake-clock";
 
 import { wallClockFields } from "../cron-timezone.js";
 import { dueInstants, readCronCursor } from "./cron-cursor.js";
@@ -38,22 +37,14 @@ const ZONE = "Etc/UTC";
  */
 const TILE_DAYS = 20;
 
-function tileDueInstants(
-  expr: string,
-  fromIso: string,
-  toIso: string
-): Date[] {
+function tileDueInstants(expr: string, fromIso: string, toIso: string): Date[] {
   const from = Date.parse(fromIso);
   const to = Date.parse(toIso);
   const out: Date[] = [];
   for (let start = from; start < to; start += TILE_DAYS * 86_400_000) {
     const end = Math.min(start + TILE_DAYS * 86_400_000, to);
     out.push(
-      ...dueInstants(
-        [{ expr, timeZone: ZONE }],
-        new Date(start),
-        new Date(end)
-      )
+      ...dueInstants([{ expr, timeZone: ZONE }], new Date(start), new Date(end))
     );
   }
   return out;
@@ -88,9 +79,7 @@ function isoWeek(date: Date): { year: number; week: number } {
   firstThursday.setUTCDate(firstThursday.getUTCDate() - firstDayNumber + 3);
   const week =
     1 +
-    Math.round(
-      (target.getTime() - firstThursday.getTime()) / (7 * 86_400_000)
-    );
+    Math.round((target.getTime() - firstThursday.getTime()) / (7 * 86_400_000));
   return { year: isoYear, week };
 }
 
