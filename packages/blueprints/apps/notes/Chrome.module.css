@@ -32,6 +32,26 @@
   flex: 1;
   min-height: 0;
   min-width: 0;
+  /* The Ask mount is positioned against this column, not against the pane. */
+  position: relative;
+}
+
+/* The assistant's panel host. Bottom-trailing under a pointer, where it sits
+   clear of the library; on the compact form factor it moves to the top so the
+   band and the keyboard never fight it for the same corner. */
+.askMount {
+  composes: kit-app-ask-mount from global;
+  position: absolute;
+  inset-inline-end: 16px;
+  bottom: 16px;
+  z-index: 30;
+}
+
+.isNarrow .askMount {
+  top: 12px;
+  inset-inline-end: 14px;
+  bottom: auto;
+  z-index: 45;
 }
 
 /* The toolbar row: controls and nothing else. No rule, no title and no count

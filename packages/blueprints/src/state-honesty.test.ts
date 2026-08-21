@@ -9,12 +9,17 @@ const read = (relative: string): string =>
   readFileSync(path.resolve(appsRoot, relative), "utf8");
 
 describe("blueprint state honesty", () => {
-  // Agenda, Notes, Tally and Tasks are absent from every row in this file:
-  // their interfaces were removed whole pending a ground-up redesign, and a
-  // row naming a file that no longer exists asserts nothing. Each rebuilt app
-  // rejoins the row that matches how it draws — these are requirements on an
-  // interface, not exemptions granted to an app.
-  test.each(["locker"])(
+  // Agenda, Notes and Tasks rejoined these rows with their rebuilds (#834);
+  // Tally is still absent because its interface is still removed whole pending
+  // a ground-up redesign, and a row naming a file that does not exist asserts
+  // nothing. Each rebuilt app joins the row that matches how it draws — these
+  // are requirements on an interface, not exemptions granted to an app.
+  //
+  // Tasks joins the generic row below: its chrome owns the scroll host and
+  // paints one skeleton for it. Agenda and Notes cannot, for the reason People
+  // cannot — their chromes hand the canvas a route and the skeleton belongs
+  // with the route body — so they are asserted per app underneath instead.
+  test.each(["locker", "tasks"])(
     "%s paints a skeleton until its first read settles",
     (app) => {
       expect(read(`${app}/Chrome.tsx`)).toContain("LoadingSkeleton");
@@ -64,6 +69,23 @@ describe("blueprint state honesty", () => {
     expect(body.match(/loading=\{loading\}/gu)).toHaveLength(routes.length);
   });
 
+  // Agenda and Notes paint their boot state in the ROUTE BODY, not the chrome:
+  // both chromes own geometry and hand a canvas whatever the current route
+  // resolves to, so a skeleton in the chrome would outlive the read it stands
+  // in for. What is asserted is the same claim the generic row makes, moved to
+  // the file that can honour it: the orchestrator answers "has a read landed"
+  // ONCE, and draws blocks at the geometry of the cards until it has.
+  test.each([
+    ["agenda", "LoadingSkeleton"],
+    ["notes", "<Skeletons"],
+  ])("%s paints its boot skeleton from the route body", (app, marker) => {
+    const root = read(`${app}/app-root.tsx`);
+    expect(root).toContain(marker);
+    expect(root).toMatch(/if \(!loaded\)/u);
+    // …and the chrome does NOT, so there is exactly one answer on screen.
+    expect(read(`${app}/Chrome.tsx`)).not.toContain("LoadingSkeleton");
+  });
+
   // The file that carries the recovery action, per app. It is the chrome for
   // every app that renders a denial as a banner inside its own shell; Photos
   // renders permission as a designed SCREEN instead (v4 handoff §13), so its
@@ -74,6 +96,9 @@ describe("blueprint state honesty", () => {
     ["docs", "docs/Chrome.tsx"],
     ["photos", "photos/components/Permission.tsx"],
     ["people", "people/Chrome.tsx"],
+    ["agenda", "agenda/Chrome.tsx"],
+    ["notes", "notes/Chrome.tsx"],
+    ["tasks", "tasks/Chrome.tsx"],
   ])("%s gives denied reads a direct vault-access action", (_app, file) => {
     expect(read(file)).toContain("VaultAccessButton");
   });
@@ -81,9 +106,21 @@ describe("blueprint state honesty", () => {
   test.each([
     ["locker", "locker/components/List.tsx"],
     ["people", "people/components/EmptyState.tsx"],
+    ["agenda", "agenda/components/Shared.tsx"],
+    ["tasks", "tasks/components/States.tsx"],
   ])("%s primary empty state uses kit vocabulary with a CTA", (_app, file) => {
     const source = read(file);
     expect(source).toContain("kit-empty");
+    expect(source).toContain("kit-btn");
+  });
+
+  // Notes is not on that row for a smaller version of the Docs reason: its day
+  // one is ONE sentence and two acts with every count blanked, so it draws its
+  // own panel rather than the notice card — but the act is still the shared
+  // `kit-btn`, which is what the row was protecting.
+  test("notes day one offers acts in kit vocabulary", () => {
+    const source = read("notes/components/States.tsx");
+    expect(source).toContain("EMPTY_DAY_ONE");
     expect(source).toContain("kit-btn");
   });
 

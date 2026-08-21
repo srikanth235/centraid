@@ -95,9 +95,9 @@ describe("the band-owner latch", () => {
   });
 
   it("is keyed per app — one answer says nothing about the next app", async () => {
-    // SHELL BEHAVIOUR, NOT PHOTOS BEHAVIOUR. Photos is the only app claiming a
-    // band today (`BAND_CLAIMING_APPS`), so the second and third ids here are
-    // arbitrary ones standing in for the next app that claims — which is the
+    // SHELL BEHAVIOUR, NOT PHOTOS BEHAVIOUR. The latch takes an `appId` and
+    // says nothing about which apps claim a band, so `notes` below is an
+    // arbitrary id standing in for the next app that claims — which is the
     // guarantee the latch makes and the reason it takes an `appId` at all.
     writeBandOwner("photos", "host");
     await Store.hydrate(bandOwnerKey("docs"), DEFAULT_BAND_OWNER);
@@ -115,11 +115,15 @@ describe("the band-owner latch", () => {
     // A limitation stated rather than hidden: mobile has no channel a frame
     // could ask "who has claimed", so the roster is hand-maintained. This
     // fails the moment it drifts without someone deciding to — Docs and
-    // People joined when their v12 phone builds landed their bands (#821).
+    // People joined when their v12 phone builds landed their bands (#821),
+    // Agenda and Tasks when theirs did (#834). Notes rebuilt in the same wave
+    // and is absent on purpose: its cover claims no band.
     expect(BAND_CLAIMING_APPS.map((app) => app.id)).toStrictEqual([
       "photos",
       "docs",
       "people",
+      "agenda",
+      "tasks",
     ]);
     for (const app of BAND_CLAIMING_APPS) {
       expect(app.name.length).toBeGreaterThan(0);

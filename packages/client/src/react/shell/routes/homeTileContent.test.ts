@@ -188,8 +188,8 @@ describe("shell/routes/homeTileContent", () => {
         ],
       }),
     });
-    expect(content.tasks?.glance.today).toBe("2 today");
-    expect(content.tasks?.glance.next).toContain("next · Sign the transfer");
+    expect(content.tasks?.glance?.today).toBe("2 today");
+    expect(content.tasks?.glance?.next).toContain("next · Sign the transfer");
   });
 
   it("takes the newest note and document by their own update stamps", async () => {

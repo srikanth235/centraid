@@ -89,14 +89,25 @@ function dayContextRows() {
     ],
     "schedule.task": [
       // Date-only due.
-      { task_id: "t1", status: "needs-action", due_at: "2026-03-14" },
+      {
+        task_id: "t1",
+        status: "needs-action",
+        title: "File the return",
+        due_at: "2026-03-14",
+      },
       // Timed due, same day.
       {
         task_id: "t2",
         status: "in-process",
+        title: "Call the plumber",
         due_at: "2026-03-14T09:30:00Z",
       },
-      { task_id: "t3", status: "needs-action", due_at: "2026-03-20" },
+      {
+        task_id: "t3",
+        status: "needs-action",
+        title: "Renew the passport",
+        due_at: "2026-03-20",
+      },
       // Closed tasks never count.
       { task_id: "t4", status: "completed", due_at: "2026-03-14" },
       // Outside the window.
@@ -144,9 +155,23 @@ describe("Agenda day-context (#834 R-daycontext)", () => {
       input: { from: "2026-03-01", to: "2026-03-31" },
       ctx,
     });
+    // A day carries its COUNT and the first few rows behind it: the shelf
+    // lists what is due without becoming a second task board, so identity and
+    // title are all a row projects and the tap-through belongs to Tasks.
     expect(result.due).toStrictEqual([
-      { day: "2026-03-14", count: 2 },
-      { day: "2026-03-20", count: 1 },
+      {
+        day: "2026-03-14",
+        count: 2,
+        tasks: [
+          { task_id: "t1", title: "File the return" },
+          { task_id: "t2", title: "Call the plumber" },
+        ],
+      },
+      {
+        day: "2026-03-20",
+        count: 1,
+        tasks: [{ task_id: "t3", title: "Renew the passport" }],
+      },
     ]);
     // No holiday source exists in the vault, so the field is honestly empty.
     expect(result.holidays).toStrictEqual([]);

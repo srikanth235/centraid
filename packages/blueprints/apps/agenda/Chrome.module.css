@@ -83,6 +83,26 @@
   flex-direction: column;
   min-inline-size: 0;
   min-block-size: 0;
+  /* The Ask mount is positioned against this column, not against the pane. */
+  position: relative;
+}
+
+/* The assistant's panel host. Bottom-trailing under a pointer, where it sits
+   clear of the canvas; on the compact form factor it moves to the top so the
+   band and the keyboard never fight it for the same corner. */
+.askMount {
+  composes: kit-app-ask-mount from global;
+  position: absolute;
+  inset-inline-end: 16px;
+  bottom: 16px;
+  z-index: 30;
+}
+
+.isNarrow .askMount {
+  top: 12px;
+  inset-inline-end: 14px;
+  bottom: auto;
+  z-index: 45;
 }
 
 .banner {

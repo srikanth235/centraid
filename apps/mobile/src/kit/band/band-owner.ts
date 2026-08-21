@@ -72,12 +72,18 @@ export interface BandClaimingApp {
  * mirror `placement-registry.ts` and `consent-gate.ts`'s `ENRICH_DOMAINS`
  * already are, and it is why the band-owner latch itself is keyed by an
  * arbitrary `appId` rather than being hard-wired to one app: the mechanism
- * is general, and since #821 the roster is three rows long.
+ * is general, and since #834 the roster is five rows long.
+ *
+ * Notes is deliberately NOT here: its rebuilt cover (#834) draws no band of
+ * its own, and a settings row offering to hand back a band nobody claimed
+ * would be a control naming nothing. It joins the day it renders one.
  */
 export const BAND_CLAIMING_APPS: readonly BandClaimingApp[] = [
   { id: "photos", name: "Photos" },
   { id: "docs", name: "Docs" },
   { id: "people", name: "People" },
+  { id: "agenda", name: "Agenda" },
+  { id: "tasks", name: "Tasks" },
 ];
 
 export interface BandOwnerState {

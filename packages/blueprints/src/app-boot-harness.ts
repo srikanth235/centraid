@@ -515,6 +515,22 @@ export function describeAppBoot(
             input?: Record<string, unknown>;
           }) => {
             readCalls += 1;
+            // Agenda asks a SECOND question on this screen (#834): the
+            // `day-context` projection, which answers a different shape from
+            // the calendar read this fixture stands for. Handing it the
+            // calendar payload would be a fiction no gateway performs — a
+            // query answering another query's rows — so it gets its own
+            // shaped answer here. It is empty on purpose: what this journey
+            // proves is that the grid still draws when nothing decorates it,
+            // and the decorations themselves are pinned by behaviour in
+            // apps/agenda/day-context.test.ts.
+            if (app === "agenda" && request?.query === "day-context") {
+              return Promise.resolve({
+                birthdays: [],
+                due: [],
+                holidays: [],
+              });
+            }
             if (app === "locker" && request?.query === "auth") {
               return Promise.resolve({
                 ok: true,

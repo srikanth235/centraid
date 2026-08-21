@@ -129,6 +129,12 @@ export function Chrome(props: ChromeProps): ReactNode {
           <div className={styles.canvas}>{props.slots.canvas}</div>
           {props.slots.detail}
         </div>
+        {/* THE ASSISTANT'S MOUNT. The panel is the shell's
+            (`kit-ask-inline.ts`) and it streams a turn under this app's id;
+            it mounts ONLY where the app gives it a node, which is why this
+            seam is here — without it the descriptor's `kitAsk` config
+            (app-inline.tsx) is real and unreachable. */}
+        <div className={styles.askMount} data-ask-mount />
       </main>
 
       {props.slots.overlays}

@@ -210,6 +210,8 @@ Applied again 2026-08-20 by [#831](https://github.com/srikanth235/centraid/issue
 
 Restoring a surface is the last step of its rebuild: delete its id from `AWAITING_HANDOFF`, put its rows back on the lists above, and the gates come back on by themselves.
 
+Amended 2026-08-21 by [#834](https://github.com/srikanth235/centraid/issues/834): **Agenda, Notes and Tasks are restored**, web and phone, and that last step is taken — the three ids are out of `AWAITING_HANDOFF` on both surfaces, so only **Tally** is still held back. Their rows are back on `state-honesty`, `shared-css`, `untrusted-rendering` and the accessibility contract, and the phone covers rejoin the virtualization list; Agenda's `day-context` is reached natively (`NATIVE_QUERY_UI`) and Notes' whole manifest through the WebView-app rule, so the rebuild added no `agent-only` withholdings. H-blank retires with the surfaces it described.
+
 ## People, links and the sharing plane (#821)
 
 Ruled 2026-08-18 by [#821](https://github.com/srikanth235/centraid/issues/821). The v12 People rebuild needed facts the contract did not answer, so the contract was **amended** — maintainer-authorized, in the same wave — rather than the screens being drawn over a guess. What each surface may say about a link, and who may make one, are separate answers.
