@@ -810,6 +810,38 @@
           }
         }
       }
+    },
+    {
+      "name": "journal",
+      "description": "The Journal place: a bounded, read-only window over the People-journal entries this vault holds — the same marker set the library, search and link-target projections exclude, read the other way round. Live entries only, newest by updated_at, with a short preview and checklist tally and never a full body; `truncated` says older entries exist beyond the window.",
+      "input": {
+        "type": "object",
+        "properties": {
+          "limit": {
+            "type": "integer",
+            "minimum": 20,
+            "maximum": 2000
+          }
+        },
+        "additionalProperties": false
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "entries": {
+            "type": "array"
+          },
+          "truncated": {
+            "type": "boolean"
+          },
+          "window": {
+            "type": "integer"
+          },
+          "vaultDenied": {
+            "type": "object"
+          }
+        }
+      }
     }
   ],
   "knobs": [

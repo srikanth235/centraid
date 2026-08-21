@@ -188,3 +188,64 @@ bunx oxlint -c oxlint.config.ts --disable-nested-config --deny-warnings \
 `packages/core/src/time/recurrence-properties.test.ts` at 660 lines
 against the 625 limit — that file belongs to the recurrence-summariser
 slice, not to this one, and is fixed there.
+
+## Audit
+
+**REFUTED** — 2026-08-21. Fresh-context sub-agent audit of the committed
+diff on `claude/issue-834-integration-prompt-co5z19` against this receipt
+and issue [#834](https://github.com/srikanth235/centraid/issues/834).
+
+What holds:
+
+- Every `- [x]` item is realized in code, not just prose. `docs/decisions.md`
+  carries `## Rebuilding Agenda, Notes and Tasks (#834)` with all four
+  `R-*` rows; Todoist-alone lands in `docs/blueprint-seats.md`,
+  `apps/tasks/app.json`, `index.json` and the regenerated `manifest.json`.
+- `day-context` is genuinely read-only and bounded: no write call, every
+  read carries `limit:` or an `op: "eq"|"in"`, `rangeOf` caps at 400 days,
+  denial returns the same shape with `vaultDenied` rather than throwing.
+- The journal exclusion really is applied in all three Notes queries
+  through the one shared `apps/_shared/journal-scheme.ts`, including the
+  in-memory re-narrowing of tag and concept rows in `library.ts` and the
+  throw-on-denial contract that makes the `link-targets` Notes column
+  absent instead of unfiltered.
+- Exactly one `describeRecurrence` definition exists repo-wide
+  (`packages/core/src/time/recurrence-summary.ts`).
+- `day-context-journal-queries.test.ts` exists with the nine claimed tests
+  and was re-run here: 9 passed.
+
+Why the verdict is REFUTED — `## What changed` does not faithfully
+describe the diff, and the file-coverage rule fails badly:
+
+- **20 of 35 changed files are unnamed** in the receipt, including two new
+  source modules and two new test/config subjects.
+- **The entire recurrence-summariser slice is absent** from both
+  `## What changed` and `## Checklist`: `recurrence-summary.ts` and
+  `recurrence-collapse.ts` (new), the excision from `recurrence.ts`, the
+  re-export in `time/index.ts`, the new public `collapseMissedOccurrences`
+  API threaded through `packages/server/src/engine/types.ts`,
+  `packages/blueprints/types/centraid.d.ts` and the worker `runner.ts`,
+  the `recurrence-lifecycle-properties.test.ts` split, and the stryker /
+  vitest-mutation / `scripts/mutation/seeds.mjs` rows. This is a real
+  capability shipped silently.
+- **`packages/client/src/react/blueprints/inlineQueryCtx.ts` now mounts a
+  `time` facade** on the inline ctx where there was none — a behavioural
+  change to the web/desktop inline plane, unnamed.
+- **`apps/tally/queries/dashboard.ts` drops the `?? template.rrule`
+  fallback**, so an unphrasable rule now yields `preview: null` instead of
+  raw RRULE text — a member-visible change, unnamed.
+- **584 lines of wave-1 UI scaffolding are in the range and unnamed**:
+  `apps/notes/types.ts`, `apps/notes/shelves.ts`, `apps/tasks/types.ts`,
+  `apps/tasks/shelves.ts` (all new). `## Out of scope` asserts "the
+  rebuilt interfaces themselves" are not here, which the diff contradicts.
+- **`## Verification` is stale and self-contradicting**: it defers the
+  `repo-hygiene` violation on `recurrence-properties.test.ts` to "the
+  recurrence-summariser slice … fixed there", but that slice is in this
+  same commit range under this same single receipt, and the fix already
+  landed here — the file is now 425 lines. No verification command in the
+  section covers any `packages/core/src/time` or `packages/server` work.
+
+`## Checklist` otherwise mirrors the issue truthfully — the unchecked
+wave 1 / `check:push` rows are expected for an in-progress umbrella, and
+no checked row overclaims. The refutation is scope description, not
+scope inflation: the code is sound, the receipt does not account for it.

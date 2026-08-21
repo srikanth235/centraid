@@ -100,6 +100,8 @@ interface EventRow extends RawEvent {
   attendees?: DecoratedAttendee[];
   is_recurrence_instance?: boolean;
   instance_key?: string;
+  /** The ONE member-facing recurrence sentence; never the rule (#834). */
+  recurrence_summary?: string | null;
 }
 /**
  * Group the owner's attachments for one subject type into a map keyed by
@@ -366,6 +368,25 @@ function expandRecurringEvents(
   return out;
 }
 
+/**
+ * The member-facing recurrence sentence for a series, or `null` for a one-off.
+ *
+ * It is a two-line call through `ctx.time` rather than a module of its own on
+ * purpose: the grammar lives in `@centraid/core/time` and is shared with
+ * Tasks, so anything more here would be the second summariser the product
+ * forbids. An older gateway exposes the vault surface without the time helper
+ * (see the `timeApi` note below); there the field is simply absent, which the
+ * UI reads as "no summary to show" rather than falling back to the rule.
+ */
+function recurrenceSummary(
+  ctx: HandlerArgs["ctx"],
+  rrule: string | null | undefined
+): string | null {
+  const time = ctx.time as TimeApi | undefined;
+  if (!rrule || !time?.describeRecurrence) return null;
+  return time.describeRecurrence(rrule);
+}
+
 export default async function upcomingHandler({ query, ctx }: HandlerArgs) {
   const purpose = "dpv:ServiceProvision";
   try {
@@ -517,6 +538,13 @@ export default async function upcomingHandler({ query, ctx }: HandlerArgs) {
           (ext?.reminders_json as string | null | undefined) ?? null,
         attachments: attByEvent.get(e.event_id) ?? [],
         attendees: guestsByEvent.get(e.event_id) ?? [],
+        // THE ONE SUMMARISER, RESOLVED SERVER-SIDE (#834). A raw RRULE is a
+        // machine string; the member-facing sentence is `ctx.time`'s and is
+        // shared with Tasks, so neither app can grow a second grammar. The
+        // row carries the sentence and never the rule, which is what makes
+        // "no raw rule reaches a surface" checkable at the boundary rather
+        // than trusted in every renderer.
+        recurrence_summary: recurrenceSummary(ctx, e.rrule),
       };
     });
     // Open-ended "upcoming" (no `to`) still needs a real ceiling to expand
