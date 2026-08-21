@@ -654,6 +654,117 @@ Every file this branch touches, so a reviewer can see the surface without leavin
 
 ## Audit
 
+**PASS** — 2026-08-21. Fourth fresh-context audit, re-adjudicated from
+scratch on `claude/issue-834-integration-prompt-co5z19` at HEAD `f162968e`
+against `e40f060e..HEAD` (`git merge-base origin/main HEAD` = `e40f060e`,
+re-fetched before the range was taken), this receipt, and the directive at
+`.governance/packs/governance-kit/audit/directives/receipt-per-issue/`.
+Working tree clean. This audit re-checks the shape the third audit
+REFUTED and the substance it affirmed; the prior entry is preserved below
+unmodified as history.
+
+**Method.** Ran the directive itself; re-derived the 180-path change set
+and diffed it programmatically against the paths the new `## Files
+changed` section lists, in both directions (missing and phantom); checked
+each group's declared count against its actual contents; matched all 24
+`- [x]` items against the new `### Crosswalk against the checklist`
+rows; spot-checked crosswalk pointers against the code rather than the
+prose; re-ran the Notes suite; compared the `## Audit` section byte-for-byte
+against `git show 412b1ce3`; and audited the repair commits for scope.
+
+### The three shape defects the prior audit named are repaired
+
+- **Rule 6, file coverage — repaired.** The directive now reports
+  **exactly 1 violation repo-wide**, and it is
+  `receipts/issue-831-clear-four-app-interfaces.md` missing `## Out of
+  scope` — a receipt that exists on `origin/main` and is absent from `git
+  diff --name-only e40f060e..HEAD`, so it is pre-existing and not this
+  change set's to fix. **Zero violations are attributed to this receipt.**
+  Independently of the gate: the new `## Files changed` section lists 186
+  backticked tokens, of which 179 are file paths and 7 are the directory
+  headers of the group labels. Set-differenced against the diff, **0 of the
+  179 non-receipt changed paths are missing and 0 phantom paths are
+  claimed**. All 13 group counts are accurate and sum to exactly 179
+  (6+12+40+36+28+2+14+7+11+5+7+7+4), matching the section's own "179 paths
+  … plus this receipt itself".
+- **Rule 3, checklist crosswalk — repaired.** 24 checked items, 0
+  unchecked; the new `### Crosswalk against the checklist` carries **24
+  rows, one per item**, each opening with the item's text verbatim and
+  each closing with a `→` pointer to where the work landed. Every item
+  matches its row as a prefix; none is a paraphrase that would satisfy the
+  matcher while dodging the evidence.
+- **The two stale numbers — corrected, and both corrections verify.** The
+  `check:push` checklist item now says **three** environment reds, and
+  `## Verification` lists exactly three `— ENVIRONMENT` bullets
+  (`test:affected`, `design:gallery`, `format:check`) under "40 of 43
+  green". Notes now reads "75 web tests across 8 files + 1 mobile test":
+  `bun run --cwd packages/blueprints vitest run apps/notes` reports **8
+  passed (8) / 75 passed (75)** at this HEAD, and
+  `apps/mobile/src/apps/notes/notes-model.test.ts` is the only mobile test
+  file and holds exactly one case — so "1 mobile test" is literal, not
+  rounded.
+
+### The repair is a shape repair only
+
+`git diff --name-only 412b1ce3..f162968e` touches **one file — this
+receipt**. Within it the only checklist edits are the two corrections
+above (`two`→`three`, `65 web tests`→`75 web tests across 8 files`); no
+other item was reworded to make the crosswalk cheaper to satisfy. Nothing
+under `.governance/` is in the change set, and neither is
+`tests/hygiene-budgets.json`, `tests/coverage-floors.json`,
+`tests/quality/copy-allowlist.json` or
+`tests/quality/unbounded-query-waivers.json` — the receipt's "no other
+gate knob moved" claim holds, and the shape was fixed in the receipt
+rather than in the gate.
+
+### Substance re-checked, not inherited
+
+Crosswalk pointers were read against the code, not accepted from the
+prose. `packages/blueprints/apps/agenda/queries/day-context.ts` is an
+addition in `a7023f24` and is registered in `app.json` (`"name":
+"day-context"`), in `app-inline.tsx` (`"day-context": { default:
+dayContextQuery }`) and against `CHANGE_TABLES` in `app-root.tsx:99`.
+`packages/blueprints/apps/_shared/journal-scheme.ts` is an addition and is
+imported by `queries/library.ts`, `queries/search.ts` and
+`queries/link-targets.ts` — the three the ruling names — plus
+`queries/journal.ts` as the include-only counterpart.
+`packages/blueprints/src/day-context-journal-queries.test.ts` is an
+addition holding exactly **nine** cases, as claimed.
+`packages/blueprints/apps/tally/queries/dashboard.ts` really drops `??
+template.rrule`. `collapseMissedOccurrences` is present in all four files
+the crosswalk names (`engine/types.ts`, `types/centraid.d.ts`,
+`worker/runner.ts`, `inlineQueryCtx.ts`).
+`apps/web/tests/e2e/rebuilt-apps.spec.ts` is an addition and names both
+`issue-834-tasks-board.png` and `issue-834-agenda-day-context.png` under
+`artifacts/e2e/ui-impact`.
+
+The "660 → 425 lines" claim for
+`packages/core/src/time/recurrence-properties.test.ts` was challenged and
+survives: the file is 603 lines at `e40f060e`, grows to **660** in stage 0
+(`a7023f24`) — over the 625-line limit — and is split back to **425** in
+`db1562dd`, with the extracted
+`recurrence-lifecycle-properties.test.ts` at 270. The receipt's numbers
+are the ones that mattered to the limit, not the merge-base ones.
+
+Both load-bearing Decisions claims verify. The `approvedDeviation`
+paragraph quoted in `## Decisions` is **identical to
+`tests/quality/classification-ratchet.json`'s `approvedDeviation`** —
+compared programmatically after whitespace normalisation, 572 characters
+on both sides. `AWAITING_HANDOFF`
+(`packages/blueprints/src/handler-reachability.test.ts:64-68`) is
+`{ web: ["tally"], mobile: ["tally"] }` — only Tally, on both surfaces,
+exactly as the checklist and `## Out of scope` state.
+
+### Verdict
+
+All three rule-7 questions pass on substance — `## What changed`
+faithfully describes the diff, every `- [x]` item is realized in the diff,
+and the `## Checklist` mirrors the issue's staged plan — and the shape
+defects that forced the prior REFUTED are repaired without weakening any
+policy. No new findings. **PASS.**
+
+---
+
 **REFUTED** — 2026-08-21. Third fresh-context audit, adjudicated from
 scratch on `claude/issue-834-integration-prompt-co5z19` at HEAD `ecee3b42`
 against the committed range `e40f060e..HEAD` (`git merge-base origin/main
