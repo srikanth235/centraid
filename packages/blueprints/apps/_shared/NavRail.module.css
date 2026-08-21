@@ -1,0 +1,157 @@
+/* The app navigation rail (v16 §3).
+
+   LOGICAL PROPERTIES ONLY. Not a house style here but a requirement of the
+   thing: the rail is a column on the LEADING edge of the content, so under RTL
+   it and its indent and its divider all have to move to the other side
+   together. One physical `left` in this file and the rail keeps its divider on
+   the wrong edge in half the world's scripts.
+
+   Every metric is a token. The two the rail needed and the system did not have
+   — its width and its pointer row rung — were added to `packages/design`
+   (`metrics.appRail` / `metrics.appRailRow`) rather than typed here, so the
+   number a row reads is the system's and not a measurement taken off a
+   prototype. */
+
+.rail {
+  flex: none;
+  /* `--w-app-rail` IS THE COLUMN, padding and divider included — the spec's
+     232 is what the content beside it gives up, not a content box the rail's
+     own insets then widen to 277. A shared component cannot assume the host
+     app declares a global `box-sizing`, and one of the two callers does not. */
+  box-sizing: border-box;
+  inline-size: var(--w-app-rail);
+  display: flex;
+  flex-direction: column;
+  /* THE RAIL AND THE CONTENT SCROLL INDEPENDENTLY, and neither scrolls the
+     other. A spine that scrolled away with the set would stop being a spine at
+     exactly the moment a long set makes you want one. */
+  overflow-y: auto;
+  min-block-size: 0;
+  /* The leading edge takes the PAGE MARGIN, so the rail starts where every
+     other page in the product starts. The trailing edge takes a rung, because
+     the divider is the thing the rows stop against and 12px is the distance
+     the rest of this chrome puts between content and a rule. */
+  padding-block: var(--sp-2) var(--sp-5);
+  /* `--content-margin` is each app's own re-declaration of the page margin on
+     its shell element (Photos sets it to `var(--page-margin)` outright, Docs
+     pins a compact rung), and this module is not that element's owner — so the
+     system token it derives from is the fallback rather than a hardcoded
+     number. A shared component may not assume an app-scoped property exists. */
+  padding-inline: var(--content-margin, var(--page-margin)) var(--sp-3);
+  border-inline-end: 1px solid var(--line);
+}
+
+/* A GROUP, not a section title. `--t-annot-label` and `--text-faint` are what
+   §3's table asks for — the annotation rung in the quietest ink — and
+   deliberately NOT `--t-eyebrow`: an uppercase 600 caps run is the register
+   this product uses for a FACT LIST's key, and a group of destinations is not
+   a fact list. It is also cased as a word ("Library", "Collections"), because
+   the rung carries no `text-transform` and adding one here would be inventing
+   the eyebrow role a second time under another name. */
+.head {
+  font: var(--t-annot-label);
+  color: var(--text-faint);
+  padding-block: var(--sp-3) var(--sp-1);
+  padding-inline: var(--sp-2);
+  /* A head is a label on the rows under it; it never takes the slack a row's
+     count takes. */
+  flex: none;
+}
+
+/* The hairline under a group whose tail is a STATE of the set rather than a
+   place in it. `--line` is the system's light hairline rung (the brief's
+   `lineS`), the same one the rail's own divider takes. */
+.rule {
+  flex: none;
+  block-size: 1px;
+  background: var(--line);
+  margin-block: var(--sp-2);
+}
+
+/* A ROW IS A DESTINATION, not a control. It takes `--h-app-rail-row` — 30
+   under a pointer, the 44 row rung anywhere coarse — rather than
+   `--h-control`, and it is a full-width target with a sub-control radius.
+
+   THE INLINE PADDING IS `--sp-2`, WHICH IS NOT THE REFERENCE'S 6px. Six is
+   between the 4 and 8 rungs, and the system's spacing scale is closed: the two
+   values below the base are `--sp-hair` and `--sp-gutter`, both seams rather
+   than rhythm steps, and a third is a system change and not a call-site
+   decision. The nearest rung is 8, so the label lands 2px further from the
+   page margin than the prototype draws it and nothing else moves. */
+.row {
+  flex: none;
+  /* Same reason as the rail's own: `inline-size: 100%` plus an inset would
+     otherwise be 100% PLUS the inset, and every row would overflow the column
+     it sits in. */
+  box-sizing: border-box;
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  inline-size: 100%;
+  block-size: var(--h-app-rail-row);
+  padding-inline: var(--sp-2);
+  border: 0;
+  border-radius: var(--r-sm);
+  background: transparent;
+  text-align: start;
+}
+
+/* One level of nesting — Docs' folders under *Folders*. There is no second,
+   and no disclosure triangle: a folder is a LABEL, so this tree is a filter
+   over one set rather than a hierarchy to walk. */
+.row[data-indent="true"] {
+  padding-inline-start: var(--sp-4);
+}
+
+/* THE CURRENT ROW IS RAISED PAPER, not a fill and never the app's hue. The
+   rail is ink on paper like every other control in the product, and Photos'
+   amber and Docs' teal are marks and content accents that never land on one.
+
+   SIZE HOLDS, WEIGHT MOVES — the same rule the strip's tabs follow. The two
+   roles sit on one rung with one leading, so routing cannot re-flow the column
+   under the pointer. */
+.row[data-current="true"] {
+  background: var(--bg-elev);
+}
+
+/* Hover firms nothing and cards do not lift; the ground is the whole
+   treatment, and it is the same ground the current row takes so that pointing
+   at a row previews standing on it. */
+.row:not([data-static="true"]):hover {
+  background: var(--bg-hover);
+}
+.row:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
+}
+
+/* The row that is NOT a destination (Docs' Unfiled). It keeps the row's box so
+   its number stays in the count column, and gives up every affordance that
+   would promise a route. */
+.row[data-static="true"] {
+  cursor: default;
+}
+
+.label {
+  flex: 1;
+  min-inline-size: 0;
+  font: var(--t-small);
+  color: var(--text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.row[data-current="true"] .label {
+  font: var(--t-small-strong);
+}
+
+/* Numerics are tabular and read in order under RTL — the numeric register,
+   whole, exactly as the strip's own count takes it. */
+.count {
+  flex: none;
+  font: var(--t-mono);
+  font-variant-numeric: var(--t-mono-numeric);
+  direction: var(--t-mono-direction);
+  unicode-bidi: var(--t-mono-bidi);
+  color: var(--text-faint);
+}

@@ -18,6 +18,28 @@ every handler stays reachable through the assistant.
 - [x] Desktop and web offline journeys retargeted onto Docs; `desktop.offline` keeps an owner and `web-pending-overlay`'s floor is taken over one-to-one
 - [x] `bun run check:push`: 41/43 green; the two reds are this container's missing Electron and Chromium headless-shell binaries (see below)
 
+## Out of scope
+
+<!-- Added by #836: rule 2 of `receipt-per-issue` is checked on every tracked
+     receipt, and this one shipped without the section, leaving `main` red.
+     Nothing below is new — each line is drawn from this receipt's own
+     `## Decisions` and from the commit message of e40f060e. -->
+
+- **Everything below the surface.** `app.json` grants and knobs, `actions/`,
+  `queries/`, `pending-projection.ts` and `seed.js` are untouched on all four
+  apps. The apps stay installed, home tiles and palette search keep reading,
+  and the assistant still reaches every handler.
+- **The `app-inline.tsx` descriptors.** `pendingProjection`, `changeTables`,
+  `queries`, `kitAsk` and Tasks' `multiScope` all stand.
+- **The rebuild itself.** #831 removes interfaces; the ground-up redesign of
+  Agenda, Notes and Tasks is
+  [#834](https://github.com/srikanth235/centraid/issues/834), and what each
+  suspended check owes back is named at its own `AWAITING_HANDOFF` row rather
+  than here.
+- **Capabilities.** No action, query, grant or manifest entry was removed, so
+  nothing the four apps could do before they lost their covers became
+  unreachable to anything but a person's eyes.
+
 ## Decisions
 
 #831 removes interfaces, not capabilities. `app.json`, `actions/`,
@@ -117,3 +139,20 @@ other package suite is green: blueprints 3934, client 2304, mobile 1630.
 The two retargeted Playwright journeys are NOT executed here — the e2e
 lanes need the same missing browser and Electron binaries — so they carry
 review risk their unit-tested neighbours do not.
+
+### Checklist crosswalk
+
+<!-- Added by #836 alongside the missing `## Out of scope` section: rule 3 of
+     `receipt-per-issue` needs each checked item's own words to appear in
+     `## What changed` or `## Verification`, and this receipt paraphrased them.
+     Each line below quotes the item and points at the prose ALREADY in this
+     receipt that covers it. No new claim about #831 is made here. -->
+
+Each checked item verbatim, and where above it is described:
+
+- `packages/blueprints/apps/{agenda,notes,tally,tasks}` keep only their non-UI graph; each `app-root.tsx` is a `Root` that paints one empty element and keeps `CHANGE_TABLES` — the first paragraph of `## What changed` — the deleted chrome per app, and `Root` returning `<div ref={rootRef} />` plus `CHANGE_TABLES`.
+- `app-inline.tsx` descriptors unchanged — `pendingProjection`, `changeTables`, `queries`, `kitAsk`, Tasks' `multiScope` all stand — same paragraph, last sentence — untouched apart from Tasks' `multiScope` comment, which named a deleted file.
+- `apps/mobile/src/apps/{agenda,notes,tally,tasks}` keep their five routes; each screen paints the themed page ground and declares the props its route hands it — the second paragraph — the five named screens, each painting `colors.bg` and declaring its `*ScreenProps`.
+- `handler-reachability`'s `AWAITING_HANDOFF` names all four on web and mobile; the justification test still proves every id is a real manifest — recorded in this receipt's `## Decisions` — the suspension lives in `handler-reachability.test.ts`'s `AWAITING_HANDOFF`, not in per-handler exceptions.
+- Desktop and web offline journeys retargeted onto Docs; `desktop.offline` keeps an owner and `web-pending-overlay`'s floor is taken over one-to-one — the `tests/matrix.json` paragraph, and the `## Decisions` paragraph beginning "The offline journeys moved seats rather than lapsing."
+- `bun run check:push`: 41/43 green; the two reds are this container's missing Electron and Chromium headless-shell binaries (see below) — the first paragraph of `## Verification`, which also names the two container-bound reds.

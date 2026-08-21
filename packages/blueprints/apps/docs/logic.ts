@@ -26,6 +26,17 @@ import { createUploads } from "./uploads.ts";
 import { createVersions } from "./versions.ts";
 
 const $ = (id: string) => document.querySelector<HTMLElement>(`#${id}`)!;
+
+/**
+ * HOW MANY ROWS **Recently changed** SHOWS.
+ *
+ * It is a WINDOW on the drive, not a filter over it: the shelf answers "what
+ * did I touch last", and a list of everything sorted by date is the All shelf
+ * with a different sort. Exported because the navigation rail's count has to
+ * be the number this shelf will actually draw — a rail saying 1,908 over a
+ * shelf showing 8 is the count/header disagreement v16 §3 calls a defect.
+ */
+export const RECENT_WINDOW = 8;
 // Bytes stream to the blob staging route (issue #296) — no base64 through
 // command JSON — so big documents fit; the route itself caps at 512 MB.
 
@@ -199,7 +210,7 @@ export function createLogic({
         .sort((a, b) =>
           String(b.created_at ?? "").localeCompare(String(a.created_at ?? ""))
         )
-        .slice(0, 8);
+        .slice(0, RECENT_WINDOW);
     }
     return [...list].sort(compareDocs);
   }

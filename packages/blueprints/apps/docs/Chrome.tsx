@@ -59,8 +59,20 @@ export interface ChromeSlots {
   toolbar: ReactNode;
   /** The shelf strip (§1.7). Null on the compact form factor whose band claim
    *  was honoured — the band carries the shelves there — and on the routes
-   *  §1.7 excludes. */
+   *  §1.7 excludes. Null on a pointer seat too since v16: `navRail` carries
+   *  the same destinations there, on the other axis. */
   shelfStrip: ReactNode;
+  /**
+   * The app navigation rail (v16) — Docs' own destinations, and the FOLDER
+   * TREE this app's §14 once cut, as a 232px column on the leading edge of the
+   * content on a pointer seat. Null where the strip or the band carries them.
+   *
+   * It is the LEADING column of the content row and `rail` (the details) is
+   * the trailing one, which is the arrangement §1 of the rail spec draws:
+   * stem · app rail · content · info rail — three questions, not three spines.
+   * Which app, where in it, what is this.
+   */
+  navRail: ReactNode;
   /** The folder list, with its inline create/rename editors. */
   folderList: ReactNode;
   storage: ReactNode;
@@ -321,6 +333,7 @@ export function Chrome(props: ChromeProps): ReactNode {
             rail is furniture now, so the two share the row and the set
             reflows to the width that is left rather than being covered. */}
         <div className={styles.content}>
+          {props.slots.navRail}
           <div className={styles.scroll}>{props.slots.scroll}</div>
           {props.slots.rail}
         </div>

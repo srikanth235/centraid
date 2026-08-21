@@ -266,10 +266,15 @@
 
 /* Bulk bar (its contents come from BulkBar.module.css) */
 /* Scroll region */
-/* The scroller and the details rail, side by side (Chrome.tsx). `position:
-   relative` because the rail is the containing block's trailing column and
-   anything the route pins inside the content — not inside the scroll — hangs
-   off this box. */
+/* The navigation rail, the scroller and the details rail, side by side
+   (Chrome.tsx) — the v16 arrangement: stem · app rail · content · info rail,
+   three questions and not three spines. `position: relative` because the
+   details rail is the containing block's trailing column and anything the
+   route pins inside the content — not inside the scroll — hangs off this box.
+
+   THE SCROLLER IS THE ONLY COLUMN THAT GIVES WIDTH BACK. Both rails are
+   `flex: none`, so at 1090 the rail holds its width and the set reflows into
+   what is left rather than either column being squeezed. */
 .content {
   flex: 1;
   min-height: 0;

@@ -52,8 +52,20 @@ import styles from "./Chrome.module.css";
 
 export interface ChromeSlots {
   /** The shelf strip (§5). Absent in album detail and on the phone whose band
-   *  claim was honoured — the band carries the shelves there. */
+   *  claim was honoured — the band carries the shelves there. On a pointer
+   *  seat wide enough for a column beside the set, `navRail` carries the same
+   *  destinations instead (v16). */
   shelfStrip: ReactNode;
+  /**
+   * The app navigation rail (v16) — Photos' own destinations as a 232px
+   * column on the leading edge of the content, on a pointer seat. Null where
+   * the strip or the band carries them instead, and on the routes §4 excludes.
+   *
+   * It is a SIBLING OF THE SCROLL PANE, not a block above it, which is the
+   * whole difference between a rail and a strip: the two columns scroll
+   * independently, so a spine does not scroll away with the set it indexes.
+   */
+  navRail: ReactNode;
   /** The Photos toolbar row (§3) — or the selection bar, while a selection is
    *  active (§6). Null when it carries nothing. */
   toolbar: ReactNode;
@@ -102,16 +114,26 @@ export function Chrome({ slots }: ChromeProps): ReactNode {
           <div id="shelfStripMount">{slots.shelfStrip}</div>
           <div id="toolbarMount">{slots.toolbar}</div>
 
-          <div id="scrollPane" className={styles.scroll}>
-            {slots.banner}
-            <section
-              id="grid"
-              className={styles.content}
-              aria-label="Photo library"
-            >
-              {slots.main}
-            </section>
-            {/* THE EMPTY BLOCK IS PHOTOS' OWN (§14, proto 4406), not the
+          {/* THE CONTENT ROW (v16): the navigation rail and the scroll pane,
+              side by side. The pane used to be the only child of `#live` and
+              is now one of two, so the rail can be a flex SIBLING of it rather
+              than a block above it. That is what makes "the rail and the
+              content column scroll independently" true — a strip is inside the
+              column's own flow and a rail is beside it — and it costs the pane
+              nothing where `navRail` is null, because the row then has one
+              child taking all of it. */}
+          <div className={styles.contentRow}>
+            {slots.navRail}
+            <div id="scrollPane" className={styles.scroll}>
+              {slots.banner}
+              <section
+                id="grid"
+                className={styles.content}
+                aria-label="Photo library"
+              >
+                {slots.main}
+              </section>
+              {/* THE EMPTY BLOCK IS PHOTOS' OWN (§14, proto 4406), not the
                 shared `.kit-empty`. Three things the kit's version could not
                 say, each of them load-bearing:
 
@@ -131,37 +153,38 @@ export function Chrome({ slots }: ChromeProps): ReactNode {
                 (view-state.ts), upload.ts binds `#emptyUpload` once at boot,
                 and `applyUploadTarget` re-reads it on every render. React
                 never re-writes an unchanged prop, so those writes survive. */}
-            <div id="empty" className={styles.empty} hidden>
-              {/* Seeded with the title it takes in every view but a search
+              <div id="empty" className={styles.empty} hidden>
+                {/* Seeded with the title it takes in every view but a search
                   miss, so the heading is never an empty one to a screen
                   reader; `applyEmptyState` overwrites its text content, and
                   the block is `hidden` until it has. */}
-              <h2 id="emptyText" className={styles.emptyTitle}>
-                {EMPTY_TITLE}
-              </h2>
-              <p id="emptyBody" className={styles.emptyBody} />
-              <div className={styles.emptyActions}>
-                {/* The ONE filled control in this view (§18). The frame's app
+                <h2 id="emptyText" className={styles.emptyTitle}>
+                  {EMPTY_TITLE}
+                </h2>
+                <p id="emptyBody" className={styles.emptyBody} />
+                <div className={styles.emptyActions}>
+                  {/* The ONE filled control in this view (§18). The frame's app
                     bar drops its own Import while this is offered — two filled
                     Imports on one screen is two answers to one question. */}
-                <button
-                  id="emptyUpload"
-                  type="button"
-                  className="kit-btn primary"
-                  hidden
-                >
-                  {EMPTY_ACTIONS.import}
-                </button>
-                {/* Phone only (§15's Import row: the camera is the compact
+                  <button
+                    id="emptyUpload"
+                    type="button"
+                    className="kit-btn primary"
+                    hidden
+                  >
+                    {EMPTY_ACTIONS.import}
+                  </button>
+                  {/* Phone only (§15's Import row: the camera is the compact
                     surface's second way in). Outlined, always. */}
-                <button
-                  id="emptyCamera"
-                  type="button"
-                  className="kit-btn"
-                  hidden
-                >
-                  {EMPTY_ACTIONS.camera}
-                </button>
+                  <button
+                    id="emptyCamera"
+                    type="button"
+                    className="kit-btn"
+                    hidden
+                  >
+                    {EMPTY_ACTIONS.camera}
+                  </button>
+                </div>
               </div>
             </div>
           </div>

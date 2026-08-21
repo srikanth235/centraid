@@ -3232,7 +3232,6 @@
       "tier": "e2e",
       "owner": "apps/web/tests/e2e/offline-reconnect.spec.ts",
       "minimumTests": 1,
-      "replacesMinimumTestsFlow": "web-pending-overlay",
       "approvedMinimumTestsDeviation": "Takes over the retired `web-pending-overlay` floor one-to-one. That journey proved the PWA recovers a VISIBLE pending row across a reload while still offline, and it drove Tally, Tasks and Agenda — the three interfaces #831 cleared, which left it without a subject on this seat. Rather than keep two near-identical offline journeys over the one remaining app that renders the shared pending overlay, the contract moved into `offline-reconnect.spec.ts`, which was itself retargeted from Tasks to Docs in the same change: it now asserts the optimistic title AND its `.kit-pending-chip` survive the offline reload before going on to prove settlement on reconnect. Two named contracts over one journey, exactly as `desktop-real-journey` and `desktop-app-open-journey` share `onboarding-home.spec.ts`. Same surface, dimension, tier and floor; no assertion dropped. #834 rebuilt Agenda, Notes and Tasks and did NOT move the contract back: one PWA offline journey over Docs still owns both halves, and the rebuilt apps' own pending honesty is proven at the boot tier (packages/blueprints/src/app-boot/agenda.test.ts) rather than by re-splitting this flow."
     },
     {

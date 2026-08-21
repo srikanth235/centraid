@@ -32,6 +32,8 @@ import { readGrantAudiences } from "../_shared/grant-audiences.ts";
 import { grantPlaneAvailable } from "../_shared/grant-gateway.ts";
 import type { GrantAudienceOption } from "../_shared/grant-plane.ts";
 import { GrantSheet } from "../_shared/GrantSheet.tsx";
+import { navSeat } from "../_shared/nav-seat.ts";
+import { NavRail } from "../_shared/NavRail.tsx";
 import { mountedScopes } from "../_shared/scope-kit.ts";
 import { SearchScaffold } from "../_shared/SearchScaffold.tsx";
 import { SAVED_TO_MY_VAULT } from "../_shared/shared-copy.ts";
@@ -74,7 +76,8 @@ import type { DriveFilters } from "./filters.ts";
 import { appBar, bandClaim } from "./frame.tsx";
 import { docsRosterAnswer } from "./grant-audiences.ts";
 import type { DocsShareHost } from "./grant-audiences.ts";
-import { createLogic } from "./logic.ts";
+import { createLogic, RECENT_WINDOW } from "./logic.ts";
+import { docsNavRail } from "./nav-rail.ts";
 import { createNav } from "./nav.ts";
 import {
   CAPABILITIES,
@@ -83,12 +86,14 @@ import {
   LOCKER,
   NAMES,
   NEWDOC,
+  RECENT,
   SCAN,
   SEARCH,
   STARRED,
   STORAGE,
   TRASH,
   allowsSelection,
+  countKey,
   folderIdFrom,
   shelfFromSegment,
   showsDrive,
@@ -802,9 +807,21 @@ export function Root({
     ? logic.folderName(openFolderId)
     : undefined;
 
-  // Per-shelf counts for the strip and the More sheet — one map, so the two
-  // surfaces can never disagree about how many things a shelf holds.
+  // Per-shelf counts for the strip, the More sheet and the NAVIGATION RAIL —
+  // one map, so the three surfaces can never disagree about how many things a
+  // shelf holds (v16 §3: "a count that disagrees with its shelf header is a
+  // defect"). The two the rail added are the two the strip had nowhere to put:
+  //
+  //   * ALL is the whole active drive, which is the number the app bar shows
+  //     on that shelf once nothing is filtered;
+  //   * RECENTLY CHANGED is a WINDOW, not a filter — `currentRows` takes the
+  //     eight most recent — so its count is that window's size and not the
+  //     drive's, which is what the shelf will actually draw.
   const shelfCounts = new Map<string, number>([
+    // All's shelf id is `null`, so it keys on the band's own name for the root
+    // (`countKey`) rather than a third name invented here.
+    [countKey(null), active.length],
+    [RECENT, Math.min(active.length, RECENT_WINDOW)],
     [FOLDERS, data.folders.length],
     [STARRED, active.filter((f) => f.starred).length],
     [TRASH, trashCount],
@@ -1017,15 +1034,50 @@ export function Root({
   // pane alone dropped the strip on a pane the shell did not consider compact
   // — no strip, no band, and six shelves reachable from nowhere. A layout
   // signal may hide a navigation only where it knows the replacement rendered.
-  const handedOff = compact && narrow;
-  const shelfStrip = handedOff ? null : (
-    <ShelfStrip
-      shelf={state.shelf}
-      counts={shelfCounts}
-      onSelect={selectShelf}
-      narrow={narrow}
-    />
-  );
+  // WHICH SURFACE CARRIES THE SHELVES (v16, `_shared/nav-seat.ts`) — band,
+  // strip or rail, exactly one of the three and never two. The condition used
+  // to be spelled out here and again in the rail's own expression; it is one
+  // function now, so "a destination that exists only in the rail is a defect"
+  // holds by construction rather than by inspection.
+  const seat = navSeat({ narrow, compact });
+  /** The band claim was HONOURED — the frame is carrying the shelves. The app
+   *  bar reads it too: it drops its own Search only where the band has one. */
+  const handedOff = seat === "band";
+  const shelfStrip =
+    seat === "strip" ? (
+      <ShelfStrip
+        shelf={state.shelf}
+        counts={shelfCounts}
+        onSelect={selectShelf}
+        narrow={narrow}
+      />
+    ) : null;
+  // THE RAIL DRAWS WHERE THE STRIP DREW — the definition of done's own rule,
+  // "a rail on exactly the routes that previously drew a strip, and no
+  // others". In this app that is every route: the seven off-strip destinations
+  // (Storage, What Docs may read, Add, Scan and the three boundary screens)
+  // draw no breadcrumb of their own, so the strip has always been the way back
+  // from them at a desk, and a rail that withdrew there would strand a member
+  // on a page whose only exit is the frame's stem. On those routes no row is
+  // current, which is the honest state: they are somewhere the rail does not
+  // name.
+  //
+  // The one gate is the DENIED SEAT. With no vault access there is nothing
+  // behind any of these destinations, and a column of them would be offering
+  // doors that all open onto the same panel.
+  const navRail =
+    seat === "rail" && !consent ? (
+      <NavRail
+        label="Docs"
+        items={docsNavRail({
+          shelf: state.shelf,
+          counts: shelfCounts,
+          folders: data.folders,
+          activeDocs: active,
+          onSelect: selectShelf,
+        })}
+      />
+    ) : null;
   const moreSheet = moreOpen ? (
     <MoreSheet
       shelf={state.shelf}
@@ -1551,6 +1603,7 @@ export function Root({
         slots={{
           toolbar,
           shelfStrip,
+          navRail,
           folderList,
           storage,
           newMenu,

@@ -39,6 +39,8 @@ import { debounce, observeWidth } from "@centraid/design/elements";
 
 import { publishOutcome } from "../_shared/app-frame.tsx";
 import { Skeleton } from "../_shared/LoadingSkeleton.tsx";
+import { navSeat } from "../_shared/nav-seat.ts";
+import { NavRail } from "../_shared/NavRail.tsx";
 import {
   mountedScopes,
   ownScopeId,
@@ -95,6 +97,7 @@ import { createLibraryStore } from "./library-store.ts";
 import { createLightbox, viewerKeyAction } from "./lightbox.tsx";
 import { createMemberPrefs, stepTileSize } from "./member-prefs.ts";
 import { buildMemories, enrichAlbums } from "./memories.ts";
+import { photosNavRail, railDrawnOn } from "./nav-rail.ts";
 import { notice, setStatusSink, setWriteTargetResolver } from "./outcomes.ts";
 import { createPeople } from "./people.ts";
 import { createPicker } from "./picker.tsx";
@@ -105,6 +108,7 @@ import { runBatchDownload } from "./selection-actions.ts";
 import { createSelection } from "./selection.tsx";
 import {
   allowsSelection,
+  countKey,
   PEOPLE,
   personIdFrom,
   personShelf,
@@ -172,6 +176,7 @@ export function Root({
   const narrowRef = useRef(false);
   const [slots, setSlots] = useState<ChromeSlots>({
     shelfStrip: null,
+    navRail: null,
     toolbar: null,
     banner: null,
     main: null,
@@ -221,6 +226,11 @@ export function Root({
       render: (node: ReactNode) => setSlot(key, node),
     });
     const shelfStripRoot = mk("shelfStrip");
+    // The app navigation rail (v16) — the pointer seat's form of the same
+    // spine the strip is. Its own slot, because it stands in a different
+    // REGION: the strip is a block above the scroll pane and the rail is a
+    // column beside it.
+    const navRailRoot = mk("navRail");
     // The toolbar row's mount — also where the selection bar renders while a
     // selection is active (v4 §6 close-out, selection.tsx's header).
     const toolbarRoot = mk("toolbar");
@@ -301,7 +311,7 @@ export function Root({
     // member record (§16). See member-prefs.ts for what is and is not true
     // about that today.
     const prefs = createMemberPrefs(() => {
-      renderShelfStrip();
+      renderNavigation();
       renderToolbarRow();
       renderMain();
       contributeAppBar();
@@ -423,7 +433,7 @@ export function Root({
       selection.prune(assets);
       if (recordNextLoad) lastFreshLoadAt = Date.now();
       recordNextLoad = true;
-      renderShelfStrip();
+      renderNavigation();
       renderToolbarRow();
       renderMain();
       selection.renderBar();
@@ -620,7 +630,7 @@ export function Root({
       if (moreOpen) closeMore();
       // Selection is cleared when the route leaves Photos (§16); within
       // Photos it survives a shelf change, which is what §6 asks for.
-      renderShelfStrip();
+      renderNavigation();
       renderToolbarRow();
       renderMain();
       contributeAppBar();
@@ -821,7 +831,45 @@ export function Root({
       return visibleAssets().length;
     }
 
-    // ---- the shelf strip (§5) ----
+    // ---- the app's own navigation: the rail (v16) or the strip (§5) ----
+    //
+    // ONE FUNCTION FOR ONE QUESTION. The rail and the strip are the same spine
+    // on two axes and they answer the same question — where in Photos am I —
+    // so they are re-rendered together and can never disagree about the answer
+    // or about which seat is carrying it.
+    function renderNavigation(): void {
+      renderNavRail();
+      renderShelfStrip();
+    }
+
+    /**
+     * The 232px column beside the content (v16 §4). A POINTER SEAT ONLY, and
+     * both halves of that are read for the same reason the strip reads both:
+     * `narrow` is this app's own pane, `compact` is the SHELL's form factor,
+     * and a rail drawn on either would be a column where there is no room for
+     * one — with the strip withdrawn behind it.
+     */
+    function renderNavRail(): void {
+      const seat = navSeat({
+        narrow: narrowRef.current,
+        compact: compactRef.current,
+      });
+      if (seat !== "rail" || accessDenied || !railDrawnOn(shelf)) {
+        navRailRoot.render(null);
+        return;
+      }
+      navRailRoot.render(
+        <NavRail
+          label="Photos"
+          items={photosNavRail({
+            shelf,
+            counts: shelfCounts(),
+            onSelect: navigateTo,
+          })}
+        />
+      );
+    }
+
     function renderShelfStrip(): void {
       const album = currentAlbum();
       const refusal = albumRefusalReason();
@@ -839,12 +887,12 @@ export function Root({
             onBack={() => navigateTo(ALBUMS)}
             onStartRename={() => {
               renamingAlbum = true;
-              renderShelfStrip();
+              renderNavigation();
             }}
             onRenameSubmit={(title) =>
               submitRenameAlbum(album, title, {
                 refresh,
-                renderToolbar: renderShelfStrip,
+                renderToolbar: renderNavigation,
                 setRenamingAlbumForId: (id) => {
                   renamingAlbum = id !== null;
                 },
@@ -852,7 +900,7 @@ export function Root({
             }
             onRenameCancel={() => {
               renamingAlbum = false;
-              renderShelfStrip();
+              renderNavigation();
             }}
             onDelete={() =>
               deleteAlbumConfirmed(album, {
@@ -864,10 +912,15 @@ export function Root({
         );
         return;
       }
-      // On the phone whose band claim was honoured, the band carries the
-      // shelves and the strip is not rendered — exactly one navigation for one
-      // set of destinations (§3, §15).
-      if (compactRef.current && narrowRef.current) {
+      // ON THE BAND'S SEAT the frame carries the shelves, and ON THE RAIL'S
+      // the column beside the content does (v16). The strip is what is left:
+      // the form of the same spine that fits a narrow pane on a pointer shell
+      // and a wide one on a compact shell. `navSeat` answers all three at once
+      // so no seat can end up with two navigations or with none.
+      if (
+        navSeat({ narrow: narrowRef.current, compact: compactRef.current }) !==
+        "strip"
+      ) {
         shelfStripRoot.render(null);
         return;
       }
@@ -887,16 +940,39 @@ export function Root({
       );
     }
 
-    /** What each shelf counts for the compact band's More sheet. The desktop
-     *  strip follows the handoff's quiet label-only presentation; counts remain
-     *  available where the overflow sheet has room to explain them. */
+    /**
+     * WHAT EACH SHELF COUNTS — one map, read by the compact band's More sheet
+     * and by the navigation rail (v16 §3: "counts read from the same source
+     * the shelf headers read; a count that disagrees with its shelf header is
+     * a defect"). The desktop strip still follows the handoff's quiet
+     * label-only presentation and draws none of them.
+     *
+     * Every entry is the same expression `countFor` uses for that shelf when
+     * the member is standing on it, so the number in the rail is the number
+     * the app bar will show once they press the row. A shelf whose count is
+     * NOT KNOWN YET omits its entry rather than contributing a zero:
+     *
+     *   * PEOPLE answers `null` until its own lazy read lands;
+     *   * DUPLICATES answers `null` until the cluster scan does;
+     *
+     * and a rail that printed 0 for either would be reporting an empty shelf
+     * it had never read.
+     */
     function shelfCounts(): ReadonlyMap<string, number> {
-      return new Map<string, number>([
+      const counts = new Map<string, number>([
+        // The Library shelf's id is `null`, so it keys on the band's own name
+        // for the root (`countKey`) rather than a third name invented here.
+        [countKey(null), assets.length],
         [FAVORITES, assets.filter((a) => a.favorite).length],
         [ALBUMS, albums.length],
         [PLACES, sections().length],
         [TRASH, trash.length],
       ]);
+      const peopleCount = people.list()?.length;
+      if (peopleCount !== undefined) counts.set(PEOPLE, peopleCount);
+      const duplicateCount = duplicates.count();
+      if (duplicateCount !== null) counts.set(DUPLICATES, duplicateCount);
+      return counts;
     }
 
     // ---- the Photos toolbar row (§3) ----
@@ -1591,13 +1667,13 @@ export function Root({
     const stopWidth = rootElRef.current
       ? observeWidth(rootElRef.current, 860, (isNarrow: boolean) => {
           narrowRef.current = isNarrow;
-          renderShelfStrip();
+          renderNavigation();
           renderMain();
         })
       : () => {};
 
     // ---- first paint ----
-    renderShelfStrip();
+    renderNavigation();
     renderToolbarRow();
     // `renderMain` paints the packed `--skel` grid while `loaded` is false
     // (§14) — the first frame already occupies the geometry the photographs
