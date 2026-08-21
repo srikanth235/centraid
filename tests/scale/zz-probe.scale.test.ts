@@ -15,32 +15,30 @@ describe("probe", () => {
     });
     const auth = { Authorization: "Bearer probe-token" };
     const paths = [
-      "/centraid/_gateway/info",
-      "/centraid/_gateway/health",
-      "/centraid/_apps",
-      "/centraid/_vault/status",
-      "/centraid/_vault/changes?since=0&limit=50",
-      "/centraid/_vault/atlas/browse?sub=tables",
-      "/centraid/_vault/atlas/browse/tables",
-      "/centraid/_vault/atlas/browse/rows?table=core_party&limit=10",
-      "/centraid/_vault/atlas/browse/ref-search?table=core.party&query=a",
-      "/centraid/_vault/atlas/census",
+      "/centraid/_vault/changes?since=0:0&limit=50",
+      "/centraid/_vault/replica/bootstrap?window=100",
+      "/centraid/_vault/automations",
+      "/centraid/_vault/apps",
+      "/centraid/notes/_describe",
+      "/centraid/tasks/_describe",
+      "/centraid/_vault/atlas/browse/rows?table=core.party&limit=10",
     ];
     for (const p of paths) {
       const res = await fetch(`${handle.url}${p}`, { headers: auth });
       const body = await res.text();
-      console.log(p, res.status, body.slice(0, 200));
+      console.log("GET", p, res.status, body.slice(0, 400));
     }
-    // blob stage
-    const up = await fetch(
-      `${handle.url}/centraid/_vault/blobs?filename=a.bin&media_type=application/octet-stream`,
-      {
+    for (const [p, body] of [
+      ["/centraid/notes/queries/list", "{}"],
+      ["/centraid/tasks/queries/list", "{}"],
+    ] as const) {
+      const res = await fetch(`${handle.url}${p}`, {
         method: "POST",
-        headers: { ...auth, "content-type": "application/octet-stream" },
-        body: Buffer.alloc(1024, 7),
-      }
-    );
-    console.log("blob POST", up.status, (await up.text()).slice(0, 300));
+        headers: { ...auth, "content-type": "application/json" },
+        body,
+      });
+      console.log("POST", p, res.status, (await res.text()).slice(0, 300));
+    }
     await handle.close();
     expect(true).toBe(true);
   }, 120_000);
