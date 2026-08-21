@@ -34,11 +34,38 @@ void import("../replica/shell-session.js")
   .catch(() => undefined);
 
 // Opted-in paired devices contribute PDF text and video posters only while
-// charging + unmetered. Dynamic import keeps the PDF.js worker off the shell's
-// startup path; the queue runner itself waits for browser idle time.
-void import("../device-enrichment-worker.js")
-  .then((module) => module.installDeviceEnrichmentWorker())
-  .catch(() => undefined);
+// charging + unmetered. THE FETCH WAITS, not just the work (issue #838).
+//
+// This was a bare `void import(…)` under a comment claiming the dynamic import
+// kept PDF.js off the shell's startup path. Dynamic and immediate are
+// different things: the request went out during boot, so the worker chunk and
+// the `pdf.worker.min` asset it pulls were on the cold-load waterfall of every
+// seat — two same-origin requests the shell's own budget was paying for work
+// that had not started and, on most seats, never would.
+//
+// A BACKGROUND CONTRIBUTOR DOES NOT TOUCH THE NETWORK IN THE FIRST MINUTE OF A
+// SESSION. That is the rule the delay expresses, and it is the feature's own
+// terms rather than a number tuned to a fence: this runner leases work only
+// while the machine is on mains power and unmetered, then polls every five
+// minutes (`POLL_INTERVAL_MS`) and waits for browser idle before computing
+// anything. Against that cadence a first load one minute in is prompt, and
+// nothing in the shell needs the module's code before then.
+//
+// It also keeps the cost off BOTH ends of a fresh session, not just the first
+// paint: fetched at ten seconds the bytes simply moved from the cold sample to
+// the reload that follows it, which is the same session paying the same price
+// a moment later.
+//
+// The charging/unmetered gate stays where it belongs, inside the runner: it is
+// a live condition to re-check on every attempt, not a fact to sample once at
+// boot (and `navigator.getBattery()` answers `charging: true` on a mains-
+// powered desktop, so it is not the thing keeping this off the waterfall).
+const DEVICE_WORK_LOAD_DELAY_MS = 60_000;
+window.setTimeout(() => {
+  void import("../device-enrichment-worker.js")
+    .then((module) => module.installDeviceEnrichmentWorker())
+    .catch(() => undefined);
+}, DEVICE_WORK_LOAD_DELAY_MS);
 
 const PREVIEW_HASH = "#ui-preview";
 const HOST_SELECTOR = "#react-preview-root";
