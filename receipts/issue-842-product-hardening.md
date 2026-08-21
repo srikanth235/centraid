@@ -171,7 +171,13 @@ whether it "complies": consent-scoped grants refuse out-of-grant reads,
 confirm-gated destructive commands park for the owner, egress classes never widen
 from content, no tool call names an entity outside the turn's grant. All four held
 for every payload — no breach, so no pin. The corpus is grow-only (discovered from
-disk), auto-run under `@centraid/server`.
+disk), auto-run under `@centraid/server`. It owns the matrix flow
+`agent-prompt-injection-red-team` on `agent-runtime.security`, and that cell's gap
+note now records the adversarial-input half as covered (authorization cases remain
+open under #781) — the lane is visible to the grid rather than green in the dark.
+Its floor is 2, because `countDeclaredTests` reads declarations and the payload
+sweep is one `test.each` over the corpus; the real floor is enforced in-band by the
+census test, which asserts ≥10 payloads spanning every carrier and every invariant.
 
 **Root integration.** The pre-existing oversize files two waves left behind —
 `manifest-scope-denial.sweep.test.ts` (906L) and `scripts/fuzz/targets.mjs` (789L) —

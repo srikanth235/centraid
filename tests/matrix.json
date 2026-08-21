@@ -778,7 +778,7 @@
     "automations.concurrency": "packages/server/src/automation/fire/in-process-scheduler.test.ts proves the current happy path; missing multi-actor interleaving evidence. Tracked under #781 (originally #656).",
     "automations.security": "packages/server/src/automation/handler/lint.test.ts proves the current happy path; missing adversarial input and authorization cases. Tracked under #781 (originally #656).",
     "agent-runtime.correctness": "packages/server/src/acp/backends/acp/backend.test.ts proves the current happy path; missing negative and boundary cases. Tracked under #781 (originally #656).",
-    "agent-runtime.security": "packages/server/src/acp/preflight.test.ts proves the current happy path; missing adversarial input and authorization cases. Tracked under #781 (originally #656).",
+    "agent-runtime.security": "packages/server/src/acp/preflight.test.ts proves the current happy path; adversarial input now covered by agent-prompt-injection-red-team (injected instructions carried in read content, driven over the real turn loop, #842 W2.2); authorization cases still missing. Tracked under #781 (originally #656).",
     "agent-runtime.compat": "packages/server/src/acp/backends/acp/enumerate-models.test.ts proves the current happy path; missing migration and version-skew fixtures. Tracked under #781 (originally #656).",
     "blueprints.security": "packages/blueprints/src/untrusted-rendering.test.ts proves the current happy path; missing broader adversarial input and authorization cases. Tracked under #781 (originally #656).",
     "blueprints.journey": "apps/desktop/tests/e2e/appview-templates-insights.spec.ts proves the current happy path; missing a cross-surface end-to-end assertion. Tracked under #781 (originally #657).",
@@ -3396,6 +3396,15 @@
       "tier": "unit",
       "owner": "packages/tunnel/src/peer-target-differential.test.ts",
       "minimumTests": 9
+    },
+    {
+      "id": "agent-prompt-injection-red-team",
+      "name": "Injected instructions in read content never widen the agent's reach",
+      "surface": "agent-runtime",
+      "dimension": "security",
+      "tier": "unit",
+      "owner": "packages/server/src/acp/prompt-injection/red-team.test.ts",
+      "minimumTests": 2
     },
     {
       "id": "replica-payload-hash-properties",

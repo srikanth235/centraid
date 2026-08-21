@@ -55,6 +55,7 @@ import { parseServeArgsPure } from "./cli-serve-args.js";
 import type { ParsedServe } from "./cli-serve-args.js";
 import type { DaemonConfig } from "./config.js";
 import { commandDevices, commandPair } from "./device-admin.js";
+import { commandDoctor } from "./doctor.js";
 import { makeDaemonDevicePlane } from "./endpoint-host.js";
 import { seedHarnessPrefs } from "./harness-prefs.js";
 import { commandKey } from "./key-admin.js";
@@ -123,6 +124,7 @@ function usage(): never {
       "  centraid-gateway service status    [--dry-run] [--label <id>]",
       "  centraid-gateway status [--data-dir <path> | --config <path>] [--label <id>] [--json]",
       "  centraid-gateway lock-status [--data-dir <path> | --config <path>] [--json]",
+      "  centraid-gateway doctor [--data-dir <path>] [--vault <id>] [--full] [--json]",
       "  centraid-gateway --version",
       "  centraid-gateway --help",
       "",
@@ -409,6 +411,9 @@ async function main(): Promise<void> {
       return;
     case "lock-status":
       await commandLockStatus(rest, fail);
+      return;
+    case "doctor":
+      await commandDoctor(rest, fail);
       return;
     default:
       fail(`unknown subcommand "${sub}"`, 2);
