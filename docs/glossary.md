@@ -107,6 +107,19 @@ Schema names follow the same one-axis rule: **a table never repeats its schema n
 | **engine registry** | The one roster of the shared engines, each row naming its source, its property flow, its mutation seed, and whether it takes a column in the app × engine grid. The registry and that grid's columns are one fact seen twice, held equal by the validator. | `tests/matrix.json#engineRegistry`; `packages/blueprints/apps/_shared/` |
 | **consent ledger** | The eight permission layers a member's answer can sit in, each naming where it is enforced, its refusal grammar, which seats it binds, and the adversary proof that it refuses — or the open issue admitting it has none. | `tests/matrix.json#consentLedger` |
 
+## Adversary lanes (testing, [TESTING.md](../TESTING.md))
+
+The suites whose job is to produce evidence the author did not choose. Each word names one lane, so "the fuzz lane found it" and "the join lane owns it" are precise claims about which rig ran.
+
+| Term | Meaning | Code |
+| --- | --- | --- |
+| **fuzz lane** | Seeded, iteration-counted mutation fuzzing over the parsers that eat bytes somebody else chose, with no fuzzing dependency in the repo. Findings partition into a register of recorded, unfixed defects and everything else, which fails the run. | `scripts/fuzz/`; register `scripts/fuzz/known-findings.json`; nightly `fuzz-parsers` |
+| **join lane** | The rig that puts N seats on **one** gateway and makes them speak the real tunnel wire — grant delivery, revocation severance, parked lifecycle, version skew. Three seats on the PR path, five nightly; the laws are the same at every N. | `packages/server/src/serve/protocol-join-lane.test.ts`; nightly `protocol-join` |
+| **time zoo** | The suites re-stating the civil-time laws over the calendars that are not ordinary — negative and half-hour DST, the leap day, the 53-week ISO year, a recurrence read from a zone other than the one it was defined in — across adversarial zones rather than one representative one. | `packages/server/src/automation/fire/time-zoo-*.test.ts`; `packages/core/src/time/time-zoo-*.test.ts` |
+| **device-only claim** | A fact about the **operating system's** behaviour rather than the product's logic, so no unit, component, or Playwright layer can falsify it. Each is written to be adoptable verbatim as a matrix cell owner, and only the `origin` seat can hold one. | roster in `tests/agent-e2e-mobile/README.md`; the flow each row names |
+| **provisional-local floor** | A mutation floor seeded from a local Stryker run rather than CI, set at (local measured − 11) and re-seeded to (CI measured − 3) by the first green nightly that measures it. The exception the file declares at the number, never a silent one ([decisions.md](decisions.md#adversary-lanes-and-provisional-evidence-839)). | `tests/mutation-floors.json` |
+| **pin** | A characterisation test asserting the current, **wrong** behaviour and naming the ruling or documented sentence it contradicts, so a fix goes red and is revisited deliberately. A defect a lane found but is not chartered to fix is pinned, never tolerated quietly and never deleted. | `scripts/fuzz/replay.test.mjs`; the `test.fails` case in `packages/vault/src/share/commons-sim.test.ts` |
+
 ## Projection doctrine (apps, [#834](https://github.com/srikanth235/centraid/issues/834))
 
 Store once, draw in the asking room's shape. These four words are how the apps talk about each other's facts; using them loosely is how a second copy gets written.
@@ -177,6 +190,7 @@ The vocabulary for what a member shares with whom, how those bytes reach an audi
 
 | Term | Meaning | Code |
 | --- | --- | --- |
+| **grant plane** | The one app-agnostic infrastructure every app shares over: the grant table stating the member's sentence, the fulfillment table carrying per-audience-vault delivery, and the engine that resolves an audience vault through the host's own registry. A plane, not a feature — an app gains sharing by naming a subject type, never by growing its own transport. | `packages/server/src/serve/grant-fulfillment.ts`, `share-coordinator.ts` |
 | **grant** | The member's sentence, standing: this **audience** (person or circle) may `view` or `edit` this **subject**, until revoked. A grant on a container covers its contents now and later; `revoked_at` stops it. The unit every share surface reads and writes ([#825](https://github.com/srikanth235/centraid/issues/825)). | `share_grant` |
 | **fulfillment** | Per-audience-vault delivery state under one grant — `awaiting_channel`, `syncing`, `delivered`, `remove_sent`, `removed`. Mechanism, never meaning: a member reads grants, never fulfillment rows. | `share_fulfillment` |
 | **channel** | How to reach a party — the reframed vault link, a property of the party with states `invited`, `live`, `severed`. A grant to an unlinked person mints the invitation as its first fulfillment step, so a channel is never a ceremony the member completes first. | `share_party_vault_binding` + `vault_links` |

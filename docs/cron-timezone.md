@@ -40,6 +40,12 @@ Pinned transition dates used in tests (America/New_York):
 - Spring-forward 2026-03-08 (02:00 → 03:00)
 - Fall-back 2026-11-01 (02:00 → 01:00)
 
+**Known divergence (Overlap, [#839](https://github.com/srikanth235/centraid/issues/839)).** A gateway that stays **up** across a fall-back fires the repeated wall-clock minute **twice**. The dedupe that delivers the Overlap row lives inside a single `dueInstants` call — its `seen` set is local to that call — while the persisted cursor carries only the window position in milliseconds, never the wall-clock keys already delivered. A running scheduler ticks once a minute, so the two absolute minutes sharing that wall clock land in two different windows, each of which dedupes perfectly against itself and fires. "Once" therefore holds only for a window wide enough to contain both copies, which is the shape that follows downtime.
+
+The Gap row is unaffected: a minute that exists in no window cannot be delivered by any number of windows.
+
+The law above stands as written — it is the intended behaviour, and the fix is a durable wall-clock watermark in the cursor reader, not a doc edit. The current behaviour is pinned in `packages/server/src/automation/fire/time-zoo-cron.test.ts` so it cannot drift unnoticed; when the reader learns that watermark, the pinned expectation flips from two fires to one and this note goes with it.
+
 Missed fires during gateway downtime are still not backfilled (#149). DST policy only governs whether a wall-clock minute is due while the scheduler is running.
 
 ## Code pointers

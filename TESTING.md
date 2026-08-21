@@ -53,7 +53,9 @@ If you are reviewing agent-authored test work, spend your attention here and let
 | Pairing journey | `tests/agent-e2e-pairing/flows/*.mjs` | daemon/CLI/device and relay ceremony | nightly + exploratory |
 | Performance | `tests/perf/*.perf.test.ts` | hot-path budgets | nightly |
 | Scale | `tests/scale/*.scale.test.ts` | correctness and duration at volume | nightly |
-| Mutation | StrykerJS on 16 seeded engine packages | mutation-score floors | nightly (full) + per-PR diff-scoped |
+| Mutation | StrykerJS on 24 seeded packages | mutation-score floors | nightly (full) + per-PR diff-scoped |
+| Fuzz | `scripts/fuzz/` targets, plus `scripts/fuzz/replay.test.mjs` for the committed crasher corpus | parser invariants over bytes nobody chose deliberately | nightly (`fuzz-parsers`) |
+| Protocol join | `packages/server/src/serve/protocol-join-lane.test.ts` | N seats on one gateway speaking the real tunnel wire | per PR at 3 seats + nightly at 5 |
 
 ### Opt-in live adapter smoke
 
@@ -65,9 +67,9 @@ Decided in [#468](https://github.com/srikanth235/centraid/issues/468); cite [doc
 
 | Lane | Runs |
 | --- | --- |
-| **Every PR** | Unit, integration, contract; matrix validation + **floors ratchet** via `check:pr`; **affected-package vitest** (`turbo run test --filter='[origin/main]'` — changed packages only, not the full dependent graph); **boot-the-artifact smoke** when the `client` filter triggers (includes `packages/server` paths — #496 E7); **path-filtered client e2e** (the `client-e2e` lane of `ci.yml` since #557) |
+| **Every PR** | Unit, integration, contract — including the **protocol join lane** at its 3-seat floor, which is an ordinary `packages/server` test; matrix validation + **floors ratchet** via `check:pr`; **affected-package vitest** (`turbo run test --filter='[origin/main]'` — changed packages only, not the full dependent graph); **boot-the-artifact smoke** when the `client` filter triggers (includes `packages/server` paths — #496 E7); **path-filtered client e2e** (the `client-e2e` lane of `ci.yml` since #557) |
 | **Path filters (client e2e)** | **Web** e2e when `apps/web`, `packages/client`, or service-worker files change; **desktop** e2e when `apps/desktop` changes; **boot-smoke** also when `packages/server` changes. Shard to keep wall-clock roughly under ten minutes. |
-| **Nightly** | Full cross-client suites, perf budgets, mobile (**iOS + Android home-loads**), pairing journeys, scale, **mutation (Stryker)** |
+| **Nightly** | Full cross-client suites, perf budgets, mobile (**iOS + Android home-loads**), pairing journeys, scale, **mutation (Stryker)**, **fuzz (`fuzz-parsers`)**, **protocol join at width (`protocol-join`)** |
 | **Weekly / release opt-in** | Real-weight enrichment goldens: pinned runtime + weights, capability handshake, OCR text, embedding cosine tolerance, face count/geometry, and licence pins. This lane is scheduled, manually dispatchable, and required after model/preprocessing changes; it never joins PR CI. |
 
 **Promotion rule:** if a nightly-only area burns us **twice**, move it to PR-time.
@@ -246,6 +248,14 @@ This table is the reference instance of the app admission contract above. It rec
 
 The five Photos device journeys use one gateway and paired profile and target **under eight minutes together per platform**. The denied-permission flow runs first against an explicitly purged vault; the next flow seeds the deterministic scenario for the remaining journeys through normal replica sync. The operational response to a budget breach lives beside them in [`photos-budget.md`](tests/agent-e2e-mobile/flows/photos-budget.md). Mobile offline write/reconnect replay belongs to a separate reliability journey because it requires host network control rather than a sixth Photos UI path. The contract is owned at its cheapest honest tier by `apps/web/tests/e2e/offline-reconnect.spec.ts`, over the same durable-outbox and intent-identity rails the phone uses; the device-native airplane-mode variant remains tracked by [#781](https://github.com/srikanth235/centraid/issues/781) (originally #717).
 
+### Home-app device journeys (#839)
+
+The five non-Photos home seats have one Maestro suite, [`tests/agent-e2e-mobile/run-home-apps-suite.mjs`](tests/agent-e2e-mobile/run-home-apps-suite.mjs): `docs-drive`, `agenda-week`, `notes-library`, `tasks-board`, `locker-gate`. Its shape is the Photos suite's — the Docs journey pairs fresh, the remaining four run under `MAESTRO_REUSE_PAIRED_STATE=1` against that paired profile, and every journey writes an independent verdict even after an earlier failure, so a mid-run failure cannot grey the later cells. Tally has no journey here; its interface is held under [#831](https://github.com/srikanth235/centraid/issues/831).
+
+Each flow owns a claim the device is the only layer that can falsify — a React Navigation pop that a push would also render, two replica reads joined on the phone, a withheld Locker count that survives a real process restart — and the roster's per-flow assertions are the `tests/agent-e2e-mobile/README.md` device-only claims table.
+
+The aggregate ceiling is ten minutes across the five, in [`flows/home-apps-budget.md`](tests/agent-e2e-mobile/flows/home-apps-budget.md), and it is a **first-land ceiling derived from the Photos suite's measured neighbour, not an observed distribution** — nothing in this suite has run on a device yet. The first nightly runs are what turn it into a measured budget: once three real runs exist the ceiling is re-derived from the observed p95 and **tightened**, under the tighten-only rule every other budget file follows. A budget nothing has ever approached is not a budget.
+
 ## Five testing layers for the app axis (#725)
 
 Eight apps do not imply eight copies of their shared machinery. The strategy mirrors the product architecture: **engines are tested once; apps are tested as deltas**.
@@ -360,13 +370,15 @@ Generated-state properties cover blob custody and replica intent idempotency. Th
 - `tempDir()` / `tempDirSync()` with automatic test-file cleanup;
 - `useFakeClock()` with automatic real-timer restoration — the leak it prevents is expensive, because fake timers left installed by a test that threw before its `afterEach` make the _rest of the file_ fail as timeouts rather than as the leak;
 - `seededRandom()` for deterministic draws;
-- `bootstrappedVault()`, plus bootstrapped `createTestVault()` and listener-free `buildTestGateway()`;
+- `bootstrappedVault()` — the kit's vault fixture, and the seam lint points every `mkdtemp` vault bootstrap at it;
 - node and jsdom+JSX+CSS-module Vitest presets;
 - the recording automation-handler rails shared by recognition and published connector/enricher source suites;
 - deterministic parties, photos, conversations, turns, and blob custody volume fixtures;
 - perf/scale JSON result emission.
 
 Do not add another local helper when the shared package already owns the seam — for `mkdtemp`, fake timers, and `Math.random` this is enforced by lint, not left to review (see [Test-kit seams](#test-kit-seams-656-layer-4)).
+
+Two factories sit outside the kit, in [`tests/helpers/factories.ts`](tests/helpers/factories.ts), because they resolve workspace TypeScript entries directly for the root perf/scale/quality projects. `createTestVault()` builds a bootstrapped on-disk vault over the kit's `bootstrappedVault()` and is the owner of that seam for those projects. `buildTestGateway()` builds the host-agnostic gateway with disposable paths and **no listener**, which means nothing reachable over the tunnel can be asserted through it; it currently has **zero callers**, so it is a retirement candidate rather than a seam anything is required to use. A suite needing a real wire uses the [protocol join lane](#protocol-join-lane-839) instead.
 
 Deterministic automation fires need no mock: their handlers run in-process against the parent-side `ctx.vault` / `ctx.fetch` / `ctx.state` rails, and only `ctx.delegate` reaches a provider. In tests that provider turn is faked through the ACP fake-harness fixture (`packages/server/src/acp/backends/acp/fake-acp-harness.mjs`), the same seam conversation turns use — there is no automation-specific mock LLM (the `@centraid/mock-llm` package was removed with the `ctx.tool` rail).
 
@@ -382,8 +394,11 @@ Deterministic automation fires need no mock: their handlers run in-process again
 | `bun run test:ratchet` | coverage floors + `minimumTests` + mutation floors up-only, and perf budgets tighten-only, vs `origin/main` |
 | `bun run test:ratchet:unit` | Unit tests for the ratchet / diff-coverage pure functions (`scripts/test-report/vitest.config.ts`) |
 | `bun run test:diff-coverage` | changed instrumentable lines vs merge base must be ≥ **80%** covered (`coverage-final.json`); CI `verify` after `coverage` |
-| `bun run test:mutation` | StrykerJS on all sixteen property-defended seeds (nightly); writes `artifacts/mutation/scores.json` |
+| `bun run test:mutation` | StrykerJS on all twenty-four property-defended seeds (nightly); writes `artifacts/mutation/scores.json` |
 | `bun run test:mutation:pr` | Per-PR: Stryker on **affected** seeds only + enforce mutation floors |
+| `bun run test:fuzz` | full seeded fuzz lane over the six parser targets (nightly); writes `artifacts/fuzz/summary.json`. `test:fuzz:smoke` is the seconds-per-target variant |
+| `bun run test:fuzz:replay` | replay every committed crasher and the whole seed corpus (`scripts/fuzz/vitest.config.ts`); needs `bun run build` first |
+| `bun run test:join` | the protocol join lane with a JSON report at `artifacts/join/summary.json`; raise `CENTRAID_JOIN_SEATS` to widen it |
 | `bun run test:perf:pr` | Per-PR: gateway low-end budget gate (also verify CI step) |
 | `bun run coverage` | unified per-PR suite, v8 report, floor enforcement, Vitest JSON (`ci.yml` **verify** job) |
 | `bun run test:matrix` | catalog/owner/contract validation (also inside `check:pr`) |
@@ -391,7 +406,7 @@ Deterministic automation fires need no mock: their handlers run in-process again
 | `bun run test:scale` | deterministic volume tests; nightly only |
 | `bun run test:report` | build `dist/test-report/index.html` (+ `summary.json` / `summary.md`) from available evidence |
 | `.github/workflows/ci.yml` | parallel **static** + **gates** + **verify**, required **check** aggregator (ruleset-required); **publish-report** on main only (Pages); Bun/Turbo/Cargo caches |
-| `.github/workflows/e2e.yml` | desktop, web, mobile (iOS + Android home-loads), pairing, perf, scale, **mutation**, full report → **publish-nightly-report** on main only; red scheduled nightly → auto-issue |
+| `.github/workflows/e2e.yml` | desktop, web, mobile (iOS + Android home-loads), pairing, perf, scale, **mutation**, **fuzz-parsers**, **protocol-join**, full report → **publish-nightly-report** on main only; red scheduled nightly → auto-issue |
 
 A gate that runs only in `check:push` is a gate nobody can be required to pass: it is skippable by pushing without it, and a broken `main` cannot be attributed. CI's `gates` job exists to close that hole — it carries the deterministic design/governance gates (reachability, the design-token/mobile-design/logical-insets/hairline/aria-label/container-opacity/type-floor/motion-rule linters, `lint:design-md`, engine-conformance, law-registry, quality-knobs, schema-export, `check:ui-receipt`, `test:quarantine`) and feeds the required `check` aggregator; `test:qualities` rides `verify` because it needs `bun run build` first. **`design:gallery`** now has its own path-gated CI job (`design-gallery` in `ci.yml`) that installs the pinned Playwright browser; since [#799](https://github.com/srikanth235/centraid/issues/799) it builds `apps/web` and photographs the shell’s own `#ui-preview` gallery with the product’s self-hosted faces, and the baselines are Linux-captured, so whether darwin `check:push` agrees with them is the open question the job’s comment records (#781). **`check:mobile-native-state`** is deliberately absent from `gates`: CI's `mobile-smoke` runs the identical `apps/mobile ci:native-state` command on a strictly wider path filter (root dependency drift triggers it where the local check's `apps/mobile/**` filter would not — #587 E22), so the delegation is complete, not a hole. `check:pr` remains a superset of CI in one further respect: it runs `test:affected`, where CI runs the full vitest suite on `verify` instead.
 
@@ -491,7 +506,7 @@ After `bun run coverage`, CI `verify` runs `bun run test:diff-coverage`. It inte
 
 ### Mutation testing (#532)
 
-Nightly StrykerJS (`@stryker-mutator/vitest-runner`) on 16 property-defended core packages, including the recognition handlers' tokenizer/CTC/NMS pure-math seed. The canonical seed list is [`scripts/mutation/seeds.mjs`](scripts/mutation/seeds.mjs); examples of its engine scopes include:
+Nightly StrykerJS (`@stryker-mutator/vitest-runner`) on 24 property-defended seeds, including the recognition handlers' tokenizer/CTC/NMS pure-math seed. The canonical seed list is [`scripts/mutation/seeds.mjs`](scripts/mutation/seeds.mjs); examples of its engine scopes include:
 
 - `packages/vault` (custody)
 - `packages/client/src/replica` (intents + payload-hash)
@@ -502,11 +517,46 @@ Nightly StrykerJS (`@stryker-mutator/vitest-runner`) on 16 property-defended cor
 - `packages/tunnel` (wire frame / pair QR / sanitize)
 - `packages/server/src/engine` (pricing cost formula)
 
-Package-local Stryker configs (`stryker.config.mjs` + `vitest.mutation.config.ts`) mutate the property-defended modules. [`scripts/mutation/seeds.mjs`](scripts/mutation/seeds.mjs) is canonical for where each seed's config lives: the runner resolves `seed.cwd` + `seed.config` and spawns Stryker there. The eight root pointers under `tests/mutation/` predate that seed list, cover only half the sixteen seeds, and are read by nothing — do not add a ninth expecting it to run. `bun run test:mutation` writes `artifacts/mutation/scores.json` for the test-health report. Floors live in `tests/mutation-floors.json` and ratchet up-only (measured 2026-07-23/24 — see file comment).
+Package-local Stryker configs (`stryker.config.mjs` + `vitest.mutation.config.ts`) mutate the property-defended modules. [`scripts/mutation/seeds.mjs`](scripts/mutation/seeds.mjs) is canonical for where each seed's config lives: the runner resolves `seed.cwd` + `seed.config` and spawns Stryker there. The eight root pointers under `tests/mutation/` predate that seed list, cover eight of the twenty-four seeds, and are read by nothing — do not add a ninth expecting it to run. `bun run test:mutation` writes `artifacts/mutation/scores.json` for the test-health report. Floors live in `tests/mutation-floors.json` and ratchet up-only (measured 2026-07-23/24 — see file comment).
 
-**Per-PR mutation** (`bun run test:mutation:pr` / CI job `mutation-pr`): runs Stryker only for seeds whose `watch` paths intersect `git diff origin/main...HEAD` (or all seeds when mutation infra / floors change), then **enforces** floors on measured packages. Unrelated PRs skip Stryker in ~1s. Nightly runs the full 16-seed lane.
+**Per-PR mutation** (`bun run test:mutation:pr` / CI job `mutation-pr`): runs Stryker only for seeds whose `watch` paths intersect `git diff origin/main...HEAD` (or all seeds when mutation infra / floors change), then **enforces** floors on measured packages. Unrelated PRs skip Stryker in ~1s. Nightly runs the full 24-seed lane.
+
+#### Seeds beyond the engine (#839)
+
+Eight of the twenty-four seeds are not engine packages. [#839](https://github.com/srikanth235/centraid/issues/839) carries the adversary into the blueprint **app** layer — `tasks`, `notes`, `agenda`, and the `_shared` pending-overlay, selection, triage, and search-scaffold modules — and into the phone's extracted logic under `apps/mobile/src/lib`. Those are the surfaces a member actually stands in: which rows a route paints, how a write is narrated, what a pending row says while the vault is quiet. Everything below the shell's own boundary is engine; the app layer above it is where the seeds go now.
+
+Every mutate set added there is browser-side TypeScript with no DOM in it, run under a plain **node** vitest project on purpose. Stryker's vitest runner dry-runs a jsdom project as "No tests were executed", so a suite carrying the `@vitest-environment jsdom` docblock defends nothing in this lane, however green it is — which is why `apps/_shared/untrusted.ts` takes no seed until a node-side suite exists, and why each seed's Stryker config states what it leaves out.
+
+**Provisional-local floors.** This file's standing rule is that a floor is seeded from **CI**, because seeding from the author's own machine is the author-asserted claim the mutation lane exists to eliminate. The eight #839 floors are the recorded exception: each is seeded from a local linux/x64 run and therefore sits at **(local measured − 11)** rather than the usual (measured − 2/3). Eleven points is the local/CI gap #656 measured on `packages/backup` and `packages/blueprints`, applied in the pessimistic direction because the direction of that gap was never verified — a floor too low fails to catch a regression it should have, while a floor too high reds a lane that is fine, and only the first is recoverable by the next measurement. **Re-seed each of them to (CI measured − 3) on the first green nightly mutation lane that includes them**, and delete the `_w2Comment` note in `tests/mutation-floors.json` when that happens. The ruling and its rationale are in [decisions.md](docs/decisions.md#adversary-lanes-and-provisional-evidence-839).
 
 **Per-PR perf** (`bun run test:perf:pr` / verify step): gateway low-end budget gate (`packages/server` `perf:low-end`, fsync-required on Linux). Perf budget _numbers_ also tighten-only via `test:ratchet`. Full `test:perf` / Playwright waterfall remains nightly.
+
+### Fuzz lane (#839)
+
+Mutation testing asks whether a test would notice a changed line. The fuzz lane asks a different question: what happens to a parser fed bytes nobody chose deliberately. [`scripts/fuzz/`](scripts/fuzz) holds the whole engine — there is **no fuzzing dependency in this repo and none may be added** — as `mutate.mjs` (seeded PRNG + mutation table), [`targets.mjs`](scripts/fuzz/targets.mjs) (entry points + invariants), and [`run.mjs`](scripts/fuzz/run.mjs). Six targets: the gateway info handshake judge, the pair-QR/header frame codec, the CBSF v2 blob directory decoder, the WAL segment/closer/pair-marker key parsers, the FTS5 MATCH expression compilers, and the replica compiler's claim to mirror the canonical gateway one.
+
+- **Seeded, iteration-counted determinism.** The program seed defaults to `839001` and is never `Date.now()`; work is measured in iterations, never wall clock, so two runs at one seed execute the same inputs in the same order and produce a byte-identical summary apart from timings. `--time-budget-ms` is a runaway guard that reports itself in the summary, not a schedule. `replay.test.mjs` runs one target twice at a fixed seed, which makes "deterministic" a tested claim rather than a design note.
+- **Coverage-guided-lite.** There is no coverage instrumentation. Feedback is each target's **behaviour signature** — the outcome class it reports per execution — and an input producing an unseen signature is promoted into the live corpus and mutated further. That is the feedback shape a coverage-guided fuzzer gets, at the granularity a target chooses to expose.
+- **Corpus, crashers, and the register.** Each target has a committed seed corpus under `scripts/fuzz/corpus/<target>/`, which runs unmutated first so a seed input that already violates an invariant is reported before any mutation happens. Every finding is written back as a committed crasher under `scripts/fuzz/crashers/<target>/`, named by its finding class. [`known-findings.json`](scripts/fuzz/known-findings.json) partitions the two populations: a finding whose class is **registered** is reported without failing the lane, because it is a recorded defect awaiting a product decision; a finding whose class is **not** registered fails the run, and the remedy the runner prints is to commit the crasher, pin it in the replay suite, and register the class with its issue. **Removing an entry is how a fix gets locked in — never add one to go green.** Three classes are registered today, all under #839: two halves of the replica-mirrors-gateway search claim, and a WAL closer key the parser admits and the formatter refuses to re-emit.
+- **The replay lock.** [`replay.test.mjs`](scripts/fuzz/replay.test.mjs) is the lane's memory, and it reads the register in both directions. Registered class ⇒ the replay pins the finding's exact class and message, so the day the product moves — fixed, or made worse — the suite goes red and the entry must be revisited on purpose. Class absent ⇒ the replay asserts the input runs clean, forever, which is the regression lock. It also fails when a registered finding has no committed crasher, and when a crasher names a target that no longer exists.
+- **Lane placement.** Nightly, in the `fuzz-parsers` job of [`e2e.yml`](.github/workflows/e2e.yml), which runs `bun run test:fuzz` and then `bun run test:fuzz:replay` under `if: always()` — the crasher corpus must keep replaying exactly as recorded even when the search above found something new. Both the search and the replay are nightly-only because **five of the six targets import each package's built `dist`**, so the lane needs a `bun run build` the PR gate chain does not do; the replay suite is its own vitest project (`scripts/fuzz/vitest.config.ts`) rather than a member of the root aggregate for the same reason — it is the one surface importing a built `dist` and `packages/client`'s TypeScript source in one process. Evidence is `artifacts/fuzz/summary.json`, uploaded as `nightly-evidence-fuzz`, and the wiring is held by [`scripts/test-report/validate-nightly-wiring.mjs`](scripts/test-report/validate-nightly-wiring.mjs).
+
+### Protocol join lane (#839)
+
+Every other suite that exercises two vaults talking to each other calls the vault package directly — a `Map` of mounted vaults, a hand-rolled `IncomingMessage`. Nothing **joined**: nothing put N seats on one gateway and made them speak the real wire. [`packages/server/src/serve/protocol-join-lane.test.ts`](packages/server/src/serve/protocol-join-lane.test.ts) is that rig — one `serve()` daemon, N mounted vaults, one iroh tunnel client per seat — so every assertion travels the transport a paired phone uses.
+
+A seat here is a **vault identity plus the device that reaches it**, not a client bundle: `seat()` in `host-platform.ts` is a build-time constant, so custodian-versus-viewer cannot be varied at runtime. The topology is one gateway with N mounted vaults and never N gateways, because fulfillment resolves an audience vault through the host's own registry and a grant to a vault on another gateway parks at `syncing` deliberately (see [Sharing v1](docs/decisions.md#sharing-v1--the-grant-plane-825) and [protocol.md](docs/protocol.md)).
+
+Four laws, and the laws are the same at every N:
+
+1. A grant crosses mounted vaults over the real transport, and **only the addressed seat** receives it.
+2. Revocation propagates across the join and **severs** delivery rather than merely pausing it.
+3. A parked payload survives a transport reconnect, then **settles once** and never unparks.
+4. An N−1 client meets **one update wall** over the real transport, with no fallback mode.
+
+The suite runs on the **PR path at its 3-seat floor** — an origin, an addressed audience, and a bystander that proves addressing is real — as an ordinary `packages/server` test. The nightly `protocol-join` job widens it, it does not own it: `CENTRAID_JOIN_SEATS=5` asserts fan-out and severance at width, and the vitest JSON report at `artifacts/join/summary.json` is the evidence, because per-test durations for the join laws are what a widening seat count moves. It gets its own job for the `restore-year3` reasons: N real iroh endpoints per case must not compete with the 30-minute `quality-performance-scale` budget, a correctness rig has no volume/duration descriptor for `tests/scale`, and real QUIC is environment-sensitive enough that a red join lane must not mask coverage and report rendering.
+
+Law 4 is asserted with **synthetic version integers**. A pinned N−1-client artifact lane is out of scope here rather than missing: the protocol window is a single point (`GATEWAY_PROTOCOL_VERSION === GATEWAY_MIN_PROTOCOL_VERSION`), so no legal N−1 client exists to pin, and producing one is a release-pipeline change.
 
 ### Property contracts (fast-check, #532)
 
@@ -526,6 +576,21 @@ Package-local Stryker configs (`stryker.config.mjs` + `vitest.mutation.config.ts
 | `protocol-handshake-properties` | protocol handshake-properties | **9** |
 | `tunnel-wire-properties` | tunnel wire-properties | **5** |
 | `app-engine-cost-properties` | app-engine cost-properties | **7** |
+
+### The time zoo (#839)
+
+A doctrine demonstrated on one zone at two hand-picked minutes is not a doctrine tested: a matcher that special-cased a whole-hour, northern-hemisphere, positive-DST shift would pass it. The time zoo re-states the civil-time laws of [cron-timezone.md](docs/cron-timezone.md) over the calendars that are not ordinary, across a zoo of adversarial zones — a negative-DST zone whose standard time is the summer one, a zone whose shift is thirty minutes rather than sixty, and a fixed-offset control that must produce neither case — and over **seeded samples of wall minutes drawn from inside each transition band**, so a law is asserted about the band and not about one minute inside it. Every zone band is read off the runtime's own tzdata rather than assumed, so tzdata drift surfaces as a failure. All of it runs on the PR path under the fake clock.
+
+| Suite | What it states |
+| --- | --- |
+| `packages/server/src/automation/fire/time-zoo-cron.test.ts` | the Gap (skip) and Overlap (once) rows of the DST policy over the zone zoo, plus the fixed-offset control |
+| `packages/server/src/automation/fire/time-zoo-calendar.test.ts` | the two civil irregularities that are not DST — February 29 including the Gregorian century rule, and the 53-week ISO year (2026 is one) — with year-long claims asserted over a tiling of `dueInstants` windows, which also proves the `(from, to]` windows compose |
+| `packages/core/src/time/time-zoo-recurrence.test.ts` | the same Gap/Overlap doctrine and the same two calendars for RRULE expansion |
+| `packages/core/src/time/time-zoo-zone-crossing.test.ts` | the collapse law for a recurrence **defined** in one zone and **read** from another: however the range is cut, the occurrences are the same multiset, in the same order, once each |
+
+The zone table is deliberately duplicated between the `@centraid/core` and `packages/server` halves: core is the dependency-free contracts package and must not reach into a server test helper, and a shared fixture would let one edit weaken both suites at once.
+
+The overlap law is where the zoo found a real defect. A gateway that is **up** across a fall-back fires the repeated wall minute twice, because the dedupe lives inside one `dueInstants` call while the persisted cursor carries only a millisecond window position — so the two absolute minutes carrying the same wall clock land in two different one-minute ticks, each deduping perfectly against itself. `cron-cursor.test.ts` covers the single wide window that follows downtime, which is why the gap went unseen. The zoo pins the current behaviour under [#839](https://github.com/srikanth235/centraid/issues/839) so a fix has to change an expectation deliberately; the documented law is unchanged and the divergence is recorded at [cron-timezone.md](docs/cron-timezone.md#dst-policy).
 
 ### Coverage-scope reachability (#532)
 

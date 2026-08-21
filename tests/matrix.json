@@ -2229,8 +2229,9 @@
         "id": "agenda",
         "seats": {
           "origin": {
-            "status": "gap",
-            "trackingIssue": "839"
+            "status": "owned",
+            "owner": "tests/agent-e2e-mobile/flows/agenda-week.mjs",
+            "tier": "e2e"
           },
           "custodian": {
             "status": "gap",
@@ -2246,8 +2247,9 @@
         "id": "docs",
         "seats": {
           "origin": {
-            "status": "gap",
-            "trackingIssue": "839"
+            "status": "owned",
+            "owner": "tests/agent-e2e-mobile/flows/docs-drive.mjs",
+            "tier": "e2e"
           },
           "custodian": {
             "status": "owned",
@@ -2265,8 +2267,9 @@
         "id": "locker",
         "seats": {
           "origin": {
-            "status": "gap",
-            "trackingIssue": "839"
+            "status": "owned",
+            "owner": "tests/agent-e2e-mobile/flows/locker-gate.mjs",
+            "tier": "e2e"
           },
           "custodian": {
             "status": "owned",
@@ -2284,8 +2287,9 @@
         "id": "notes",
         "seats": {
           "origin": {
-            "status": "gap",
-            "trackingIssue": "839"
+            "status": "owned",
+            "owner": "tests/agent-e2e-mobile/flows/notes-library.mjs",
+            "tier": "e2e"
           },
           "custodian": {
             "status": "gap",
@@ -2358,8 +2362,9 @@
         "id": "tasks",
         "seats": {
           "origin": {
-            "status": "gap",
-            "trackingIssue": "839"
+            "status": "owned",
+            "owner": "tests/agent-e2e-mobile/flows/tasks-board.mjs",
+            "tier": "e2e"
           },
           "custodian": {
             "status": "gap",
@@ -2715,7 +2720,7 @@
         "packages/core/src/time/recurrence.ts",
         "packages/core/src/time/timezone.ts"
       ],
-      "propertyFlow": null,
+      "propertyFlow": "recurrence-properties",
       "mutationSeed": "packages/core/src/time",
       "appEngineColumn": false
     },
@@ -2727,7 +2732,7 @@
         "packages/vault/src/grant/fulfillment.ts",
         "packages/blueprints/apps/_shared/grant-plane.ts"
       ],
-      "propertyFlow": null,
+      "propertyFlow": "commons-grant-plane-simulation",
       "mutationSeed": null,
       "appEngineColumn": false
     },
@@ -2768,7 +2773,7 @@
         "packages/vault/src/gateway/consent.ts",
         "packages/server/src/enrich/engine-profiles.ts"
       ],
-      "propertyFlow": null,
+      "propertyFlow": "manifest-scope-denial-sweep",
       "mutationSeed": null,
       "appEngineColumn": false
     },
@@ -2811,7 +2816,7 @@
       "id": "policy-cascade",
       "label": "Enrichment policy cascade",
       "source": ["packages/server/src/automation/fire/enrich-resolve.ts"],
-      "propertyFlow": null,
+      "propertyFlow": "enrich-policy-cascade-properties",
       "mutationSeed": null,
       "appEngineColumn": false
     },
@@ -3095,6 +3100,15 @@
       "tier": "unit",
       "owner": "packages/vault/src/share/commons-convergence-properties.test.ts",
       "minimumTests": 3
+    },
+    {
+      "id": "commons-grant-plane-simulation",
+      "name": "Seeded commons+grant schedules converge and hold the grant-plane invariants",
+      "surface": "vault-core",
+      "dimension": "correctness",
+      "tier": "unit",
+      "owner": "packages/vault/src/share/commons-sim.test.ts",
+      "minimumTests": 6
     },
     {
       "id": "backup-crypto-properties",
@@ -3600,6 +3614,15 @@
       "minimumTests": 3
     },
     {
+      "id": "manifest-scope-denial-sweep",
+      "name": "Every bundled manifest clamp denies closed inside the six-class refusal grammar",
+      "surface": "gateway",
+      "dimension": "security",
+      "tier": "integration",
+      "owner": "packages/server/src/serve/manifest-scope-denial.sweep.test.ts",
+      "minimumTests": 18
+    },
+    {
       "id": "extension-origin-matching",
       "name": "Extension origin matching",
       "surface": "extension",
@@ -3688,6 +3711,24 @@
       "tier": "unit",
       "owner": "packages/server/src/automation/fire/fire.test.ts",
       "minimumTests": 11
+    },
+    {
+      "id": "recurrence-properties",
+      "name": "Recurrence expansion holds under generated rules, windows, and zones",
+      "surface": "automations",
+      "dimension": "correctness",
+      "tier": "unit",
+      "owner": "packages/core/src/time/recurrence-properties.test.ts",
+      "minimumTests": 14
+    },
+    {
+      "id": "enrich-policy-cascade-properties",
+      "name": "Policy cascade resolves per field, fails closed, and never raises the egress ceiling",
+      "surface": "automations",
+      "dimension": "correctness",
+      "tier": "unit",
+      "owner": "packages/server/src/automation/fire/enrich-resolve.property.test.ts",
+      "minimumTests": 16
     },
     {
       "id": "automation-fire-budget",

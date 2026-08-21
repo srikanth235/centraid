@@ -72,10 +72,20 @@ describe("MUTATION_SEEDS", () => {
         "packages/tunnel",
         "packages/vault",
         "packages/model-runtime",
+        "packages/blueprints/apps/tasks",
+        "packages/blueprints/apps/notes",
+        "packages/blueprints/apps/agenda",
+        "packages/blueprints/apps/_shared/pending-overlay",
+        "packages/blueprints/apps/_shared/selection",
+        "packages/blueprints/apps/_shared/triage",
+        "packages/blueprints/apps/_shared/search-scaffold",
+        "apps/mobile",
       ].sort()
     );
     for (const seed of MUTATION_SEEDS) {
-      expect(seed.config).toMatch(/^stryker(?:\.[a-z]+)?\.config\.mjs$/u);
+      expect(seed.config).toMatch(
+        /^stryker(?:\.[a-z]+(?:-[a-z]+)*)?\.config\.mjs$/u
+      );
       expect(
         seed.cwd.startsWith("packages/") || seed.cwd.startsWith("apps/"),
         seed.id
