@@ -151,6 +151,7 @@ jobs:
       AZURE_CLIENT_SECRET: ${{ secrets.AZURE_CLIENT_SECRET }}
       AZURE_CODE_SIGNING_ACCOUNT: ${{ secrets.AZURE_CODE_SIGNING_ACCOUNT }}
       AZURE_CERT_PROFILE: ${{ secrets.AZURE_CERT_PROFILE }}
+      CENTRAID_RELEASE_SIGNING_KEY: ${{ secrets.CENTRAID_RELEASE_SIGNING_KEY }}
 
   gateway-npm:
     needs: plan

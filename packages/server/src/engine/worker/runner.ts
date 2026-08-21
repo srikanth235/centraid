@@ -52,13 +52,13 @@ import { parentPort, workerData } from "node:worker_threads";
  * type stripping (see the header of `sandbox/boot.ts`), so the `.js`/`.ts`
  * choice is made here the same way `ensureTsLoader` makes it below.
  */
-async function loadSandboxBoot(): Promise<
-  typeof import("../sandbox/boot.js")
-> {
+async function loadSandboxBoot(): Promise<typeof import("../sandbox/boot.js")> {
   const dir = path.join(import.meta.dirname, "..", "sandbox");
   const js = path.join(dir, "boot.js");
   const file = existsSync(js) ? js : path.join(dir, "boot.ts");
-  return (await import(pathToFileURL(file).href)) as typeof import("../sandbox/boot.js");
+  return (await import(
+    pathToFileURL(file).href
+  )) as typeof import("../sandbox/boot.js");
 }
 
 /**
@@ -303,8 +303,10 @@ function execute(req: WorkerRequest): void {
       // immediately before the untrusted graph is reachable. The handler file
       // is the taint root; everything it pulls in inherits the confinement.
       const { loadSandbox } = await loadSandboxBoot();
-      const boot = await loadSandbox();
-      const sandbox = boot.installWorkerSandbox(boot.appHandlerPolicy());
+      const sandboxApi = await loadSandbox();
+      const sandbox = sandboxApi.installWorkerSandbox(
+        sandboxApi.appHandlerPolicy()
+      );
       sandbox.taint(pathToFileURL(req.handlerFile).href);
       const mod = (await import(pathToFileURL(req.handlerFile).href)) as {
         default?: (args: unknown) => Promise<unknown>;

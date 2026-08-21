@@ -33,6 +33,8 @@ import { ensureConversationLedger } from "@centraid/server/engine";
 
 import { AnomalyLedger } from "../../packages/server/src/serve/anomaly-ledger.js";
 import { buildDiagnosticsBundle } from "../../packages/server/src/serve/gateway-diagnostics.js";
+import { GatewayLogStore } from "../../packages/server/src/serve/gateway-log-store.js";
+import { HealthRegistry } from "../../packages/server/src/serve/health-registry.js";
 import { collectSupportBundleInput } from "../../packages/server/src/serve/support-bundle-source.js";
 import {
   buildSupportBundle,
@@ -40,11 +42,12 @@ import {
   serializeSupportBundle,
 } from "../../packages/server/src/serve/support-bundle.js";
 import type { SupportBundleInput } from "../../packages/server/src/serve/support-bundle.js";
-import { GatewayLogStore } from "../../packages/server/src/serve/gateway-log-store.js";
-import { HealthRegistry } from "../../packages/server/src/serve/health-registry.js";
 import { openVaultPlane } from "../../packages/server/src/serve/vault-plane.js";
 import { tempDir } from "../../packages/test-kit/src/temp-dir.js";
-import { seedYear3Vault, year3VaultProfile } from "../../packages/test-kit/src/year3-vault.js";
+import {
+  seedYear3Vault,
+  year3VaultProfile,
+} from "../../packages/test-kit/src/year3-vault.js";
 
 const CLOCK_START = Date.parse("2026-08-21T09:00:00.000Z");
 
@@ -155,7 +158,9 @@ async function buildRig(): Promise<Rig> {
   logger.warn(
     `locker: card ${SENTINELS["payment-card"]} rejected by the issuer`
   );
-  logger.error(`vault plane: cannot open ${SENTINELS["absolute-path"]}/vault.db`);
+  logger.error(
+    `vault plane: cannot open ${SENTINELS["absolute-path"]}/vault.db`
+  );
   logger.warn(`notes: body too large — ${SENTINELS["note-body"]}`);
   logger.info(`peer: authorization Bearer ${SENTINELS["bearer-token"]}`);
   logger.warn(`keys: passphrase ${SENTINELS.passphrase} did not unwrap`);
@@ -257,11 +262,11 @@ function getRig(): Promise<Rig> {
   return rigPromise;
 }
 
-afterAll(async () => {
-  if (rigPromise) (await rigPromise).planeStop();
-});
-
 describe("W8.1 diagnostics leak canary", () => {
+  afterAll(async () => {
+    if (rigPromise) (await rigPromise).planeStop();
+  });
+
   test.each(["strict", "standard"] as const)(
     "the %s support bundle carries no sentinel of any class",
     async (level) => {
@@ -351,9 +356,10 @@ describe("W8.1 diagnostics leak canary", () => {
         "secret-key",
         "url",
       ])
-        expect(fired, `${rule} never fired against the seeded corpus`).toContain(
-          rule
-        );
+        expect(
+          fired,
+          `${rule} never fired against the seeded corpus`
+        ).toContain(rule);
     }
   });
 

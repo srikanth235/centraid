@@ -168,9 +168,6 @@ async function openPalette(page: Page): Promise<void> {
  * than what the app left behind.
  */
 async function openAndClose(page: Page): Promise<number> {
-  const homeNodes = await page.evaluate(
-    () => document.querySelectorAll("*").length
-  );
   await openPalette(page);
   const palette = page.getByRole("dialog", { name: "Command palette" });
   await palette.locator("input").fill(APP_NAME);
@@ -190,8 +187,13 @@ async function openAndClose(page: Page): Promise<number> {
       )
     )
     .toBe(true);
+  // The app's OWN subtree, not the document total. The total is dominated by
+  // the shell frame and by whatever Home happens to be showing, so it is not a
+  // stable witness that an app rendered — measured in a full-suite run where
+  // earlier specs had populated the vault, the total delta was 0 while the app
+  // was demonstrably up.
   const mountedNodes = await page.evaluate(
-    () => document.querySelectorAll("*").length
+    () => document.querySelectorAll('[data-testid="inline-app-view"] *').length
   );
 
   await page.getByRole("button", { name: "Home", exact: true }).click();
@@ -205,10 +207,7 @@ async function openAndClose(page: Page): Promise<number> {
     )
     .toBe(true);
   await expect(page.locator('nav[aria-label="Apps"]').first()).toBeVisible();
-  // How many elements the mounted app added to the document. Returned rather
-  // than the absolute count because the absolute count barely moves (the shell
-  // frame dominates it), so only the DELTA can testify that an app was up.
-  return mountedNodes - homeNodes;
+  return mountedNodes;
 }
 
 /**
@@ -254,10 +253,10 @@ test("renderer leak soak — repeated app open/close leaves no residue", async (
   // Sequential by necessity — the cycles ARE the measurement, so they may not
   // be started in parallel (`no-await-in-loop`'s remedy would measure a very
   // different renderer).
-  let mountDeltaLow = Number.POSITIVE_INFINITY;
+  let mountedSubtreeLow = Number.POSITIVE_INFINITY;
   const runCycles = async (count: number): Promise<void> => {
     if (count === 0) return;
-    mountDeltaLow = Math.min(mountDeltaLow, await openAndClose(page));
+    mountedSubtreeLow = Math.min(mountedSubtreeLow, await openAndClose(page));
     return runCycles(count - 1);
   };
 
@@ -303,7 +302,7 @@ test("renderer leak soak — repeated app open/close leaves no residue", async (
       heapRatio:
         baselineHeap && finalHeap ? Number(heapGrowthRatio.toFixed(4)) : null,
     },
-    mountDeltaLow,
+    mountedSubtreeLow,
   };
   await fs.mkdir(path.dirname(REPORT_PATH), { recursive: true });
   await fs.writeFile(REPORT_PATH, JSON.stringify(report, null, 2));
@@ -318,7 +317,9 @@ test("renderer leak soak — repeated app open/close leaves no residue", async (
   );
   console.log(`observers:     ${baseline.observers} → ${final.observers}`);
   console.log(`domNodes:      ${baseline.domNodes} → ${final.domNodes}`);
-  console.log(`mount delta:   ${mountDeltaLow} elements (worst cycle)`);
+  console.log(
+    `app subtree:   ${mountedSubtreeLow} elements while mounted (worst cycle)`
+  );
   if (baselineHeap && finalHeap) {
     console.log(
       `retainedNodes: ${baselineHeap.retainedNodes} → ${finalHeap.retainedNodes}`
@@ -340,9 +341,9 @@ test("renderer leak soak — repeated app open/close leaves no residue", async (
   // the quantitative half — the app must actually have PUT something in the
   // document on every single cycle, including the worst one.
   expect(
-    mountDeltaLow,
-    "elements the app added to the document, worst cycle"
-  ).toBeGreaterThanOrEqual(leakBudgets.minMountedNodeDelta);
+    mountedSubtreeLow,
+    "elements inside the mounted app view, worst cycle"
+  ).toBeGreaterThanOrEqual(leakBudgets.minMountedSubtreeNodes);
 
   // Integral counters — a subscription is torn down or it is not.
   expect(growth("intervals"), "live setInterval handles").toBeLessThanOrEqual(

@@ -213,7 +213,10 @@ export function auditUnsafeEdges(options = {}) {
 }
 
 /* c8 ignore start -- CLI shell; the audit itself is covered by the test file */
-if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+if (
+  process.argv[1] &&
+  import.meta.url === pathToFileURL(process.argv[1]).href
+) {
   const rootFlag = process.argv.indexOf("--root");
   const result = auditUnsafeEdges(
     rootFlag === -1 ? {} : { root: path.resolve(process.argv[rootFlag + 1]) }

@@ -50,7 +50,9 @@ function ledgerWithFaults(): AnomalyLedger {
   return ledger;
 }
 
-function input(overrides: Partial<SupportBundleInput> = {}): SupportBundleInput {
+function input(
+  overrides: Partial<SupportBundleInput> = {}
+): SupportBundleInput {
   return {
     generatedAtMs: AT,
     salt: "bundle-salt-842",
@@ -144,9 +146,9 @@ describe("support bundle — redaction", () => {
   test("strict is the default, and it drops prose rather than scrubbing it", () => {
     const bundle = buildSupportBundle(input({ level: undefined }));
     expect(bundle.redaction.level).toBe("strict");
-    expect(bundle.logs.groups.every((group) => group.templates.length === 0)).toBe(
-      true
-    );
+    expect(
+      bundle.logs.groups.every((group) => group.templates.length === 0)
+    ).toBe(true);
     expect(bundle.redaction.byRule["prose-dropped"]).toBeGreaterThan(0);
   });
 
@@ -232,9 +234,9 @@ describe("support bundle — usefulness", () => {
       bundle.logs.groups.map((group) => group.component).toSorted()
     ).toStrictEqual(["backup-service", "vault-registry", "vault-registry"]);
     // Every group carries a digest the owner can grep their own log for.
-    expect(
-      bundle.logs.groups.every((group) => group.digests.length > 0)
-    ).toBe(true);
+    expect(bundle.logs.groups.every((group) => group.digests.length > 0)).toBe(
+      true
+    );
     // Storage sizing survives, so "the vault is 84MB with 41k items" is answerable.
     const storage = bundle.storage[0] as Record<string, unknown>;
     expect(storage.vaultDbBytes).toBe(84_000_000);
@@ -263,7 +265,9 @@ describe("support bundle — usefulness", () => {
     const bundle = buildSupportBundle(input());
     expect(bundle.sharing).toBe(SUPPORT_BUNDLE_SHARING);
     expect(SUPPORT_BUNDLE_SHARING).toBe("manual-owner-action");
-    expect(bundle.disclosure.join(" ")).toContain("Nothing in Centraid uploads");
+    expect(bundle.disclosure.join(" ")).toContain(
+      "Nothing in Centraid uploads"
+    );
     expect(bundle.generatedAt).toBe("2026-08-21T09:30:00.000Z");
   });
 });

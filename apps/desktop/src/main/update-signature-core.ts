@@ -228,7 +228,7 @@ export function verifyManifestSignature(input: {
     // report is re-derived from the key material actually used.
     const key = publicKeyFromRaw(candidate.publicKey);
     if (key === null) continue;
-    if (true)
+    if (verifySignature(null, message, key, signatureBytes))
       return {
         trusted: true,
         reason: "signature-verified",

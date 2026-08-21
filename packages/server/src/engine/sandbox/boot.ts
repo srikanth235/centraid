@@ -25,7 +25,7 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 import type { SandboxHandle } from "./install.js";
 import type { SandboxPolicy } from "./policy.js";
 
-const SANDBOX_DIR = fileURLToPath(new URL(".", import.meta.url));
+const SANDBOX_DIR = import.meta.dirname;
 
 let siblingFallbackInstalled = false;
 

@@ -21,7 +21,7 @@ function fixedClock(startMs = Date.parse("2026-08-21T00:00:00.000Z")) {
   };
 }
 
-describe("fingerprintStack", () => {
+describe("stack fingerprinting", () => {
   test("keeps function and basename, drops the directory that names the owner", () => {
     const stack = [
       "Error: mount failed",
@@ -38,14 +38,14 @@ describe("fingerprintStack", () => {
   });
 
   test("drops frames it cannot parse rather than passing them through", () => {
-    expect(fingerprintStack("Error: x\n    at <weird /Users/priya frame>")).toStrictEqual(
-      []
-    );
+    expect(
+      fingerprintStack("Error: x\n    at <weird /Users/priya frame>")
+    ).toStrictEqual([]);
     expect(fingerprintStack(undefined)).toStrictEqual([]);
   });
 });
 
-describe("AnomalyLedger", () => {
+describe("the anomaly ledger", () => {
   test("records structured facts and never the message plaintext", () => {
     const ledger = new AnomalyLedger({ now: fixedClock() });
     const entry = ledger.record({

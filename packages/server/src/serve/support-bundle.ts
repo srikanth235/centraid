@@ -37,6 +37,7 @@
  * exists to avoid.
  */
 
+import type { AnomalyRecord } from "./anomaly-ledger.js";
 import {
   applyTripwire,
   emitLeaf,
@@ -49,7 +50,6 @@ import type {
   RedactionLevel,
   RedactionReport,
 } from "./diagnostics-redaction.js";
-import type { AnomalyRecord } from "./anomaly-ledger.js";
 
 export const SUPPORT_BUNDLE_FORMAT_VERSION = 1;
 
@@ -166,11 +166,11 @@ const MAX_TABLE_ROWS = 64;
  *  component prefix (`vault registry: created vault …`). Kept only when it
  *  is a short machine-ish phrase; anything else becomes `unknown`, because
  *  a prefix that is not a prefix is interpolated text. */
-const COMPONENT_PREFIX = /^([a-z][a-z0-9 _.-]{0,31}):/u;
+const COMPONENT_PREFIX = /^(?<component>[a-z][a-z0-9 _.-]{0,31}):/u;
 
 function componentOf(message: string): string {
   const matched = COMPONENT_PREFIX.exec(message);
-  return (matched?.[1] ?? "unknown").replaceAll(" ", "-");
+  return (matched?.groups?.component ?? "unknown").replaceAll(" ", "-");
 }
 
 const DISCLOSURE = [
@@ -212,7 +212,13 @@ function groupLogs(
   const byLevel: Record<string, number> = {};
   const buckets = new Map<
     string,
-    { component: string; level: string; count: number; digests: string[]; templates: string[] }
+    {
+      component: string;
+      level: string;
+      count: number;
+      digests: string[];
+      templates: string[];
+    }
   >();
   for (const entry of logs) {
     const level = String(entry.level);
@@ -226,9 +232,15 @@ function groupLogs(
     }
     bucket.count += 1;
     const stamp = digest12(entry.message);
-    if (!bucket.digests.includes(stamp) && bucket.digests.length < MAX_GROUP_DIGESTS)
+    if (
+      !bucket.digests.includes(stamp) &&
+      bucket.digests.length < MAX_GROUP_DIGESTS
+    )
       bucket.digests.push(stamp);
-    if (context.report.level === "standard" && bucket.templates.length < MAX_GROUP_DIGESTS) {
+    if (
+      context.report.level === "standard" &&
+      bucket.templates.length < MAX_GROUP_DIGESTS
+    ) {
       const template = emitLeaf(entry.message, "prose", context);
       if (typeof template === "string" && !bucket.templates.includes(template))
         bucket.templates.push(template);

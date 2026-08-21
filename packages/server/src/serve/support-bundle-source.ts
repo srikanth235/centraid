@@ -44,7 +44,7 @@ export interface SupportBundleHealthLike {
       detail?: string;
       lastError?: string;
     }[];
-    metrics?: Record<string, unknown>;
+    metrics?: object;
   }>;
 }
 
@@ -145,7 +145,7 @@ export async function collectSupportBundleInput(
       message: entry.message,
     }));
   const storage: SupportBundleStorage[] = [];
-  const sensitive = new Set<string>(options.extraSensitive ?? []);
+  const sensitive = new Set<string>(options.extraSensitive);
   for (const plane of options.planes) {
     const sizes = plane.db ? dbSizeBreakdownSafe(plane.db) : null;
     storage.push({
@@ -170,7 +170,7 @@ export async function collectSupportBundleInput(
       status: health.status,
       uptimeMs: health.uptimeMs,
       components: health.components.map((component) => ({ ...component })),
-      metrics: health.metrics ?? {},
+      metrics: (health.metrics ?? {}) as Record<string, unknown>,
     },
     anomalies: options.anomalies.snapshot(),
     logs,

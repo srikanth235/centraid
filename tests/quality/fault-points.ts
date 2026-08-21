@@ -77,10 +77,3 @@ export const CRASH_BOUNDARY_BY_ID: Readonly<
 > = Object.fromEntries(
   CRASH_BOUNDARIES.map((boundary) => [boundary.id, boundary])
 ) as Record<CrashBoundaryId, CrashBoundary>;
-
-/**
- * @deprecated Back-compat alias for the pre-#842 flat id list. Prefer
- * `CRASH_BOUNDARY_IDS` / `CRASH_BOUNDARIES`.
- */
-export const GATEWAY_WRITE_FAULT_POINTS = CRASH_BOUNDARY_IDS;
-export type GatewayWriteFaultPoint = CrashBoundaryId;

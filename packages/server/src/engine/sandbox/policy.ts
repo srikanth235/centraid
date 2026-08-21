@@ -140,10 +140,16 @@ export function automationHandlerPolicy(): SandboxPolicy {
  * subprocesses are refused, and the environment is empty — so the *handler
  * JavaScript* around the model cannot exfiltrate what the model sees.
  */
-export function modelRuntimePolicy(readRoots: readonly string[]): SandboxPolicy {
+export function modelRuntimePolicy(
+  readRoots: readonly string[]
+): SandboxPolicy {
   return {
     lane: "model-runtime",
-    allowedBuiltins: [...COMPUTATIONAL_BUILTINS, FS_BUILTIN, FS_PROMISES_BUILTIN],
+    allowedBuiltins: [
+      ...COMPUTATIONAL_BUILTINS,
+      FS_BUILTIN,
+      FS_PROMISES_BUILTIN,
+    ],
     filesystem: { mode: "read-confined", readRoots: normalizeRoots(readRoots) },
     network: "denied",
     subprocess: "denied",
@@ -234,7 +240,13 @@ export function isPathWithinRoots(
 ): boolean {
   if (roots.length === 0) return false;
   const resolved = path.resolve(target);
-  return roots.some(
-    (root) => resolved === root || resolved.startsWith(root + path.sep)
-  );
+  return roots.some((root) => {
+    if (resolved === root) return true;
+    // `path.relative`, not `startsWith(root + sep)`: the string form is wrong
+    // for a root that already ends in the separator (a bare `/` would compare
+    // against `//` and match nothing), and it is the idiom that also rejects
+    // the `/srv/models-evil` sibling a naive prefix test would accept.
+    const rel = path.relative(root, resolved);
+    return rel !== "" && !rel.startsWith("..") && !path.isAbsolute(rel);
+  });
 }

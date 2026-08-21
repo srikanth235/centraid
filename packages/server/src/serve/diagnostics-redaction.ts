@@ -153,8 +153,9 @@ const PROSE_RULES: readonly ProseRule[] = [
     id: "url",
     // Keep the scheme so "it failed talking to an https endpoint" survives;
     // host, path, query and fragment all go.
-    pattern: /\b([A-Za-z][A-Za-z0-9+.-]*):\/\/[^\s"'`<>]+/gu,
-    replace: (match) => `${match.slice(0, match.indexOf(":"))}://[REDACTED:url]`,
+    pattern: /\b(?<scheme>[A-Za-z][A-Za-z0-9+.-]*):\/\/[^\s"'`<>]+/gu,
+    replace: (match) =>
+      `${match.slice(0, match.indexOf(":"))}://[REDACTED:url]`,
   },
   {
     id: "absolute-path",
@@ -274,8 +275,7 @@ export type LeafPolicy =
 // `@` is allowed so a stack fingerprint (`fn@file.js:12`) is an enum leaf
 // rather than a refused one; it carries no more information than the parts.
 const ENUM_SHAPE = /^[A-Za-z0-9][A-Za-z0-9._:@-]{0,63}$/u;
-const TIMESTAMP_SHAPE =
-  /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,6})?Z$/u;
+const TIMESTAMP_SHAPE = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,6})?Z$/u;
 const VERBATIM_SHAPE = /^[\w .+:/@-]{0,64}$/u;
 
 export interface LeafContext {
@@ -391,11 +391,7 @@ export function scrubUnknown(
   }
   if (typeof value === "number") return emitLeaf(value, "number", context);
   if (typeof value === "string")
-    return emitLeaf(
-      value,
-      isMachineSetting(value) ? "enum" : "prose",
-      context
-    );
+    return emitLeaf(value, isMachineSetting(value) ? "enum" : "prose", context);
   if (Array.isArray(value)) {
     const kept = value.slice(0, MAX_ARRAY);
     if (value.length > kept.length) hit(report, "width-cap");
@@ -450,7 +446,8 @@ export function applyTripwire(
     let index = out.indexOf(raw);
     while (index !== -1) {
       hits += 1;
-      out = out.slice(0, index) + MARK("tripwire") + out.slice(index + raw.length);
+      out =
+        out.slice(0, index) + MARK("tripwire") + out.slice(index + raw.length);
       index = out.indexOf(raw, index + 1);
     }
   }

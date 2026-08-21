@@ -218,7 +218,10 @@ export function runRustSupplyChain(options = {}) {
 }
 
 /* c8 ignore start -- CLI shell; the decision logic above is unit-covered */
-if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+if (
+  process.argv[1] &&
+  import.meta.url === pathToFileURL(process.argv[1]).href
+) {
   const requireTools = process.argv.includes("--require");
   const rootFlag = process.argv.indexOf("--root");
   const root =

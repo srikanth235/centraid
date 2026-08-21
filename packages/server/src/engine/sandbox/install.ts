@@ -58,17 +58,10 @@ import { existsSync } from "node:fs";
 import { registerHooks } from "node:module";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
-import { setConfinedReadRoots } from "./confined-fs.js";
+import { denied } from "./denied.js";
+import { setConfinedReadRoots } from "./fs-guard.js";
 import { builtinDecision, builtinId } from "./policy.js";
 import type { SandboxPolicy } from "./policy.js";
-
-export class SandboxDenied extends Error {
-  readonly code = "CENTRAID_SANDBOX_DENIED";
-  constructor(message: string) {
-    super(`sandbox refused: ${message}`);
-    this.name = "SandboxDenied";
-  }
-}
 
 export interface SandboxHandle {
   readonly policy: SandboxPolicy;
@@ -80,9 +73,9 @@ export interface SandboxHandle {
    */
   readonly hostFetch: typeof globalThis.fetch;
   /** Mark a module URL untrusted; its whole transitive graph is confined. */
-  taint(url: string): void;
+  readonly taint: (url: string) => void;
   /** Is this URL inside the confined graph? Exposed for assertions. */
-  isTainted(url: string): boolean;
+  readonly isTainted: (url: string) => boolean;
 }
 
 /** Strip the `?query#hash` a loader may append before comparing identities. */
@@ -115,14 +108,14 @@ let installed: SandboxHandle | undefined;
 export function installWorkerSandbox(policy: SandboxPolicy): SandboxHandle {
   if (installed) {
     if (installed.policy.lane !== policy.lane) {
-      throw new SandboxDenied(
+      throw denied(
         `thread already sandboxed for lane "${installed.policy.lane}"; refusing to re-install as "${policy.lane}"`
       );
     }
     return installed;
   }
   if (typeof registerHooks !== "function") {
-    throw new SandboxDenied(
+    throw denied(
       "node:module.registerHooks is unavailable (needs Node >= 22.15); refusing to run untrusted handlers with no containment"
     );
   }
@@ -132,11 +125,9 @@ export function installWorkerSandbox(policy: SandboxPolicy): SandboxHandle {
   const confinedFsUrl = siblingUrl("confined-fs");
   const confinedFsPromisesUrl = siblingUrl("confined-fs-promises");
 
-  if (policy.filesystem !== "denied") {
-    setConfinedReadRoots(policy.filesystem.readRoots);
-  } else {
-    setConfinedReadRoots([]);
-  }
+  setConfinedReadRoots(
+    policy.filesystem === "denied" ? [] : policy.filesystem.readRoots
+  );
 
   /**
    * The redirect target for `node:fs` / `node:fs/promises`. `format` must be
@@ -169,7 +160,7 @@ export function installWorkerSandbox(policy: SandboxPolicy): SandboxHandle {
       const id = builtinId(specifier);
       if (id !== null) {
         const decision = builtinDecision(policy, id);
-        if (decision.kind === "deny") throw new SandboxDenied(decision.reason);
+        if (decision.kind === "deny") throw denied(decision.reason);
         if (decision.kind === "confined-fs") {
           return confinedFsResolution(decision.promises);
         }
@@ -182,7 +173,7 @@ export function installWorkerSandbox(policy: SandboxPolicy): SandboxHandle {
         const resolvedId = builtinId(resolved.url);
         if (resolvedId !== null) {
           const decision = builtinDecision(policy, resolvedId);
-          if (decision.kind === "deny") throw new SandboxDenied(decision.reason);
+          if (decision.kind === "deny") throw denied(decision.reason);
           if (decision.kind === "confined-fs") {
             return confinedFsResolution(decision.promises);
           }
@@ -199,7 +190,9 @@ export function installWorkerSandbox(policy: SandboxPolicy): SandboxHandle {
     policy,
     hostFetch,
     taint(url: string): void {
-      tainted.add(bareUrl(url.startsWith("file:") ? url : pathToFileURL(url).href));
+      tainted.add(
+        bareUrl(url.startsWith("file:") ? url : pathToFileURL(url).href)
+      );
     },
     isTainted(url: string): boolean {
       return tainted.has(
@@ -217,8 +210,8 @@ export function resetWorkerSandboxForTests(): void {
 
 function revokeAmbientAuthority(policy: SandboxPolicy): void {
   if (policy.network === "denied") {
-    const deny = (name: string) => () => {
-      throw new SandboxDenied(
+    const revoke = (name: string) => () => {
+      throw denied(
         `global ${name} is revoked in lane "${policy.lane}"; network reach is a capability the host grants through ctx, not ambient authority`
       );
     };
@@ -229,25 +222,25 @@ function revokeAmbientAuthority(policy: SandboxPolicy): void {
       "EventSource",
       "XMLHttpRequest",
     ]) {
-      if (name in scope) scope[name] = deny(name);
+      if (name in scope) scope[name] = revoke(name);
     }
     const nav = scope.navigator as { sendBeacon?: unknown } | undefined;
     if (nav && typeof nav === "object" && "sendBeacon" in nav) {
-      nav.sendBeacon = deny("navigator.sendBeacon");
+      nav.sendBeacon = revoke("navigator.sendBeacon");
     }
   }
 
   const proc = process as unknown as Record<string, unknown>;
   if (policy.subprocess === "denied") {
     proc.binding = () => {
-      throw new SandboxDenied(
+      throw denied(
         "process.binding is revoked; it reaches internal bindings the module allowlist cannot see"
       );
     };
   }
   if (!policy.nativeAddons) {
     proc.dlopen = () => {
-      throw new SandboxDenied(
+      throw denied(
         `lane "${policy.lane}" may not load native addons; a .node binary runs outside every check this sandbox makes`
       );
     };
@@ -262,7 +255,7 @@ function revokeAmbientAuthority(policy: SandboxPolicy): void {
     if (id === null) return realGetBuiltinModule(specifier);
     const decision = builtinDecision(policy, id);
     if (decision.kind !== "allow") {
-      throw new SandboxDenied(
+      throw denied(
         `process.getBuiltinModule("${specifier}") is refused: ${decision.kind === "deny" ? decision.reason : "filesystem access must go through the confined mirror, which this bypass would skip"}`
       );
     }

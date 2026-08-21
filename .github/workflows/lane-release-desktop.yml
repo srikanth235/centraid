@@ -45,6 +45,14 @@ on:
         required: false
       AZURE_CERT_PROFILE:
         required: false
+      # #842 W6.1/W6.2 — the release signing key, raw 32-byte Ed25519 seed,
+      # base64. Distinct from the OS code-signing credentials above: those prove
+      # a certificate signed the installer, this proves WHICH RELEASE produced
+      # these bytes, and it is the only one the shipped updater checks (the OS
+      # check is a no-op on Linux/AppImage). Optional, because no key is
+      # enrolled yet; the manifest step guarded-skips loudly without it.
+      CENTRAID_RELEASE_SIGNING_KEY:
+        required: false
 
 permissions:
   contents: write
@@ -166,8 +174,52 @@ jobs:
           path: apps/desktop/release/
           retention-days: 14
 
-  github-release:
+  # #842 W6.2 — a release ships a bill of materials, a provenance statement over
+  # the real artifact digests, and — once a release key is enrolled — a signed
+  # manifest the desktop updater verifies before it will install anything
+  # (W6.1). Everything here is a `run:` step calling a repo script, so the job
+  # adds no third-party action and no new pin.
+  supply-chain:
     needs: [package-macos, package-windows, package-linux]
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    if: startsWith(github.ref, 'refs/tags/v')
+    environment: release
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: ./.github/actions/setup
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v4
+        with:
+          path: release-artifacts
+          merge-multiple: true
+      # Each producing step is re-verified in the same run. A signer whose
+      # output nobody checked is how an unverifiable release ships green.
+      - name: SBOM + provenance (deterministic — the timestamp is the commit's)
+        run: |
+          set -euo pipefail
+          node scripts/security/supply-chain.mjs sbom --out release-artifacts/sbom.cdx.json
+          node scripts/security/supply-chain.mjs verify-sbom --sbom release-artifacts/sbom.cdx.json
+          node scripts/security/supply-chain.mjs provenance \
+            --artifacts release-artifacts --out release-artifacts/provenance.intoto.json
+          node scripts/security/supply-chain.mjs verify-provenance \
+            --artifacts release-artifacts --statement release-artifacts/provenance.intoto.json
+      - name: Signed release manifest (guarded skip until a release key is enrolled)
+        env:
+          CENTRAID_RELEASE_SIGNING_KEY: ${{ secrets.CENTRAID_RELEASE_SIGNING_KEY }}
+        run: |
+          VER="${GITHUB_REF_NAME#v}"
+          node scripts/security/supply-chain.mjs manifest --artifacts release-artifacts --version "$VER"
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: supply-chain
+          path: |
+            release-artifacts/sbom.cdx.json
+            release-artifacts/provenance.intoto.json
+            release-artifacts/centraid-release-manifest*.json
+          retention-days: 90
+
+  github-release:
+    needs: [package-macos, package-windows, package-linux, supply-chain]
     runs-on: ubuntu-latest
     timeout-minutes: 20
     if: startsWith(github.ref, 'refs/tags/v')

@@ -101,14 +101,18 @@ export const leakBudgets = {
   maxHeapGrowthRatio: 0.35,
 
   /**
-   * Anti-vacuity floor: elements the mounted app added to the document, on the
-   * WORST cycle of the run. A cycle that mounted nothing would hold every
-   * ceiling above at zero and report a perfect result, so the census has to
-   * testify that an app was really up each time. Stated as a delta because the
-   * absolute node count is dominated by the shell frame and barely moves.
-   * MEASURED 2026-08-21: +11 to +12 on every cycle; the floor is under half of
-   * that, low
-   * enough to survive a copy change and high enough that an empty route fails.
+   * Anti-vacuity floor: elements INSIDE the mounted app view, on the worst
+   * cycle of the run. A cycle that mounted nothing would hold every ceiling
+   * above at zero and report a perfect result, so the census has to testify
+   * that an app was really rendered each time.
+   *
+   * Deliberately the app's own subtree rather than a whole-document delta.
+   * MEASURED 2026-08-21: a document-total delta reads +11 when this lane runs
+   * alone and 0 in a full-suite run, because Home's own content grows with
+   * whatever earlier specs wrote to the shared harness vault — a witness that
+   * depends on suite order is not a witness. The subtree count is a property
+   * of the app alone; measured at 44 elements, and the floor is set well under
+   * it so a copy change cannot red the lane while an empty route still does.
    */
-  minMountedNodeDelta: 5,
+  minMountedSubtreeNodes: 5,
 } as const;

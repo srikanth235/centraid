@@ -2,6 +2,20 @@
 
 ## Open
 
+- **The desktop crash log is correct as a local file and wrong the moment
+  anything shares it.** `apps/desktop/src/main/crash-log-core.ts`'s
+  `toCrashRecord` writes the raw error message and the full stack — absolute
+  paths, and therefore the OS username — into `<userData>/crash.log`. That is
+  the right shape for a sovereign local file nobody uploads, and it is the
+  wrong shape for anything a person attaches to a support request. #842 W8.1
+  built the redacted-at-write-time alternative
+  (`packages/server/src/serve/anomaly-ledger.ts`) but did not migrate the
+  desktop crash log onto it: the two have different lifecycles (one is written
+  by the main process before a vault may even be mounted) and merging them is
+  a design question, not a rename. Recorded as an observation rather than
+  pinned — nothing today copies `crash.log` into a shareable artifact, so no
+  invariant is violated. It becomes a defect the day something does.
+
 - **A parallel wave leaves repo-wide gates unrun, and only the sweep finds
   out.** The three #834 wave slices each verified their own tree (per-tree
   `oxlint` over changed files, per-package typecheck, per-app suites) and

@@ -29,6 +29,8 @@ import { describe, expect, test } from "vitest";
 import { ensureConversationLedger } from "@centraid/server/engine";
 
 import { AnomalyLedger } from "../../packages/server/src/serve/anomaly-ledger.js";
+import { GatewayLogStore } from "../../packages/server/src/serve/gateway-log-store.js";
+import { HealthRegistry } from "../../packages/server/src/serve/health-registry.js";
 import {
   REQUIRED_RESOURCE_LANES,
   validateResourceLedger,
@@ -40,8 +42,6 @@ import type {
 } from "../../packages/server/src/serve/resource-evidence.js";
 import { collectSupportBundleInput } from "../../packages/server/src/serve/support-bundle-source.js";
 import { renderSupportBundle } from "../../packages/server/src/serve/support-bundle.js";
-import { GatewayLogStore } from "../../packages/server/src/serve/gateway-log-store.js";
-import { HealthRegistry } from "../../packages/server/src/serve/health-registry.js";
 import { openVaultPlane } from "../../packages/server/src/serve/vault-plane.js";
 import { tempDir } from "../../packages/test-kit/src/temp-dir.js";
 import { seedYear3Vault } from "../../packages/test-kit/src/year3-vault.js";
@@ -89,9 +89,9 @@ async function measure(): Promise<Record<ResourceMetric, number>> {
       SEED
     );
     const items = (
-      db.vault
-        .prepare("SELECT COUNT(*) AS n FROM core_content_item")
-        .get() as { n: number }
+      db.vault.prepare("SELECT COUNT(*) AS n FROM core_content_item").get() as {
+        n: number;
+      }
     ).n;
     const pageBytes =
       (db.vault.prepare("PRAGMA page_count").get() as { page_count: number })
@@ -155,14 +155,22 @@ describe("W8.2 mobile resource evidence ledger", () => {
     );
     for (const [surface, metric] of REQUIRED_RESOURCE_LANES)
       expect(lanes, `${surface}/${metric}`).toContain(`${surface}/${metric}`);
-    for (const row of ledger.observations)
-      if (row.method === "blocked-external") {
-        // A blocked row is a citation, not a shrug: it names what is missing
-        // and the exact condition that would produce the number.
-        expect(row.blockedReason?.length ?? 0).toBeGreaterThan(20);
-        expect(row.unblockCondition?.length ?? 0).toBeGreaterThan(20);
-        expect(row.value).toBeNull();
-      }
+    // A blocked row is a citation, not a shrug: it names what is missing and
+    // the exact condition that would produce the number. Asserted over the
+    // whole set at once so a ledger with zero blocked rows cannot pass by
+    // running the body zero times.
+    const blockedRows = ledger.observations.filter(
+      (row) => row.method === "blocked-external"
+    );
+    expect(blockedRows).toHaveLength(6);
+    expect(
+      blockedRows.filter(
+        (row) =>
+          (row.blockedReason?.length ?? 0) > 20 &&
+          (row.unblockCondition?.length ?? 0) > 20 &&
+          row.value === null
+      )
+    ).toHaveLength(blockedRows.length);
   });
 
   test("every derived row still reproduces on this machine", async () => {
@@ -182,18 +190,14 @@ describe("W8.2 mobile resource evidence ledger", () => {
     }
   });
 
-  test("PROBE", async () => {
-    // eslint-disable-next-line no-console
-    console.log("MEASURED", JSON.stringify(await measure()));
-    expect(1).toBe(1);
-  });
-
   test("the derived rows point at this file as their recomputation", async () => {
     const ledger = await loadLedger();
-    for (const row of ledger.observations)
-      if (row.method === "derived")
-        expect(row.recomputedBy).toBe(
-          "tests/quality/mobile-resource-evidence.test.ts"
-        );
+    const derivedRows = ledger.observations.filter(
+      (row) => row.method === "derived"
+    );
+    expect(derivedRows.map((row) => row.recomputedBy)).toStrictEqual(
+      derivedRows.map(() => "tests/quality/mobile-resource-evidence.test.ts")
+    );
+    expect(derivedRows).toHaveLength(3);
   });
 });

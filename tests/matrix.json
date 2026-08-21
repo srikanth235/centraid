@@ -32,6 +32,51 @@
       "seed": "disable PeerLinkTicketStore.claim's conditional DELETE (the single-use burn)",
       "failure": "the replayed redemption mints a second link and leaves the ticket unburned"
     },
+    "T7": {
+      "command": "bunx vitest run --config vitest.quality.config.ts tests/quality/diagnostics-redaction-canary.test.ts",
+      "seed": "delete the `email` rule from PROSE_RULES in packages/server/src/serve/diagnostics-redaction.ts",
+      "failure": "3 of 7 cases red — the standard bundle leaks priyanka.raghunathan@example.org, and the rule-attribution case reports that `email` never fired against the seeded corpus"
+    },
+    "T8": {
+      "command": "node node_modules/vitest/vitest.mjs run --project @centraid/server src/engine/sandbox/",
+      "seed": "add fs, net, http, child_process, worker_threads and module to appHandlerPolicy().allowedBuiltins",
+      "failure": "8 escape tests fail: the hostile handler reads /etc/hostname, opens a socket and spawns a subprocess"
+    },
+    "T9": {
+      "command": "node --test scripts/security/rust-supply-chain.test.mjs",
+      "seed": "disable the available-but-did-not-run check in decideExit",
+      "failure": "'AVAILABLE BUT DID NOT RUN fails' goes red — an unrun lane reads as a pass"
+    },
+    "T10": {
+      "command": "node scripts/security/unsafe-edge-audit.mjs",
+      "seed": "plant an unjustified `unsafe` block in packages/tunnel/data-plane/src",
+      "failure": "exit 1 naming the unjustified site and the ledger overrun"
+    },
+    "T11": {
+      "command": "bunx vitest run src/main/update-signature-core.test.ts   # cwd apps/desktop",
+      "seed": "make the signature check unconditional: `if (verifySignature(...))` becomes `if (true)`",
+      "failure": "4 red — the attacker-relabelled keyId, the signature over a different manifest, the mutated golden vector and the tampered manifest all admit"
+    },
+    "T12": {
+      "command": "node --test scripts/security/dependency-behaviour.test.mjs",
+      "seed": "drop the unledgered-package push and the stale-entry push from lifecycle-audit.mjs",
+      "failure": "an unledgered dependency declaring postinstall passes, and a ledger entry for a dependency that no longer runs install-time code is never noticed"
+    },
+    "C2": {
+      "command": "bunx vitest run src/automation/fire/clock-adversity-cron.test.ts   # cwd packages/server",
+      "seed": "clamp the inverted cron window in readCronCursor: if (from > to) from = to - 60_000",
+      "failure": "5 red — the rewound clock and the skewed device pair re-deliver wall minutes already committed"
+    },
+    "F4": {
+      "command": "bunx vitest run --config vitest.quality.config.ts tests/quality/mobile-resource-evidence.test.ts",
+      "seed": "drop a required lane from tests/mobile-resource-evidence.json, or move a derived row's value outside its recorded tolerance",
+      "failure": "'lane ios/cold-start-ms has no row — a lane is measured or blocked-with-a-reason, never absent', or the recompute reports ledger v ±25% but measured n"
+    },
+    "L4": {
+      "command": "bunx playwright test -c tests/e2e/playwright.config.ts renderer-leak.spec.ts   # cwd apps/web",
+      "seed": "register one window listener (or one setInterval) per open/close cycle",
+      "failure": "listener growth reads exactly 12 against a ceiling of 2 (or interval growth 12 against 0) — one per cycle, the residue argument showing its work"
+    },
     "T5": {
       "command": "node scripts/security/dast-scan.mjs",
       "seed": "point the scanner at a gateway with no Host check, a silent 200 on every verb, and a foreign origin reflected with credentials",
@@ -241,6 +286,72 @@
           "redLastDemonstrated": "2026-08-21"
         },
         {
+          "id": "T7",
+          "name": "diagnostics leak canary",
+          "owner": "tests/quality/diagnostics-redaction-canary.test.ts",
+          "evidence": "11 sentinel classes seeded into a real vault and pushed through the paths that interpolate owner data; neither redaction level emits one, and the bundle stays useful",
+          "lane": "vitest",
+          "wallClockCost": "medium",
+          "knob": "packages/server/src/serve/diagnostics-redaction.ts",
+          "governance": "waiver-gated",
+          "redLastDemonstrated": "2026-08-21"
+        },
+        {
+          "id": "T8",
+          "name": "handler sandbox containment",
+          "owner": "packages/server/src/engine/sandbox/sandbox-escape.test.ts",
+          "evidence": "hostile handlers refused fs, sockets, subprocesses and the environment in real worker threads over the real runner entry points",
+          "lane": "vitest",
+          "wallClockCost": "low",
+          "knob": "packages/server/src/engine/sandbox/policy.ts",
+          "governance": "tighten-only",
+          "redLastDemonstrated": "2026-08-21"
+        },
+        {
+          "id": "T9",
+          "name": "rust supply-chain gate",
+          "owner": "scripts/security/rust-supply-chain.test.mjs",
+          "evidence": "cargo-audit and cargo-deny per crate; the guarded skip is loud and --require turns a missing binary red",
+          "lane": "vitest",
+          "wallClockCost": "low",
+          "knob": "deny.toml",
+          "governance": "tighten-only",
+          "redLastDemonstrated": "2026-08-21"
+        },
+        {
+          "id": "T10",
+          "name": "rust unsafe-edge ratchet",
+          "owner": "scripts/security/unsafe-edge-audit.test.mjs",
+          "evidence": "an unjustified or unledgered unsafe site fails; the count is tighten-only in both directions",
+          "lane": "vitest",
+          "wallClockCost": "low",
+          "knob": "scripts/security/rust-unsafe-ledger.json",
+          "governance": "tighten-only",
+          "redLastDemonstrated": "2026-08-21"
+        },
+        {
+          "id": "T11",
+          "name": "update signature custody",
+          "owner": "apps/desktop/src/main/update-signature-core.test.ts",
+          "evidence": "twelve refusal reasons over real Ed25519 keys, including a cross-implementation golden vector the release signer and the shipped verifier must agree on byte-for-byte",
+          "lane": "vitest",
+          "wallClockCost": "low",
+          "knob": "apps/desktop/src/main/update-signature-gate.ts",
+          "governance": "tighten-only",
+          "redLastDemonstrated": "2026-08-21"
+        },
+        {
+          "id": "T12",
+          "name": "dependency behaviour and CI egress ratchets",
+          "owner": "scripts/security/dependency-behaviour.test.mjs",
+          "evidence": "install-time code digested over the command AND the script bytes, so a republished tarball at the same version fails; CI egress debt shrinks only",
+          "lane": "vitest",
+          "wallClockCost": "low",
+          "knob": "scripts/security/lifecycle-ledger.json",
+          "governance": "tighten-only",
+          "redLastDemonstrated": "2026-08-21"
+        },
+        {
           "id": "A6",
           "name": "nightly red blocks release",
           "owner": "scripts/release/publish-guards.test.mjs",
@@ -290,6 +401,17 @@
           "knob": "tests/matrix.json",
           "governance": "waiver-gated",
           "redLastDemonstrated": "2026-08-01"
+        },
+        {
+          "id": "C2",
+          "name": "scheduler holds under clock adversity",
+          "owner": "packages/server/src/automation/fire/clock-adversity-cron.test.ts",
+          "evidence": "no double fire, no silent skip and no drift under clock steps, rewinds, a seeded jitter walk, two disagreeing devices, and a zone moved mid-schedule",
+          "lane": "vitest",
+          "wallClockCost": "low",
+          "knob": "packages/server/src/automation/fire/cron-cursor.ts",
+          "governance": "tighten-only",
+          "redLastDemonstrated": "2026-08-21"
         },
         {
           "id": "D2",
@@ -519,6 +641,17 @@
           "redLastDemonstrated": "2026-08-01"
         },
         {
+          "id": "F4",
+          "name": "mobile resource evidence ledger",
+          "owner": "tests/quality/mobile-resource-evidence.test.ts",
+          "evidence": "every mobile resource lane is measured, or blocked with a written reason and a concrete unblock condition — never absent; derived host-proxy numbers are recomputed on every run",
+          "lane": "vitest",
+          "wallClockCost": "low",
+          "knob": "tests/mobile-resource-evidence.json",
+          "governance": "tighten-only",
+          "redLastDemonstrated": "2026-08-21"
+        },
+        {
           "id": "D6",
           "name": "canonical cross-surface formatters",
           "owner": "packages/design/src/format.test.ts",
@@ -566,6 +699,17 @@
           "lane": "vitest",
           "wallClockCost": "low",
           "knob": "scripts/corpora/schema-epoch-census.json",
+          "governance": "tighten-only",
+          "redLastDemonstrated": "2026-08-21"
+        },
+        {
+          "id": "L4",
+          "name": "renderer leaves no residue per open/close cycle",
+          "owner": "apps/web/tests/e2e/renderer-leak.spec.ts",
+          "evidence": "12 identical cycles after 3 warm-up cycles; every ceiling sits strictly below the cycle count, so a per-cycle residue cannot hide under it while a one-off late allocation still passes",
+          "lane": "playwright",
+          "wallClockCost": "low",
+          "knob": "apps/web/tests/e2e/leak-budgets.ts",
           "governance": "tighten-only",
           "redLastDemonstrated": "2026-08-21"
         },
@@ -4050,6 +4194,159 @@
       "tier": "unit",
       "owner": "packages/server/src/backup/restore-drill.test.ts",
       "minimumTests": 8
+    },
+    {
+      "id": "cron-clock-adversity",
+      "name": "Scheduler holds no-double-fire, no-skip and no-drift under clock skew, device disagreement and a mid-schedule zone change",
+      "surface": "automations",
+      "dimension": "correctness",
+      "tier": "unit",
+      "owner": "packages/server/src/automation/fire/clock-adversity-cron.test.ts",
+      "minimumTests": 11
+    },
+    {
+      "id": "cron-calendar-boundaries",
+      "name": "Cron delivers month, year and leap-second boundaries exactly once",
+      "surface": "automations",
+      "dimension": "correctness",
+      "tier": "unit",
+      "owner": "packages/server/src/automation/fire/calendar-boundary-cron.test.ts",
+      "minimumTests": 12
+    },
+    {
+      "id": "renderer-leak-soak",
+      "name": "Repeated app open/close leaves no listener, subscription, node or heap residue",
+      "surface": "web",
+      "dimension": "durability",
+      "tier": "e2e",
+      "owner": "apps/web/tests/e2e/renderer-leak.spec.ts",
+      "minimumTests": 1
+    },
+    {
+      "id": "handler-sandbox-policy",
+      "name": "Handler sandbox capability lanes and root containment",
+      "surface": "app-engine",
+      "dimension": "contracts",
+      "tier": "contract",
+      "owner": "packages/server/src/engine/sandbox/policy.test.ts",
+      "minimumTests": 15
+    },
+    {
+      "id": "handler-sandbox-escape",
+      "name": "Hostile handlers cannot reach the filesystem, sockets, subprocesses or the environment",
+      "surface": "app-engine",
+      "dimension": "security",
+      "tier": "integration",
+      "owner": "packages/server/src/engine/sandbox/sandbox-escape.test.ts",
+      "minimumTests": 20
+    },
+    {
+      "id": "rust-supply-chain-gate",
+      "name": "cargo-audit / cargo-deny run per crate, and an unrun lane never reads as a pass",
+      "surface": "tunnel-pairing",
+      "dimension": "security",
+      "tier": "unit",
+      "owner": "scripts/security/rust-supply-chain.test.mjs",
+      "minimumTests": 15
+    },
+    {
+      "id": "rust-unsafe-edge-ratchet",
+      "name": "Every Rust unsafe site is justified and ledgered, tighten-only",
+      "surface": "tunnel-pairing",
+      "dimension": "security",
+      "tier": "unit",
+      "owner": "scripts/security/unsafe-edge-audit.test.mjs",
+      "minimumTests": 15
+    },
+    {
+      "id": "desktop-update-signature-custody",
+      "name": "Packaged updater refuses unsigned, wrong-signed and tampered payloads",
+      "surface": "desktop",
+      "dimension": "security",
+      "tier": "contract",
+      "owner": "apps/desktop/src/main/update-signature-core.test.ts",
+      "minimumTests": 29
+    },
+    {
+      "id": "desktop-update-signature-gate",
+      "name": "Update install gate fetches release custody assets and fails closed",
+      "surface": "desktop",
+      "dimension": "security",
+      "tier": "unit",
+      "owner": "apps/desktop/src/main/update-signature-gate.test.ts",
+      "minimumTests": 14
+    },
+    {
+      "id": "release-supply-chain-attestation",
+      "name": "SBOM, provenance and release-manifest signature verify or refuse",
+      "surface": "desktop",
+      "dimension": "security",
+      "tier": "contract",
+      "owner": "scripts/security/supply-chain-core.test.mjs",
+      "minimumTests": 16
+    },
+    {
+      "id": "dependency-behaviour-ratchets",
+      "name": "Install-time code and CI egress ratchets only shrink",
+      "surface": "desktop",
+      "dimension": "security",
+      "tier": "contract",
+      "owner": "scripts/security/dependency-behaviour.test.mjs",
+      "minimumTests": 24
+    },
+    {
+      "id": "gateway-support-bundle-redaction",
+      "name": "The shareable support bundle emits no vault content, secret or personal data",
+      "surface": "gateway",
+      "dimension": "security",
+      "tier": "unit",
+      "owner": "packages/server/src/serve/diagnostics-redaction.test.ts",
+      "minimumTests": 21
+    },
+    {
+      "id": "gateway-anomaly-ledger",
+      "name": "The local crash/anomaly ledger records structured facts and never plaintext",
+      "surface": "gateway",
+      "dimension": "durability",
+      "tier": "unit",
+      "owner": "packages/server/src/serve/anomaly-ledger.test.ts",
+      "minimumTests": 9
+    },
+    {
+      "id": "gateway-support-bundle-contract",
+      "name": "Support bundle: allowlist-by-construction, useful under redaction, no egress",
+      "surface": "gateway",
+      "dimension": "contracts",
+      "tier": "contract",
+      "owner": "packages/server/src/serve/support-bundle.test.ts",
+      "minimumTests": 12
+    },
+    {
+      "id": "diagnostics-leak-canary",
+      "name": "No sentinel class reaches the support bundle, and the bundle stays useful",
+      "surface": "gateway",
+      "dimension": "security",
+      "tier": "integration",
+      "owner": "tests/quality/diagnostics-redaction-canary.test.ts",
+      "minimumTests": 6
+    },
+    {
+      "id": "mobile-resource-evidence-law",
+      "name": "Every mobile resource lane is measured or blocked with an unblock condition",
+      "surface": "mobile",
+      "dimension": "contracts",
+      "tier": "contract",
+      "owner": "packages/server/src/serve/resource-evidence.test.ts",
+      "minimumTests": 9
+    },
+    {
+      "id": "mobile-resource-evidence-recompute",
+      "name": "Every derived mobile resource number still reproduces on this machine",
+      "surface": "mobile",
+      "dimension": "performance",
+      "tier": "integration",
+      "owner": "tests/quality/mobile-resource-evidence.test.ts",
+      "minimumTests": 4
     },
     {
       "id": "app-engine-handler-budget",

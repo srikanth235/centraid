@@ -19,14 +19,18 @@ const context = (level: "strict" | "standard" = "standard"): LeafContext => ({
   salt: "fixed-salt-842",
 });
 
-describe("scrubProse", () => {
+describe("prose scrubbing", () => {
   const cases: readonly (readonly [string, string, string])[] = [
     [
       "email",
       "outbox: delivery to priya.raghunathan@example.com failed",
       "priya.raghunathan@example.com",
     ],
-    ["jwt", "auth: eyJhbGciOi.eyJzdWIiOjEyMw.QWxsRG9uZQ rejected", "eyJhbGciOi"],
+    [
+      "jwt",
+      "auth: eyJhbGciOi.eyJzdWIiOjEyMw.QWxsRG9uZQ rejected",
+      "eyJhbGciOi",
+    ],
     [
       "url",
       "peer: dial https://vault.example.net/join?ticket=abc123 timed out",
@@ -122,7 +126,7 @@ describe("scrubProse", () => {
   });
 });
 
-describe("emitLeaf", () => {
+describe("leaf policies", () => {
   test("refuses a value whose shape its policy does not declare", () => {
     const shared = context();
     expect(emitLeaf("Priya's vault", "enum", shared)).toBe(
@@ -168,7 +172,7 @@ describe("emitLeaf", () => {
   });
 });
 
-describe("scrubUnknown", () => {
+describe("unknown-shape config walk", () => {
   test("drops secret-shaped keys at any depth and scrubs strings", () => {
     const shared = context();
     const out = scrubUnknown(
@@ -218,7 +222,7 @@ describe("scrubUnknown", () => {
   });
 });
 
-describe("applyTripwire", () => {
+describe("the serialization tripwire", () => {
   test("removes every occurrence and counts them", () => {
     const result = applyTripwire(
       '{"a":"Priya Raghunathan","b":"x Priya Raghunathan"}',

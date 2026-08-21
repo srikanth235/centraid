@@ -500,12 +500,12 @@ function execute(request: WorkerRequest): void {
   void (async () => {
     try {
       if (request.sandboxLane !== undefined) {
-        const boot = await (await loadSandboxBoot()).loadSandbox();
+        const sandboxApi = await (await loadSandboxBoot()).loadSandbox();
         const policy =
           request.sandboxLane === "model-runtime"
-            ? boot.modelRuntimePolicy(request.sandboxReadRoots ?? [])
-            : boot.automationHandlerPolicy();
-        const sandbox = boot.installWorkerSandbox(policy);
+            ? sandboxApi.modelRuntimePolicy(request.sandboxReadRoots ?? [])
+            : sandboxApi.automationHandlerPolicy();
+        const sandbox = sandboxApi.installWorkerSandbox(policy);
         sandbox.taint(pathToFileURL(req.handlerFile).href);
       }
       const mod = (await import(pathToFileURL(req.handlerFile).href)) as {

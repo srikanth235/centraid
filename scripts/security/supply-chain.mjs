@@ -327,12 +327,22 @@ const COMMANDS = {
       fail(
         "a release public key is enrolled but the artifacts carry no signed manifest — the signing step did not run"
       );
+    const manifest = JSON.parse(readFileSync(manifestPath, "utf8"));
     const result = verifyDocument(
-      JSON.parse(readFileSync(manifestPath, "utf8")),
+      manifest,
       JSON.parse(readFileSync(signaturePath, "utf8")),
       publicKey
     );
     if (!result.ok) fail(`release manifest signature: ${result.reason}`);
+    // A validly-signed manifest for the WRONG version is exactly the replay the
+    // updater refuses at install time; catch it here rather than shipping it.
+    if (
+      typeof options.version === "string" &&
+      manifest.version !== options.version
+    )
+      fail(
+        `release manifest is signed but vouches for ${manifest.version}, not ${options.version}`
+      );
     console.info("supply-chain: release manifest signature verified");
   },
 };

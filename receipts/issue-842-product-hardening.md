@@ -40,9 +40,9 @@ W3 — time, network, disorder:
 
 - [ ] W3.1 Network chaos on the tunnel plane
 - [ ] W3.2 Composition-level chaos
-- [ ] W3.3 Clock-skew + calendar-edge injection
+- [x] W3.3 Clock-skew + calendar-edge injection
 - [ ] W3.4 Long-run soak rig (weekly)
-- [ ] W3.5 Renderer leak testing
+- [x] W3.5 Renderer leak testing
 
 W4 — load and limits:
 
@@ -58,20 +58,20 @@ W5 — compatibility and lifecycle:
 
 W6 — ship-time custody:
 
-- [ ] W6.1 Apple notarization + signature-verified auto-update
-- [ ] W6.2 Signed images, SBOM, provenance
-- [ ] W6.3 CI egress control + dependency-behaviour layer
+- [x] W6.1 Apple notarization + signature-verified auto-update
+- [x] W6.2 Signed images, SBOM, provenance
+- [x] W6.3 CI egress control + dependency-behaviour layer
 
 W7 — the running process:
 
-- [ ] W7.1 Sandbox model runtime + handler workers
-- [ ] W7.2 Rust-side lanes (cargo-audit/deny; unsafe-edge pass)
+- [x] W7.1 Sandbox model runtime + handler workers
+- [x] W7.2 Rust-side lanes (cargo-audit/deny; unsafe-edge pass)
 
 W8 — the field, and the spec:
 
-- [ ] W8.1 Crash/anomaly ledger + redacted diagnostics bundle
-- [ ] W8.2 Mobile resource evidence ledger seeded
-- [ ] W8.3 External reviews scheduled; formal-model note
+- [x] W8.1 Crash/anomaly ledger + redacted diagnostics bundle
+- [x] W8.2 Mobile resource evidence ledger seeded
+- [x] W8.3 External reviews scheduled; formal-model note
 
 ## What changed
 

@@ -71,3 +71,32 @@ jobs:
         uses: github/codeql-action/analyze@e4fba868fa4b1b91e1fdab776edc8cfbe6e9fb81 # v4.37.3
         with:
           category: /language:${{ matrix.language }}
+
+  # #842 W7.2 — the Rust half of supply chain. CodeQL above reads the crates'
+  # source; this reads their DEPENDENCIES: cargo-audit for known advisories,
+  # cargo-deny for licences, banned crates, duplicate versions and unknown
+  # registries. It lives here rather than on the PR loop for the same reason
+  # codeql does — installing two cargo binaries is minutes.
+  #
+  # The unsafe-edge ratchet runs on every PR instead (`check:push`): it needs no
+  # toolchain, so there is no reason to defer it to a weekly lane. It is
+  # repeated here only so a weekly run reports the whole Rust posture in one
+  # place.
+  rust-supply-chain:
+    name: rust supply-chain (cargo-audit + cargo-deny)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: dtolnay/rust-toolchain@2c7215f132e9ebf062739d9130488b56d53c060c # stable
+      - run: cargo install cargo-audit --locked
+      - run: cargo install cargo-deny --locked
+      # `--require` is what makes this job worth having. Without it a missing
+      # binary is a loud guarded skip that still exits 0 — correct on a
+      # developer machine, wrong here, where this job installs both and so an
+      # absent binary means the install step lied rather than that the tool is
+      # unavailable. Under --require, "available but did not run" is red too.
+      - run: node scripts/security/rust-supply-chain.mjs --require
+      - run: node scripts/security/unsafe-edge-audit.mjs

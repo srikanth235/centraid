@@ -20,7 +20,7 @@ import {
   normalizeRoots,
 } from "./policy.js";
 
-describe("builtinId", () => {
+describe("builtin specifier recognition", () => {
   test("recognizes both spellings and rejects userland lookalikes", () => {
     expect(builtinId("node:fs")).toBe("fs");
     expect(builtinId("fs")).toBe("fs");
@@ -126,20 +126,17 @@ describe("model-runtime lane", () => {
   });
 });
 
-describe("normalizeRoots", () => {
+describe("read-root normalization", () => {
   test("absolutizes, de-duplicates and sorts; drops empty entries", () => {
-    const result = normalizeRoots([
-      "/b/two",
-      "/a/one",
-      "/b/two",
-      "   ",
-      "",
+    const result = normalizeRoots(["/b/two", "/a/one", "/b/two", "   ", ""]);
+    expect(result).toStrictEqual([
+      path.resolve("/a/one"),
+      path.resolve("/b/two"),
     ]);
-    expect(result).toStrictEqual([path.resolve("/a/one"), path.resolve("/b/two")]);
   });
 });
 
-describe("isPathWithinRoots", () => {
+describe("root containment", () => {
   const roots = normalizeRoots(["/srv/models"]);
 
   test("accepts the root itself and paths beneath it", () => {
@@ -153,7 +150,18 @@ describe("isPathWithinRoots", () => {
   });
 
   test("refuses traversal out of the root", () => {
-    expect(isPathWithinRoots("/srv/models/../../etc/passwd", roots)).toBe(false);
+    expect(isPathWithinRoots("/srv/models/../../etc/passwd", roots)).toBe(
+      false
+    );
+  });
+
+  test("a bare filesystem root really does contain everything", () => {
+    // Regression: the string form `resolved.startsWith(root + sep)` compares
+    // against "//" for a "/" root and matches nothing, so a lane granted the
+    // whole filesystem would silently have refused every read.
+    expect(isPathWithinRoots("/etc/hostname", normalizeRoots(["/"]))).toBe(
+      true
+    );
   });
 
   test("refuses everything when no root was granted", () => {

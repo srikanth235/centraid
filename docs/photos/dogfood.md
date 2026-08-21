@@ -4,7 +4,7 @@ The discovery and regression-detection pattern for the Photos application, and w
 
 ## Why dogfood matters
 
-Centraid ships no telemetry — no event logging, no crash reporting service, no aggregate usage heuristics. A maintainer importing their real camera roll and living in it side-by-side with native iOS Photos is therefore the **only discovery channel** for Photos defects. This is not a nice-to-have ritual; it is the quality gate.
+Centraid ships no telemetry — no event logging, no crash reporting service, no aggregate usage heuristics. The local crash/anomaly ledger and the owner-shared support bundle ([external-review-scope.md](../external-review-scope.md), `packages/server/src/serve/support-bundle.ts`, #842 W8.1) are not a counter-example: nothing uploads, and sharing is an explicit owner act. A maintainer importing their real camera roll and living in it side-by-side with native iOS Photos is therefore the **only discovery channel** for Photos defects. This is not a nice-to-have ritual; it is the quality gate.
 
 The pattern is a written checklist so that every maintainer and release lead follows the same motion and catches the same class of bugs. Findings live in `QUALITY.md` under `## Open` (per [AGENTS.md](../../AGENTS.md) convention).
 

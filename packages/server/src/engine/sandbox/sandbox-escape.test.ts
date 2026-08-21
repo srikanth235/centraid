@@ -1,4 +1,3 @@
-/* oxlint-disable unicorn/require-post-message-target-origin -- node:worker_threads postMessage has no targetOrigin */
 /**
  * ESCAPE TESTS for the handler sandbox (issue #842 W7.1).
  *
@@ -20,9 +19,9 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { Worker } from "node:worker_threads";
 
-import { afterEach, beforeAll, describe, expect, test } from "vitest";
+import { describe, expect, test } from "vitest";
 
-import { tempDir } from "@centraid/test-kit/temp-dir";
+import { tempDirSync } from "@centraid/test-kit/temp-dir";
 
 const APP_RUNNER = fileURLToPath(
   new URL("../worker/runner.ts", import.meta.url)
@@ -35,8 +34,13 @@ const AUTOMATION_RUNNER = fileURLToPath(
 const CANARY_ENV = "CENTRAID_SANDBOX_CANARY";
 const CANARY_VALUE = "canary-value-that-must-not-be-readable";
 
-let dir = "";
-let workers: Worker[] = [];
+/**
+ * Created eagerly at module scope rather than in a `beforeAll`: every worker in
+ * this file is owned and terminated by the helper that spawned it, so the file
+ * needs no lifecycle hooks at all — and a hook-free suite cannot leak a hostile
+ * worker into a later test by forgetting to clean up.
+ */
+const dir = tempDirSync("sandbox-escape-");
 
 /** Write one handler module and return its absolute path. */
 async function handler(name: string, source: string): Promise<string> {
@@ -79,8 +83,11 @@ async function runAppHandler(handlerFile: string): Promise<ResultMessage> {
     execArgv: [],
     env: { [CANARY_ENV]: CANARY_VALUE },
   });
-  workers.push(worker);
-  return awaitResult(worker);
+  try {
+    return await awaitResult(worker);
+  } finally {
+    await worker.terminate();
+  }
 }
 
 /** Run one handler through the real automation worker entry point. */
@@ -98,8 +105,11 @@ async function runAutomationHandler(
     execArgv: [],
     env: { [CANARY_ENV]: CANARY_VALUE },
   });
-  workers.push(worker);
-  return awaitResult(worker);
+  try {
+    return await awaitResult(worker);
+  } finally {
+    await worker.terminate();
+  }
 }
 
 /** The refusal text, wherever the runner surfaced it. */
@@ -108,16 +118,6 @@ function refusal(result: ResultMessage): string {
   const value = result.value as { denied?: unknown } | undefined;
   return String(value?.denied ?? JSON.stringify(result.value));
 }
-
-beforeAll(async () => {
-  dir = await tempDir("sandbox-escape-");
-});
-
-afterEach(async () => {
-  const running = workers;
-  workers = [];
-  await Promise.all(running.map((worker) => worker.terminate()));
-});
 
 describe("app-handler lane: filesystem", () => {
   test("import of node:fs is refused before the handler ever runs", async () => {

@@ -108,16 +108,19 @@ function token(value: string): string {
 export function fingerprintStack(stack: string | undefined): string[] {
   if (typeof stack !== "string") return [];
   const frames: string[] = [];
-  for (const line of stack.split("\n")) {
-    const trimmed = line.trim();
+  for (const raw of stack.split("\n")) {
+    const trimmed = raw.trim();
     if (!trimmed.startsWith("at ")) continue;
-    const located = /\(?([^()\s]+):(\d+):\d+\)?$/u.exec(trimmed);
+    const located = /\(?(?<file>[^()\s]+):(?<line>\d+):\d+\)?$/u.exec(trimmed);
     if (!located) continue;
-    const file = path.basename(located[1] ?? "").replaceAll(/[^\w.-]/gu, "");
+    const file = path
+      .basename(located.groups?.file ?? "")
+      .replaceAll(/[^\w.-]/gu, "");
     if (file.length === 0) continue;
-    const named = /^at\s+(?:async\s+)?([\w$.<>[\]]+)\s*\(/u.exec(trimmed);
-    const fn = named?.[1] ?? "";
-    frames.push(fn.length > 0 ? `${fn}@${file}:${located[2]}` : `${file}:${located[2]}`);
+    const named = /^at\s+(?:async\s+)?(?<fn>[\w$.<>[\]]+)\s*\(/u.exec(trimmed);
+    const fn = named?.groups?.fn ?? "";
+    const at = located.groups?.line ?? "0";
+    frames.push(fn.length > 0 ? `${fn}@${file}:${at}` : `${file}:${at}`);
     if (frames.length >= MAX_STACK_FRAMES) break;
   }
   return frames;
@@ -168,8 +171,7 @@ export class AnomalyLedger {
       input.message ??
       (input.error instanceof Error ? input.error.message : undefined) ??
       (input.error === undefined ? "" : String(input.error));
-    const stack =
-      input.error instanceof Error ? input.error.stack : undefined;
+    const stack = input.error instanceof Error ? input.error.stack : undefined;
     const entry: AnomalyRecord = {
       seq: this.nextSeq,
       at: new Date(this.now()).toISOString(),

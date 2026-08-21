@@ -65,7 +65,7 @@ function fullLanes(extra: ResourceObservation[] = []): ResourceObservation[] {
   ];
 }
 
-describe("validateResourceLedger", () => {
+describe("resource-ledger validation", () => {
   test("a complete ledger of blocked and derived rows validates", () => {
     const result = validateResourceLedger(ledgerOf(fullLanes()));
     expect(result.errors).toStrictEqual([]);
@@ -96,7 +96,9 @@ describe("validateResourceLedger", () => {
         ])
       )
     );
-    expect(result.errors).toContain("vague: blocked-external needs blockedReason");
+    expect(result.errors).toContain(
+      "vague: blocked-external needs blockedReason"
+    );
     expect(result.errors).toContain(
       "vague: blocked-external needs unblockCondition"
     );
@@ -115,14 +117,20 @@ describe("validateResourceLedger", () => {
     const result = validateResourceLedger(
       ledgerOf(
         fullLanes([
-          derived({ id: "loose", recomputedBy: undefined, tolerance: undefined }),
+          derived({
+            id: "loose",
+            recomputedBy: undefined,
+            tolerance: undefined,
+          }),
         ])
       )
     );
     expect(result.errors).toContain(
       "loose: derived needs recomputedBy naming the test that reproduces it"
     );
-    expect(result.errors).toContain("loose: derived needs a positive tolerance");
+    expect(result.errors).toContain(
+      "loose: derived needs a positive tolerance"
+    );
   });
 
   test("a derived row may not claim to be a device measurement, and vice versa", () => {
@@ -131,7 +139,11 @@ describe("validateResourceLedger", () => {
         fullLanes([
           derived({
             id: "pretender",
-            device: { model: "iPhone 15", os: "iOS 26", class: "phone-current" },
+            device: {
+              model: "iPhone 15",
+              os: "iOS 26",
+              class: "phone-current",
+            },
           }),
           derived({
             id: "mislabelled",
@@ -160,7 +172,7 @@ describe("validateResourceLedger", () => {
   });
 });
 
-describe("withinTolerance", () => {
+describe("tolerance bands", () => {
   test("accepts inside the band and refuses outside it", () => {
     const row = derived({ value: 100, tolerance: 0.2 });
     expect(withinTolerance(row, 118)).toBe(true);
