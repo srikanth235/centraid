@@ -281,7 +281,9 @@ Per-app journey budgets are tighten-only and sit beside the flows they own, so a
 
 ### Layer 5 — honest floors per app
 
-A graduating app leaves the blended coverage floor and receives its own ratcheted scope. Photos is the first: `packages/blueprints/apps/photos/**` has a measured floor, while the remaining `_shared` and seven non-graduated app trees retain a separate blended scope. The blend shrinks as later graduation issues land; a well-tested app cannot subsidize another app forever. Any down-only reseed caused by splitting a denominator is an explicit approved deviation tied to the graduation issue.
+A graduating app leaves the blended coverage floor and receives its own ratcheted scope. Photos was the first ([#725](https://github.com/srikanth235/centraid/issues/725)); [#839](https://github.com/srikanth235/centraid/issues/839) graduates **tasks, agenda, and notes**, so four apps now hold their own measured floors and the blend has shrunk to `_shared` plus `docs`, `locker`, `people`, `tally`. The blend shrinks as later graduation issues land; a well-tested app cannot subsidize another app forever. Graduation also re-seeds what remains: a blend held down for years by its weakest members measures far above its floor once they leave, and #839 re-seeded the shrunken blend from 20/14 to 41/33 on that basis. Any down-only reseed caused by splitting a denominator is an explicit approved deviation tied to the graduation issue; changing the _shape_ of a blended key is likewise recorded there, because the ratchet reads a renamed scope as a removal even when every tree it governed ends up floored higher.
+
+The same rule reaches outside `packages/blueprints`. Mobile's **screens** are still ungated on purpose, but since #839 its extracted pure logic is not: `apps/mobile/src/lib/**` and the `*-model.ts` view models under `apps/mobile/src/**` each carry a measured floor. Those modules are the surface a device journey is worst at falsifying, so leaving them to journeys alone was the same subsidy in a different tree.
 
 Property-style checks follow the normal `*.test.ts` convention and say `property` in the suite name. `.spec.ts` is Playwright-only.
 
@@ -289,7 +291,7 @@ Timeouts come in two tiers. Node projects — the `node:sqlite` ones, which boot
 
 ## Product tiers and coverage gates
 
-The deeply gated engine is vault, client replica, gateway, app-engine, automation, backup, blueprints (including its co-located app sources), design (tokens + the kit runtime), agent-runtime, plus pure libraries tunnel, protocol, and cli. Renderer screens and mobile UI are covered by extracted logic plus journeys, not by a whole-surface line percentage. `packages/client/src/replica/**` is gated independently from `packages/client/src/react/**` for that reason.
+The deeply gated engine is vault, client replica, gateway, app-engine, automation, backup, blueprints (including its co-located app sources), design (tokens + the kit runtime), agent-runtime, plus pure libraries tunnel, protocol, and cli. Renderer screens and mobile UI are covered by extracted logic plus journeys, not by a whole-surface line percentage. `packages/client/src/replica/**` is gated independently from `packages/client/src/react/**` for that reason — and since [#839](https://github.com/srikanth235/centraid/issues/839) the same split is made inside `apps/mobile`, where the extracted logic (`src/lib/**`, the `*-model.ts` view models) is floored while the screens around it are not. "Mobile has no coverage floor" was true until then; what remains true is that no floor covers a mobile screen.
 
 Floors live in [`tests/coverage-floors.json`](tests/coverage-floors.json) and are consumed directly by the root Vitest config — that file, not this table, is the enforced contract. Floors are a conservative integer margin below the measured `bun run coverage` run that seeded them; most were seeded by the 2026-08-08 run (1,065 files / 11,719 tests **as of that run** — the suite has grown since, so treat the counts as the measurement's provenance, not a current census). A row whose floor was re-seeded by a later issue carries that issue's measurement instead, and says so.
 
@@ -301,7 +303,10 @@ Floors live in [`tests/coverage-floors.json`](tests/coverage-floors.json) and ar
 | `packages/core/src/blob/**` | — / — | **98** / **96** |
 | `packages/blueprints/src/**` | 90.68 / 78.27 | **90** / **75** |
 | `packages/blueprints/apps/photos/**` | 46.82 / 42.81 | **44** / **40** |
-| `_shared` + non-graduated blueprint apps | 22.53 / 16.92 | **20** / **14** |
+| `packages/blueprints/apps/agenda/**` | 42.27 / 32.47 (#839) | **40** / **30** |
+| `packages/blueprints/apps/notes/**` | 41.05 / 29.47 (#839) | **39** / **27** |
+| `packages/blueprints/apps/tasks/**` | 39.36 / 27.76 (#839) | **37** / **25** |
+| `_shared` + non-graduated blueprint apps | 43.13 / 35.22 (#839) | **41** / **33** |
 | `packages/model-runtime/src/**` | 68.01 / 51.44 | **66** / **49** |
 | `packages/design/src/**` | 95.1 / — (#709) | **94** / **70** |
 | `packages/server/src/engine/**` | 85.45 / 74.44 | **84** / **73** |
@@ -315,12 +320,14 @@ Floors live in [`tests/coverage-floors.json`](tests/coverage-floors.json) and ar
 | `packages/server/src/acp/**` | 86.4 / 76.29 | **84** / **75** |
 | `packages/cli/src/**` | 84.50 / 82.85 | **83** / **81** |
 | `packages/core/src/protocol/**` | 100.00 / 98.59 | **98** / **96** |
+| `apps/mobile/src/lib/**` | 58.12 / 50.65 (#839) | **56** / **48** |
+| `apps/mobile/src/**/*-model.ts` | 88.62 / 74.26 (#839) | **86** / **72** |
 | `apps/desktop/src/main/*-core.ts` | — / — | **96** / **89** |
 | `apps/oauth-worker/src/**` | 90.65 / 84.23 | **88** / **82** |
 
 Three rows read `—` rather than a number because the measurement that seeded them is not recorded in `tests/coverage-floors.json`; the floor is still enforced, and the next `bun run coverage` that touches those scopes is what fills the column in. `packages/vault` and the former-gateway scopes under `packages/server/src` carry the [#638](https://github.com/srikanth235/centraid/issues/638) re-seed (the #630 vault expansion diluted the older 88/80 seeds) and `packages/design/src` the [#709](https://github.com/srikanth235/centraid/issues/709) re-seed measured on CI verify run 30901194404; those provenance notes live in the JSON's `approvedDeviation`.
 
-The #630 denominator expansion is an approved measurement deviation: the old 71% aggregate excluded 11,639 executable lines under `packages/blueprints/apps` and `packages/design/kit`. Issue #725 graduates Photos to its own scope; the remaining blend covers `_shared` and the seven apps without graduation tables yet. The split is measured on the complete 2026-08-08 run, with the down-only change from the old 17/12 blend documented in `tests/coverage-floors.json`. Real handler contracts and platform journeys own correctness while the line/branch floors ratchet upward from here. The `packages/model-runtime` scope covers recognition model/build sources; its live model lane is intentionally separate from PR coverage.
+The #630 denominator expansion is an approved measurement deviation: the old 71% aggregate excluded 11,639 executable lines under `packages/blueprints/apps` and `packages/design/kit`. Issue #725 graduated Photos to its own scope, measured on the complete 2026-08-08 run with the down-only change from the old 17/12 blend documented in `tests/coverage-floors.json`. Issue #839 graduated tasks, agenda, and notes on a 2026-08-21 measurement and re-seeded what the blend still covers (`_shared`, `docs`, `locker`, `people`, `tally`) from 20/14 to 41/33; the mobile pure-logic rows were seeded by the same run. That run was path-filtered to the `packages/blueprints` and `apps/mobile` suites rather than the full unified pass, which can only under-measure — cross-package suites add coverage, never remove it — so every floor it seeded sits under a number the unified run would only raise. Real handler contracts and platform journeys own correctness while the line/branch floors ratchet upward from here. The `packages/model-runtime` scope covers recognition model/build sources; its live model lane is intentionally separate from PR coverage.
 
 `bun run test` prints the active floors after package tests so the local loop never hides the CI contract; `bun run coverage` measures and enforces them. Floors move only upward (`bun run test:ratchet`).
 

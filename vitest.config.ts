@@ -91,10 +91,16 @@ export default defineConfig({
       // Engine packages are where the meaningful coverage lives (TESTING.md).
       // These are the *seeded* regression floors — set a conservative margin
       // below the measured baseline so they catch backsliding without flaking,
-      // then ratchet upward as coverage grows. Renderer (desktop) and mobile
-      // are deliberately ungated here: their meaningful coverage is
-      // logic-units + e2e journeys, not a line percentage. Per-glob keys only
-      // gate matching files; everything else is tracked, not gated.
+      // then ratchet upward as coverage grows. Whole *screen* surfaces —
+      // desktop renderer, and mobile's components — stay ungated: their
+      // meaningful coverage is logic-units + e2e journeys, not a line
+      // percentage. That is a claim about screens, not about the app: since
+      // #839 `apps/mobile` carries floors over its extracted pure logic
+      // (`src/lib/**` and the `*-model.ts` view models), which is exactly the
+      // surface those journeys cannot falsify cheaply. Per-glob keys only
+      // gate matching files; everything else is tracked, not gated. Keys are
+      // picomatch globs resolved against repo-relative paths, and each key
+      // gets its own coverage map, so two keys may overlap on a file.
       thresholds: coverageFloors,
     },
   },
