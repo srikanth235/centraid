@@ -243,7 +243,11 @@ describe("the rows a route paints", () => {
   });
 
   it("counts the WINDOW, not the vault", () => {
-    expect([...notebookCounts(appData).entries()].toSorted()).toStrictEqual([
+    expect(
+      [...notebookCounts(appData).entries()].toSorted(([a], [b]) =>
+        a.localeCompare(b)
+      )
+    ).toStrictEqual([
       ["b1", 2],
       ["b2", 1],
     ]);

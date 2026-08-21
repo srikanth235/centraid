@@ -37,7 +37,7 @@ Wave 2 — raise the adversaries (G4, G5, G9, G10):
 
 Wave 3 — prove the joins (G1, G2, G3, G11, G12):
 
-- [ ] Join rig: one gateway + N in-process seats; grant verbs in the seeded
+- [x] Join rig: one gateway + N in-process seats; grant verbs in the seeded
   simulator; revocation propagation and parked lifecycle owned
 - [x] Version-skew lane; time zoo under the fake clock
 
@@ -227,6 +227,32 @@ agenda's mutate set widened to `format.ts` once W3-C's suite existed
 (re-measured 79.30 against the unchanged 74 floor).
 
 ### Wave 3 — prove the joins (landed so far)
+
+**W3-A — grant verbs in the seeded commons simulator (G1, G2, G3).** The
+mulberry32 simulator gains a grant plane: ten new actions against real
+product code — `createShareGrant` (+ idempotent replay), `fulfillShareGrant`,
+origin edits, audience tampering, binding churn, `revokeShareGrant`
+(+ replay → already-revoked), `propagateShareGrantRevocation`, real parking
+via a `requires_confirmation` command through `gateway.invoke`, settlement
+via `gateway.confirm` through the `gateway.ts:1579` branch, and
+consent-grant revocation sweeping parked payloads. One new long seed
+(839_001: 320 actions, four seats, grant verbs ~37% of steps) per the
+lengthen-don't-multiply budget doctrine; existing seeds draw byte-identical
+programs. Invariants: revocation severs (fulfillment refuses revoked grants
+at every reach), parked payloads settle and never unpark, the fulfillment
+state machine takes only legal transitions, and the G-view projection
+doctrine (the audience holds exactly the origin's album, tampering healed
+and counted non-vacuously, exactly one origin row). Determinism proven
+in-process and across processes. **Product defect found — D1, a
+revocation-severance hole (`fulfillment.ts:315-334`/`:420-435`): an
+unreachable-seat pass overwrites a `delivered` row with `syncing`, and
+propagation then reads syncing as never-delivered and settles `removed`
+while deleting nothing — the owner's vault reports removed, the audience
+keeps the whole projection forever.** Pinned as a `test.fails` case that
+turns red the day the defect is fixed, plus a precondition-scoped pin in the
+random schedule; any severance breach outside that exact precondition stays
+a hard failure. docs/decisions.md's "best-effort, hard delete" G-revoke
+ruling gets its supersession note in the Wave 5 docs pass.
 
 **W3-B — protocol join lane + version-skew wall (G11, G12).**
 `packages/server/src/serve/protocol-join-lane.test.ts`: one `serve()`
