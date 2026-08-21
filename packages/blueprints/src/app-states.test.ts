@@ -120,21 +120,23 @@ describe("app.json#states", () => {
     }
   );
 
-  it.each(BLUEPRINT_APPS.map((id) => [id] as const))(
-    "apps/%s spends a reason and a citation on every exclusion",
-    (id) => {
-      // Empty today by design (see this file's header). The check is the
-      // ratchet: the first exclusion anyone adds has to carry its evidence.
-      for (const entry of readManifest(id).states?.excluded ?? []) {
-        expect(entry.reason.length, `${id}/${entry.state} needs a reason`)
-          .toBeGreaterThan(0);
-        expect(
-          entry.citation.includes("docs/") || entry.citation.includes(".md"),
-          `${id}/${entry.state} must cite a doc, not prose`
-        ).toBe(true);
-      }
+  it("spends a reason and a citation on every exclusion, and has none", () => {
+    // The whole exclusion table across the eight apps, asserted as one value:
+    // empty today (see this file's header), and the first entry anyone adds
+    // shows up in this diff with its evidence attached rather than slipping in
+    // app by app.
+    const table = BLUEPRINT_APPS.flatMap((id) =>
+      (readManifest(id).states?.excluded ?? []).map((entry) => ({
+        app: id,
+        ...entry,
+      }))
+    );
+    expect(table).toStrictEqual([]);
+    for (const entry of table) {
+      expect(entry.citation, `${entry.app}/${entry.state}`).toContain(".md");
+      expect(entry.reason, `${entry.app}/${entry.state}`).not.toBe("");
     }
-  );
+  });
 
   it("rides along in the gallery manifest, so the shell needs one fetch", () => {
     // `scripts/build-manifest.mjs` folds `states` in beside `seats`; this is
@@ -151,8 +153,10 @@ describe("app.json#states", () => {
     expect(withStates).toStrictEqual([...BLUEPRINT_APPS].toSorted());
     for (const template of gallery.templates) {
       if (!template.states) continue;
-      expect(template.states.designed, `${template.id} in manifest.json`)
-        .toStrictEqual([...CANONICAL_DESIGNED_STATES]);
+      expect(
+        template.states.designed,
+        `${template.id} in manifest.json`
+      ).toStrictEqual([...CANONICAL_DESIGNED_STATES]);
     }
   });
 
@@ -175,8 +179,10 @@ describe("app.json#states", () => {
           )
         )
       );
-      expect(manifest.states, `${template.id} declares no states`)
-        .toBeUndefined();
+      expect(
+        manifest.states,
+        `${template.id} declares no states`
+      ).toBeUndefined();
     }
   });
 });
