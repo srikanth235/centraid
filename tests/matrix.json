@@ -682,6 +682,7 @@
     "cross-linking": "Flow vault-cross-link owns core.link_entities (packages/vault/src/gateway/ext.test.ts).",
     "people": "Flow people-crm owns people.* commands (packages/vault/src/commands/people.test.ts).",
     "blank-machine-restore": "Product blank-machine journey is recover.integration.test.ts (recover() + kit). Backup primitive round-trips live under packages/backup engine tests.",
+    "appStates.copy-owners": "Copy-level owners in appStates (agenda.parked, agenda.denied, notes.denied) prove the state's user-facing copy renders, not that the state is reachable end-to-end; reachability promotion is Wave 1+ work under #839.",
     "agent-runtime.contracts": "Coverable-today suite (#535): owned by packages/server/src/acp/matrix-contracts.test.ts. Tracked under #781 (originally #656).",
     "agent-runtime.durability": "Coverable-today suite (#535): owned by packages/server/src/acp/matrix-durability.test.ts. Tracked under #781 (originally #656).",
     "agent-runtime.concurrency": "Coverable-today suite (#535): owned by packages/server/src/acp/matrix-concurrency.test.ts. Tracked under #781 (originally #656).",
@@ -2493,8 +2494,7 @@
             "status": "gap"
           },
           "conflict": {
-            "status": "owned",
-            "owner": "packages/blueprints/apps/notes/view-copy.test.ts"
+            "status": "gap"
           },
           "parked": {
             "status": "gap"

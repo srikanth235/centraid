@@ -380,6 +380,47 @@ describe(validateManifest, () => {
     ).toThrow(ManifestError);
   });
 
+  it("rejects an excluded entry with no reason", () => {
+    expect(() =>
+      validateManifest({
+        ...baseManifest(),
+        states: {
+          designed: CANONICAL_DESIGNED_STATES.filter(
+            (state) => state !== "stale"
+          ),
+          excluded: [
+            {
+              state: "stale",
+              citation: "docs/blueprint-seats.md#engine-contracts",
+            },
+          ],
+        },
+      })
+    ).toThrow(ManifestError);
+  });
+
+  // An empty string is the cheapest way to satisfy "has a reason"; the schema's
+  // minLength: 1 is what keeps a blank from buying a structural exclusion.
+  it("rejects an excluded entry whose reason is empty", () => {
+    expect(() =>
+      validateManifest({
+        ...baseManifest(),
+        states: {
+          designed: CANONICAL_DESIGNED_STATES.filter(
+            (state) => state !== "stale"
+          ),
+          excluded: [
+            {
+              state: "stale",
+              reason: "",
+              citation: "docs/blueprint-seats.md#engine-contracts",
+            },
+          ],
+        },
+      })
+    ).toThrow(ManifestError);
+  });
+
   it("rejects an excluded entry carrying an unknown field", () => {
     expect(() =>
       validateManifest({

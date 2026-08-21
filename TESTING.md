@@ -306,7 +306,7 @@ Floors live in [`tests/coverage-floors.json`](tests/coverage-floors.json) and ar
 | `packages/blueprints/apps/agenda/**` | 42.27 / 32.47 (#839) | **40** / **30** |
 | `packages/blueprints/apps/notes/**` | 41.05 / 29.47 (#839) | **39** / **27** |
 | `packages/blueprints/apps/tasks/**` | 39.36 / 27.76 (#839) | **37** / **25** |
-| `_shared` + non-graduated blueprint apps | 43.13 / 35.22 (#839) | **41** / **33** |
+| `_shared` + non-graduated blueprint apps | 44.12 / 36.31 (#839) | **41** / **33** |
 | `packages/model-runtime/src/**` | 68.01 / 51.44 | **66** / **49** |
 | `packages/design/src/**` | 95.1 / — (#709) | **94** / **70** |
 | `packages/server/src/engine/**` | 85.45 / 74.44 | **84** / **73** |

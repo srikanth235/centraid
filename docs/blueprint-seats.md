@@ -151,6 +151,21 @@ Each blueprint's `app.json` grows a `seats` block so coding agents get the split
 
 Locker declares `"disabledOn": ["viewer"]`. Record-only apps declare `"byteBearing": false` and should fail review if they import custody machinery.
 
+### Designed states
+
+Beside `seats`, each UI blueprint's `app.json` carries a `states` block naming which honest states the design calls for:
+
+```json
+"states": {
+  "designed": ["dayone", "pending", "offline", "stale", "conflict", "parked", "denied"],
+  "excluded": []
+}
+```
+
+The seven ids are the canonical designed states (`CANONICAL_DESIGNED_STATES` in `packages/server/src/engine/registry/manifest.ts`), and the two sides are a **closed partition**: `packages/server/src/engine/registry/manifest.ts` rejects a manifest that omits a canonical state, claims one on both sides, or lists one twice, so an app can never be silent about a state. `designed` is what the design calls for; `excluded` is what the design makes structurally unrepresentable, and each entry costs a `reason` plus a `citation` (both non-empty) — the same evidence discipline as the [engine contracts](#engine-contracts). "Nobody has built it yet" is a gap, not an exclusion. The block is optional, so the UI-less automation manifests keep validating without one.
+
+`packages/blueprints/src/app-states.test.ts` pins the partition app by app, `scripts/build-manifest.mjs` folds the block into the gallery `manifest.json` so the shell needs one fetch, and `tests/matrix.json#appStates` **mirrors** it: the app × designed-state grid (grid D of the test-health report) must declare exactly the manifest's partition, and `bun run test:matrix` fails when a grid cell and its manifest disagree in either direction. History: [#839](https://github.com/srikanth235/centraid/issues/839).
+
 ## Open follow-ups
 
 - ~~Wire `SEAT` and the `seats` manifest block~~ — done: `apps/mobile/src/lib/seat.ts`, `seat()` in `packages/client/src/react/host-platform.ts`, all eight `app.json` blocks validated by `packages/server/src/engine/registry/manifest.ts`, tripwire in `packages/blueprints/src/blueprint-seats.test.ts`.

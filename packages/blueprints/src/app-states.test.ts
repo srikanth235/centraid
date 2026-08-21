@@ -131,11 +131,10 @@ describe("app.json#states", () => {
         ...entry,
       }))
     );
+    // The first real exclusion must REPLACE this pin with a table-driven check
+    // that every entry carries a followable citation and a non-empty reason —
+    // asserting those over an empty table proves nothing.
     expect(table).toStrictEqual([]);
-    for (const entry of table) {
-      expect(entry.citation, `${entry.app}/${entry.state}`).toContain(".md");
-      expect(entry.reason, `${entry.app}/${entry.state}`).not.toBe("");
-    }
   });
 
   it("rides along in the gallery manifest, so the shell needs one fetch", () => {
