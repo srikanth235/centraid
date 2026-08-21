@@ -139,7 +139,10 @@ signals. `packages/blueprints/apps/photos/nav-rail.test.ts` and
 `packages/blueprints/apps/docs/nav-rail.test.ts` pin each rail's shape,
 its current-row resolution, and its counts.
 `packages/blueprints/manifest.json` is regenerated for the five new app
-files.
+files, and `tests/design-gallery/baselines/bi-light.png` /
+`tests/design-gallery/baselines/bi-dark.png` are re-captured — the BI lane
+photographs every custom property `toBlueprintCss()` declares, so two new
+tokens shift every row below them.
 
 `apps/web/tests/e2e/app-navigation-rail.spec.ts` is the browser lane, and it
 settles the four claims jsdom cannot: the rail is exactly `metrics.appRail`
@@ -278,6 +281,35 @@ it gives up. `box-sizing: border-box` on `.rail` and `.row` in
 `NavRail.module.css` is the fix; delete either line to re-seed it. No jsdom
 suite could have seen it, and no reading of the stylesheet did.
 
+The design gallery's BI lane, which photographs `toBlueprintCss()` as a list of
+every custom property it declares. The two new tokens are inserted mid-list, so
+every row below them shifts and the full-page capture reads 100% changed — a
+real, expected re-baseline, not a regression:
+
+```sh
+bun run design:gallery -- --update   # then keep only bi-light / bi-dark
+bun run design:gallery               # bi-dark: 0.00% changed, max channel delta 0
+```
+
+**THE REFRESHED bi-light / bi-dark BASELINES WERE CAPTURED ON THE WRONG
+BROWSER, and this is stated plainly rather than discovered in review.** CI pins
+Chrome Headless Shell **151.0.7922.34** (`playwright chromium-headless-shell
+v1234`); this container ships Chromium **141.0.7390.37** and
+`cdn.playwright.dev` is refused by the session's egress policy (`CONNECT tunnel
+failed, response 403`), so the pinned build cannot be fetched here. The gap is
+measurable: re-verifying the six baselines this change does NOT touch reports
+`sh-light 2.45%`, `sh-c-light 4.79%`, `mo-advisory-light 8.83%` — pure
+rasterizer delta on unchanged content, against a 1% tolerance. `mo-advisory` is
+the same kind of page as `bi` (a dense token list), so CI will very likely
+report a similar delta against these captures.
+
+The CONTENT of the new baselines is correct — locally they verify at 0.00% —
+and the finish is one command on any machine with the pinned browser:
+
+```sh
+bun run design:gallery -- --update   # bi-light and bi-dark only
+```
+
 Format, lint and the design gates:
 
 ```sh
@@ -331,6 +363,11 @@ Checked, and what each check found:
   a `style` attribute) rather than by inspection.
 - **The `## Checklist` against the issue's acceptance criteria.** Ten
   items, verbatim and in order.
+- **The design-gallery lane is not green, and the receipt says so above.** The
+  BI baselines had to be refreshed because the change legitimately adds two
+  tokens to the blueprint lowering; they could not be refreshed on CI's
+  rasterizer from this container. Reported rather than papered over: no
+  tolerance was widened and no lane was excluded.
 - **What was NOT covered until it was.** The independent-scrolling and 1090
   reflow claims began as authored-but-unmeasured CSS, which the first draft of
   this receipt recorded as its honest limit. The browser lane now measures
