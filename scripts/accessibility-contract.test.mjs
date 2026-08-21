@@ -61,26 +61,54 @@ test("blueprint dialogs, keyboard focus, and Photos focus restore stay wired", a
   // Tally's shared `<dialog>` wrapper was the second subject here — the one
   // that proved a blueprint modal restores focus to its opener on close — and
   // Tasks and Tally owned two of the focus-ring sheets, until all three web
-  // interfaces were removed pending a ground-up redesign. Nothing is softened
-  // to a conditional read: a check that skips itself when its subject is
-  // missing passes for the wrong reason. What remains is asserted on the
-  // subjects that are actually there — the shared grant sheet for the modal,
-  // Photos' lightbox for focus restore — and each rebuilt app owes this test
-  // its dialog and its focus ring back.
-  const [grantSheet, photos, lockerCss, peopleCss, photosCss] =
-    await Promise.all([
-      source("packages/blueprints/apps/_shared/GrantSheet.tsx"),
-      source("packages/blueprints/apps/photos/lightbox.tsx"),
-      source("packages/blueprints/apps/locker/Chrome.module.css"),
-      source("packages/blueprints/apps/people/Chrome.module.css"),
-      source("packages/blueprints/apps/photos/Chrome.module.css"),
-    ]);
+  // interfaces were removed pending a ground-up redesign. Nothing was softened
+  // to a conditional read while they were gone: a check that skips itself when
+  // its subject is missing passes for the wrong reason. Agenda, Notes and
+  // Tasks paid their dialog and their focus ring back with their rebuilds
+  // (#834); Tally still owes both.
+  const [grantSheet, photos, dialogs, sheets] = await Promise.all([
+    source("packages/blueprints/apps/_shared/GrantSheet.tsx"),
+    source("packages/blueprints/apps/photos/lightbox.tsx"),
+    Promise.all(
+      [
+        // Every destructive confirm and every modal editor these three draw is
+        // a REAL `<dialog>` opened with `showModal()` — which is what makes
+        // Escape, the top layer and the focus trap the platform's rather than
+        // a div's imitation of them.
+        "packages/blueprints/apps/agenda/components/EventEditor.tsx",
+        "packages/blueprints/apps/notes/components/Overlays.tsx",
+        "packages/blueprints/apps/tasks/components/Confirm.tsx",
+      ].map(async (file) => [file, await source(file)])
+    ),
+    Promise.all(
+      [
+        "packages/blueprints/apps/agenda/Chrome.module.css",
+        "packages/blueprints/apps/locker/Chrome.module.css",
+        "packages/blueprints/apps/notes/Chrome.module.css",
+        "packages/blueprints/apps/people/Chrome.module.css",
+        "packages/blueprints/apps/photos/Chrome.module.css",
+        "packages/blueprints/apps/tasks/Chrome.module.css",
+      ].map(async (file) => [file, await source(file)])
+    ),
+  ]);
   assert.match(grantSheet, /<dialog/u);
   assert.match(grantSheet, /showModal/u);
   assert.match(photos, /priorFocus\?\.focus/u);
   assert.match(photos, /button\[aria-label="Close"\]/u);
-  for (const css of [lockerCss, peopleCss, photosCss])
-    assert.match(css, /:focus-visible/u);
+  for (const [file, text] of dialogs) {
+    assert.match(text, /<dialog/u, `${file} lost its real dialog element`);
+    assert.match(text, /showModal/u, `${file} opens a dialog non-modally`);
+  }
+  // The two that MOVE focus on open — Agenda into the title field, Tasks onto
+  // the confirm — put it back on the opener themselves. Notes' overlays never
+  // take focus off what opened them, so the platform's own modal restore is
+  // the whole of their contract and there is nothing to pin.
+  for (const [file, text] of dialogs.filter(
+    ([name]) => !name.endsWith("Overlays.tsx")
+  ))
+    assert.match(text, /priorFocus/u, `${file} lost its focus restore`);
+  for (const [file, css] of sheets)
+    assert.match(css, /:focus-visible/u, `${file} lost its focus ring`);
 });
 
 test("every mobile Pressable screen names an accessibility contract and keeps Dynamic Type enabled", async () => {
@@ -108,17 +136,22 @@ test("every mobile Pressable screen names an accessibility contract and keeps Dy
 test("long native surfaces remain virtualized and photo cells keep bounded image caches", async () => {
   // Docs' native drive was the fourth surface here until it was removed
   // pending the v11 design handoff (apps/mobile/src/apps/docs/DocsHome.tsx is
-  // now a wall), and Agenda's native cover left the same way pending its own
-  // ground-up redesign. Put each back on this list the moment its rebuilt
-  // screen renders a list of unbounded length — a virtualization gate is only
-  // meaningful over a surface that can actually grow.
+  // now a wall). Agenda's native cover left the same way and came back with
+  // its rebuild (#834), which also brought Notes' and Tasks' covers — every
+  // one of them draws a list of unbounded length, which is what makes this
+  // gate meaningful over them. Notes recycles through FlashList rather than
+  // FlatList; both virtualize, and the assertion names which one the screen
+  // is expected to keep so a silent swap to a plain `map` cannot pass.
   const files = [
-    "apps/mobile/src/apps/photos/FaceReview.tsx",
-    "apps/mobile/src/apps/assistant/Assistant.tsx",
+    ["apps/mobile/src/apps/photos/FaceReview.tsx", /<FlatList/u],
+    ["apps/mobile/src/apps/assistant/Assistant.tsx", /<FlatList/u],
+    ["apps/mobile/src/apps/agenda/AgendaHome.tsx", /<FlatList/u],
+    ["apps/mobile/src/apps/tasks/TasksHome.tsx", /<FlatList/u],
+    ["apps/mobile/src/apps/notes/NotesHome.tsx", /<FlashList/u],
   ];
-  const sources = await Promise.all(files.map((file) => source(file)));
-  for (const [index, file] of files.entries()) {
-    assert.match(sources[index], /<FlatList/u, `${file} lost virtualization`);
+  const sources = await Promise.all(files.map(([file]) => source(file)));
+  for (const [index, [file, expected]] of files.entries()) {
+    assert.match(sources[index], expected, `${file} lost virtualization`);
   }
   // The decode/cache contract for a grid cell used to be inline props on the
   // timeline's <Image>, so a grep for the literal was the whole check. It now

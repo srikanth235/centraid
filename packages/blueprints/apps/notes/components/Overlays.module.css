@@ -1,0 +1,188 @@
+/* The powerbox, the confirms and the band's More sheet. A dialog is one of
+   the three places `--shadow-*` is allowed: it is genuinely over the page. */
+
+.powerbox,
+.confirm {
+  background: var(--bg-elev);
+  border: 1px solid var(--line);
+  border-radius: var(--r-lg);
+  box-shadow: var(--shadow-lg);
+  color: var(--text);
+  padding: var(--sp-3);
+  animation: kit-rise var(--dur-2) var(--ease-entry);
+}
+
+.powerbox::backdrop,
+.confirm::backdrop {
+  background: var(--scrim);
+}
+
+.powerbox {
+  width: 620px;
+  max-width: 92vw;
+}
+
+/* ON TOUCH THE SAME LIST IS A BOTTOM SHEET. One component, one stylesheet
+   decision — never a second powerbox for the phone. */
+@media (pointer: coarse) {
+  .powerbox {
+    width: 100%;
+    max-width: 100%;
+    margin: auto 0 0;
+    /* The two top corners only — written as the two corner longhands so each
+       one still reads a single rung off the shared scale. */
+    border-top-left-radius: var(--r-lg);
+    border-top-right-radius: var(--r-lg);
+  }
+}
+
+.sigil {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  min-height: var(--h-control);
+  color: var(--text-faint);
+  font: var(--t-label-on);
+}
+
+.probe {
+  flex: 1;
+  min-width: 0;
+  font: var(--t-reading);
+  color: var(--text);
+  background: transparent;
+  border: none;
+  padding: 0;
+}
+
+.legend {
+  font: var(--t-control);
+  color: var(--text-faint);
+  border: 1px solid var(--line);
+  border-radius: var(--r-sm);
+  padding: 0 var(--sp-1);
+}
+
+.results {
+  display: flex;
+  flex-direction: column;
+  max-height: 46vh;
+  overflow-y: auto;
+}
+
+.group {
+  display: flex;
+  flex-direction: column;
+}
+
+.result {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  min-height: var(--density-row);
+  padding: 0 var(--sp-1);
+  text-align: start;
+  border-radius: var(--r-md);
+}
+.result:hover {
+  background: var(--bg-sunken);
+}
+
+/* The kind column: one width for all seven, so the list scans by app. */
+.kind {
+  width: 88px;
+  flex: none;
+  font: var(--t-annot-label);
+  color: var(--text-faint);
+}
+
+.resultTitle {
+  flex: 1;
+  min-width: 0;
+  font: var(--t-body);
+  color: var(--text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.annot {
+  font: var(--t-annot-label);
+  color: var(--text-faint);
+  margin: 0;
+}
+
+.foot {
+  font: var(--t-annot-label);
+  color: var(--text-faint);
+  margin: 0;
+  padding-top: var(--sp-2);
+  border-top: 1px solid var(--line);
+}
+
+/* ---------- Confirms ---------- */
+
+.confirm {
+  width: 420px;
+  max-width: 92vw;
+}
+
+.confirmTitle {
+  font: var(--t-title);
+  letter-spacing: var(--t-title-tracking);
+  margin: 0 0 var(--sp-2);
+}
+
+.confirmBody {
+  font: var(--t-body);
+  color: var(--text-soft);
+  margin: 0 0 var(--sp-2);
+}
+
+.confirmActs {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--sp-2);
+  padding-top: var(--sp-2);
+}
+
+/* Destructive is OUTLINED in the danger tone. Never a fill: the tone is
+   reserved, and a filled red button is a dare. */
+.destructive {
+  color: var(--net);
+  border-color: var(--net);
+}
+
+/* ---------- The band's More sheet ---------- */
+
+.sheet {
+  position: fixed;
+  inset-inline: 0;
+  bottom: 0;
+  z-index: 40;
+  background: var(--bg-elev);
+  border-top: 1px solid var(--line);
+  border-top-left-radius: var(--r-lg);
+  border-top-right-radius: var(--r-lg);
+  box-shadow: var(--shadow-lg);
+  padding: var(--sp-3);
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-1);
+  animation: kit-rise var(--dur-2) var(--ease-entry);
+}
+
+.sheetRow {
+  min-height: var(--target-min);
+  display: flex;
+  align-items: center;
+  padding: 0 var(--sp-2);
+  border-radius: var(--r-md);
+  font: var(--t-body);
+  color: var(--text);
+  text-align: start;
+}
+.sheetRow[aria-current="page"] {
+  background: var(--bg-sunken);
+  font: var(--t-label-on);
+}

@@ -1,7 +1,12 @@
 export {
+  collapseMissedOccurrences,
+  type CollapseMissedInput,
+  type CollapsedOccurrence,
+} from "./recurrence-collapse.js";
+export { describeRecurrence } from "./recurrence-summary.js";
+export {
   applyRecurrenceExceptions,
   canonicalizeRrule,
-  describeRecurrence,
   expandRecurrence,
   nextOccurrence,
   parseRrule,

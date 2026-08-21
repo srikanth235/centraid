@@ -1,0 +1,29 @@
+/* Quick add: one row over the canvas, at the foot of the pane so it never
+   covers the slot it was started from. */
+
+.quick {
+  position: absolute;
+  inset-inline: var(--sp-4);
+  inset-block-end: var(--sp-4);
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--sp-2);
+  padding: var(--sp-3);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--r-lg);
+  background: var(--bg-elev);
+  box-shadow: var(--shadow-md);
+}
+
+.when {
+  flex: none;
+  font: var(--t-small);
+  color: var(--text-soft);
+}
+
+.title {
+  flex: 1;
+  min-inline-size: 12ch;
+}

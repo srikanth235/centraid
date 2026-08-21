@@ -141,6 +141,9 @@ interface InlineAppMountProps {
   compact: boolean;
   onRootReady: (el: HTMLElement | null, descriptor: InlineAppModule) => void;
   onOpenApprovals: () => void;
+  /** The cross-app door (#834): a projection hands the member to the room
+   *  that OWNS the fact rather than redrawing it. */
+  onOpenApp: (appId: string) => void;
 }
 
 function InlineAppMount({
@@ -152,6 +155,7 @@ function InlineAppMount({
   compact,
   onRootReady,
   onOpenApprovals,
+  onOpenApp,
 }: InlineAppMountProps): JSX.Element {
   // ONLY the primary scope blocks first paint (issue #599). Every audience is
   // hydrated after the app is on screen, so a household with several shared
@@ -177,6 +181,7 @@ function InlineAppMount({
       pendingProjection: descriptor.pendingProjection,
       scopes: [{ scope: primary.scope, session: lease.session }],
       onOpenApprovals,
+      onOpenApp,
       onInstalled: (published) => {
         client = published;
       },
@@ -465,6 +470,7 @@ export default function InlineAppRoute({
                     compact={Boolean(compact)}
                     onRootReady={onRootReady}
                     onOpenApprovals={() => nav.navigate({ kind: "approvals" })}
+                    onOpenApp={(id) => nav.navigate({ kind: "app", id })}
                   />
                 ) : (
                   <div className={styles.fallback}>Loading {app.name}…</div>

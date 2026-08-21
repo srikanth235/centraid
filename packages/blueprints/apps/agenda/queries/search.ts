@@ -119,6 +119,23 @@ function attendeesByEvent(
   return byEvent;
 }
 
+/**
+ * The member-facing recurrence sentence for a series, or `null` for a one-off.
+ * The grammar itself is `@centraid/core/time`'s and is shared with Tasks; this
+ * is the call, not a second summariser. See the twin note in `upcoming.ts` for
+ * why an older gateway simply omits the field instead of printing the rule.
+ */
+function recurrenceSummary(
+  ctx: HandlerArgs["ctx"],
+  rrule: string | null
+): string | null {
+  const time = ctx.time as
+    | { describeRecurrence?: (rule: string) => string | null }
+    | undefined;
+  if (!rrule || !time?.describeRecurrence) return null;
+  return time.describeRecurrence(rrule);
+}
+
 export default async function searchHandler({ input, ctx }: HandlerArgs) {
   const purpose = "dpv:ServiceProvision";
   const term = String(input?.term ?? "").trim();
@@ -219,6 +236,14 @@ export default async function searchHandler({ input, ctx }: HandlerArgs) {
       attachments: attByEvent.get(e.event_id) ?? [],
       attendees: guestsByEvent.get(e.event_id) ?? [],
       snippet: typeof _snippet === "string" ? _snippet : "",
+      // Same row shape as `upcoming`, including the one member-facing
+      // recurrence sentence (#834): a result row and a grid row render
+      // through the same component, so a field present on one and missing
+      // from the other would be a raw rule waiting to be printed.
+      recurrence_summary: recurrenceSummary(
+        ctx,
+        typeof e.rrule === "string" ? e.rrule : null
+      ),
     }));
     return { events };
   } catch (error) {

@@ -653,7 +653,10 @@ export default async function dashboardHandler({ ctx }: HandlerArgs) {
       const next = ctx.time.applyRecurrenceExceptions(instances, exceptions)[0];
       return {
         ...template,
-        preview: ctx.time.describeRecurrence(template.rrule) ?? template.rrule,
+        // A rule the summariser cannot phrase drops its preview entirely.
+        // Falling back to `template.rrule` would put RRULE syntax on a
+        // member-facing surface, which the house rule bans outright.
+        preview: ctx.time.describeRecurrence(template.rrule),
         next_start: next?.originalStart ?? null,
       };
     });

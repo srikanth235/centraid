@@ -1,0 +1,177 @@
+/* The card and the row (Notes spec §5). Every value is a token: the surf on
+   lineS, the 12 radius, the 12 pad, the 4 gap and the two ink steps are the
+   system's, and this file only arranges them. */
+
+.cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(232px, 1fr));
+  gap: var(--sp-3);
+  padding: var(--sp-2) var(--content-margin) 0;
+}
+
+.rows {
+  display: flex;
+  flex-direction: column;
+  padding: var(--sp-2) var(--content-margin) 0;
+}
+
+/* ---------- The card ---------- */
+
+.card {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-1);
+  background: var(--bg-elev);
+  border: 1px solid var(--line);
+  border-radius: var(--r-lg);
+  padding: var(--sp-3);
+}
+/* Hover FIRMS THE HAIRLINE. Cards do not lift: no shadow, no scale, no
+   parallax — the two-case motion grammar has no third case. */
+.card:hover {
+  border-color: var(--text-faint);
+}
+
+/* A queued write takes a 2px inline-start rule in annotation ink. The chip
+   beside it carries the words; this is the mark that survives at a glance. */
+.card:has(:global(.kit-pending-chip)),
+.row:has(:global(.kit-pending-chip)) {
+  border-inline-start: 2px solid var(--text-faint);
+}
+
+.open {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-1);
+  text-align: start;
+  width: 100%;
+}
+
+/* The title slot. A TYPED title takes the label rung; a promoted first line
+   takes the body rung — the same slot, the same clamp, one step of ink
+   weight between them. */
+.title {
+  font: var(--t-label-on);
+  color: var(--text);
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+  line-clamp: 3;
+  overflow: hidden;
+}
+.title[data-untitled="true"] {
+  font: var(--t-body);
+}
+
+.preview {
+  font: var(--t-annot-label);
+  color: var(--text-soft);
+  white-space: pre-line;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  overflow: hidden;
+}
+
+/* The striped block a screenshot / link-only / audio note shows instead of a
+   preview. Sunken on a hairline, with the content type spelled out — the
+   gallery never becomes a wall of broken thumbnails. */
+.placeholder {
+  background: repeating-linear-gradient(
+    135deg,
+    var(--bg-sunken),
+    var(--bg-sunken) 6px,
+    var(--bg) 6px,
+    var(--bg) 12px
+  );
+  border: 1px solid var(--line);
+  border-radius: var(--r-sm);
+  min-height: 56px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.placeholder span {
+  font: var(--t-annot-label);
+  color: var(--text-faint);
+}
+
+.foot {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-2);
+  font: var(--t-annot-label);
+  color: var(--text-faint);
+}
+
+/* EVERY NUMERIC IS TABULAR AND ISOLATED, or a date reorders under RTL. */
+.num {
+  font-variant-numeric: tabular-nums;
+  unicode-bidi: isolate;
+  direction: ltr;
+}
+
+.marks {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+}
+
+.pin {
+  min-width: var(--target-min);
+  min-height: var(--target-min);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-faint);
+  border-radius: var(--r-md);
+}
+.pin[aria-pressed="true"] {
+  color: var(--text);
+}
+
+/* ---------- The row ---------- */
+
+.row {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  min-height: var(--density-row);
+  padding: 0 var(--sp-2);
+  border-bottom: 1px solid var(--line);
+}
+.row:hover {
+  border-bottom-color: var(--text-faint);
+}
+
+.rowOpen {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  text-align: start;
+  padding: var(--sp-2) 0;
+}
+
+.rowMeta {
+  font: var(--t-annot-label);
+  color: var(--text-soft);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.rowAge {
+  font: var(--t-annot-label);
+  color: var(--text-faint);
+  flex: none;
+}
+
+.row .title {
+  -webkit-line-clamp: 1;
+  line-clamp: 1;
+}

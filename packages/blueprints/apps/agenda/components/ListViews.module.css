@@ -1,0 +1,101 @@
+/* Schedule and Waiting on: a day rail beside a column of rows. */
+
+.list {
+  display: flex;
+  flex-direction: column;
+  padding: var(--sp-4) var(--page-margin);
+  gap: var(--sp-5);
+}
+
+.day {
+  display: flex;
+  gap: var(--sp-4);
+  min-inline-size: 0;
+}
+
+.rail {
+  flex: none;
+  inline-size: 48px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+}
+
+.railNum {
+  font: var(--t-title);
+  letter-spacing: var(--t-title-tracking);
+  color: var(--text);
+}
+.rail[data-today="true"] .railNum {
+  color: var(--accent-text);
+}
+
+.railDow,
+.railMonth {
+  font: var(--t-annot-label);
+  color: var(--text-faint);
+}
+
+.items {
+  flex: 1;
+  min-inline-size: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+}
+
+.row {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--sp-3);
+  inline-size: 100%;
+  min-block-size: var(--h-row);
+  padding: var(--sp-2) var(--sp-3);
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+  background: var(--bg-elev);
+  color: var(--text);
+  font: var(--t-body);
+  text-align: start;
+  cursor: pointer;
+}
+.row:hover {
+  border-color: var(--line-strong);
+}
+
+.rowTime {
+  flex: none;
+  inline-size: 6ch;
+  color: var(--text-soft);
+  font: var(--t-small);
+}
+
+.rowText {
+  flex: 1;
+  min-inline-size: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.rowTitle {
+  font: var(--t-body-strong);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.rowTitle[data-tentative="true"] {
+  color: var(--text-soft);
+}
+
+.rowMeta {
+  font: var(--t-annot-label);
+  color: var(--text-faint);
+}
+
+.rowAwaiting {
+  flex: none;
+  font: var(--t-annot-label);
+  color: var(--text-soft);
+}

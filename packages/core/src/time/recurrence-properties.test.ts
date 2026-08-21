@@ -1,28 +1,27 @@
 /**
- * Recurrence laws (#656 Layer 3 mutation seed).
+ * Recurrence parsing + expansion laws (#656 Layer 3 mutation seed).
  *
  * `recurrence.test.ts` pins six concrete expansions. Those prove the engine
  * runs; they do not prove it detects. A mutant that drops the `emitted >=
  * rule.count` guard, flips `value >= from` to `>`, or removes the
  * `firstPeriodAtOrAfter` back-off still reproduces every asserted array.
  *
- * These tests state the laws instead: monotonicity, the COUNT/UNTIL bounds,
- * cadence spacing, BYDAY membership, exception identity, and the parser's
- * normalisation contract — each for arbitrary inputs.
+ * These tests state the laws instead: the parser's normalisation contract,
+ * monotonicity, the COUNT/UNTIL bounds, cadence spacing, and BYDAY membership
+ * — each for arbitrary inputs. The occurrence lifecycle (nextOccurrence,
+ * summaries, collapse) and the exception algebra live in
+ * `recurrence-lifecycle-properties.test.ts`.
  */
 import { describe, expect, test } from "vitest";
 
 import { fc } from "@centraid/test-kit/fast-check";
 
+import { describeRecurrence } from "./recurrence-summary.js";
 import {
-  applyRecurrenceExceptions,
   canonicalizeRrule,
-  describeRecurrence,
   expandRecurrence,
-  nextOccurrence,
   parseRrule,
   rruleLine,
-  shiftTemporal,
 } from "./recurrence.js";
 
 const FREQS = ["DAILY", "WEEKLY", "MONTHLY", "YEARLY"] as const;
@@ -153,15 +152,16 @@ describe("rrule normalisation", () => {
       ),
       { numRuns: 60, seed: 65615 }
     );
-    // Singular for interval 1, plural otherwise — the count/until tail is
-    // mutually exclusive (COUNT wins over UNTIL).
-    expect(describeRecurrence("FREQ=DAILY")).toBe("Every day");
+    // Natural phrasing for interval 1, plural otherwise — the count/until tail
+    // is mutually exclusive (COUNT wins over UNTIL) and never leaks the raw
+    // rule string into a member-facing surface.
+    expect(describeRecurrence("FREQ=DAILY")).toBe("Daily");
     expect(describeRecurrence("FREQ=DAILY;INTERVAL=3")).toBe("Every 3 days");
     expect(
       describeRecurrence("FREQ=DAILY;COUNT=2;UNTIL=20301231T000000Z")
-    ).toBe("Every day, 2 times");
+    ).toBe("Daily · 2 times");
     expect(describeRecurrence("FREQ=DAILY;UNTIL=20301231T000000Z")).toBe(
-      "Every day until 20301231T000000Z"
+      "Daily · until Dec 31, 2030"
     );
   });
 });
@@ -421,183 +421,5 @@ describe("expansion laws", () => {
       expect(instance.originalStart).toBe(instance.start);
       expect(instance.overlap).toBe(false);
     }
-  });
-});
-
-describe("occurrence lifecycle laws", () => {
-  test("nextOccurrence is strictly after `after`, never equal to it", () => {
-    fc.assert(
-      fc.property(fc.integer({ min: 0, max: 23 }), (hour) => {
-        const after = `2026-07-05T${String(hour).padStart(2, "0")}:00:00.000Z`;
-        const next = nextOccurrence({
-          rrule: "FREQ=DAILY",
-          scheduledStart: "2026-07-01T09:00:00.000Z",
-          after,
-          timeZone: "Etc/UTC",
-        });
-        expect(next).not.toBeNull();
-        expect(Date.parse(next as string)).toBeGreaterThan(Date.parse(after));
-      }),
-      { numRuns: 24, seed: 65630 }
-    );
-  });
-
-  test("a completion anchor re-bases the cadence on the completion time", () => {
-    const scheduled = nextOccurrence({
-      rrule: "FREQ=DAILY",
-      scheduledStart: "2026-07-01T09:00:00.000Z",
-      after: "2026-07-05T12:00:00.000Z",
-      timeZone: "Etc/UTC",
-    });
-    const completion = nextOccurrence({
-      rrule: "FREQ=DAILY",
-      scheduledStart: "2026-07-01T09:00:00.000Z",
-      after: "2026-07-05T12:00:00.000Z",
-      timeZone: "Etc/UTC",
-      anchor: "completion",
-    });
-    expect(scheduled).toBe("2026-07-06T09:00:00.000Z");
-    expect(completion).toBe("2026-07-06T12:00:00.000Z");
-  });
-
-  test("an unusable rule or `after` yields null instead of a guess", () => {
-    expect(
-      nextOccurrence({
-        rrule: "FREQ=DAILY",
-        scheduledStart: "2026-07-01T09:00:00.000Z",
-        after: "not-a-date",
-      })
-    ).toBeNull();
-    expect(
-      nextOccurrence({
-        rrule: "FREQ=HOURLY",
-        scheduledStart: "2026-07-01T09:00:00.000Z",
-        after: "2026-07-05T12:00:00.000Z",
-        timeZone: "Etc/UTC",
-      })
-    ).toBeNull();
-    // COUNT exhausted before `after` — the series is over.
-    expect(
-      nextOccurrence({
-        rrule: "FREQ=DAILY;COUNT=2",
-        scheduledStart: "2026-07-01T09:00:00.000Z",
-        after: "2026-07-05T12:00:00.000Z",
-        timeZone: "Etc/UTC",
-      })
-    ).toBeNull();
-  });
-});
-
-describe("exception laws", () => {
-  const base = () => expandAllDay("FREQ=DAILY;COUNT=6", "2026-07-01");
-
-  test("with no exceptions the series is returned untouched", () => {
-    expect(applyRecurrenceExceptions(base(), [])).toStrictEqual(base());
-  });
-
-  test("a skip removes exactly its own occurrence and nothing else", () => {
-    fc.assert(
-      fc.property(fc.integer({ min: 0, max: 5 }), (index) => {
-        const instances = base();
-        const target = instances[index]?.originalStart as string;
-        const out = applyRecurrenceExceptions(instances, [
-          { originalStart: target, action: "skip" },
-        ]);
-        expect(out).toHaveLength(instances.length - 1);
-        expect(out.some((i) => i.originalStart === target)).toBe(false);
-      }),
-      { numRuns: 24, seed: 65640 }
-    );
-  });
-
-  test("an override moves `start` but never rewrites occurrence identity", () => {
-    fc.assert(
-      fc.property(fc.integer({ min: 0, max: 5 }), (index) => {
-        const instances = base();
-        const target = instances[index]?.originalStart as string;
-        const out = applyRecurrenceExceptions(instances, [
-          { originalStart: target, action: "override", start: "2026-12-25" },
-        ]);
-        expect(out).toHaveLength(instances.length);
-        const moved = out.find((i) => i.originalStart === target);
-        expect(moved?.start).toBe("2026-12-25");
-        // Every other occurrence is byte-identical.
-        for (const instance of out) {
-          if (instance.originalStart === target) continue;
-          expect(instance.start).toBe(instance.originalStart);
-        }
-      }),
-      { numRuns: 24, seed: 65641 }
-    );
-  });
-
-  test("an unknown originalStart matches nothing", () => {
-    const instances = base();
-    expect(
-      applyRecurrenceExceptions(instances, [
-        { originalStart: "1999-01-01", action: "skip" },
-      ])
-    ).toStrictEqual(instances);
-  });
-
-  test("a future-scope override shifts this and every later occurrence by the delta", () => {
-    const instances = base();
-    const out = applyRecurrenceExceptions(instances, [
-      {
-        originalStart: "2026-07-03",
-        action: "override",
-        scope: "future",
-        start: "2026-07-05",
-      },
-    ]);
-    // +2 days from the third occurrence onward; the first two are untouched.
-    expect(out.map((i) => i.start)).toStrictEqual([
-      "2026-07-01",
-      "2026-07-02",
-      "2026-07-05",
-      "2026-07-06",
-      "2026-07-07",
-      "2026-07-08",
-    ]);
-  });
-
-  test("an occurrence-scope exception wins over an active future-scope one", () => {
-    const out = applyRecurrenceExceptions(base(), [
-      {
-        originalStart: "2026-07-02",
-        action: "override",
-        scope: "future",
-        start: "2026-07-04",
-      },
-      { originalStart: "2026-07-05", action: "skip" },
-    ]);
-    expect(out.some((i) => i.originalStart === "2026-07-05")).toBe(false);
-    expect(out).toHaveLength(5);
-  });
-
-  test("shiftTemporal is invertible and preserves the value's shape", () => {
-    fc.assert(
-      fc.property(
-        fc.constantFrom(
-          "2026-07-01T09:00:00.000Z",
-          "2026-07-01T09:00:00",
-          "2026-07-01"
-        ),
-        fc.integer({ min: -5, max: 5 }),
-        (value, days) => {
-          const delta = days * 86_400_000;
-          const shifted = shiftTemporal(value, delta);
-          expect(shiftTemporal(shifted, -delta)).toBe(value);
-          // A zoned instant stays zoned; a floating/all-day value stays naive.
-          expect(shifted.endsWith("Z")).toBe(value.endsWith("Z"));
-          expect(shifted.includes("T")).toBe(value.includes("T"));
-        }
-      ),
-      { numRuns: 60, seed: 65642 }
-    );
-  });
-
-  test("shiftTemporal returns an unparseable value unchanged", () => {
-    expect(shiftTemporal("not-a-date", 86_400_000)).toBe("not-a-date");
   });
 });

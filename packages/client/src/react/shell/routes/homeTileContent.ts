@@ -15,11 +15,18 @@
 // No fixtures. A tile with no read path renders the empty body and the seam is
 // recorded here in prose rather than papered over with a plausible number.
 
+// The Tasks app's OWN "when" predicates (#834). `when.ts` is an import-free
+// leaf for exactly this reason: the tile must not grow a second answer to
+// "does this touch Today", and blueprint app sources are not type-checked
+// under the client program.
+import { dueLabel, landsToday } from "@centraid/blueprints/apps/tasks/when";
+
 import type { DailyBrief } from "../../../gateway-client.js";
 import { authorizeBlobUrl, BLOB_PREFIX } from "../../blueprints/blob-auth.js";
 import type {
   HomeTileContent,
   HomeTilePerson,
+  HomeTileTaskGlance,
   HomeTileTaskRow,
 } from "./homeTiles.js";
 
@@ -156,9 +163,22 @@ async function peopleFaces(
   return { directory, total: directory.length };
 }
 
-async function taskBoard(
-  reader: HomeTileReader
-): Promise<{ total: number; rows: HomeTileTaskRow[] }> {
+/**
+ * The Tasks tile: the rows, plus the glance (#834).
+ *
+ * WHAT LANDS TODAY AND WHAT IS NEXT ARE NOT DERIVED HERE. `landsToday` is the
+ * one predicate in the product that answers "does this touch Today", and
+ * `dueLabel` is the one phrase that says when — both are imported from the
+ * Tasks app itself, so the tile cannot quietly disagree with the room it is a
+ * door into. That is also what keeps the rule an UNDATED TASK NEVER TOUCHES
+ * TODAY true on this surface: `landsToday` returns false without a due value,
+ * in this code path exactly as in every other.
+ */
+async function taskBoard(reader: HomeTileReader): Promise<{
+  total: number;
+  rows: HomeTileTaskRow[];
+  glance: HomeTileTaskGlance;
+}> {
   const rows = await rowsOf(reader, "tasks", "schedule.task", WINDOW.tasks);
   const open = rows.filter((row) => {
     const status = text(row.values.status);
@@ -174,7 +194,41 @@ async function taskBoard(
       title: text(row.values.title),
     })),
   ].filter((row) => row.title !== "");
-  return { rows: model, total: open.length };
+  return { glance: taskGlance(open), rows: model, total: open.length };
+}
+
+/** The tile's own words for today's pile and the next dated row. */
+function taskGlance(
+  open: readonly { values: Record<string, unknown> }[]
+): HomeTileTaskGlance {
+  const now = new Date().toISOString();
+  const dated = open
+    .map((row) => ({
+      due_at: text(row.values.due_at) || null,
+      next_due: text(row.values.next_due) || null,
+      status: text(row.values.status),
+      title: text(row.values.title),
+    }))
+    .filter((task) => task.title !== "");
+  const today = dated.filter((task) => landsToday(task, now)).length;
+  // The next thing AHEAD of today — what today already holds is the first
+  // half of the glance, and repeating it as "next" would say it twice.
+  const ahead = dated
+    .filter((task) => {
+      const due = task.next_due ?? task.due_at;
+      return due !== null && !landsToday(task, now);
+    })
+    .map((task) => ({
+      due: (task.next_due ?? task.due_at)!,
+      title: task.title,
+    }))
+    .filter((task) => task.due > now)
+    .sort((left, right) => left.due.localeCompare(right.due))[0];
+  const when = ahead ? dueLabel(ahead.due, now) : null;
+  return {
+    next: ahead && when ? `next · ${ahead.title}, ${when}` : "",
+    today: today > 0 ? `${today} today` : "",
+  };
 }
 
 async function lockerState(

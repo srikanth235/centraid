@@ -15,10 +15,13 @@ import {
   safeExternalUrl,
   safeMediaUrl,
 } from "../apps/_shared/untrusted.ts";
+import { ListView as AgendaListView } from "../apps/agenda/components/ListViews.tsx";
 import { ListRow as DocsRow } from "../apps/docs/components/List.tsx";
 import { LockerList } from "../apps/locker/components/List.tsx";
+import { NoteCard } from "../apps/notes/components/Library.tsx";
 import { Row as PeopleRow } from "../apps/people/components/Shared.tsx";
 import { MemoriesStrip } from "../apps/photos/components/Memories.tsx";
+import { TaskRow } from "../apps/tasks/components/TaskRow.tsx";
 
 const VECTORS = [
   "<script>globalThis.pwned=true</script>",
@@ -40,11 +43,53 @@ type Renderer = (value: string) => string;
 
 const noop = () => undefined;
 
-// One row per app that draws member-supplied text. Agenda, Notes, Tally and
-// Tasks are absent because their interfaces are, not because they were
-// excused: each rebuilt app owes this suite a row again the moment it renders
-// a vault string, and the vectors below are what it must render inert.
+// One row per app that draws member-supplied text. Agenda, Notes and Tasks
+// paid that debt back with their rebuilds (#834); Tally is still absent
+// because its interface is, not because it was excused — it owes this suite a
+// row again the moment it renders a vault string, and the vectors below are
+// what it must render inert.
 const RENDERERS: Record<string, Renderer> = {
+  // ONE row draws every list in Agenda: Schedule and Waiting on share it, and
+  // the grid's rows are the same component fed a different window. Every
+  // member string the row can reach is the vector at once — the title, the
+  // search snippet and the one recurrence sentence — with a guest's own name
+  // and the event's description and join link riding along, because those
+  // arrive from an invitation nobody on this seat typed.
+  agenda: (value) =>
+    renderToStaticMarkup(
+      createElement(AgendaListView, {
+        groups: [
+          {
+            dayKey: "2026-08-21",
+            segments: [
+              {
+                ev: {
+                  event_id: "event-1",
+                  calendar_id: "cal-1",
+                  dtstart: "2026-08-21T09:00:00Z",
+                  dtend: "2026-08-21T10:00:00Z",
+                  summary: value,
+                  description: value,
+                  snippet: value,
+                  recurrence_summary: value,
+                  conferencing_uri: value,
+                  attendees: [{ party_id: "p1", name: value, partstat: value }],
+                },
+                segStart: 540,
+                segEnd: 600,
+                startsHere: true,
+                endsHere: true,
+                spansAll: false,
+                clamped: false,
+              },
+            ],
+          },
+        ],
+        hueFor: () => null,
+        pendingFor: () => undefined,
+        onOpen: noop,
+      })
+    ),
   docs: (value) =>
     renderToStaticMarkup(
       createElement(DocsRow, {
@@ -105,6 +150,42 @@ const RENDERERS: Record<string, Renderer> = {
         onClearSearch: noop,
       })
     ),
+  // The library card, which is also the search result and the notebook's row.
+  // It is rendered TWICE and the two markups concatenated, because a card
+  // shows the preview it stored or the snippet a search matched — never both —
+  // and each of those is member text arriving from an import or a share.
+  notes: (value) =>
+    [
+      renderToStaticMarkup(
+        createElement(NoteCard, {
+          note: {
+            note_id: "note-1",
+            title: value,
+            preview: value,
+            updated_at: "2026-08-21T09:00:00Z",
+            notebook_names: [value],
+          },
+          onOpen: noop,
+          onTogglePin: noop,
+          search: "",
+        })
+      ),
+      renderToStaticMarkup(
+        createElement(NoteCard, {
+          note: {
+            note_id: "note-2",
+            title: value,
+            preview: value,
+            updated_at: "2026-08-21T09:00:00Z",
+            notebook_names: [value],
+            snippet: value,
+          },
+          onOpen: noop,
+          onTogglePin: noop,
+          search: "term",
+        })
+      ),
+    ].join(""),
   // ONE row draws the whole of People — the roster, Search, Touch's three
   // lists, Trash and Merge all render this component (apps/people/components/
   // Shared.tsx), so covering it covers every list the app has. Each of its
@@ -134,6 +215,28 @@ const RENDERERS: Record<string, Renderer> = {
             onOpen: noop,
           },
         ],
+      })
+    ),
+  // The task row appears in eight places and is one component, so covering it
+  // covers every list Tasks has. Its three member-text slots are fed at once:
+  // the title, a tag's label and the project name the row was handed — a tag
+  // and a project can both arrive from an import or a shared vault.
+  tasks: (value) =>
+    renderToStaticMarkup(
+      createElement(TaskRow, {
+        task: {
+          task_id: "task-1",
+          status: "needs-action",
+          title: value,
+          due_at: "2026-08-21",
+          tags: [{ tag_id: "g1", label: value }],
+        },
+        now: "2026-08-21T09:00:00Z",
+        projectName: value,
+        projectHue: "ochre",
+        shared: true,
+        onOpen: noop,
+        onComplete: noop,
       })
     ),
 };

@@ -379,11 +379,45 @@ export default async function boardHandler({ input, ctx }: HandlerArgs) {
       return String(a.title).localeCompare(String(b.title));
     };
 
+    // A REPEATING TASK NEVER STACKS, and the arithmetic that guarantees it
+    // lives in ONE place — `ctx.time` (packages/core/src/time). The row leaves
+    // here carrying the summariser's words and the collapse's two numbers, so
+    // no surface ever sees an RRULE string or re-counts a missed period for
+    // itself. That second count is the defect the shared summariser exists to
+    // prevent, and a UI is exactly where it grows back.
+    const nowIso = new Date().toISOString();
+    const withRecurrence = (task: RawTask) => {
+      const rrule = typeof task.rrule === "string" ? task.rrule : null;
+      const start = typeof task.due_at === "string" ? task.due_at : null;
+      if (!rrule || !start) return {};
+      const collapsed = ctx.time.collapseMissedOccurrences({
+        rrule,
+        scheduledStart: start,
+        ...(typeof task.recurrence_tz === "string"
+          ? { timeZone: task.recurrence_tz }
+          : {}),
+        ...(task.recurrence_anchor === "completion" ||
+        task.recurrence_anchor === "scheduled"
+          ? { anchor: task.recurrence_anchor }
+          : {}),
+        now: nowIso,
+        ...(typeof task.completed_at === "string"
+          ? { lastCompletedAt: task.completed_at }
+          : {}),
+      });
+      return {
+        recurrence_summary: ctx.time.describeRecurrence(rrule),
+        missed: collapsed.missed,
+        next_due: collapsed.nextDue,
+      };
+    };
+
     const withAttachments = (task: RawTask) => ({
       ...task,
       attachments: attByTask.get(task.task_id) ?? [],
       references: refsByTask.get(task.task_id) ?? [],
       tags: tagsByTask.get(task.task_id) ?? [],
+      ...withRecurrence(task),
     });
 
     const withChildren = (task: RawTask) => {

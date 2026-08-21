@@ -46,6 +46,21 @@
       },
       {
         "schema": "core",
+        "table": "tag",
+        "verbs": "read"
+      },
+      {
+        "schema": "core",
+        "table": "concept",
+        "verbs": "read"
+      },
+      {
+        "schema": "core",
+        "table": "concept_scheme",
+        "verbs": "read"
+      },
+      {
+        "schema": "core",
         "table": "attach",
         "verbs": "act"
       },
@@ -351,7 +366,7 @@
   "queries": [
     {
       "name": "upcoming",
-      "description": "Non-cancelled events, soonest first, with the calendars they could land on, each event's calendar_id, conferencing_uri, its attachments, and its guest list (attendees joined from schedule_attendee → core_party, each `{party_id, name, partstat, is_you}`). Defaults to today forward; pass ISO `from`/`to` instants to read any visible range (month and week views do), including still-running multi-day events that began before `from`. A repeating event (rrule set) is materialized into one row per occurrence inside the visible range — each carries the series' real event_id (reschedule/cancel/RSVP/attach all still target the series), an `instance_key` for list rendering, and `is_recurrence_instance` on every non-anchor occurrence.",
+      "description": "Non-cancelled events, soonest first, with the calendars they could land on, each event's calendar_id, conferencing_uri, its attachments, and its guest list (attendees joined from schedule_attendee → core_party, each `{party_id, name, partstat, is_you}`). Defaults to today forward; pass ISO `from`/`to` instants to read any visible range (month and week views do), including still-running multi-day events that began before `from`. A repeating event (rrule set) is materialized into one row per occurrence inside the visible range — each carries the series' real event_id (reschedule/cancel/RSVP/attach all still target the series), an `instance_key` for list rendering, `is_recurrence_instance` on every non-anchor occurrence, and `recurrence_summary`: the one member-facing recurrence sentence from the shared summariser, so no surface renders a raw rule.",
       "input": {
         "type": "object",
         "properties": {
@@ -381,7 +396,7 @@
     },
     {
       "name": "search",
-      "description": "Full-text event search through the vault's FTS5 index (summary + description) — returns only the ranked non-cancelled matches in the upcoming row shape (calendar_id, attachments, and the `attendees` guest list included) plus a hit snippet, never a whole-table pull.",
+      "description": "Full-text event search through the vault's FTS5 index (summary + description) — returns only the ranked non-cancelled matches in the upcoming row shape (calendar_id, attachments, the `attendees` guest list and `recurrence_summary` included) plus a hit snippet, never a whole-table pull.",
       "input": {
         "type": "object",
         "properties": {
@@ -396,6 +411,39 @@
         "type": "object",
         "properties": {
           "events": {
+            "type": "array"
+          },
+          "vaultDenied": {
+            "type": "object"
+          }
+        }
+      }
+    },
+    {
+      "name": "day-context",
+      "description": "The cross-app facts that decorate a calendar day, as one read-only projection: birthdays recurring inside the window (each `{party_id, name, month, day, tier}`, where `tier` is `inner` when the owner starred that person and `outer` otherwise), the count of still-open tasks (`needs-action`/`in-process`) coming due per day, and holidays. Holidays are always `[]` today — the vault has no holiday source. Due counts are THIS vault's tasks only; there is no cross-vault aggregation. `from`/`to` are inclusive `YYYY-MM-DD` days, defaulting to today plus 45 days and capped at a 400-day span.",
+      "input": {
+        "type": "object",
+        "properties": {
+          "from": {
+            "type": "string"
+          },
+          "to": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "birthdays": {
+            "type": "array"
+          },
+          "due": {
+            "type": "array"
+          },
+          "holidays": {
             "type": "array"
           },
           "vaultDenied": {

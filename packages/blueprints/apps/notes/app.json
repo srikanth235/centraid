@@ -60,6 +60,11 @@
         "verbs": "read"
       },
       {
+        "schema": "schedule",
+        "table": "add_task",
+        "verbs": "act"
+      },
+      {
         "schema": "tally",
         "table": "expense",
         "verbs": "read"
@@ -516,6 +521,31 @@
       "writes": []
     },
     {
+      "name": "send-to-tasks",
+      "description": "Hand one checklist line to Tasks: mints the canonical schedule.task row through schedule.add_task (undated unless the line carried a date) and links it back to the note through core.link_entities. Notes keeps no copy of the task.",
+      "confirmation": "none",
+      "input": {
+        "type": "object",
+        "properties": {
+          "title": { "type": "string", "minLength": 1 },
+          "due_at": { "type": "string", "minLength": 1 },
+          "note_id": { "type": "string", "minLength": 1 },
+          "exact": { "type": "string" }
+        },
+        "required": ["title", "note_id"],
+        "additionalProperties": false
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "status": { "type": "string" },
+          "output": { "type": "object" },
+          "reason": { "type": "string" }
+        }
+      },
+      "writes": []
+    },
+    {
       "name": "attach",
       "description": "Pin a file (image, PDF, any media) to a note through core.attach; bytes are stored as a deduped canonical content item.",
       "confirmation": "none",
@@ -804,6 +834,38 @@
         "properties": {
           "versions": {
             "type": "array"
+          },
+          "vaultDenied": {
+            "type": "object"
+          }
+        }
+      }
+    },
+    {
+      "name": "journal",
+      "description": "The Journal place: a bounded, read-only window over the People-journal entries this vault holds — the same marker set the library, search and link-target projections exclude, read the other way round. Live entries only, newest by updated_at, with a short preview and checklist tally and never a full body; `truncated` says older entries exist beyond the window.",
+      "input": {
+        "type": "object",
+        "properties": {
+          "limit": {
+            "type": "integer",
+            "minimum": 20,
+            "maximum": 2000
+          }
+        },
+        "additionalProperties": false
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "entries": {
+            "type": "array"
+          },
+          "truncated": {
+            "type": "boolean"
+          },
+          "window": {
+            "type": "integer"
           },
           "vaultDenied": {
             "type": "object"

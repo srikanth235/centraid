@@ -1,0 +1,164 @@
+/* Agenda chrome — geometry only.
+
+   Design tokens (--text, --line, --bg-elev, --r-*, --sp-*, the type ladder …)
+   are supplied by the shell's scoped blueprint-token block, so this file
+   references them directly and loads nothing of its own. No colour literal
+   appears here or anywhere in this app: the calendar hue dot is a CONTENT
+   marker derived from the shared identity wheel and arrives as an inline
+   custom property, never as a rule in a stylesheet.
+
+   The retired global ag-prefixed shell/side/topbar selectors are gone for
+   good — and are not spelled out here, because the ban is enforced by
+   substring over this whole tree (shared-css.test.ts). The sidebar was a second navigation column beside the shell's stem
+   and the topbar was a header restating the frame's own app bar. */
+
+.shell {
+  composes: kit-app-shell from global;
+  --agenda-rail: 232px;
+  /* THE PAGE MARGIN IS DECLARED ONCE AND INHERITED. Every row that spans the
+     pane reads it, so the rail's first label and the canvas's first column
+     start from the same edge. */
+  --agenda-margin: var(--page-margin);
+  display: flex;
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  letter-spacing: normal;
+}
+
+/* Agenda's identity is FOREST. It is NOT declared here: `app.json`'s
+   `colorKey` already says so and the shell's injected scope block sets the
+   identity token from it, so a re-declaration in this file would shadow the
+   system's own property and stop tracking theme changes. Nothing in this app
+   reads the hue anyway — the identity mark is the shell's icon chip, and the
+   calendar dot is a per-calendar content marker derived from the shared
+   identity wheel in `format.ts`, never from the app's own hue. */
+
+/* ---------- The rail ---------- */
+
+.rail {
+  flex: none;
+  inline-size: var(--agenda-rail);
+  min-inline-size: 0;
+  border-inline-end: 1px solid var(--line);
+  padding: var(--agenda-margin) var(--sp-4);
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-5);
+}
+
+.railSection {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+  min-inline-size: 0;
+}
+
+.railLabel {
+  margin: 0;
+  font: var(--t-eyebrow);
+  letter-spacing: var(--t-eyebrow-tracking);
+  text-transform: var(--t-eyebrow-transform);
+  color: var(--text-faint);
+}
+
+/* The day-context seam. It keeps its box whether or not a layer has mounted
+   into it, so the rail's rhythm does not move when the layers arrive. */
+.dayContext {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+  font: var(--t-small);
+  color: var(--text-soft);
+  min-block-size: var(--sp-6);
+}
+
+/* ---------- The main column ---------- */
+
+.main {
+  composes: kit-app-main from global;
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-inline-size: 0;
+  min-block-size: 0;
+  /* The Ask mount is positioned against this column, not against the pane. */
+  position: relative;
+}
+
+/* The assistant's panel host. Bottom-trailing under a pointer, where it sits
+   clear of the canvas; on the compact form factor it moves to the top so the
+   band and the keyboard never fight it for the same corner. */
+.askMount {
+  composes: kit-app-ask-mount from global;
+  position: absolute;
+  inset-inline-end: 16px;
+  bottom: 16px;
+  z-index: 30;
+}
+
+.isNarrow .askMount {
+  top: 12px;
+  inset-inline-end: 14px;
+  bottom: auto;
+  z-index: 45;
+}
+
+.banner {
+  margin: var(--sp-3) var(--agenda-margin) 0;
+}
+
+/* The second control row: what is true about this read right now — offline,
+   behind the vault, partly denied, holding a cancellation. It renders only
+   when there is something to declare. */
+.stateRow {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sp-3);
+  padding: var(--sp-3) var(--agenda-margin);
+  border-block-end: 1px solid var(--line);
+  font: var(--t-small);
+  color: var(--text-soft);
+}
+
+.content {
+  display: flex;
+  flex: 1;
+  min-block-size: 0;
+  min-inline-size: 0;
+}
+
+.canvas {
+  flex: 1;
+  min-inline-size: 0;
+  min-block-size: 0;
+  overflow: auto;
+}
+
+/* ---------- Narrow ---------- */
+
+.isNarrow .content {
+  flex-direction: column;
+}
+
+/* The drawer slide is enabled only after the first painted frame, so the
+   mount-time layout snap is instant and later changes animate. */
+.ready .content {
+  transition: none;
+}
+
+.denied .canvas {
+  /* A denied read leaves no rows to scroll; the banner above carries the way
+     forward and the canvas simply stops claiming the space. */
+  overflow: hidden;
+}
+
+/* Every interactive element in this app carries the ring; the shell's own
+   controls do too, and this is where Agenda's chrome declares it so a rebuilt
+   surface cannot ship without one. */
+.shell :focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
+}
