@@ -57,7 +57,7 @@ import {
   cbsfFrameAad,
   decodeCbsfDirectory,
   encodeCbsfDirectory,
-} from "@centraid/blob-format";
+} from "@centraid/core/blob";
 
 const NONCE_BYTES = 12;
 const TAG_BYTES = 16;

@@ -39,7 +39,7 @@
   max-width: 100%;
   background: var(--bg-elev);
   border: 0.5px solid var(--line);
-  border-radius: 18px;
+  border-radius: var(--r-lg);
   box-shadow:
     0 2px 4px var(--scrim),
     0 32px 80px -20px var(--scrim);
@@ -56,7 +56,7 @@
 .profModalHeadIcon {
   width: 26px;
   height: 26px;
-  border-radius: 7px;
+  border-radius: var(--r-md);
   flex-shrink: 0;
   display: grid;
   place-items: center;
@@ -67,7 +67,7 @@
   margin: 0;
   flex: 1;
   font: var(--t-small-strong);
-  font-size: 15.5px;
+  font-size: var(--t-small-size);
   font-weight: 600;
   letter-spacing: -0.01em;
   color: var(--text);
@@ -87,7 +87,7 @@
   align-items: center;
   gap: 13px;
   padding: 13px;
-  border-radius: 12px;
+  border-radius: var(--r-lg);
   background: color-mix(in srgb, var(--text) 3%, transparent);
   border: 0.5px solid var(--line);
 }
@@ -96,7 +96,7 @@
 }
 .profModalPreviewName {
   font: var(--t-title);
-  font-size: 14.5px;
+  font-size: var(--t-small-size);
   font-weight: 600;
   color: var(--text);
   overflow: hidden;
@@ -106,7 +106,7 @@
 .profModalPreviewSub {
   margin-top: 2px;
   font: var(--t-small);
-  font-size: var(--t-mono-size);
+  font-size: var(--t-control-size);
   color: var(--text-faint);
 }
 .profModalFoot {
@@ -118,7 +118,7 @@
   border-top: 0.5px solid var(--line);
 }
 .profModalDelete {
-  font-size: 12.5px;
+  font-size: var(--t-small-size);
   padding: 7px 12px;
   color: var(--danger);
   border-color: color-mix(in srgb, var(--danger) 30%, transparent);
@@ -129,7 +129,7 @@
   gap: 6px;
   height: 32px;
   padding: 0 16px;
-  border-radius: 8px;
+  border-radius: var(--r-md);
   border: none;
   background: var(--accent);
   color: var(--text);
@@ -152,8 +152,8 @@
   gap: 7px;
   margin-bottom: 7px;
   font: var(--t-body);
-  font-size: 12.5px;
-  font-weight: 500;
+  font-size: var(--t-small-size);
+  font-weight: 600;
   color: var(--text);
 }
 .profFieldOptional {
@@ -168,9 +168,9 @@
   padding: 9px 12px;
   background: color-mix(in srgb, var(--text) 3%, transparent);
   border: 0.5px solid var(--line);
-  border-radius: 8px;
+  border-radius: var(--r-md);
   font: var(--t-body);
-  font-size: 13.5px;
+  font-size: var(--t-small-size);
   color: var(--text);
   outline: none;
   caret-color: var(--accent);
@@ -190,7 +190,7 @@
 .profIconBtn {
   width: 34px;
   height: 34px;
-  border-radius: 9px;
+  border-radius: var(--r-md);
   cursor: pointer;
   display: grid;
   place-items: center;
@@ -211,7 +211,7 @@
 .profColorBtn {
   width: 28px;
   height: 28px;
-  border-radius: 8px;
+  border-radius: var(--r-md);
   cursor: pointer;
   padding: 0;
   border: 0.5px solid var(--line);

@@ -791,7 +791,7 @@ export const LANDMARKS_CORE: Record<string, LandmarkBuilder> = {
     add(g, () => kit.beacon(w * 0.36, baseH + h * 1.1, -d * 0.16, color, 0.3));
   },
 
-  // ── Agent Runtime Row ────────────────────────────────────────────────────────────
+  // ── Harness Runtime Row ──────────────────────────────────────────────────────────
 
   "runtime-ledger"({ g, w, h, d, color, kit }) {
     const m = kit.mat || {};
@@ -1135,7 +1135,7 @@ export const LANDMARKS_CORE: Record<string, LandmarkBuilder> = {
         0
       );
     }
-    // Occupied slots are installed, pinned runner kinds; the gaps are the ones you have not got.
+    // Occupied slots are installed, pinned harness kinds; the gaps are the ones you have not got.
     add(
       g,
       () => kit.crateStack(w * 0.22, rackH * 0.26, d * 0.5, m.timber),

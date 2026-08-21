@@ -128,6 +128,35 @@ const SCHEMAS: Record<string, JsonSchema> = {
       path: { type: "string", minLength: 1 },
     },
   },
+  // Photo-library import (issue #721). Only the fields that can never be
+  // null carry a `type`: `capturedAt`, the coordinates, `caption`,
+  // `captureGroupId` and `album` are all legitimately NULL — an archive that
+  // says nothing about a photo must publish it, not fail it.
+  MediaAssetPayload: {
+    type: "object",
+    required: [
+      "stagedSha",
+      "filename",
+      "mediaType",
+      "byteSize",
+      "path",
+      "capturedAt",
+      "latitude",
+      "longitude",
+      "caption",
+      "favorite",
+      "captureGroupId",
+      "album",
+    ],
+    properties: {
+      stagedSha: { type: "string", minLength: 64, maxLength: 64 },
+      filename: { type: "string", minLength: 1 },
+      mediaType: { type: "string", minLength: 1 },
+      byteSize: { type: "number" },
+      path: { type: "string", minLength: 1 },
+      favorite: { type: "integer", enum: [0, 1] },
+    },
+  },
   AnnotationPayload: {
     type: "object",
     required: ["target_type", "target_id", "body", "author_party_id"],

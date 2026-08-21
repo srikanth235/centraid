@@ -4,19 +4,30 @@
 // Browser compute adapters for the idle-device queue (issue #414 D11/D13).
 // The shell owns scheduling/eligibility; this file owns bounded PDF.js text
 // extraction and hardware-decoded video poster generation.
+//
+// TRANSCRIPTION IS NOT HERE ANY MORE (issue #724). Handing a recording to the
+// desktop's file-ASR adapter was this file's third adapter; transcription is
+// owned by its self-contained recognition automation so every derived row can
+// name the versioned local model that produced it. A
+// browser lane keeps only the rungs that are format conversion, where which
+// implementation ran does not change the answer.
 
 import type { PDFDocumentProxy } from "pdfjs-dist";
 // eslint-disable-next-line import/default -- Vite's ?url loader synthesizes the default URL export; governance: allow-no-unjustified-suppressions upstream module has no source-level default (#414)
 import pdfWorkerUrl from "pdfjs-dist/legacy/build/pdf.worker.min.mjs?url";
 
+// The shared browser capture pipeline. It sits on the blueprints side of the
+// package edge because Photos' upload path needs it too and blueprints must
+// never import `@centraid/client` — see that module's header.
+import { captureVideoFrames } from "@centraid/blueprints/apps/_shared/video-frame";
+
 import type { DeviceEnrichmentLease } from "./gateway-client-devices.js";
-import { captureVideoFrames } from "./video-frame.js";
 
 const MAX_TEXT_CHARS = 1_000_000;
 const MAX_PDF_PAGES = 2_000;
 
 export interface DeviceWorkContribution {
-  variant: "poster" | "thumb" | "text" | "transcript";
+  variant: "poster" | "thumb" | "text";
   body: Blob;
   mediaType: string;
 }
@@ -134,46 +145,12 @@ async function videoContributions(
     : [];
 }
 
-async function transcriptContributions(
-  source: Blob
-): Promise<DeviceWorkContribution[]> {
-  const transcribe = window.CentraidApi.transcribeMedia;
-  if (
-    !transcribe ||
-    (!source.type.startsWith("audio/") && !source.type.startsWith("video/"))
-  ) {
-    return [];
-  }
-  try {
-    const text = (
-      await transcribe({
-        bytes: await readBlobBytes(source),
-        mediaType: source.type,
-      })
-    )
-      .trim()
-      .slice(0, MAX_TEXT_CHARS);
-    return text
-      ? [
-          {
-            variant: "transcript",
-            body: new Blob([text], { type: "text/plain" }),
-            mediaType: "text/plain",
-          },
-        ]
-      : [];
-  } catch {
-    return [];
-  }
-}
-
 /** Compute every contribution fulfilled by the browser capability in one lease. */
 export async function computeDeviceWorkContributions(
   lease: DeviceEnrichmentLease,
   source: Blob
 ): Promise<DeviceWorkContribution[]> {
   if (lease.capability === "poster") return videoContributions(source);
-  if (lease.capability === "transcript") return transcriptContributions(source);
   if (lease.capability === "pdfText") {
     const text = await extractPdfText(source);
     return text

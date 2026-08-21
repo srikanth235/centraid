@@ -1,60 +1,19 @@
 /**
  * Per-app file rewrites the clone + rename paths share.
  *
- * Both `cloneTemplate` (in clone.ts) and `updateAppMeta` (in
- * scaffold.ts) need to push a new display name into an app's
- * subordinate files — the cloned `index.html`'s `<title>` and any
- * `automations/<id>/automation.json#name`. Keeping these helpers in
- * one place keeps the two surfaces in lockstep so a rename can't leave
- * the browser-tab title stale, and an automation app's Automations row
- * title can't drift from its wrapping `app.json#name`.
+ * Both `cloneTemplate` (in clone.ts) and `updateAppMetaFiles` (in
+ * app-meta.ts) need to push a new display name into an app's subordinate
+ * `automations/<id>/automation.json` manifests. Keeping these helpers in
+ * one place keeps the two surfaces in lockstep so an automation app's
+ * Automations row title can't drift from its wrapping `app.json#name`.
  *
  * Every helper is defensive on every branch: missing files / unparseable
- * JSON / unrelated content → no-op. The same call serves a UI app
- * (rewrites `<title>`, no automations/) and an automation app (no
- * `index.html`, rewrites `automations/<id>/automation.json`).
+ * JSON / unrelated content → no-op, so the same call serves an app with no
+ * `automations/` subdir and one with several.
  */
 
 import { promises as fs } from "node:fs";
 import path from "node:path";
-
-/**
- * Pure string variant: replace the first `<title>...</title>` in an HTML
- * string with `newName` (HTML-escaped). No `<title>` → returns the input
- * unchanged. Shared by the filesystem path ({@link rewriteIndexHtmlTitle})
- * and the git-store file-map path (issue #141).
- */
-export function rewriteTitleInHtml(html: string, newName: string): string {
-  const re = /<title>[\s\S]*?<\/title>/iu;
-  if (!re.test(html)) return html; // no <title> tag — leave the string untouched.
-  // Callback form so $-sequences in `newName` aren't interpreted as
-  // backreferences by `String.replace`. Regex has no /g so only the
-  // first <title> is rewritten.
-  return html.replace(re, () => `<title>${escapeHtml(newName)}</title>`);
-}
-
-/**
- * Replace the first `<title>...</title>` in `<appDir>/index.html`
- * with `newName`. HTML-escapes the name so a user-chosen "Foo & Bar"
- * can't break the markup or smuggle a tag in.
- *
- * Missing `index.html` → no-op. No `<title>` tag → no-op. Only the
- * first match is replaced.
- */
-export async function rewriteIndexHtmlTitle(
-  appDir: string,
-  newName: string
-): Promise<void> {
-  const htmlPath = path.join(appDir, "index.html");
-  let raw: string;
-  try {
-    raw = await fs.readFile(htmlPath, "utf8");
-  } catch {
-    return; // app has no index.html (automation app) — nothing to rewrite.
-  }
-  const next = rewriteTitleInHtml(raw, newName);
-  if (next !== raw) await fs.writeFile(htmlPath, next);
-}
 
 /**
  * Tile visual identity (icon glyph + hue) carried in `app.json`. Keys are
@@ -187,13 +146,4 @@ export async function rewriteAutomationManifestNames(
         if (next !== null) await fs.writeFile(manifestPath, next);
       })
   );
-}
-
-function escapeHtml(s: string): string {
-  return s
-    .replaceAll("&", "&amp;")
-    .replaceAll("<", "&lt;")
-    .replaceAll(">", "&gt;")
-    .replaceAll('"', "&quot;")
-    .replaceAll("'", "&#39;");
 }

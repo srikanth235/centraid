@@ -1,16 +1,38 @@
-// The forward-only schema ladder for vault.db and journal.db. Pre-release v0
-// keeps the vault at one base rung: all current owner tables are composed in
-// dependency order and there are no released files that need compatibility
-// upgrades. Later rungs are reserved for post-release data migrations.
-// Tracked via PRAGMA user_version; migrate() applies each rung transactionally.
+// The schema ladder for vault.db and journal.db. Rung one is the baseline,
+// composed of every owner table's DDL in dependency order, including what
+// issue #726's forward rename and issue #731's Commons control plane used to
+// ship as separate rungs. Rung two (issue #821) is the first genuine upgrade
+// rung: relaxing a CHECK in the baseline text reaches new files only, so
+// vaults already stamped v1 need a vault-preserving rebuild to get there.
+// Rung three (issue #825) adds the grant plane's tables and restates live
+// commons grants into them; it is written `IF NOT EXISTS` + backfill so a
+// fresh file, which got the tables from the baseline, walks it as a no-op.
+// `migrate()` applies rungs transactionally and stamps `PRAGMA user_version`,
+// and that version number is load-bearing beyond this file: it is the
+// downgrade guard
+// (`VaultSchemaAheadError`, thrown when a file's version exceeds what this
+// build's ladder knows how to reach) and it is the "schema version this
+// build understands" reported by the gateway's backup/recovery provenance
+// (`packages/server/src/backup/backup-service.ts`,
+// `packages/server/src/backup/recover-internals.ts` read
+// `VAULT_MIGRATIONS.length`). A fresh file walks EVERY rung (rung two is a
+// faithful re-creation on a table that already has the relaxed CHECK; rung
+// three creates tables the baseline already made and backfills from an empty
+// commons plane), so the two paths land on the same shape and version.
 
 import type { DatabaseSync } from "node:sqlite";
 
 import { AGENT_DDL } from "./agent.js";
 import { BLOB_TRANSFER_DDL } from "./blob-transfer.js";
 import { BLOB_DDL } from "./blob.js";
+import { COMMONS_RESILIENCE_DDL } from "./commons-resilience.js";
 import { CONSENT_DDL, CONSENT_INSTALL_MEMORY_DDL } from "./consent.js";
-import { CORE_DDL, LINK_ANCHOR_DDL, SHARE_ORIGIN_DDL } from "./core.js";
+import {
+  CORE_DDL,
+  LINK_ANCHOR_DDL,
+  SHARE_ORIGIN_ATTRIBUTION_DDL,
+  SHARE_ORIGIN_DDL,
+} from "./core.js";
 import {
   HEALTH_DDL,
   FINANCE_DDL,
@@ -22,7 +44,11 @@ import {
   LOCKER_AUTH_DDL,
   LOCKER_DDL,
 } from "./domains-locker.js";
-import { PEOPLE_DDL, PEOPLE_PROFILE_LIFECYCLE_DDL } from "./domains-people.js";
+import {
+  PEOPLE_DDL,
+  PEOPLE_PROFILE_CADENCE_FLOOR_DDL,
+  PEOPLE_PROFILE_LIFECYCLE_DDL,
+} from "./domains-people.js";
 import {
   SOCIAL_DDL,
   KNOWLEDGE_DDL,
@@ -38,6 +64,8 @@ import { RENAME_INBOX_NOTICE_DDL } from "./notifications.js";
 import { OUTBOX_DDL } from "./outbox.js";
 import { REPLICA_DDL } from "./replica.js";
 import { SEED_DDL } from "./seed.js";
+import { SHARE_COMMONS_DDL } from "./share-commons.js";
+import { SHARE_GRANT_BACKFILL_DDL, SHARE_GRANT_DDL } from "./share-grant.js";
 import { SYNC_CREDENTIAL_DDL, SYNC_DDL } from "./sync.js";
 import { TIME_ORGANIZE_DDL } from "./time-organize.js";
 
@@ -50,6 +78,13 @@ export const ONTOLOGY_VERSION = "1.4";
 
 // Composition order is dependency order:
 //   - CORE first (everything references the spine), anchors ride with it;
+//   - SHARE_ORIGIN_DDL then its forward rename (shared_by_member -> shared_by,
+//     ex-issue #726 rung two) run back to back: SQLite's ALTER TABLE RENAME
+//     COLUMN rewrites the stored sqlite_schema `sql` text in place, so a fresh
+//     database ends up with a `core_share_origin` whose column has always
+//     been `shared_by` — composing the two here (rather than hand-editing the
+//     CREATE TABLE to skip the rename) keeps this file mechanism-only and
+//     leaves the DDL modules untouched;
 //   - the consent plane (apps, grants, install memory, the seed registry,
 //     the ext-band registry) before anything that enrolls or scopes;
 //   - the agent plane's model tables;
@@ -64,12 +99,18 @@ export const ONTOLOGY_VERSION = "1.4";
 //     shape, and the backfill is a no-op on a fresh file;
 //   - BLOB_DDL dead last: it re-creates the document's FTS sync with the
 //     derivative-aware body expression (extracted text feeds the owning
-//     document's row), overriding the generated triggers by name.
+//     document's row), overriding the generated triggers by name;
+//   - the Commons control plane (ex-issue #731 rung three) and, composed with
+//     it, the local-only resilience/instrumentation tables that hang off it:
+//     steward-contact state, this device's own link evidence, and recovery
+//     lineage. `SHARE_COMMONS_DDL` alters `social_circle_member` (added by
+//     SOCIAL_DDL above) so it must run after the domains.
 export const VAULT_MIGRATIONS: readonly string[] = [
   [
     CORE_DDL,
     LINK_ANCHOR_DDL,
     SHARE_ORIGIN_DDL,
+    SHARE_ORIGIN_ATTRIBUTION_DDL,
     CONSENT_DDL,
     CONSENT_INSTALL_MEMORY_DDL,
     SEED_DDL,
@@ -103,7 +144,24 @@ export const VAULT_MIGRATIONS: readonly string[] = [
     // Notifications is a rebuildable projection; its pre-release rename is
     // part of the composed base rather than a compatibility rung.
     RENAME_INBOX_NOTICE_DDL,
+    SHARE_COMMONS_DDL,
+    COMMONS_RESILIENCE_DDL,
+    // The grant plane (issue #825) after the commons plane it is restated
+    // from: `granted_by` references `core_party`, and rung three's backfill
+    // reads `share_circle_grant` and the roster.
+    SHARE_GRANT_DDL,
   ].join("\n"),
+  // Rung two (issue #821): the vault-preserving people_profile rebuild that
+  // carries the relaxed `cadence_days >= 0` CHECK to files created before it.
+  // See `PEOPLE_PROFILE_CADENCE_FLOOR_DDL` for why a rebuild, and for how the
+  // rung handles foreign keys inside the runner's transaction.
+  PEOPLE_PROFILE_CADENCE_FLOOR_DDL,
+  // Rung three (issue #825): the grant plane reaches files stamped before it.
+  // The DDL is `IF NOT EXISTS` throughout, so a fresh file — which already got
+  // the tables from the baseline above — walks this rung as a no-op create
+  // plus a backfill that selects from an empty `share_circle_grant`, and the
+  // two paths land on the same shape and version.
+  SHARE_GRANT_BACKFILL_DDL,
 ];
 
 export const JOURNAL_MIGRATIONS: readonly string[] = [JOURNAL_DDL];

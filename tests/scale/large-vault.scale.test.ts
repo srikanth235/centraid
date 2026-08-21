@@ -16,7 +16,7 @@ import {
   sealValue,
 } from "@centraid/vault";
 
-import { ensureConversationLedger } from "../../packages/app-engine/src/stores/gateway-db.js";
+import { ensureConversationLedger } from "../../packages/server/src/engine/stores/gateway-db.js";
 import { rigDriftBudgetMs } from "../helpers/rig-budgets.js";
 
 const OWNER = "tests/scale/large-vault.scale.test.ts";
@@ -152,7 +152,7 @@ describe("large-vault.scale", () => {
     const readStarted = performance.now();
     const recentPhotos = db.vault
       .prepare(
-        `SELECT asset_id FROM media_media_asset
+        `SELECT asset_id FROM media_asset
           WHERE deleted_at IS NULL ORDER BY captured_at DESC LIMIT 200`
       )
       .all();

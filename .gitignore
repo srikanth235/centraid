@@ -46,3 +46,7 @@ packages/blueprints/.app-boot/
 # with `bun run --cwd apps/web build:iroh` after changing iroh-wasm
 # (issue #468 K15 — ensure-iroh still rebuilds if the file is deleted).
 **/.stryker-tmp/
+
+# Design-agent handoff prototypes (#707) are reference-only: read them locally,
+# never commit them. The brief itself is quoted in full in the issue.
+docs/design/handoff-binding-layer/

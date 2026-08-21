@@ -2,22 +2,45 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { JSX } from "react";
 
-import type { IconName } from "@centraid/design";
-
 import { ASSIST_HANDOFF_EVENT } from "../../assist-oauth-events.js";
 import type { AssistHandoffResult } from "../../assist-oauth-events.js";
+import {
+  CONNECTORS_EMPTY_BODY,
+  CONNECTORS_EMPTY_TITLE,
+  CONNECTORS_ERROR_BODY,
+  CONNECTORS_ERROR_TITLE,
+} from "../../connectors-copy.js";
+import { SKELETON_NOTE } from "../../surface-copy.js";
 import { relativeTime } from "../format.js";
-import { cx } from "../ui/cx.js";
+import type {
+  RouteHealth,
+  RouteVerbs,
+  RouteVitalsInput,
+} from "../shell/routeVitals.js";
+import { PageSkeleton } from "../shell/status.js";
+import ChipsBlock from "../ui/ChipsBlock.js";
+import EmptyBlock from "../ui/EmptyBlock.js";
 import { Button, Icon } from "../ui/index.js";
+import NoteBlock from "../ui/NoteBlock.js";
+import PanelBlock from "../ui/PanelBlock.js";
+import RowsBlock from "../ui/RowsBlock.js";
+import type { RowDef } from "../ui/RowsBlock.js";
+import SectionBlock from "../ui/SectionBlock.js";
 import { ConnectorBrandGlyph } from "./connectorBrandMarks.js";
 
-import controlsCss from "../styles/controls.module.css";
 import styles from "./SettingsConnectionsScreen.module.css";
 
-// Connectors gallery (issue #304 renderer half; primary sidebar page). Featured
-// tile grid of gateway provider connectors (Gmail, Calendar, Drive, GitHub, …)
-// with a detail/Connect sheet — not a sparse settings list. Same gateway I/O
-// surface as before: configure / pause / authorize / remove.
+// Connectors (issue #304 renderer half; primary sidebar page), rebuilt on the
+// v9 block vocabulary (#765): the page is a list of what is connected and what
+// each connection feeds, and nothing else. Its identity, its count line, its
+// health sentence and its two verbs live in the frame — the screen reports what
+// it read and draws blocks.
+//
+// The gateway I/O surface is unchanged: configure / pause / authorize / remove,
+// plus the same Connect sheet the catalog has always opened. What moved is
+// where you reach them from — the row's ONE trailing action is the thing that
+// connection needs next (re-authorize, resume, configure), and pause/remove sit
+// in the connection's own sheet where the sentence explaining them fits.
 
 export type ConnectionHealth = "ok" | "needs-auth" | "paused" | "failing";
 
@@ -96,6 +119,23 @@ export interface LinkedSyncDTO {
   installedEnabled: boolean;
 }
 
+/**
+ * One installed sync — an automation that copies a narrow thing out of a
+ * connection on a schedule. The page's second section; distinct from
+ * `LinkedSyncDTO`, which is what a connector COULD sync (installed or not).
+ */
+export interface AttachedSyncDTO {
+  /** The automation's `<app>/<id>` ref. */
+  id: string;
+  /** The connection it rides — the row it belongs under. */
+  connectionId: string;
+  connectionLabel: string;
+  name: string;
+  /** Plain-English schedule ("Every 15 minutes"), or "On demand". */
+  cadence: string;
+  enabled: boolean;
+}
+
 /** The wizard's submitted form, already resolved to one connector — carries
  *  the chosen preset's auth/token URLs + host pin along so the data layer
  *  doesn't have to re-fetch the provider catalog to build the configure
@@ -152,6 +192,17 @@ export interface SettingsConnectionsBridgeProps {
   }) => Promise<{ ref: string } | void>;
   /** Gateway OAuth callback URL for the BYO client setup form. Optional. */
   loadOAuthCallbackUri?: () => Promise<string>;
+  /** The installed syncs across the connections just read. Optional. */
+  loadAttachedSyncs?: (
+    connections: readonly ConnectionRowDTO[]
+  ) => Promise<AttachedSyncDTO[]>;
+  /** Report what the page just read: the count line, the state the five-state
+   *  model is in, and (ready/full only) the one health sentence. The ROUTE
+   *  publishes it to the frame. */
+  onSignals?: (input: RouteVitalsInput & { health?: RouteHealth }) => void;
+  /** Claim the app bar's two verbs. Both need state only this screen has — the
+   *  Connect sheet, and whether the catalog is showing. */
+  onVerbs?: (verbs: RouteVerbs) => void;
 }
 
 const HEALTH_LABEL: Record<ConnectionHealth, string> = {
@@ -160,6 +211,101 @@ const HEALTH_LABEL: Record<ConnectionHealth, string> = {
   ok: "Connected",
   paused: "Paused",
 };
+
+/** The row's one mono slot: the state word, in the frame's own vocabulary. */
+const HEALTH_META: Record<ConnectionHealth, string> = {
+  failing: "Failing",
+  "needs-auth": "Needs re-auth",
+  ok: "Fine",
+  paused: "Paused",
+};
+
+/** What each state needs NEXT — the row's single trailing action. */
+const HEALTH_ACTION: Record<ConnectionHealth, string> = {
+  failing: "Re-authorize",
+  "needs-auth": "Re-authorize",
+  ok: "Configure",
+  paused: "Resume",
+};
+
+const CRED_LABEL: Record<"oauth2" | "api_key", string> = {
+  api_key: "API key",
+  oauth2: "OAuth",
+};
+
+/** The row filters the `full` state offers, first one on. */
+const FILTERS = [
+  { health: null, id: "all", label: "All" },
+  { health: "failing", id: "failing", label: "Failing" },
+  { health: "needs-auth", id: "needs-auth", label: "Needs re-auth" },
+  { health: "paused", id: "paused", label: "Paused" },
+] as const;
+
+type ConnFilter = (typeof FILTERS)[number]["id"];
+
+/**
+ * Where `ready` becomes `full`. The spec's everyday page is five rows; a sixth
+ * is the point at which scanning the list stops being free and a filter row
+ * starts earning the space it takes.
+ */
+const FULL_AT = 6;
+
+/**
+ * Which of the five states the page is in, derived from what actually happened
+ * to the query — never a switch. `full` is a row count, because the filter row
+ * is a response to a list that is too long to scan, not a mode.
+ */
+function pageState(
+  rows: readonly ConnectionRowDTO[] | null,
+  readError: string | null
+): RouteVitalsInput["state"] {
+  if (readError !== null) return "error";
+  if (rows === null) return "loading";
+  if (rows.length === 0) return "empty";
+  return rows.length >= FULL_AT ? "full" : "ready";
+}
+
+/** A connection that cannot currently reach its service. */
+function isLapsed(row: ConnectionRowDTO): boolean {
+  return row.health === "needs-auth" || row.health === "failing";
+}
+
+/** Copy joins two sentences; a gateway note may or may not end in a stop. */
+function sentence(text: string): string {
+  return /[.!?]$/u.test(text.trim()) ? text.trim() : `${text.trim()}.`;
+}
+
+function plural(n: number, one: string, many: string): string {
+  return `${n} ${n === 1 ? one : many}`;
+}
+
+/** The row's explanatory second line: who, how, and when it last worked. */
+function connectionSub(row: ConnectionRowDTO): string {
+  const credential = row.credKind ? CRED_LABEL[row.credKind] : "no credential";
+  const when =
+    row.authNote ??
+    (row.lastRunAt
+      ? `last worked ${relativeTime(row.lastRunAt)}`
+      : "has not worked yet");
+  return [row.principal ?? "no account", credential, when].join(" · ");
+}
+
+/**
+ * The app bar's count line, from the rows themselves.
+ *
+ * Only the clauses that are TRUE appear: a page with nothing to re-authorize
+ * says "5 connections" and stops, rather than reading "· 0 needs
+ * re-authorization" and making the reader check a zero.
+ */
+function countLine(rows: readonly ConnectionRowDTO[]): string {
+  if (rows.length === 0) return "No connections";
+  const lapsed = rows.filter(isLapsed).length;
+  const paused = rows.filter((r) => r.health === "paused").length;
+  const parts = [plural(rows.length, "connection", "connections")];
+  if (lapsed > 0) parts.push(`${lapsed} needs re-authorization`);
+  if (paused > 0) parts.push(`${paused} paused`);
+  return parts.join(" · ");
+}
 
 const POLL_MS = 2000;
 const POLL_WINDOW_MS = 45_000;
@@ -452,87 +598,6 @@ function buildFeatured(providers: ProviderOptionDTO[]): FeaturedConnector[] {
   return out;
 }
 
-function ConnectionRow({
-  row,
-  busy,
-  authorizing,
-  onToggleStatus,
-  onDetach,
-  onReconnect,
-  onOpenDetail,
-}: {
-  row: ConnectionRowDTO;
-  busy: boolean;
-  authorizing: boolean;
-  onToggleStatus: () => void;
-  onDetach: () => void;
-  onReconnect: () => void;
-  onOpenDetail: () => void;
-}): JSX.Element {
-  const needsReconnect =
-    row.health === "needs-auth" || row.health === "failing";
-  return (
-    <div
-      className={styles.row}
-      data-health={row.health}
-      data-testid="connector-row"
-    >
-      <button type="button" className={styles.rowMain} onClick={onOpenDetail}>
-        <span className={styles.dot} data-health={row.health} />
-        <div className={styles.rowMeta}>
-          <div className={styles.rowName}>{row.label}</div>
-          <span className={styles.rowSub}>
-            {`${row.kind}${row.principal ? ` · ${row.principal}` : ""}${
-              row.lastRunAt ? ` · last run ${relativeTime(row.lastRunAt)}` : ""
-            }`}
-          </span>
-          {row.authNote ? (
-            <span className={styles.rowAuthNote}>{row.authNote}</span>
-          ) : null}
-        </div>
-        <span className={styles.healthLabel} data-health={row.health}>
-          {HEALTH_LABEL[row.health]}
-        </span>
-      </button>
-      <div className={styles.rowActions}>
-        {needsReconnect ? (
-          <span data-testid="connector-reconnect">
-            <Button
-              variant="primary"
-              size="sm"
-              label={
-                authorizing
-                  ? "Still waiting…"
-                  : row.oauthMode === "assist"
-                    ? "Reconnect with Centraid Assist"
-                    : "Reconnect"
-              }
-              disabled={busy}
-              onClick={onReconnect}
-            />
-          </span>
-        ) : null}
-        <Button
-          variant="secondary"
-          size="sm"
-          label={row.health === "paused" ? "Resume" : "Pause"}
-          disabled={busy}
-          onClick={onToggleStatus}
-        />
-        <button
-          type="button"
-          className={cx(controlsCss.chip, controlsCss.chipDanger)}
-          disabled={busy}
-          title="Remove this connection entirely — deletes it and its credential. Refused if it still has undecided outbox items or sync history."
-          onClick={onDetach}
-        >
-          Remove
-        </button>
-      </div>
-    </div>
-  );
-}
-
 function SetupGuide({ steps }: { steps: string[] }): JSX.Element {
   const [open, setOpen] = useState(false);
   return (
@@ -651,12 +716,12 @@ function ConnectForm({
           data-tone={labelTaken ? "warn" : undefined}
         >
           {labelTaken
-            ? "A connection with this label already exists — saving will update it. Rename to add a separate account."
+            ? "Label already in use — saving updates that connection."
             : existingLabels.length > 0
-              ? `You already have ${existingLabels.length} ${
+              ? `${existingLabels.length} ${
                   existingLabels.length === 1 ? "account" : "accounts"
-                } connected here. Give this one a distinct name (e.g. “${featured.meta.name} · work”).`
-              : "Name this connection. Use a distinct label per account to connect more than one."}
+                } connected here — name this one distinctly (e.g. “${featured.meta.name} · work”).`
+              : "A distinct label per account."}
         </span>
       </label>
 
@@ -827,12 +892,12 @@ function AssistConnectForm({
           data-tone={labelTaken ? "warn" : undefined}
         >
           {labelTaken
-            ? "A connection with this label already exists — saving will update it. Rename to add a separate account."
+            ? "Label already in use — saving updates that connection."
             : existingLabels.length > 0
-              ? `You already have ${existingLabels.length} ${
+              ? `${existingLabels.length} ${
                   existingLabels.length === 1 ? "account" : "accounts"
-                } connected here. Give this one a distinct name (e.g. “${featured.meta.name} · work”).`
-              : "Name this connection. Use a distinct label per account to connect more than one."}
+                } connected here — name this one distinctly (e.g. “${featured.meta.name} · work”).`
+              : "A distinct label per account."}
         </span>
       </label>
       <fieldset className={styles.scopePicker}>
@@ -870,7 +935,7 @@ function AssistConnectForm({
       </fieldset>
       <p className={styles.sheetNote}>
         Centraid does not request Google identity scopes (openid, email, or
-        profile). Disconnect or reconnect at any time.
+        profile).
       </p>
       {permitted.length > 0 &&
       permitted.every(
@@ -878,9 +943,8 @@ function AssistConnectForm({
           entry.tier === "restricted" && !assist.restrictedScopesEnabled
       ) ? (
         <p className={styles.sheetNote}>
-          This connector remains unavailable until Google restricted-scope
-          verification is complete. You can use your own OAuth client from
-          Advanced now.
+          Unavailable until Google restricted-scope verification completes —
+          your own OAuth client works now, under Advanced.
         </p>
       ) : null}
       <div className={styles.wizardFoot}>
@@ -992,12 +1056,23 @@ export default function SettingsConnectionsScreen({
   completeAssistReturnLink,
   showToast,
   loadLinkedSyncs,
+  loadAttachedSyncs,
   installSync,
   loadOAuthCallbackUri,
+  onSignals,
+  onVerbs,
 }: SettingsConnectionsBridgeProps): JSX.Element {
   const [rows, setRows] = useState<ConnectionRowDTO[] | null>(null);
+  // The last connections read that FAILED. It is its own state rather than an
+  // absence of rows: a page that has read once and then lost the gateway is not
+  // a page that is still loading, and the five-state model says so out loud.
+  const [readError, setReadError] = useState<string | null>(null);
+  const [lastReadAt, setLastReadAt] = useState<number | null>(null);
+  const [attachedSyncs, setAttachedSyncs] = useState<AttachedSyncDTO[]>([]);
   const [providers, setProviders] = useState<ProviderOptionDTO[] | null>(null);
-  const [query, setQuery] = useState("");
+  const [filter, setFilter] = useState<ConnFilter>("all");
+  const [catalogOpen, setCatalogOpen] = useState(false);
+  const [technicalOpen, setTechnicalOpen] = useState(false);
   const [sheet, setSheet] = useState<SheetMode>({ kind: "closed" });
   const [saving, setSaving] = useState(false);
   const [busyIds, setBusyIds] = useState<Set<string>>(new Set());
@@ -1011,11 +1086,24 @@ export default function SettingsConnectionsScreen({
 
   const refresh = useCallback((): void => {
     void loadConnections()
-      .then(setRows)
-      .catch((error: unknown) =>
-        showToast(error instanceof Error ? error.message : String(error))
-      );
-  }, [loadConnections, showToast]);
+      .then((fresh) => {
+        setRows(fresh);
+        setReadError(null);
+        setLastReadAt(Date.now());
+        // A sync list that cannot be read does not fail the page: the page is
+        // about connections, and the syncs section simply does not appear.
+        if (loadAttachedSyncs) {
+          void loadAttachedSyncs(fresh)
+            .then(setAttachedSyncs)
+            .catch(() => setAttachedSyncs([]));
+        }
+      })
+      .catch((error: unknown) => {
+        const message = error instanceof Error ? error.message : String(error);
+        setReadError(message);
+        showToast(message);
+      });
+  }, [loadAttachedSyncs, loadConnections, showToast]);
 
   useEffect(() => {
     refresh();
@@ -1069,28 +1157,29 @@ export default function SettingsConnectionsScreen({
     return s;
   }, [rows]);
 
-  const q = query.trim().toLowerCase();
-  const filteredFeatured = useMemo(() => {
-    if (!q) return featured;
-    return featured.filter(
-      (f) =>
-        f.meta.name.toLowerCase().includes(q) ||
-        f.meta.short.toLowerCase().includes(q) ||
-        f.kind.toLowerCase().includes(q) ||
-        f.provider.name.toLowerCase().includes(q)
-    );
-  }, [featured, q]);
+  const state = pageState(rows, readError);
 
-  const filteredRows = useMemo(() => {
-    if (!rows) return null;
-    if (!q) return rows;
-    return rows.filter(
-      (r) =>
-        r.label.toLowerCase().includes(q) ||
-        r.kind.toLowerCase().includes(q) ||
-        (r.principal?.toLowerCase().includes(q) ?? false)
-    );
-  }, [rows, q]);
+  // The chips only exist in `full`, so a filter set there cannot survive the
+  // list shrinking back — otherwise rows would stay hidden with no visible
+  // control left to unhide them.
+  const activeFilter =
+    state === "full"
+      ? (FILTERS.find((f) => f.id === filter) ?? FILTERS[0])
+      : FILTERS[0];
+  const visibleRows = useMemo(() => {
+    const all = rows ?? [];
+    if (activeFilter.health === null) return all;
+    return all.filter((r) => r.health === activeFilter.health);
+  }, [rows, activeFilter]);
+
+  const countText = countLine(rows ?? []);
+  // The health sentence is about ONE connection: the first that cannot reach
+  // its service. A page that listed every lapse in the status line would be a
+  // second copy of the list it is standing over.
+  const lapsed = (rows ?? []).find(isLapsed) ?? null;
+  const dependentSyncs = lapsed
+    ? attachedSyncs.filter((s) => s.connectionId === lapsed.connectionId).length
+    : 0;
 
   const withBusy = (id: string, fn: () => Promise<void>): void => {
     setBusyIds((s) => new Set(s).add(id));
@@ -1290,131 +1379,263 @@ export default function SettingsConnectionsScreen({
       .finally(() => setInstallingSync(null));
   };
 
+  // The health action re-authorizes the lapsed connection, and it is published
+  // to a channel that outlives this render — so it reaches the CURRENT handler
+  // through a ref rather than closing over the one that existed when the query
+  // resolved.
+  const reconnectRef = useRef(onReconnect);
+  useEffect(() => {
+    reconnectRef.current = onReconnect;
+  });
+
+  useEffect(() => {
+    if (!onSignals) return;
+    const showsHealth = state === "ready" || state === "full";
+    const health: RouteHealth | undefined = showsHealth
+      ? lapsed
+        ? {
+            action: {
+              label: "Re-authorize",
+              run: () => reconnectRef.current(lapsed),
+            },
+            detail: `${sentence(
+              lapsed.authNote ??
+                (lapsed.lastRunAt
+                  ? `It last worked ${relativeTime(lapsed.lastRunAt)}`
+                  : "It has not worked yet")
+            )} ${
+              dependentSyncs === 0
+                ? "No sync depends on it."
+                : `${plural(dependentSyncs, "sync depends", "syncs depend")} on it.`
+            }`,
+            label: `${lapsed.label} ${
+              lapsed.health === "failing"
+                ? "is failing"
+                : "needs re-authorization"
+            }`,
+          }
+        : {
+            detail:
+              lastReadAt === null
+                ? "Nothing needs re-authorizing."
+                : `Read at ${new Date(lastReadAt).toLocaleTimeString(
+                    undefined,
+                    {
+                      hour: "2-digit",
+                      minute: "2-digit",
+                    }
+                  )}.`,
+            label: "Every connection is working",
+          }
+      : undefined;
+    onSignals({
+      count: countText,
+      state,
+      ...(lastReadAt === null ? {} : { lastReadAt }),
+      ...(health ? { health } : {}),
+    });
+  }, [countText, dependentSyncs, lapsed, lastReadAt, onSignals, state]);
+
+  // The bar's two verbs both need state only this screen has: the Connect sheet
+  // it opens, and whether the catalog section is showing.
+  useEffect(() => {
+    onVerbs?.({
+      onCommit: () => setSheet({ kind: "picker" }),
+      onSecondary: () => setCatalogOpen((open) => !open),
+    });
+  }, [onVerbs]);
+
+  const hiddenByFilter = (rows?.length ?? 0) - visibleRows.length;
+  const connectionRows: RowDef[] = visibleRows.map((row) => {
+    const busy = busyIds.has(row.connectionId);
+    const waiting = authorizingIds.has(row.connectionId);
+    const configure = (): void => openConnectionDetail(row);
+    return {
+      action: {
+        label: waiting ? "Still waiting…" : HEALTH_ACTION[row.health],
+        onClick: () => {
+          if (busy) return;
+          if (isLapsed(row)) onReconnect(row);
+          else if (row.health === "paused")
+            withBusy(row.connectionId, () =>
+              setConnectionStatus(row.connectionId, "active")
+            );
+          else configure();
+        },
+      },
+      id: row.connectionId,
+      meta: HEALTH_META[row.health],
+      sub: connectionSub(row),
+      title: row.label,
+      ...(isLapsed(row) ? { net: true } : {}),
+      // A row carries ONE action, and for a lapsed or paused connection that
+      // action is what it needs next — so the door to everything else it can be
+      // told (pause, resume, remove, its syncs) opens from the row's own detail
+      // slot rather than becoming unreachable until it is healthy again.
+      ...(row.health === "ok"
+        ? {}
+        : {
+            children: (
+              <Button
+                label="Configure"
+                onClick={configure}
+                size="sm"
+                variant="quiet"
+              />
+            ),
+          }),
+    };
+  });
+
+  const syncRows: RowDef[] = attachedSyncs.map((sync) => {
+    const connection =
+      (rows ?? []).find((r) => r.connectionId === sync.connectionId) ?? null;
+    const stalled = connection ? isLapsed(connection) : false;
+    return {
+      action: {
+        label: "Configure",
+        onClick: () => {
+          if (connection) openConnectionDetail(connection);
+        },
+      },
+      id: sync.id,
+      meta: stalled || !sync.enabled ? "Paused" : "On",
+      sub: stalled
+        ? "Paused while the connection is lapsed"
+        : sync.enabled
+          ? sync.cadence
+          : `${sync.cadence} · paused by you`,
+      title: `${sync.connectionLabel} → ${sync.name}`,
+      ...(stalled ? { net: true } : {}),
+    };
+  });
+
+  const catalogRows: RowDef[] = featured.map((f) => {
+    const connected = connectedKinds.has(f.kind);
+    return {
+      action: {
+        label: connected ? "Add another" : "Connect",
+        onClick: () => openDetail(f),
+      },
+      id: f.key,
+      sub: `${f.meta.short} · ${
+        f.provider.credKind === "oauth2" ? "OAuth 2.0" : "API key"
+      }`,
+      title: f.meta.name,
+      ...(connected ? { meta: "Connected" } : {}),
+    };
+  });
+
+  const catalogSection = catalogOpen ? (
+    <>
+      <SectionBlock
+        label="Catalog"
+        meta={providers === null ? "" : String(catalogRows.length)}
+      />
+      {providers === null ? (
+        <NoteBlock>Reading the catalog…</NoteBlock>
+      ) : catalogRows.length === 0 ? (
+        <NoteBlock>No providers are configured on this gateway.</NoteBlock>
+      ) : (
+        <RowsBlock rows={catalogRows} />
+      )}
+    </>
+  ) : null;
+
   return (
     <div className={styles.page} data-testid="connectors-panel">
-      <header className={styles.toolbar}>
-        <div className={styles.titleBlock}>
-          <h1 className={styles.title}>Connectors</h1>
-          <p className={styles.subtitle}>
-            Data sources the vault pulls from — Gmail, Calendar, GitHub, and
-            anything else you connect yourself.
-          </p>
-        </div>
-        <div className={styles.toolbarActions}>
-          <label className={styles.searchWrap}>
-            <Icon name={"Search" as IconName} size={14} />
-            <input
-              className={styles.searchInput}
-              type="search"
-              placeholder="Search…"
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-              aria-label="Search connectors"
-            />
-          </label>
-          <Button
-            variant="primary"
-            size="sm"
-            label="New Connector"
-            onClick={() => setSheet({ kind: "picker" })}
+      {state === "error" ? (
+        <>
+          <PanelBlock
+            action={{
+              label: "Try again",
+              onClick: () => {
+                setTechnicalOpen(false);
+                refresh();
+              },
+            }}
+            action2={{
+              label: technicalOpen
+                ? "Hide the technical detail"
+                : "Show the technical detail",
+              onClick: () => setTechnicalOpen((open) => !open),
+            }}
+            body={CONNECTORS_ERROR_BODY}
+            eyebrow="THIS PAGE COULD NOT LOAD"
+            title={CONNECTORS_ERROR_TITLE}
+            tone="net"
           />
-        </div>
-      </header>
-
-      {/* Connected — unhealthy first (attention queue via sortConnectionsByAttention). */}
-      <section className={styles.section}>
-        <div className={styles.sectionLabel}>
-          {filteredRows?.some(
-            (r) => r.health === "needs-auth" || r.health === "failing"
-          )
-            ? "Your connections · needs attention"
-            : "Your connections"}
-        </div>
-        {filteredRows === null ? (
-          <div className={styles.emptyNote}>Reading connectors…</div>
-        ) : filteredRows.length === 0 ? (
-          <div className={styles.emptyNote}>
-            {rows && rows.length === 0
-              ? "No connectors configured yet. Pick one from Featured below."
-              : "No connected connectors match your search."}
-          </div>
-        ) : (
-          <div className={styles.connectedList}>
-            {filteredRows.map((row) => (
-              <ConnectionRow
-                key={row.connectionId}
-                row={row}
-                busy={busyIds.has(row.connectionId)}
-                authorizing={authorizingIds.has(row.connectionId)}
-                onReconnect={() => onReconnect(row)}
-                onOpenDetail={() => openConnectionDetail(row)}
-                onDetach={() =>
-                  withBusy(row.connectionId, () =>
-                    detachConnection(row.connectionId, row.kind, row.label)
-                  )
-                }
-                onToggleStatus={() =>
-                  withBusy(row.connectionId, () =>
-                    setConnectionStatus(
-                      row.connectionId,
-                      row.health === "paused" ? "active" : "paused"
-                    )
-                  )
-                }
+          {technicalOpen && readError ? (
+            <NoteBlock>{readError}</NoteBlock>
+          ) : null}
+        </>
+      ) : state === "loading" ? (
+        <>
+          <PageSkeleton label="Reading connections" rows={6} />
+          <NoteBlock>{SKELETON_NOTE}</NoteBlock>
+        </>
+      ) : state === "empty" ? (
+        <>
+          <EmptyBlock
+            action={{
+              label: "Open the catalog",
+              onClick: () => setCatalogOpen(true),
+            }}
+            body={CONNECTORS_EMPTY_BODY}
+            routine
+            title={CONNECTORS_EMPTY_TITLE}
+          />
+          {catalogSection}
+        </>
+      ) : (
+        <>
+          {state === "full" ? (
+            <ChipsBlock
+              ariaLabel="Filter connections"
+              chips={FILTERS.map((f) => ({
+                id: f.id,
+                label: f.label,
+                on: f.id === filter,
+              }))}
+              onPick={(id) => setFilter(id as ConnFilter)}
+            />
+          ) : null}
+          <SectionBlock
+            label="Connections"
+            meta={
+              hiddenByFilter > 0
+                ? `showing ${visibleRows.length} of ${rows?.length ?? 0}`
+                : String(rows?.length ?? 0)
+            }
+          />
+          {connectionRows.length === 0 ? (
+            <EmptyBlock
+              action={{
+                label: "Show all",
+                onClick: () => setFilter("all"),
+              }}
+              body="Every connection is in another state right now."
+              routine
+              title="Nothing matches that filter"
+            />
+          ) : (
+            <RowsBlock rows={connectionRows} />
+          )}
+          {syncRows.length > 0 ? (
+            <>
+              <SectionBlock
+                label="Attached data syncs"
+                meta={String(syncRows.length)}
               />
-            ))}
-          </div>
-        )}
-      </section>
-
-      {/* Featured catalog */}
-      <section className={styles.section}>
-        <div className={styles.sectionLabel}>Featured</div>
-        {providers === null ? (
-          <div className={styles.emptyNote}>Loading catalog…</div>
-        ) : filteredFeatured.length === 0 ? (
-          <div className={styles.emptyNote}>
-            {featured.length === 0
-              ? "No providers configured on this gateway."
-              : "No connectors match your search."}
-          </div>
-        ) : (
-          <div className={styles.grid} data-testid="connectors-featured">
-            {filteredFeatured.map((f) => {
-              const connected = connectedKinds.has(f.kind);
-              const authLabel =
-                f.provider.credKind === "oauth2" ? "OAuth 2.0" : "API key";
-              return (
-                <button
-                  key={f.key}
-                  type="button"
-                  className={cx(
-                    styles.tile,
-                    connected ? styles.tileConnected : undefined
-                  )}
-                  data-testid="connector-tile"
-                  data-cred-kind={f.provider.credKind}
-                  onClick={() => openDetail(f)}
-                >
-                  <BrandMark meta={f.meta} />
-                  <span className={styles.tileMain}>
-                    <span className={styles.tileName}>{f.meta.name}</span>
-                    <span className={styles.tileMeta}>
-                      {f.meta.short} · {authLabel}
-                    </span>
-                  </span>
-                  {connected ? (
-                    <span className={styles.tileBadge}>Connected</span>
-                  ) : (
-                    <span className={styles.tileBadgeMuted}>{authLabel}</span>
-                  )}
-                </button>
-              );
-            })}
-          </div>
-        )}
-      </section>
-
+              <RowsBlock rows={syncRows} />
+            </>
+          ) : null}
+          <NoteBlock>
+            A sync copies one narrow thing into the vault on a schedule.
+          </NoteBlock>
+          {catalogSection}
+        </>
+      )}
       {/* Detail / picker sheet */}
       {sheet.kind === "closed" ? null : (
         <div
@@ -1464,7 +1685,7 @@ export default function SettingsConnectionsScreen({
                         onClick={() => openDetail(f)}
                       >
                         <BrandMark meta={f.meta} size={32} />
-                        <span className={styles.tileMain}>
+                        <span className={styles.pickerMain}>
                           <span className={styles.pickerName}>
                             {f.meta.name}
                           </span>
@@ -1612,6 +1833,43 @@ export default function SettingsConnectionsScreen({
                           ))}
                         </div>
                       )}
+                      {/* Pause and Remove live HERE rather than on the row: the
+                          row carries one action, and these two are the ones
+                          that need the sentence beside them. */}
+                      <div className={styles.sheetFoot}>
+                        <Button
+                          disabled={busyIds.has(sheet.row.connectionId)}
+                          label={
+                            sheet.row.health === "paused" ? "Resume" : "Pause"
+                          }
+                          onClick={() =>
+                            withBusy(sheet.row.connectionId, () =>
+                              setConnectionStatus(
+                                sheet.row.connectionId,
+                                sheet.row.health === "paused"
+                                  ? "active"
+                                  : "paused"
+                              )
+                            )
+                          }
+                          variant="secondary"
+                        />
+                        <Button
+                          disabled={busyIds.has(sheet.row.connectionId)}
+                          label="Remove"
+                          onClick={() =>
+                            withBusy(sheet.row.connectionId, () =>
+                              detachConnection(
+                                sheet.row.connectionId,
+                                sheet.row.kind,
+                                sheet.row.label
+                              )
+                            )
+                          }
+                          title="Deletes the connection and its credential — refused while outbox items or sync history remain."
+                          variant="destructive"
+                        />
+                      </div>
                     </>
                   )}
                 </div>
@@ -1657,7 +1915,7 @@ export default function SettingsConnectionsScreen({
                         <span>
                           {sheet.featured.provider.assist?.enabled
                             ? "Connect through Centraid Assist, or use your own OAuth client from Advanced."
-                            : "Connect with your own Google / Microsoft / Dropbox OAuth client. You will sign in at the provider after saving credentials."}
+                            : "Your own OAuth client — you sign in at the provider after saving credentials."}
                         </span>
                       </>
                     ) : (
@@ -1742,8 +2000,8 @@ export default function SettingsConnectionsScreen({
                             <span className={styles.aboutDesc}>
                               {sheet.featured.provider.credKind === "oauth2"
                                 ? sheet.featured.provider.assist?.enabled
-                                  ? "Assist keeps the shared Google client secret in a stateless Cloudflare Worker. Your gateway alone stores tokens."
-                                  : "Register a Web application OAuth client with this gateway’s redirect URI, paste Client ID + secret here, then authorize in the browser."
+                                  ? "The shared client secret lives in a stateless Cloudflare Worker; only your gateway stores tokens."
+                                  : "Register a Web OAuth client with this gateway’s redirect URI, then paste Client ID + secret."
                                 : "Credentials stay sealed on your gateway — never shared as training data."}
                             </span>
                           </div>
@@ -1766,9 +2024,9 @@ export default function SettingsConnectionsScreen({
                       <p className={styles.sheetNote}>
                         {sheet.featured.provider.credKind === "oauth2"
                           ? sheet.featured.provider.assist?.enabled
-                            ? "Tokens never pass through the browser, URL fragments, deep links, or Cloudflare storage. BYO remains available under Advanced."
+                            ? "Tokens never pass through the browser, URL fragments, deep links, or Cloudflare storage."
                             : "OAuth 2.0 uses your own developer client (BYO)."
-                          : "Paste an API key or personal token. Review scopes before connecting."}
+                          : "Paste an API key or personal token — review scopes first."}
                       </p>
                       <div className={styles.sheetFoot}>
                         <Button

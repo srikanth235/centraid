@@ -16,8 +16,8 @@ import type {
 import { cx } from "../ui/cx.js";
 import { Button, Icon, IconButton } from "../ui/index.js";
 import AutomationCompilePane from "./AutomationCompilePane.js";
-import { AutomationEditorAgentPicker } from "./AutomationEditorAgentPicker.js";
 import { AutomationEditorConnectorsPicker } from "./AutomationEditorConnectorsPicker.js";
+import { AutomationEditorHarnessPicker } from "./AutomationEditorHarnessPicker.js";
 
 import au from "../styles/automation.module.css";
 import styles from "./AutomationEditorScreen.module.css";
@@ -56,10 +56,9 @@ type TriggerDraft = {
   event: string;
   filterRepo: string;
 };
-// Mirrors packages/automation/src/manifest/manifest.ts `CONDITION_OPS` — kept
+// Mirrors packages/server/src/automation/manifest/manifest.ts `CONDITION_OPS` — kept
 // in sync by hand since the renderer bundle doesn't pull in the automation
-// runtime package (main-process-only dependency today), same as
-// BuilderAutomationTriggers.tsx.
+// runtime package (main-process-only dependency today).
 const CONDITION_OPS = [
   "eq",
   "ne",
@@ -388,6 +387,7 @@ export default function AutomationEditorScreen({
   onSearchEntities,
   loadEntityTypes,
   loadConnectorCatalog,
+  connectorsEnabled = true,
   configureConnection,
   beginAuthorize,
   showToast,
@@ -409,7 +409,7 @@ export default function AutomationEditorScreen({
   >("loading");
   const [name, setName] = useState("");
   const [instructions, setInstructions] = useState("");
-  const [runner, setRunner] = useState<string | null | undefined>(undefined);
+  const [harness, setHarness] = useState<string | null | undefined>(undefined);
   const [model, setModel] = useState<string | null | undefined>(undefined);
   const [triggers, setTriggers] = useState<TriggerDraft[]>([]);
   const [entityTypes, setEntityTypes] = useState<string[]>([]);
@@ -477,7 +477,7 @@ export default function AutomationEditorScreen({
       if (!resetForm) return;
       setName(d.name);
       setInstructions(d.instructions);
-      setRunner(d.runner);
+      setHarness(d.harness);
       setModel(d.model);
       setBaselineInstructions(d.instructions);
       setTriggers(d.triggers.map(loadedTrigger));
@@ -752,7 +752,7 @@ export default function AutomationEditorScreen({
         name: name.trim(),
         triggers: builtTriggers,
         connections,
-        ...(runner === undefined ? {} : { runner }),
+        ...(harness === undefined ? {} : { harness }),
         ...(model === undefined ? {} : { model }),
       });
       if (ok) {
@@ -1022,8 +1022,8 @@ export default function AutomationEditorScreen({
                     data-testid="cron-timezone"
                   />
                   <span className={styles.trigHint}>
-                    IANA name (e.g. America/New_York). Empty uses the gateway
-                    default, then the host clock.
+                    IANA name (e.g. America/New_York); empty follows the gateway
+                    default.
                   </span>
                 </label>
                 {preview.length > 0 ? (
@@ -1534,59 +1534,68 @@ export default function AutomationEditorScreen({
         </div>
       ) : null}
       <div className={styles.instrToolbar} ref={connectorsWrapRef}>
-        <AutomationEditorAgentPicker
-          runners={d.agentRunners ?? []}
-          runner={runner}
+        <AutomationEditorHarnessPicker
+          harnesses={d.harnesses ?? []}
+          harness={harness}
           model={model}
-          defaultRunnerKind={d.defaultRunnerKind}
+          defaultHarnessKind={d.defaultHarnessKind}
           defaultModel={d.defaultModel}
           onChange={(next) => {
-            setRunner(next.runner);
+            setHarness(next.harness);
             setModel(next.model);
           }}
         />
-        <button
-          type="button"
-          className={styles.instrChip}
-          data-open={String(connectorsOpen)}
-          onClick={openConnectorsPicker}
-          aria-expanded={connectorsOpen}
-          aria-haspopup="dialog"
-          title="Choose connectors this automation may use"
-        >
-          <Icon name="Plug" size={14} />
-          <span>Connectors</span>
-          <span className={styles.instrChipCount}>{connectorCount}</span>
-          <Icon name="ChevronDown" size={12} />
-        </button>
-        <span className={styles.instrHint}>
-          {connectorCount === 0
-            ? "Optional — attach Gmail, GitHub, …"
-            : `${connectorCount} selected`}
-        </span>
-        {danglingConnectorKinds.size > 0 ? (
-          <output
-            className={styles.connDanglingNote}
-            data-testid="connector-binding-dangling"
-          >
-            {[...danglingConnectorKinds].join(", ")} — the bound account is no
-            longer configured. Open Connectors and choose a replacement.
-          </output>
+        {/* Connectors are their own gated surface (C1): with the experiment
+            off this gateway mounts no connections route, so the chip, its
+            hint, and the picker leave together rather than opening a sheet
+            that can only fail. The rest of the editor is unaffected — an
+            automation without a provider account is an ordinary automation. */}
+        {connectorsEnabled ? (
+          <>
+            <button
+              type="button"
+              className={styles.instrChip}
+              data-open={String(connectorsOpen)}
+              onClick={openConnectorsPicker}
+              aria-expanded={connectorsOpen}
+              aria-haspopup="dialog"
+              title="Choose connectors this automation may use"
+            >
+              <Icon name="Plug" size={14} />
+              <span>Connectors</span>
+              <span className={styles.instrChipCount}>{connectorCount}</span>
+              <Icon name="ChevronDown" size={12} />
+            </button>
+            <span className={styles.instrHint}>
+              {connectorCount === 0
+                ? "Optional — attach Gmail, GitHub, …"
+                : `${connectorCount} selected`}
+            </span>
+            {danglingConnectorKinds.size > 0 ? (
+              <output
+                className={styles.connDanglingNote}
+                data-testid="connector-binding-dangling"
+              >
+                {[...danglingConnectorKinds].join(", ")} — the bound account is
+                no longer configured. Open Connectors and choose a replacement.
+              </output>
+            ) : null}
+            <AutomationEditorConnectorsPicker
+              open={connectorsOpen}
+              catalog={catalog}
+              loading={catalogLoading}
+              selected={selectedConnectors}
+              bindings={connectionBindings}
+              onToggleSelect={toggleConnector}
+              onBoundConnection={bindConnection}
+              onClose={() => setConnectorsOpen(false)}
+              configureConnection={configureConnection}
+              beginAuthorize={beginAuthorize}
+              onConnected={() => void refreshCatalog()}
+              showToast={showToast}
+            />
+          </>
         ) : null}
-        <AutomationEditorConnectorsPicker
-          open={connectorsOpen}
-          catalog={catalog}
-          loading={catalogLoading}
-          selected={selectedConnectors}
-          bindings={connectionBindings}
-          onToggleSelect={toggleConnector}
-          onBoundConnection={bindConnection}
-          onClose={() => setConnectorsOpen(false)}
-          configureConnection={configureConnection}
-          beginAuthorize={beginAuthorize}
-          onConnected={() => void refreshCatalog()}
-          showToast={showToast}
-        />
       </div>
     </div>
   );
@@ -1720,8 +1729,8 @@ export default function AutomationEditorScreen({
               <div>
                 <h2 className={styles.sectionTitle}>Triggers</h2>
                 <p className={styles.sectionHint}>
-                  Optional. Without a trigger, this only runs when you fire it
-                  by hand.
+                  Optional — without one, this runs only when you fire it by
+                  hand.
                 </p>
               </div>
               {addTriggerMenu}

@@ -18,3 +18,23 @@
 export function isWebHost(): boolean {
   return typeof window !== "undefined" && window.CentraidIroh !== undefined;
 }
+
+/**
+ * This bundle's SEAT (docs/blueprint-seats.md S1) — where bytes live and
+ * which way they flow, orthogonal to compact form factor. One bundle serves
+ * both desktop (custodian: the gateway is a local child process, bytes are
+ * effectively local) and web (viewer: a replica of meaning, bytes arrive
+ * only on request), so the seat resolves from the same first-paint host
+ * marker `isWebHost()` reads above — `window.CentraidIroh`, installed by
+ * the web host and never by the Electron preload. Mobile's `origin` seat
+ * lives in its own bundle (`apps/mobile/src/lib/seat.ts`) since that runtime
+ * never shares this module.
+ *
+ * Presentation only, same caveat as `isWebHost()` — never branch custody
+ * logic, auth, or security on the result. The one exception this repo
+ * makes is S5's Locker mount-time refusal (InlineAppRoute), which is a UI
+ * decision (what to render), not a security boundary.
+ */
+export function seat(): "custodian" | "viewer" {
+  return isWebHost() ? "viewer" : "custodian";
+}

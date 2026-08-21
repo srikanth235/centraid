@@ -23,7 +23,7 @@ export const fetchMock: Mock<typeof responseFor> = vi.fn();
  * Per-test toggles the mock gateway reads. `installGatewayContractHarness()`
  * restores both defaults before every test.
  */
-export const state = { hostAppSessions: false, forceVault404: false };
+export const state = { forceVault404: false };
 
 export function json(
   body: unknown,
@@ -68,7 +68,7 @@ export function row(): CentraidAutomationRow {
       triggers,
       requires: {},
       history: { keep: { count: 10 } },
-      generated: { by: "agent", at: "2026-07-25T00:00:00.000Z" },
+      generated: { by: "centraid-builder", at: "2026-07-25T00:00:00.000Z" },
     },
   };
 }
@@ -127,11 +127,11 @@ export function responseFor(rawUrl: string, init?: RequestInit): Response {
   if (path.endsWith("/settings"))
     return json({ settings: { timezone: "UTC" } });
   if (path === "/centraid/_apps" && method === "GET")
-    return json([{ id: "daily", hasIndex: true }]);
+    return json([{ id: "daily" }]);
   if (path === "/centraid/_templates") return json([]);
   if (path === "/_centraid-user/id") return json({ id: "user-1" });
   if (path === "/_centraid-user/prefs")
-    return json({ prefs: { runner: "codex" } });
+    return json({ prefs: { harness: "codex" } });
   if (path === "/centraid/_apps/_sessions" && method === "POST") {
     const body = JSON.parse(String(init?.body)) as { sessionId: string };
     return json({ sessionId: body.sessionId });
@@ -168,6 +168,11 @@ export function responseFor(rawUrl: string, init?: RequestInit): Response {
     });
   if (path.startsWith("/centraid/_automations/turn-now"))
     return json({ turnId: "turn-1" });
+  if (path.startsWith("/centraid/_automations/invoke-and-await"))
+    return json({
+      turnId: "turn-awaited",
+      result: { turnId: "turn-awaited", outcome: { ok: true } },
+    });
   if (path.startsWith("/centraid/_automations/turns"))
     return json({
       turns: [{ turnId: "turn-1", startedAt: 1, endedAt: 2, ok: true }],
@@ -301,7 +306,7 @@ export function responseFor(rawUrl: string, init?: RequestInit): Response {
 
 window.CentraidApi = {
   getGatewayAuth,
-  getHostCapabilities: async () => ({ appSessions: state.hostAppSessions }),
+  getHostCapabilities: async () => ({}),
   onGatewayChanged: () => () => undefined,
   onVaultChanged: () => () => undefined,
 } as unknown as typeof window.CentraidApi;
@@ -309,6 +314,7 @@ vi.stubGlobal("fetch", fetchMock);
 
 export const client = await import("./gateway-client.js");
 export const vault = await import("./gateway-client-vault.js");
+export const vaultImports = await import("./gateway-client-vault-imports.js");
 export const editing = await import("./gateway-client-automation-editing.js");
 export const outbox = await import("./gateway-client-outbox.js");
 export const logs = await import("./gateway-client-logs.js");
@@ -319,7 +325,6 @@ const { resetAppSessions } = await import("./gateway-client-editing.js");
 /** Registers the per-test reset. Call once at the top level of a test file. */
 export function installGatewayContractHarness(): void {
   beforeEach(() => {
-    state.hostAppSessions = false;
     state.forceVault404 = false;
     getGatewayAuth.mockReset().mockResolvedValue({
       baseUrl: "https://gateway.test",

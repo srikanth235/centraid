@@ -1,8 +1,8 @@
 # Centraid
 
-**Personal software. Your data. Your apps. Your devices.**
+**Personal software. Your data. Your devices.**
 
-Install an app and a local gateway runs it — on your desktop, browser, and phone — or add an agent that works your data in the background. Every app is a thin projection over one **vault** on your machine — a shared personal ontology where your people, money, documents and plans live once, borrowed through grants you sign. App code is a folder of HTML + JS handlers versioned in a local git store; apps serve from the shipped release and update with it, and are authored by agents (the builder that does that ships hidden for v1).
+Centraid is a personal, local-first **superapp**: one shell wrapping many first-party apps — on your desktop, browser, and phone — plus automations that work your data in the background. Every app is a thin projection over one **vault** on your machine — a shared personal ontology where your people, money, documents and plans live once, accessed through grants you sign. The apps ship in the release and update with it; the gateway serves their **data**, never their UI bytes. Automations are the one thing you author yourself: a template is cloned into a user-owned folder of JS handlers, versioned in a local git store, and the compile harness edits it.
 
 [Docs](https://centraid.dev/docs/) · [Get started](https://centraid.dev/docs/start/) · [Architecture](ARCHITECTURE.md) · [Agents map](AGENTS.md) · [Contributing](CONTRIBUTING.md)
 
@@ -20,7 +20,7 @@ Centraid is **solo-maintained**. Coding agents do much of the implementation; re
 ## What it does
 
 - **Install apps** — 8 blueprint apps (Docs, Photos, Notes, People, Locker, Tally, Agenda, Tasks). Installing writes a consent row and grants the scopes the app declares — nothing is copied; apps serve from the shipped release, upgrade with it, and uninstall keeps your data.
-- **Automate your data** — automation templates (Google/Microsoft/GitHub/GitLab/Linear/Notion/Todoist/Slack/Dropbox connectors plus enrichers like photo captioner and document deadlines) that fire on a schedule, webhook, condition, or vault data change. Each is a saved conversation; its handler runs in a worker thread with a curated `ctx` surface (`ctx.vault`, `ctx.agent`, `ctx.fetch`, KV state, run history). Templates still copy into the vault.
+- **Automate your data** — automation templates (Google/Microsoft/GitHub/GitLab/Linear/Notion/Todoist/Slack/Dropbox connectors plus enrichers like photo captioner and document deadlines) that fire on a schedule, webhook, condition, or vault data change. Each is a saved conversation; its handler runs in a worker thread with a curated `ctx` surface (`ctx.vault`, `ctx.delegate`, `ctx.fetch`, KV state, run history). Templates still copy into the vault.
 - **Connect Google without Cloud Console** — Centraid Assist uses a stateless public OAuth ceremony so desktop/PWA clients paired to a remote gateway can connect Calendar or Contacts without exposing that gateway. The browser carries only a short-lived code; tokens are sealed only on the gateway. BYO OAuth remains under Advanced. [Privacy and architecture](docs/oauth-assist.md).
 - **Ask your vault** — a vault-wide assistant reads across every app through one tool register; each app also answers data questions on its own `/centraid/<id>/_turn` surface.
 - **Explore the model** — **Vault Atlas** maps every kind, how kinds relate (a star centered on `core_party`), and a browsable table editor — every write going through the journalled command path.
@@ -41,7 +41,7 @@ Centraid is **solo-maintained**. Coding agents do much of the implementation; re
  │  app-engine        agent-runtime      automation  │
  │  declared-handler  ACP turn driver    cron+webhook│
  │  dispatcher        (one path, every   fire spine  │
- │      │             runner kind)            │      │
+ │      │             harness kind)           │      │
  │      ▼                                     ▼      │
  │  vault plane: vault.db + journal.db  scheduler    │
  │  (consent-checked commands, receipts)             │
@@ -49,8 +49,8 @@ Centraid is **solo-maintained**. Coding agents do much of the implementation; re
 ```
 
 - **Apps are folders**: `index.html` + `queries/*.js` + `actions/*.js` + `automations/<id>/` + `app.json`. No migrations and no private database — handlers reach the vault through `ctx.vault` under granted scopes (a declared **ext band** inside `vault.db` covers genuinely app-local tables). Code lives in a per-vault git store; drafts are session branches; Publish fast-forwards `main`.
-- **One agent tool family** — the vault register: `vault_sql` (read-only SQL over the whole vault), `vault_invoke` (typed commands, including every app's declared handlers), `vault_content` (document text). UI buttons dispatch to the same handlers `vault_invoke` does — one calling convention.
-- **Live data, no plumbing**: every action invalidates the tables it touched and subscribers re-read — bundled apps render inline in the shell and refresh off the device replica; served apps (builder preview, mobile WebViews) tail SSE on `/centraid/<id>/_changes`.
+- **One harness tool family** — the vault register: `vault_sql` (read-only SQL over the whole vault), `vault_invoke` (typed commands, including every app's declared handlers), `vault_content` (document text). UI buttons dispatch to the same handlers `vault_invoke` does — one calling convention.
+- **Live data, no plumbing**: every action invalidates the tables it touched and subscribers re-read — apps render inline in the shell and refresh off the device replica.
 
 ## Get started (60 seconds)
 
@@ -76,7 +76,7 @@ For Pi-class always-on hosts, prefer f2fs/btrfs or a USB SSD and mount the data 
 
 Mobile companion: `bun run dev:mobile` (Expo dev build), then pair it from desktop Household → Devices with a one-time ticket or QR.
 
-Optional device-local transcription: run an OpenAI-compatible file-ASR service such as whisper.cpp on the desktop and set `CENTRAID_DEVICE_ASR_URL` to its loopback `/v1/audio/transcriptions` endpoint. `CENTRAID_DEVICE_ASR_TOKEN` and `CENTRAID_DEVICE_ASR_MODEL` are optional. Centraid advertises the transcript work capability only while that loopback adapter answers; media and credentials stay in the Electron main process.
+Optional model capabilities are self-contained in their recognition automation handlers. Install the local runtime dependencies and model assets with `bun run --cwd packages/model-runtime setup`; handlers load those assets directly (or from `CENTRAID_AUTOMATION_RUNTIME_DIR`) and use `ctx.vault.content` / `ctx.vault.invoke` for vault I/O. No enrichment service or gateway inference primitive is configured. The transcript recipe decodes bounded audio/video locally and runs its bundled Whisper model through the same automation path.
 
 The PWA connects with only a pairing ticket over relay-only Iroh/WASM, so a gateway URL is not required. A standalone gateway can also serve the PWA as a same-host web origin; remote gateway connections remain ticket-only Iroh. Generated apps receive separate, single-app sessions and cannot call shell/admin routes.
 
@@ -92,24 +92,22 @@ Full tour: [Get started](https://centraid.dev/docs/start/) — install → vault
 | `apps/mobile` | Expo app for iOS / Android / web. Connects to a gateway over HTTP; embeds nothing. |
 | `apps/oauth-worker` | Stateless Cloudflare Worker for Centraid Assist callback, confidential exchange, and refresh; no per-user storage. |
 | `packages/client` | Browser-safe gateway client plus the React shell/UI shared by desktop and web. |
-| `packages/gateway` | Host-agnostic gateway: wires everything below against injected paths/secrets. Ships the `centraid-gateway` daemon. |
+| `packages/core` | Zero-dependency shared contracts: wire protocol, CBSF blob codecs, civil-time recurrence (`@centraid/core/protocol`, `/blob`, `/time`). |
+| `packages/server` | One backend: gateway daemon (`centraid-gateway`), app engine, automation fire spine, and ACP turn driver (`centraid-acp`). |
 | `packages/vault` | The personal ontology: `vault.db` + `journal.db` DDL, consent gateway, typed commands, sealed columns, sync/outbox spine. |
-| `packages/app-engine` | Runtime engine: handler loader, declared-handler dispatcher, conversation ledger, `/centraid` HTTP surface. |
-| `packages/agent-runtime` | Drives one turn through the Agent Client Protocol — the single path for every runner kind, with first-party adapters for CLIs that don't speak ACP ([docs/runners.md](docs/runners.md)); ships the vault-register tools and the `centraid` CLI. |
-| `packages/automation` | Manifest schema, fire spine, in-process scheduler, webhook ingress, worker-thread handler runner. |
 | `packages/tunnel` | iroh QUIC wire protocol — device tunnel + one-time pairing; the TS reference the Swift/Kotlin mobile ports mirror. |
-| `packages/blueprints` | Template gallery: 8 blueprint apps + 27 automation templates, plus blank-app scaffolders. Renders on the kit layer of `packages/design`. |
-| `packages/design` | The design system in two layers: the **token** vocabulary (colors, type, spacing, app metadata, icons) shared across desktop and mobile, and the **kit** (`kit.css` / `kit.ts`) served to every blueprint app surface. |
+| `packages/blueprints` | The superapp's catalogue: 8 first-party system apps installed in place + 28 automation templates cloned into user-owned code. Renders on the element layer of `packages/design`. |
+| `packages/design` | The design system in two layers: the **token** vocabulary (colors, type, spacing, app metadata, icons) shared across desktop and mobile, and the **element** layer (`src/elements/**`, `kit.css`) — the browser substrate every app renders on, bundled with the client rather than served. |
 
 ## Gateway install (npm / curl|bash)
 
-Host **gateway only** (not desktop/mobile). OpenClaw-style stages: Node ≥ 22 → npm install `@centraid/gateway` → `centraid-gateway` on PATH. **No silent OS service** — use `centraid-gateway service install` when you want H5.
+Host **gateway only** (not desktop/mobile). OpenClaw-style stages: Node ≥ 22 → npm install `@centraid/server` → `centraid-gateway` on PATH. **No silent OS service** — use `centraid-gateway service install` when you want H5.
 
 ### Platforms
 
 | OS | Arch | Install | First-party tunnel NAPI |
 | --- | --- | --- | --- |
-| **Linux** | x64 | curl\|bash or `npm i -g @centraid/gateway` | **Required** in published packs |
+| **Linux** | x64 | curl\|bash or `npm i -g @centraid/server` | **Required** in published packs |
 | **Linux** | arm64 | same | Best-effort CI (`ubuntu-24.04-arm`) |
 | **macOS** | arm64 (Apple Silicon) | curl\|bash or npm | **Required** |
 | **macOS** | x64 (Intel) | curl\|bash or npm | Best-effort CI (`macos-15-intel`); preferred over `@number0/iroh` (no darwin-x64 iroh package) |
@@ -138,10 +136,10 @@ bash scripts/install-gateway.sh --prefix /tmp/centraid-gw --from-pack-dir artifa
 Use Node 22+ and npm (PowerShell or cmd). The curl\|bash installer is Unix-oriented.
 
 ```powershell
-npm install -g @centraid/gateway
+npm install -g @centraid/server
 centraid-gateway --help
 # Prefix install (no global):
-npm install --prefix $env:USERPROFILE\.centraid @centraid/gateway
+npm install --prefix $env:USERPROFILE\.centraid @centraid/server
 ```
 
 - **Publish set:** `scripts/gateway-npm/publish-set.json` (gateway + workspace deps). Pack: `bun run gateway:npm:pack`. Publish: `bun run gateway:npm:publish` (requires `NPM_TOKEN`; dry-runs without it).
@@ -150,10 +148,10 @@ npm install --prefix $env:USERPROFILE\.centraid @centraid/gateway
 
 ### Pair clients after install (VPS / headless)
 
-Start the gateway — a fresh data dir **auto-founds** two vaults, **Shared** and **Personal**, at construction (issue #603). There is no founding ceremony, no founding ticket, and no first-run wall; the only ticket concept left is the **pair ticket**, which always means _join an existing gateway_. An existing data dir is never modified.
+Start the gateway — a fresh data dir **auto-founds** one **Personal** vault at construction (issue #603). There is no founding ceremony, no founding ticket, and no first-run wall; shared vaults are created later by an explicit owner action. The only ticket concept left is the **pair ticket**, which always means _join an existing gateway_. An existing data dir is never modified.
 
 ```sh
-# Fresh VPS: serve creates Shared + Personal silently, then keeps serving.
+# Fresh VPS: serve creates Personal silently, then keeps serving.
 centraid-gateway serve --data-dir "$DATA_DIR"
 
 # Mint a one-time pair ticket for a phone / PWA / desktop.
@@ -229,7 +227,7 @@ See [docs/toolchain.md](docs/toolchain.md) for the stable command API, rule rubr
 
 Desktop e2e: 55 Playwright tests across the current desktop specs, driving the real Electron app against local and remote gateway paths — see [apps/desktop/tests/e2e](apps/desktop/tests/e2e/README.md).
 
-Web e2e: `bun run --cwd apps/web build && bun run --cwd apps/web e2e` drives the production PWA against a real gateway and verifies pairing, preview/publish, app execution, and session isolation.
+Web e2e: `bun run --cwd apps/web build && bun run --cwd apps/web e2e` drives the production PWA against a real gateway and verifies pairing, inline app execution, offline reconnect, the pending-write overlay, and session isolation.
 
 Companion: `bun run --cwd apps/extension package` emits Chrome and Firefox ZIPs; its real-browser pairing/fill/revoke flow lives in [tests/agent-e2e-pairing/flows/extension-companion.md](tests/agent-e2e-pairing/flows/extension-companion.md).
 
@@ -241,8 +239,8 @@ The docs ([centraid.dev/docs](https://centraid.dev/docs/)) are Astro-built stati
 | --- | --- |
 | [Start](https://centraid.dev/docs/start/) | Install → vault → first app → pair a phone → always-on → key backup |
 | [Data](https://centraid.dev/docs/data/) | The vault, consent & the outbox, sealed columns, connections & sync, automations, the assistant, blobs, search |
-| [Apps](https://centraid.dev/docs/apps/) | The eight blueprints, app anatomy, the install model, attach & link, the agent surface, mobile |
-| [Devices](https://centraid.dev/docs/devices/) | Star topology, (gateway, vault) addressing, pairing, iroh, desktop & mobile clients, agent runtimes |
+| [Apps](https://centraid.dev/docs/apps/) | The eight blueprints, app anatomy, the install model, attach & link, the harness surface, mobile |
+| [Devices](https://centraid.dev/docs/devices/) | Star topology, (gateway, vault) addressing, pairing, iroh, desktop & mobile clients, harness runtimes |
 | [Ontology](https://centraid.dev/docs/ontology/) | The full logical model — schemas, entity map, ownership matrix, gateway contract, rules |
 | [Privacy](https://centraid.dev/docs/privacy/) | Google user-data use, OAuth custody, retention, sharing, and deletion |
 | [Terms](https://centraid.dev/docs/terms/) | Terms for Centraid and the optional Assist ceremony service |

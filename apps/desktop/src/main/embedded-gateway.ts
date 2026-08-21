@@ -2,8 +2,8 @@ import {
   assistOAuthFromEnvironment,
   createWasmImagePreviewCodec,
   serve,
-} from "@centraid/gateway";
-import type { GatewayPaths, GatewayServeHandle } from "@centraid/gateway";
+} from "@centraid/server";
+import type { GatewayPaths, GatewayServeHandle } from "@centraid/server";
 import type { KeyStore } from "@centraid/vault";
 
 export interface DesktopEmbeddedGatewayOptions {
@@ -12,7 +12,6 @@ export interface DesktopEmbeddedGatewayOptions {
   keyStore: KeyStore;
   token: string;
   ownerEndpointId: string;
-  remoteTemplatesUrl?: string;
   sessionIdFor?: (appId: string) => string;
   logTag?: string;
 }
@@ -30,15 +29,12 @@ export async function startDesktopEmbeddedGateway(
     paths: {
       ...options.paths,
       dataDir: options.dataDir,
-      ...(options.remoteTemplatesUrl
-        ? { remoteTemplatesUrl: options.remoteTemplatesUrl }
-        : {}),
     },
     keyStore: options.keyStore,
     token: options.token,
     hostDeviceEndpointId: options.ownerEndpointId,
-    // No founding options (issue #603): the gateway founds its own Shared +
-    // Personal vaults synchronously when it sees a fresh data dir, and the
+    // No founding options (issue #603): the gateway founds its own Personal
+    // vault synchronously when it sees a fresh data dir, and the
     // founding-ticket plane is gone entirely.
     ...(options.sessionIdFor ? { sessionIdFor: options.sessionIdFor } : {}),
     ...(options.logTag ? { logTag: options.logTag } : {}),

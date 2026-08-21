@@ -6,11 +6,11 @@
 import { runFlow } from "../lib/docker-harness.mjs";
 
 await runFlow("cross-network-relay", async (ctx) => {
-  // 1. Mint for the auto-founded Shared vault (#603);
+  // 1. Mint for the auto-founded Personal vault (#603);
   // the ticket is still minted inside the gateway container.
   // only the redemption crosses the network boundary.
-  const { raw, payload } = await ctx.mintTicket({ vault: "Shared" });
-  if (payload.vaultName !== "Shared")
+  const { raw, payload } = await ctx.mintTicket({ vault: "Personal" });
+  if (payload.vaultName !== "Personal")
     throw new Error(`ticket names vault "${payload.vaultName}"`);
   if (payload.exp <= Date.now())
     throw new Error("ticket minted already expired");
@@ -33,7 +33,7 @@ await runFlow("cross-network-relay", async (ctx) => {
   }
   if (!device.paired)
     throw new Error(`redeem failed: ${JSON.stringify(device)}`);
-  if (!device.vaultId || device.vaultName !== "Shared") {
+  if (!device.vaultId || device.vaultName !== "Personal") {
     throw new Error(
       `pair response names the wrong vault: ${JSON.stringify(device)}`
     );

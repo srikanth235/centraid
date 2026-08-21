@@ -1,682 +1,370 @@
-// governance: allow-repo-hygiene file-size-limit (#630) — this factory is the
-// cohesive controller for one blueprint; splitting its shared mutable app
-// closure would obscure write/outcome and undo sequencing.
-import {
-  PALETTE,
-  listColor,
-  daysSince,
-  daysUntilAnnual,
-  statusOf,
-} from "./format.ts";
-// Non-visual business logic: vault IO (write/act), row derivation, selection,
-// the kebab/move-to-list popover (stays plain DOM, built with kit's
-// `h()`/`popItem()` — no React root needed there), every person/list write,
-// the profile drawer's load/reload + "+ add" write helper, journal/activity
-// reads, and navigation state transitions. `createLogic()` is a factory
-// app.tsx calls once at boot, closing over the exact `state`/`data` objects
-// app.tsx owns (passed by reference: app.tsx mutates their properties in
-// place, never reassigns the bindings, so this module always sees the live
-// values) plus the render entry points only app.tsx can define. Everything
-// returned here is then wired into app.tsx's render functions and JSX props,
-// exactly like any other value flowing down. Same factory pattern as
-// tasks/logic.ts and notes/logic.ts.
-import {
-  closePopover,
-  h,
-  openPopover,
-  outcomeMessage,
-  popItem,
-  runBulk as runBulkBase,
-  toast,
-} from "./kit.ts";
+// People's store and its READ side: what is in hand, what each screen is
+// showing, and where the member is.
+//
+// Not a component — no JSX, no props — and never a second copy of mutable
+// state. `createLogic()` is a factory `app-root.tsx` calls once at boot,
+// closing over the exact `state` and `data` objects it owns (passed by
+// reference and mutated in place, never reassigned, so this module always sees
+// the live values) plus the one orchestration entry point only `app-root.tsx`
+// can define: `render`. It is the shape `docs/logic.ts` uses, for the same
+// reason — the app's rules are readable and testable outside a render.
+//
+// THE WRITE SIDE IS `writes.ts`. Two files rather than one because they answer
+// two different questions ("what is true" and "what did this write do"), and
+// because one file carrying both is how this app's predecessor reached the
+// size where nobody read it.
+import { debounce, readFailed } from "@centraid/design/elements";
+
+import { isOverdue, linkState } from "./format.ts";
+import { STATUS } from "./people-copy.ts";
+import { EDIT, LOG, MERGE, PERSON, SEARCH, TOUCH, TRASH } from "./shelves.ts";
+import type { ShelfId } from "./shelves.ts";
 import type {
+  AppData,
+  AppState,
   DashboardData,
-  DetailPerson,
-  JournalData,
-  LogicDeps,
-  Nav,
-  Person,
-  PersonList,
+  PersonDetail,
+  PersonRow,
+  TrashedPerson,
 } from "./types.ts";
 
-const $ = (id: string) => document.querySelector<HTMLElement>(`#${id}`)!;
+/** How many people the roster window asks for. The query caps and reports
+ *  `truncated`, which the app bar's count reads rather than hiding. */
+const ROSTER_WINDOW = 200;
+
+interface DeniedRead {
+  vaultDenied?: { message?: string } | null;
+}
+
+interface LogicDeps {
+  state: AppState;
+  data: AppData;
+  render: () => void;
+  /** A read has landed (either way) — the gate every empty state is behind. */
+  setLoaded: (loaded: boolean) => void;
+  setConsent: (consent: { message: string } | null) => void;
+  setReadFailed: (failed: boolean) => void;
+}
 
 export function createLogic({
   state,
   data,
   render,
-  refresh,
-  renderRows,
-  renderDetails,
-  renderModal,
-  renderNewMenu,
+  setLoaded,
+  setConsent,
+  setReadFailed,
 }: LogicDeps) {
-  function notice(text: string) {
-    const b = $("noticeBanner");
-    b.textContent = text || "";
-    b.hidden = !text;
+  const banner = (): HTMLElement | null =>
+    document.querySelector<HTMLElement>("#noticeBanner");
+
+  /** The app's one imperative banner. Rendered once by the chrome and never
+   *  reconciled, so these writes are never clobbered by React. */
+  function notice(text?: string): void {
+    const element = banner();
+    if (!element) return;
+    element.textContent = text ?? "";
+    element.hidden = !text;
   }
 
-  // Returns true when the write executed; otherwise narrates the outcome and
-  // returns false.
-  function narrate(outcome: VaultOutcome | undefined): boolean {
-    if (outcome?.status === "executed") {
+  let failed = false;
+
+  async function read<T>(
+    query: string,
+    input?: Record<string, unknown>
+  ): Promise<T | null> {
+    try {
+      return await window.centraid.read<T>({
+        query,
+        ...(input ? { input } : {}),
+      });
+    } catch {
+      // A THROW IS NOT AN EMPTY SET. The inline client tries the local replica
+      // and falls back to the gateway, so a failure means neither answered —
+      // which the app says, rather than drawing "nobody here yet".
+      readFailed(banner());
+      failed = true;
+      setReadFailed(true);
+      setLoaded(true);
+      return null;
+    }
+  }
+
+  /** Every read this app performs, in one place, so a screen can never open a
+   *  sixth. The secondary reads are conditional: a member on the roster has no
+   *  use for the dashboard, and asking for it anyway is a read nobody sees. */
+  async function refresh(): Promise<void> {
+    const roster = await read<
+      DeniedRead & {
+        people?: PersonRow[];
+        truncated?: boolean;
+        links_available?: boolean;
+      }
+    >("people", { limit: ROSTER_WINDOW });
+    if (!roster) return;
+    if (failed) {
+      failed = false;
       notice("");
-      return true;
     }
-    notice(outcomeMessage(outcome) ?? "");
-    return false;
-  }
-
-  async function act(
-    action: string,
-    input: Record<string, unknown>
-  ): Promise<VaultOutcome | undefined> {
-    try {
-      return await window.centraid.write({ action, input });
-    } catch (error) {
-      notice(error instanceof Error ? error.message : String(error));
-      return undefined;
+    setReadFailed(false);
+    const denied = roster.vaultDenied;
+    setConsent(denied ? { message: denied.message ?? "" } : null);
+    setLoaded(true);
+    if (denied) {
+      render();
+      return;
     }
-  }
+    data.people = roster.people ?? [];
+    data.truncated = Boolean(roster.truncated);
+    // THE SHARING PLANE'S OWN FLAG, never inferred from the rows. A window
+    // where nobody happens to be linked is not a window where the link facts
+    // are missing, and the two draw differently everywhere.
+    data.linksAvailable = Boolean(roster.links_available);
 
-  // ---------- Row derivation (client-side, like the prototype's in-memory list) ----------
-
-  function currentRows(): Person[] {
-    const { nav, chip, search } = state;
-    let base: Person[];
-    if (search.trim()) {
-      base = state.searchResults ?? [];
-    } else {
-      base = nav.kind === "trash" ? data.trash.slice() : data.people.slice();
-      if (nav.kind === "reconnect")
-        base = base.filter((p) => daysSince(p) >= (p.cadence_days ?? 30));
-      else if (nav.kind === "upcoming")
-        base = base.filter((p) => (p.reminders || []).length > 0);
-      else if (nav.kind === "starred") base = base.filter((p) => p.starred);
-      else if (nav.kind === "list")
-        base = base.filter((p) => (p.list_id ?? null) === nav.listId);
-    }
-    if (chip !== "all") base = base.filter((p) => statusOf(p).key === chip);
-
-    if (search.trim()) return base; // keep vault rank order
-    if (nav.kind === "reconnect") {
-      return base
-        .slice()
-        .sort(
-          (a, b) =>
-            daysSince(b) -
-            (b.cadence_days ?? 30) -
-            (daysSince(a) - (a.cadence_days ?? 30))
-        );
-    }
-    if (nav.kind === "upcoming") {
-      const near = (p: Person) =>
-        Math.min(
-          ...(p.reminders || []).map((d) => daysUntilAnnual(d.month_day)),
-          999
-        );
-      return base.slice().sort((a, b) => near(a) - near(b));
-    }
-    const dir = state.sortDir;
-    return base.slice().sort((a, b) => {
-      let r: number;
-      if (state.sortKey === "name")
-        r = String(a.name).localeCompare(String(b.name));
-      else if (state.sortKey === "cadence")
-        r = (a.cadence_days ?? 0) - (b.cadence_days ?? 0);
-      else r = daysSince(a) - daysSince(b);
-      return r * dir;
-    });
-  }
-
-  // ---------- Selection ----------
-
-  function clearSelection() {
-    state.selected.clear();
-  }
-  function toggleSelect(id: string) {
-    if (state.selected.has(id)) state.selected.delete(id);
-    else state.selected.add(id);
-    render();
-  }
-  function toggleAllVisible(rows: Person[], allSelected: boolean) {
-    if (allSelected) for (const p of rows) state.selected.delete(p.party_id);
-    else for (const p of rows) state.selected.add(p.party_id);
-    render();
-  }
-  function clearSelected() {
-    clearSelection();
-    render();
-  }
-
-  // ---------- Popover (kebab + move-to-list) ----------
-  // Reused for both the row kebab menu and the drawer's "Move to list"
-  // button (same target list), exactly as the old version did.
-
-  function openPersonMenu(anchor: HTMLElement, p: Person) {
-    openPopover(anchor, (box) => {
-      box.append(
-        popItem("Open profile", () => {
-          closePopover();
-          void openDetails(p.party_id);
-        }),
-        popItem(p.starred ? "Remove favorite" : "Add to favorites", () => {
-          closePopover();
-          void toggleStar(p);
-        }),
-        h("div", { class: "kit-popover-sep" }),
-        h("p", { class: "kit-popover-head" }, "Move to list"),
-        popItem(
-          "No list",
-          () => {
-            closePopover();
-            void movePerson(p, null, "no list");
-          },
-          { disabled: p.list_id == null, dotColor: "var(--text-faint)" }
-        ),
-        ...data.lists.map((c) =>
-          popItem(
-            c.name,
-            () => {
-              closePopover();
-              void movePerson(p, c.list_id, c.name);
-            },
-            {
-              disabled: p.list_id === c.list_id,
-              dotColor: listColor(c.list_id),
-            }
-          )
-        )
+    if (state.shelf === TOUCH) {
+      const dashboard = await read<DeniedRead & Partial<DashboardData>>(
+        "dashboard"
       );
-    });
-  }
-
-  // ---------- Person writes ----------
-
-  // refresh() re-renders the open drawer, but from the stale `detailPerson`
-  // snapshot — so any write that can land while the drawer is open on the
-  // same person must also reload the detail read, or the drawer keeps
-  // showing the pre-write state (star glyph, list, history) until it's
-  // closed and reopened.
-  async function reloadOpenDetail(partyId: string) {
-    if (state.detailsId === partyId) await loadDetail(partyId);
-  }
-
-  async function toggleStar(p: Person | DetailPerson) {
-    const outcome = await act(p.starred ? "unstar-person" : "star-person", {
-      party_id: p.party_id,
-    });
-    if (!narrate(outcome)) return;
-    toast(
-      p.starred ? "Favorite removed · receipted." : "Favorited · receipted."
-    );
-    await refresh();
-    await reloadOpenDetail(p.party_id);
-  }
-
-  async function movePerson(
-    p: Person | DetailPerson,
-    listId: string | null,
-    name: string
-  ) {
-    const input = {
-      party_id: p.party_id,
-      ...(listId == null ? {} : { list_id: listId }),
-    };
-    const outcome = await act("move-person", input);
-    if (!narrate(outcome)) return;
-    toast(`Moved to ${name} · receipted.`);
-    await refresh();
-    await reloadOpenDetail(p.party_id);
-  }
-
-  async function undoPerson(
-    partyId: string,
-    revisionId: string
-  ): Promise<void> {
-    const outcome = await act("undo-person", {
-      party_id: partyId,
-      revision_id: revisionId,
-    });
-    if (!narrate(outcome)) return;
-    toast("Change undone · receipt");
-    await refresh();
-    await reloadOpenDetail(partyId);
-  }
-
-  async function editPerson(
-    p: DetailPerson,
-    fields: Record<string, unknown>
-  ): Promise<boolean> {
-    const outcome = await act("edit-person", {
-      party_id: p.party_id,
-      ...fields,
-    });
-    if (!narrate(outcome)) return false;
-    const revisionId = String(outcome?.output?.revision_id ?? "");
-    toast("Profile updated · receipt", {
-      duration: revisionId ? 10_000 : undefined,
-      undoLabel: revisionId ? "Undo" : undefined,
-      onUndo: revisionId
-        ? () => void undoPerson(p.party_id, revisionId)
-        : undefined,
-    });
-    await refresh();
-    await reloadOpenDetail(p.party_id);
-    return true;
-  }
-
-  async function setCadence(
-    p: DetailPerson,
-    cadenceDays: number
-  ): Promise<boolean> {
-    const outcome = await act("set-cadence", {
-      party_id: p.party_id,
-      cadence_days: cadenceDays,
-    });
-    if (!narrate(outcome)) return false;
-    const revisionId = String(outcome?.output?.revision_id ?? "");
-    toast("Cadence updated · receipt", {
-      duration: revisionId ? 10_000 : undefined,
-      undoLabel: revisionId ? "Undo" : undefined,
-      onUndo: revisionId
-        ? () => void undoPerson(p.party_id, revisionId)
-        : undefined,
-    });
-    await refresh();
-    await reloadOpenDetail(p.party_id);
-    return true;
-  }
-
-  async function trashPerson(p: DetailPerson): Promise<void> {
-    const outcome = await act("trash-person", { party_id: p.party_id });
-    if (!narrate(outcome)) return;
-    const revisionId = String(outcome?.output?.revision_id ?? "");
-    closeDetails();
-    toast(`${p.name} moved to trash`, {
-      duration: revisionId ? 10_000 : undefined,
-      undoLabel: revisionId ? "Undo" : undefined,
-      onUndo: revisionId
-        ? () => void undoPerson(p.party_id, revisionId)
-        : undefined,
-    });
-    await refresh();
-  }
-
-  async function restorePerson(p: Person): Promise<void> {
-    const outcome = await act("restore-person", { party_id: p.party_id });
-    if (!narrate(outcome)) return;
-    toast(`${p.name} restored · receipt`);
-    await refresh();
-  }
-
-  async function logInteraction(p: DetailPerson, kind: string, text: string) {
-    const outcome = await act("log-interaction", {
-      party_id: p.party_id,
-      kind,
-      text,
-    });
-    if (!narrate(outcome)) return;
-    toast(`Logged · receipted.`);
-    await refresh();
-    await reloadOpenDetail(p.party_id);
-  }
-
-  // Bulk actions run through the kit's runBulk with the app's own voice.
-  const bulkOpts = {
-    notice,
-    friendly: (outcome: VaultOutcome | undefined) =>
-      outcome?.reason ?? outcome?.predicate ?? null,
-    after: async () => {
-      clearSelection();
-      await refresh();
-    },
-  };
-  function favoriteSelected() {
-    return runBulkBase(
-      [...state.selected],
-      (id) => act("star-person", { party_id: id }),
-      {
-        progress: "Favoriting",
-        done: "Favorited",
-        ...bulkOpts,
+      // The Reconnect rows say `every <n> days · <ago>`; the query returns
+      // identity and role only, so the cadence pair is joined back in from
+      // the roster read that landed just above.
+      const byId = new Map(
+        data.people.map((person) => [person.party_id, person])
+      );
+      data.dashboard = dashboard
+        ? {
+            reconnect: (dashboard.reconnect ?? []).map((card) => {
+              const row = byId.get(card.party_id);
+              return row
+                ? {
+                    ...card,
+                    cadence_days: row.cadence_days,
+                    last_contacted_at: row.last_contacted_at,
+                    created_at: row.created_at,
+                  }
+                : card;
+            }),
+            upcoming: dashboard.upcoming ?? [],
+            recent: dashboard.recent ?? [],
+            counts: dashboard.counts ?? {
+              all: 0,
+              reconnect: 0,
+              upcoming: 0,
+              starred: 0,
+              // Null, not zero: a dashboard that never answered has not said
+              // that nobody is linked (`components/TouchRoute.tsx`).
+              linked: null,
+              to_link: null,
+            },
+          }
+        : null;
+    }
+    if (state.shelf === TRASH) {
+      const trash = await read<DeniedRead & { people?: TrashedPerson[] }>(
+        "trash"
+      );
+      data.trash = trash?.people ?? [];
+    }
+    if (state.personId) {
+      const detail = await read<DeniedRead & { person?: PersonDetail }>(
+        "person",
+        { party_id: state.personId }
+      );
+      data.person = detail?.person ?? null;
+      // The person may have been trashed or merged away in another window. The
+      // member is not left on a screen about nobody: they go back to the
+      // roster, which is where they reached the person from.
+      if (!data.person) {
+        state.personId = null;
+        state.shelf = null;
       }
-    );
-  }
-
-  // ---------- List writes ----------
-
-  async function createList(name: string) {
-    const outcome = await act("create-list", { name });
-    if (narrate(outcome)) {
-      state.creatingList = false;
-      toast(`List "${name}" created · receipted.`);
-      await refresh();
     } else {
+      data.person = null;
+    }
+    render();
+  }
+
+  /** The search shelf's own read, debounced, sequence-guarded, and honest
+   *  about the difference between "no matches" and "could not ask". */
+  const applySearch = debounce(async (): Promise<void> => {
+    const term = state.search.trim();
+    if (!term) {
+      state.searchResults = null;
+      state.searchStatus = "resting";
       render();
+      return;
     }
-  }
-  async function renameList(listId: string, name: string) {
-    const outcome = await act("rename-list", { list_id: listId, name });
-    if (narrate(outcome)) {
-      state.renamingListId = null;
-      toast("List renamed · receipted.");
-      await refresh();
-    } else {
-      render();
-    }
-  }
-  async function deleteList(list: PersonList) {
-    const outcome = await act("delete-list", { list_id: list.list_id });
-    if (narrate(outcome)) {
-      if (state.nav.kind === "list" && state.nav.listId === list.list_id)
-        state.nav = { kind: "all" };
-      toast("List deleted · receipted.");
-      await refresh();
-    }
-  }
-  function startRenameList(listId: string) {
-    state.renamingListId = listId;
+    const seq = ++state.searchSeq;
+    state.searchStatus = "searching";
     render();
-  }
-  function cancelCreateList() {
-    state.creatingList = false;
-    render();
-  }
-  function cancelRenameList() {
-    state.renamingListId = null;
-    render();
-  }
-
-  // ---------- Profile drawer ----------
-
-  async function openDetails(id: string) {
-    state.detailsId = id;
-    state.detailPerson = null;
-    state.detailAdders = {};
-    renderDetails(); // paints a shell immediately
-    await loadDetail(id);
-  }
-  function closeDetails() {
-    state.detailsId = null;
-    state.detailPerson = null;
-    renderDetails();
-  }
-  async function loadDetail(id: string) {
+    let rows: PersonRow[] = [];
+    let reached = true;
     try {
-      const res = await window.centraid.read<{
-        person?: DetailPerson;
-        vaultDenied?: unknown;
-      }>({
-        query: "person",
-        input: { party_id: id },
+      const result = await window.centraid.read<{ people?: PersonRow[] }>({
+        query: "search",
+        input: { term },
       });
-      if (res?.vaultDenied) return;
-      if (state.detailsId !== id) return;
-      state.detailPerson = res?.person ?? null;
-      renderDetails();
-    } catch (error) {
-      notice(error instanceof Error ? error.message : String(error));
-    }
-  }
-  function toggleAdder(key: string) {
-    state.detailAdders[key] = !state.detailAdders[key];
-    renderDetails();
-  }
-
-  // Returns true when the write executed (the AddRows components clear their
-  // own fields only then — a failed/parked write leaves the typed draft in
-  // place instead of silently discarding it).
-  async function drawerAct(
-    action: string,
-    input: Record<string, unknown>,
-    message: string
-  ): Promise<boolean> {
-    const outcome = await act(action, input);
-    if (!narrate(outcome)) return false;
-    toast(`${message} · receipted.`);
-    await refresh();
-    if (state.detailsId) await loadDetail(state.detailsId);
-    return true;
-  }
-
-  async function saveContactChannel(
-    person: DetailPerson,
-    fields: Record<string, unknown>
-  ): Promise<boolean> {
-    const outcome = await act("save-contact-channel", {
-      party_id: person.party_id,
-      ...fields,
-    });
-    if (!narrate(outcome)) return false;
-    const channelId = String(outcome?.output?.channel_id ?? "");
-    const revisionId = String(outcome?.output?.revision_id ?? "");
-    const duplicates = Array.isArray(outcome?.output?.duplicate_party_ids)
-      ? outcome.output.duplicate_party_ids.length
-      : 0;
-    toast(
-      duplicates > 0
-        ? `Contact saved · ${duplicates} possible duplicate${duplicates === 1 ? "" : "s"}`
-        : "Contact saved · receipt",
-      {
-        duration: revisionId ? 10_000 : undefined,
-        undoLabel: revisionId ? "Undo" : undefined,
-        onUndo:
-          revisionId && channelId
-            ? () =>
-                void undoContactChannel(person.party_id, channelId, revisionId)
-            : undefined,
-      }
-    );
-    await loadDetail(person.party_id);
-    return true;
-  }
-
-  async function deleteContactChannel(
-    person: DetailPerson,
-    channelId: string
-  ): Promise<void> {
-    const outcome = await act("delete-contact-channel", {
-      channel_id: channelId,
-    });
-    if (!narrate(outcome)) return;
-    const revisionId = String(outcome?.output?.revision_id ?? "");
-    toast("Contact deleted · receipt", {
-      duration: revisionId ? 10_000 : undefined,
-      undoLabel: revisionId ? "Undo" : undefined,
-      onUndo: revisionId
-        ? () => void undoContactChannel(person.party_id, channelId, revisionId)
-        : undefined,
-    });
-    await loadDetail(person.party_id);
-  }
-
-  async function undoContactChannel(
-    partyId: string,
-    channelId: string,
-    revisionId: string
-  ): Promise<void> {
-    const outcome = await act("undo-contact-channel", {
-      channel_id: channelId,
-      revision_id: revisionId,
-    });
-    if (!narrate(outcome)) return;
-    toast("Contact restored · receipt");
-    await loadDetail(partyId);
-  }
-
-  async function mergePerson(
-    source: DetailPerson,
-    targetPartyId: string
-  ): Promise<void> {
-    const outcome = await act("merge-people", {
-      source_party_id: source.party_id,
-      target_party_id: targetPartyId,
-    });
-    if (!narrate(outcome)) return;
-    closeDetails();
-    await refresh();
-    // core.merge_party is irreversible by design (#290 / #306 Tier 4).
-    toast(`${source.name} merged · receipt`);
-  }
-
-  // ---------- Add-person modal ----------
-
-  async function addPerson({
-    name,
-    role,
-    listId,
-    cadence,
-  }: {
-    name: string;
-    role: string;
-    listId: string | null;
-    cadence: number;
-  }): Promise<boolean> {
-    const avatar_color = PALETTE[data.people.length % PALETTE.length];
-    const input = {
-      display_name: name,
-      cadence_days: cadence,
-      avatar_color,
-      ...(role ? { role } : {}),
-      ...(listId == null ? {} : { list_id: listId }),
-    };
-    const outcome = await act("add-person", input);
-    if (!narrate(outcome)) return false;
-    state.addModalOpen = false;
-    renderModal();
-    toast("Added · receipted.");
-    await refresh();
-    const newId = outcome?.output?.party_id;
-    if (typeof newId === "string") await openDetails(newId);
-    return true;
-  }
-  function openAddModal() {
-    state.newMenuOpen = false;
-    renderNewMenu();
-    state.addModalOpen = true;
-    renderModal();
-  }
-  function closeAddModal() {
-    state.addModalOpen = false;
-    renderModal();
-  }
-  function startCreateList() {
-    state.newMenuOpen = false;
-    renderNewMenu();
-    state.creatingList = true;
-    render();
-  }
-
-  // ---------- Journal / Activity ----------
-
-  async function loadJournal() {
-    try {
-      const res = await window.centraid.read<
-        JournalData & { vaultDenied?: unknown }
-      >({
-        query: "journal",
-        input: {},
-      });
-      state.journalData = res?.vaultDenied
-        ? { entries: [] }
-        : (res ?? { entries: [] });
+      rows = result?.people ?? [];
     } catch {
-      state.journalData = { entries: [] };
+      reached = false;
     }
+    if (seq !== state.searchSeq) return;
+    state.searchResults = reached ? rows : null;
+    state.searchStatus = reached ? "ready" : "unreachable";
+    render();
+  }, 150);
+
+  function setSearch(term: string): void {
+    state.search = term;
+    render();
+    void applySearch();
   }
-  async function loadDashboard() {
-    try {
-      const res = await window.centraid.read<
-        DashboardData & { vaultDenied?: unknown }
-      >({
-        query: "dashboard",
-        input: {},
-      });
-      state.dashboardData = res?.vaultDenied
-        ? { recent: [] }
-        : (res ?? { recent: [] });
-    } catch {
-      state.dashboardData = { recent: [] };
-    }
-  }
-  async function addJournalEntry(mood: string, text: string): Promise<boolean> {
-    const outcome = await act("add-journal-entry", { mood, text });
-    if (!narrate(outcome)) return false;
-    toast("Entry added · receipted.");
-    await loadJournal();
-    renderRows();
-    return true;
+
+  function clearSearch(): void {
+    state.search = "";
+    state.searchResults = null;
+    state.searchStatus = "resting";
+    render();
   }
 
   // ---------- Navigation ----------
 
-  async function selectNav(nav: Nav) {
-    state.nav = nav;
-    clearSelection();
-    state.detailsId = null;
-    state.detailPerson = null;
-    state.search = "";
-    state.searchResults = null;
-    ($("searchInput") as HTMLInputElement).value = "";
-    state.chip = "all";
-    state.newMenuOpen = false;
-    state.creatingList = false;
-    state.renamingListId = null;
-    if (state.narrow) $("root").classList.remove("side-open");
-    renderDetails();
-    if (nav.kind === "journal") await loadJournal();
-    if (nav.kind === "activity") await loadDashboard();
+  /** Every move goes through here, so the composer, the draft and the confirm
+   *  cannot outlive the screen they belong to — a half-typed note reappearing
+   *  three screens later is state leaking, not state preserved. */
+  function go(shelf: ShelfId, personId?: string | null): void {
+    state.shelf = shelf;
+    if (personId !== undefined) state.personId = personId;
+    state.composer = null;
+    state.confirm = null;
+    render();
+    void refresh();
+  }
+
+  function openPerson(partyId: string): void {
+    go(PERSON, partyId);
+  }
+
+  function goBack(): void {
+    // Nested screens return to the person they are about; the person screen
+    // and Trash return to the roster (handoff § Navigation).
+    if (state.shelf === PERSON || state.shelf === TRASH) {
+      go(null, null);
+      return;
+    }
+    if (state.personId) {
+      go(PERSON, state.personId);
+      return;
+    }
+    go(null, null);
+  }
+
+  function toggleSection(key: string): void {
+    state.collapsed = {
+      ...state.collapsed,
+      [key]: !state.collapsed[key],
+    };
     render();
   }
 
-  async function showMorePeople() {
-    state.peopleWindow += 200;
-    await refresh();
+  // ---------- Derivations ----------
+
+  /** The numbers the roster's status line and app bar are made of. `linked`
+   *  and `toLink` are counted over the SAME window as the rest — the rows in
+   *  hand — so the status line and the chips can never disagree about how
+   *  many people are linked. They are zero while the link facts are absent,
+   *  which is why every reader gates on `data.linksAvailable` first. */
+  function rosterCounts(): {
+    people: number;
+    due: number;
+    starred: number;
+    linked: number;
+    toLink: number;
+  } {
+    const now = Date.now();
+    return {
+      people: data.people.length,
+      due: data.people.filter((person) => isOverdue(person, now)).length,
+      starred: data.people.filter((person) => person.starred).length,
+      linked: data.people.filter((person) => linkState(person) === "linked")
+        .length,
+      toLink: data.people.filter((person) => linkState(person) === "unlinked")
+        .length,
+    };
+  }
+
+  /** The merge screen's candidates: everyone except the person on screen,
+   *  with the contract's own duplicates first — the `person` query marks a
+   *  channel shared with another party (`duplicate_party_ids`), and a person
+   *  the vault already suspects belongs at the top of the pick list. */
+  function mergeCandidates(): PersonRow[] {
+    const duplicates = new Set(
+      (data.person?.contact ?? []).flatMap(
+        (channel) => channel.duplicate_party_ids ?? []
+      )
+    );
+    return data.people
+      .filter((person) => person.party_id !== state.personId)
+      .sort(
+        (a, b) =>
+          Number(duplicates.has(b.party_id)) -
+          Number(duplicates.has(a.party_id))
+      );
+  }
+
+  function personRow(partyId: string | null): PersonRow | null {
+    if (!partyId) return null;
+    return data.people.find((person) => person.party_id === partyId) ?? null;
+  }
+
+  /**
+   * The AMBIENT sentence for the current screen — what the status line says
+   * while nothing has just happened. A write's own outcome replaces it in
+   * place (`writes.ts`), which is the frame's one status line doing its one
+   * job.
+   */
+  function ambientStatus(): string | null {
+    const counts = rosterCounts();
+    const links = data.linksAvailable;
+    if (state.shelf === TOUCH)
+      return links
+        ? STATUS.touchLinked(counts.linked, counts.toLink, counts.due)
+        : STATUS.touch(counts.people, counts.due);
+    if (state.shelf === SEARCH) {
+      if (state.searchStatus === "unreachable") return STATUS.searchUnreachable;
+      if (!state.search.trim()) return STATUS.searchResting;
+      return STATUS.searchResults(
+        state.searchResults?.length ?? 0,
+        counts.people
+      );
+    }
+    if (state.shelf === TRASH) return STATUS.trash(data.trash.length);
+    if (state.shelf === LOG) return STATUS.logging;
+    if (state.shelf === EDIT) return STATUS.editing;
+    if (state.shelf === MERGE) return null;
+    if (state.shelf === PERSON) return null;
+    return links
+      ? STATUS.rosterLinked(
+          counts.linked,
+          counts.people,
+          counts.toLink,
+          counts.due,
+          counts.starred
+        )
+      : STATUS.roster(counts.people, counts.due, counts.starred);
   }
 
   return {
     notice,
-    narrate,
-    act,
-    currentRows,
-    clearSelection,
-    toggleSelect,
-    toggleAllVisible,
-    clearSelected,
-    openPersonMenu,
-    toggleStar,
-    movePerson,
-    undoPerson,
-    editPerson,
-    setCadence,
-    trashPerson,
-    restorePerson,
-    logInteraction,
-    favoriteSelected,
-    createList,
-    renameList,
-    deleteList,
-    startRenameList,
-    cancelCreateList,
-    cancelRenameList,
-    openDetails,
-    closeDetails,
-    loadDetail,
-    toggleAdder,
-    drawerAct,
-    saveContactChannel,
-    deleteContactChannel,
-    mergePerson,
-    addPerson,
-    openAddModal,
-    closeAddModal,
-    startCreateList,
-    loadJournal,
-    loadDashboard,
-    addJournalEntry,
-    selectNav,
-    showMorePeople,
+    refresh,
+    setSearch,
+    clearSearch,
+    go,
+    goBack,
+    openPerson,
+    toggleSection,
+    rosterCounts,
+    mergeCandidates,
+    personRow,
+    ambientStatus,
   };
 }

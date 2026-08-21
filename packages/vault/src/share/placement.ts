@@ -8,12 +8,19 @@
 // into that vault's CAS. There are no row-level ACLs anywhere; the vault
 // boundary is the isolation.
 //
-// The shape of one share:
+// The shape of one share — the LOCAL COMPOSITION of the two halves the split
+// in issue #726 made independent (read-closure.ts / project-closure.ts):
 //
-//   (a) hardlink the closure's blobs from the origin CAS into the audience CAS
+//   (a) read the closure out of the origin (read-only, no transaction there);
+//   (b) hardlink its blobs from the origin CAS into the audience CAS
 //       (share/blobs.ts), copying only where the filesystem refuses to link;
-//   (b) ONE transaction in the AUDIENCE vault: the projected rows plus the
-//       `core_share_origin` provenance record.
+//   (c) ONE transaction in the AUDIENCE vault: the projected rows, the
+//       `core_share_origin` provenance record, and the audience's own ingest
+//       re-registration of what arrived.
+//
+// Byte custody is the half that does NOT generalise to a wire: a hardlink
+// needs both CAS directories on one filesystem. P3's tunnel replaces (b) and
+// leaves (a) and (c) exactly as they are.
 //
 // The origin vault is never written — sharing needs only READ there — so there
 // is no two-database transaction and no new recovery machinery. Blobs go
@@ -37,8 +44,9 @@ import { VaultShareError } from "../errors.js";
 import { beginReplicaCommit, endReplicaCommit } from "../replica/change-log.js";
 import { placeBlob } from "./blobs.js";
 import type { BlobPlacement } from "./blobs.js";
-import { projectShareClosure, readShareClosure } from "./closure.js";
-import type { ShareableItemType } from "./closure.js";
+import type { ProjectedItem, ShareableItemType } from "./closure.js";
+import { projectShareClosure } from "./project-closure.js";
+import { readShareClosure } from "./read-closure.js";
 import { deleteProjectedClosure } from "./removal.js";
 
 /**
@@ -51,33 +59,39 @@ export interface ShareVaultRef {
   blobs: { local: LocalBlobStore };
   /** Per-vault DEK used only to re-seal a shared Locker item for its audience. */
   sealKey?: Buffer;
+  /** Optional vault signing seed used to authenticate commons member intents. */
+  identitySeed?: Buffer;
 }
 
-export interface ShareToVaultInput {
-  /** The vault the item lives in. READ-ONLY throughout this flow. */
+export interface ShareItemsToVaultInput {
+  /** The vault the items live in. READ-ONLY throughout this flow. */
   origin: ShareVaultRef;
   /** Gateway id of the origin vault, recorded as provenance in the audience. */
   originVaultId: string;
-  /** The vault the item is placed into — the only vault written. */
+  /** The vault the items are placed into — the only vault written. */
   audience: ShareVaultRef;
-  /** Logical entity name of the item being shared. */
+  /** Logical entity name of the items being shared. */
   itemType: ShareableItemType;
-  /** The item's row id in the ORIGIN vault. */
-  itemId: string;
-  /** The L2 member principal performing the placement. */
-  sharedByMember: string;
+  /** The items' row ids in the ORIGIN vault. One closure covers the set. */
+  itemIds: readonly string[];
+  /**
+   * Written into `core_share_origin.shared_by` (issue #726 Finding 6 — the
+   * household L2 member-principal layer this field name once implied is
+   * gone). An owner id for a co-hosted edge, or a `peer:<vaultId>` string
+   * naming the remote vault a give arrived from — an attribution, not a
+   * principal this vault can look up.
+   */
+  sharedBy: string;
   /** Injectable clock, epoch ms. Defaults to `Date.now`. */
   now?: () => number;
-}
-
-export interface ShareToVaultResult {
-  itemType: ShareableItemType;
-  /** The projection's row id in the AUDIENCE vault. */
-  itemId: string;
-  /** True when the audience vault already held this item — an idempotent re-share. */
-  deduped: boolean;
-  /** Every content address the closure needed, and how it got there. */
-  blobs: BlobPlacement[];
+  /**
+   * True when the audience is not this owner's own vault (#726 P3 threat 8) —
+   * forwarded to `readShareClosure`, which gates the origin's `media.location`
+   * policy against `exif_json` on that basis. Defaults false: the placement
+   * plane's callers are same-owner by construction (ownership already gates
+   * that route), so only the cross-vault edge plane opts in.
+   */
+  crossOwner?: boolean;
 }
 
 export interface UnshareFromVaultInput {
@@ -111,7 +125,9 @@ export interface ShareOriginRecord {
   itemId: string;
   originVaultId: string;
   originItemId: string;
-  sharedByMember: string;
+  /** `core_share_origin.shared_by` — an owner id, or a `peer:<vaultId>`
+   *  attribution. See `ShareItemsToVaultInput.sharedBy`'s doc comment. */
+  sharedBy: string;
   sharedAt: number;
 }
 
@@ -122,14 +138,14 @@ export function readShareOrigin(
 ): ShareOriginRecord | undefined {
   const row = audience
     .prepare(
-      `SELECT origin_vault_id, origin_item_id, shared_by_member, shared_at
+      `SELECT origin_vault_id, origin_item_id, shared_by, shared_at
          FROM core_share_origin WHERE item_type = ? AND item_id = ?`
     )
     .get(itemType, itemId) as
     | {
         origin_vault_id: string;
         origin_item_id: string;
-        shared_by_member: string;
+        shared_by: string;
         shared_at: number;
       }
     | undefined;
@@ -139,19 +155,32 @@ export function readShareOrigin(
     itemId,
     originVaultId: row.origin_vault_id,
     originItemId: row.origin_item_id,
-    sharedByMember: row.shared_by_member,
+    sharedBy: row.shared_by,
     sharedAt: row.shared_at,
   };
 }
 
+export interface ShareItemsToVaultResult {
+  itemType: ShareableItemType;
+  /** One entry per requested id, in the order asked for. */
+  items: ProjectedItem[];
+  /** Every content address the closure needed, and how it got there. */
+  blobs: BlobPlacement[];
+}
+
 /**
- * Project one item from `origin` into `audience`, hardlinking its bytes.
+ * Place a SET of items from `origin` into `audience` as one share: one
+ * closure, one blob pass, one audience transaction. Rows shared between the
+ * items (the bytes two photographs deduped onto, an album cover that is also
+ * an entry) cross exactly once.
  *
- * Idempotent: re-sharing the same item — including by a DIFFERENT member —
- * dedupes onto the existing row (`core_content_item.sha256` is UNIQUE) and
+ * Idempotent: re-sharing the same items — including by a DIFFERENT member —
+ * dedupes onto the existing rows (`core_content_item.sha256` is UNIQUE) and
  * keeps the first placement record. One row, no duplicate, no error.
  */
-export function shareToVault(input: ShareToVaultInput): ShareToVaultResult {
+export function shareItemsToVault(
+  input: ShareItemsToVaultInput
+): ShareItemsToVaultResult {
   if (input.origin.vault === input.audience.vault) {
     throw new VaultShareError(
       "cannot share a vault into itself — sharing crosses a vault boundary"
@@ -159,68 +188,34 @@ export function shareToVault(input: ShareToVaultInput): ShareToVaultResult {
   }
   // Resolve everything out of the origin BEFORE touching the audience, so an
   // unknown item is refused with nothing placed anywhere.
-  const closure = readShareClosure(
-    input.origin.vault,
-    input.itemType,
-    input.itemId
-  );
+  const closure = readShareClosure(input.origin.vault, {
+    originVaultId: input.originVaultId,
+    itemType: input.itemType,
+    itemIds: input.itemIds,
+    crossOwner: input.crossOwner === true,
+  });
 
   // (a) Bytes first — a link is idempotent, and a failure after this point
   // leaves at most an orphaned link the audience's own sweep reclaims.
-  const blobs: BlobPlacement[] = closure.shas.map((sha256) => ({
-    sha256,
+  const blobs: BlobPlacement[] = closure.blobs.map((entry) => ({
+    sha256: entry.sha256,
     mode: placeBlob(
       input.origin.blobs.local,
       input.audience.blobs.local,
-      sha256
+      entry.sha256
     ),
   }));
 
   // (b) One transaction, audience vault only.
-  const audience = input.audience.vault;
-  audience.exec("BEGIN IMMEDIATE");
-  let replicaCommit!: ReturnType<typeof beginReplicaCommit>;
-  try {
-    replicaCommit = beginReplicaCommit(audience);
-    const projection = projectShareClosure(
-      audience,
-      closure,
+  const projection = projectShareClosure(input.audience.vault, closure, {
+    sharedBy: input.sharedBy,
+    now: input.now,
+    keys:
       input.origin.sealKey && input.audience.sealKey
-        ? {
-            origin: input.origin.sealKey,
-            audience: input.audience.sealKey,
-          }
-        : undefined
-    );
-    audience
-      .prepare(
-        `INSERT INTO core_share_origin
-           (item_type, item_id, origin_vault_id, origin_item_id, shared_by_member, shared_at)
-         VALUES (?, ?, ?, ?, ?, ?)
-         ON CONFLICT (item_type, item_id) DO NOTHING`
-      )
-      .run(
-        input.itemType,
-        projection.itemId,
-        input.originVaultId,
-        closure.itemId,
-        input.sharedByMember,
-        (input.now ?? Date.now)()
-      );
-    endReplicaCommit(audience, replicaCommit);
-    audience.exec("COMMIT");
-    return {
-      itemType: input.itemType,
-      itemId: projection.itemId,
-      deduped: projection.deduped,
-      blobs,
-    };
-  } catch (error) {
-    // Roll the audience back to exactly where it was — the origin was never
-    // written, so the whole share is undone bar the orphaned link above.
-    audience.exec("ROLLBACK");
-    throw error;
-  }
+        ? { origin: input.origin.sealKey, audience: input.audience.sealKey }
+        : undefined,
+  });
+  return { itemType: input.itemType, items: projection.items, blobs };
 }
 
 /**
@@ -238,7 +233,11 @@ export function unshareFromVault(
   if (!readShareOrigin(audience, input.itemType, input.itemId)) {
     return { removed: false, orphanedShas: [] };
   }
-  audience.exec("BEGIN IMMEDIATE");
+  // Nest under a savepoint when a caller (e.g. the commons scrub+re-project
+  // apply, commons.ts) already owns the audience transaction, so the whole
+  // sequence is one atomic unit and this removal never double-opens BEGIN.
+  const nested = audience.isTransaction;
+  audience.exec(nested ? "SAVEPOINT unshare_from_vault" : "BEGIN IMMEDIATE");
   let replicaCommit!: ReturnType<typeof beginReplicaCommit>;
   let shas: string[];
   try {
@@ -255,9 +254,10 @@ export function unshareFromVault(
       .run(input.itemType, input.itemId);
     shas = removal.shas;
     endReplicaCommit(audience, replicaCommit);
-    audience.exec("COMMIT");
+    audience.exec(nested ? "RELEASE unshare_from_vault" : "COMMIT");
   } catch (error) {
-    audience.exec("ROLLBACK");
+    audience.exec(nested ? "ROLLBACK TO unshare_from_vault" : "ROLLBACK");
+    if (nested) audience.exec("RELEASE unshare_from_vault");
     throw error;
   }
   // Which of those addresses the vault no longer claims — read from the live

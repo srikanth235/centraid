@@ -10,15 +10,17 @@
 // field. The `*BridgeProps` names are retained only to avoid churning ~50
 // import sites.
 
-import type { TileVariant } from "@centraid/design";
+import type { ColorKey } from "@centraid/design";
 
 import type { ResourceUsageDTO } from "./screens/resource-summary.js";
 
 // The bridge is intentionally self-contained — it must not import the vanilla
 // shell modules, whose ambient globals aren't in the React island's tsconfig.
-// `DiscoverTemplate` mirrors `TemplateEntry` (app-shell-context.ts) field for
+// `CatalogTemplate` mirrors `TemplateEntry` (app-shell-context.ts) field for
 // field so the vanilla side's `TemplateEntry` values pass through unchanged.
-export interface DiscoverTemplate {
+// It was `DiscoverTemplate` until Discover was retired (issue #708); the shape
+// outlived the page because the automation gallery renders the same card.
+export interface CatalogTemplate {
   id: string;
   name: string;
   desc: string;
@@ -26,37 +28,17 @@ export interface DiscoverTemplate {
   iconKey: string;
   version: string;
   kind?: "app" | "automation";
-  /** App-kind template already installed in the addressed vault (issue #434) —
-   *  the card shows Open instead of Install. */
-  installed?: boolean;
-  /** Requested vault access, for the install/consent sheet (issue #434). */
-  vault?: {
-    purpose?: string;
-    why?: string;
-    scopes: Array<{ schema: string; table?: string; verbs: string }>;
-  };
+  /* `installed` and `vault` are deliberately NOT mirrored: they existed for the
+     install/consent sheet, and the only screen that still renders this card is
+     the automation gallery, where adopting a template is a clone rather than an
+     install. The wire type (`TemplateEntry`) keeps both — the gateway still
+     sends them — but a screen contract that carries fields no screen reads is
+     how a retired flow keeps looking alive. */
   emoji?: string;
   category?: string;
   triggerKind?: "cron" | "webhook" | "data" | "condition";
   triggerLabel?: string;
   integrations?: readonly string[];
-}
-
-/** Right-click anchor passed back to the shell's template context menu. */
-export interface DiscoverMenuAnchor {
-  kind: "point";
-  x: number;
-  y: number;
-}
-
-/** Everything the React Discover screen needs from the vanilla shell. */
-export interface DiscoverBridgeProps {
-  appTemplates: readonly DiscoverTemplate[];
-  automationTemplates: readonly DiscoverTemplate[];
-  tileVariant: TileVariant;
-  onOpenTemplate: (t: DiscoverTemplate) => void;
-  onOpenAutomationTemplate: (t: DiscoverTemplate) => void;
-  onTemplateContext: (t: DiscoverTemplate, anchor: DiscoverMenuAnchor) => void;
 }
 
 // ── Insights (#514 transparency rewrite) ────────────────────────────────────
@@ -66,7 +48,7 @@ export interface InsightsKpis {
   hydrationTokens: number;
   /** Known spend floor when unpriced/unreported runs exist. */
   totalCostUsd: number;
-  agentReportedCostUsd: number;
+  harnessReportedCostUsd: number;
   estimatedCostUsd: number;
   forecastCostUsd: number;
   generations: number;
@@ -92,8 +74,8 @@ export interface InsightsSourceRow {
   costUsd: number;
   automationName?: string;
 }
-export interface InsightsRunnerRow {
-  provider: string;
+export interface InsightsHarnessRow {
+  harness: string;
   runs: number;
   tokens: number;
   costUsd: number;
@@ -121,7 +103,7 @@ export interface InsightsActivityRow {
   tokens: number;
   hydrationTokens: number;
   costUsd: number;
-  provider?: string;
+  harness?: string;
   model?: string;
   effort?: string;
 }
@@ -151,7 +133,7 @@ export interface InsightsSummary {
   kpis: InsightsKpis;
   daily: InsightsDailyPoint[];
   bySource: InsightsSourceRow[];
-  byRunner: InsightsRunnerRow[];
+  byHarness: InsightsHarnessRow[];
   byModel: InsightsModelRow[];
   byEffort: InsightsEffortRow[];
   recent: InsightsActivityRow[];
@@ -226,11 +208,11 @@ export interface VaultBridgeProps {
 
 // ── Automation templates gallery ────────────────────────────────────────────
 export interface AutomationTemplatesBridgeProps {
-  templates: readonly DiscoverTemplate[];
+  templates: readonly CatalogTemplate[];
   /** Subtitle under the self-painted "Templates" header (issue: automations UX pass). */
   subtitle?: string;
   /** Open the vanilla preview drawer (kept vanilla — a body-level modal). */
-  onPreview: (t: DiscoverTemplate) => void;
+  onPreview: (t: CatalogTemplate) => void;
   /** "Start from scratch" → the conversational automation builder. */
   onStartFromScratch: () => void;
 }
@@ -251,15 +233,44 @@ export interface PaletteRowDTO {
   /** Pre-rendered icon SVG markup (from the vanilla `Icon` set). */
   iconHtml: string;
   variant: "action" | "app" | "chat";
-  /** For `variant: 'app'` — the gradient tile paint. */
+  /** For `variant: 'app'` — the shared single-tone desktop mark. */
+  appMark?: {
+    colorKey: ColorKey;
+    iconKey: string;
+  };
+  /** Legacy fallback for older palette bridge rows. */
   tile?: PaletteTileDTO;
+  /**
+   * MONO row-kind register (Binding Layer row anatomy, issue #708 §A) — a
+   * short lowercase noun for what the row IS (`doc`, `person`, `event`,
+   * `conversation`), rendered ahead of the title. Unset for rows that are
+   * not a vault object (apps, nav destinations, the create row).
+   */
+  kind?: string;
+  /**
+   * NUMERIC register — tabular mono, a date/size/count. Distinct from `sub`,
+   * which stays free UI-register text.
+   */
   meta?: string;
   kbd?: string;
   accent?: boolean;
   run: () => void;
 }
+export interface PaletteGroupIconDTO {
+  /** Pre-rendered icon SVG markup — the owning app's glyph. */
+  html: string;
+  /** Identity hue as a CSS value, e.g. `var(--c-teal)`. Omitted = no tint. */
+  hue?: string;
+}
 export interface PaletteGroupDTO {
   group: string;
+  /**
+   * Group marker (Binding Layer row anatomy, issue #708 §A point 2) — set
+   * when every row in the group is a vault object owned by one app/surface
+   * (entity search, Conversations, Recents); omitted for navigational
+   * groups (Apps, Go to, Create) that stay plain text.
+   */
+  icon?: PaletteGroupIconDTO;
   items: PaletteRowDTO[];
 }
 export interface PaletteBridgeProps {
@@ -271,6 +282,12 @@ export interface PaletteBridgeProps {
    * async data (templates) arrives so `buildGroups` re-runs.
    */
   onReady?: (refresh: () => void) => void;
+  /**
+   * Example queries for the pre-query empty state (issue #708 §A) — seeded
+   * from what the vault actually contains, not static copy. Read only while
+   * the query field is empty; a click fills the field with the chip's text.
+   */
+  suggestions?: () => string[];
 }
 
 // ── Phone settings pane ─────────────────────────────────────────────────────
@@ -301,60 +318,6 @@ export interface PhoneBridgeProps {
     onPaired: (deviceName: string) => void
   ) => Promise<{ info: PhonePairingDTO; cancel: () => void } | null>;
   revoke: (deviceId: string) => Promise<boolean>;
-  showToast?: (message: string) => void;
-}
-
-// ── Import pane ─────────────────────────────────────────────────────────────
-export interface ImportBatchDTO {
-  batchId: string;
-  status: "draft" | "published" | "discarded";
-  createdAt: string;
-  summary: Record<string, number>;
-  kind: string | null;
-  label: string | null;
-}
-export interface ImportConnectionDTO {
-  connectionId: string;
-  kind: string;
-  label: string;
-  principal: string | null;
-  status: "active" | "needs-auth" | "failing" | "paused";
-  lastRunAt: string | null;
-  lastRunError: string | null;
-}
-export interface ImportRowDTO {
-  entityType: string;
-  externalId: string;
-  disposition: "create" | "update" | "skip" | "merge-candidate";
-  note: string | null;
-  mapping: string;
-}
-export interface ImportData {
-  vaultName: string;
-  batches: ImportBatchDTO[];
-  connections: ImportConnectionDTO[];
-}
-export interface ImportStagePayload {
-  filename?: string;
-  text?: string;
-  base64?: string;
-  directoryName?: string;
-  files?: { path: string; text: string }[];
-}
-export interface ImportBridgeProps {
-  /** Read the import surface. `null` = no vault plane mounted. */
-  loadData: () => Promise<ImportData | null>;
-  /** Stage a dropped file; resolves to the staged row count. */
-  stage: (payload: ImportStagePayload) => Promise<number>;
-  /** Load a bounded row preview for a draft batch. */
-  loadRows: (batchId: string) => Promise<ImportRowDTO[]>;
-  publish: (batchId: string) => Promise<void>;
-  discard: (batchId: string) => Promise<void>;
-  setConnectionStatus: (
-    connectionId: string,
-    status: "active" | "paused"
-  ) => Promise<void>;
-  exportPortable: () => Promise<{ blob: Blob; filename: string }>;
   showToast?: (message: string) => void;
 }
 
@@ -399,6 +362,8 @@ export interface AuOverviewRowDTO {
   attentionCount: number;
   /** The newest attempt is a successful or failed fallback rung. */
   recentFailover?: boolean;
+  /** Built-in recipe grouped outside the member's automation fleet. */
+  systemLane?: "recognition";
 }
 export interface AuOverviewRunDTO {
   runId: string;
@@ -411,6 +376,8 @@ export interface AuOverviewRunDTO {
   /** Raw fire time (ms epoch) — the "Recent activity" list's date-group
    *  separators are derived from this client-side. */
   startedAt: number;
+  /** Built-in run grouped outside app automation activity. */
+  systemLane?: "recognition";
 }
 export interface AuOverviewData {
   rows: AuOverviewRowDTO[];
@@ -430,10 +397,13 @@ export interface AutomationsOverviewBridgeProps {
   loadData: () => Promise<AuOverviewData>;
   onOpenAutomation: (ref: string) => void;
   onOpenRun: (automationId: string, runId: string) => void;
+  /** The empty state's one verb. "New automation" is NOT here: it is the
+   *  page's filled commit and lives in the app bar (issue #765, `opsBar.ts`),
+   *  resolved by the route's published verbs — a screen that also drew it
+   *  would put two of the view's one commit on the same page. */
   onBrowseTemplates: () => void;
-  onNewAutomation: () => void;
-  /** Curated template starters for the empty fleet — omitted when the
-   *  catalog is unavailable. Empty state falls back to Browse / New only. */
+  /** Curated template starters — the "Worth setting up" section. Omitted when
+   *  the catalog is unavailable, and the section disappears with it. */
   loadSuggestions?: () => Promise<AuOverviewSuggestionDTO[]>;
   /** Adopt a suggested template (clone → thread), same path as Templates. */
   onUseSuggestion?: (templateId: string) => void;
@@ -615,27 +585,27 @@ export interface AutomationEditorData {
    *  this one hands off to when a run fails. Optional/additive. */
   onFailure?: string | null;
   /** Notifications tab: manifest `requires.model` (falling back to
-   *  the selected runner's effective default) — the model the compiled plan
+   *  the selected harness's effective default) — the model the compiled plan
    *  runs on. `null` means "Use default". Optional/additive. */
   model?: string | null;
-  /** Manifest `requires.runner`; `null` means the automations subsystem runner. */
-  runner?: AgentRunnerKind | null;
-  /** Effective automations subsystem runner inherited when `runner` is null. */
-  defaultRunnerKind?: AgentRunnerKind;
-  /** Effective model inherited for `defaultRunnerKind` when `model` is null. */
+  /** Manifest `requires.harness`; `null` means the automations subsystem harness. */
+  harness?: HarnessKind | null;
+  /** Effective automations subsystem harness inherited when `harness` is null. */
+  defaultHarnessKind?: HarnessKind;
+  /** Effective model inherited for `defaultHarnessKind` when `model` is null. */
   defaultModel?: string | null;
   /**
    * Gateway-wide default cron timezone (prefs `automation.cron.defaultTimezone`).
    * Used when a cron trigger omits `tz` (issue #570). Absent/empty → host-local.
    */
   defaultCronTimeZone?: string | null;
-  /** Dynamic gateway runner/model catalog used by the editor Agent control. */
-  agentRunners?: Array<{
-    kind: AgentRunnerKind;
+  /** Dynamic gateway harness/model catalog used by the editor harness control. */
+  harnesses?: Array<{
+    kind: HarnessKind;
     label: string;
     accent: string;
     connected: boolean;
-    models: AgentModelDTO[];
+    models: HarnessModelDTO[];
     defaultModel: string | null;
   }>;
 }
@@ -645,12 +615,12 @@ export interface AutomationEditorSaveFields {
   triggers: AuEditorTriggerInput[];
   /**
    * Durable vault connection bindings from the connectors picker.
-   * Soft bindings only (agent automations) — connection id + kind + label.
+   * Soft bindings only (harness-backed automations) — connection id + kind + label.
    */
   connections?: Array<{ connectionId: string; kind: string; label: string }>;
   /** Explicit harness pin; `null` clears back to the automations default. */
-  runner?: AgentRunnerKind | null;
-  /** Explicit model pin; `null` clears back to the selected runner's default. */
+  harness?: HarnessKind | null;
+  /** Explicit model pin; `null` clears back to the selected harness's default. */
   model?: string | null;
 }
 /** Credential payload when attaching a catalog connector from the editor. */
@@ -681,7 +651,7 @@ export interface AuEditorConnectFormInput {
 export interface CompileStepDTO {
   itemId: string;
   ordinal: number;
-  /** Ledger item kind — 'tool' / 'step' / 'agent' / 'message_in'. */
+  /** Ledger item kind — 'tool' / 'step' / 'delegate' / 'message_in'. */
   kind: string;
   /** Human label: the tool name, or the phase for a model step. */
   label: string;
@@ -768,6 +738,16 @@ export interface AutomationEditorBridgeProps {
    *  Connectors picker. Optional so hosts without the connections API still
    *  typecheck; absent ⇒ picker shows an empty/unavailable state. */
   loadConnectorCatalog?: () => Promise<AuEditorCatalogConnectorDTO[]>;
+  /**
+   * Whether this gateway offers connectors at all (C1). False withdraws the
+   * Connectors chip and its picker outright — with the gate off the vault
+   * connections + OAuth routes are not mounted, so an "attach Gmail" the
+   * gateway would refuse is worse than no offer. An automation can still be
+   * written, saved and compiled; it simply binds no provider account.
+   * Optional and defaulting TRUE so a host without a handshake keeps the
+   * picker (its own absent-loader empty state still applies).
+   */
+  connectorsEnabled?: boolean;
   /** Attach BYO oauth2 client or api_key credential for a connector kind.
    *  Resolves with the new/updated `connectionId` so oauth2 can start PKCE. */
   configureConnection?: (
@@ -871,6 +851,18 @@ export interface AutomationThreadData {
   plan: AuPlanStatusDTO;
   /** Native interactive automation-turn endpoint advertised by the gateway. */
   automationTurns?: boolean;
+  /** Optional deterministic-vs-delegate recognition choice declared by manifest. */
+  recognition?: {
+    capability: string;
+    selected: "deterministic" | "delegate";
+    deterministicLabel: string;
+    delegate: {
+      /** Null means the delegate step is deliberately unreachable until pinned. */
+      model: string | null;
+      latency: string;
+      consequence: string;
+    };
+  };
 }
 export interface AutomationThreadBridgeProps {
   /** Load the automation + its runs + its consent surface. `null` = not found. */
@@ -898,6 +890,10 @@ export interface AutomationThreadBridgeProps {
     onMessages: (messages: AsstMsgDTO[]) => void,
     signal: AbortSignal
   ) => Promise<boolean>;
+  /** Persist the recognition path used by every future fire. */
+  onSetRecognitionStep?: (
+    variant: "deterministic" | "delegate"
+  ) => Promise<boolean>;
   /** Start a manual fire and return its native turn id. */
   onRunNow: () => Promise<string | null>;
   onToggleEnabled: (next: boolean) => Promise<boolean>;
@@ -917,7 +913,7 @@ export interface AutomationThreadBridgeProps {
     text: string,
     options: {
       attachments?: BuilderAttachmentRef[];
-      runnerKind?: AgentRunnerKind;
+      harnessKind?: HarnessKind;
       model?: string;
       thinking?: string;
       onContext?: (context: { used: number; size: number }) => void;
@@ -930,7 +926,7 @@ export interface AutomationThreadBridgeProps {
   /** Auth-aware transcript thumbnail loader. */
   loadAttachmentImage?: (hash: string, mime: string) => Promise<string>;
   /** Session-ready preflight before an attended per-conversation switch. */
-  onSetRunner?: (runnerKind: AgentRunnerKind) => Promise<AsstModelPickerDTO>;
+  onSetHarness?: (harnessKind: HarnessKind) => Promise<AsstModelPickerDTO>;
   onCopyWebhook: (url: string) => void;
   onRotateWebhook: () => Promise<boolean>;
   /** Confirm + delete; resolves true when deleted (thread is navigating away). */
@@ -941,59 +937,66 @@ export interface AutomationThreadBridgeProps {
 /** The three positions of the Appearance control. `system` is a standing mode
  *  the shell keeps tracking, not a one-shot snap to the current OS value. */
 export type SettingsThemeMode = "light" | "dark" | "system";
-/** Appearance is the one visual-treatment page: theme and card
- *  surface. Layout was folded into it (#608). The accent swatches and the
- *  app-tile treatment picker were cut but keep their prefs; the dark ramp's
- *  surface temperature was removed outright, so dark has exactly one ramp —
- *  parity with light, which never had a temperature.
+/** Appearance is the one visual-treatment page, and theme is now the whole of
+ *  it. Layout was folded in (#608), and the controls that came with it have
+ *  been retired one by one: the app-tile treatment picker was cut but keeps its
+ *  pref; the dark ramp's surface temperature was removed outright, so dark has
+ *  exactly one ramp — parity with light, which never had a temperature; and the
+ *  card surface followed, a three-way choice nothing in the product asked the
+ *  owner to make. `cardVariant` still paints (`html.dataset.cards`, default
+ *  `outlined`) — it is a stored pref with no control, like the tile treatment.
  *
- *  `sidebarOpen` is deliberately absent: the sidebar has a toggle in the
- *  chrome itself, so a settings switch for it was a second control for the
- *  same state, one of them always stale-looking. The pref still exists and
- *  the chrome toggle still writes it. */
+ *  The accent swatches went the same way in #608 and their PREF went in #707:
+ *  the shell spends no hue at all now, so there is no accent to store. Neither
+ *  is `sidebarOpen` — the stem never hides, so there is no open state. */
 export interface SettingsAppearanceBridgeProps {
   themeMode: SettingsThemeMode;
-  cardVariant: "flat" | "outlined" | "elevated";
   onSetThemeMode: (mode: SettingsThemeMode) => void;
-  onSetCards: (v: "flat" | "outlined" | "elevated") => void;
+  /** Whether this gateway runs automations, which decides whether the default
+   *  cron timezone is offered at all — a schedule default on a gateway that
+   *  schedules nothing is a control whose effect can never be observed. The
+   *  row is a squatter here regardless (see the screen's own note); the gate is
+   *  the honest floor until it moves to the Automations surface. Defaults ON so
+   *  an unprovided screen (a test tree) shows it, matching `useShellCapabilities`. */
+  automations?: boolean;
 }
 
-// ── Settings: providers (agents console) ────────────────────────────────────
+// ── Settings: harnesses (Agents console) ────────────────────────────────────
 /**
- * A runner kind as it arrives on the wire. Deliberately an OPEN string rather
- * than a closed union: the gateway derives the list from its own runner
+ * A harness kind as it arrives on the wire. Deliberately an OPEN string rather
+ * than a closed union: the gateway derives the list from its own harness
  * registry, and a gateway newer than this client will name kinds this build
  * has never heard of. Narrowing here would make those unparseable — the exact
  * failure docs/protocol.md C1a forbids. The client renders whatever the
- * gateway lists, using the wire `label`, and only consults `AGENT_RUNNER_KINDS`
- * for cosmetic polish it happens to have on hand.
+ * gateway lists, using the wire `label`; cosmetic maps may add polish but
+ * never validate or filter the roster.
  */
-export type AgentRunnerKind = string;
-export interface AgentModelDTO {
+export type HarnessKind = string;
+export interface HarnessModelDTO {
   id: string;
   name?: string;
   default?: boolean;
   tier?: "smart" | "balanced" | "fast";
 }
-export interface AgentCardDTO {
-  kind: AgentRunnerKind;
+export interface HarnessCardDTO {
+  kind: HarnessKind;
   title: string;
   accent: string;
   subtitle: string;
   connected: boolean;
-  models: AgentModelDTO[];
+  models: HarnessModelDTO[];
   modelsLoading: boolean;
   /** ACP initialize/session probe succeeded and did not request authentication. */
   sessionReady: boolean;
   /**
-   * The runner is installed but its capability probe has not reported yet —
+   * The harness is installed but its capability probe has not reported yet —
    * the gateway omits `capabilities` entirely until the probe succeeds, and it
    * also omits them when the probe throws. Without this flag "we haven't
    * checked" is indistinguishable from "you are signed out", which is how a
-   * cold gateway came to label every installed runner "sign-in needed".
+   * cold gateway came to label every installed harness "sign-in needed".
    */
   sessionProbePending?: boolean;
-  /** Why an installed runner cannot join unattended failover. */
+  /** Why an installed harness cannot join unattended failover. */
   fallbackBlockedReason?: string;
   /** Live ACP capability evidence gates the corresponding turn controls. */
   modelConfigurable?: boolean;
@@ -1010,12 +1013,12 @@ export interface AgentCardDTO {
   additionalDirectories?: boolean;
   /**
    * Short capability chips for Settings (vault, resume, model pin, sign-in).
-   * Empty when the gateway has not probed this agent yet.
+   * Empty when the gateway has not probed this harness yet.
    */
   capabilityChips?: string[];
-  /** True when vault tools need HTTP MCP and the agent does not offer it. */
+  /** True when vault tools need HTTP MCP and the harness does not offer it. */
   vaultUnavailable?: boolean;
-  /** True when the agent answered AUTH_REQUIRED on the last probe. */
+  /** True when the harness answered AUTH_REQUIRED on the last probe. */
   authRequired?: boolean;
   /** Active breaker states, exposed so Settings can explain failover decisions. */
   breakerStates?: Array<{
@@ -1024,23 +1027,23 @@ export interface AgentCardDTO {
   }>;
 }
 /**
- * The chat/agent subsystems that can each pin their own model, independent
- * of the runner's default (issue: model config → gateway prefs store).
- * Mirrors the gateway prefs keys `model.<runnerKind>.<subsystem>`.
+ * The conversation/harness subsystems that can each pin their own model, independent
+ * of the harness's default (issue: model config → gateway prefs store).
+ * Mirrors the gateway prefs keys `model.<harnessKind>.<subsystem>`.
  */
 export type ModelSubsystem = "assistant" | "ask" | "builder" | "automations";
-export interface AgentsStatusDTO {
-  /** The DEFAULT agent (`agent.runner.kind`) — the runner every subsystem
+export interface HarnessesStatusDTO {
+  /** The DEFAULT harness (`harness.kind`) — the harness every subsystem
    *  without its own pin inherits. */
-  selectedKind: AgentRunnerKind;
-  cards: AgentCardDTO[];
+  selectedKind: HarnessKind;
+  cards: HarnessCardDTO[];
   anyLoading: boolean;
   savedModelByKind: Record<string, string>;
-  /** Per-runner subsystem model overrides, keyed by runner kind then subsystem. */
+  /** Per-harness subsystem model overrides, keyed by harness kind then subsystem. */
   subsystemModelByKind: Record<string, Partial<Record<ModelSubsystem, string>>>;
-  /** Semantic config pins at the runner-default tier. */
+  /** Semantic config pins at the harness-default tier. */
   defaultConfigPinsByKind: Record<string, Record<string, string>>;
-  /** Semantic config pins at the runner + subsystem tier. */
+  /** Semantic config pins at the harness + subsystem tier. */
   subsystemConfigPinsByKind: Record<
     string,
     Partial<Record<ModelSubsystem, Record<string, string>>>
@@ -1048,57 +1051,66 @@ export interface AgentsStatusDTO {
   /** Sanitized, exportable capability evidence from the latest probe. */
   diagnosticsJson: string;
   /**
-   * Per-subsystem runner pins (`runner.<subsystem>`). An ABSENT subsystem
+   * Per-subsystem harness pins (`harness.<subsystem>`). An ABSENT subsystem
    * inherits `selectedKind` — the map only carries explicit pins, so a
-   * missing entry and "pinned to the default agent" stay distinguishable.
+   * missing entry and "pinned to the default harness" stay distinguishable.
    */
-  subsystemRunnerByKey: Partial<Record<ModelSubsystem, AgentRunnerKind>>;
-  /** Ordered automatic failover members after the resolved primary runner. */
-  subsystemRunnerLadders: Partial<Record<ModelSubsystem, AgentRunnerKind[]>>;
+  subsystemHarnessByKey: Partial<Record<ModelSubsystem, HarnessKind>>;
+  /** Ordered automatic failover members after the resolved primary harness. */
+  subsystemHarnessLadders: Partial<Record<ModelSubsystem, HarnessKind[]>>;
 }
-export interface SettingsProvidersBridgeProps {
-  loadStatus: () => Promise<AgentsStatusDTO>;
-  refreshModels: () => Promise<AgentsStatusDTO>;
-  /** Switch the DEFAULT agent — the fallback every unpinned subsystem
-   *  inherits; resolves true on success. */
-  activateRunner: (kind: AgentRunnerKind) => Promise<boolean>;
-  /** Persist this agent's default model ('' = clears back to the backend default). */
-  setAgentModel: (kind: AgentRunnerKind, modelId: string) => void;
-  /** Persist this agent's per-subsystem model override ('' = clears back to the default model). */
+/**
+ * Every writer here resolves to the GATEWAY'S OWN TEXT when the write was
+ * refused, and `null` when it landed. It used to be `void` for the model,
+ * effort and ladder pins, which made a refusal invisible: the pick stayed on
+ * screen looking saved. The screen restores the previous value and puts the
+ * refusal on the status line.
+ */
+export type HarnessPrefWrite = Promise<string | null>;
+export interface SettingsHarnessesBridgeProps {
+  loadStatus: () => Promise<HarnessesStatusDTO>;
+  refreshModels: () => Promise<HarnessesStatusDTO>;
+  /** Switch the DEFAULT harness — the fallback every unpinned subsystem inherits. */
+  activateHarness: (kind: HarnessKind) => HarnessPrefWrite;
+  /** Persist this harness's default model ('' = clears back to the backend default). */
+  setHarnessModel: (kind: HarnessKind, modelId: string) => HarnessPrefWrite;
+  /** Persist this harness's per-subsystem model override ('' = clears back to the default model). */
   setSubsystemModel: (
-    kind: AgentRunnerKind,
+    kind: HarnessKind,
     subsystem: ModelSubsystem,
     modelId: string
-  ) => void;
-  /** Persist a semantic runner-default config pin ('' clears it). */
-  setAgentConfigPin: (
-    kind: AgentRunnerKind,
+  ) => HarnessPrefWrite;
+  /** Persist a semantic harness-default config pin ('' clears it). */
+  setHarnessConfigPin: (
+    kind: HarnessKind,
     category: string,
     value: string
-  ) => void;
+  ) => HarnessPrefWrite;
   /** Persist a semantic per-subsystem config pin ('' clears it). */
   setSubsystemConfigPin: (
-    kind: AgentRunnerKind,
+    kind: HarnessKind,
     subsystem: ModelSubsystem,
     category: string,
     value: string
-  ) => void;
+  ) => HarnessPrefWrite;
   /**
-   * Pin this subsystem to a runner, independent of the default agent.
+   * Pin this subsystem to a harness, independent of the default harness.
    * `''` clears the pin, so the subsystem inherits `selectedKind` again.
    */
-  setSubsystemRunner: (
+  setSubsystemHarness: (
     subsystem: ModelSubsystem,
-    kind: AgentRunnerKind | ""
-  ) => Promise<boolean>;
+    kind: HarnessKind | ""
+  ) => HarnessPrefWrite;
   /**
    * Replace one lane's ordered automatic failover membership. Removing a
    * member also revokes ladder-derived provider grants at the gateway.
    */
-  setSubsystemRunnerLadder: (
+  setSubsystemHarnessLadder: (
     subsystem: ModelSubsystem,
-    kinds: AgentRunnerKind[]
-  ) => void;
+    kinds: HarnessKind[]
+  ) => HarnessPrefWrite;
+  /** The status line — where a refused pin states what the gateway said. */
+  showToast: (message: string) => void;
 }
 
 // ── Settings: Vault (issue #382) ─────────────────────────────────────────────
@@ -1133,11 +1145,13 @@ export interface HomeAppItemDTO {
   name: string;
   desc: string;
   iconKey: string;
-  tile: HomeTileDTO;
-  tone: "new" | "draft" | null;
+  /** App identity hue used by the shared desktop AppMark. */
+  colorKey?: ColorKey;
+  /** Legacy card-paint fallback for older screen harnesses. */
+  tile?: HomeTileDTO;
+  tone: "new" | null;
   stamp: string;
   starred: boolean;
-  draft: boolean;
 }
 export interface HomeAutoItemDTO {
   ref: string;
@@ -1153,34 +1167,6 @@ export interface HomeAutoItemDTO {
   footTimeLabel: string;
   footOk: boolean;
   starred: boolean;
-}
-export interface HomeDailyBriefDTO {
-  date: string;
-  events: Array<{ id: string; title: string; at: string }>;
-  tasks: Array<{ id: string; title: string; dueAt: string }>;
-  newPhotos: number;
-  balanceMinor: number;
-  currency: string;
-}
-export interface HomeBridgeProps {
-  /** Dev flag (issue #434, Phase 3) — when false the builder is hidden, so the
-   *  "What should we build?" composer hero + its suggestions don't render and
-   *  the empty states drop their "describe an app" build prompt. */
-  builderEnabled: boolean;
-  suggestions: string[];
-  dateLabel: string;
-  appItems: HomeAppItemDTO[];
-  automationItems: HomeAutoItemDTO[];
-  dailyBrief?: HomeDailyBriefDTO;
-  counts: { all: number; apps: number; automations: number };
-  attention: number;
-  onBuild: (prompt: string) => void;
-  onOpenApp: (id: string) => void;
-  onEnterDraft: (id: string) => void;
-  onAppContext: (id: string, anchor: HomeMenuAnchor) => void;
-  onOpenAutomation: (ref: string) => void;
-  onAutomationMenu: (ref: string, anchor: HomeMenuAnchor) => void;
-  onBrowseTemplates: () => void;
 }
 
 // ── Automation run-viewer (SSE, live) ───────────────────────────────────────
@@ -1264,9 +1250,10 @@ export interface RunViewBridgeProps {
 // and the rich-answer renderer; it pushes a snapshot to React on each change.
 // Final AI answers carry pre-rendered HTML (from the vanilla `richAnswer`);
 // React injects it and re-hydrates the interactive vault refs via `hydrateRefs`.
-// The conversation LIST + selection now live in the shell sidebar (App.tsx +
-// Sidebar.tsx) — AssistantScreen renders a single, full-width conversation
-// only, so there's no `threads`/`onSelectThread`/`onDeleteThread` here.
+// The conversation LIST + selection live in the assistant SURFACE since #707
+// (AssistantRoute + AssistantConversations) — AssistantScreen still renders a
+// single conversation only, so there's no `threads`/`onSelectThread`/
+// `onDeleteThread` here.
 export interface AsstToolCallDTO {
   tool: string;
   sql?: string;
@@ -1298,7 +1285,7 @@ export interface AsstUsageDTO {
   /** True when `costUsd` is a live client-side estimate (ledger cost is exact). */
   estimated?: boolean;
   model?: string;
-  /** ACP-confirmed semantic thought level; absent when the runner did not confirm it. */
+  /** ACP-confirmed semantic thought level; absent when the harness did not confirm it. */
   effort?: string;
 }
 /**
@@ -1321,7 +1308,7 @@ export type AsstMsgDTO =
   /** A live streaming reasoning/thinking row (issue #420, Wave 2). Live-only —
    *  reasoning is not persisted in the ledger, so it never comes back on reload. */
   | { kind: "thinking"; text: string; streaming: boolean; msgId?: string }
-  /** A non-fatal runner notice (issue #420) — e.g. "this model can't read PDF
+  /** A non-fatal harness notice (issue #420) — e.g. "this model can't read PDF
    *  attachments". Persisted as a notice step and replayed on reload. */
   | { kind: "notice"; level: "warn" | "info"; text: string; msgId?: string }
   | {
@@ -1389,18 +1376,18 @@ export interface AssistantSnapshot {
   canLoadEarlier?: boolean;
   /** A previous page is being fetched right now. */
   loadingEarlier?: boolean;
-  /** False while a persisted conversation's runner binding is loading. */
-  runnerReady?: boolean;
-  /** Changes when the screen must reload runner/model capability data. */
+  /** False while a persisted conversation's harness binding is loading. */
+  harnessReady?: boolean;
+  /** Changes when the screen must reload harness/model capability data. */
   pickerRevision?: number;
 }
 /**
- * The composer's inline model picker (subsystem `assistant`, active runner
- * only) — mirrors the same `model.<runnerKind>.assistant` gateway pref the
+ * The composer's inline model picker (subsystem `assistant`, active harness
+ * only) — mirrors the same `model.<harnessKind>.assistant` gateway pref the
  * Settings → Models → Agents "Chat & agent subsystems" group reads/writes
- * (settingsProvidersData.ts), so both surfaces always agree. `models` is the
- * active runner's catalog; `selectedModelId` is `''` when the subsystem has
- * no override (falls through to `defaultModelName`, the runner's own default
+ * (settingsHarnessesData.ts), so both surfaces always agree. `models` is the
+ * active harness's catalog; `selectedModelId` is `''` when the subsystem has
+ * no override (falls through to `defaultModelName`, the harness's own default
  * — either its saved default model or its catalog-marked default).
  */
 export interface AsstModelOptionDTO {
@@ -1409,8 +1396,8 @@ export interface AsstModelOptionDTO {
   default?: boolean;
 }
 export interface AsstModelPickerDTO {
-  runners: Array<{
-    kind: AgentRunnerKind;
+  harnesses: Array<{
+    kind: HarnessKind;
     title: string;
     connected: boolean;
     sessionReady: boolean;
@@ -1418,7 +1405,7 @@ export interface AsstModelPickerDTO {
     sessionProbePending?: boolean;
     hint?: string;
   }>;
-  selectedRunnerKind: AgentRunnerKind;
+  selectedHarnessKind: HarnessKind;
   workspaceKinds: Array<"vault-data" | "app" | "draft">;
   connected: boolean;
   models: AsstModelOptionDTO[];
@@ -1476,8 +1463,8 @@ export interface AssistantBridgeProps {
   onSetModel: (modelId: string) => void;
   /** Persist the subsystem thought_level override ('' clears it). */
   onSetEffort: (effort: string) => void;
-  /** Select a runner for this conversation and reload its semantic controls. */
-  onSetRunner: (runnerKind: AgentRunnerKind) => Promise<AsstModelPickerDTO>;
+  /** Select a harness for this conversation and reload its semantic controls. */
+  onSetHarness: (harnessKind: HarnessKind) => Promise<AsstModelPickerDTO>;
   /** Persist the Centraid-scoped working directory for this conversation. */
   onSetWorkspaceKind?: (kind: "vault-data" | "app" | "draft") => void;
   /** Composer entity-mention search (issue #420). Absent = mentions disabled. */
@@ -1536,11 +1523,16 @@ export interface AppOrderDTO {
 }
 export interface AppSettingsSnapshot {
   appName: string;
-  iconSvg: string;
-  /** Gradient tile finish for the header app icon. */
-  iconBg: string;
-  iconColor: string;
-  iconShadow: string | null;
+  /** Shared single-tone desktop mark. Optional for older bridge snapshots. */
+  appMark?: {
+    colorKey: ColorKey;
+    iconKey: string;
+  };
+  iconSvg?: string;
+  /** Legacy fallback for older bridge snapshots. */
+  iconBg?: string;
+  iconColor?: string;
+  iconShadow?: string | null;
   accent: string;
   vaultVisible: boolean;
   automationsBadge: number | null;
@@ -1552,6 +1544,14 @@ export interface AppSettingsSnapshot {
 export interface AppSettingsBridgeProps {
   /** Initial settings destination for direct recovery links from an app. */
   initialTab?: "appearance" | "vault";
+  /**
+   * Whether this gateway offers automations at all (C1). False withdraws the
+   * Automations tab — a per-app view of standing orders on a gateway that
+   * mounts no automations route would be an empty list that never explains
+   * itself. Optional and defaulting TRUE so a host without a handshake (tests,
+   * harnesses) keeps the full tab strip.
+   */
+  automationsVisible?: boolean;
   onReady: (update: (s: AppSettingsSnapshot) => void) => void;
   onClose: () => void;
   onKnobCommit: (key: string, value: string) => void;
@@ -1573,83 +1573,19 @@ export interface AppSettingsBridgeProps {
   onMountRuns: (ref: string, host: HTMLElement) => void;
   /** Fill the vault consent pane host — vanilla `renderVaultPane`. */
   onMountVault: (host: HTMLElement) => void;
+  /**
+   * Fill the Enrichment pane host (issue #807). Present only for an app whose
+   * data shape HAS enrichment capabilities; absent withdraws the tab, on the
+   * same rule as `vaultVisible` — a tab that could only be empty is not shown.
+   */
+  onMountEnrichment?: (host: HTMLElement) => void;
 }
 
-// ── Builder chat pane ────────────────────────────────────────────────────────
-// The builder's right pane (preview / code / cloud / config / runs / flow) stays
-// vanilla — iframe host, code editor, cloud rail. Only the left CHAT pane moves
-// to React. The vanilla `openBuilder` closure keeps the SSE agent stream, the
-// `chat` message model, and all turn state; it derives a snapshot on every
-// change (the single `renderChat()` funnel) and pushes it. React renders the
-// transcript, the determinate agent-progress strip, and the composer. The
-// version-history view stays a vanilla async renderer, injected into a host div
-// via `onMountHistory`.
-export type BuilderMsgDTO =
-  | { kind: "divider"; text: string }
-  | { kind: "status"; text: string; spinning: boolean }
-  | { kind: "user"; text: string }
-  | { kind: "ai"; paras: string[] }
-  | { kind: "thinking"; text: string; streaming: boolean; header: string }
-  | {
-      kind: "toolGroup";
-      id: string;
-      label: string;
-      open: boolean;
-      running: boolean;
-      error: boolean;
-      rows: {
-        state: "running" | "ok" | "error";
-        verb: string;
-        target: string;
-      }[];
-      change: { count: number; subtitle: string; version: string } | null;
-    };
-export interface BuilderProgressDTO {
-  verb: string;
-  file: string;
-  sub: string;
-  filled: number;
-}
-export interface BuilderChatSnapshot {
-  view: "chat" | "history";
-  messages: BuilderMsgDTO[];
-  generating: boolean;
-  /** Live turn progress; present only while `generating`. */
-  progress: BuilderProgressDTO | null;
-  suggestions: string[];
-  /** `true` while a turn is in flight or before an app id exists. */
-  composerDisabled: boolean;
-  /** Bumps to force a history-view re-fetch after a version op. */
-  historyNonce: number;
-  context?: { used: number; size: number };
-  model?: string;
-  effort?: string;
-  /** Capability-backed attended runner controls for this builder conversation. */
-  runnerConfig?: AsstModelPickerDTO;
-  workspaceKind: "vault-data" | "app" | "draft";
-  workspaceKinds: Array<"vault-data" | "app" | "draft">;
-}
-/** A builder-composer attachment ref (mirrors ConversationAttachmentRef). */
+// ── Composer attachments ─────────────────────────────────────────────────────
+/** A composer attachment ref (mirrors ConversationAttachmentRef). */
 export interface BuilderAttachmentRef {
   hash: string;
   mime: string;
   sizeBytes: number;
   filename?: string;
-}
-export interface BuilderChatBridgeProps {
-  onReady: (update: (s: BuilderChatSnapshot) => void) => void;
-  /** Send a turn, optionally with files uploaded ahead of it (issue #420). */
-  onSend: (text: string, attachments?: BuilderAttachmentRef[]) => void;
-  onCancel: () => void;
-  onToggleGroup: (id: string) => void;
-  onSetView: (view: "chat" | "history") => void;
-  onSetWorkspaceKind: (kind: "vault-data" | "app" | "draft") => void;
-  onSetRunner: (runnerKind: AgentRunnerKind) => Promise<AsstModelPickerDTO>;
-  onSetModel: (modelId: string) => void;
-  onSetEffort: (effort: string) => void;
-  /** Fill the version-history host — vanilla owns the async renderer. */
-  onMountHistory: (host: HTMLElement) => void;
-  /** Upload one file to the app's blob CAS (issue #420). When omitted, the
-   *  composer's attach button is hidden (e.g. before the app exists). */
-  onUploadAttachment?: (file: File) => Promise<BuilderAttachmentRef>;
 }

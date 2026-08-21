@@ -1,25 +1,34 @@
 #!/usr/bin/env node
-// Mobile product-grammar gate (#690).
+// Native consumer-design gate (#690, #747).
 //
-// Native consumes the typed lowering, never CSS. This gate keeps the mobile
-// source and checked-in generated module from regressing to the old token
-// vocabulary, a CSS parser, or the retired Feather dependency.
+// The canonical design package owns literal values. Product code consumes its
+// typed lowering (`colors`, `radii`, and `t(role)`), just as desktop/PWA CSS
+// consumes custom properties. The two native adapter files own platform
+// lowering; every other production file is a consumer with zero literal debt.
 import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
 import path from "node:path";
 
 const ROOT = path.resolve(import.meta.dirname, "..");
 const MOBILE_ROOT = path.join(ROOT, "apps", "mobile");
-const SKIP_DIRS = new Set(["node_modules", "dist", "build", ".expo"]);
+const SKIP_DIRS = new Set([
+  "node_modules",
+  "dist",
+  "build",
+  ".expo",
+  "test",
+  "tests",
+]);
+const LOWERING_OWNER_SUFFIXES = [
+  path.join("kit", "theme", "native.ts"),
+  path.join("kit", "theme", "resolve.ts"),
+];
 
-// Ratchet the migration surface. These are the post-grammar counts in the
-// v0 baseline; lowering a bespoke value is welcome, adding one requires an
-// explicit review of the shared token contract instead of silently expanding
-// the exception surface.
-export const MOBILE_DESIGN_BASELINE = Object.freeze({
-  hex: 601,
-  rgba: 158,
-  fontSize: 316,
-});
+/** Blank comments while preserving offsets for useful line numbers. */
+function blankComments(src) {
+  return src
+    .replace(/\/\*[\s\S]*?\*\//gu, (match) => match.replace(/[^\n]/gu, " "))
+    .replace(/\/\/[^\n]*/gu, (match) => " ".repeat(match.length));
+}
 
 const FORBIDDEN = [
   ["Feather dependency", /(?:Feather|@expo\/vector-icons)/u],
@@ -31,75 +40,79 @@ const FORBIDDEN = [
   ],
 ];
 
+const CONSUMER_LITERAL_RULES = [
+  ["numeric fontSize; use t(<role>)", /\bfontSize\s*:\s*-?\d+(?:\.\d+)?\b/gu],
+  [
+    "numeric lineHeight; use t(<role>)",
+    /\blineHeight\s*:\s*-?\d+(?:\.\d+)?\b/gu,
+  ],
+  [
+    "literal fontWeight; use t(<role>)",
+    /\bfontWeight\s*:\s*(?:["']\d{3}["']|\d{3})(?!\d)/gu,
+  ],
+  [
+    "literal fontFamily; use t(<role>) or family.<code role>",
+    /\bfontFamily\s*:\s*["'][^"']+["']/gu,
+  ],
+  [
+    "numeric radius; use radii.<role>",
+    /\b(?:borderRadius|borderTopLeftRadius|borderTopRightRadius|borderBottomLeftRadius|borderBottomRightRadius|borderStartStartRadius|borderStartEndRadius|borderEndStartRadius|borderEndEndRadius)\s*:\s*-?\d+(?:\.\d+)?\b/gu,
+  ],
+  [
+    "literal style color; use colors.<role>",
+    /\b(?:color|backgroundColor|borderColor|borderBottomColor|borderTopColor|borderLeftColor|borderRightColor|borderStartColor|borderEndColor|shadowColor|textDecorationColor|tintColor)\s*:\s*["'](?:#[0-9a-f]{3,8}\b|rgba?\()/giu,
+  ],
+  [
+    "literal JSX color; use colors.<role>",
+    /\bcolor\s*=\s*["'](?:#[0-9a-f]{3,8}\b|rgba?\()/giu,
+  ],
+];
+
+function lineFor(source, offset) {
+  return source.slice(0, offset).split("\n").length;
+}
+
+export function analyzeNativeConsumer(source) {
+  const code = blankComments(source);
+  const findings = [];
+  for (const [label, pattern] of [...FORBIDDEN, ...CONSUMER_LITERAL_RULES]) {
+    const match = pattern.exec(code);
+    pattern.lastIndex = 0;
+    if (match) findings.push(`${lineFor(code, match.index)}: ${label}`);
+  }
+  return findings;
+}
+
 function walk(directory, out = []) {
   for (const entry of readdirSync(directory)) {
     if (SKIP_DIRS.has(entry)) continue;
     const absolute = path.join(directory, entry);
     if (statSync(absolute).isDirectory()) walk(absolute, out);
-    else if (/\.(?:ts|tsx)$/u.test(absolute)) out.push(absolute);
+    else if (
+      /\.(?:ts|tsx)$/u.test(entry) &&
+      !/\.(?:test|spec)\.(?:ts|tsx)$/u.test(entry) &&
+      !LOWERING_OWNER_SUFFIXES.some((suffix) => absolute.endsWith(suffix))
+    ) {
+      out.push(absolute);
+    }
   }
   return out;
 }
 
 export function scanMobileDesign(root = ROOT) {
   const sourceRoot = path.join(root, "apps", "mobile", "src");
-  const generated = path.join(
-    sourceRoot,
-    "kit",
-    "theme",
-    "tokens.generated.ts"
-  );
   const files = [
     path.join(root, "apps", "mobile", "App.tsx"),
     ...walk(sourceRoot),
   ];
-  const uniqueFiles = [...new Set(files)];
   const findings = [];
 
-  const counts = { fontSize: 0, hex: 0, rgba: 0 };
-  const literalPatterns = {
-    fontSize: /fontSize\s*:/gu,
-    hex: /#[0-9a-f]{3,8}\b/giu,
-    rgba: /rgba\(/gu,
-  };
-
-  for (const file of uniqueFiles) {
-    const source = readFileSync(file, "utf8");
-    for (const [label, pattern] of FORBIDDEN) {
-      if (pattern.test(source))
-        findings.push(`${path.relative(root, file)}: ${label}`);
-    }
-    for (const [name, pattern] of Object.entries(literalPatterns)) {
-      counts[name] += (source.match(pattern) ?? []).length;
+  for (const file of new Set(files)) {
+    for (const finding of analyzeNativeConsumer(readFileSync(file, "utf8"))) {
+      findings.push(`${path.relative(root, file)}:${finding}`);
     }
   }
 
-  for (const [name, baseline] of Object.entries(MOBILE_DESIGN_BASELINE)) {
-    if (counts[name] > baseline) {
-      findings.push(
-        `apps/mobile: ${name} literal count ${counts[name]} exceeds baseline ${baseline}`
-      );
-    }
-  }
-
-  const generatedSource = readFileSync(generated, "utf8");
-  for (const [label, pattern] of FORBIDDEN) {
-    if (pattern.test(generatedSource))
-      findings.push(`${path.relative(root, generated)}: ${label}`);
-  }
-
-  for (const required of [
-    "accentDeepHover",
-    "appIdentityText",
-    "bgSel",
-    "lineSel",
-    "focusRingColor",
-    "textDisabled",
-    'export const durations = {"one":120,"two":200}',
-  ]) {
-    if (!generatedSource.includes(required))
-      findings.push(`${path.relative(root, generated)}: missing ${required}`);
-  }
   return findings;
 }
 
@@ -107,12 +120,14 @@ function main() {
   if (!existsSync(MOBILE_ROOT)) throw new Error("apps/mobile is missing");
   const findings = scanMobileDesign();
   if (findings.length > 0) {
-    console.error("FAIL — mobile product-grammar gate:");
+    console.error("FAIL — native consumer-design gate:");
     for (const finding of findings) console.error(`  ${finding}`);
     process.exitCode = 1;
     return;
   }
-  console.log("ok   mobile product-grammar — typed native lowering is clean");
+  console.log(
+    "ok   native consumer design — typed lowering, zero literal debt"
+  );
 }
 
 if (process.argv[1] === import.meta.filename) main();

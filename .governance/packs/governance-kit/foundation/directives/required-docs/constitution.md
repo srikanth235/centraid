@@ -2,11 +2,11 @@
 
 - **Directive**: The repo ships the baseline set of root-level documents and local-hook scaffolding expected by governance-kit — every sub-check below is enabled:
     - `constitution` — `CONSTITUTION.md` at repo root, non-empty, ≥ 10 lines.
-    - `agents` — `AGENTS.md` at repo root, 30–250 lines (configurable via `AGENTS_MD_MIN` / `AGENTS_MD_MAX` keys in `.governance/conf/governance-kit/foundation/required-docs.conf`, or the matching `GOVERNANCE_*` env vars), with ≥ 3 links to other repo docs (configurable via `AGENTS_MD_MIN_LINKS`), and a link to `CONSTITUTION.md` so the file functions as a map to the bedrock durable docs rather than a standalone manual.
+    - `agents` — `AGENTS.md` at repo root, 30–250 lines (configurable via `AGENTS_MD_MIN` / `AGENTS_MD_MAX` keys in `.governance/conf/governance-kit/foundation/required-docs.conf`), with ≥ 3 links to other repo docs (configurable via `AGENTS_MD_MIN_LINKS`), and a link to `CONSTITUTION.md` so the file functions as a map to the bedrock durable docs rather than a standalone manual.
     - `readme` — `README.md`, `README`, or `README.rst` at repo root with a top-level heading and ≥ 30 words.
     - `license` — `LICENSE`, `LICENSE.md`, `LICENSE.txt`, `COPYING`, or `COPYING.md` exists at repo root and is non-empty.
     - `security` — `SECURITY.md` (root, `docs/`, or `.github/`) exists and lists a contact email, URL, or vulnerability-disclosure platform.
-    - `architecture` — `ARCHITECTURE.md` (root or `docs/`) exists and is ≥ 20 lines (configurable via an `ARCHITECTURE_MIN=` line in `.governance/conf/governance-kit/foundation/required-docs.conf`, or the `GOVERNANCE_ARCHITECTURE_MIN` env var).
+    - `architecture` — `ARCHITECTURE.md` (root or `docs/`) exists and is ≥ 20 lines (configurable via an `ARCHITECTURE_MIN=` line in `.governance/conf/governance-kit/foundation/required-docs.conf`).
     - `ci-workflow` — `.github/workflows/` contains at least one non-governance workflow.
     - `env-example` — when a local `.env` exists, every key in it is declared in `.env.example`.
     - `hooks` — when the installed hook strategy is `githooks`, `.githooks/pre-commit` is tracked + executable, `.githooks/commit-msg` likewise if `commit-message-format` is installed, and `core.hooksPath` points at `.githooks`. No-op on `husky` / `pre-commit.com` strategies.

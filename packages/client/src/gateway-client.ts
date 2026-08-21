@@ -11,11 +11,11 @@
  * remote gateway answers on its URL — identical wire protocol either way
  * (the local server now emits CORS for the `file://` renderer origin).
  *
- * This module ports the pure `fetch` methods that previously lived in
- * `main/*-client.ts` + `@centraid/agent-harness`'s `gateway-client`.
- * It covers the app read surface (logs / settings / deregister / live
- * URL — the schema/table-rows/query trio died with the per-app
- * data.sqlite, issue #286 phase 2), version history (list / activate), the
+ * This module ports the pure `fetch` methods that previously lived in the
+ * desktop's `main/*-client.ts` modules and its old builder gateway client.
+ * It covers the app read surface (logs / settings / deregister — the
+ * schema/table-rows/query trio died with the per-app data.sqlite, issue
+ * #286 phase 2), version history (list / activate), the
  * `/_centraid-user` identity + prefs surface, and the automation
  * read/run/analytics + insights surface. The shared fetch infrastructure
  * lives in `gateway-client-core.ts`; the app-editing + lifecycle surface
@@ -23,27 +23,22 @@
  * import everything from `./gateway-client.js`.
  */
 
-import {
-  consumeSse,
-  consumeSseFrames,
-  frameData,
-} from "@centraid/design/kit/turn-stream.js";
-import type { TurnStreamEvent } from "@centraid/design/kit/turn-stream.js";
-import { isGatewayCapabilities, ROUTES } from "@centraid/protocol";
-import type { GatewayCapabilities, GatewayInfo } from "@centraid/protocol";
+import { isGatewayCapabilities, ROUTES } from "@centraid/core/protocol";
+import type { GatewayCapabilities, GatewayInfo } from "@centraid/core/protocol";
 
 import {
-  appSessionUrl,
   auth,
   authHeaders,
   doFetch,
   enc,
   readJson,
 } from "./gateway-client-core.js";
+import { consumeSse, consumeSseFrames, frameData } from "./turn-stream.js";
+import type { TurnStreamEvent } from "./turn-stream.js";
 
 export * from "./gateway-client-core.js";
+export * from "./gateway-client-automations.js";
 export * from "./gateway-client-automation-compile.js";
-export * from "./gateway-client-capture.js";
 export * from "./gateway-client-push.js";
 
 /** Feature flags advertised by the active gateway, or undefined if malformed. */
@@ -59,13 +54,6 @@ export async function readGatewayCapabilities(): Promise<
   return isGatewayCapabilities(info.capabilities)
     ? info.capabilities
     : undefined;
-}
-
-/** URL the renderer loads in an app iframe. */
-export async function appLiveUrl(input: {
-  id: string;
-}): Promise<{ url: string }> {
-  return { url: await appSessionUrl(input.id, `/centraid/${enc(input.id)}/`) };
 }
 
 /** Newest-first tail of persistent handler logs. */
@@ -162,7 +150,6 @@ export interface AppMetaEntry {
   name?: string;
   description?: string;
   kind?: "app" | "automation";
-  hasIndex: boolean;
   /** Tile identity from `app.json` (issue #263) — raw strings; validate
    *  against the design-tokens sets before rendering. */
   iconKey?: string;
@@ -173,8 +160,8 @@ export interface AppMetaEntry {
  * Apps published on `main`, with the metadata the home shelf reads. The
  * git store is the source of truth post-#137 — there's no local worktree
  * to stat — so this returns the registry-backed metadata row, not the
- * legacy `CentraidAppInfo` (the renderer only reads id/name/desc/kind/
- * hasIndex off it).
+ * legacy `CentraidAppInfo` (the renderer only reads id/name/desc/kind
+ * off it).
  */
 export async function listApps(): Promise<AppMetaEntry[]> {
   const { baseUrl, token } = await auth();
@@ -195,9 +182,11 @@ export interface TemplateVaultScope {
   fieldMask?: string[];
 }
 
-/** A template's requested vault access, for the Discover install/consent sheet
- *  (issue #434). Read from the app-kind template's `app.json`; automations omit
- *  it. `why` is the owner-facing sentence; `scopes` are what it will touch. */
+/** A template's requested vault access (issue #434). Read from the app-kind
+ *  template's `app.json`; automations omit it. `why` is the owner-facing
+ *  sentence; `scopes` are what it will touch. The install/consent sheet that
+ *  rendered it retired with Discover (#708) — the standing surface for the same
+ *  question is now the Privacy grants ledger, which can also revoke. */
 export interface TemplateVaultDTO {
   purpose?: string;
   why?: string;
@@ -219,7 +208,8 @@ export interface TemplateMetaEntry {
   /**
    * Whether this bundled app is already installed in the addressed vault
    * (issue #434). Present only when the gateway resolves per-vault install
-   * state; the Discover gallery shows "Open" when true, "Install" otherwise.
+   * state. True for every bundled app on a mounted vault since #708 installs
+   * them all at mount.
    */
   installed?: boolean;
   /**
@@ -388,12 +378,12 @@ export async function getUserPrefs(): Promise<Record<string, unknown>> {
 /**
  * Merge `patch` into the gateway-side prefs store; returns the full map.
  *
- * The old IPC handler also called `noteRunnerPrefsChanged()` to drop the
+ * The old IPC handler also called `noteHarnessPrefsChanged()` to drop the
  * main process's in-memory preflight cache. That's no longer needed from
- * here: the preflight cache keys on the runner prefs that matter
+ * here: the preflight cache keys on the harness prefs that matter
  * (kind / binPath / provider id+baseUrl+envKey), so a change to any of
- * them re-probes automatically; and the runner-status panel
- * (`getRunnerStatus`) force-invalidates before every read regardless.
+ * them re-probes automatically; and the harness-status panel
+ * (`getHarnessStatus`) force-invalidates before every read regardless.
  */
 export async function saveUserPrefs(
   patch: Record<string, unknown>
@@ -414,7 +404,7 @@ export async function saveUserPrefs(
 // ---- Automations + insights (`/centraid/_automations`, `/centraid/_insights`) ----
 // Read/run/analytics proxies. Code (manifests) resolves gateway-side from
 // the materialized `main`; run ledgers + analytics from the gateway's data
-// dir. A turn-now fires on the gateway host with ITS runner + provider key.
+// dir. A turn-now fires on the gateway host with ITS harness + provider key.
 
 /** Every automation on `main`, sorted by name. */
 export async function listAutomations(): Promise<CentraidAutomationRow[]> {
@@ -464,6 +454,37 @@ export async function runAutomationNow(input: {
     { method: "POST", headers: authHeaders(token) }
   );
   return readJson<CentraidAutomationTurnResult>(res, "run automation");
+}
+
+/**
+ * Fire through the gateway's ordinary automation path and wait for the
+ * handler outcome. Test Run and synchronous product gestures use this seam;
+ * Run now remains the background/SSE affordance.
+ */
+export async function invokeAutomationAndAwait(input: {
+  automationId: string;
+  payload?: unknown;
+}): Promise<CentraidAutomationInvokeResult> {
+  const { baseUrl, token } = await auth();
+  const res = await doFetch(
+    baseUrl,
+    `/centraid/_automations/invoke-and-await?ref=${enc(input.automationId)}`,
+    {
+      method: "POST",
+      headers: authHeaders(token, "application/json"),
+      body: JSON.stringify(input.payload ?? {}),
+    }
+  );
+  const result = await readJson<CentraidAutomationInvokeResult>(
+    res,
+    "invoke automation and await"
+  );
+  if (result.result.outcome && !result.result.outcome.ok) {
+    throw new Error(
+      result.result.outcome.error ?? "Automation finished unsuccessfully."
+    );
+  }
+  return result;
 }
 
 /** Native automation turns, newest-first. Omit `automationId` for the global feed. */
@@ -675,7 +696,7 @@ export async function streamAutomationConversationTurn(
       sizeBytes: number;
       filename?: string;
     }>;
-    runnerKind?: string;
+    harnessKind?: string;
     model?: string;
     thinking?: string;
   }
@@ -691,7 +712,7 @@ export async function streamAutomationConversationTurn(
         message,
         ...(providerConsent?.length ? { providerConsent } : {}),
         ...(turn?.attachments?.length ? { attachments: turn.attachments } : {}),
-        ...(turn?.runnerKind ? { runnerKind: turn.runnerKind } : {}),
+        ...(turn?.harnessKind ? { harnessKind: turn.harnessKind } : {}),
         ...(turn?.model ? { model: turn.model } : {}),
         ...(turn?.thinking ? { thinking: turn.thinking } : {}),
       }),
@@ -808,6 +829,9 @@ export * from "./gateway-client-conversation.js";
 // lives in `gateway-client-vault.ts`. Re-exported here so the per-app
 // Vault tab imports it from the same barrel.
 export * from "./gateway-client-vault.js";
+// The staged-import workflow half of that same plane (issue #712 P18) — one
+// lifecycle rather than one act per call; see its header for the seam.
+export * from "./gateway-client-vault-imports.js";
 export * from "./gateway-client-atlas.js";
 
 // The broker-owned OAuth / BYO-client connections surface (issue #304)
@@ -856,8 +880,7 @@ export {
   releaseGatewayDeviceWork,
   stageGatewayDeviceWorkDerivative,
   type CentraidGatewayDevice,
-  type GatewayDeviceRole,
-  type GatewayVaultGrant,
+  type GatewayDeviceVault,
   type DeviceComputeCapabilities,
   type DeviceComputeProfile,
   type GatewayDeviceWorkDepth,
@@ -870,12 +893,39 @@ export {
 // row revoked?" without importing the HTTP client (see the module header).
 export { isRevokedDevice } from "./device-roster.js";
 
-// The household roster (issue #599 L2) — the people devices act as. Same
-// card, same barrel; see `gateway-client-members.ts` for the two-verb split.
+// The caller's own person (issue #726) — the device roster's own-owner
+// header. Same card, same barrel; see `gateway-client-owners.ts`.
 export {
-  listGatewayMembers,
-  createGatewayMember,
-  renameGatewayMember,
-  removeGatewayMember,
-  type GatewayMember,
-} from "./gateway-client-members.js";
+  listGatewayOwners,
+  renameGatewayOwner,
+  type GatewayOwner,
+  type GatewayOwnerVault,
+} from "./gateway-client-owners.js";
+
+// The link ceremony (#726 P2/P3) and the placement/commons surface (#726
+// P2/P4) — the People panel's own data plane. Same barrel so
+// `SharingCard.tsx` reads it beside the devices/owners surfaces above. D9's
+// per-link receive setting is NOT here: it governed gives arriving from
+// another person's vault, and copy-as-share retired (#825, ruling G-copy).
+export {
+  listGatewayLinks,
+  proposeGatewayLink,
+  approveGatewayLink,
+  type GatewayLink,
+} from "./gateway-client-links.js";
+export {
+  listGatewayEdges,
+  createCommons,
+  listCommonsInvitations,
+  claimCommonsInvitation,
+  answerCommonsInvitation,
+  listCommonsRecovery,
+  recoverCommons,
+  type GatewayEdge,
+  type EdgeMode,
+  type EdgeKind,
+  type EdgeStatus,
+  type CommonsInvitation,
+  type CommonsRecoveryGrant,
+  type CommonsRecoveryOutcome,
+} from "./gateway-client-edges.js";

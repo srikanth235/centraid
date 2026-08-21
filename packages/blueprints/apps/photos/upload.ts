@@ -1,4 +1,3 @@
-import { $ } from "./dom.ts";
 // Upload pipeline: perceptual hash + client thumb staging, then the typed
 // `upload` command per file. `runUpload` takes `refresh` and `setUploading`
 // from app.tsx (the only two things here that touch app-level state) — the
@@ -8,15 +7,18 @@ import {
   isPendingOffsite,
   stageDerivative,
   stageFileBytes,
-  toast,
-} from "./kit.ts";
-import { act, narrate, writeTarget } from "./outcomes.ts";
-import { thumbHashFromImage } from "./thumbhash.ts";
+} from "@centraid/design/elements";
+
 import {
   captureVideoFrames,
   VIDEO_POSTER_EDGE,
   VIDEO_THUMB_EDGE,
-} from "./video-frame.js";
+} from "../_shared/video-frame.ts";
+import { tallyDedupes } from "./components/Import.tsx";
+import type { ImportResult } from "./components/Import.tsx";
+import { $ } from "./dom.ts";
+import { act, narrate, notice, writeTarget } from "./outcomes.ts";
+import { thumbHashFromImage } from "./thumbhash.ts";
 
 const CLIENT_TINY_EDGE = VIDEO_THUMB_EDGE;
 const CLIENT_MEDIUM_EDGE = VIDEO_POSTER_EDGE;
@@ -256,13 +258,26 @@ export async function probeAudio(file: File): Promise<MediaMeta | null> {
   }
 }
 
+const NOTHING_IMPORTED: ImportResult = {
+  added: 0,
+  deduped: 0,
+  restored: 0,
+};
+
 export async function runUpload(
   files: File[],
   {
     refresh,
     setUploading,
-  }: { refresh: () => Promise<void>; setUploading: (v: boolean) => void }
-): Promise<void> {
+    wasTrashed,
+  }: {
+    refresh: () => Promise<void>;
+    setUploading: (v: boolean) => void;
+    /** Was `assetId` in the trash this device had loaded when the run began?
+     *  See `tallyDedupes` for why the answer has to predate the run. */
+    wasTrashed: (assetId: string) => boolean;
+  }
+): Promise<ImportResult> {
   // WHERE the new photos land (issue #599): whatever the chip selection makes
   // the write target — the member's own library under "All", or the audience
   // they are looking at. A read-only audience never gets here (wireUpload
@@ -270,28 +285,33 @@ export async function runUpload(
   // a drop or paste can race the shell revoking write access.
   const target = writeTarget("new");
   if (target.disabled) {
-    toast(target.reason);
-    return;
+    notice(target.reason);
+    return NOTHING_IMPORTED;
   }
   const scope = target.scopeId;
   const oversized = files.filter((f) => f.size > MAX_UPLOAD_BYTES);
   const accepted = files.filter((f) => f.size <= MAX_UPLOAD_BYTES);
   if (accepted.length === 0) {
-    toast(
+    notice(
       oversized.length === 1
-        ? `Skipped “${oversized[0]!.name}” — each upload tops out at 512 MB.`
-        : `Skipped ${oversized.length} files — each upload tops out at 512 MB.`
+        ? `Skipped “${oversized[0]!.name}” — each import tops out at 512 MB.`
+        : `Skipped ${oversized.length} files — each import tops out at 512 MB.`
     );
-    return;
+    return NOTHING_IMPORTED;
   }
 
   setUploading(true);
-  const btn = $<HTMLButtonElement>("uploadBtn");
-  btn.disabled = true;
-  $<HTMLButtonElement>("emptyUpload").disabled = true;
+  // The two entry controls go inert for the run. NEITHER becomes a progress
+  // bar (v4 §14): a control says what it does, and what the run is doing is
+  // said once, with exact counts, on the frame's one status line.
+  setImportEnabled(false);
 
   let added = 0;
-  let deduped = 0;
+  // The assets this run's dedupes landed on, in selection order. Kept as ids
+  // rather than a count because "already here" and "restored" are the same
+  // command output (`deduped: 1`) and only the id tells them apart — see
+  // `tallyDedupes`.
+  const dedupedIds: string[] = [];
   let parked = 0;
   let pendingOffsite = 0;
   let queued = 0;
@@ -304,7 +324,9 @@ export async function runUpload(
   const uploadNext = async (i: number): Promise<void> => {
     const file = accepted[i];
     if (file === undefined) return;
-    btn.textContent = `Uploading ${i + 1} of ${accepted.length}…`;
+    // Determinate, with exact counts, on the ONE status line — never a
+    // spinner and never a control that has turned into a label (§14).
+    notice(`Importing ${i + 1} of ${accepted.length}…`);
     // Stage the bytes (issue #296), grow a client thumb beside them, then
     // claim the sha through the typed command — which is where the receipt
     // mints and the library learns about the asset.
@@ -359,9 +381,16 @@ export async function runUpload(
     );
     // One bad file never sinks the batch — count it and keep going.
     if (outcome?.status === "executed") {
-      if (isPendingOffsite(staged)) pendingOffsite += 1;
+      // A DEDUPE IS NOT AN ADDITION. It used to be counted as one AND as a
+      // dedupe, so a run of four files that were all already here said "Added
+      // 4 photographs (4 already in the library)" — two numbers describing the
+      // same four files, one of them untrue. The branches are exclusive now,
+      // and the pending-offsite question does not arise for bytes the library
+      // already had.
+      if (outcome.output?.deduped) {
+        dedupedIds.push(String(outcome.output.asset_id ?? ""));
+      } else if (isPendingOffsite(staged)) pendingOffsite += 1;
       else added += 1;
-      if (outcome.output?.deduped) deduped += 1;
     } else if (outcome?.status === "parked") {
       parked += 1;
     } else if (
@@ -378,17 +407,19 @@ export async function runUpload(
   await uploadNext(0);
 
   setUploading(false);
-  btn.textContent = "＋ Add media";
   // Re-enable through the target, not blindly: the chip selection may have
   // moved to a read-only audience while the batch ran.
   applyUploadTarget();
 
+  const { deduped, restored } = tallyDedupes(dedupedIds, wasTrashed);
   const parts: string[] = [];
   if (added > 0) {
-    const dedupeNote =
-      deduped > 0 ? ` (${deduped} already in the library)` : "";
-    parts.push(`Added ${added} ${added === 1 ? "item" : "items"}${dedupeNote}`);
+    parts.push(`Added ${added} ${added === 1 ? "photograph" : "photographs"}`);
   }
+  // Both outcomes are named on the ONE status line as counts, and explained at
+  // length by the panels the caller draws afterwards (components/Import.tsx).
+  if (restored > 0) parts.push(`${restored} restored from the trash`);
+  if (deduped > 0) parts.push(`${deduped} already in your library`);
   if (parked > 0) parts.push(`${parked} awaiting approval`);
   if (pendingOffsite > 0)
     parts.push(`${pendingOffsite} attached locally · pending offsite`);
@@ -399,9 +430,10 @@ export async function runUpload(
     parts.push(`${retryable} interrupted — add again to resume`);
   if (oversized.length > 0)
     parts.push(`${oversized.length} over the 512 MB cap`);
-  toast(parts.join(" · ") || "Nothing added");
+  notice(parts.join(" · ") || "Nothing added");
   if (lastBad) narrate(lastBad);
   await refresh();
+  return { added, deduped, restored };
 }
 
 function dragHasFiles(e: DragEvent): boolean {
@@ -424,15 +456,31 @@ function dragHasFiles(e: DragEvent): boolean {
  * after the upload has already started. Called by app-root.tsx on every
  * toolbar render, so it tracks the chip selection.
  */
+/** The two controls that hand this app files from disk. `uploadBtn` is the
+ *  frame's own Import contribution (frame.tsx) and `emptyUpload` the empty
+ *  state's, so either can be absent on any given render — unlike the static
+ *  ids `$` is otherwise asserted non-null for. */
+const IMPORT_CONTROL_IDS = ["uploadBtn", "emptyUpload"] as const;
+
+function importControls(): HTMLButtonElement[] {
+  const found: HTMLButtonElement[] = [];
+  for (const id of IMPORT_CONTROL_IDS) {
+    const btn = $<HTMLButtonElement>(id) as HTMLButtonElement | null;
+    if (btn) found.push(btn);
+  }
+  return found;
+}
+
+/** Inert for the duration of a run, and nothing else — no label swap, no
+ *  spinner, no count on the control (§14). */
+function setImportEnabled(enabled: boolean): void {
+  for (const btn of importControls()) btn.disabled = !enabled;
+}
+
 export function applyUploadTarget(): void {
   const target = writeTarget("new");
   const reason = target.disabled ? target.reason : "";
-  for (const id of ["uploadBtn", "emptyUpload"]) {
-    // `uploadBtn` lives in the React-owned sidebar and `emptyUpload` in the
-    // empty state, so either can be absent on any given render — unlike the
-    // static ids `$` is otherwise asserted non-null for.
-    const btn = $<HTMLButtonElement>(id) as HTMLButtonElement | null;
-    if (!btn) continue;
+  for (const btn of importControls()) {
     btn.disabled = target.disabled;
     btn.title = reason;
   }

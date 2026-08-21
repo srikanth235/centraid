@@ -50,6 +50,73 @@ describe("AutomationThreadScreen", () => {
     expect(el.textContent).toContain("Paused");
   });
 
+  it("shows explicit recognition consequences and passes the chosen variant", async () => {
+    const data = makeData({
+      recognition: {
+        capability: "ocr",
+        selected: "deterministic",
+        deterministicLabel: "Deterministic service",
+        delegate: {
+          model: "provider/member-selected-model",
+          latency: "Delegate OCR takes seconds instead of milliseconds.",
+          consequence:
+            "Delegate steps are billed and re-derive eligible photos.",
+        },
+      },
+    });
+    const props = makeProps({}, data);
+    const el = await mount(props);
+    expect(el.textContent).toContain(
+      "Delegate OCR takes seconds instead of milliseconds."
+    );
+    expect(el.textContent).toContain(
+      "Delegate steps are billed and re-derive eligible photos."
+    );
+    expect(el.textContent).toContain("explicit provider-egress consent");
+
+    const method = el.querySelector<HTMLSelectElement>(
+      'select[aria-label="Recognition method"]'
+    )!;
+    await act(async () => {
+      method.value = "delegate";
+      method.dispatchEvent(new Event("change", { bubbles: true }));
+    });
+    expect(
+      el.querySelector<HTMLSelectElement>(
+        'select[aria-label="Pinned delegate model"]'
+      )?.value
+    ).toBe("provider/member-selected-model");
+    await act(async () =>
+      byText(el, "button", "Run now")!.dispatchEvent(
+        new MouseEvent("click", { bubbles: true })
+      )
+    );
+    expect(props.onSetRecognitionStep).toHaveBeenCalledWith("delegate");
+    expect(props.onRunNow).toHaveBeenCalledWith();
+  });
+
+  it("disables the agent recognition choice until a model is pinned", async () => {
+    const data = makeData({
+      recognition: {
+        capability: "ocr",
+        selected: "deterministic",
+        deterministicLabel: "Deterministic service",
+        delegate: {
+          model: null,
+          latency: "Delegate OCR takes seconds.",
+          consequence:
+            "Delegate steps are billed and re-derive eligible photos.",
+        },
+      },
+    });
+    const el = await mount(makeProps({}, data));
+    const delegate = el.querySelector<HTMLOptionElement>(
+      'option[value="delegate"]'
+    );
+    expect(delegate?.disabled).toBe(true);
+    expect(el.textContent).toContain("Choose a delegate model in Compiler");
+  });
+
   it("opens the overflow menu and edits setup from it", async () => {
     const props = makeProps();
     const el = await mount(props);

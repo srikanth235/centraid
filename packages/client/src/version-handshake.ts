@@ -1,7 +1,7 @@
 /*
  * Version handshake (issue #289 decision 8 / #468 K10 / #504 / #512).
  *
- * Re-exports the pure wire core from `@centraid/protocol` so desktop + web
+ * Re-exports the pure wire core from `@centraid/core/protocol` so desktop + web
  * share one product + protocol source with the gateway and CLI.
  * Runtime connect gates on protocol only (product version is display).
  */
@@ -18,4 +18,4 @@ export {
   type GatewayInfo,
   type HandshakeResult,
   type GatewayCapabilities,
-} from "@centraid/protocol";
+} from "@centraid/core/protocol";

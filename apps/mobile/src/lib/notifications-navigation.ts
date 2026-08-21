@@ -4,7 +4,6 @@ export type MobileNotificationsDestination =
   | { kind: "automation-thread"; automationRef: string }
   | { kind: "gateway-alerts" }
   | { kind: "outbox"; itemId: string }
-  | { kind: "app"; appId: string }
   | { kind: "notifications" };
 
 /** Resolve a notice to the native surface where the owner can act on it. */
@@ -26,7 +25,9 @@ export function mobileNotificationsDestination(
         : notice.sourceRef;
     return { kind: "outbox", itemId };
   }
-  if (typeof notice.detail.appId === "string")
-    return { kind: "app", appId: notice.detail.appId };
+  // An app-scoped notice has no destination of its own: every app is a native
+  // cover reached from Home, and there is no generic per-app screen left to
+  // push (issue #799 retired the WebView cover). The notice list is where the
+  // owner reads it, so that is where the tap lands.
   return { kind: "notifications" };
 }

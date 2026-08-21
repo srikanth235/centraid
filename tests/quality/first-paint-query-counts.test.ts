@@ -15,10 +15,10 @@ import {
   sealValue,
 } from "@centraid/vault";
 
-import { ConversationHistoryStore } from "../../packages/app-engine/src/conversation/history.js";
-import { ensureConversationLedger } from "../../packages/app-engine/src/stores/gateway-db.js";
-import type { WorkspaceProvider } from "../../packages/app-engine/src/stores/vault-workspace.js";
-import { openVaultPlane } from "../../packages/gateway/src/serve/vault-plane.js";
+import { ConversationHistoryStore } from "../../packages/server/src/engine/conversation/history.js";
+import { ensureConversationLedger } from "../../packages/server/src/engine/stores/gateway-db.js";
+import type { WorkspaceProvider } from "../../packages/server/src/engine/stores/vault-workspace.js";
+import { openVaultPlane } from "../../packages/server/src/serve/vault-plane.js";
 import { tempDir } from "../../packages/test-kit/src/temp-dir.js";
 import { seedYear3Vault } from "../../packages/test-kit/src/year3-vault.js";
 import budgets from "../experience-budgets/client-query-counts.json";
@@ -263,7 +263,7 @@ describe("P2 first-paint query counts on the year-3 fixture", () => {
       appsDir: `${db.dir}/apps`,
       journal: () => db.journal,
       journalDbFile: `${db.dir}/journal.db`,
-      runnerSessionDir: `${db.dir}/runner-sessions`,
+      harnessSessionDir: `${db.dir}/harness-sessions`,
     });
     const store = new ConversationHistoryStore(workspace);
     const conversation = db.journal

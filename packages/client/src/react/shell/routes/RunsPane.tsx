@@ -6,7 +6,7 @@ import {
   pinAutomationTurn,
 } from "../../../gateway-client.js";
 import { useCachedQuery } from "../queryCache.js";
-import { showToast } from "../toast.js";
+import { postStatus } from "../statusChannel.js";
 
 import styles from "./RunsPane.module.css";
 
@@ -41,7 +41,7 @@ export default function RunsPane({
         ),
       () => pinAutomationTurn({ turnId: run.turnId, pinned })
     ).catch((error: unknown) =>
-      showToast(
+      postStatus(
         `Couldn't ${pinned ? "pin" : "unpin"} that run: ${error instanceof Error ? error.message : String(error)}`
       )
     );

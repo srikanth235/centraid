@@ -21,7 +21,7 @@ import path from "node:path";
 
 import { app } from "electron";
 
-import { platformDefaultDataDir } from "@centraid/gateway";
+import { platformDefaultDataDir } from "@centraid/server";
 
 /** Device-local id for the one gateway hosted on this machine. */
 export const LOCAL_GATEWAY_ID = "local";

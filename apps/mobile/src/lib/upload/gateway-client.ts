@@ -1,5 +1,5 @@
 // Client for the gateway's direct-transfer door (#414/#416), served by
-// `packages/gateway/src/routes/blob-routes.ts` over
+// `packages/server/src/routes/blob-routes.ts` over
 // `packages/vault/src/blob/direct-transfers.ts`.
 //
 // The device identity the gateway gates on (`AUTHED_DEVICE_HEADER`) is stamped

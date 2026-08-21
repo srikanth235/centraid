@@ -71,9 +71,9 @@ export const COMPONENT_PRESENTATION: Readonly<
     blurb: "Snapshot keyring, engine state, and bytes waiting to go offsite.",
   },
   cache: {
-    label: "Runner cache",
+    label: "Harness cache",
     color: "var(--c-slate)",
-    blurb: "Coding-agent scratch space. Derived — safe to delete at any time.",
+    blurb: "Harness scratch space — derived, safe to delete.",
   },
   logs: {
     label: "Logs",
@@ -95,6 +95,28 @@ export const COMPONENT_PRESENTATION: Readonly<
 const COMPONENT_ORDER = Object.keys(
   COMPONENT_PRESENTATION
 ) as LocalComponentId[];
+
+/**
+ * Presentation for a component id, INCLUDING one this build does not
+ * recognize. `LocalComponentId` is a checked union in this file's own type
+ * system, but the wire gives no such guarantee at runtime: a newer gateway
+ * can report a component id shipped after this client was built, and
+ * `readJson`'s cast does not validate against the union. Indexing
+ * `COMPONENT_PRESENTATION` directly with such an id reads `undefined` and
+ * throws on the next `.label`/`.color` access. Falling back to the raw id as
+ * its own label keeps the real byte count on screen (never
+ * dropped, never a thrown card) without inventing a name for something this
+ * build cannot describe.
+ */
+export function presentationFor(component: string): ComponentPresentation {
+  return (
+    COMPONENT_PRESENTATION[component as LocalComponentId] ?? {
+      label: component,
+      color: "var(--c-slate)",
+      blurb: "A newer component this app version does not yet describe.",
+    }
+  );
+}
 
 export interface FootprintSlice {
   component: LocalComponentId;
@@ -133,7 +155,7 @@ export function footprintSlices(report: LocalUsageReportDTO): FootprintSlice[] {
   return [...totals.entries()]
     .filter(([, value]) => value.bytes > 0)
     .map(([component, value]) => {
-      const presentation = COMPONENT_PRESENTATION[component];
+      const presentation = presentationFor(component);
       return {
         component,
         label: presentation.label,
@@ -250,7 +272,7 @@ export function budgetSummary(
   const used = formatBytes(report.totalBytes);
   const of = formatBytes(limits.totalLimitBytes);
   if (report.limit.status === "error") {
-    return `${used} of your ${of} budget — over. Nothing is being blocked; this is a warning so you can decide what to clear.`;
+    return `${used} of your ${of} budget — over.`;
   }
   if (report.limit.status === "degraded") {
     return `${used} of your ${of} budget — past the ${limits.warnAtPercent}% mark.`;

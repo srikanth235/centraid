@@ -1,11 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { AutomationFeedEntry } from "./automationsData.js";
-import {
-  attentionCount,
-  buildHomeAppItems,
-  buildHomeAutoItems,
-} from "./homeData.js";
+import { buildHomeAppItems, buildHomeAutoItems } from "./homeData.js";
 
 // `vi.mock` is hoisted above the imports by vitest, so the gateway stub is in
 // place before homeData.js pulls gateway-client-core's load-time side-effect.
@@ -30,17 +26,6 @@ describe("homeData", () => {
       color: "#123",
       updatedAt: "2020-01-01T00:00:00Z",
     }) as unknown as UserAppMeta;
-  const draft = (id: string): DraftAppMeta =>
-    ({
-      id,
-      name: id,
-      iconKey: "Sparkle",
-      color: "#456",
-      __draft: true,
-      hasIndex: true,
-      desc: "d",
-    }) as unknown as DraftAppMeta;
-
   const row = (
     over: Partial<CentraidAutomationRow> = {}
   ): CentraidAutomationRow =>
@@ -66,23 +51,19 @@ describe("homeData", () => {
   });
 
   describe("homeData", () => {
-    it("builds app items, flagging drafts and starred", () => {
-      const items = buildHomeAppItems([userApp("todos"), draft("wip")], {
+    it("builds app items, flagging starred and stamping the last edit", () => {
+      const items = buildHomeAppItems([userApp("todos"), userApp("notes")], {
         userApps: [userApp("todos")],
         isStarred: (id) => id === "todos",
         tileVariant: "gradient",
       });
       expect(items[0]).toMatchObject({
         id: "todos",
-        draft: false,
         starred: true,
+        tone: null,
       });
-      expect(items[1]).toMatchObject({
-        id: "wip",
-        draft: true,
-        stamp: "saved",
-        tone: "draft",
-      });
+      // Not in `userApps`, so there is no edit stamp to resolve.
+      expect(items[1]).toMatchObject({ id: "notes", starred: false });
     });
 
     it("builds automation items with status + trigger labels", () => {
@@ -93,11 +74,6 @@ describe("homeData", () => {
         triggerIcon: "Clock",
       });
       expect(items[0]?.footOk).toBe(true);
-    });
-
-    it("counts automations whose last run failed as needing attention", () => {
-      expect(attentionCount([row()], [entry(false)])).toBe(1);
-      expect(attentionCount([row()], [entry(true)])).toBe(0);
     });
   });
 });

@@ -2,7 +2,7 @@
  * Delete an album through media.delete_album. Only the album goes —
  * its photos stay in the library. Risk low.
  *
- * @type {import('@centraid/app-engine').ActionHandler}
+ * @type {import('@centraid/server/engine').ActionHandler}
  */
 export default async function deleteAlbum({ body, ctx }: HandlerArgs) {
   const input = (body ?? {}) as Record<string, unknown>;

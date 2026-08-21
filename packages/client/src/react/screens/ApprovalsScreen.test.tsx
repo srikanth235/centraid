@@ -1,16 +1,23 @@
-// governance: allow-repo-hygiene file-size-limit (#552) one suite per screen — decision/risk/actor/grant/collapse/filter/expand cases all exercise the single ApprovalsScreen activity contract and share its mount fixtures
+// governance: allow-repo-hygiene file-size-limit (#765) one suite per screen — staged write, waiting queue, grants, ledger, history and the five states all exercise the single ApprovalsScreen contract and share its mount fixtures
 import { act } from "react";
 import { createRoot } from "react-dom/client";
 import type { Root } from "react-dom/client";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import ApprovalsScreen, {
-  NOTICE_BAR_MAX,
-  noticeBarCount,
-  noticeHue,
+import {
+  arrivalCount,
+  blockingIds,
+  callerPhrase,
+  isAuthorableKey,
   noticeSeverityLabel,
   noticeSpanPhrase,
-} from "./ApprovalsScreen.js";
+  outboundLabel,
+} from "../shell/routes/approvalsPhrasing.js";
+// The surface's presentation rules moved out of the component with the v11
+// pass (#815) — the phrasings to `approvalsPhrasing`, the store ledger's
+// revoked-row bookkeeping to `privacyStores` — and this suite keeps exercising
+// them beside the screen they are the contract for.
+import ApprovalsScreen from "./ApprovalsScreen.js";
 import type {
   ApprovalsActivityRowDTO,
   ApprovalsGrantRowDTO,
@@ -21,6 +28,7 @@ import type {
   ApprovalsScreenProps,
   NoticeRowDTO,
 } from "./ApprovalsScreen.js";
+import { mergeRevokedHolders, revokedHolderKey } from "./privacyStores.js";
 
 const outboxRow: ApprovalsOutboxRowDTO = {
   itemId: "item1",
@@ -157,6 +165,7 @@ function makeProps(
     parked: [],
     scopeRequests: [],
     grants: [],
+    storeGrants: [],
     activity: [],
     busyId: null,
     onApproveOutbox: vi.fn<ApprovalsScreenProps["onApproveOutbox"]>(),
@@ -165,6 +174,7 @@ function makeProps(
     onConfirmParked: vi.fn<ApprovalsScreenProps["onConfirmParked"]>(),
     onDecideScopeRequest: vi.fn<ApprovalsScreenProps["onDecideScopeRequest"]>(),
     onRevokeGrant: vi.fn<ApprovalsScreenProps["onRevokeGrant"]>(),
+    onRevokeStoreGrant: vi.fn<ApprovalsScreenProps["onRevokeStoreGrant"]>(),
     ...over,
   };
 }
@@ -188,34 +198,56 @@ describe("screens/ApprovalsScreen", () => {
     });
     return container;
   }
-  function findButton(el: HTMLElement, text: string): HTMLButtonElement {
-    const btn = [...el.querySelectorAll("button")].find((b) =>
-      b.textContent?.includes(text)
-    );
-    if (!btn) throw new Error(`no button with text "${text}"`);
-    return btn as HTMLButtonElement;
-  }
   function rerender(props: ApprovalsScreenProps): void {
     act(() => {
       root?.render(<ApprovalsScreen {...props} />);
     });
   }
-  function openArchived(el: HTMLElement): void {
-    act(() => {
-      findButton(el, "Archived").click();
-    });
+  /** Buttons carry their whole label as text, so an EXACT match is the honest
+   *  selector: "Deny" and "Deny this write" are two different controls. */
+  function findButton(el: HTMLElement, text: string): HTMLButtonElement {
+    const btn = [...el.querySelectorAll("button")].find(
+      (b) => b.textContent?.trim() === text
+    );
+    if (!btn) throw new Error(`no button labelled "${text}"`);
+    return btn as HTMLButtonElement;
+  }
+  function click(el: HTMLElement, text: string): void {
+    act(() => findButton(el, text).click());
+  }
+  /** Press one section head's own Show/Hide, rather than the first button in
+   *  the page that happens to carry the same word. */
+  function toggleSection(el: HTMLElement, label: string): void {
+    const head = [...el.querySelectorAll("h2")].find(
+      (h) => h.textContent === label
+    );
+    const btn = head?.parentElement?.querySelector("button");
+    if (!btn) throw new Error(`no toggle on section "${label}"`);
+    act(() => btn.click());
+  }
+  function sectionMeta(el: HTMLElement, label: string): string | undefined {
+    const head = [...el.querySelectorAll("h2")].find(
+      (h) => h.textContent === label
+    );
+    return head?.nextElementSibling?.textContent ?? undefined;
   }
 
   describe(ApprovalsScreen, () => {
-    it("shows the honest empty state and keeps retained grants under Archived", () => {
+    it("says empty is the healthy state, and still keeps the standing grants reachable", () => {
       const el = mount(makeProps());
-      expect(el.textContent).toContain("Nothing waiting on you.");
-      openArchived(el);
+      expect(el.textContent).toContain("Nothing is waiting on you");
+      expect(el.textContent).toContain(
+        "Staged writes, lapsed connections and access requests land here."
+      );
+      // The empty state's one verb has somewhere real to land: the grants
+      // section renders in every state, because a consent surface that hides
+      // what it already consented to is not a record.
+      expect(() => findButton(el, "Review standing grants")).not.toThrow();
       expect(el.textContent).toContain("Standing grants");
       expect(el.textContent).toContain("No standing grants yet");
     });
 
-    it("renders every decision type in one pinned Needs me stream", () => {
+    it("gives every blocking decision its own card, closed until it is reviewed", () => {
       const el = mount(
         makeProps({
           outbox: [outboxRow],
@@ -224,602 +256,154 @@ describe("screens/ApprovalsScreen", () => {
           scopeRequests: [scopeRow],
         })
       );
-      expect(el.textContent).toContain("Hi");
+      const card = el.querySelector('[data-testid="staged-write"]');
+      expect(card).not.toBeNull();
+      // Closed: the kind, the title and the sub, and one outlined Review.
+      expect(card?.textContent).toContain("Staged write · personal");
+      expect(card?.textContent).toContain("Hi");
+      expect(card?.textContent).not.toContain("nothing has been sent");
+      expect(card?.textContent).not.toContain("See you at 6.");
+      expect(el.textContent).toContain("Waiting on you");
+      expect(sectionMeta(el, "Waiting on you")).toBe("4 waiting");
       expect(el.textContent).toContain("work gmail");
       expect(el.textContent).toContain("social.send_message");
-      expect(el.textContent).toContain("invoicer");
-      expect(el.querySelectorAll("section")).toHaveLength(1);
-      expect(el.textContent).toContain("4 waiting on you");
+      expect(el.textContent).toContain("invoicer asks for wider access");
+      // The whole title block is the disclosure — one target for one act.
+      expect(card?.querySelector("button[aria-expanded]")).not.toBeNull();
     });
 
-    it("keeps notices non-blocking while exposing read and archive actions", () => {
-      const onReadNotice =
-        vi.fn<NonNullable<ApprovalsScreenProps["onReadNotice"]>>();
-      const onArchiveNotice =
-        vi.fn<NonNullable<ApprovalsScreenProps["onArchiveNotice"]>>();
-      const el = mount(
-        makeProps({
-          outbox: [outboxRow],
-          notices: [noticeRow()],
-          onReadNotice,
-          onArchiveNotice,
-        })
-      );
-      expect(el.textContent).toContain("1 waiting on you");
-      expect(el.textContent).toContain("Digest failed");
-      // The collapsed multiplicity now rides the meta line as a duration
-      // phrase + attempt strip, not a `×N` suffix on the headline.
-      expect(el.textContent).toContain("failing for 1 day");
-      expect(
-        el.querySelector('[data-testid="notice-severity-pill"]')?.textContent
-      ).toBe("Failed");
-      expect(
-        el.querySelectorAll('[data-testid="notice-streak"] span span')
-      ).toHaveLength(2);
-      expect(el.querySelector('[data-testid="notice-tile"]')).not.toBeNull();
-      expect(
-        el.querySelector('[data-testid="notice-unread-dot"]')
-      ).not.toBeNull();
-      expect(el.textContent).toContain("brief/digest");
-      act(() => findButton(el, "Mark read").click());
-      act(() => {
-        (
-          [...el.querySelectorAll("button")].find(
-            (button) => button.textContent === "Archive"
-          ) as HTMLButtonElement
-        ).click();
-      });
-      expect(onReadNotice).toHaveBeenCalledWith("notice-1");
-      expect(onArchiveNotice).toHaveBeenCalledWith("notice-1");
-    });
-
-    it("filters active notices by source and retains archived notices in history", () => {
-      const el = mount(
-        makeProps({
-          notices: [
-            noticeRow(),
-            noticeRow({
-              noticeId: "app-notice",
-              sourceRef: "app-1",
-              headline: "Export sent",
-              sourceType: "app",
-              detail: { sourceType: "app" },
-              sourceLabel: "Exports",
-            }),
-            noticeRow({
-              noticeId: "archived-notice",
-              sourceRef: "old",
-              headline: "Old failure",
-              archivedAt: "2026-07-30T02:00:00.000Z",
-            }),
-          ],
-        })
-      );
-      act(() => findButton(el, "Automations").click());
-      expect(el.textContent).toContain("Digest failed");
-      expect(el.textContent).not.toContain("Export sent");
-      expect(el.textContent).not.toContain("Old failure");
-      openArchived(el);
-      expect(el.textContent).toContain("Old failure");
-      expect(el.textContent).not.toContain("Digest failed");
-    });
-
-    it("keeps open decisions pinned under every chip, including Archived", () => {
-      // The chips filter the NOTICE stream. A decision that is blocking the
-      // owner must not disappear because they tapped "Apps" (#647 D3).
-      const el = mount(
-        makeProps({
-          outbox: [outboxRow],
-          parked: [parkedRow],
-          notices: [noticeRow()],
-        })
-      );
-      for (const chip of ["Automations", "Agents", "Apps", "Archived"]) {
-        act(() => findButton(el, chip).click());
-        expect(el.textContent).toContain("Hi");
-        expect(el.textContent).toContain("social.send_message");
-        expect(el.textContent).toContain("2 waiting on you");
-      }
-    });
-
-    it("says only that a notice filter is empty, never that Notifications is clear", () => {
-      const el = mount(makeProps({ outbox: [outboxRow], notices: [] }));
-      act(() => findButton(el, "Apps").click());
-      expect(el.textContent).toContain("No notices here.");
-      expect(el.textContent).not.toContain("Nothing waiting on you.");
-      expect(el.textContent).toContain("Hi");
-    });
-
-    it("focuses the outbox decision an outbox notice deep-links to", () => {
-      const props = makeProps({ outbox: [outboxRow] });
-      const el = mount(props);
-      openArchived(el);
-      rerender({ ...props, focusOutbox: { itemId: "item1", nonce: 1 } });
-
-      expect(findButton(el, "Needs me").dataset.active).toBe("true");
-      expect(findButton(el, "Archived").dataset.active).toBeUndefined();
-      expect(
-        (
-          el.querySelector(
-            '[data-testid="outbox-row-item1"]'
-          ) as HTMLElement | null
-        )?.dataset.focused
-      ).toBe("true");
-      // Expanded, so the owner lands on the artifact rather than a collapsed row.
-      expect(el.textContent).toContain("See you at 6.");
-    });
-
-    it("keeps info-severity notices out of Needs me but under their source chip", () => {
-      // "Needs me" means "requires attention" (#665): a gateway-recovered FYI
-      // must not sit in the default view as an unread obligation, while a
-      // warning/high notice keeps its place.
-      const recovered = noticeRow({
-        noticeId: "notice-recovered",
-        kind: "app",
-        sourceType: "app",
-        severity: "info",
-        headline: "Local recovered",
-        detail: { sourceType: "app" },
-      });
-      const failed = noticeRow(); // severity high
-      const el = mount(makeProps({ notices: [recovered, failed] }));
-
-      expect(el.textContent).toContain("Digest failed");
-      expect(el.textContent).not.toContain("Local recovered");
-
-      act(() => {
-        findButton(el, "Apps").click();
-      });
-      expect(el.textContent).toContain("Local recovered");
-      expect(el.textContent).not.toContain("Digest failed");
-    });
-
-    it("falls back to Needs me with nothing focused when the item is gone", () => {
-      const props = makeProps({ outbox: [outboxRow] });
-      const el = mount(props);
-      openArchived(el);
-      rerender({ ...props, focusOutbox: { itemId: "decided", nonce: 1 } });
-
-      expect(findButton(el, "Needs me").dataset.active).toBe("true");
-      expect(el.querySelector('[data-focused="true"]')).toBeNull();
-    });
-
-    it("expands an outbox row on click to reveal the readable artifact fields + actions", () => {
+    it("opens a staged write to its facts, its quote and three verbs", () => {
       const el = mount(makeProps({ outbox: [outboxRow] }));
-      expect(el.textContent).not.toContain("See you at 6.");
-      act(() => {
-        findButton(el, "Hi").click();
-      });
-      expect(el.textContent).toContain("See you at 6.");
-      expect(el.querySelector(".editNote")?.textContent).toContain(
-        "can’t be edited yet"
+      click(el, "Review");
+      const card = el.querySelector('[data-testid="staged-write"]');
+      // The draft is quoted in full, and every fact about where it goes is
+      // stated before the commit — including the one that cannot be undone.
+      expect(card?.textContent).toContain("See you at 6.");
+      expect(card?.textContent).toContain("what it would do");
+      expect(card?.textContent).toContain("ravi@example.com");
+      expect(card?.textContent).toContain("nothing has been sent");
+      expect(card?.textContent).toContain(
+        "approving sends it immediately and cannot be undone"
       );
+      expect(() => findButton(el, "Approve")).not.toThrow();
+      expect(() => findButton(el, "Discard")).not.toThrow();
     });
 
-    it("fires onApproveOutbox with the always-allow checkbox state", () => {
-      const onApproveOutbox = vi.fn<ApprovalsScreenProps["onApproveOutbox"]>();
-      const el = mount(makeProps({ outbox: [outboxRow], onApproveOutbox }));
-      act(() => {
-        findButton(el, "Hi").click();
-      });
-      const checkbox = el.querySelector(
-        'input[type="checkbox"]'
-      ) as HTMLInputElement;
-      act(() => {
-        checkbox.click();
-      });
-      act(() => {
-        findButton(el, "Approve").click();
-      });
-      expect(onApproveOutbox).toHaveBeenCalledWith("item1", true);
-    });
-
-    it("fires onDenyOutbox for the expanded item", () => {
-      const onDenyOutbox = vi.fn<ApprovalsScreenProps["onDenyOutbox"]>();
-      const el = mount(makeProps({ outbox: [outboxRow], onDenyOutbox }));
-      act(() => {
-        findButton(el, "Hi").click();
-      });
-      act(() => {
-        findButton(el, "Deny").click();
-      });
-      expect(onDenyOutbox).toHaveBeenCalledWith("item1");
-    });
-
-    it("shows an Automation badge and the display name for an agent-kind outbox caller", () => {
-      const el = mount(makeProps({ outbox: [outboxRow] }));
-      expect(el.textContent).toContain("Automation");
-      expect(el.textContent).toContain("gmail-send");
-    });
-
-    it("shows an Assistant badge for an assistant-kind outbox caller", () => {
+    it("confirms a discard in place, in --net, and keeps it on Keep it", () => {
+      const discarded: string[] = [];
       const el = mount(
+        makeProps({
+          onDenyOutbox: (id) => discarded.push(id),
+          outbox: [outboxRow],
+        })
+      );
+      click(el, "Review");
+      click(el, "Discard");
+      const card = el.querySelector<HTMLElement>(
+        '[data-testid="staged-write"] section'
+      );
+      expect(card?.dataset.confirm).toBe("true");
+      expect(el.textContent).toContain(
+        "Irreversible — nothing is written and the draft is destroyed."
+      );
+      // The commit is withdrawn while the question is open: a confirm that
+      // still offers Approve is not a confirm.
+      expect(() => findButton(el, "Approve")).toThrow(Error);
+      click(el, "Keep it");
+      expect(discarded).toStrictEqual([]);
+      click(el, "Discard");
+      click(el, "Do it");
+      // Exactly one discard, of exactly this item — a Keep it followed by a
+      // Do it must not send two.
+      expect(discarded).toStrictEqual(["item1"]);
+    });
+
+    it("states the consequence the route gives it, in the gateway's terms", () => {
+      const el = mount(
+        makeProps({
+          discardConsequence: "Nothing will be sent.",
+          outbox: [outboxRow],
+        })
+      );
+      click(el, "Review");
+      click(el, "Discard");
+      expect(el.textContent).toContain("Nothing will be sent.");
+    });
+
+    it("names who staged the write in words rather than a classifier chip", () => {
+      const el = mount(makeProps({ outbox: [outboxRow] }));
+      expect(el.textContent).toContain(
+        "Outbound email · staged by the automation gmail-send"
+      );
+      // The age is its own slot on the eyebrow row, in the numeric register.
+      expect(el.textContent).toContain("5m ago");
+
+      const assistant = mount(
         makeProps({
           outbox: [
             { ...outboxRow, caller: "Assistant", callerKind: "assistant" },
           ],
         })
       );
-      expect(el.textContent).toContain("Assistant");
-    });
+      expect(assistant.textContent).toContain("staged by the assistant");
 
-    it("shows an App badge for an app-kind outbox caller", () => {
-      const el = mount(
+      const app = mount(
         makeProps({
           outbox: [{ ...outboxRow, caller: "Briefing", callerKind: "app" }],
         })
       );
-      expect(el.textContent).toContain("App");
-      expect(el.textContent).toContain("Briefing");
-    });
+      expect(app.textContent).toContain("staged by the app Briefing");
 
-    it("shows no kind badge for an owner-staged outbox item, but still shows the caller name", () => {
-      const el = mount(
+      const owner = mount(
         makeProps({
           outbox: [{ ...outboxRow, caller: "owner", callerKind: "owner" }],
         })
       );
-      expect(el.querySelector("[data-kind]")).toBeNull();
-      expect(el.textContent).toContain("owner");
+      expect(owner.textContent).toContain("staged by owner");
     });
 
-    it("routes needs-auth reconnection through onOpenSettings", () => {
-      const onOpenSettings = vi.fn<ApprovalsScreenProps["onOpenSettings"]>();
-      const el = mount(
-        makeProps({ needsAuth: [needsAuthRow], onOpenSettings })
+    it("fires onApproveOutbox with the always-allow state from the card's commit", () => {
+      const onApproveOutbox = vi.fn<ApprovalsScreenProps["onApproveOutbox"]>();
+      const el = mount(makeProps({ outbox: [outboxRow], onApproveOutbox }));
+      click(el, "Review");
+      click(el, "Approve");
+      expect(onApproveOutbox).toHaveBeenCalledWith("item1", false);
+
+      // The offer is made where the decision is made, and says what it costs
+      // the next time.
+      const checkbox = el.querySelector(
+        'input[type="checkbox"]'
+      ) as HTMLInputElement;
+      expect(el.textContent).toContain("Approve without asking again");
+      expect(el.textContent).toContain(
+        "the automation gmail-send may gmail.send → ravi@example.com without asking again."
       );
-      act(() => {
-        findButton(el, "Reconnect").click();
-      });
-      expect(onOpenSettings).toHaveBeenCalledWith(
-        expect.objectContaining({ type: "click" })
-      );
+      act(() => checkbox.click());
+      click(el, "Approve");
+      expect(onApproveOutbox).toHaveBeenLastCalledWith("item1", true);
     });
 
-    it("fires onConfirmParked(true) on Approve without needing to expand first", () => {
-      const onConfirmParked = vi.fn<ApprovalsScreenProps["onConfirmParked"]>();
-      const el = mount(makeProps({ parked: [parkedRow], onConfirmParked }));
-      act(() => {
-        findButton(el, "social.send_message").click();
-      });
-      act(() => {
-        findButton(el, "Approve").click();
-      });
-      expect(onConfirmParked).toHaveBeenCalledWith("inv1", true);
-    });
-
-    it("shows an App badge and the display name for an app-kind parked caller", () => {
-      const el = mount(makeProps({ parked: [parkedRow] }));
-      expect(el.textContent).toContain("App");
-      expect(el.textContent).toContain("Briefing");
-    });
-
-    it("shows an Automation badge for an agent-kind parked caller (automations ride the agent plane)", () => {
-      const el = mount(
-        makeProps({
-          parked: [
-            {
-              ...parkedRow,
-              caller: "E2e Agent Purge Demo",
-              callerKind: "agent",
-            },
-          ],
-        })
-      );
-      expect(el.textContent).toContain("Automation");
-      expect(el.textContent).toContain("E2e Agent Purge Demo");
-    });
-
-    it("shows an Assistant badge for an assistant-kind parked caller, distinct from an automation", () => {
-      const el = mount(
-        makeProps({
-          parked: [
-            { ...parkedRow, caller: "Assistant", callerKind: "assistant" },
-          ],
-        })
-      );
-      expect(el.textContent).toContain("Assistant");
-      expect(el.querySelector('[data-kind="automation"]')).toBeNull();
-    });
-
-    it("fires onDecideScopeRequest inline (no expansion needed)", () => {
-      const onDecideScopeRequest =
-        vi.fn<ApprovalsScreenProps["onDecideScopeRequest"]>();
-      const el = mount(
-        makeProps({ scopeRequests: [scopeRow], onDecideScopeRequest })
-      );
-      act(() => {
-        findButton(el, "Deny").click();
-      });
-      expect(onDecideScopeRequest).toHaveBeenCalledWith("r1", false);
-    });
-
-    it("renders standing grants with a Revoke action", () => {
-      const onRevokeGrant = vi.fn<ApprovalsScreenProps["onRevokeGrant"]>();
-      const el = mount(makeProps({ grants: [grantRow], onRevokeGrant }));
-      openArchived(el);
-      expect(el.textContent).toContain("gmail-send");
-      expect(el.textContent).toContain("ravi@example.com");
-      act(() => {
-        findButton(el, "Revoke").click();
-      });
-      expect(onRevokeGrant).toHaveBeenCalledWith("g1");
-    });
-
-    it("shows the origin of a recent Locker fill in review activity", () => {
-      const el = mount(makeProps({ activity: [fillActivity] }));
-      openArchived(el);
-      expect(el.textContent).toContain("Recent activity");
-      expect(el.textContent).toContain("Locker filled a login");
-      expect(el.textContent).toContain("https://example.test");
-    });
-
-    it("renders a distinct decision badge + icon accent per decision value", () => {
-      const el = mount(
-        makeProps({
-          activity: [
-            activityRow({
-              receiptId: "a1",
-              decision: "allow",
-              label: "Allowed act",
-            }),
-            activityRow({
-              receiptId: "a2",
-              decision: "deny",
-              label: "Denied act",
-            }),
-          ],
-        })
-      );
-      openArchived(el);
-      const badges = [
-        ...el.querySelectorAll('[data-testid="activity-decision-badge"]'),
-      ].map((n) => n.textContent);
-      expect(badges).toStrictEqual(
-        expect.arrayContaining(["Allowed", "Denied"])
-      );
-      const allowRow = el.querySelector('[data-decision="allow"]');
-      const denyRow = el.querySelector('[data-decision="deny"]');
-      expect(allowRow).not.toBeNull();
-      expect(denyRow).not.toBeNull();
-      expect(allowRow?.className).not.toBe(denyRow?.className);
-      expect(
-        allowRow?.querySelector('[data-testid="activity-decision-icon"]')
-      ).not.toBeNull();
-      expect(
-        denyRow?.querySelector('[data-testid="activity-decision-icon"]')
-      ).not.toBeNull();
-    });
-
-    it("shows a risk salience marker only when risk is non-null", () => {
-      const el = mount(
-        makeProps({
-          activity: [
-            activityRow({ receiptId: "r1", risk: "high", label: "Risky" }),
-            activityRow({ receiptId: "r2", risk: null, label: "Quiet" }),
-          ],
-        })
-      );
-      openArchived(el);
-      expect(
-        el.querySelectorAll('[data-testid="activity-risk-marker"]')
-      ).toHaveLength(1);
-      expect(el.querySelector('[data-risk="high"]')).not.toBeNull();
-    });
-
-    it("shows an actor KindBadge matching Outbox treatment per actorKind", () => {
-      const el = mount(
-        makeProps({
-          activity: [
-            activityRow({
-              receiptId: "app1",
-              actor: "Briefing",
-              actorKind: "app",
-              label: "App act",
-            }),
-            activityRow({
-              receiptId: "ag1",
-              actor: "gmail-send",
-              actorKind: "agent",
-              label: "Agent act",
-            }),
-            activityRow({
-              receiptId: "as1",
-              actor: "Assistant",
-              actorKind: "assistant",
-              label: "Assistant act",
-            }),
-          ],
-        })
-      );
-      openArchived(el);
-      expect(el.textContent).toContain("App");
-      expect(el.textContent).toContain("Briefing");
-      expect(el.textContent).toContain("Automation");
-      expect(el.textContent).toContain("gmail-send");
-      expect(el.textContent).toContain("Assistant");
-    });
-
-    it("attributes standing-grant auto-allow and fires onRevokeGrant from the activity row", () => {
-      const onRevokeGrant = vi.fn<ApprovalsScreenProps["onRevokeGrant"]>();
-      const el = mount(
-        makeProps({
-          activity: [
-            activityRow({
-              receiptId: "g-row",
-              grantId: "grant-42",
-              attribution: "grant",
-              decision: "allow",
-              label: "Auto send",
-            }),
-          ],
-          onRevokeGrant,
-        })
-      );
-      openArchived(el);
-      expect(
-        el.querySelector('[data-testid="activity-attribution-grant"]')
-          ?.textContent
-      ).toContain("Auto-allowed by standing grant");
-      act(() => {
-        findButton(el, "Auto send").click();
-      });
-      act(() => {
-        findButton(el, "Revoke grant").click();
-      });
-      expect(onRevokeGrant).toHaveBeenCalledWith("grant-42");
-    });
-
-    it("says approved-by-the-owner when attribution is owner", () => {
-      const el = mount(
-        makeProps({
-          activity: [
-            activityRow({
-              attribution: "owner",
-              decision: "allow",
-              label: "Owner ok",
-            }),
-          ],
-        })
-      );
-      openArchived(el);
-      expect(
-        el.querySelector('[data-testid="activity-attribution-owner"]')
-          ?.textContent
-      ).toContain("Approved by the owner");
-    });
-
-    it("shows a ×N marker for collapsed adjacent duplicates", () => {
-      const el = mount(
-        makeProps({
-          activity: [
-            activityRow({
-              count: 3,
-              label: "Draft drop",
-              receiptId: "collapsed",
-            }),
-          ],
-        })
-      );
-      openArchived(el);
-      expect(
-        el.querySelector('[data-testid="activity-count"]')?.textContent
-      ).toBe("×3");
-    });
-
-    it("expands an activity row to the full object id and absolute time", () => {
-      const el = mount(
-        makeProps({
-          activity: [
-            activityRow({
-              label: "Remove connection",
-              objectId: "cmd-abc123def456",
-              objectType: "agent.command",
-              occurredAt: "2026-03-01T12:00:00.000Z",
-            }),
-          ],
-        })
-      );
-      openArchived(el);
-      expect(el.querySelector('[data-testid="activity-detail"]')).toBeNull();
-      act(() => {
-        findButton(el, "Remove connection").click();
-      });
-      const detail = el.querySelector('[data-testid="activity-detail"]');
-      expect(detail).not.toBeNull();
-      expect(detail?.textContent).toContain("cmd-abc123def456");
-      expect(detail?.textContent).toContain("agent.command");
-      // Absolute timestamp is reachable in the expanded panel.
-      expect(detail?.textContent).toMatch(/2026|Mar|03/u);
-    });
-
-    it("filters to Denied-only when the Denied chip is active", () => {
-      const el = mount(
-        makeProps({
-          activity: [
-            activityRow({
-              receiptId: "ok",
-              decision: "allow",
-              label: "Allowed row",
-            }),
-            activityRow({
-              receiptId: "no",
-              decision: "deny",
-              label: "Denied row",
-            }),
-          ],
-        })
-      );
-      openArchived(el);
-      expect(el.textContent).toContain("Allowed row");
-      expect(el.textContent).toContain("Denied row");
-      act(() => {
-        (
-          el.querySelector(
-            '[data-testid="activity-filter-denied"]'
-          ) as HTMLButtonElement
-        ).click();
-      });
-      expect(el.textContent).not.toContain("Allowed row");
-      expect(el.textContent).toContain("Denied row");
-    });
-
-    it("shows See all when the feed is truncated and fires onSeeAllActivity", () => {
-      const onSeeAllActivity =
-        vi.fn<NonNullable<ApprovalsScreenProps["onSeeAllActivity"]>>();
-      const el = mount(
-        makeProps({
-          activity: [activityRow()],
-          activityTruncated: true,
-          onSeeAllActivity,
-        })
-      );
-      openArchived(el);
-      expect(
-        el.querySelector('[data-testid="activity-see-all"]')
-      ).not.toBeNull();
-      act(() => {
-        findButton(el, "See all").click();
-      });
-      expect(onSeeAllActivity).toHaveBeenCalledWith(
-        expect.objectContaining({ type: "click" })
-      );
-    });
-
-    it("does not show See all when the feed is not truncated", () => {
-      const el = mount(
-        makeProps({ activity: [activityRow()], activityTruncated: false })
-      );
-      openArchived(el);
-      expect(el.querySelector('[data-testid="activity-see-all"]')).toBeNull();
-    });
-
-    it("shows an Edit affordance only when canEdit is true, and keeps the honest copy otherwise", () => {
+    it("refuses Edit and approve honestly when the gateway cannot rebuild it", () => {
       const notEditable = mount(makeProps({ outbox: [outboxRow] }));
-      act(() => {
-        findButton(notEditable, "Hi").click();
-      });
-      expect(() => findButton(notEditable, "Edit")).toThrow(Error);
-      expect(notEditable.querySelector(".editNote")?.textContent).toContain(
-        "can’t be edited yet"
+      click(notEditable, "Review");
+      // The verb is present and inert, with the reason stated as a fact — not
+      // silently absent, which reads as a build that forgot it.
+      expect(findButton(notEditable, "Edit and approve").disabled).toBe(true);
+      expect(notEditable.textContent).toContain("cannot be edited");
+      expect(notEditable.textContent).toContain(
+        "approving sends exactly what is quoted above"
       );
 
       const editable = mount(makeProps({ outbox: [editableOutboxRow] }));
-      act(() => {
-        findButton(editable, "Hi").click();
-      });
-      expect(() => findButton(editable, "Edit")).not.toThrow();
-      expect(editable.querySelector(".editNote")).toBeNull();
+      click(editable, "Review");
+      expect(findButton(editable, "Edit and approve").disabled).toBe(false);
+      expect(editable.textContent).not.toContain("cannot be edited");
     });
 
-    it("edit mode turns string fields into inputs/textarea and the string[] field into a comma input, seeded with the staged values", () => {
+    it("edits in the card's own facts: strings become inputs, a string[] a comma field", () => {
       const el = mount(makeProps({ outbox: [editableOutboxRow] }));
-      act(() => {
-        findButton(el, "Hi").click();
-      });
-      act(() => {
-        findButton(el, "Edit").click();
-      });
+      click(el, "Review");
+      click(el, "Edit and approve");
       const toInput = el.querySelector(
         'input[aria-label="To"]'
       ) as HTMLInputElement;
@@ -832,22 +416,20 @@ describe("screens/ApprovalsScreen", () => {
       expect(toInput.value).toBe("ravi@example.com, asha@example.com");
       expect(subjectInput.value).toBe("Hi");
       expect(bodyArea.value).toBe("See you at 6.");
-      // Cancel and Approve with edits replace Edit/Approve while editing.
-      expect(() => findButton(el, "Cancel")).not.toThrow();
       expect(() => findButton(el, "Approve with edits")).not.toThrow();
+      expect(() => findButton(el, "Cancel")).not.toThrow();
     });
 
-    it('submits the edited artifact on "Approve with edits", splitting the recipients on comma', () => {
-      const onApproveOutbox = vi.fn<ApprovalsScreenProps["onApproveOutbox"]>();
+    it('submits the edited artifact on "Approve with edits", splitting recipients on comma', () => {
+      const approvals: unknown[][] = [];
       const el = mount(
-        makeProps({ outbox: [editableOutboxRow], onApproveOutbox })
+        makeProps({
+          onApproveOutbox: (...args) => approvals.push(args),
+          outbox: [editableOutboxRow],
+        })
       );
-      act(() => {
-        findButton(el, "Hi").click();
-      });
-      act(() => {
-        findButton(el, "Edit").click();
-      });
+      click(el, "Review");
+      click(el, "Edit and approve");
       const setNativeValue = (
         input: HTMLInputElement | HTMLTextAreaElement,
         value: string
@@ -876,79 +458,692 @@ describe("screens/ApprovalsScreen", () => {
           "x@example.com, y@example.com"
         );
       });
-      act(() => {
-        findButton(el, "Approve with edits").click();
-      });
-      expect(onApproveOutbox).toHaveBeenCalledWith("item1", false, {
-        to: ["x@example.com", "y@example.com"],
-        subject: "New subject",
-        body: "New body.",
-      });
+      click(el, "Approve with edits");
+      // One approval, carrying the whole artifact: the edited fields AND the
+      // untouched ones, which ride through unchanged.
+      expect(approvals).toStrictEqual([
+        [
+          "item1",
+          false,
+          {
+            body: "New body.",
+            subject: "New subject",
+            to: ["x@example.com", "y@example.com"],
+          },
+        ],
+      ]);
     });
 
-    it("Cancel exits edit mode and restores the read-only fields, without approving", () => {
+    it("Cancel leaves the editor without approving, and the quote survives", () => {
       const onApproveOutbox = vi.fn<ApprovalsScreenProps["onApproveOutbox"]>();
       const el = mount(
         makeProps({ outbox: [editableOutboxRow], onApproveOutbox })
       );
-      act(() => {
-        findButton(el, "Hi").click();
-      });
-      act(() => {
-        findButton(el, "Edit").click();
-      });
-      act(() => {
-        findButton(el, "Cancel").click();
-      });
+      click(el, "Review");
+      click(el, "Edit and approve");
+      click(el, "Cancel");
       expect(el.querySelector('input[aria-label="Subject"]')).toBeNull();
       expect(el.textContent).toContain("See you at 6.");
       expect(onApproveOutbox).not.toHaveBeenCalled();
     });
 
-    it("a plain Approve with no edits calls onApproveOutbox with just (itemId, alwaysAllow)", () => {
-      const onApproveOutbox = vi.fn<ApprovalsScreenProps["onApproveOutbox"]>();
-      const el = mount(makeProps({ outbox: [outboxRow], onApproveOutbox }));
+    it("keeps a half-typed edit through a refusal, with the gateway's words", () => {
+      const props = makeProps({ outbox: [editableOutboxRow] });
+      const el = mount(props);
+      click(el, "Review");
+      click(el, "Edit and approve");
+      const subject = el.querySelector(
+        'input[aria-label="Subject"]'
+      ) as HTMLInputElement;
+      const setter = Object.getOwnPropertyDescriptor(
+        HTMLInputElement.prototype,
+        "value"
+      )?.set;
       act(() => {
-        findButton(el, "Hi").click();
+        setter?.call(subject, "Half typed");
+        subject.dispatchEvent(new Event("input", { bubbles: true }));
       });
-      act(() => {
-        findButton(el, "Approve").click();
+      click(el, "Approve with edits");
+      rerender({
+        ...props,
+        refusal: {
+          itemId: "item1",
+          message: "repo.comment: token expired",
+          nonce: 1,
+        },
       });
-      expect(onApproveOutbox).toHaveBeenCalledWith("item1", false);
+      expect(el.textContent).toContain("The gateway refused that approval");
+      expect(el.textContent).toContain("repo.comment: token expired");
+      expect(
+        (el.querySelector('input[aria-label="Subject"]') as HTMLInputElement)
+          .value
+      ).toBe("Half typed");
     });
 
-    it("disables the busy row’s actions", () => {
-      const el = mount(makeProps({ outbox: [outboxRow], busyId: "item1" }));
-      act(() => {
-        findButton(el, "Hi").click();
+    it("withdraws the staged write's verbs while its decision is in flight", () => {
+      const props = makeProps({ outbox: [outboxRow] });
+      const el = mount(props);
+      click(el, "Review");
+      rerender({ ...props, busyId: "item1" });
+      expect(() => findButton(el, "Approve")).toThrow(Error);
+      expect(() => findButton(el, "Discard")).toThrow(Error);
+      // The write itself is still stated — only the verbs are gone.
+      expect(el.textContent).toContain("nothing has been sent");
+    });
+
+    it("opens a second staged write from its own Review, closing the first", () => {
+      const second: ApprovalsOutboxRowDTO = {
+        ...outboxRow,
+        itemId: "item2",
+        subject: "Second draft",
+      };
+      const el = mount(makeProps({ outbox: [outboxRow, second] }));
+      expect(el.querySelectorAll('[data-testid="staged-write"]')).toHaveLength(
+        2
+      );
+      expect(
+        el.querySelector('[data-testid="staged-write"][data-open]')
+      ).toBeNull();
+      const reviews = [...el.querySelectorAll("button")].filter(
+        (b) => b.textContent === "Review"
+      );
+      act(() => reviews[1]?.click());
+      expect(
+        el.querySelector<HTMLElement>(
+          '[data-testid="staged-write"][data-open="true"]'
+        )?.dataset.itemId
+      ).toBe("item2");
+    });
+
+    it("opens the staged write an outbox notice names", () => {
+      const other: ApprovalsOutboxRowDTO = {
+        ...outboxRow,
+        itemId: "item2",
+        subject: "Second draft",
+      };
+      const props = makeProps({ outbox: [outboxRow, other] });
+      const el = mount(props);
+      rerender({ ...props, focusOutbox: { itemId: "item2", nonce: 1 } });
+      expect(
+        el.querySelector<HTMLElement>(
+          '[data-testid="staged-write"][data-open="true"]'
+        )?.dataset.itemId
+      ).toBe("item2");
+      expect(el.textContent).toContain("Second draft");
+    });
+
+    it("opens nothing when the deep-linked item has already been decided", () => {
+      const props = makeProps({ outbox: [outboxRow] });
+      const el = mount(props);
+      rerender({ ...props, focusOutbox: { itemId: "decided", nonce: 1 } });
+      // The queue is left exactly as it is, rather than pointing at a card
+      // that isn't there.
+      expect(
+        el.querySelector('[data-testid="staged-write"][data-open="true"]')
+      ).toBeNull();
+      expect(
+        el.querySelector<HTMLElement>('[data-testid="staged-write"]')?.dataset
+          .itemId
+      ).toBe("item1");
+    });
+
+    it("filters the queue by chip once it is long enough to need one, and says so", () => {
+      const el = mount(
+        makeProps({
+          outbox: [outboxRow, { ...outboxRow, itemId: "item2" }],
+          needsAuth: [needsAuthRow],
+          parked: [parkedRow],
+          scopeRequests: [scopeRow],
+        })
+      );
+      expect(sectionMeta(el, "Waiting on you")).toBe("5 waiting");
+      click(el, "Authorization");
+      expect(sectionMeta(el, "Waiting on you")).toBe("showing 2 of 5");
+      expect(el.textContent).toContain("work gmail");
+      expect(el.textContent).not.toContain("social.send_message");
+      expect(el.querySelector('[data-testid="staged-write"]')).toBeNull();
+      click(el, "Everything");
+      expect(sectionMeta(el, "Waiting on you")).toBe("5 waiting");
+    });
+
+    it("shows no filter chips while the queue is short enough to read", () => {
+      const el = mount(makeProps({ outbox: [outboxRow] }));
+      expect(() => findButton(el, "Everything")).toThrow(Error);
+    });
+
+    it("drops the filter and re-heads the queue on the bar's Review all verb", () => {
+      const props = makeProps({
+        outbox: [outboxRow, { ...outboxRow, itemId: "item2" }],
+        needsAuth: [needsAuthRow],
+        parked: [parkedRow],
+        scopeRequests: [scopeRow],
       });
-      expect(findButton(el, "Approve").disabled).toBe(true);
-      expect(findButton(el, "Deny").disabled).toBe(true);
+      const el = mount(props);
+      click(el, "Authorization");
+      expect(el.querySelector('[data-testid="staged-write"]')).toBeNull();
+      rerender({ ...props, reviewAll: { nonce: 1 } });
+      expect(
+        el.querySelector<HTMLElement>(
+          '[data-testid="staged-write"][data-open="true"]'
+        )?.dataset.itemId
+      ).toBe("item1");
+    });
+
+    it("sends a lapsed connection to Connectors, where re-authorizing happens", () => {
+      const onOpenSettings = vi.fn<ApprovalsScreenProps["onOpenSettings"]>();
+      const el = mount(
+        makeProps({ needsAuth: [needsAuthRow], onOpenSettings })
+      );
+      expect(el.textContent).toContain("Authorization · work gmail");
+      expect(el.textContent).toContain("work gmail needs re-authorizing");
+      click(el, "Open Connectors");
+      expect(onOpenSettings).toHaveBeenCalledWith();
+    });
+
+    it("decides a parked invocation from its own card, over its input", () => {
+      const rulings: Array<[string, boolean]> = [];
+      const el = mount(
+        makeProps({
+          onConfirmParked: (id, approve) => rulings.push([id, approve]),
+          parked: [parkedRow],
+        })
+      );
+      expect(el.textContent).toContain("asked by the app Briefing");
+      click(el, "Review");
+      expect(el.textContent).toContain('"to": "x"');
+      click(el, "Approve");
+      expect(rulings).toStrictEqual([["inv1", true]]);
+    });
+
+    it("confirms a parked denial in place, naming who must ask again", () => {
+      const rulings: Array<[string, boolean]> = [];
+      const el = mount(
+        makeProps({
+          onConfirmParked: (id, approve) => rulings.push([id, approve]),
+          parked: [parkedRow],
+        })
+      );
+      click(el, "Review");
+      click(el, "Deny");
+      expect(el.textContent).toContain(
+        "A denied command cannot be replayed — Briefing must ask again."
+      );
+      // Opening the confirm rules nothing; only [Do it] does, and only once.
+      expect(rulings).toStrictEqual([]);
+      click(el, "Do it");
+      expect(rulings).toStrictEqual([["inv1", false]]);
+    });
+
+    it("distinguishes an assistant-asked parked invocation from an automation's", () => {
+      const el = mount(
+        makeProps({
+          parked: [
+            { ...parkedRow, caller: "Assistant", callerKind: "assistant" },
+          ],
+        })
+      );
+      expect(el.textContent).toContain("asked by the assistant");
+
+      const automation = mount(
+        makeProps({
+          parked: [
+            {
+              ...parkedRow,
+              caller: "E2e Agent Purge Demo",
+              callerKind: "agent",
+            },
+          ],
+        })
+      );
+      expect(automation.textContent).toContain(
+        "asked by the automation E2e Agent Purge Demo"
+      );
+    });
+
+    it("decides a scope request from its opened card, confirming the denial", () => {
+      const decisions: Array<[string, boolean]> = [];
+      const el = mount(
+        makeProps({
+          onDecideScopeRequest: (id, approve) => decisions.push([id, approve]),
+          scopeRequests: [scopeRow],
+        })
+      );
+      click(el, "Review");
+      expect(el.textContent).toContain("business.invoice (act)");
+      expect(() => findButton(el, "Approve the wider access")).not.toThrow();
+      click(el, "Deny");
+      expect(el.textContent).toContain(
+        "invoicer keeps what it has, and is not asked again."
+      );
+      click(el, "Do it");
+      expect(decisions).toStrictEqual([["r1", false]]);
+    });
+
+    it("renders standing grants with a Revoke that states what re-parks", () => {
+      const revoked: string[] = [];
+      const el = mount(
+        makeProps({
+          grants: [grantRow],
+          onRevokeGrant: (id) => revoked.push(id),
+        })
+      );
+      expect(el.textContent).toContain("gmail-send may always gmail.send");
+      expect(el.textContent).toContain("ravi@example.com");
+      expect(el.textContent).toContain(
+        "A standing grant skips this page for one narrow thing; revoking one takes effect on the next run."
+      );
+      click(el, "Revoke");
+      expect(el.textContent).toContain(
+        "Matching items park for review again, including anything approved but not yet drained."
+      );
+      expect(revoked).toStrictEqual([]);
+      click(el, "Do it");
+      expect(revoked).toStrictEqual(["g1"]);
+    });
+
+    it("opens and closes the record's sections from their own heads", () => {
+      const el = mount(makeProps({ grants: [grantRow] }));
+      expect(el.textContent).toContain("gmail-send may always gmail.send");
+      toggleSection(el, "Standing grants");
+      expect(el.textContent).not.toContain("gmail-send may always gmail.send");
+      toggleSection(el, "Standing grants");
+      expect(el.textContent).toContain("gmail-send may always gmail.send");
+    });
+
+    it("keeps a demanding notice in the queue and files news under Notices", () => {
+      const onReadNotice =
+        vi.fn<NonNullable<ApprovalsScreenProps["onReadNotice"]>>();
+      const onArchiveNotice =
+        vi.fn<NonNullable<ApprovalsScreenProps["onArchiveNotice"]>>();
+      const el = mount(
+        makeProps({
+          notices: [
+            noticeRow(),
+            noticeRow({
+              noticeId: "notice-info",
+              headline: "Local recovered",
+              severity: "info",
+            }),
+          ],
+          onReadNotice,
+          onArchiveNotice,
+        })
+      );
+      expect(sectionMeta(el, "Waiting on you")).toBe("1 waiting");
+      expect(el.textContent).toContain("Digest failed");
+      expect(el.textContent).toContain("Failed · brief/digest");
+      expect(el.textContent).toContain("Notices");
+      expect(el.textContent).toContain("Local recovered");
+      // The collapsed multiplicity rides the sub line as a duration phrase.
+      expect(el.textContent).toContain("failing for 1 day");
+      expect(el.textContent).toContain("brief/digest");
+      click(el, "Mark read");
+      click(el, "Archive");
+      expect(onReadNotice).toHaveBeenCalledWith("notice-1");
+      expect(onArchiveNotice).toHaveBeenCalledWith("notice-1");
+    });
+
+    it("opens a notice at its own surface and keeps archived ones in their section", () => {
+      const onOpenNotice =
+        vi.fn<NonNullable<ApprovalsScreenProps["onOpenNotice"]>>();
+      const el = mount(
+        makeProps({
+          notices: [
+            noticeRow(),
+            noticeRow({
+              noticeId: "archived-notice",
+              headline: "Old failure",
+              archivedAt: "2026-07-30T02:00:00.000Z",
+            }),
+          ],
+          onOpenNotice,
+        })
+      );
+      expect(el.textContent).toContain("Archived");
+      expect(el.textContent).toContain("Old failure");
+      click(el, "Open");
+      expect(onOpenNotice).toHaveBeenCalledWith(
+        expect.objectContaining({ noticeId: "notice-1" })
+      );
+    });
+
+    it("lists each store's holders and says 'reachable by nothing' when it has none", () => {
+      const el = mount(
+        makeProps({
+          storeGrants: [
+            {
+              storeId: "photos",
+              label: "Photos",
+              holders: [
+                {
+                  grantId: "g-photos",
+                  holderKind: "app",
+                  holderId: "photos",
+                  holderLabel: "Photos",
+                  mode: "read",
+                },
+              ],
+            },
+            { storeId: "locker", label: "Locker", holders: [] },
+          ],
+        })
+      );
+      expect(el.querySelector('[data-testid="privacy-ledger"]')).not.toBeNull();
+      expect(el.querySelectorAll('[data-testid="privacy-store"]')).toHaveLength(
+        2
+      );
+      expect(el.textContent).toContain("Photos");
+      expect(el.textContent).toContain("read access");
+      expect(el.textContent).toContain("1 app");
+      expect(el.textContent).toContain("Locker");
+      expect(el.textContent).toContain("reachable by nothing");
+      expect(el.textContent).toContain(
+        "Everything an app can reach — revoking takes effect at once."
+      );
+      // The footer names every real call the product makes off this device.
+      expect(el.textContent).toContain("Your configured AI provider");
+      expect(el.textContent).toContain("The pairing relay");
+    });
+
+    // The enrichment egress ledger (issue #807, Wave 3). Reference material,
+    // read back: every answer is shown, the refusals included, and none of
+    // them is a control.
+    it("lists the enrichment egress answers, declines and all, with no verb", () => {
+      const el = mount(
+        makeProps({
+          enrichConsent: [
+            {
+              id: "faces:provider:",
+              title: "Faces",
+              sub: "Declined · at a third-party provider · this vault · 2 days ago",
+              meta: "provider",
+            },
+            {
+              id: "ocr:on-device:",
+              title: "Ocr",
+              sub: "Granted · on this device · this vault · 5 days ago",
+              meta: "on-device",
+            },
+          ],
+        })
+      );
+
+      const section = el.querySelector('[data-testid="enrichment-consent"]');
+      expect(section).not.toBeNull();
+      expect(section?.textContent).toContain("Faces");
+      expect(section?.textContent).toContain("Declined");
+      expect(section?.textContent).toContain("Granted");
+      expect(section?.textContent).toContain("Asked once, answered once");
+      // Nothing here decides anything — the answer is given where it is asked.
+      // The only control in the section is the head's own Show/Hide.
+      expect(
+        [...section!.querySelectorAll("button")].map((b) => b.textContent)
+      ).toStrictEqual(["Hide"]);
+    });
+
+    it("says nothing at all when no enrichment question has been answered", () => {
+      const el = mount(makeProps({}));
+      expect(el.querySelector('[data-testid="enrichment-consent"]')).toBeNull();
+    });
+
+    it("says an old gateway cannot be asked, rather than showing no answers", () => {
+      const el = mount(makeProps({ enrichConsentReadable: false }));
+      const section = el.querySelector('[data-testid="enrichment-consent"]');
+      expect(section?.textContent).toContain(
+        "This gateway is older than the consent ledger"
+      );
+      expect(section?.textContent).toContain(
+        "It cannot say which questions were answered."
+      );
+      expect(sectionMeta(el, "Answers about what may leave")).toBe(
+        "not readable here"
+      );
+    });
+
+    it("revoking a store grant strikes the row through instead of removing it", () => {
+      const onRevokeStoreGrant =
+        vi.fn<ApprovalsScreenProps["onRevokeStoreGrant"]>();
+      const el = mount(
+        makeProps({
+          storeGrants: [
+            {
+              storeId: "photos",
+              label: "Photos",
+              holders: [
+                {
+                  grantId: "g-photos",
+                  holderKind: "app",
+                  holderId: "photos",
+                  holderLabel: "Photos",
+                  mode: "write",
+                },
+              ],
+            },
+          ],
+          onRevokeStoreGrant,
+        })
+      );
+      click(el, "Revoke");
+      // The consequence is stated before the row is struck, in the holder's
+      // own name.
+      expect(el.textContent).toContain("Photos loses that store");
+      expect(el.textContent).toContain(
+        "It cannot read again, and the row stays, struck through."
+      );
+      expect(onRevokeStoreGrant).not.toHaveBeenCalled();
+      click(el, "Do it");
+      expect(onRevokeStoreGrant).toHaveBeenCalledWith(
+        expect.objectContaining({ grantId: "g-photos", holderLabel: "Photos" })
+      );
+      // The row survives, struck through and switched off — the history of
+      // who once held access stays legible.
+      expect(el.textContent).toContain("Photos");
+      expect(el.textContent).toContain("write access");
+      expect(el.querySelector('[data-off="true"]')).not.toBeNull();
+      expect(el.querySelector('[data-struck="true"]')).not.toBeNull();
+    });
+
+    it("shows the origin of a recent Locker fill in the history", () => {
+      const el = mount(makeProps({ activity: [fillActivity] }));
+      expect(el.textContent).toContain("Recent activity");
+      expect(el.textContent).toContain("Locker filled a login");
+      expect(el.textContent).toContain("https://example.test");
+    });
+
+    it("states each receipt's decision, risk and attribution on the row", () => {
+      const el = mount(
+        makeProps({
+          activity: [
+            activityRow({
+              receiptId: "a1",
+              decision: "allow",
+              label: "Allowed act",
+              risk: "high",
+              attribution: "grant",
+              grantId: "grant-42",
+            }),
+            activityRow({
+              receiptId: "a2",
+              decision: "deny",
+              label: "Denied act",
+            }),
+          ],
+        })
+      );
+      expect(el.textContent).toContain("Allowed · high risk");
+      expect(el.textContent).toContain("auto-allowed by a standing grant");
+      expect(el.textContent).toContain("Denied");
+      expect(el.textContent).toContain("by the automation gmail-send");
+    });
+
+    it("expands an activity row to the full object id, absolute time and its grant", () => {
+      const el = mount(
+        makeProps({
+          activity: [
+            activityRow({
+              label: "Remove connection",
+              objectId: "cmd-abc123def456",
+              objectType: "agent.command",
+              occurredAt: "2026-03-01T12:00:00.000Z",
+              grantId: "grant-42",
+              attribution: "grant",
+            }),
+          ],
+          grants: [grantRow],
+        })
+      );
+      expect(el.querySelector('[data-testid="activity-detail"]')).toBeNull();
+      click(el, "Details");
+      const detail = el.querySelector('[data-testid="activity-detail"]');
+      expect(detail?.textContent).toContain("cmd-abc123def456");
+      expect(detail?.textContent).toContain("agent.command");
+      expect(detail?.textContent).toMatch(/2026|Mar|03/u);
+      // The rule that decided this opens where rules are revoked — one
+      // revoke, in one place, rather than a second one down here.
+      toggleSection(el, "Standing grants");
+      expect(el.textContent).not.toContain("gmail-send may always gmail.send");
+      click(el, "Open the grant");
+      expect(el.textContent).toContain("gmail-send may always gmail.send");
+    });
+
+    it("collapses adjacent duplicates onto one row with a ×N count", () => {
+      const el = mount(
+        makeProps({
+          activity: [
+            activityRow({
+              count: 3,
+              label: "Draft drop",
+              receiptId: "collapsed",
+            }),
+          ],
+        })
+      );
+      expect(el.textContent).toContain("Draft drop ×3");
+    });
+
+    it("filters the history to denied-only, and says how much it is showing", () => {
+      const el = mount(
+        makeProps({
+          activity: [
+            activityRow({
+              receiptId: "ok",
+              decision: "allow",
+              label: "Allowed row",
+            }),
+            activityRow({
+              receiptId: "no",
+              decision: "deny",
+              label: "Denied row",
+            }),
+          ],
+        })
+      );
+      expect(el.textContent).toContain("Allowed row");
+      click(el, "Denied");
+      expect(el.textContent).not.toContain("Allowed row");
+      expect(el.textContent).toContain("Denied row");
+      expect(sectionMeta(el, "Recent activity")).toBe("showing 1 of 2");
+    });
+
+    it("holds live arrivals back while the member is part-way through one", () => {
+      const props = makeProps({ outbox: [editableOutboxRow] });
+      const el = mount(props);
+      click(el, "Review");
+      click(el, "Edit and approve");
+      const second: ApprovalsOutboxRowDTO = {
+        ...outboxRow,
+        itemId: "item2",
+        subject: "Arrived while editing",
+      };
+      rerender({ ...props, outbox: [editableOutboxRow, second] });
+      // The list the member is working in does not move under them.
+      expect(el.textContent).not.toContain("Arrived while editing");
+      expect(el.querySelector('[data-testid="held-tray"]')).not.toBeNull();
+      expect(el.textContent).toContain("1 more arrived");
+      expect(el.textContent).toContain(
+        "Held back while you are part-way through an item."
+      );
+      click(el, "Add them");
+      expect(el.textContent).toContain("Arrived while editing");
+      expect(el.querySelector('[data-testid="held-tray"]')).toBeNull();
+    });
+
+    it("lets a refresh through while nothing is part-way through", () => {
+      const props = makeProps({ outbox: [outboxRow] });
+      const el = mount(props);
+      click(el, "Review");
+      const second: ApprovalsOutboxRowDTO = {
+        ...outboxRow,
+        itemId: "item2",
+        subject: "Arrived while reading",
+      };
+      rerender({ ...props, outbox: [outboxRow, second] });
+      // Reading is not work in progress: an expanded card survives the list
+      // growing under it, and nothing is held.
+      expect(el.textContent).toContain("Arrived while reading");
+      expect(el.querySelector('[data-testid="held-tray"]')).toBeNull();
+    });
+
+    it("shows See all only when the feed is truncated, and fires onSeeAllActivity", () => {
+      const onSeeAllActivity =
+        vi.fn<NonNullable<ApprovalsScreenProps["onSeeAllActivity"]>>();
+      const el = mount(
+        makeProps({
+          activity: [activityRow()],
+          activityTruncated: true,
+          onSeeAllActivity,
+        })
+      );
+      expect(
+        el.querySelector('[data-testid="activity-see-all"]')
+      ).not.toBeNull();
+      click(el, "See all");
+      expect(onSeeAllActivity).toHaveBeenCalledWith();
+
+      const untruncated = mount(
+        makeProps({ activity: [activityRow()], activityTruncated: false })
+      );
+      expect(
+        untruncated.querySelector('[data-testid="activity-see-all"]')
+      ).toBeNull();
+    });
+
+    it("links the durable alert history rather than restating it", () => {
+      const onOpenAlertHistory =
+        vi.fn<NonNullable<ApprovalsScreenProps["onOpenAlertHistory"]>>();
+      const el = mount(
+        makeProps({ activity: [activityRow()], onOpenAlertHistory })
+      );
+      expect(el.textContent).toContain("Gateway alert history");
+      expect(el.textContent).toContain(
+        "Machine health lives on System, not here."
+      );
+      click(el, "Open");
+      expect(onOpenAlertHistory).toHaveBeenCalledWith();
     });
   });
 });
 
-describe("notice presentation helpers", () => {
-  const HUES = [
-    "amber",
-    "forest",
-    "indigo",
-    "ochre",
-    "rose",
-    "slate",
-    "teal",
-    "violet",
-  ];
-
-  it("hashes a correspondent to a stable palette hue", () => {
-    expect(noticeHue("brief/digest")).toBe(noticeHue("brief/digest"));
-    expect(HUES).toContain(noticeHue("brief/digest"));
-    expect(HUES).toContain(noticeHue(""));
-    // Different correspondents should not all collapse onto one hue.
-    const spread = new Set(
-      ["a", "b", "c", "d", "e", "f", "g", "h"].map((s) => noticeHue(s))
+describe("notification presentation helpers", () => {
+  it("names an actor in words, and falls back to the bare name it was given", () => {
+    expect(callerPhrase("app", "Briefing")).toBe("the app Briefing");
+    expect(callerPhrase("agent", "gmail-send")).toBe(
+      "the automation gmail-send"
     );
-    expect(spread.size).toBeGreaterThan(1);
+    expect(callerPhrase("assistant", "Assistant")).toBe("the assistant");
+    expect(callerPhrase("owner", "owner")).toBe("owner");
+  });
+
+  it("names the kind of outbound write from the connection and the verb only", () => {
+    expect(
+      outboundLabel({ verb: "gmail.send", connectionKind: "pull.gmail" })
+    ).toBe("Outbound email");
+    expect(
+      outboundLabel({ verb: "slack.post", connectionKind: "push.slack" })
+    ).toBe("Outbound message");
+    expect(
+      outboundLabel({ verb: "sheets.append", connectionKind: "push.sheets" })
+    ).toBe("Outbound write");
   });
 
   it("labels only warning and high severities", () => {
@@ -1013,12 +1208,74 @@ describe("notice presentation helpers", () => {
     ).toBe("×3");
   });
 
-  it("clamps the attempt strip and leaves the remainder to a +N label", () => {
-    expect(noticeBarCount(0)).toBe(0);
-    expect(noticeBarCount(1)).toBe(0);
-    expect(noticeBarCount(3)).toBe(3);
-    expect(noticeBarCount(NOTICE_BAR_MAX)).toBe(NOTICE_BAR_MAX);
-    expect(noticeBarCount(40)).toBe(NOTICE_BAR_MAX);
-    expect(noticeBarCount(Number.POSITIVE_INFINITY)).toBe(0);
+  it("offers only fields a member can AUTHOR as editable", () => {
+    const artifact = {
+      body: "hello",
+      files: ["a.ts", "b.ts"],
+      fileCount: "3",
+      path: "~/projects/pemberton",
+      size: "4.2 KB",
+      undo: "10 minutes",
+      window: { start: 1 },
+    };
+    expect(isAuthorableKey(artifact, "path")).toBe(true);
+    expect(isAuthorableKey(artifact, "body")).toBe(true);
+    // Computed by the actor: a size, a count, a retention window, a file list.
+    expect(isAuthorableKey(artifact, "size")).toBe(false);
+    expect(isAuthorableKey(artifact, "undo")).toBe(false);
+    expect(isAuthorableKey(artifact, "files")).toBe(false);
+    expect(isAuthorableKey(artifact, "fileCount")).toBe(false);
+    // Not a shape the gateway's drift guard accepts at all.
+    expect(isAuthorableKey(artifact, "window")).toBe(false);
+  });
+
+  it("counts what ARRIVED, so the tray never says a departure is an arrival", () => {
+    const empty = {
+      needsAuth: [],
+      outbox: [],
+      parked: [],
+      scopeRequests: [],
+    };
+    const shown = { ...empty, outbox: [outboxRow] };
+    const next = {
+      ...empty,
+      outbox: [outboxRow, { ...outboxRow, itemId: "item2" }],
+      parked: [parkedRow],
+    };
+    expect([...blockingIds(shown)]).toStrictEqual(["item1"]);
+    expect(arrivalCount(shown, next)).toBe(2);
+    // A decided item leaving is not an arrival.
+    expect(arrivalCount(next, shown)).toBe(0);
+  });
+
+  it("re-attaches a revoked holder the live group no longer carries", () => {
+    const holder = {
+      grantId: "g-photos",
+      holderKind: "app" as const,
+      holderId: "photos",
+      holderLabel: "Photos",
+      mode: "read" as const,
+    };
+    const revoked = new Map([[revokedHolderKey("photos", "g-photos"), holder]]);
+    expect(
+      mergeRevokedHolders(
+        { storeId: "photos", label: "Photos", holders: [] },
+        revoked
+      ).holders
+    ).toHaveLength(1);
+    // Still live server-side: no duplicate row.
+    expect(
+      mergeRevokedHolders(
+        { storeId: "photos", label: "Photos", holders: [holder] },
+        revoked
+      ).holders
+    ).toHaveLength(1);
+    // A different store's key never reattaches here.
+    expect(
+      mergeRevokedHolders(
+        { storeId: "locker", label: "Locker", holders: [] },
+        revoked
+      ).holders
+    ).toHaveLength(0);
   });
 });

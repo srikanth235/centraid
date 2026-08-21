@@ -1,7 +1,7 @@
 import type { JSX } from "react";
 
 import type { TemplateEntry } from "../../../app-shell-context.js";
-import type { DiscoverTemplate } from "../../screen-contracts.js";
+import type { CatalogTemplate } from "../../screen-contracts.js";
 import AutomationTemplatesScreen from "../../screens/AutomationTemplatesScreen.js";
 import { useShellActions } from "../actions.js";
 import { openAutomationTemplatePreview } from "../automationTemplatePreview.js";
@@ -61,8 +61,8 @@ export default function TemplatesRoute(): JSX.Element {
         <PageEmpty message={`Couldn’t load templates: ${state.error}`} />
       ) : (
         <AutomationTemplatesScreen
-          templates={state.data as unknown as DiscoverTemplate[]}
-          subtitle="Proven automations, pre-wired with triggers and integrations. Adopt one and tune it to your workflow."
+          templates={state.data as unknown as CatalogTemplate[]}
+          subtitle="Proven automations, pre-wired with triggers and integrations."
           onPreview={(t) =>
             openAutomationTemplatePreview(
               t as unknown as TemplateEntry,

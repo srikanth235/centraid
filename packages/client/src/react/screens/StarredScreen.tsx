@@ -6,30 +6,28 @@ import type {
   HomeMenuAnchor,
 } from "../screen-contracts.js";
 import { cx } from "../ui/cx.js";
-import { AppCard, AutoCard } from "./HomeScreen.js";
+import { AppCard, AutoCard } from "./LibraryCards.js";
 
-import styles from "./HomeScreen.module.css";
+import styles from "./LibraryCards.module.css";
 
 export interface StarredScreenProps {
   appItems: readonly HomeAppItemDTO[];
   automationItems: readonly HomeAutoItemDTO[];
   onOpenApp: (id: string) => void;
-  onEnterDraft: (id: string) => void;
   onAppContext: (id: string, anchor: HomeMenuAnchor) => void;
   onOpenAutomation: (ref: string) => void;
   onAutomationMenu: (ref: string, anchor: HomeMenuAnchor) => void;
 }
 
 /**
- * Starred library — Home's card grid narrowed to starred apps + automations.
+ * Starred library — the card grid narrowed to starred apps + automations.
  * The route filters the DTOs; this just lays them out with the shared cards,
- * so a starred tile looks identical here and on Home.
+ * so a starred tile looks identical here and wherever else it is drawn.
  */
 export default function StarredScreen({
   appItems,
   automationItems,
   onOpenApp,
-  onEnterDraft,
   onAppContext,
   onOpenAutomation,
   onAutomationMenu,
@@ -40,13 +38,7 @@ export default function StarredScreen({
       data-layout="tiles"
     >
       {appItems.map((a) => (
-        <AppCard
-          key={a.id}
-          a={a}
-          onOpen={onOpenApp}
-          onEnterDraft={onEnterDraft}
-          onContext={onAppContext}
-        />
+        <AppCard key={a.id} a={a} onOpen={onOpenApp} onContext={onAppContext} />
       ))}
       {automationItems.map((r) => (
         <AutoCard

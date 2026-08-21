@@ -46,6 +46,11 @@ function baseMatrix() {
     ],
     cellOwners: { "vault.correctness": { owner: OWNER, tier: "unit" } },
     flows: [],
+    appEngines: {
+      engines: [],
+      apps: [],
+      seatDoctrine: "docs/blueprint-seats.md#engine-contracts",
+    },
   };
 }
 
@@ -70,9 +75,20 @@ function makeFixtureRoot(options = {}) {
   writeFileSync(path.join(root, "tests/mutation-floors.json"), "{}\n");
   mkdirSync(path.join(root, "owners"), { recursive: true });
   writeFileSync(path.join(root, OWNER), "test('owned behaviour', () => {});\n");
+  mkdirSync(path.join(root, "docs"), { recursive: true });
+  writeFileSync(
+    path.join(root, "docs/blueprint-seats.md"),
+    "## Engine contracts\n"
+  );
+  const fixtureMatrix = options.matrix ?? baseMatrix();
+  for (const app of fixtureMatrix.appEngines?.apps ?? []) {
+    const appRoot = path.join(root, "packages/blueprints/apps", app.id);
+    mkdirSync(appRoot, { recursive: true });
+    writeFileSync(path.join(appRoot, "app.json"), "{}\n");
+  }
   writeFileSync(
     path.join(root, "matrix.json"),
-    `${JSON.stringify(options.matrix ?? baseMatrix(), null, 2)}\n`
+    `${JSON.stringify(fixtureMatrix, null, 2)}\n`
   );
   return root;
 }
@@ -188,6 +204,91 @@ describe("evidence freshness", () => {
     ]);
     expect(result.summary.stale).toBe(1);
     expect(result.summary.passed).toBe(0);
+  });
+
+  test("renders absent real-model evidence grey, never green", () => {
+    const root = makeFixtureRoot();
+    const result = runGenerate(root);
+    expect(result.html).toContain(
+      "Weekly real-model evidence · eight-day freshness"
+    );
+    expect(result.html).toContain(
+      "No weekly real-weight artifact is available."
+    );
+    expect(result.html).toContain('class="metric missing">· missing');
+  });
+
+  test("keeps weekly real-model evidence fresh for eight days", () => {
+    const root = makeFixtureRoot();
+    const livePath = writeJson(root, "in/enrichment-live.json", {
+      owner: "packages/model-runtime/src/model-goldens.live.test.ts",
+      lane: "enrichment-live",
+      status: "passed",
+      capturedAt: new Date(
+        Date.now() - (8 * 24 - 1) * 60 * 60 * 1_000
+      ).toISOString(),
+    });
+    const result = runGenerate(root, ["--enrichment-live", livePath]);
+    expect(result.html).toContain('class="metric passed">✓ passed');
+  });
+
+  test("marks real-model evidence stale after eight days", () => {
+    const root = makeFixtureRoot();
+    const livePath = writeJson(root, "in/enrichment-live.json", {
+      owner: "packages/model-runtime/src/model-goldens.live.test.ts",
+      lane: "enrichment-live",
+      status: "passed",
+      capturedAt: new Date(
+        Date.now() - (8 * 24 + 1) * 60 * 60 * 1_000
+      ).toISOString(),
+    });
+    const result = runGenerate(root, ["--enrichment-live", livePath]);
+    expect(result.html).toContain('class="metric missing">! stale');
+    expect(result.html).toContain("older than eight days");
+  });
+});
+
+describe("apps × engines grid", () => {
+  test("renders the seat-doctrine citation on structural skips", () => {
+    const root = makeFixtureRoot({
+      matrix: {
+        ...baseMatrix(),
+        appEngines: {
+          seatDoctrine: "docs/blueprint-seats.md#engine-contracts",
+          engines: [
+            { id: "consent", label: "Consent", flow: "locker-consent" },
+          ],
+          apps: [
+            {
+              id: "locker",
+              engines: {
+                consent: {
+                  status: "skip",
+                  reason: "Locker is structurally excluded.",
+                  citation: "docs/blueprint-seats.md#engine-contracts",
+                },
+              },
+            },
+          ],
+        },
+        flows: [
+          {
+            id: "locker-consent",
+            name: "Locker consent",
+            surface: "vault",
+            dimension: "correctness",
+            tier: "unit",
+            owner: OWNER,
+            minimumTests: 0,
+          },
+        ],
+      },
+    });
+    const result = runGenerate(root);
+    expect(result.status).toBe(0);
+    expect(result.html).toContain(
+      "Locker is structurally excluded. (docs/blueprint-seats.md#engine-contracts)"
+    );
   });
 });
 
@@ -465,3 +566,10 @@ describe("perf and scale trends", () => {
     expect(result.html).toContain("Perf and scale results are missing");
   });
 });
+
+/**
+ * #781 — the 15 `*:accessibility` cells have a declared owner with no
+ * evidence lane at all (a per-PR node --test gate). Registered cells become a
+ * NAMED, budgeted absence on nightly instead of unfixable red noise — and the
+ * exemption voids itself the night the accessibility lane first runs.
+ */

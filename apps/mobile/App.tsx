@@ -1,13 +1,14 @@
 // Direct sub-path imports avoid the package's barrel index.js which
 // re-exports every weight (some of which Metro fails to resolve).
-import Geist_400Regular from "@expo-google-fonts/geist/400Regular/Geist_400Regular.ttf";
-import Geist_500Medium from "@expo-google-fonts/geist/500Medium/Geist_500Medium.ttf";
-import Geist_600SemiBold from "@expo-google-fonts/geist/600SemiBold/Geist_600SemiBold.ttf";
-import JetBrainsMono_400Regular from "@expo-google-fonts/jetbrains-mono/400Regular/JetBrainsMono_400Regular.ttf";
-import JetBrainsMono_500Medium from "@expo-google-fonts/jetbrains-mono/500Medium/JetBrainsMono_500Medium.ttf";
-import JetBrainsMono_600SemiBold from "@expo-google-fonts/jetbrains-mono/600SemiBold/JetBrainsMono_600SemiBold.ttf";
-import PlayfairDisplay_600SemiBold from "@expo-google-fonts/playfair-display/600SemiBold/PlayfairDisplay_600SemiBold.ttf";
-import PlayfairDisplay_600SemiBold_Italic from "@expo-google-fonts/playfair-display/600SemiBold_Italic/PlayfairDisplay_600SemiBold_Italic.ttf";
+//
+// The Binding Layer's ONE face, two weights (400 / 600): Instrument Sans for
+// every product role. The reading serif and numeric face are withdrawn, so
+// this list must stay two files — a face loaded here that the
+// ramp cannot name is exactly the divergence from the shared registry that the
+// native adapter prevents. Code surfaces use the PLATFORM monospace
+// (see kit/theme/index.ts#family), which loads nothing.
+import InstrumentSans_400Regular from "@expo-google-fonts/instrument-sans/400Regular/InstrumentSans_400Regular.ttf";
+import InstrumentSans_600SemiBold from "@expo-google-fonts/instrument-sans/600SemiBold/InstrumentSans_600SemiBold.ttf";
 import { NavigationContainer } from "@react-navigation/native";
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
 import { useFonts } from "expo-font";
@@ -22,16 +23,43 @@ import { GestureHandlerRootView } from "react-native-gesture-handler";
 import {
   SafeAreaProvider,
   SafeAreaView,
+  initialWindowMetrics,
   useSafeAreaInsets,
 } from "react-native-safe-area-context";
 
+// Every screen here is reached only through a `component=` prop on a
+// navigator, and each one's module body is evaluated on first navigation
+// rather than at app start — see `lazy-screens.tsx` for why.
+import {
+  AssistantScreen,
+  AssistantFullScreen,
+  AutomationsScreen,
+  InsightsScreen,
+  LockerHome,
+  NotesHome,
+  TallyHome,
+  TasksHome,
+  CaptureScreen,
+  ConnectorsScreen,
+  DataScreen,
+  DevicesScreen,
+  ScanScreen,
+  SignalNotificationScreen,
+  SystemOnPhoneScreen,
+} from "./lazy-screens";
+import {
+  AgendaNavigator,
+  DocsNavigator,
+  PeopleNavigator,
+  PhotosNavigator,
+  SettingsNavigator,
+} from "./navigators";
 import { configurePhotoImageCache } from "./src/apps/photos/image-cache";
 import { LINKING } from "./src/deep-links";
 import ErrorBoundary from "./src/ErrorBoundary";
 import { Text } from "./src/kit/components/NativeText";
-import ToastHost from "./src/kit/components/Toast";
+import StatusLine from "./src/kit/components/StatusLine";
 import { ShareIntentIngest } from "./src/kit/hooks/ShareIntentIngest";
-import FrameProbe from "./src/kit/perf/FrameProbe";
 import {
   REPLICA_UNPAIRED_MESSAGE,
   ReplicaProvider,
@@ -40,13 +68,11 @@ import {
 import { AppLockProvider } from "./src/kit/security/AppLock";
 import {
   hydrateAppearance,
-  hydrateAccent,
   navThemeFor,
   radii,
   resolveScheme,
   resolveTheme,
   t,
-  useAccent,
   useAppearance,
   useTheme,
 } from "./src/kit/theme";
@@ -55,90 +81,12 @@ import { hydrateProfile, isOnboarded } from "./src/lib/profile";
 import { MOBILE_COMPATIBILITY_WALL_COPY } from "./src/lib/replica/mobile-gateway-compatibility-core";
 import { useUploadReconciliation } from "./src/lib/upload/boot";
 import { rootNavigationRef } from "./src/navigation";
-import type {
-  AgendaStackParamList,
-  DocsStackParamList,
-  PhotosStackParamList,
-  RootStackParamList,
-  SettingsStackParamList,
-} from "./src/navigation";
+import type { RootStackParamList } from "./src/navigation";
 // Only the two screens that can be on screen at first paint are imported
 // eagerly: Home is the initial route of the root stack, Onboarding is what the
 // tree renders instead when the profile says the user has not been through it.
 import HomeScreen from "./src/screens/Home";
 import OnboardingScreen from "./src/screens/Onboarding";
-
-/**
- * Defer a screen module's *evaluation* until the first navigation to it.
- *
- * Metro has no code splitting, so the bytes still ship in the launch bundle —
- * what this buys is that `react-native-maps`, `expo-camera`,
- * `react-native-webview` and `expo-video` no longer run their module bodies
- * (and therefore their `requireNativeComponent` / TurboModule registration) as
- * part of app start. That native-module init is the measurable cold-start cost,
- * not the parse.
- *
- * The wrapper exists so the result stays a plain `ComponentType<P>`:
- * `React.lazy` returns a `LazyExoticComponent`, which react-navigation's
- * `component=` prop does not accept.
- */
-function lazyScreen<P extends object>(
-  load: () => Promise<{ default: React.ComponentType<P> }>
-): React.ComponentType<P> {
-  const Lazy = React.lazy(load);
-  function LazyScreen(props: P): React.JSX.Element {
-    return <Lazy {...props} />;
-  }
-  return LazyScreen;
-}
-
-// Every screen below is reachable only through a `component=` prop on a
-// navigator, so nothing else in this file may reference these bindings — that
-// is what keeps the deferral honest.
-const AgendaEvent = lazyScreen(() => import("./src/apps/agenda/AgendaEvent"));
-const AgendaHome = lazyScreen(() => import("./src/apps/agenda/AgendaHome"));
-const AssistantScreen = lazyScreen(
-  () => import("./src/apps/assistant/Assistant")
-);
-const AutomationsScreen = lazyScreen(
-  () => import("./src/apps/automations/Automations")
-);
-const DocsHome = lazyScreen(() => import("./src/apps/docs/DocsHome"));
-const DocumentViewer = lazyScreen(
-  () => import("./src/apps/docs/DocumentViewer")
-);
-const InsightsScreen = lazyScreen(() => import("./src/apps/insights/Insights"));
-const LockerHome = lazyScreen(() => import("./src/apps/locker/LockerHome"));
-const NotesHome = lazyScreen(() => import("./src/apps/notes/NotesHome"));
-const PeopleHome = lazyScreen(() => import("./src/apps/people/PeopleHome"));
-const AlbumDetail = lazyScreen(() => import("./src/apps/photos/AlbumDetail"));
-const BackupHealth = lazyScreen(() => import("./src/apps/photos/BackupHealth"));
-const DuplicateReview = lazyScreen(
-  () => import("./src/apps/photos/DuplicateReview")
-);
-const FaceReview = lazyScreen(() => import("./src/apps/photos/FaceReview"));
-const PhotoLightbox = lazyScreen(
-  () => import("./src/apps/photos/PhotoLightbox")
-);
-const PhotosHome = lazyScreen(() => import("./src/apps/photos/PhotosHome"));
-const PhotosLibrary = lazyScreen(
-  () => import("./src/apps/photos/PhotosLibrary")
-);
-const PhotosSearch = lazyScreen(() => import("./src/apps/photos/PhotosSearch"));
-const PhotoStateView = lazyScreen(
-  () => import("./src/apps/photos/PhotoStateView")
-);
-const PlacesMap = lazyScreen(() => import("./src/apps/photos/PlacesMap"));
-const TallyHome = lazyScreen(() => import("./src/apps/tally/TallyHome"));
-const TasksHome = lazyScreen(() => import("./src/apps/tasks/TasksHome"));
-const AppDetailScreen = lazyScreen(() => import("./src/screens/AppDetail"));
-const ApprovalsScreen = lazyScreen(() => import("./src/screens/Approvals"));
-const CaptureScreen = lazyScreen(() => import("./src/screens/Capture"));
-const PhoneStorageScreen = lazyScreen(
-  () => import("./src/screens/PhoneStorage")
-);
-const ScanScreen = lazyScreen(() => import("./src/screens/Scan"));
-const SettingsScreen = lazyScreen(() => import("./src/screens/Settings"));
 
 // Held until the profile prefs say onboarding vs app — see the comment on the
 // `onboarded === null` gate in App() for why fonts are deliberately *not* part
@@ -160,10 +108,6 @@ Notifications.setNotificationHandler({
 });
 
 const RootStack = createNativeStackNavigator<RootStackParamList>();
-const PhotosStack = createNativeStackNavigator<PhotosStackParamList>();
-const DocsStack = createNativeStackNavigator<DocsStackParamList>();
-const AgendaStack = createNativeStackNavigator<AgendaStackParamList>();
-const SettingsStack = createNativeStackNavigator<SettingsStackParamList>();
 
 // Presenting an app cover: an edge-to-edge full-screen modal that cross-fades in
 // (`fade`). `fullScreenModal` (not `modal`) so the cover truly covers the screen —
@@ -182,91 +126,6 @@ function UploadReconciliation(): null {
   const { session } = useReplica();
   useUploadReconciliation(session);
   return null;
-}
-
-function PhotosNavigator(): React.JSX.Element {
-  const { colors } = useTheme();
-  return (
-    <View style={{ flex: 1 }}>
-      <PhotosStack.Navigator
-        screenOptions={{
-          contentStyle: { backgroundColor: colors.bg },
-          headerShown: false,
-        }}
-      >
-        <PhotosStack.Screen name="PhotosHome" component={PhotosHome} />
-        <PhotosStack.Screen
-          name="PhotoLightbox"
-          component={PhotoLightbox}
-          options={{ animation: "fade_from_bottom", gestureEnabled: false }}
-        />
-        <PhotosStack.Screen name="PhotosLibrary" component={PhotosLibrary} />
-        <PhotosStack.Screen name="PhotosSearch" component={PhotosSearch} />
-        <PhotosStack.Screen name="BackupHealth" component={BackupHealth} />
-        <PhotosStack.Screen name="PlacesMap" component={PlacesMap} />
-        <PhotosStack.Screen name="FaceReview" component={FaceReview} />
-        <PhotosStack.Screen
-          name="DuplicateReview"
-          component={DuplicateReview}
-        />
-        <PhotosStack.Screen name="AlbumDetail" component={AlbumDetail} />
-        <PhotosStack.Screen name="PhotoStateView" component={PhotoStateView} />
-      </PhotosStack.Navigator>
-      {/* A full-screen native-stack cover sits above the root shell, so the
-        root probe cannot be observed while Photos is presented. */}
-      <FrameProbe />
-    </View>
-  );
-}
-
-function DocsNavigator(): React.JSX.Element {
-  const { colors } = useTheme();
-  return (
-    <DocsStack.Navigator
-      screenOptions={{
-        contentStyle: { backgroundColor: colors.bg },
-        headerShown: false,
-      }}
-    >
-      <DocsStack.Screen name="DocsHome" component={DocsHome} />
-      <DocsStack.Screen name="DocumentViewer" component={DocumentViewer} />
-    </DocsStack.Navigator>
-  );
-}
-
-function AgendaNavigator(): React.JSX.Element {
-  const { colors } = useTheme();
-  return (
-    <AgendaStack.Navigator
-      screenOptions={{
-        contentStyle: { backgroundColor: colors.bg },
-        headerShown: false,
-      }}
-    >
-      <AgendaStack.Screen name="AgendaHome" component={AgendaHome} />
-      <AgendaStack.Screen name="AgendaEvent" component={AgendaEvent} />
-    </AgendaStack.Navigator>
-  );
-}
-
-function SettingsNavigator(): React.JSX.Element {
-  const { colors } = useTheme();
-  return (
-    <SettingsStack.Navigator
-      screenOptions={{
-        animation: "slide_from_right",
-        contentStyle: { backgroundColor: colors.bg },
-        headerShown: false,
-      }}
-    >
-      <SettingsStack.Screen name="Settings" component={SettingsScreen} />
-      <SettingsStack.Screen name="Approvals" component={ApprovalsScreen} />
-      <SettingsStack.Screen
-        name="PhoneStorage"
-        component={PhoneStorageScreen}
-      />
-    </SettingsStack.Navigator>
-  );
 }
 
 /**
@@ -384,30 +243,21 @@ export default function App(): React.JSX.Element | null {
   // scheme here so the nav container theme + status bar follow it, matching the
   // per-screen `useTheme()` override (src/kit/theme/appearance.ts).
   const scheme = resolveScheme(useAppearance(), useColorScheme());
-  const accentKey = useAccent();
-  const { colors } = resolveTheme(scheme, accentKey);
+  const { colors } = resolveTheme(scheme);
   // `null` while the profile prefs hydrate; then true/false gates onboarding.
   const [onboarded, setOnboarded] = React.useState<boolean | null>(null);
   // The return tuple is deliberately dropped: nothing gates on it any more (see
   // the tradeoff note below the effects). `useFonts` still re-renders this
   // component when the faces land, which is what swaps the system fallback out.
   useFonts({
-    Geist_400Regular,
-    Geist_500Medium,
-    Geist_600SemiBold,
-    JetBrainsMono_400Regular,
-    JetBrainsMono_500Medium,
-    JetBrainsMono_600SemiBold,
-    PlayfairDisplay_600SemiBold,
-    PlayfairDisplay_600SemiBold_Italic,
+    InstrumentSans_400Regular,
+    InstrumentSans_600SemiBold,
   });
 
   useEffect(() => {
-    // Both hydrations are kicked off in the same tick and neither is awaited by
-    // the other: the appearance read must not sit behind the profile read, or
-    // first paint waits on two round trips to AsyncStorage instead of one.
+    // The appearance read must not sit behind the profile read, or first paint
+    // waits on two round trips to AsyncStorage instead of one.
     void hydrateAppearance();
-    void hydrateAccent();
     void hydrateProfile().then(() => setOnboarded(isOnboarded()));
     // expo-image ships with no ceiling on its in-memory bitmap cache, so a long
     // scroll through the photo grid otherwise holds every decoded thumbnail
@@ -417,7 +267,7 @@ export default function App(): React.JSX.Element | null {
   }, []);
 
   // Deliberate tradeoff (#659 M3): the splash lifts as soon as the profile has
-  // hydrated, *without* waiting on the ten font faces. Text therefore paints in
+  // hydrated, *without* waiting on the three font faces. Text therefore paints in
   // the system font for the frame or two before `useFonts` resolves and
   // re-renders. The alternative — the previous `!fontsLoaded` gate — held a
   // blank screen for the whole font load on every cold start, which is a far
@@ -443,7 +293,12 @@ export default function App(): React.JSX.Element | null {
   return (
     <ErrorBoundary>
       <GestureHandlerRootView style={{ flex: 1 }}>
-        <SafeAreaProvider>
+        {/* Seeded with the insets the native side already measured at launch,
+            so the first frame is laid out correctly instead of at zero until
+            the first JS layout pass reports back. NOTE: this alone does NOT
+            fix the cover screens' top inset — that was measured and it does
+            not; see `kit/components/TopSafeArea.tsx`. */}
+        <SafeAreaProvider initialMetrics={initialWindowMetrics}>
           <View
             style={{ backgroundColor: colors.bg, flex: 1 }}
             onLayout={onReady}
@@ -465,7 +320,7 @@ export default function App(): React.JSX.Element | null {
                       <NavigationContainer
                         ref={rootNavigationRef}
                         linking={LINKING}
-                        theme={navThemeFor(scheme, accentKey)}
+                        theme={navThemeFor(scheme)}
                       >
                         <StatusBar
                           style={scheme === "dark" ? "light" : "dark"}
@@ -484,8 +339,7 @@ export default function App(): React.JSX.Element | null {
                           <RootStack.Navigator
                             screenOptions={{ headerShown: false }}
                             // `selection` haptic when a cover opens — preserves the
-                            // vocabulary the old tabPress listener gave, and the one
-                            // WebView apps get via expo-haptics (src/lib/bridge/dispatch.ts).
+                            // vocabulary the old tabPress listener gave.
                             // `closing` guards it to the open transition, not dismissal.
                             screenListeners={{
                               transitionStart: (e) => {
@@ -535,7 +389,7 @@ export default function App(): React.JSX.Element | null {
                             />
                             <RootStack.Screen
                               name="People"
-                              component={PeopleHome}
+                              component={PeopleNavigator}
                               options={COVER_OPTIONS}
                             />
                             <RootStack.Screen
@@ -549,13 +403,26 @@ export default function App(): React.JSX.Element | null {
                               options={COVER_OPTIONS}
                             />
                             <RootStack.Screen
-                              name="AppDetail"
-                              component={AppDetailScreen}
+                              name="Assistant"
+                              component={AssistantScreen}
+                              options={{
+                                animation: "none",
+                                presentation: "transparentModal",
+                              }}
+                            />
+                            <RootStack.Screen
+                              name="AssistantFull"
+                              component={AssistantFullScreen}
                               options={COVER_OPTIONS}
                             />
                             <RootStack.Screen
-                              name="Assistant"
-                              component={AssistantScreen}
+                              name="SystemOnPhone"
+                              component={SystemOnPhoneScreen}
+                              options={COVER_OPTIONS}
+                            />
+                            <RootStack.Screen
+                              name="SignalNotification"
+                              component={SignalNotificationScreen}
                               options={COVER_OPTIONS}
                             />
                             <RootStack.Screen
@@ -566,6 +433,21 @@ export default function App(): React.JSX.Element | null {
                             <RootStack.Screen
                               name="Insights"
                               component={InsightsScreen}
+                              options={COVER_OPTIONS}
+                            />
+                            <RootStack.Screen
+                              name="Connectors"
+                              component={ConnectorsScreen}
+                              options={COVER_OPTIONS}
+                            />
+                            <RootStack.Screen
+                              name="Data"
+                              component={DataScreen}
+                              options={COVER_OPTIONS}
+                            />
+                            <RootStack.Screen
+                              name="Devices"
+                              component={DevicesScreen}
                               options={COVER_OPTIONS}
                             />
                             <RootStack.Screen
@@ -586,7 +468,7 @@ export default function App(): React.JSX.Element | null {
                 </ReplicaProvider>
               </AppLockProvider>
             </ShareIntentProvider>
-            <ToastHost />
+            <StatusLine />
           </View>
         </SafeAreaProvider>
       </GestureHandlerRootView>

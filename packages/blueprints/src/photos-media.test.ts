@@ -6,8 +6,8 @@ import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 // The typed `vi.mock(import('../apps/photos/format.js'), …)` form that
 // vitest/prefer-import-in-mock wants pulls that module into this package's TS
 // program, but `apps/` sits outside its `rootDir: ./src` (tsconfig.json), so
-// typecheck fails with TS6059 plus TS2307 on the module's own `./kit.ts`
-// import. The blueprint apps are typechecked separately by tsconfig.apps.json,
+// typecheck fails with TS6059 plus TS2307 on the module's own app-relative
+// imports. The apps are typechecked separately by tsconfig.apps.json,
 // and the `@ts-nocheck` above does not help because module resolution still
 // happens. The string specifier keeps the module out of this program.
 // oxlint-disable-next-line vitest/prefer-import-in-mock -- see above
@@ -30,12 +30,20 @@ interface FakeObserver {
 }
 
 const observers: FakeObserver[] = [];
+const mutationCallbacks: MutationCallback[] = [];
 let mutationCallback: MutationCallback | undefined;
+
+/** Fire every live MutationObserver, the way a real attribute change would. */
+function flushMutations(): void {
+  for (const fire of mutationCallbacks.slice())
+    fire([], {} as MutationObserver);
+}
 
 describe("Photos next-screen media loading", () => {
   beforeEach(() => {
     vi.resetModules();
     observers.length = 0;
+    mutationCallbacks.length = 0;
     mutationCallback = undefined;
     document.body.innerHTML = "";
     vi.stubGlobal(
@@ -67,9 +75,14 @@ describe("Photos next-screen media loading", () => {
 
   function FakeMutationObserver(callback: MutationCallback) {
     mutationCallback = callback;
+    // Every construction is recorded so a test can fire the ones it cares about
+    // (the detached-tile sweeper, plus a per-image promotion watcher).
+    mutationCallbacks.push(callback);
     vi.spyOn(this, "observe").mockReturnValue(undefined);
+    vi.spyOn(this, "disconnect").mockReturnValue(undefined);
   }
   FakeMutationObserver.prototype.observe = () => undefined;
+  FakeMutationObserver.prototype.disconnect = () => undefined;
 
   test("roots the one-screen lookahead in the overflowing photo pane", async () => {
     const { observeNextScreen } = await importFixture(
@@ -101,6 +114,149 @@ describe("Photos next-screen media loading", () => {
       "/centraid/_vault/blobs/photo?variant=thumb"
     );
     expect(observers[0]?.unobserve).toHaveBeenCalledWith(image);
+  });
+
+  // #708 (web host). A relative `/centraid/_vault/blobs/…` path is only the
+  // gateway on the SERVED path. In the shell — the installable PWA reaching the
+  // gateway over the iroh tunnel, or desktop's `file://` document — it resolves
+  // to the SPA's own index.html, so the <img> gets HTML, fires `error`, and the
+  // tile placeholders itself before the shell's authorizer can swap in an
+  // authed `blob:` URL. The staged value must therefore never reach `src` while
+  // the authorizer says it owns that reference.
+  test("holds the staged promotion while the shell authorizes a vault path", async () => {
+    const { observeNextScreen } = await importFixture(
+      "../apps/photos/media-observer.js"
+    );
+    const image = document.createElement("img");
+    document.body.append(image);
+
+    observeNextScreen(image, "/centraid/_vault/blobs/photo?variant=thumb");
+    // The shell's authorizer claims the staged reference (it stamps this
+    // synchronously, before its fetch, so the claim is in place by the time the
+    // viewport observer fires).
+    image.dataset.blobPending = "1";
+
+    observers[0]?.callback(
+      [{ isIntersecting: true, target: image } as IntersectionObserverEntry],
+      observers[0] as unknown as IntersectionObserver
+    );
+
+    // The raw path NEVER lands in src — that load is what greys the grid.
+    expect(image.getAttribute("src")).toBeNull();
+    expect(image.dataset.prefetchSrc).toBe(
+      "/centraid/_vault/blobs/photo?variant=thumb"
+    );
+
+    // The authorizer settles: staged value becomes an authed object URL and the
+    // claim is released. The held promotion resumes with the authed URL.
+    image.dataset.prefetchSrc = "blob:mock/1";
+    delete image.dataset.blobPending;
+    flushMutations();
+
+    expect(image.getAttribute("src")).toBe("blob:mock/1");
+    expect(Object.hasOwn(image.dataset, "prefetchSrc")).toBe(false);
+  });
+
+  // The other settle: authorization failed. The claim is released with the
+  // staged value still raw, and the tile must stop waiting — it paints the raw
+  // path so the app's normal `error` fallback (a placeholder) runs.
+  test("resumes a held promotion when authorization gives up", async () => {
+    const { observeNextScreen } = await importFixture(
+      "../apps/photos/media-observer.js"
+    );
+    const image = document.createElement("img");
+    document.body.append(image);
+
+    observeNextScreen(image, "/centraid/_vault/blobs/photo");
+    image.dataset.blobPending = "1";
+    observers[0]?.callback(
+      [{ isIntersecting: true, target: image } as IntersectionObserverEntry],
+      observers[0] as unknown as IntersectionObserver
+    );
+    expect(image.getAttribute("src")).toBeNull();
+
+    delete image.dataset.blobPending;
+    flushMutations();
+
+    expect(image.getAttribute("src")).toBe("/centraid/_vault/blobs/photo");
+  });
+
+  // The SERVED path (blueprint in an iframe the gateway itself serves) installs
+  // no authorizer, so the stamp never appears and the relative path resolves
+  // same-origin exactly as it always has. Nothing may be held there.
+  test("promotes a vault path immediately when no authorizer claimed it", async () => {
+    const { observeNextScreen } = await importFixture(
+      "../apps/photos/media-observer.js"
+    );
+    const image = document.createElement("img");
+    document.body.append(image);
+
+    observeNextScreen(image, "/centraid/_vault/blobs/photo?variant=thumb");
+    observers[0]?.callback(
+      [{ isIntersecting: true, target: image } as IntersectionObserverEntry],
+      observers[0] as unknown as IntersectionObserver
+    );
+
+    expect(image.getAttribute("src")).toBe(
+      "/centraid/_vault/blobs/photo?variant=thumb"
+    );
+    expect(observers[0]?.unobserve).toHaveBeenCalledWith(image);
+  });
+
+  // saveData / no IntersectionObserver puts the raw path straight into `src`,
+  // so the load CAN fail before the authorizer settles. That error is the
+  // un-authorized load failing, not the asset — tearing the tile down there is
+  // what left the web grid at zero <img> elements and ten placeholders.
+  test("does not placeholder a tile whose error arrives mid-authorization", async () => {
+    const { fillTileMedia } = await importFixture("../apps/photos/media.js");
+
+    const tile = document.createElement("div");
+    fillTileMedia(tile, {
+      asset_id: "a1",
+      kind: "photo",
+      content_uri: "/centraid/_vault/blobs/abc",
+      thumb_uri: null,
+    });
+    const image = tile.querySelector("img")!;
+    image.src = image.dataset.prefetchSrc ?? "";
+    image.dataset.blobPending = "1";
+
+    image.dispatchEvent(new Event("error"));
+    expect(tile.querySelector("img")).toBe(image);
+    expect(tile.classList.contains("is-placeholder")).toBe(false);
+    // Not even the one-shot original retry burned — there is nothing to retry
+    // yet, and spending it here is what left the tile with no second chance.
+    expect(Object.hasOwn(image.dataset, "originalFallback")).toBe(false);
+
+    // Authorization succeeded: the authed URL loads and no error ever returns.
+    delete image.dataset.blobPending;
+    image.setAttribute("src", "blob:mock/1");
+    expect(tile.classList.contains("is-placeholder")).toBe(false);
+  });
+
+  // …and when authorization fails, the authorizer clears the stamp and re-fires
+  // `error`. With the claim gone the tile's terminal path runs as before.
+  test("placeholders the tile once authorization has given up", async () => {
+    const { fillTileMedia } = await importFixture("../apps/photos/media.js");
+
+    const tile = document.createElement("div");
+    fillTileMedia(tile, {
+      asset_id: "a1",
+      kind: "photo",
+      content_uri: "/centraid/_vault/blobs/abc",
+      thumb_uri: null,
+    });
+    const image = tile.querySelector("img")!;
+    image.src = image.dataset.prefetchSrc ?? "";
+    image.dataset.blobPending = "1";
+    image.dispatchEvent(new Event("error"));
+    expect(tile.classList.contains("is-placeholder")).toBe(false);
+
+    delete image.dataset.blobPending;
+    image.dispatchEvent(new Event("error")); // the authorizer's re-fire
+    image.dispatchEvent(new Event("error")); // the retried original fails too
+    expect(tile.querySelector("img")).toBeNull();
+    expect(tile.classList.contains("is-placeholder")).toBe(true);
   });
 
   test("keeps observers scoped per scroll container and releases detached tiles", async () => {
@@ -160,6 +316,37 @@ describe("Photos next-screen media loading", () => {
     ).toBeNull();
   });
 
+  test("paints the original when a photo has no thumb derivative yet", async () => {
+    const { gridSrc } = await importFixture("../apps/photos/media.js");
+
+    // `thumb_uri` is only set once the gateway's preview backstop has written
+    // the derivative row, so this is the state EVERY photo is in for a while
+    // after import. Returning null here built no `<img>` at all, which is what
+    // rendered a freshly seeded library as a wall of grey boxes — and why the
+    // `<img>` error retry could not save it.
+    expect(
+      gridSrc({
+        content_uri: "/centraid/_vault/blobs/original-photo",
+        kind: "photo",
+        thumb_uri: null,
+      })
+    ).toBe("/centraid/_vault/blobs/original-photo");
+  });
+
+  test("still refuses a thumb-less original that lives off this device", async () => {
+    const { gridSrc } = await importFixture("../apps/photos/media.js");
+
+    // A bare remote URL is a full-size original fetched off-device; the tile
+    // stays a placeholder rather than reaching for it.
+    expect(
+      gridSrc({
+        content_uri: "https://example.test/original.jpg",
+        kind: "photo",
+        thumb_uri: null,
+      })
+    ).toBeNull();
+  });
+
   test("renders duration and media-specific lightweight placeholders", async () => {
     const { durationLabel, fillTileMedia } = await importFixture(
       "../apps/photos/media.js"
@@ -180,6 +367,65 @@ describe("Photos next-screen media loading", () => {
     expect(audio.querySelector(".ph-tile-duration")?.textContent).toBe(
       "1:01:01"
     );
+  });
+
+  // #708. A PNG still whose `duration_s` column is 0 (or absent) was stamped
+  // with a "0:00" chip, which reads as a video that will not play.
+  test("never stamps a duration on a still photo", async () => {
+    const { durationLabel, fillTileMedia } = await importFixture(
+      "../apps/photos/media.js"
+    );
+    expect(durationLabel(0)).toBeNull();
+
+    const still = document.createElement("div");
+    fillTileMedia(still, {
+      asset_id: "s1",
+      kind: "photo",
+      duration_s: 0,
+      thumb_uri: "/centraid/_vault/blobs/still?variant=thumb",
+    });
+    expect(still.querySelector(".ph-tile-duration")).toBeNull();
+
+    // Not even a positive one — a still has no timeline to report.
+    const oddStill = document.createElement("div");
+    fillTileMedia(oddStill, {
+      asset_id: "s2",
+      kind: "photo",
+      duration_s: 12,
+      thumb_uri: "/centraid/_vault/blobs/odd?variant=thumb",
+    });
+    expect(oddStill.querySelector(".ph-tile-duration")).toBeNull();
+  });
+
+  // #708. The thumb derivative does not exist until the gateway's preview
+  // backstop runs, and an authorized `blob:` URL can be revoked mid-decode —
+  // both surface as one `error` on the <img>. The tile retries the ORIGINAL
+  // once before it gives up, instead of painting a permanent grey box.
+  test("retries the original once before falling back to a placeholder", async () => {
+    const { fillTileMedia } = await importFixture("../apps/photos/media.js");
+
+    const tile = document.createElement("div");
+    fillTileMedia(tile, {
+      asset_id: "a1",
+      kind: "photo",
+      content_uri: "/centraid/_vault/blobs/abc",
+      thumb_uri: "/centraid/_vault/blobs/abc?variant=thumb",
+      width: 4_000,
+      height: 3_000,
+    });
+    const image = tile.querySelector("img")!;
+    // The lazy loader stages the thumb; promote it the way the observer does.
+    image.src = image.dataset.prefetchSrc ?? "";
+
+    image.dispatchEvent(new Event("error"));
+    expect(image.parentElement).toBe(tile);
+    expect(image.getAttribute("src")).toBe("/centraid/_vault/blobs/abc");
+    expect(tile.classList.contains("is-placeholder")).toBe(false);
+
+    // The original failing too is a real dead end — now the placeholder.
+    image.dispatchEvent(new Event("error"));
+    expect(tile.querySelector("img")).toBeNull();
+    expect(tile.classList.contains("is-placeholder")).toBe(true);
   });
 
   // Issue #599. The shell's blob authorizer resolves a `/centraid/_vault/blobs/…`

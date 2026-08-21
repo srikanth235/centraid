@@ -21,6 +21,7 @@ import { Pressable, StyleSheet, View } from "react-native";
 
 import { formatFrameSample, sampleFrames } from "../../lib/perf/frame-sampler";
 import { Text } from "../components/NativeText";
+import { t, useTheme } from "../theme";
 
 /**
  * `centraid://perf-frames?ms=4000` still arms one sample for manual use.
@@ -55,6 +56,7 @@ function windowMsFrom(url: string): number | undefined {
 }
 
 export default function FrameProbe(): React.JSX.Element | null {
+  const { colors } = useTheme();
   const [sampling, setSampling] = useState(false);
   const [report, setReport] = useState<string>();
   const runningRef = useRef(false);
@@ -115,12 +117,12 @@ export default function FrameProbe(): React.JSX.Element | null {
   }
   if (report) {
     return (
-      <View style={styles.readout}>
+      <View style={[styles.readout, { backgroundColor: colors.stage }]}>
         <Text
           accessible
           accessibilityLabel={report}
           testID={FRAME_PROBE_REPORT_ID}
-          style={styles.text}
+          style={[styles.text, { color: colors.success }]}
         >
           {report}
         </Text>
@@ -160,7 +162,6 @@ const styles = StyleSheet.create({
     zIndex: 9999,
   },
   readout: {
-    backgroundColor: "#000",
     left: 0,
     padding: 4,
     position: "absolute",
@@ -168,5 +169,5 @@ const styles = StyleSheet.create({
     top: 0,
     zIndex: 9999,
   },
-  text: { color: "#0f0", fontSize: 10 },
+  text: { fontSize: t("mono").fontSize },
 });

@@ -10,8 +10,6 @@
       "version": "0.4.1",
       "kind": "app",
       "files": [
-        "Chrome.module.css",
-        "Chrome.tsx",
         "actions/attach.ts",
         "actions/cancel-event.ts",
         "actions/detach.ts",
@@ -22,56 +20,14 @@
         "app-inline.tsx",
         "app-root.tsx",
         "app.json",
-        "components/CreateModal.module.css",
-        "components/CreateModal.tsx",
-        "components/EventDrawer.module.css",
-        "components/EventDrawer.tsx",
-        "components/EventEditor.module.css",
-        "components/EventEditor.tsx",
-        "components/HeaderBar.module.css",
-        "components/HeaderBar.tsx",
-        "components/MonthView.module.css",
-        "components/MonthView.tsx",
-        "components/ScheduleView.module.css",
-        "components/ScheduleView.tsx",
-        "components/Shared.tsx",
-        "components/Sidebar.module.css",
-        "components/Sidebar.tsx",
-        "components/WeekView.module.css",
-        "components/WeekView.tsx",
-        "components/shared.module.css",
-        "format.ts",
-        "icons.ts",
-        "index.html",
-        "logic.ts",
         "package.json",
-        "pending.ts",
+        "pending-projection.ts",
         "queries/parties.ts",
         "queries/search.ts",
         "queries/upcoming.ts",
-        "types.ts"
+        "seed.js"
       ],
       "appKnobs": [
-        {
-          "key": "appFont",
-          "label": "Font",
-          "type": "segmented",
-          "default": "sans",
-          "options": [
-            {
-              "value": "sans",
-              "label": "Sans"
-            },
-            {
-              "value": "serif",
-              "label": "Serif"
-            },
-            {
-              "value": "mono",
-              "label": "Mono"
-            }
-          ]
-        },
         {
           "key": "appWidth",
           "label": "Width",
@@ -136,7 +92,13 @@
             }
           ]
         }
-      ]
+      ],
+      "seats": {
+        "byteBearing": false,
+        "originActs": [],
+        "disabledOn": [],
+        "northStar": "google-calendar"
+      }
     },
     {
       "id": "tasks",
@@ -147,8 +109,6 @@
       "version": "0.3.1",
       "kind": "app",
       "files": [
-        "Chrome.module.css",
-        "Chrome.tsx",
         "actions/add-tag.ts",
         "actions/add.ts",
         "actions/attach.ts",
@@ -162,49 +122,13 @@
         "app-inline.tsx",
         "app-root.tsx",
         "app.json",
-        "components/Board.module.css",
-        "components/Board.tsx",
-        "components/Capture.module.css",
-        "components/Capture.tsx",
-        "components/Detail.module.css",
-        "components/Detail.tsx",
-        "components/Row.module.css",
-        "components/Row.tsx",
-        "components/Shared.tsx",
-        "components/Sidebar.module.css",
-        "components/Sidebar.tsx",
-        "components/shared.module.css",
-        "format.ts",
-        "icons.ts",
-        "index.html",
-        "logic.ts",
         "package.json",
+        "pending-projection.ts",
         "queries/board.ts",
         "queries/search.ts",
-        "seed.js",
-        "types.ts"
+        "seed.js"
       ],
       "appKnobs": [
-        {
-          "key": "appFont",
-          "label": "Font",
-          "type": "segmented",
-          "default": "sans",
-          "options": [
-            {
-              "value": "sans",
-              "label": "Sans"
-            },
-            {
-              "value": "serif",
-              "label": "Serif"
-            },
-            {
-              "value": "mono",
-              "label": "Mono"
-            }
-          ]
-        },
         {
           "key": "appWidth",
           "label": "Width",
@@ -273,7 +197,13 @@
             }
           ]
         }
-      ]
+      ],
+      "seats": {
+        "byteBearing": false,
+        "originActs": [],
+        "disabledOn": [],
+        "northStar": "todoist"
+      }
     },
     {
       "id": "people",
@@ -317,72 +247,46 @@
         "app-inline.tsx",
         "app-root.tsx",
         "app.json",
-        "components/Activity.tsx",
-        "components/AddPersonModal.module.css",
-        "components/AddPersonModal.tsx",
-        "components/AddRows.module.css",
-        "components/AddRows.tsx",
-        "components/BulkBar.module.css",
-        "components/BulkBar.tsx",
-        "components/ContactChannels.module.css",
-        "components/ContactChannels.tsx",
-        "components/DetailSections.module.css",
-        "components/DetailSections.tsx",
-        "components/Details.module.css",
-        "components/Details.tsx",
-        "components/Grid.module.css",
-        "components/Grid.tsx",
-        "components/History.module.css",
-        "components/History.tsx",
-        "components/Journal.module.css",
-        "components/Journal.tsx",
-        "components/List.module.css",
-        "components/List.tsx",
-        "components/NewMenu.module.css",
-        "components/NewMenu.tsx",
+        "components/ConfirmHost.tsx",
+        "components/EditRoute.module.css",
+        "components/EditRoute.tsx",
+        "components/EmptyState.module.css",
+        "components/EmptyState.tsx",
+        "components/LogRoute.tsx",
+        "components/MergeRoute.tsx",
+        "components/PeopleRouteBody.tsx",
+        "components/PersonGrants.test.tsx",
+        "components/PersonGrants.tsx",
+        "components/PersonRoute.tsx",
+        "components/RosterRoute.tsx",
+        "components/SearchRoute.tsx",
         "components/Shared.tsx",
-        "components/Sidebar.module.css",
-        "components/Sidebar.tsx",
-        "components/Toolbar.tsx",
-        "components/TrashCard.module.css",
-        "components/TrashCard.tsx",
+        "components/TouchRoute.tsx",
+        "components/TrashRoute.tsx",
         "components/shared.module.css",
         "format.ts",
-        "icons.ts",
-        "index.html",
+        "frame.tsx",
+        "grant-dashboard.ts",
         "logic.ts",
         "package.json",
+        "pending-projection.ts",
+        "people-copy.ts",
+        "queries/_shared.ts",
         "queries/dashboard.ts",
         "queries/history.ts",
         "queries/journal.ts",
         "queries/people.ts",
         "queries/person.ts",
         "queries/search.ts",
+        "queries/share-links.test.ts",
         "queries/trash.ts",
         "seed.js",
-        "types.ts"
+        "shelves.ts",
+        "types.ts",
+        "view-state.ts",
+        "writes.ts"
       ],
       "appKnobs": [
-        {
-          "key": "appFont",
-          "label": "Font",
-          "type": "segmented",
-          "default": "sans",
-          "options": [
-            {
-              "value": "sans",
-              "label": "Sans"
-            },
-            {
-              "value": "serif",
-              "label": "Serif"
-            },
-            {
-              "value": "mono",
-              "label": "Mono"
-            }
-          ]
-        },
         {
           "key": "appWidth",
           "label": "Width",
@@ -447,7 +351,13 @@
             }
           ]
         }
-      ]
+      ],
+      "seats": {
+        "byteBearing": false,
+        "originActs": [],
+        "disabledOn": [],
+        "northStar": "google-contacts"
+      }
     },
     {
       "id": "notes",
@@ -458,8 +368,6 @@
       "version": "0.4.1",
       "kind": "app",
       "files": [
-        "Chrome.module.css",
-        "Chrome.tsx",
         "actions/add-tag.ts",
         "actions/attach.ts",
         "actions/create-note.ts",
@@ -479,58 +387,16 @@
         "app.json",
         "commonmark.test.ts",
         "commonmark.ts",
-        "components/Card.module.css",
-        "components/Card.tsx",
-        "components/Editor.module.css",
-        "components/Editor.tsx",
-        "components/History.module.css",
-        "components/History.tsx",
-        "components/QuickAdd.module.css",
-        "components/QuickAdd.tsx",
-        "components/Shared.tsx",
-        "components/Sidebar.module.css",
-        "components/Sidebar.tsx",
-        "components/Toolbar.module.css",
-        "components/Toolbar.tsx",
-        "components/Wall.module.css",
-        "components/Wall.tsx",
-        "components/WikiLinks.module.css",
-        "components/WikiLinks.tsx",
-        "components/shared.module.css",
-        "format.ts",
-        "icons.ts",
-        "index.html",
-        "logic.ts",
         "package.json",
+        "pending-projection.ts",
         "queries/history.ts",
         "queries/library.ts",
         "queries/link-targets.ts",
         "queries/note.ts",
         "queries/search.ts",
-        "seed.js",
-        "types.ts"
+        "seed.js"
       ],
       "appKnobs": [
-        {
-          "key": "appFont",
-          "label": "Font",
-          "type": "segmented",
-          "default": "sans",
-          "options": [
-            {
-              "value": "sans",
-              "label": "Sans"
-            },
-            {
-              "value": "serif",
-              "label": "Serif"
-            },
-            {
-              "value": "mono",
-              "label": "Mono"
-            }
-          ]
-        },
         {
           "key": "appWidth",
           "label": "Width",
@@ -595,7 +461,16 @@
             }
           ]
         }
-      ]
+      ],
+      "seats": {
+        "byteBearing": true,
+        "originActs": [
+          "capture",
+          "voice"
+        ],
+        "disabledOn": [],
+        "northStar": "apple-notes"
+      }
     },
     {
       "id": "photos",
@@ -603,17 +478,18 @@
       "desc": "The library you own, wherever the bytes live.",
       "colorKey": "ochre",
       "iconKey": "Camera",
-      "version": "0.2.0",
+      "version": "0.4.0",
       "kind": "app",
       "files": [
         "Chrome.module.css",
         "Chrome.tsx",
         "actions/add-to-album.ts",
-        "actions/confirm-face.ts",
+        "actions/answer-face.ts",
         "actions/create-album.ts",
         "actions/delete-album.ts",
         "actions/delete-asset.ts",
-        "actions/reject-face.ts",
+        "actions/name-place.ts",
+        "actions/purge-asset.ts",
         "actions/remove-from-album.ts",
         "actions/rename-album.ts",
         "actions/request-enrichment.ts",
@@ -624,6 +500,7 @@
         "actions/tag-asset.ts",
         "actions/untag-asset.ts",
         "actions/update-asset.ts",
+        "actions/upload.test.ts",
         "actions/upload.ts",
         "activity.ts",
         "albums-actions.ts",
@@ -632,90 +509,170 @@
         "app.json",
         "asset-key.ts",
         "assets-actions.ts",
+        "components/AlbumBar.module.css",
+        "components/AlbumBar.tsx",
+        "components/AlbumGrant.test.tsx",
         "components/AlbumGrid.module.css",
         "components/AlbumGrid.tsx",
+        "components/DuplicateReview.module.css",
+        "components/DuplicateReview.tsx",
         "components/Duplicates.module.css",
         "components/Duplicates.tsx",
         "components/Editor.module.css",
         "components/Editor.tsx",
-        "components/Enrichment.module.css",
-        "components/Enrichment.tsx",
+        "components/EmptyTrash.module.css",
+        "components/EmptyTrash.tsx",
+        "components/EnrichmentConsent.tsx",
+        "components/FaceReview.module.css",
+        "components/FaceReview.tsx",
+        "components/Import.module.css",
+        "components/Import.tsx",
         "components/InlineInput.tsx",
         "components/Lightbox.module.css",
         "components/Lightbox.tsx",
         "components/LightboxInfo.module.css",
         "components/LightboxInfo.tsx",
+        "components/LightboxLocation.tsx",
+        "components/LoadingGrid.module.css",
+        "components/LoadingGrid.tsx",
         "components/Memories.module.css",
         "components/Memories.tsx",
+        "components/MoreSheet.module.css",
+        "components/MoreSheet.tsx",
+        "components/OfflineBanner.module.css",
+        "components/OfflineBanner.tsx",
+        "components/People.module.css",
+        "components/People.test.tsx",
+        "components/People.tsx",
+        "components/Permission.module.css",
+        "components/Permission.tsx",
         "components/Picker.module.css",
         "components/Picker.tsx",
+        "components/PlaceMap.module.css",
+        "components/PlaceMap.test.tsx",
+        "components/PlaceMap.tsx",
+        "components/PlaceNaming.module.css",
+        "components/PlaceNaming.test.tsx",
+        "components/PlaceNaming.tsx",
+        "components/Places.module.css",
+        "components/Places.test.tsx",
+        "components/Places.tsx",
+        "components/ScrubRail.module.css",
+        "components/ScrubRail.tsx",
+        "components/SearchShelf.module.css",
+        "components/SearchShelf.tsx",
         "components/SelectionBar.module.css",
         "components/SelectionBar.tsx",
-        "components/Sidebar.module.css",
-        "components/Sidebar.tsx",
+        "components/ShelfStrip.module.css",
+        "components/ShelfStrip.tsx",
         "components/Slideshow.module.css",
         "components/Slideshow.tsx",
+        "components/Storage.module.css",
+        "components/Storage.tsx",
+        "components/Tile.module.css",
+        "components/Tile.tsx",
         "components/Timeline.module.css",
         "components/Timeline.tsx",
         "components/Toolbar.module.css",
         "components/Toolbar.tsx",
+        "components/ViewerActions.tsx",
+        "components/ViewerStage.tsx",
         "components/shared.module.css",
         "constants.ts",
+        "custody-store.ts",
         "dom.ts",
+        "duplicate-decision.ts",
         "duplicates-actions.ts",
         "duplicates.tsx",
+        "enrichment-consent.test.ts",
+        "enrichment-consent.ts",
+        "enrichment-gate.ts",
         "faces.ts",
+        "filters.ts",
         "format.ts",
+        "frame.tsx",
+        "grant-audiences.ts",
+        "grant-entries.test.ts",
+        "grouping.test.ts",
+        "grouping.ts",
         "icons.tsx",
-        "index.html",
         "layout.ts",
         "library-reads.ts",
         "library-store.ts",
         "lightbox.tsx",
         "media-observer.ts",
         "media.ts",
-        "merge.ts",
+        "member-prefs.ts",
+        "memories.test.ts",
+        "memories.ts",
         "outcomes.ts",
         "package.json",
+        "pending-projection.ts",
+        "people.ts",
         "picker-actions.ts",
         "picker.tsx",
+        "pinch.ts",
+        "place-map.test.ts",
+        "place-map.ts",
+        "place-phrase.test.ts",
+        "place-phrase.ts",
         "queries/_shared.ts",
         "queries/duplicates.ts",
         "queries/enrichment-status.ts",
+        "queries/face-queue.ts",
         "queries/faces.ts",
         "queries/library.ts",
+        "queries/people.ts",
         "queries/search.ts",
-        "scopes.ts",
+        "queries/storage.ts",
+        "sample/ana-and-marco-table.png",
+        "sample/ana-kitchen-window.png",
+        "sample/ana-porch-evening.png",
+        "sample/ana-profile-doorway.png",
+        "sample/ana-trailhead.png",
+        "sample/backyard-last-light.png",
+        "sample/cabin-window-morning.png",
+        "sample/downtown-blue-hour.png",
+        "sample/emerald-bay-overlook.png",
+        "sample/empty-hallway.png",
+        "sample/granite-switchback.png",
+        "sample/harbor-lights.png",
+        "sample/marco-harbor-wall.png",
+        "sample/marco-workshop.png",
+        "sample/sand-harbor-dawn.png",
+        "sample/tahoe-dusk-ridge.png",
+        "sample/trailhead-sign.png",
+        "sample/truckee-river-bend.png",
+        "scope-declaration.ts",
+        "search-entry.test.ts",
+        "search-groups.test.ts",
+        "search-groups.ts",
         "search.ts",
+        "seed.js",
         "selection-actions.ts",
-        "sidebar.tsx",
+        "selection.tsx",
+        "share-place.test.ts",
+        "share-place.ts",
+        "shared-copy.ts",
+        "shelves.ts",
         "slideshow.tsx",
+        "storage-model.test.ts",
+        "storage-model.ts",
         "thumbhash.ts",
+        "tile-state.ts",
+        "trash-actions.test.ts",
+        "trash-actions.ts",
+        "trips.test.ts",
+        "trips.ts",
         "types.ts",
         "upload.ts",
+        "view-copy.ts",
+        "view-state.ts",
+        "viewer.test.ts",
+        "viewer.ts",
         "visibility.ts"
       ],
       "appKnobs": [
-        {
-          "key": "appFont",
-          "label": "Font",
-          "type": "segmented",
-          "default": "sans",
-          "options": [
-            {
-              "value": "sans",
-              "label": "Sans"
-            },
-            {
-              "value": "serif",
-              "label": "Serif"
-            },
-            {
-              "value": "mono",
-              "label": "Mono"
-            }
-          ]
-        },
         {
           "key": "appWidth",
           "label": "Width",
@@ -776,7 +733,15 @@
             }
           ]
         }
-      ]
+      ],
+      "seats": {
+        "byteBearing": true,
+        "originActs": [
+          "camera"
+        ],
+        "disabledOn": [],
+        "northStar": "google-photos"
+      }
     },
     {
       "id": "docs",
@@ -807,71 +772,104 @@
         "app-inline.tsx",
         "app-root.tsx",
         "app.json",
+        "blob-text.ts",
+        "capabilities.ts",
         "components/Activity.module.css",
         "components/Activity.tsx",
+        "components/Blocks.module.css",
+        "components/Blocks.tsx",
+        "components/BoundaryRoute.tsx",
+        "components/Breadcrumb.module.css",
+        "components/Breadcrumb.tsx",
         "components/BulkBar.module.css",
         "components/BulkBar.tsx",
+        "components/CapabilitiesRoute.tsx",
         "components/Details.module.css",
         "components/Details.tsx",
-        "components/Editor.module.css",
-        "components/Editor.tsx",
+        "components/DetailsTabs.tsx",
+        "components/DriveRoute.module.css",
+        "components/DriveRoute.tsx",
+        "components/EmptyState.module.css",
+        "components/EmptyState.tsx",
+        "components/FilterRow.module.css",
+        "components/FilterRow.tsx",
+        "components/FoldersRoute.module.css",
+        "components/FoldersRoute.tsx",
         "components/Grid.module.css",
         "components/Grid.tsx",
         "components/History.module.css",
         "components/History.tsx",
+        "components/InfoToggle.module.css",
+        "components/InfoToggle.tsx",
         "components/List.module.css",
         "components/List.tsx",
-        "components/NewMenu.module.css",
+        "components/MoreSheet.module.css",
+        "components/MoreSheet.tsx",
+        "components/NewDocRoute.tsx",
         "components/NewMenu.tsx",
         "components/QuickLook.module.css",
         "components/QuickLook.tsx",
+        "components/QuickLookInfo.tsx",
+        "components/QuickLookStage.tsx",
+        "components/QuickLookText.tsx",
+        "components/RowStateSlot.module.css",
+        "components/RowStateSlot.tsx",
+        "components/ScanRoute.tsx",
+        "components/SearchField.module.css",
+        "components/SearchField.tsx",
+        "components/SeatStates.module.css",
+        "components/SeatStates.tsx",
         "components/Shared.tsx",
+        "components/ShelfStrip.module.css",
+        "components/ShelfStrip.tsx",
         "components/Sidebar.module.css",
         "components/Sidebar.tsx",
+        "components/StorageRoute.tsx",
         "components/Tags.module.css",
         "components/Tags.tsx",
-        "components/Toolbar.tsx",
+        "components/TrashAsk.module.css",
+        "components/TrashAsk.tsx",
+        "components/UploadQueue.module.css",
+        "components/UploadQueue.tsx",
+        "components/VersionsRoute.module.css",
+        "components/VersionsRoute.tsx",
+        "components/ViewToggle.module.css",
+        "components/ViewToggle.tsx",
         "components/shared.module.css",
+        "custody-row-mark.test.ts",
+        "document-copy.ts",
+        "drive-copy.ts",
+        "filters.ts",
         "format.ts",
+        "frame.tsx",
+        "grant-audiences.test.ts",
+        "grant-audiences.ts",
         "icons.ts",
-        "index.html",
         "kind-colours.test.ts",
         "logic.ts",
         "metadata.ts",
         "nav.ts",
         "package.json",
         "pdf-text.ts",
+        "pending-projection.ts",
         "popovers.ts",
+        "print.ts",
         "queries/_shared.ts",
         "queries/activity.ts",
         "queries/drive.ts",
         "queries/history.ts",
         "queries/search.ts",
+        "queries/shares.test.ts",
+        "seed.js",
+        "shelves.ts",
         "types.ts",
         "upload.ts",
-        "versions.ts"
+        "uploads.ts",
+        "versions.ts",
+        "view-copy.ts",
+        "view-state.ts"
       ],
       "appKnobs": [
-        {
-          "key": "appFont",
-          "label": "Font",
-          "type": "segmented",
-          "default": "sans",
-          "options": [
-            {
-              "value": "sans",
-              "label": "Sans"
-            },
-            {
-              "value": "serif",
-              "label": "Serif"
-            },
-            {
-              "value": "mono",
-              "label": "Mono"
-            }
-          ]
-        },
         {
           "key": "appWidth",
           "label": "Width",
@@ -936,7 +934,15 @@
             }
           ]
         }
-      ]
+      ],
+      "seats": {
+        "byteBearing": true,
+        "originActs": [
+          "scanner"
+        ],
+        "disabledOn": [],
+        "northStar": "google-drive"
+      }
     },
     {
       "id": "locker",
@@ -977,11 +983,12 @@
         "components/shared.module.css",
         "format.ts",
         "icons.ts",
-        "index.html",
+        "locker-item-type.test.ts",
         "logic.test.ts",
         "logic.ts",
         "origin-matching.test.ts",
         "package.json",
+        "pending-projection.ts",
         "queries/auth.ts",
         "queries/autofill-candidates.ts",
         "queries/autofill-item.ts",
@@ -996,22 +1003,6 @@
         "types.ts"
       ],
       "appKnobs": [
-        {
-          "key": "appFont",
-          "label": "Font",
-          "type": "segmented",
-          "default": "sans",
-          "options": [
-            {
-              "value": "sans",
-              "label": "Sans"
-            },
-            {
-              "value": "mono",
-              "label": "Mono"
-            }
-          ]
-        },
         {
           "key": "appColor",
           "label": "Color",
@@ -1040,7 +1031,17 @@
             }
           ]
         }
-      ]
+      ],
+      "seats": {
+        "byteBearing": true,
+        "originActs": [
+          "autofill"
+        ],
+        "disabledOn": [
+          "viewer"
+        ],
+        "northStar": "1password"
+      }
     },
     {
       "id": "tally",
@@ -1051,8 +1052,6 @@
       "version": "0.1.1",
       "kind": "app",
       "files": [
-        "Chrome.module.css",
-        "Chrome.tsx",
         "actions/add-expense.ts",
         "actions/add-friend.ts",
         "actions/add-group-member.ts",
@@ -1072,63 +1071,18 @@
         "app-inline.tsx",
         "app-root.tsx",
         "app.json",
-        "components/Activity.module.css",
-        "components/Activity.tsx",
-        "components/Dashboard.module.css",
-        "components/Dashboard.tsx",
-        "components/DetailModal.tsx",
-        "components/ExpenseModal.module.css",
-        "components/ExpenseModal.tsx",
-        "components/ExpenseRow.module.css",
-        "components/ExpenseRow.tsx",
-        "components/ExpenseUndo.module.css",
-        "components/ExpenseUndo.tsx",
-        "components/FriendModal.tsx",
-        "components/GroupManager.module.css",
-        "components/GroupManager.tsx",
-        "components/GroupModal.module.css",
-        "components/GroupModal.tsx",
-        "components/History.module.css",
-        "components/History.tsx",
-        "components/Ledger.module.css",
-        "components/Ledger.tsx",
-        "components/Search.tsx",
-        "components/SettleModal.tsx",
-        "components/Shared.tsx",
-        "components/Sidebar.module.css",
-        "components/Sidebar.tsx",
-        "components/shared.module.css",
-        "format.ts",
-        "icons.ts",
-        "index.html",
-        "logic.ts",
         "package.json",
+        "pending-projection.ts",
         "queries/activity.ts",
         "queries/dashboard.ts",
         "queries/friend.ts",
+        "queries/group-departed.test.ts",
         "queries/group.ts",
         "queries/history.ts",
         "queries/search.ts",
-        "seed.js",
-        "types.ts"
+        "seed.js"
       ],
       "appKnobs": [
-        {
-          "key": "appFont",
-          "label": "Font",
-          "type": "segmented",
-          "default": "sans",
-          "options": [
-            {
-              "value": "sans",
-              "label": "Sans"
-            },
-            {
-              "value": "mono",
-              "label": "Mono"
-            }
-          ]
-        },
         {
           "key": "appColor",
           "label": "Color",
@@ -1157,26 +1111,15 @@
             }
           ]
         }
-      ]
-    },
-    {
-      "id": "photo-captioner",
-      "name": "Photo captions",
-      "desc": "Captions and tags new photos so the library is searchable by what's in the pictures.",
-      "colorKey": "ochre",
-      "iconKey": "Sparkle",
-      "version": "0.1.0",
-      "kind": "automation",
-      "emoji": "🖼️",
-      "category": "Enrichment",
-      "triggerKind": "data",
-      "triggerLabel": "When new photos arrive",
-      "integrations": [],
-      "files": [
-        "app.json",
-        "automations/photo-captioner/automation.json",
-        "automations/photo-captioner/handler.js"
-      ]
+      ],
+      "seats": {
+        "byteBearing": false,
+        "originActs": [
+          "camera"
+        ],
+        "disabledOn": [],
+        "northStar": "splitwise"
+      }
     },
     {
       "id": "doc-text-extractor",
@@ -1198,25 +1141,6 @@
       ]
     },
     {
-      "id": "screenshot-extractor",
-      "name": "Screenshot intelligence",
-      "desc": "Turns photographed receipts and bookings into staged ledger and calendar entries you review.",
-      "colorKey": "forest",
-      "iconKey": "Sparkle",
-      "version": "0.1.0",
-      "kind": "automation",
-      "emoji": "🧾",
-      "category": "Enrichment",
-      "triggerKind": "data",
-      "triggerLabel": "When new screenshots arrive",
-      "integrations": [],
-      "files": [
-        "app.json",
-        "automations/screenshot-extractor/automation.json",
-        "automations/screenshot-extractor/handler.js"
-      ]
-    },
-    {
       "id": "doc-filer",
       "name": "Document filing",
       "desc": "Proposes a folder and a readable title for every scan-dump document — you approve, it files.",
@@ -1233,44 +1157,6 @@
         "app.json",
         "automations/doc-filer/automation.json",
         "automations/doc-filer/handler.js"
-      ]
-    },
-    {
-      "id": "face-proposer",
-      "name": "Face proposals",
-      "desc": "Spots faces in new photos and proposes regions you confirm as people — nothing is asserted without you.",
-      "colorKey": "rose",
-      "iconKey": "Sparkle",
-      "version": "0.1.0",
-      "kind": "automation",
-      "emoji": "🙂",
-      "category": "Enrichment",
-      "triggerKind": "data",
-      "triggerLabel": "When new photos arrive",
-      "integrations": [],
-      "files": [
-        "app.json",
-        "automations/face-proposer/automation.json",
-        "automations/face-proposer/handler.js"
-      ]
-    },
-    {
-      "id": "trip-albums",
-      "name": "Trip albums",
-      "desc": "Clusters your photos into trip albums by time gaps — proposed as drafts, published only when you approve.",
-      "colorKey": "teal",
-      "iconKey": "Sparkle",
-      "version": "0.1.0",
-      "kind": "automation",
-      "emoji": "🧳",
-      "category": "Enrichment",
-      "triggerKind": "cron",
-      "triggerLabel": "Daily · 6:00 AM",
-      "integrations": [],
-      "files": [
-        "app.json",
-        "automations/trip-albums/automation.json",
-        "automations/trip-albums/handler.js"
       ]
     },
     {
@@ -1685,6 +1571,121 @@
         "app.json",
         "automations/slack-pull/automation.json",
         "automations/slack-pull/handler.js"
+      ]
+    },
+    {
+      "id": "photo-ocr",
+      "name": "Photo OCR",
+      "desc": "Makes text in photographs searchable through deterministic OCR, with an optional billed delegate step.",
+      "colorKey": "amber",
+      "iconKey": "Search",
+      "version": "0.1.0",
+      "kind": "automation",
+      "emoji": "🔎",
+      "category": "Recognition",
+      "triggerKind": "data",
+      "triggerLabel": "When photographs arrive",
+      "integrations": [],
+      "files": [
+        "app.json",
+        "automations/photo-ocr/automation.json",
+        "automations/photo-ocr/handler.js"
+      ]
+    },
+    {
+      "id": "transcript",
+      "name": "Transcription",
+      "desc": "Makes speech in audio and video searchable through the configured deterministic transcription service.",
+      "colorKey": "purple",
+      "iconKey": "Music",
+      "version": "0.1.0",
+      "kind": "automation",
+      "emoji": "🎙️",
+      "category": "Recognition",
+      "triggerKind": "data",
+      "triggerLabel": "When audio or video arrives",
+      "integrations": [],
+      "files": [
+        "app.json",
+        "automations/transcript/automation.json",
+        "automations/transcript/handler.js"
+      ]
+    },
+    {
+      "id": "embed-image",
+      "name": "Image embeddings",
+      "desc": "Builds deterministic visual embeddings from bounded preview derivatives for semantic search.",
+      "colorKey": "indigo",
+      "iconKey": "Image",
+      "version": "0.1.0",
+      "kind": "automation",
+      "emoji": "🖼️",
+      "category": "Recognition",
+      "triggerKind": "data",
+      "triggerLabel": "When photographs arrive",
+      "integrations": [],
+      "files": [
+        "app.json",
+        "automations/embed-image/automation.json",
+        "automations/embed-image/handler.js"
+      ]
+    },
+    {
+      "id": "place-names",
+      "name": "Place names",
+      "desc": "Names the nearest town for places that only have coordinates, from a settlement list bundled with Centraid and read on this device.",
+      "colorKey": "green",
+      "iconKey": "MapPin",
+      "version": "0.1.0",
+      "kind": "automation",
+      "emoji": "📍",
+      "category": "Recognition",
+      "triggerKind": "data",
+      "triggerLabel": "When a place gains coordinates",
+      "integrations": [],
+      "files": [
+        "LICENSE-GEONAMES.md",
+        "app.json",
+        "automations/place-names/automation.json",
+        "automations/place-names/handler.js"
+      ]
+    },
+    {
+      "id": "embed-text",
+      "name": "Text embeddings",
+      "desc": "Builds deterministic embeddings for extracted text and transcripts so semantic search stays model-versioned.",
+      "colorKey": "teal",
+      "iconKey": "Book",
+      "version": "0.1.0",
+      "kind": "automation",
+      "emoji": "🔤",
+      "category": "Recognition",
+      "triggerKind": "data",
+      "triggerLabel": "When extracted text arrives",
+      "integrations": [],
+      "files": [
+        "app.json",
+        "automations/embed-text/automation.json",
+        "automations/embed-text/handler.js"
+      ]
+    },
+    {
+      "id": "faces",
+      "name": "Face recognition",
+      "desc": "Detects face regions from photograph previews and stages them in the reviewable face queue.",
+      "colorKey": "rose",
+      "iconKey": "Users",
+      "version": "0.1.0",
+      "kind": "automation",
+      "emoji": "🙂",
+      "category": "Recognition",
+      "triggerKind": "data",
+      "triggerLabel": "When photographs arrive",
+      "integrations": [],
+      "files": [
+        "app.json",
+        "automations/faces/automation.json",
+        "automations/faces/handler.js"
       ]
     },
     {

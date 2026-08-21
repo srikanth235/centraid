@@ -20,7 +20,7 @@
   min-width: 0;
 }
 .selectWrap[data-disabled="true"]::after {
-  opacity: 0.5;
+  opacity: var(--o-disabled);
 }
 .selectWrap::after {
   content: "";
@@ -63,6 +63,6 @@
   box-shadow: 0 0 0 3px color-mix(in oklab, var(--accent) 15%, transparent);
 }
 .select:disabled {
-  opacity: 0.5;
+  opacity: var(--o-disabled);
   cursor: default;
 }

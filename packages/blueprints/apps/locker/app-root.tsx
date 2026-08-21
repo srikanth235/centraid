@@ -17,6 +17,14 @@ import {
 } from "react";
 import type { ReactNode } from "react";
 
+import {
+  observeWidth,
+  onDataChange,
+  onFocusRefresh,
+  readFailed,
+} from "@centraid/design/elements";
+
+import { retryInSeconds } from "../_shared/shared-copy.ts";
 import type { InlineAppProps } from "../inline-types.ts";
 import { Chrome } from "./Chrome.tsx";
 import { LockerDetail } from "./components/Detail.tsx";
@@ -25,12 +33,6 @@ import { Generator } from "./components/Generator.tsx";
 import { LockerList } from "./components/List.tsx";
 import { LockScreen } from "./components/LockScreen.tsx";
 import { LockerSidebar } from "./components/Sidebar.tsx";
-import {
-  observeWidth,
-  onDataChange,
-  onFocusRefresh,
-  readFailed,
-} from "./kit.ts";
 import {
   clearSecretClipboard,
   copy,
@@ -97,7 +99,7 @@ function makeState(): AppState {
     authSession: null,
     authBusy: false,
     authError: "",
-    pendingItemId: null,
+    revealItemId: null,
     reauthOpen: false,
     gen: false,
     genLen: 20,
@@ -123,7 +125,7 @@ function wipeSecretState(state: AppState, data: AppData): void {
   state.authSession = null;
   state.authBusy = false;
   state.authError = "";
-  state.pendingItemId = null;
+  state.revealItemId = null;
   state.reauthOpen = false;
   state.selectedId = null;
   state.detail = null;
@@ -328,7 +330,7 @@ export function Root({ rootRef }: InlineAppProps): ReactNode {
         state.authError =
           result.message ??
           (result.retryAfterMs
-            ? `Try again in ${Math.ceil(result.retryAfterMs / 1000)} seconds.`
+            ? retryInSeconds(Math.ceil(result.retryAfterMs / 1000))
             : "The passphrase was not accepted.");
         bump();
         return;
@@ -346,7 +348,7 @@ export function Root({ rootRef }: InlineAppProps): ReactNode {
   const submitItemAuthorization = useCallback(
     async (secret: string) => {
       const state = stateRef.current;
-      const itemId = state.pendingItemId;
+      const itemId = state.revealItemId;
       const sessionToken = state.authSession;
       if (!itemId || !sessionToken) {
         lockNow();
@@ -379,12 +381,12 @@ export function Root({ rootRef }: InlineAppProps): ReactNode {
         state.authError =
           result.message ??
           (result.retryAfterMs
-            ? `Try again in ${Math.ceil(result.retryAfterMs / 1000)} seconds.`
+            ? retryInSeconds(Math.ceil(result.retryAfterMs / 1000))
             : "The passphrase was not accepted.");
         bump();
         return;
       }
-      state.pendingItemId = null;
+      state.revealItemId = null;
       state.reauthOpen = false;
       state.authError = "";
       bump();
@@ -667,7 +669,7 @@ export function Root({ rootRef }: InlineAppProps): ReactNode {
               bump();
             }}
             onSelect={(id) => {
-              state.pendingItemId = id;
+              state.revealItemId = id;
               state.reauthOpen = true;
               state.authError = "";
               bump();
@@ -700,7 +702,7 @@ export function Root({ rootRef }: InlineAppProps): ReactNode {
               bump();
             }}
             onSelect={(id) => {
-              state.pendingItemId = id;
+              state.revealItemId = id;
               state.reauthOpen = true;
               state.authError = "";
               bump();
@@ -731,7 +733,7 @@ export function Root({ rootRef }: InlineAppProps): ReactNode {
                 error={state.authError}
                 onSubmit={submitItemAuthorization}
                 onCancel={() => {
-                  state.pendingItemId = null;
+                  state.revealItemId = null;
                   state.reauthOpen = false;
                   state.authError = "";
                   bump();

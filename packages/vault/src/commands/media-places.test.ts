@@ -12,6 +12,11 @@ import { registerMediaCommands } from "./media.js";
 
 const PIXEL =
   "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==";
+/** A second, differently coloured 1×1 PNG — content dedupe adopts identical
+ *  bytes onto the existing asset, so a test that needs two assets needs two
+ *  payloads. */
+const OTHER_PIXEL =
+  "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAADElEQVR4nGPgEpEDAABoAD1UCKP3AAAAAElFTkSuQmCC";
 let db: VaultDb;
 let gw: Gateway;
 let boot: BootstrapResult;
@@ -123,7 +128,7 @@ describe("media: places", () => {
   test("add_asset with EXIF GPS finds-or-creates a core.place and links it", () => {
     const { asset_id } = stageAndAdd(exifJpegAt(37, "N", 122, "W"));
     const asset = db.vault
-      .prepare("SELECT place_id FROM media_media_asset WHERE asset_id = ?")
+      .prepare("SELECT place_id FROM media_asset WHERE asset_id = ?")
       .get(asset_id) as { place_id: string | null };
     expect(asset.place_id).not.toBeNull();
     const place = db.vault
@@ -137,9 +142,7 @@ describe("media: places", () => {
     const first = stageAndAdd(exifJpegAt(37, "N", 122, "W", 1));
     const second = stageAndAdd(exifJpegAt(37, "N", 122, "W", 2));
     const places = db.vault
-      .prepare(
-        "SELECT place_id FROM media_media_asset WHERE asset_id IN (?, ?)"
-      )
+      .prepare("SELECT place_id FROM media_asset WHERE asset_id IN (?, ?)")
       .all(first.asset_id, second.asset_id) as { place_id: string }[];
     expect(places[0]?.place_id).toBe(places[1]?.place_id);
     expect(
@@ -155,9 +158,7 @@ describe("media: places", () => {
     const first = stageAndAdd(exifJpegAt(37, "N", 122, "W", 1));
     const second = stageAndAdd(exifJpegAt(10, "N", 20, "E", 2));
     const rows = db.vault
-      .prepare(
-        "SELECT place_id FROM media_media_asset WHERE asset_id IN (?, ?)"
-      )
+      .prepare("SELECT place_id FROM media_asset WHERE asset_id IN (?, ?)")
       .all(first.asset_id, second.asset_id) as { place_id: string }[];
     expect(rows[0]?.place_id).not.toBe(rows[1]?.place_id);
   });
@@ -165,7 +166,7 @@ describe("media: places", () => {
   test("a photo with no GPS gets no place", () => {
     const { asset_id } = addAsset({ data_uri: PIXEL });
     const asset = db.vault
-      .prepare("SELECT place_id FROM media_media_asset WHERE asset_id = ?")
+      .prepare("SELECT place_id FROM media_asset WHERE asset_id = ?")
       .get(asset_id) as { place_id: string | null };
     expect(asset.place_id).toBeNull();
   });
@@ -184,7 +185,7 @@ describe("media: places", () => {
     expect(
       (
         db.vault
-          .prepare("SELECT place_id FROM media_media_asset WHERE asset_id = ?")
+          .prepare("SELECT place_id FROM media_asset WHERE asset_id = ?")
           .get(asset_id) as { place_id: string }
       ).place_id
     ).toBe(placeId);
@@ -194,7 +195,7 @@ describe("media: places", () => {
     expect(
       (
         db.vault
-          .prepare("SELECT place_id FROM media_media_asset WHERE asset_id = ?")
+          .prepare("SELECT place_id FROM media_asset WHERE asset_id = ?")
           .get(asset_id) as { place_id: string | null }
       ).place_id
     ).toBeNull();
@@ -204,6 +205,293 @@ describe("media: places", () => {
     const { asset_id } = addAsset({ data_uri: PIXEL });
     expect(
       invoke("media.set_asset_place", { asset_id, place_id: "nope" }).status
+    ).not.toBe("executed");
+  });
+
+  // The inline door carries no spool metadata, so before these an asset added
+  // as a `data_uri` could never have a place — which is why a fully seeded
+  // vault still showed an empty Places shelf.
+  test("an asserted coordinate places an inline asset", () => {
+    const { asset_id } = addAsset({
+      data_uri: PIXEL,
+      latitude: 38.9542,
+      longitude: -120.1094,
+    });
+    const row = db.vault
+      .prepare(
+        `SELECT p.geo_lat AS lat, p.geo_lng AS lng FROM media_asset a
+           JOIN core_place p ON p.place_id = a.place_id
+          WHERE a.asset_id = ?`
+      )
+      .get(asset_id) as { lat: number; lng: number } | undefined;
+    // Field by field: a `node:sqlite` row is a null-prototype object, so a
+    // whole-object comparison fails on the prototype while reporting "no
+    // visual difference" — which is a worse test AND a worse failure message.
+    expect(row?.lat).toBe(38.9542);
+    expect(row?.lng).toBe(-120.1094);
+  });
+
+  test("two assets a few metres apart share one place", () => {
+    const first = addAsset({
+      data_uri: PIXEL,
+      latitude: 39.0021,
+      longitude: -120.1131,
+    });
+    // Same spot to 4dp — the ~11m identity rung — via a different 6dp pair,
+    // which is what a second shutter click at one overlook actually looks
+    // like. A per-photo place row would make the shelf a list of duplicates.
+    // Distinct BYTES matter here: identical content is adopted onto the first
+    // asset, and one asset cannot demonstrate two assets sharing anything.
+    const second = addAsset({
+      data_uri: OTHER_PIXEL,
+      latitude: 39.00212,
+      longitude: -120.11307,
+    });
+    const rows = db.vault
+      .prepare("SELECT place_id FROM media_asset WHERE asset_id IN (?, ?)")
+      .all(first.asset_id, second.asset_id) as { place_id: string }[];
+    expect(rows[0]?.place_id).toBe(rows[1]?.place_id);
+  });
+
+  // A vault holds named places from the rest of the product — a home, an
+  // office, a venue on an event. A photograph taken at one of them belongs to
+  // it, and the alternative is that a member who carefully named where they
+  // live still gets a shelf of coordinate strings.
+  test("a photograph adopts a place the member already named nearby", () => {
+    db.vault
+      .prepare(
+        `INSERT INTO core_place (place_id, name, kind, geo_lat, geo_lng, created_at)
+         VALUES ('home', 'Home', 'home', 37.4419, -122.143, datetime('now'))`
+      )
+      .run();
+    // ~90m up the garden: a different coordinate, the same place.
+    const { asset_id } = addAsset({
+      data_uri: PIXEL,
+      latitude: 37.4427,
+      longitude: -122.1432,
+    });
+    const row = db.vault
+      .prepare("SELECT place_id FROM media_asset WHERE asset_id = ?")
+      .get(asset_id) as { place_id: string };
+    expect(row.place_id).toBe("home");
+    // And no second row was minted beside it.
+    expect(
+      (
+        db.vault.prepare("SELECT count(*) AS n FROM core_place").get() as {
+          n: number;
+        }
+      ).n
+    ).toBe(1);
+  });
+
+  test("a coordinate-labelled place is not a name, so it is not adopted", () => {
+    // The label this command mints itself. Adopting one would smear a
+    // meaningless string across a neighbourhood and hide the row from the
+    // geocoding sweep that is looking for exactly this shape.
+    db.vault
+      .prepare(
+        `INSERT INTO core_place (place_id, name, kind, geo_lat, geo_lng, created_at)
+         VALUES ('coord', '37.4419, -122.1430', NULL, 37.4419, -122.143, datetime('now'))`
+      )
+      .run();
+    const { asset_id } = addAsset({
+      data_uri: PIXEL,
+      latitude: 37.4427,
+      longitude: -122.1432,
+    });
+    const row = db.vault
+      .prepare("SELECT place_id FROM media_asset WHERE asset_id = ?")
+      .get(asset_id) as { place_id: string };
+    expect(row.place_id).not.toBe("coord");
+  });
+
+  test("a named place two kilometres away is a different place", () => {
+    db.vault
+      .prepare(
+        `INSERT INTO core_place (place_id, name, kind, geo_lat, geo_lng, created_at)
+         VALUES ('home', 'Home', 'home', 37.4419, -122.143, datetime('now'))`
+      )
+      .run();
+    const { asset_id } = addAsset({
+      data_uri: PIXEL,
+      latitude: 37.46,
+      longitude: -122.143,
+    });
+    const row = db.vault
+      .prepare("SELECT place_id FROM media_asset WHERE asset_id = ?")
+      .get(asset_id) as { place_id: string };
+    expect(row.place_id).not.toBe("home");
+  });
+
+  // NAMING A PLACE (issue #816) — the write that turns a coordinate into a
+  // location. Every surface phrases a place from this row at render, so the
+  // only thing these tests have to hold is that the row says what the member
+  // said and nothing else moved.
+  describe("media.name_place", () => {
+    function seedPlace(
+      placeId: string,
+      name: string,
+      extra: { kind?: string; addressJson?: string } = {}
+    ): void {
+      db.vault
+        .prepare(
+          `INSERT INTO core_place (place_id, name, kind, geo_lat, geo_lng, address_json, created_at)
+           VALUES (?, ?, ?, 37.4419, -122.143, ?, datetime('now'))`
+        )
+        .run(placeId, name, extra.kind ?? null, extra.addressJson ?? null);
+    }
+
+    function placeRow(placeId: string): {
+      name: string;
+      kind: string | null;
+      address_json: string | null;
+    } {
+      return db.vault
+        .prepare(
+          "SELECT name, kind, address_json FROM core_place WHERE place_id = ?"
+        )
+        .get(placeId) as {
+        name: string;
+        kind: string | null;
+        address_json: string | null;
+      };
+    }
+
+    test("names a place that was only ever labelled with its coordinate", () => {
+      seedPlace("coord", "37.4419, -122.1430");
+      expect(
+        invoke("media.name_place", {
+          place_id: "coord",
+          name: "Grandma's house",
+        }).status
+      ).toBe("executed");
+      expect(placeRow("coord").name).toBe("Grandma's house");
+    });
+
+    test("renames a place the member had already named", () => {
+      seedPlace("named", "The old flat");
+      expect(
+        invoke("media.name_place", { place_id: "named", name: "Mum's flat" })
+          .status
+      ).toBe("executed");
+      expect(placeRow("named").name).toBe("Mum's flat");
+    });
+
+    test("trims the name rather than storing the member's stray spaces", () => {
+      seedPlace("coord", "37.4419, -122.1430");
+      expect(
+        invoke("media.name_place", {
+          place_id: "coord",
+          name: "  Lake Tahoe  ",
+        }).status
+      ).toBe("executed");
+      expect(placeRow("coord").name).toBe("Lake Tahoe");
+    });
+
+    test("marks a place as home, which is what anchors every relative phrase", () => {
+      seedPlace("coord", "37.4419, -122.1430");
+      expect(
+        invoke("media.name_place", {
+          place_id: "coord",
+          name: "Home",
+          kind: "home",
+        }).status
+      ).toBe("executed");
+      const row = placeRow("coord");
+      expect(row.name).toBe("Home");
+      expect(row.kind).toBe("home");
+    });
+
+    test("a rename leaves a kind the member already declared alone", () => {
+      seedPlace("home", "Home", { kind: "home" });
+      expect(
+        invoke("media.name_place", { place_id: "home", name: "The house" })
+          .status
+      ).toBe("executed");
+      const row = placeRow("home");
+      expect(row.name).toBe("The house");
+      expect(row.kind).toBe("home");
+    });
+
+    test("a blank name is refused — an empty one and a whitespace one alike", () => {
+      seedPlace("coord", "37.4419, -122.1430");
+      expect(
+        invoke("media.name_place", { place_id: "coord", name: "" }).status
+      ).not.toBe("executed");
+      expect(
+        invoke("media.name_place", { place_id: "coord", name: "   " }).status
+      ).not.toBe("executed");
+      // And the row still carries the label it had: a refused write wrote
+      // nothing, rather than half-naming the place.
+      expect(placeRow("coord").name).toBe("37.4419, -122.1430");
+    });
+
+    test("an unknown place id is refused", () => {
+      expect(
+        invoke("media.name_place", { place_id: "nope", name: "Home" }).status
+      ).not.toBe("executed");
+    });
+
+    test("a kind outside the vocabulary is refused", () => {
+      seedPlace("coord", "37.4419, -122.1430");
+      expect(
+        invoke("media.name_place", {
+          place_id: "coord",
+          name: "Home",
+          kind: "spaceship",
+        }).status
+      ).not.toBe("executed");
+    });
+
+    // THE INVARIANT THIS COMMAND EXISTS TO KEEP. A member-entered name outranks
+    // a derived one for DISPLAY; it does not delete it. `address_json` is a
+    // gazetteer's finding with its own writer, and a rename that cleared it
+    // would destroy a fact on the strength of a label about the same point.
+    test("naming a place does not clear the gazetteer's derived address", () => {
+      const address = JSON.stringify({ locality: "Truckee", region: "CA" });
+      seedPlace("derived", "37.4419, -122.1430", { addressJson: address });
+      expect(
+        invoke("media.name_place", {
+          place_id: "derived",
+          name: "Grandma's house",
+          kind: "venue",
+        }).status
+      ).toBe("executed");
+      const row = placeRow("derived");
+      expect(row.name).toBe("Grandma's house");
+      expect(row.address_json).toBe(address);
+    });
+
+    test("a named place is then adopted by the next photograph taken there", () => {
+      seedPlace("coord", "37.4419, -122.1430");
+      expect(
+        invoke("media.name_place", { place_id: "coord", name: "Home" }).status
+      ).toBe("executed");
+      // ~90m up the garden: `findOrCreatePlaceTx` refuses to adopt a
+      // coordinate-labelled row and adopts a named one, so the SAME row that
+      // was unnameable a moment ago now gathers the photographs around it.
+      const { asset_id } = addAsset({
+        data_uri: PIXEL,
+        latitude: 37.4427,
+        longitude: -122.1432,
+      });
+      expect(
+        (
+          db.vault
+            .prepare("SELECT place_id FROM media_asset WHERE asset_id = ?")
+            .get(asset_id) as { place_id: string }
+        ).place_id
+      ).toBe("coord");
+    });
+  });
+
+  test("half a coordinate is refused, not silently dropped", () => {
+    expect(
+      invoke("media.add_asset", { data_uri: PIXEL, latitude: 38.9542 }).status
+    ).not.toBe("executed");
+    expect(
+      invoke("media.add_asset", { data_uri: PIXEL, longitude: -120.1094 })
+        .status
     ).not.toBe("executed");
   });
 });

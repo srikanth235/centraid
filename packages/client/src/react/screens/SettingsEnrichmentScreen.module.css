@@ -1,0 +1,316 @@
+/* Settings → Enrichment (issue #807), and the app popover that shares its
+   vocabulary.
+
+   `.panel`, `.row`, `.rowName`, `.rowMeta` and `.form` are the POPOVER's shape
+   now — a bordered card of hairline-separated rows. The settings page itself
+   stopped drawing one when the v11 binding layer landed: its capabilities are
+   blocks under a section head, not a card inside one. Delete these five with
+   `AppEnrichmentSurface`, not before. */
+.panel {
+  border: 1px solid var(--line);
+  border-radius: var(--r-lg);
+  background: var(--bg-elev);
+  overflow: hidden;
+}
+
+/* One exception / answer. The name takes the space, the meta line states what
+   the gateway computed, and any act sits at the end of the row. */
+.row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sp-2);
+  padding: var(--sp-3) var(--sp-4);
+}
+.row + .row {
+  border-top: 1px solid var(--line);
+}
+.rowName {
+  font-size: var(--t-small-size);
+  font-weight: 600;
+  color: var(--text);
+  flex: 1 1 auto;
+  min-width: 0;
+}
+.rowMeta {
+  font-size: var(--t-control-size);
+  line-height: 1.45;
+  color: var(--text-faint);
+}
+
+/* A control row under a panel. Settings → Enrichment no longer has one — every
+   control it kept lives inside a capability row — but `AppEnrichmentSurface`
+   shares this stylesheet for the app popover's "Enrich with…" picker and is now
+   its only consumer. Kept here rather than moved so the two enrichment surfaces
+   keep reading as one; delete it with that picker, not before. */
+.form {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sp-2);
+  margin-top: var(--sp-2);
+}
+
+/* THE CAPABILITY LIST IS NOT A PANEL (binding layer v11). Each capability is a
+   block under the domain's section head, separated by one hairline — the same
+   shape a `PickRow` takes on Agents. A border around the group would put a
+   container between the head that counts the rows and the rows it counts. */
+.capList {
+  display: flex;
+  flex-direction: column;
+}
+
+/* ONE CAPABILITY. Reading order across the row is the sentence: what this is,
+   where its work goes, what reads it, and — last — whether it runs. The switch
+   is the trailing edge because everything before it is its own subject; it used
+   to lead, which put the commit ahead of the thing being committed. */
+.capRow {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-1);
+  padding: var(--sp-2) 0 var(--sp-3);
+  border-top: 1px solid var(--line);
+}
+.capMain {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-4);
+  min-height: var(--h-row);
+}
+/* 38 × 22, the one switch geometry in the system. The input carries the state
+   and the semantics; the track is its skin. */
+.capSwitch {
+  position: relative;
+  display: inline-flex;
+  flex: none;
+  width: 38px;
+  height: 22px;
+  cursor: pointer;
+}
+.capSwitch input {
+  position: absolute;
+  inset: 0;
+  margin: 0;
+  opacity: 0;
+  cursor: pointer;
+}
+.capSwitchTrack {
+  position: absolute;
+  inset: 0;
+  /* Skin only — clicks must reach the input underneath. */
+  pointer-events: none;
+  border: 1px solid var(--line-strong, var(--line));
+  border-radius: var(--r-pill);
+  background: transparent;
+  transition:
+    background 160ms ease,
+    border-color 160ms ease;
+}
+.capSwitchTrack::after {
+  content: "";
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 16px;
+  height: 16px;
+  border-radius: var(--r-pill);
+  background: var(--text-ghost);
+  transition:
+    transform 160ms ease,
+    background 160ms ease;
+}
+.capSwitch input:checked + .capSwitchTrack {
+  border-color: var(--accent);
+  background: var(--accent);
+}
+.capSwitch input:checked + .capSwitchTrack::after {
+  background: var(--text-inv);
+  transform: translateX(16px);
+}
+.capSwitch input:focus-visible + .capSwitchTrack {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+.capText {
+  flex: 1 1 0;
+  display: grid;
+  gap: var(--sp-hair);
+  min-width: 0;
+}
+.capName {
+  font-size: var(--t-small-size);
+  font-weight: 600;
+  color: var(--text);
+}
+.capBlurb {
+  font-size: var(--t-control-size);
+  line-height: 1.45;
+  color: var(--text-faint);
+  text-wrap: pretty;
+}
+
+/* The computed egress fact. Quiet by default — it is reassurance, not an
+   alarm — and only `provider` earns colour, because that is the one answer
+   where something left the member's own machines. `--net` is the token whose
+   whole meaning is "this leaves the device", so this is the role it exists for
+   rather than a hue picked to look cautionary. */
+.capWhere {
+  flex: none;
+  font-size: var(--t-control-size);
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  color: var(--text-faint);
+}
+.capWhere[data-egress="provider"] {
+  color: var(--net);
+}
+/* THE ENGINE, COLLAPSED. Two rows out of nine have an engine to choose, so it
+   is one pill beside the switch rather than a select every row wears. Pressing
+   it opens the chips and the model/level row below. */
+.capPill {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  /* `--target-min`, not `--h-control`: this is the only route to the engine
+     choice, so it holds the touch floor and drops to control height only where
+     a fine pointer is proven. */
+  min-height: var(--target-min);
+  padding-inline: var(--sp-3);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--r-lg);
+  background: transparent;
+  color: var(--text);
+  font-size: var(--t-control-size);
+  white-space: nowrap;
+  cursor: pointer;
+}
+.capPill[data-open="true"] {
+  border-color: var(--text);
+  background: var(--bg-sunken);
+  font-weight: 600;
+}
+/* The caret is the pill's disclosure, quiet against its label: the pill states
+   a fact and the caret says the fact is also a way in. */
+.capCaret {
+  font-size: var(--t-control-size);
+  line-height: 1;
+  color: var(--text-faint);
+}
+/* A capability this build has no words for: stated where the switch would be,
+   never a control that would write a guess. */
+.capLock {
+  flex: none;
+  font-size: var(--t-control-size);
+  color: var(--text-ghost);
+  white-space: nowrap;
+}
+.capEngine {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sp-1);
+  padding-block-end: var(--sp-1);
+}
+.capEngineLabel {
+  font-size: var(--t-control-size);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-ghost);
+}
+.capChip {
+  flex: none;
+  min-height: var(--target-min);
+  padding-inline: var(--sp-3);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--r-pill);
+  background: transparent;
+  color: var(--text);
+  font-size: var(--t-control-size);
+  white-space: nowrap;
+  cursor: pointer;
+}
+.capChip[data-on="true"] {
+  border-color: var(--text);
+  background: var(--bg-sunken);
+  font-weight: 600;
+}
+/* A disconnected agent is OFFERED and not selectable — dashed, so the row says
+   "this exists, and not here" rather than hiding the answer. */
+.capChip[data-off="true"] {
+  border-style: dashed;
+  color: var(--text-disabled);
+  cursor: default;
+}
+/* The engine's own pick row — the same object Agents draws: a subject on the
+   leading edge, its picks on the trailing one. */
+.capModelRow {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-4);
+  min-height: var(--h-row);
+}
+/* The label and what it promises, stacked: this row writes the same pin the
+   Agents page writes, and saying so is what stops the two reading as two
+   answers that happen to disagree. */
+.capModelText {
+  flex: 1 1 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-hair);
+  min-inline-size: 0;
+}
+.capModelLabel {
+  font-size: var(--t-small-size);
+  color: var(--text);
+}
+.capModelPicks {
+  flex: none;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sp-1);
+}
+.capModelCaption {
+  color: var(--text-faint);
+  font-size: var(--t-control-size);
+  line-height: 1.45;
+}
+
+/* A statement about the row that is not a control: its own line, so the row
+   above it stays one glance. */
+.capRefusal,
+.capNote {
+  font-size: var(--t-control-size);
+  line-height: 1.5;
+  text-wrap: pretty;
+}
+.capRefusal {
+  color: var(--warning);
+}
+.capNote {
+  color: var(--text-faint);
+}
+
+/* Narrow settings pane. The row wraps rather than starving its own subject:
+   two fixed children plus their gaps leave the name and its description a
+   column too thin to read, so the pill takes a line of its own and the egress
+   fact — reassurance, not a control — steps out. */
+@container settings-shell (max-width: 720px) {
+  .capMain {
+    flex-wrap: wrap;
+    gap: var(--sp-2) var(--sp-3);
+  }
+  .capText {
+    flex: 1 1 calc(100% - 60px);
+  }
+  .capWhere {
+    display: none;
+  }
+  .capPill {
+    order: 3;
+  }
+  .capModelRow {
+    flex-wrap: wrap;
+  }
+}

@@ -1,0 +1,37 @@
+/* The offline banner (v4 handoff §14, proto 4868-4873).
+
+   Geometry is the prototype's, in tokens: `gap: R.gap.m` and `padding:
+   R.gap.m` are both 12px = `--sp-3`, the border is 1px `--net`, and the corner
+   is the CONTAINER radius (`--r-lg`, 12px) because this is a container and not
+   a control.
+
+   NO FILL AND NO ICON. `--net` means "this leaves the device" and the brief
+   allows it as a border or a 2px rule, nothing more (§18) — a tinted ground
+   would turn a state the product is designed for into an alarm, and a glyph
+   would say something the sentence already says better.
+
+   NO CONTAINER DIMMING (README §14/§395): nothing here or behind it takes an
+   `opacity`. Every caption, date, album and person on the screen is true while
+   this is up, and washing them out would contradict the banner's own claim. */
+
+.banner {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  margin-block: var(--sp-3);
+  padding: var(--sp-3);
+  border: 1px solid var(--net);
+  border-radius: var(--r-lg);
+}
+
+/* 13px/1.5 sans (`--t-small`, the system's 13px rung), primary ink: it is a
+   paragraph a member reads once, and it is the reason the grid looks the way
+   it does — never `--text-faint`. */
+.body {
+  flex: 1;
+  min-inline-size: 0;
+  margin: 0;
+  font: var(--t-small);
+  color: var(--text);
+  text-wrap: pretty;
+}

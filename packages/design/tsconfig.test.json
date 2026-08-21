@@ -1,17 +1,26 @@
 {
-  // Typecheck-only program covering BOTH layers' sources and tests.
+  // ONE typecheck program over both layers' sources and tests — the element
+  // layer cannot be checked at all unless it is in a program, and every
+  // consumer gate (lint:types, typecheck) drives a single config per package.
+  //
+  // It therefore carries the DOM lib, which tsconfig.json deliberately does
+  // not. The token layer's Expo-safety guarantee does NOT rest here: it rests
+  // on the BUILD program (tsconfig.json, `lib: ["ES2023"]`, elements excluded),
+  // which is what `bun run build` runs, plus the reachability walk in
+  // src/native-contract.test.ts — and that walk is the stronger of the two,
+  // because it also catches a `globalThis` cast the lib setting never sees.
   //
   // `module: ESNext` (not the package's Node16) because this program never
-  // emits: the kit layer is browser ES modules and its tests use `import.meta`
-  // and top-level `await`, which TypeScript rejects only because the package's
-  // BUILD target is CommonJS. The build config (tsconfig.json) is unchanged and
-  // still emits CJS for the token layer, which Electron preload requires.
+  // emits: the suites use `import.meta` and top-level `await`, which TypeScript
+  // rejects only because the package's BUILD target is CommonJS. The build
+  // configs are unchanged and still emit CJS, which Electron preload requires.
   "extends": "./tsconfig.json",
   "compilerOptions": {
     "noEmit": true,
     "allowImportingTsExtensions": true,
     "module": "ESNext",
-    "moduleResolution": "Bundler"
+    "moduleResolution": "Bundler",
+    "lib": ["ES2023", "DOM", "DOM.Iterable"]
   },
   "include": ["src/**/*.ts", "src/**/*.d.ts"],
   "exclude": ["dist", "node_modules"]

@@ -1,3 +1,6 @@
+import { readFileSync } from "node:fs";
+import path from "node:path";
+
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 
@@ -16,7 +19,7 @@ describe(Button, () => {
     expect(html).toContain('type="button"');
   });
 
-  it("supports the five recipe variants", () => {
+  it("supports the four canonical recipe variants", () => {
     expect(
       renderToStaticMarkup(<Button label="x" variant="secondary" />)
     ).toContain("secondary");
@@ -26,9 +29,6 @@ describe(Button, () => {
     expect(
       renderToStaticMarkup(<Button label="x" variant="destructive" />)
     ).toContain("destructive");
-    expect(
-      renderToStaticMarkup(<Button label="x" variant="destructiveFilled" />)
-    ).toContain("destructiveFilled");
   });
 
   it("defaults to the secondary variant", () => {
@@ -39,9 +39,46 @@ describe(Button, () => {
     expect(renderToStaticMarkup(<Button label="x" size="sm" />)).toContain(
       "btn sm"
     );
+    // `.btn` is the base at every size — chrome is a size modifier on top of
+    // it, not a replacement, so the shared hover/press/focus rules apply.
     expect(renderToStaticMarkup(<Button label="x" size="chrome" />)).toContain(
-      "chrome secondary"
+      "btn chrome secondary"
     );
+  });
+
+  it("keeps the filled ink on a commit control at titlebar scale", () => {
+    // The bug this pins: `size` and `variant` are independent props, so the
+    // type system cannot catch a size class that paints. A chrome-size
+    // primary that renders unfilled is a commit control the eye cannot find
+    // (issue #708, invariant 3 — the shell owns no colour, commit is filled
+    // ink), and it fails silently in exactly the place it matters most.
+    expect(
+      renderToStaticMarkup(
+        <Button label="Save" size="chrome" variant="primary" />
+      )
+    ).toContain("btn chrome primary");
+
+    const css = readFileSync(
+      path.join(import.meta.dirname, "Button.module.css"),
+      "utf8"
+    );
+    // Sizes carry geometry only. A `background` in one of them wins over the
+    // variant declared after it, whatever the markup says.
+    for (const size of ["chrome", "sm"]) {
+      const rule = new RegExp(
+        `\\n\\.${size}\\s*\\{(?<body>[^}]*)\\}`,
+        "u"
+      ).exec(css);
+      expect(rule?.groups?.body, `.${size} rule not found`).toBeTypeOf(
+        "string"
+      );
+      expect(rule!.groups!.body).not.toMatch(/(?:^|\s)background\s*:/u);
+    }
+    // …and the colour they must not fight is declared after them.
+    expect(css.indexOf("\n.chrome {")).toBeLessThan(
+      css.indexOf("\n.primary {")
+    );
+    expect(css.indexOf("\n.sm {")).toBeLessThan(css.indexOf("\n.primary {"));
   });
 
   it("renders a leading icon svg when an icon is given", () => {

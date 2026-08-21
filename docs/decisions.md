@@ -1,349 +1,266 @@
-# Decisions (issue #468)
+# Current decisions
 
-Settled **2026-07-20**. Source of truth for judgement calls that blocked solo-maintainer leverage work. Cite this file instead of re-asking. If a decision is wrong in practice, say so in a PR comment and change it here — do not quietly implement something different.
+This file is the adjudication layer over the repository's append-only evidence. It records the decisions that are in force, deliberate non-goals, and supersession chains that keep old evidence from being mistaken for current truth. The linked issues and receipts carry the rationale and implementation history; this file carries the current answer. Update a row when the answer changes and link the issue that settles the change.
 
-Full issue: [#468](https://github.com/srikanth235/centraid/issues/468).
+## Product positioning
 
-## The four that gated whole groups
+Centraid is a personal, local-first **superapp**: one shell wrapping many first-party apps whose content characters could not be more different. The shell, the vault, and the apps ship together as one product — the owner installs Centraid, not apps into Centraid.
 
-| Id | Decision |
+Ruled 2026-08-15 by [#799](https://github.com/srikanth235/centraid/issues/799), which retired the serving plane that made the older "personal app builder" framing true:
+
+- **Not an app builder.** There is no authoring surface, no scaffolder a person points at a blank app, and no build-and-publish loop. `conversation.kind='build'` names the workspace-capable assistant thread, not a retired app-authoring product.
+- **Not a platform.** There is no third-party, user-built, or generated app plane, no code store, and no install-from-elsewhere path. The catalogue is the bundled system apps this repo ships.
+- **The gateway serves data, never UI bytes.** Every app UI is first-party code in the release: an inline React route in the shared shell, or the same app as an Expo screen on mobile. See [Inline system apps](#inline-system-apps).
+
+Automations remain owner-authored — the automation compiler is a live "builder" in the narrow, internal sense and keeps that word ([blueprints README](../packages/blueprints/README.md)). Retired positioning vocabulary and its replacements are in [glossary.md](glossary.md#forbidden--discouraged-synonyms-broader); the binding design statement of the same idea is [DESIGN.md](../DESIGN.md).
+
+## Foundational decisions
+
+| Id | Current decision |
 | --- | --- |
-| **H1** | **The gateway runs detached.** The desktop launches it as a child that outlives the app window. The always-on premise is load-bearing for pairing, the browser extension ([#462](https://github.com/srikanth235/centraid/issues/462)), and mobile. H2–H7 are implemented; the in-process path remains only for tests and explicit `CENTRAID_EMBEDDED_GATEWAY=1`. Rationale: [H1 rationale](#h1-detached-gateway). |
-| **C1** | **No fallback paths, confirmed.** Hard capability gating with an "update the host" wall, no degraded modes. With both ends under one maintainer's control and no compatibility promise before 1.0, every fallback branch is code that gets written defensively and reviewed forever. The protocol-contract half (never break parsing) keeps the wall graceful rather than a crash. See [protocol.md](protocol.md). |
-| **Signing** | **Enroll in all three now.** Apple Developer Program for notarization; **Azure Trusted Signing** for Windows rather than an OV/EV certificate (cheaper, faster to obtain, and the key never exists as a file in CI); **Play App Signing** for Android, so Google holds the release key and we hold only a recoverable upload key. Wall-clock lead time — start before pipeline work. Checklist: [enrollment.md](enrollment.md). |
-| **J7** | **Store-only releases, with a dormant hotfix lane.** Install and configure `expo-updates` with `runtimeVersion: { policy: "appVersion" }` and production/development channels, but add **no `eas update` step to CI**. Store releases stay the only routine path. OTA is a configured hotfix lane for one already-shipped version only (`checkAutomatically: "ON_ERROR_RECOVERY"`). |
+| **H1** | The gateway runs detached. Desktop launches `centraid-gateway` as a child that outlives the app window; the in-process path is test-only and requires `CENTRAID_EMBEDDED_GATEWAY=1`. See [ARCHITECTURE.md](../ARCHITECTURE.md). |
+| **C1** | There are no fallback paths for an unsupported protocol or capability. The client shows an update wall; protocol parsing remains strict and graceful. See [protocol.md](protocol.md). |
+| **Signing** | Enroll in Apple Developer Program, Azure Trusted Signing, and Play App Signing. Human steps live in [enrollment.md](enrollment.md). |
+| **J7** | Mobile uses store releases as the routine path. `expo-updates` is configured as a dormant, already-shipped-version recovery lane; CI does not run `eas update`. |
+| **D4** | Patch releases contain fixes only. Added, changed, or removed product behavior is minor before 1.0; agents never propose a major. See [release.md](release.md). |
+| **D5** | Beta is desktop-only; TestFlight and Play internal track are mobile beta channels; web is continuous on `app.centraid.dev`. Stable download and `latest` image targets never move for beta. |
+| **R1** | One product version stamps the monorepo. A surface may skip shipping a version but never carries a divergent package version. |
+| **R2** | Build numbers derive from product semver. A store resubmission without product change is not supported; cut a patch instead. |
+| **R3** | Protocol version is the runtime connection comparator. Product version is display-only; capability flags gate features. |
+| **R4** | Product tags ship desktop, gateway image, and gateway npm by default. Mobile is dispatch-opt-in; web/docs are continuous on main. |
+| **R5** | A failed build is retried or rebuilt; product semver is not bumped solely to make a build pass. |
+| **F1** | 1.0 begins when every schema change ships a migration. Before 1.0, epoch changes may require vault recreation and the handshake refuses mismatches. |
+| **H5** | OS service installation is opt-in and default-off. The LaunchAgent label is `dev.centraid.gateway`. |
+| **J1** | GitHub Actions holds the Android upload key; Google Play App Signing holds the release key. |
+| **J4** | Secrets use platform secure storage (`expo-secure-store`, Keychain, or Android Keystore), never plaintext. |
+| **J5** | The reverse-DNS root is `dev.centraid`; the full table is [identifiers.md](identifiers.md). |
+| **K5** | The PWA manifest id is `/`, so future `start_url` changes do not orphan installs. |
+| **I12** | What's new is sourced from GitHub Releases; desktop opens it at most once per product version. |
+| **L1 / E2** | PRs run unit, integration, contract, boot-smoke, and path-filtered client e2e; nightly owns full cross-client, performance, scale, mutation, mobile, and pairing lanes. See [TESTING.md](../TESTING.md). |
+| **L3** | [TESTING.md](../TESTING.md) is the winning test contract; a contradictory suite README is corrected. |
 
-## Policy table
+## Superseded decision pointers
 
-| Item | Decision |
+| Former decision | Current pointer |
 | --- | --- |
-| **D4** | Patch = fixes only. If every changelog entry sits under _Fixed_, it is a patch; anything added, changed, or removed is a minor. No major before 1.0, and agents never propose one. See [release.md](release.md). |
-| **D5** | Beta channel is desktop-only. TestFlight and the Play internal track already are the mobile beta channel; web continuous host is **`app.centraid.dev`** (gateway-served PWA remains LAN fallback). Tags: `v0.x.y-beta.n` as GitHub pre-releases on a separate updater channel — never move the stable download target or `latest` **image** tag (GHCR `centraid-gateway`). |
-| **R1** | **One product version** stamps the monorepo. Surfaces may skip _shipping_ a version; they never keep a divergent package version in git. |
-| **R2** | **Build numbers** are script-derived from product semver (`major*1e6+minor*1e3+patch`). Never hand-set. Store resubmit without product change is not supported — cut a patch. |
-| **R3** | **Protocol version** is the only runtime connect comparator; product version is display-only. Capability flags gate features (C1). See [protocol.md](protocol.md) / #512. |
-| **R4** | **Default ship set** on product tag: desktop, gateway-image, gateway-npm. Mobile is dispatch-opt-in. Web/docs are continuous on main. |
-| **R5** | **Never bump product version only to fix a failed build.** Rebuild / re-run workflows / surface retry; reserve semver for real product change. |
-| **F1** | **1.0 is defined as** the first release after which every schema change ships a migration. Before it: epoch bumps may require vault re-creation and the version handshake refuses mismatches. Pre-1.0 stores rely on optional-fields-with-defaults for forward compatibility. |
-| **H5** | OS service install is **opt-in**, offered during onboarding, **default off**. Silent service installation is the one thing that makes users distrust a local-first app. LaunchAgent label `dev.centraid.gateway` (see [identifiers.md](identifiers.md)). |
-| **J1** | Upload key in GitHub Actions secrets; release key held by Play App Signing. An upload key is recoverable if lost; a self-managed release key is not. |
-| **J4** | Yes, unconditionally — secrets move to platform secure storage (`expo-secure-store` / Keychain / Android Keystore). Recorded deliberately; there is no argument for plaintext once we submit to stores. |
-| **J5** | Reverse-DNS root is **`dev.centraid`**, not `com.centraid`. Full table: [identifiers.md](identifiers.md). |
-| **K5** | PWA manifest `"id": "/"`, landed before any real install exists. Without it, install identity derives from `start_url` and later changes orphan installs. |
-| **I12** | Hide the "what's new" placeholder; re-wire to GitHub Releases feed (desktop `changelog.ts`). **Closed in #501:** sidebar entry + once-per-version auto-open via `changelogSeenVersion`. |
-| **L1 / E2** | PR-time: unit, integration, the boot-the-artifact smoke unconditionally, plus **path-filtered** client e2e. Nightly: full cross-client suites, perf budgets, mobile. Promotion rule: if a nightly-only area burns us twice, it moves to PR-time. See [TESTING.md](../TESTING.md). |
-| **L3** | `TESTING.md` wins; any suite README that contradicts it is stale and gets corrected. |
-| **L4** | Triage orphaned desktop e2e flows against the [#458](https://github.com/srikanth235/centraid/issues/458) flow inventory; adopt what covers a real gap; delete the rest in one commit. |
-| **T1 (superseded)** ([#505](https://github.com/srikanth235/centraid/issues/505)) | Historical direct-transport decision; see the amendment below for the current connection contract. |
-| **T1 amendment** ([#555](https://github.com/srikanth235/centraid/issues/555), supersedes T1/#505) | **Gateway connections are iroh-only and identified by EndpointId.** Per-device HTTP tokens, direct URL connections, and `POST /centraid/_gateway/pair` are removed. Relay hints are refreshable cache. Every request resolves a real vault enrollment; there is no wildcard admin plane. The original T1 remains above as the historical decision being reversed. |
-| **#298 erase amendment** ([#555](https://github.com/srikanth235/centraid/issues/555), supersedes #298's “leave the seal key behind” recovery posture) | **A completed vault erase crypto-erases its independent DEK.** Gateway rows and an erase intent commit first; content and the DEK are then unlinked; boot idempotently completes a crash-left intent. The gateway EndpointId and recovery-kit fingerprint survive. Recovery after erase is through a previously exported, passphrase-wrapped kit and provider snapshot—not a seal key deliberately retained on the erased host. **Amended by [#603](https://github.com/srikanth235/centraid/issues/603):** the erase ceremony itself is unchanged, but restore-after-erase is now the backup-plane `centraid-gateway recover` only — the `vaults:restore` founding route it used to name is gone. |
-| **Founding retirement** ([#603](https://github.com/srikanth235/centraid/issues/603), supersedes the #555/#568 zero→one founding plane) | **A gateway founds itself; there is no ceremony.** Constructing over a _fresh_ data dir creates `Shared` (first) and `Personal` (marked `personal`, hence the registry default and the head of every vault listing — see #665), and enrols the host device as `admin` on both. An existing data dir is never modified. Deleted: the `centraid-gw-found` ticket kind, `init-ticket`, `serve --init-vault` / `initVaultName`, the `vaults:initialize` / `:initialize/verify` / `:restore` routes, the `uninitialized` 409 wall and its fresh-gateway allowlist, the FoundingScreen, and the founding recovery-kit ceremony. Recovery kits keep their **backup-plane** life (`backup kit` export, `recover`, Settings surfaces); they may return as a first-class Settings export post-v0. Consequently there is exactly one ticket concept — the **pair ticket** — and web/PWA + mobile onboarding is ticket-only, because only a desktop can start a gateway. |
+| **T1 / #505 direct transport** | Superseded by [#555](https://github.com/srikanth235/centraid/issues/555): gateway connections are Iroh-only and identified by `EndpointId`; the original transport rationale remains in [#505](https://github.com/srikanth235/centraid/issues/505). |
+| **#298 erase posture** | Superseded and amended by [#555](https://github.com/srikanth235/centraid/issues/555) and [#603](https://github.com/srikanth235/centraid/issues/603); current erase/restore behavior is the backup-plane `centraid-gateway recover` contract. |
+| **#599 member/role model** | Superseded by [#726](https://github.com/srikanth235/centraid/issues/726); current authority is one owner per vault. |
+| **#724 enrichment service** | Superseded by [#731](https://github.com/srikanth235/centraid/issues/731); current recognition runs inside bundled handlers. |
+| **#505 served-app plane** | Superseded by [#799](https://github.com/srikanth235/centraid/issues/799); an app UI reaches the screen one way — an inline React route in the shared shell, or the same app as an Expo screen on mobile. |
+| **Single-scalar `EnrichTier` per domain** | Superseded by [#807](https://github.com/srikanth235/centraid/issues/807); policy is a scoped cascade with engine selection. The tier survives as the vault-default layer and its `off\|device\|gateway` values as egress-class ceilings — see [Generic enrichment](#generic-enrichment-807). |
+| **Delegate step as an OCR-only one-off** | Superseded by [#807](https://github.com/srikanth235/centraid/issues/807); delegate engines are engine profiles selected by policy, and a recipe's `delegateStep.selected` is one of two selectors. OCR remains the first shipped delegate. |
+| **#690 / #765 DOM custom elements** | Superseded by [#799](https://github.com/srikanth235/centraid/issues/799); the third rendering technology is gone and every DOM composition is a React block. |
+| **"personal app builder" positioning** | Superseded by [#799](https://github.com/srikanth235/centraid/issues/799); Centraid is a personal, local-first **superapp** — see [Product positioning](#product-positioning). |
+| **16-package workspace split** | Superseded by [#801](https://github.com/srikanth235/centraid/issues/801); see [Package boundaries](#package-boundaries-801). |
+| **Coordinate naming deferred for want of a licensed gazetteer** | Superseded by [#816](https://github.com/srikanth235/centraid/issues/816); naming is an opt-in automation over a vendored open dataset, run entirely on-device — see [Photos place and cartography](#photos-place-and-cartography-816). |
+| **No basemap under Places, on any surface** | Superseded by [#816](https://github.com/srikanth235/centraid/issues/816); that ruling was derived from the browser's tile-request problem. Mobile defaults to a real native map with a one-switch return to the sketch; web stays sketch-only with CSP `'self'`. |
+| **#726 "Give is a receiver-owned snapshot"** | Superseded by [#825](https://github.com/srikanth235/centraid/issues/825); copy-as-share retires and a share is a standing grant. Closure read and projection survive as internal fulfillment transport — see [Sharing v1](#sharing-v1--the-grant-plane-825). The rest of #726's placement ruling stands. |
+| **The link ceremony as a prerequisite (#726 / #821 L-write)** | Superseded by [#825](https://github.com/srikanth235/centraid/issues/825); share subsumes linking — a grant to an unlinked person parks at `awaiting_channel` and mints the invitation — and People gains the write side, so a share is no longer always made from a container. |
+| **`react-native-maps` as the phone's map SDK** | Superseded by [#816](https://github.com/srikanth235/centraid/issues/816); the dependency is removed as dead code and the native map stack is `expo-maps` on iOS plus `@maplibre/maplibre-react-native` on Android. |
+
+## Package boundaries (#801)
+
+Ruled 2026-08-16 by [#801](https://github.com/srikanth235/centraid/issues/801). A workspace package exists only if it has a **distribution** split, a **hard technical wall** (native build, zero-runtime-dep, React Native `src` resolution), or an **independently published contract**. Architectural seams that meet none of those (automation must not import an ACP backend; engine imports nothing above it) are enforced by import-boundary lint and tests, not extra package.json edges.
+
+Kept packages and why:
+
+| Package | Test | Why it stays |
+| --- | --- | --- |
+| `core` | distribution + technical wall | Thin clients consume protocol/blob/time without server code; RN `src`; zero-dep |
+| `server` | distribution | The backend unit; desktop and `centraid-gateway` consume it whole |
+| `vault` | distribution + published ontology | Desktop consumes it directly |
+| `backup` | technical wall + published format | Node builtins only; `centraid-storage-provider/1` + `centraid-snapshot/2` |
+| `blueprints` | distribution | Server needs manifests/handlers; client/mobile need UI chunks |
+| `design` | distribution + RN `src` | Shared by every app |
+| `client` | distribution | Browser-safe React shell for desktop/web/mobile |
+| `tunnel` | native wall | Rust data plane + napi |
+| `cli` | distribution (deliberate) | Depends only on contracts to prove wire parity |
+| `test-kit` / `model-runtime` | private leaves | Shared tests; pinned native inference |
+
+Supersedes any prior rationale that treated `protocol`, `blob-format`, `time-engine`, `gateway`, `app-engine`, `automation`, or `agent-runtime` as independently publishable workspace packages. Those names remain historical in receipts and changelogs.
 
 ## Defaults (so nobody has to ask)
 
 | Topic | Default |
 | --- | --- |
-| **B3 knip** | knip, per-workspace, warn-first for one week then error |
-| **G1 dev env** | Promote existing `.claude/launch.json` (when present) plus [dev-environment.md](dev-environment.md) — do not invent a new manifest format |
-| **I5 rollout** | 72-hour staged rollout window; stable per-install bucket (`bucket < elapsed/window`) |
-| **I10 packaging** | ZIP **and** DMG on macOS; per-user NSIS on Windows |
-| **K11 fonts** | System font stack in the app shell; no webfont / no render-blocking third-party CDN |
+| **B3 knip** | knip runs per-workspace at error level; unused files, dependencies, and exports fail the gate |
+| **G1 dev env** | `.claude/launch.json` plus [dev-environment.md](dev-environment.md) are the dev-environment manifest; do not invent a new format |
+| **I5 rollout** | Desktop updates use a 72-hour staged rollout window with a stable per-install bucket (`bucket < elapsed/window`) |
+| **I10 packaging** | macOS ships ZIP **and** DMG; Windows ships per-user NSIS |
+| **K11 fonts** | The app shell uses the system font stack; no webfont, no render-blocking third-party CDN |
 
-## H1 — Detached gateway
+## Gateway founding and recovery
 
-### Decision
+A fresh gateway founds itself: it creates `Shared` and `Personal` and enrolls the host device as owner on both. An existing data directory is never modified by founding. There is one ticket concept — the pair ticket — and web/PWA and mobile onboarding are ticket-only. The former founding ceremony and `vaults:initialize` / `vaults:restore` routes are not part of the current surface. Recovery kits remain a backup-plane export and are consumed by `centraid-gateway recover`. Settled in [#603](https://github.com/srikanth235/centraid/issues/603).
 
-The desktop-hosted gateway is a **detached child process** that outlives the Electron app window (and, after H5 opt-in, can outlive logout/reboot via OS service).
+## Ownership, sharing, and peer transport
 
-### Why not "gateway dies with the app"
+The ruling from [#726](https://github.com/srikanth235/centraid/issues/726): **one owner per vault, structurally enforced; there are no roles.** Authorization asks which owner a proved device binds to and whether that owner owns the vault. Sharing is placement, not row filtering: data crosses by projection into an audience vault, and no one queries another person's vault. Commons is circle-backed co-owned residency. The Give half — a receiver-owned snapshot as a member-facing act — is superseded by [#825](https://github.com/srikanth235/centraid/issues/825); a share is a standing grant and closure projection is internal fulfillment transport ([Sharing v1](#sharing-v1--the-grant-plane-825)). The authentication boundary is transport-first (Iroh `EndpointId` proves the device; custody of the data directory proves the host) with no password/session/OIDC plane, which remains the standing [#599](https://github.com/srikanth235/centraid/issues/599) security decision minus its role vocabulary. Schema, tables, and mechanics live in [ARCHITECTURE.md](../ARCHITECTURE.md#vault-ownership-and-sharing-726) and [SECURITY.md](../SECURITY.md); vocabulary in [glossary.md](glossary.md#owners-gateway-726).
 
-Closing the desktop window must not take the vault offline for:
+## Commons
 
-- paired phones and the Expo client,
-- the browser PWA / ticket-only Iroh path,
-- the companion extension ([#462](https://github.com/srikanth235/centraid/issues/462)),
-- any always-on automation schedule that expects a reachable gateway.
+Commons is circle-backed, steward-serialized multi-writer state from [#731](https://github.com/srikanth235/centraid/issues/731). The steward orders member-signed commands into a monotonic log; members apply checkpoint plus tail and compute balances from identical rows. Non-steward writes require the bound vault signature and fresh nonce. v0 uses deterministic last-write-wins by steward sequence; invalid commands are refused rather than surfaced as retriable conflicts.
 
-Scoping the gateway to the app lifetime would force rewriting the product story (always-on personal software) rather than fixing the process model.
+## Experimental features (v0)
 
-### Implemented implications
+Automations and connectors ship in the release binary but are **off by default** in v0; the gate exists for owner + enthusiast early feedback ([#774](https://github.com/srikanth235/centraid/issues/774)). Resolution per feature mirrors Resource mode: `CENTRAID_EXPERIMENTAL` env (authoritative when set) &gt; durable prefs `gateway.experimental.*` &gt; host option &gt; off, applied at serve boot. Off means absent: no capability advertisement (C1), no routes, no webhook ingress — clients hide or wall the surface from the one capability detection point. Turning a feature off leaves its durable data intact. System recognition recipes (photo OCR, faces, embeddings, transcripts) are **not** gated: schedulers always run and the gate lives in the reconcile row-set, so the photos pipeline keeps flowing while user automations stay dark. There is no remote flag service and no per-user targeting — each user owns their gateway; the opt-in switch is the allowlist. Clients treat an **unanswered** capability question as unknown, never as off, wherever a stale answer would reshuffle standing navigation: mobile places never hide on unknown (offline cold starts keep their band), and the desktop route wall stays a blank frame until resolved. The desktop launcher/palette are the recorded exception — they boot at off because hiding beats flashing against a loopback gateway that answers within a frame (see `packages/client/src/react/shell/capabilities.ts`).
 
-- **H2** — spawn detached, ignore stdio, `unref()` so a dead app cannot wedge a full stdout pipe.
-- **H3** — ownership stamp in the pid-lock; adopt-don't-kill foreign/developer-started gateways.
-- **H4** — stable default port + status probe for the bound address (no ephemeral-port bookmarks).
-- **H5** — OS service opt-in (LaunchAgent / systemd / Windows service), default off.
-- **H6** — lifecycle verbs through the bundled CLI for app and terminal parity.
-- **H7** — preserve the existing crash-loop breaker.
+The proposed fixed-window replacement for steward-side ack-gated compaction is **not adopted**. The current `share_commons_cursor` ack and retention behavior remains until unconditional checkpoint digest verification and real dogfood lag measurements justify a change. The instrumentation is exposed through the commons diagnostics described in [logs.md](logs.md#commons-sync-observability-731); the proposal and its rejected alternatives live in [#731](https://github.com/srikanth235/centraid/issues/731).
 
-The production desktop path now satisfies H2–H7. The in-process `serve()` path remains an explicit test/E2E escape hatch, not the default product topology.
+## Recognition automations and derived data
 
-## Signing identities (enrollment targets)
+Recognition is self-contained automation. `photo-ocr`, `transcript`, `embed-image`, `embed-text`, and `faces` read bytes through `ctx.vault.content`, run their bundled implementation, and persist through `ctx.vault.invoke`. The automation engine owns scheduling, consent, retries, cursor watermarks, and ledger history. There is no service wire, `ctx.infer`, or `ctx.enrich`. A recipe may declare a consented `ctx.delegate` variant — `photo-ocr` and `doc-text-extractor` do — and which engine runs it is answered by the policy cascade below, not by the recipe alone ([#807](https://github.com/srikanth235/centraid/issues/807)). Device-side model inference is not part of the product; clients consume replicated derived rows. See [recognition-automations.md](recognition-automations.md) and [Photos derived ledger](photos/derived-ledger.md).
 
-| Platform | Mechanism | Notes |
-| --- | --- | --- |
-| macOS | Apple Developer Program | Hardened runtime, notarization, entitlements (I2) |
-| Windows | Azure Trusted Signing | Prefer over OV/EV; key never a CI file (I3) |
-| Android | Play App Signing | Google holds release key; we hold recoverable upload key (J1) |
+Faces consume only an open `enrich_request(capability='faces')` or a prior consent stamp. `media.forget_person` removes regions, embeddings, derivation stamps, and clusters. `enrich_derivation` is the provenance record, and model upgrades are backfills that leave older rows serving until replacements land. The stamp is keyed by **engine profile** as well as target and variant ([#807](https://github.com/srikanth235/centraid/issues/807)): several profiles' results for one variant coexist, and consumers read the one `preferredDerivation` ([`packages/vault/src/enrich/derivation.ts`](../packages/vault/src/enrich/derivation.ts)) resolves — never a hand-picked row.
 
-Human residual checklist (no secrets in git): [enrollment.md](enrollment.md).
+## Generic enrichment (#807)
 
-## #599 — household members, sharing, and the no-credential invariant
+Ruled 2026-08-17 by [#807](https://github.com/srikanth235/centraid/issues/807). Enrichment is four independent layers, and conflating any two is what made the old single-scalar policy unable to grow. The binding statements live in [blueprint-seats.md](blueprint-seats.md#enrichment-doctrine) and [recognition-automations.md](recognition-automations.md).
 
-Settled **2026-07-27** in [#599](https://github.com/srikanth235/centraid/issues/599). The standing invariants:
-
-- **Authentication is the transport.** Devices prove iroh EndpointIds in the QUIC handshake; the host proves custody of the data dir (landlord bearer derived from the endpoint key). There is **no password/session/OIDC plane by design** — identity-proofing for a new member is an owner handing them a ticket. Any future feature that wants a login screen is re-opening this decision, not extending it.
-- **Model A over Model B.** Vault-per-person plus additional shared vaults on one household gateway — never one vault with many member principals and row-level visibility. Rationale: 46/122 FK edges in the ontology point at `core_party`; per-member ACLs would put an "as whom?" filter into every query, agent turn, and automation, break the sovereignty story, and reintroduce OIDC pressure.
-- **Authority is authored on `(member, vault)`;** devices are bindings that inherit. No per-device roles, no attenuation. Roles are ownership words (Owner / Member / Viewer over `admin`/`write`/`read`).
-- **Sharing is placement, not filtering.** Selective sharing projects rows/blobs into an audience vault (hardlinked CAS, `core_share_origin` provenance sidecar, single-DB transaction in the audience vault). Row-level ACLs are rejected as fail-open; **narrower vaults over finer roles** is the fence.
-- **Household participation and domain identity stay separate.** An authenticated gateway `member` with a role in the audience vault may read/write a placed Tally group; a Tally `core_party` / `social_circle_member` remains an accounting identity and never grants authority. Locker placements are re-encrypted under the audience vault's independent DEK rather than copying ciphertext or introducing a household-wide key. Revocation removes the member role; explicit unshare removes the audience projection, and both gestures preserve access receipts.
-- **v0 encryption posture: the local gateway is not an adversary.** Local blobs stay plaintext (`packages/vault/src/blob/local.ts`); sealing exists for untrusted remote storage and activates exactly when a storage/CAS provider is configured. Stolen-disk is the OS full-disk-encryption's job. Accepted, deferred loss: remote dedup of shared blobs (each vault seals under its own keys); local dedup is kept because the filesystem link count is the cross-vault refcount.
-
-## #630 — blueprint-readiness policies
-
-Settled **2026-07-29** in [#630](https://github.com/srikanth235/centraid/issues/630). The issue's Wave 0 exit text says “all six decisions,” but its checklist names seven; all seven are binding:
-
-| Topic | Decision |
+| Id | Current decision |
 | --- | --- |
-| Schema migrations | **Real-vault-preserving migrations start now for blueprint-readiness data.** F1 remains the general pre-1.0 compatibility posture, but it is not permission to erase a person's real vault. New #630 tables/columns use the existing ordered `packages/vault/src/schema/migrate.ts` machinery, prove upgrade from the previous user version, and never require erase/re-import. |
-| Backup and restore | **Schema and recovery land atomically.** A change that creates versions, recurrence exceptions, notification registrations, sync cursors, or household grants also proves snapshot/restore and restore-after-erase retain them. Whole-database backup is not sufficient evidence by assertion; the recovery test seeds and reads the new rows. |
-| Notification permission | **Prompt at the first reminder, never at launch.** The action that creates a first reminder explains the value, then requests OS permission. A denial leaves the reminder visible with an actionable Settings path and does not nag on later launches. |
-| Local OCR | **Device-native first, bounded gateway backstop.** iOS uses Vision text recognition and Android uses ML Kit on-device recognition; the PWA/manual gateway path uses a local Tesseract-compatible worker. Gateway work is one document at a time, capped at 20 megapixels / 25 MiB, with a Raspberry Pi 4-class 4 GiB host as the supported low-end floor. No image or recognized text leaves the user's devices. |
-| Quick-add routing | **Heuristics first, agent fallback.** Deterministic, offline rules route unambiguous task/expense/note/event text immediately; ambiguous input asks the local agent for a classified preview. Nothing commits before the user sees the destination and parsed fields. |
-| Google OAuth | **BYO-client first for Calendar/Contacts.** The shared Assist client does not request these sensitive scopes until Google's production verification evidence is accepted. BYO remains functional throughout and uses the same connector/sync contract. |
-| Push topology | **Expo Push Service is a wake-only relay, with local fallback.** The relay receives device tokens, timing, an opaque registration id, and a content-free wake/deep-link class—never titles, bodies, secrets, entity names, or sealed columns. The gateway remains canonical for content after open. Installations that disable the relay retain on-device scheduled notifications while the app is resident, with the availability limitation stated in Settings. |
+| **E-capability** | A capability is a typed contract — input kind to versioned output schema — registered in [`capability-registry.ts`](../packages/server/src/enrich/capability-registry.ts). Apps consume capabilities by contract only. `EnrichDomain` stays closed at `photos \| docs`; an app is not a domain, so Tally receipts ride `docs` and app-level differences are expressed by the cascade's app scope. |
+| **E-engine** | An engine profile is a named bundle of capability + engine + parameters. Bundled deterministic models are immutable `built-in` profiles; member profiles bind a harness, model, config pins and prompt revision. Profiles are **gateway prefs** (`enrich.profile.*`) because execution is a device property — see [config-ownership.md](config-ownership.md). |
+| **E-egress** | Every engine carries a computed egress class — `on-device`, `gateway` (the member's own infrastructure, not egress), or `provider`. It is a fact about the harness, never a user knob, and a profile can never claim a lower class than its engine implies. |
+| **E-policy** | Policy is one scoped cascade — vault, domain, collection, item — stating per capability: enabled, engine profile, trigger. `NULL` inherits; most specific wins. Rules and consent are **vault-owned** because permission travels with the data. There is exactly one resolver, inside `decideEnrichmentGate`; a second policy path is a defect. |
+| **E-ceiling** | The legacy per-domain tier survives as the vault-default layer, its values read as egress ceilings (`off`, `on-device`, `gateway`). Only that layer sets the ceiling, so no rule, profile, or per-item choice can widen egress. It is **not a member-facing control** ([#815](https://github.com/srikanth235/centraid/issues/815)): enrichment runs on the gateway, and where it runs is not a choice, so Settings → Enrichment offers no per-domain tier. The gate is unchanged, so a row a stored ceiling refuses says so at that row — removing the control must not turn a refusal back into silence. |
+| **E-consent** | Egress consent is keyed capability × egress class (× optional scope), asked once, receipted, and evaluated **independently** of the cascade. The tier is the recorded answer for `on-device` and `gateway`; `provider` requires an explicit granted row, and an absent answer is not a grant. |
+| **E-plural** | Derived results are keyed by engine profile and coexist. Consumers read the policy-preferred result through the one resolver; re-enrichment is backfill, never destructive. |
+| **E-faces** | Faces stays built-in, on-device-class only. Biometric egress needs its own proposal before any delegate engine may claim it. |
+| **E-oneshot** | A per-item "enrich with X" is a one-shot run with stamped provenance, not a standing item rule; durable rules stop at collection scope. |
+| **E-budget** | Triggers live in the cascade; resource budgeting stays in the gateway Resource mode machinery. Enrichment grows no second throttling policy, and provider-cost ceilings are out of scope. |
 
-## #686 — typography is a contract of ROLES, not families
+Blueprints gain nothing from this: apps declare consumed capabilities and never touch inference, and `app.json#knobs` stays cosmetic. The per-app enrichment surface writes host-owned policy through host UI.
 
-Recorded **2026-08-01** as an orchestrator recommendation under [#686](https://github.com/srikanth235/centraid/issues/686). Canonical design document: [DESIGN.md](../DESIGN.md).
+## Blueprint-readiness policies
 
-- **The contract names roles, never faces.** `sans` / `display` / `mono` / `serif`, plus the semantic scale in `packages/design/src/typography.ts` (`size`, `lineHeight`, `weight` per key). A surface binds roles to faces; a surface never adds a role, and no consumer may set an arbitrary `font-family`.
-- **Web and desktop use system stacks. #468 K11 stands.** `system-ui` / `ui-monospace` chains, no webfont family first, so the chrome never blocks on a network fetch. This is not up for renegotiation as part of #686.
-- **Mobile maps the same roles to platform-appropriate loaded faces.** React Native cannot combine `fontFamily` with `fontWeight` reliably across platforms, so each (role, weight) pair must be its own family name. The current mapping in `apps/mobile/src/kit/theme/index.ts` — Geist (sans), Space Grotesk (display), JetBrains Mono (mono), Playfair Display (serif) — is **recorded here as the sanctioned per-role mapping**, pending a future revisit toward native faces (San Francisco / Roboto) if the download weight or the cross-platform look argues for it.
-- **Therefore the web↔mobile face divergence is decided, not drift.** An audit that finds different family names on the two surfaces has found the intended state. The thing to check is that mobile still resolves _roles and the numeric scale_ from `@centraid/design`, and that the size/lineHeight/weight values are not re-typed by hand.
+The current cross-app policies from [#630](https://github.com/srikanth235/centraid/issues/630) are:
 
-## #686 — the type scale is not under-adopted, it is under-shaped
+| Topic | Current decision |
+| --- | --- |
+| Schema migrations | New blueprint-readiness data uses ordered real-vault-preserving migrations; pre-1.0 recreation is not permission to erase a real vault. |
+| Backup and restore | Schema and recovery evidence land together; snapshot/restore and restore-after-erase retain new rows. |
+| Notification permission | Request permission when the first reminder is created, never at launch; a denial leaves an actionable Settings path. |
+| Local OCR | The bundled `photo-ocr` handler is the local path; an explicit provider-egress-consented OCR delegate is optional. |
+| Quick add | Deterministic rules route unambiguous input; ambiguous input gets a bounded delegate preview and nothing commits before confirmation. |
+| Google OAuth | BYO client is the path for Calendar/Contacts until Assist's verification evidence is accepted. |
+| Push | Expo Push is wake-only and content-free; the gateway remains canonical and resident-device notifications are the local fallback. |
 
-Recorded **2026-08-02** under [#686](https://github.com/srikanth235/centraid/issues/686).
+## Typography and design contracts
 
-`--t-*` are CSS `font` **shorthands**, so using one sets family, weight, size and line-height together. A rule that wants the scale's _size_ but a different weight — or that must inherit the family — cannot use the token at all, and has to write a raw `font-size`. The repo-wide ratchet counts those as debt, which framed 1,284 declarations as indiscipline. The measurement says otherwise:
+The design contract is binding in [DESIGN.md](../DESIGN.md) and lowered by `@centraid/design`. Shared semantic roles use one spelling across shell, blueprint, and native lowerings; size and line-height may differ by renderer, while family and weight express the role. The composable `--t-*-size` rungs are the supported escape from shorthand font roles, and `kit.css` consumes them rather than owning a second scale. The `--t-tiny` family/weight exception remains explicit in the role-parity contract until a separately named eyebrow role can replace it. See [design machinery](design-machinery.md) and [#686](https://github.com/srikanth235/centraid/issues/686).
 
-| relation to the scale | declarations | share |
-| --------------------- | ------------ | ----- |
-| exactly a token size  | 494          | 38%   |
-| within 0.6px of one   | 477          | 37%   |
-| genuinely off-scale   | 314          | 24%   |
+The seat and north-star contract is orthogonal to form factor: mobile is `origin`, desktop is `custodian`, and web/PWA is `viewer`; record-only apps use replica data, byte-bearing apps use the custody triple. Locker is disabled on the viewer seat, and Photos uses a merged timeline plus automatic frame-owned backup. See [blueprint seats](blueprint-seats.md).
 
-**181 of those rules already set `font: var(--t-*)` and then override `font-size`.** That is the shape problem stated in the authors' own hands: they reached for the token, then had to fight it.
+The design-gallery gate screenshots the product, not a fixture. Ruled 2026-08-15 under [#799](https://github.com/srikanth235/centraid/issues/799): the SH and SH-c lanes capture the built web shell's `#ui-preview` surface, and every capture renders the product's self-hosted Instrument Sans woff2 faces — loaded from the same `FONT_FILES` manifest the shell serves, gated by `document.fonts.ready` plus an explicit resolution probe so no fallback face can be baked into a baseline. This supersedes the `system-ui` bootstrap fixture and discharges the one-time maintainer baseline decision recorded against [#781](https://github.com/srikanth235/centraid/issues/781): baselines are Linux-captured and byte-deterministic there; if a darwin run shows a residual rasterizer delta, the remedy is per-platform baseline directories, never a widened diff tolerance. BI and MO are deliberately token-lowering lanes, not component screenshots: MO has no DOM, and photographing the shell's React blocks under the blueprint lowering would depict components no blueprint app renders (the two DOM compositions merge under [#765](https://github.com/srikanth235/centraid/issues/765)). A lane's narrower claim is stated in the gallery manifest's `laneClaims` rather than left to be misread as component coverage.
 
-**Decision.** Treat this as a token-shape gap, not a cleanup backlog. The scale should expose composable size (and line-height) rungs alongside the shorthands, so a rule can take the size without inheriting the weight. Roughly 971 of the 1,284 declarations would then become token references with **no visual change** — the values already match.
+System state follows the signal ladder settled in [#785](https://github.com/srikanth235/centraid/issues/785): ambient ribbon → glance destination → push only for a human decision → cause-focused drill-down. The signal vocabulary is exactly quiet, attention, and urgent; healthy state earns no hue or animation. Persisted route ids remain stable while member-facing destinations are Vault, Activity, System, and On this phone. Seat filtering is presentation only, and omitted launcher destinations remain deep-link reachable with an explanatory state. The Assistant remains a full route and also appears as a frame companion; its pointer rail reserves content width rather than reproducing the reference prototype's overlay limitation. See [assistant companion and system signals](system-signals.md).
 
-**Not done here.** #686 is already 243 files; adding vocabulary plus a 971-site sweep would make the visual diff unreviewable. The ratchet in `scripts/lint-design-tokens.mjs` holds the count meanwhile, and this entry records that the count is a symptom rather than the fault.
+## Photos place and cartography (#816)
 
-### Shipped: the vocabulary, and the exact-match half of the sweep
+Ruled 2026-08-17 by [#816](https://github.com/srikanth235/centraid/issues/816). Place is a first-class dimension of memory, and the three answers below — how a place is named, which surface owns the experience, and what is drawn under the pins — are decided independently.
 
-Recorded **2026-08-02**, same issue. `--t-<key>-size` now exists on both surfaces — one property per **distinct** size, so `body`/`bodyStrong` (both 15px) publish `--t-body-size` and nothing else. `typeSizeRungs()` in `packages/design/src/typography.ts` derives them, `toCss()` and `toBlueprintCss()` emit them, and `contract.ts` derives both contracts from the same call rather than a hand-list. The blueprint type scale moved into `typography.ts` as `blueprintType` in the process — it was six opaque shorthand strings, from which no size could be read.
+| Id | Current decision |
+| --- | --- |
+| **P-ladder** | A place is named by a phrase ladder, in falling order of what the vault knows: a name the member gave it; a settlement name from the gazetteer when the opt-in gazetteer automation is on; a phrase relative to a member-named place; then "A place with no name yet". A coordinate is never printed as a name. Raw coordinates appear only behind an explicit exact-location action the member takes on one item. |
+| **P-gazetteer** | Coordinate-to-settlement naming ships as an **opt-in, zero-egress automation** over a vendored open dataset (GeoNames `cities15000` class, CC-BY): the lookup runs against bundled bytes, so nothing is requested and no coordinate leaves the device. A member-entered name is authoritative and derived naming never overwrites it. |
+| **P-mobile-first** | The Expo mobile app is the **primary Photos surface**: it is where place work is designed, built, and accepted first, and a wave exits on mobile evidence. It runs as a dev client with config plugins — never Expo Go, never a webview. Web is the **curation surface** and lands after mobile, not before. |
+| **P-cartography** | Cartography has two modes. On mobile the real map is the default: iOS renders Apple MapKit through `expo-maps`, Android renders MapLibre (`@maplibre/maplibre-react-native`) against OpenFreeMap vector tiles — both keyless, no account, no vendor API key in the app. The **"Use real maps"** setting (on by default) swaps to the Private sketch, the zero-egress projection both surfaces already share ([`place-map.ts`](../packages/blueprints/apps/photos/place-map.ts)). Web is sketch-only and its CSP stays `'self'`. Trip-card covers always render the offline projection, in either mode, because a card is an artifact rather than a live view. |
+| **P-shared** | A relative phrase ("3.4 km NE of Home") is readable only to someone who knows where Home is, so it is a **private** rung: it never renders in a shared or exported context, and never in a title a card carries. In a shared context the ladder falls straight from the member's name to the gazetteer name to "A place with no name yet". Place metadata rides along on a share only by the member's explicit choice, at a precision they chose. |
+| **P-egress** | In real-map mode the map provider sees which areas are viewed. That is disclosed plainly where the setting lives — it is **not** consent-gated, because it is base-layer traffic a member turns off with one switch. No vault bytes, coordinates of items, names, or photographs are ever sent to a map provider under either mode. |
 
-**No line-height rungs.** The data does not support them and speculative vocabulary is worse than none: of 227 hand-written `line-height` declarations across the three targets, all but a handful are unitless multipliers, while the chrome scale's line-heights are absolute px. A `--t-body-line-height: 22px` would be a rung nothing could adopt.
+## Copy governance (#805)
 
-**411 declarations converted, provably zero visual change** — 402 in `packages/client/src`, 9 in `packages/blueprints/apps`. The bar was tightened twice against the estimate above:
+Ruled 2026-08-16 by [#805](https://github.com/srikanth235/centraid/issues/805). UX copy is a design contract, not per-screen taste, and the binding statement is [DESIGN.md § Copy](../DESIGN.md#copy).
 
-- **Per-surface scales, not one scale.** The 494/477/314 split measured every target against the _chrome_ scale. The blueprint layer has its own — `--t-small` is 13px in the chrome and `0.8rem` in an app — so a `13px` inside `packages/blueprints/apps` was never an exact match. Against the scale that actually resolves there, the exact set is 402 + 9, not 494.
-- **Same unit, not same computed px.** `1rem` and `16px` agree only at a 16px root; a reader who has raised their browser's default font size would see the second stop tracking. Only like-for-unit conversions were made (px→px rung in the chrome, rem→rem rung in the blueprints).
+| Id | Current decision |
+| --- | --- |
+| **U-voice** | The house voice stays — calm, concrete, confident — and gains a length cap. Crisp-but-warm beats utilitarian: "Photo deleted", never "Deleted" and never "Your photo has been successfully deleted." Copy is signage read at a glance, not conversation. |
+| **U-ratchet** | Concision is enforced by a hard ratchet in the U-series quality tests (`tests/quality/user-facing-qualities.test.ts`). `tests/quality/copy-allowlist.json` is the only escape hatch, and an entry is a debt that records its reason. |
+| **U-scope** | The rulebook covers the whole app — shell, bundled system apps, and mobile — under one umbrella. Audit everything, rewrite only violations: a string already inside its budget is left alone. |
+| **U-reassurance** | Reassurance is positional. Full sentences about what was not lost, deleted, sent, or generated belong only where the risk decision is made — consent screens, destructive confirms, security and privacy disclosures — and those strings are allowlisted by name. Nothing else gets a second sentence by default. |
+| **U-umbrella** | One umbrella issue, no child issues. Slices are sub-agents and PR waves under it, with one receipt for the umbrella. Recorded as repo process in [AGENTS.md](../AGENTS.md) and [multi-agent.md](multi-agent.md). |
 
-**`packages/design/kit` was left alone entirely.** `kit.css` renders under _both_ token layers — the shell `:root` and the rescoped `.centraid-inline-scope` block — so its exact matches resolve to two different values, and every one of them would move on one of the two surfaces. (This sentence first said "eight exact matches", contradicting the "20" measured two entries below. Re-derived: the count is **20**, and 16 of them were bound in the follow-up entry at the end of this file.)
+The per-surface sentence budgets (button, toast, status line, empty state, banner, error, settings description, placeholder, consent) live in the DESIGN.md table, not here; vocabulary rules remain [glossary.md](glossary.md).
 
-**Still open, as recorded debt:** the ~477 near-misses (within 0.6px) and the ~314 genuinely off-scale declarations. Both are visual changes and need per-site judgement, not a sweep. The ratchet total fell 1291 → 880 with no other metric moving, and `rawFontSize` now counts `font-size: var(--t-<key>)` — naming a shorthand where a size belongs — as debt rather than letting it hide inside the `var()` carve-out.
+## Inline system apps
 
-## #686 — one token name, two meanings: the shell and blueprint type scales have diverged
+The eight bundled system apps are inline React routes in the shared shell. Their reads, subscriptions, and writes use `ReplicaShellSession`; writes carry `intentId`, and the apps render from the replica offline. There is no second render path: the served-iframe plane, its bridge and blueprint CSP, the postMessage settings path, and the gateway's UI-byte serving were retired end to end on 2026-08-15 by [#799](https://github.com/srikanth235/centraid/issues/799). The app-scoped RPC surface is `/centraid/<app>/actions|queries/<name>`; the former shared admin token plane is retired in favor of revocable owner enrollment. Full render-path details live in [ARCHITECTURE.md](../ARCHITECTURE.md#app-render-path). Settled by [#505](https://github.com/srikanth235/centraid/issues/505) and narrowed to one path by [#799](https://github.com/srikanth235/centraid/issues/799).
 
-Recorded **2026-08-02** under [#686](https://github.com/srikanth235/centraid/issues/686). Surfaced while adopting the composable size rungs; **not fixed** — it needs a deliberate call.
+## Surfaces held back for a design handoff
 
-`toCss()` and `toBlueprintCss()` both emit `--t-*`, and the contract's rule is that an emitter "may choose values appropriate to its surface, but cannot invent a second spelling for a semantic role." The inverse has happened: the same spelling now carries a **different role** on each surface.
+Ruled 2026-08-18. Three surfaces were **removed rather than carried**, and none of them are deprecations: mobile Docs, mobile People, and desktop People. Each was drawn before the Binding Layer v11 handoff and answers an earlier grammar, so keeping it would have meant maintaining, testing and explaining screens the rebuild is going to replace. A surface that is wrong costs more than a surface that is absent.
 
-| token | shell | blueprint |
-| --- | --- | --- |
-| `--t-body` | 15px / 22px, sans, 400 | 0.855rem (13.68px) / 1.5, sans, 400 |
-| `--t-small` | 13px / 18px, sans, 400 | 0.8rem (12.8px) / 1.45, sans, 400 |
-| `--t-mono` | 12px / 16px, mono, 500 | 0.72rem (11.52px) / 1.4, mono, 500 |
-| **`--t-tiny`** | 11px / 14px, **sans**, **500** | 0.6rem (9.6px) / 1.4, **mono**, **600** |
+Amended 2026-08-18 by [#821](https://github.com/srikanth235/centraid/issues/821): **desktop/web People is restored** — rebuilt to the Binding Layer v12 handoff over the untouched contract, with `people` deleted from `AWAITING_HANDOFF.web` and its gate rows back on ([design-divergences.md](design-divergences.md#people--v12-parity-state-and-sanctioned-withholdings) records what the rebuild withholds and why). The first H-loss — People's adversarial untrusted-string rendering — is closed by the restored web renderer.
 
-Size and line-height differing per surface is defensible — an embedded app pane is not the chrome. `--t-tiny` changing **family and weight** looked like the one indefensible cell: a rule that reads "the eyebrow rung" gets sans-500 in the shell and mono-600 in an app.
+Closed out 2026-08-18, same issue, wave 3: **mobile Docs and mobile People are restored** — native Expo rebuilds to the same handoff (People to Part 1's touch geometry, Docs to Part 2's fourteen phone screens), `AWAITING_HANDOFF.mobile` is empty, both stacks and their deep links are back (superseding H-shape's removal), and the gate now scans both native trees again with `NATIVE_QUERY_UI` / `NATIVE_FALLBACK` rows naming how each handler is reached. No surface remains under this holdback; the ruling stands only as the pattern for the next handoff. The H-loss row's second loss (the People phase of the mobile frame-drop scale flow) remains accepted — the native roster is back, but the 5,000-contact year-3 volume flow has not been re-authored yet.
 
-This matters because **`kit.css` is served to both surfaces**. Of its 80 hardcoded `font-size` declarations, **20 exactly match a blueprint rung and 0 match a shell rung** — the kit's type was authored against the app scale while rendering on both. Because those values are hardcoded, kit components currently render at app sizes _inside the chrome_, and cannot be tokenised without moving on one surface or the other. That is why the size-rung sweep skipped `kit.css` entirely.
+Applied again 2026-08-20 by [#831](https://github.com/srikanth235/centraid/issues/831), to four apps at once and on every seat: **Agenda, Notes, Tally and Tasks lose their interfaces** — the inline web/desktop trees and all five native covers — ahead of interfaces designed from scratch. H-scope, H-gates and H-loss govern it unchanged; H-wall does not, and the divergence is deliberate (see the row). `AWAITING_HANDOFF` carries all four on both `web` and `mobile`. The four native routes keep their place in the navigator and their params in `navigation.ts`, so H-shape's stack surgery has no counterpart here.
 
-**Options as first recorded.** (a) Reconcile the two scales so a role means one thing, and let only the _values_ differ. (b) Rename the blueprint rungs so the divergence is explicit rather than implied. (c) Declare `kit.css` blueprint-scoped and give the chrome its own component sheet. The sub-entry above closes the family/weight half of (a) on evidence — the two surfaces bind the same role to different faces because they carry different rungs, which the contract permits; (b) and (c) stand.
+| Id | Current decision |
+| --- | --- |
+| **H-scope** | Only the RENDER TREE goes. Manifests, `./actions/*`, `./queries/*`, vault scopes, pending projections and receipts are untouched on all three. A design handoff redraws screens; it does not redesign a contract. The apps are **unrendered, not dark** — the assistant still invokes every handler, and desktop People's Ask panel still runs its seven queries. |
+| **H-wall** | Each removed surface leaves a wall carrying the place's own frame — its title and the way out — not a blank screen, a spinner, or a 404. Deliberately not the switched-off-place wall (`FeatureOffPlace`), which states a different fact (the gateway disabled something) with a different remedy. The wall spends no CTA: there is nothing to go forward to. |
+| **H-shape** | Docs on mobile loses its stack and is a plain cover again; `docs/:documentId` is gone from the deep-link table rather than silently resolving to the drive. People was already a single cover on both seats. |
+| **H-gates** | Gates are suspended over the missing UI by NAME, never softened. `handler-reachability.test.ts` gains one `awaiting-handoff` exception keyed per app per surface, whose justification test fails on an id that is not a real manifest; People comes off the three `state-honesty.test.ts` rendering lists; the native Docs assertions leave `placement-registry.test.ts` and the People renderer leaves `untrusted-rendering.test.ts` rather than being made conditional. Every removal names what the rebuild must restore. |
+| **H-loss** | Two coverage losses are accepted and recorded, not papered over: People's adversarial untrusted-string rendering, and the People phase of the mobile frame-drop scale flow (no other native list carries its 5,000-contact year-3 volume, so it is excised rather than pointed at a stand-in). |
+| **H-blank** | Amends H-wall for [#831](https://github.com/srikanth235/centraid/issues/831) only: those four surfaces paint NOTHING — an empty element on the web seat, the themed page ground on the phone. A wall is copy, and copy written for a screen that is being redesigned is one more thing for the rebuild to unpick; the owner asked for the empty container by name. The frame around the route is still the shell's, so the place still has its title and its way out — what is gone is the app's own sentence about being gone. H-wall continues to govern any future single-surface holdback. |
+| **H-offline** | The desktop and web offline journeys (`pending-overlay.spec.ts`, `offline-reconnect.spec.ts`) were built on Tally, Tasks and Agenda and could not survive #831. They are RETARGETED onto Docs — the one remaining app whose production rows render the shared pending overlay — rather than deleted or softened, so `desktop.offline` keeps an owner and no floor is lowered. Their offline write goes through `window.centraid.write`, because Docs' rename affordances sit off the inline seat; every observable after it is still the production UI's. |
 
-Until then, `DESIGN.md`'s claim that the kit "holds no design decisions of its own" is true of colour, radius and spacing, and **false of type** — 80 sizes live there.
+Restoring a surface is the last step of its rebuild: delete its id from `AWAITING_HANDOFF`, put its rows back on the lists above, and the gates come back on by themselves.
 
-### Resolved by measurement: the shell's `--t-tiny` is not the eyebrow rung, so it does not move
+## People, links and the sharing plane (#821)
 
-Recorded **2026-08-02**, same issue. The obvious reading — that the shell's sans is a plain outlier against `DESIGN.md`'s "**Mono is the signature.** Metadata, counts, dates, and eyebrows are mono" and against shell practice — was tested and **does not survive the measurement**. `type.tiny` stays `sans` / 500.
+Ruled 2026-08-18 by [#821](https://github.com/srikanth235/centraid/issues/821). The v12 People rebuild needed facts the contract did not answer, so the contract was **amended** — maintainer-authorized, in the same wave — rather than the screens being drawn over a guess. What each surface may say about a link, and who may make one, are separate answers.
 
-The eyebrow idiom in the shell is real and is overwhelmingly mono: of **120** rules under `packages/client/src` carrying `text-transform: uppercase`, **94 set a mono family in the same block**. But those 94 rules are not `--t-tiny` sites and never were — the sizes they pair with mono are:
+| Id | Current decision |
+| --- | --- |
+| **L-linked** | A person is **linked** exactly when a live `share_party_vault_binding` row names their party. The link ceremony writes it: approving a same-machine link, and redeeming a link ticket, both reconcile the binding into whichever side's vault is mounted here (`packages/server/src/serve/link-party-bindings.ts` over `VaultLinksStore`'s change listener). One party holds **at most one live binding** — on conflict the standing binding wins and the loser carries `revoked_at`, so "linked people" and "live bindings" are the same count by construction. |
+| **L-read** | People and Docs hold **read-only** scopes on the sharing plane (`share.party_vault_binding`, `share.circle_grant`, `share.commons_member_state`, `share.commons_invitation`, plus `social.circle_member` and `core.party`). Every share read degrades to **absent, not empty**, on denial: the query answers `null`, and the surface draws nothing rather than a zero. A scope may legitimately be parked on an existing vault, so "nobody is linked" must never be rendered from "we could not look". |
+| **L-write** | Amended by [#825](https://github.com/srikanth235/centraid/issues/825): **People holds the write side.** A share is a grant over an audience × subject × capability, made from either end — the content app's subject or the person screen's audience — and the person screen is the grant dashboard that Share and Revoke return through ([G-audience](#sharing-v1--the-grant-plane-825)). A grant to an unlinked person parks at `awaiting_channel` and mints the invitation itself, so no separate link act precedes it. The standing rule the amendment keeps: a surface never grows a control naming an act it cannot perform. |
+| **L-never** | `cadence_days = 0` means **never**, and is stored verbatim — the vault `CHECK` floors at 0 and `people.add_person` / `people.set_cadence` type a minimum of 0. A person on zero is never overdue and is excluded from Reconnect outright; no stand-in number, and no sentinel. |
 
-| size                         | rules |
-| ---------------------------- | ----- |
-| 9.5px                        | 36    |
-| 10px                         | 21    |
-| 10.5px                       | 19    |
-| 9px                          | 9     |
-| 8.5px                        | 4     |
-| `var(--t-tiny-size)` (11px)  | 3     |
-| 8px                          | 1     |
-| `font: var(--t-mono)` (12px) | 1     |
+What each surface consequently draws and withholds, screen by screen, is [design-divergences.md](design-divergences.md) — the [People](design-divergences.md#people--v12-parity-state-and-sanctioned-withholdings) and [Docs](design-divergences.md#docs--parity-state-and-sanctioned-withholdings) sections. The commons mechanics live in [ARCHITECTURE.md](../ARCHITECTURE.md#circle-backed-commons-731); the grant plane over them is [Sharing v1](#sharing-v1--the-grant-plane-825).
 
-**90 of the 94 sit below `--t-tiny`'s 11px.** The shell's eyebrow is a sub-11px mono rung that the scale does not name, not the 11px rung it does. Two shell eyebrows go further and opt _out_ of mono on purpose — `chrome.module.css` `.sbSection` pairs `font-family: var(--font-sans)` with `font-size: var(--t-tiny-size)`, and `.sbSubLabel` is sans at 10px.
+## Sharing v1 — the grant plane (#825)
 
-What actually consumes the shell shorthand `font: var(--t-tiny)` is **5 sites in 4 files**, and none of them is an eyebrow or metadata:
+Ruled 2026-08-19 by [#825](https://github.com/srikanth235/centraid/issues/825). A share is a **standing grant**, and the audience's bytes are a replica under it. One app-agnostic infrastructure carries every app: `share_grant(grant_id, audience_kind person|circle, audience_id, subject_type, subject_id, capability view|edit, granted_at, revoked_at, granted_by)` states the member's sentence, `share_fulfillment(grant_id, peer_vault_id, state awaiting_channel|syncing|delivered|remove_sent|removed)` carries per-audience-vault delivery. Capabilities are `view` and `edit`; `comment` is reserved and unimplemented. These rulings land ahead of the code waves of #825, per its execution plan.
 
-| Site | What it is | Verdict |
-| --- | --- | --- |
-| `packages/client/src/react/screens/SettingsProvidersScreen.module.css` `.ladderMember` | pill holding an agent's display title (`card.title`) | prose label — sans |
-| `packages/client/src/react/screens/SettingsProvidersScreen.module.css` `.ladderAdd` | native `<select>`, options are agent titles | form control — sans |
-| `packages/client/src/react/screens/SessionStatusStrip.module.css` `.telemetry` | container; its own text is "Working"/"Ready". The numeric readout is the child `.context`, which already sets `font-family: var(--font-mono)` itself | the metadata was already mono; the parent is prose — sans |
-| `packages/client/src/react/screens/DevicesCard.module.css` `.renameAction` / `.renameIcon` | buttons reading "Save"/"Cancel", and a pencil glyph | action labels — sans |
-| `packages/client/src/react/screens/AssistantScreen.module.css` `.effortPicker select` | native `<select>` (runner / effort / workspace pickers) | form control — sans |
+| Id | Current decision |
+| --- | --- |
+| **G-membership** | Container semantics are **membership, not snapshot**. A grant on an album or folder covers its contents now and later; an item added after the grant is shared by the grant, with no second act. |
+| **G-view** | View grants sync forward. The origin is the sole author of a `view` subject and delivery is **re-projection on change**, not a CRDT merge. Divergence between origin and audience copies is a bug to fix, never the resting state. |
+| **G-edit** | Edit grants route writes back through the existing commons command routing ([`commons-routing.ts`](../packages/vault/src/share/commons-routing.ts)): the commons machinery is the `edit` **fulfillment strategy**, not a second product concept beside grants. The [#750](https://github.com/srikanth235/centraid/issues/750) rule survives as the registry gate — a subject type with no fulfillment answer cannot be offered. v1 ships edit co-contribution for `tally.group` only; albums and folders are view-capable and their edit strategy is deferred. |
+| **G-revoke** | Revoke is **one verb, uniform, and honestly best-effort**. `revoked_at` stops sync and sends removal; a sovereign system cannot scrub a peer's disk, and the copy says so plainly — "no longer shared; her vault has been asked to remove it". Removal on the audience side is a hard delete: no tombstone row survives it. |
+| **G-channel** | Share subsumes linking. A grant to an unlinked person parks at `awaiting_channel` and mints the invitation as its first fulfillment step, so the **channel** (today's `share_party_vault_binding` + `vault_links`, states invited\|live\|severed) is a property of the party rather than a ceremony the member must complete first. |
+| **G-copy** | Copy-as-share retires, code and all. The give / edge-answer verbs and the transport beneath them — the give route and client, the remote reconciler, the audience-side ranged blob pull and the `/_peer/blob/chunk` route it read, the `await-answer` / `deliver-refusal` / `pull-blob` outbox kinds, and the per-link "receive gives" preference — are **deleted**, not gated, and no "give a copy" verb replaces them in v1. [`readShareClosure`](../packages/vault/src/share/read-closure.ts) / [`projectShareClosure`](../packages/vault/src/share/project-closure.ts) survive as **internal fulfillment transport** only — machinery beneath a grant, never a member-facing act. |
+| **G-audience** | Audience-first is the primary key. "Everything Priya can reach" is one query over `share_grant`; People's person screen is the grant dashboard, and Share and Revoke return there through it. |
+| **G-subject** | `people.person` is never a subject. A person is the **audience** side of a grant; subjects are the shared things — album, folder, document, asset. |
 
-Mobile agrees. Of the seven `t("tiny")` consumers in `apps/mobile/src`, five are prose — `AppHeader.subtitle`, `OptionSheet.rowDetail`, `AttentionLine.chipSub`, `Assistant.statusText`, `Assistant.selectionError` (an error message) — and the two that _are_ eyebrows already override the family themselves: `AppLock.eyebrow` to `family.monoBold`, `LockerHome.fieldLabel` to `family.monoMedium`.
+**A retired obligation is drained, not retried.** A gateway upgraded across G-copy can still hold queued `share_effects` rows whose transport no longer exists — a cross-owner `deliver-give`, or one of the three retired kinds. Leaving them queued would keep a sweep dialing a verb that answers `not_found` and parking the edge with a network-sounding reason: a queue claiming a delivery might still land. Marking them `done` would be worse, because `done` means discharged and nothing was. So `retireDeadShareEffects` (`packages/server/src/serve/share-effects-retire.ts`) runs once at every writable `gateway.db` open: the obligation row is deleted and its edge moves to the terminal `failed` with the reason "giving a copy to another person's vault was retired; share it as a grant instead". `failed` is right here where it is wrong for a retry — the verb was withdrawn, which is exactly the finality it claims. An edge that already reached an answer (completed, denied, revoked, failed) keeps it; `share_access_receipts` is untouched, so every copy that DID land stays audited, and no delivered copy is un-delivered. The `link_receive_settings` table is dropped in the same pass, being a stored answer to a question nothing asks.
 
-So aligning `type.tiny` to mono would improve **zero** of the 94 mono eyebrows (they already say mono, at sizes the rung does not carry), and would regress **all five** shell sites plus five mobile prose sites — putting `<select>` chrome, "Save"/"Cancel" buttons and an error message into a monospace face. `DESIGN.md`'s "prose is not" clause governs here, not the eyebrow clause.
+**Grants deliver to vaults mounted on the same gateway (v1 limit).** Fulfillment resolves an audience vault through the host's own registry, and the peer transport that might have carried bytes cross-host retired with G-copy. A grant to a party whose vault lives on another gateway parks at `syncing` with the vault named — the ask stands, the vault is not here — and stays there. Stated as a current limitation wherever the docs could imply otherwise; carrying a grant across the peer plane is a follow-up under #825, not a v1 requirement.
 
-**The weight question answers itself the same way**, and also refutes the premise that the blueprint's 600 is the settled reading: the two mobile eyebrows that hand-patch the family disagree with each other — 600 and 500 — so there is no single mono eyebrow weight to converge on. The shell's 500 is the correct weight for what the shell rung actually is (a quiet control label; 600 would make "Save" compete with the row it sits in), and the blueprint's 600 is correct for what _its_ rung is (a 9.6px eyebrow, which needs the extra weight to hold at that size). This is a legitimate per-surface difference of a role's _rendering_, not two roles wearing one name.
+Per-grant size ceilings carry over unchanged from the commons limits; the grant plane adds no second budget. Circle grants recompile their roster on every fulfillment pass — a party added to a granted circle is delivered on the next pass with no re-grant — while grants the #825 migration decomposed into per-party rows are literal and do not follow roster drift; reaching a later addition there takes a new grant.
 
-**What this leaves — and a correction to it.** The first draft of this entry said the shell has an "unnamed sub-11px mono eyebrow rung", implying a single rung waiting to be named. Measuring the 94 rules by _shape_ rather than by size refutes that: they carry **51 distinct (size, weight, tracking) combinations**, and the largest cluster is 6 rules.
+## Performance and Rust byte plane
 
-| shape                   | rules    |
-| ----------------------- | -------- |
-| 9.5px, tracking 0.1em   | 6        |
-| 9.5px, tracking 0.05em  | 6        |
-| 10px, tracking 0.06em   | 5        |
-| 10.5px, tracking 0.04em | 5        |
-| 10px, tracking 0.1em    | 5        |
-| …46 more shapes         | 1–4 each |
+Node remains the gateway runtime until Bun supports `node:sqlite` and passes the same durability suite. Five performance designs — dependency-aware read cache, compiled consent decisions, incremental materializations, verified boot snapshot, and lazy vault mount — are evidence-gated, not adopted; mounting stays eager because a missed automation wakeup is a correctness failure. The Rust data plane moves bounded bytes only and never owns identity, consent, journal, replica, agent, or automation decisions. Budgets, profiles, and the full boundary live in [ARCHITECTURE.md](../ARCHITECTURE.md#performance-and-byte-plane-boundary); settled in [#456](https://github.com/srikanth235/centraid/issues/456).
 
-So a `--t-eyebrow` shorthand would fit at most 6 of 94 sites. Adding one would repeat the exact mistake the entry above diagnoses — an all-or-nothing token almost nothing can adopt — and would be a second `--r-lg`: vocabulary that exists because it seemed principled, not because anything could use it.
+## Product grammar and block composition
 
-What the 94 rules genuinely share is a **family** (`--font-mono`, already tokenised) and an **idiom** (uppercase + tracking). Sizes span 8–10.5px and tracking varies continuously from 0.04em to 0.1em. That is not a missing token; it is 51 ad-hoc decisions that need converging before any rung can describe them. Converging them is a design pass with a visual diff at ~94 sites — a real piece of work, and explicitly **not** a naming exercise.
+The product grammar is the current design contract, not a migration plan: semantic roles, lowerings, recipes, icon/identity/formatter contracts, and reference states are enforced by [DESIGN.md](../DESIGN.md), [design machinery](design-machinery.md), and their tests. The former plan's durable outcome is that app identity and action colour remain separate, host appearance owns appearance, and mobile consumes `toNativeTheme()` without CSS parsing. See [#690](https://github.com/srikanth235/centraid/issues/690) and its review closure [#695](https://github.com/srikanth235/centraid/issues/695).
 
-**Still genuinely open, and unresolved by any of the above:** (b) whether the blueprint rungs should be renamed so the size/line-height divergence is explicit; (c) whether `kit.css` is blueprint-scoped and the chrome gets its own component sheet. Those remain product decisions.
-
-## #686 — the three questions this issue left open, and their answers
-
-Recorded **2026-08-02** under [#686](https://github.com/srikanth235/centraid/issues/686). Proposed as recommendations and **accepted as written by the maintainer on 2026-08-02** — all three. They are decisions now, not proposals. Agreed order is **(1) → (3) → (2)**, each its own PR; the measurements behind them are in the entries above.
-
-### 1. The 94 mono eyebrows: converge to two rungs, then name them
-
-Measured distribution — sizes `9.5px ×36, 10px ×21, 10.5px ×19, 9px ×9, 8.5px ×4`; tracking `0.06em ×20, 0.05em ×15, 0.04em ×15, 0.1em ×14, 0.08em ×9`. 51 distinct shapes, largest cluster 6.
-
-**Recommend:** converge _first_, name _second_ — the reverse of the instinct. Two rungs cover the real span: a standard eyebrow at **9.5px** (the plurality, 38%) and a section header at **10.5px**, both mono at one tracking value. Pick the tracking from the cluster, not by eye: `0.06em` is the mode and sits mid-range.
-
-The order matters. Naming a rung against 51 shapes produces vocabulary that fits 6% and rots — the `--r-lg` failure. Converging first makes the rung describe something real, and the conversion afterwards is mechanical.
-
-**Cost:** a visual diff at ~94 sites, none individually large. **Do not** attempt it inside a change set that is already doing something else.
-
-### 2. `kit.css`: do NOT blueprint-scope it — make it consume the size rungs
-
-`kit.css` renders under both token layers, and 20 of its 80 hardcoded sizes match a blueprint rung against **0** shell rungs, so its type was authored for the app surface while shipping on both.
-
-**Recommend against** splitting it into two component sheets. That doubles the divergence this issue documented rather than resolving it, and every future component then has two homes. Instead, bind those sizes to `--t-<key>-size`, which now emits from both emitters — a kit button becomes 15px in the chrome and 13.68px in an app.
-
-That is the right answer on the merits, not just the cheap one: an embedded app pane **should** read at app scale. A component that renders identically in both contexts is the actual bug, and it is what ships today.
-
-**Caveat, stated plainly:** this is a visible change on both surfaces, and the exact matches were skipped in #686 for exactly this reason. It needs its own PR.
-
-### 3. Should the two emitters' scales diverge? Size yes, role no
-
-**Recommend:** codify the split the contract already implies. **Size and line-height may differ per surface** — a chrome and an embedded pane are different reading contexts, and the emitters exist precisely so values can differ. **Family and weight may not** — those are the role, and one spelling with two roles is the inverse of the contract's own rule.
-
-That makes `--t-tiny` (sans/500 shell, mono/600 blueprint) the one genuine violation. Note that #686 investigated aligning it and **declined**: 90 of the 94 mono eyebrows sit below its 11px, so `--t-tiny` is a quiet control label on the shell side and changing it would monospace prose. The clean fix is therefore (1) first, not a direct edit — once the eyebrow rung exists and is named, `--t-tiny` can be aligned without collateral.
-
-**Sequence:** (1) → (3) → (2). Each is independently shippable; doing (3) before (1) recreates the problem #686 already declined to cause.
-
-## #686 — `--t-*` role parity is now a law with a test behind it
-
-Recorded **2026-08-02** under [#686](https://github.com/srikanth235/centraid/issues/686). Implements decision (3) above (accepted by the maintainer 2026-08-02). Enforced by `packages/design/src/type-role-parity.test.ts`.
-
-**The law.** _Size and line-height may diverge per emitter. Family and weight may not._ A shell and an embedded app pane are different reading contexts, so optical size is legitimately a per-surface value choice — that is what two emitters over one contract are _for_. Family and weight are not a value choice; they are the role. `font: var(--t-tiny)` has to mean something.
-
-**Family is compared by genus, not by name or stack.** The two emitters legitimately spell one role with different custom properties (`--font-display` in the shell, `--font-title` in the blueprint layer, both aliasing a sans stack) and ship different concrete stacks for the same genus — the blueprint layer is sandboxed and loads no fonts, so its stacks are system-only and ordered differently. What the law gates is `sans-serif` vs `monospace` vs `serif`, resolved by following `var()` aliases to the generic family the stack ends in.
-
-**The full derived comparison**, from `packages/design/src` rather than from any prior table. Six roles are published by both emitters:
-
-| role | shell | blueprint | family | weight |
-| --- | --- | --- | --- | --- |
-| `--t-body` | sans-serif 400, 15px/22px | sans-serif 400, 0.855rem/1.5 | agree | agree |
-| `--t-body-strong` | sans-serif 600, 15px/22px | sans-serif 600, 0.855rem/1.4 | agree | agree |
-| `--t-mono` | monospace 500, 12px/16px | monospace 500, 0.72rem/1.4 | agree | agree |
-| `--t-small` | sans-serif 400, 13px/18px | sans-serif 400, 0.8rem/1.45 | agree | agree |
-| **`--t-tiny`** | **sans-serif 500**, 11px/14px | **monospace 600**, 0.6rem/1.4 | **DIFFER** | **DIFFER** |
-| `--t-title` | sans-serif 600, 20px/26px | sans-serif 600, 1.15rem/1.2 | agree | agree |
-
-`--t-display`, `--t-display-1`, `--t-h2` and `--t-h3` are shell-only and out of the law's scope — the law governs shared spellings, not the union.
-
-**So `--t-tiny` is the only violation, and it is waived, not fixed.** Both sides were re-derived after lane (1) landed and the earlier reading holds: the shell's five `font: var(--t-tiny)` sites are two native `<select>`s, a Save/Cancel pair plus a pencil glyph, a pill holding an agent title, and the "Working"/"Ready" telemetry strip — **zero** eyebrows, plus five mobile prose consumers including an error message. The blueprint's **twelve** sites are **ten** uppercase + `--tracking-eyebrow` eyebrows at 0.6rem (9.6px), with two chips. Forcing mono monospaces prose and controls; forcing sans de-monospaces an entire surface's eyebrow idiom. Neither side is wrong; the spelling is.
-
-The fix is therefore **not** to pick a winner — it is open decision (b), naming the eyebrow role separately. Lane (1) converged the 94 shell eyebrows onto two rungs but deliberately did not name them, so the vocabulary that would let `--t-tiny` align does not exist yet. Until it does, the divergence sits in `ROLE_PARITY_ALLOWLIST` with this reasoning attached, and the test asserts the entry is still _needed_ — the moment the two sides agree, the stale waiver fails the suite.
-
-## #686 — `kit.css` binds 16 of its 20 exact matches; 4 hold their size on purpose
-
-Recorded **2026-08-02** under [#686](https://github.com/srikanth235/centraid/issues/686). Implements decision (2) above. This is the lane that actually moves pixels, so the measurement is stated before the change.
-
-### The measured distribution, re-derived
-
-`packages/design/kit/kit.css` carries **80** raw `font-size` declarations across **29** distinct values. Three of the declarations use two `em` values (`0.82em ×2`, `0.95em ×1`), which are relative to the parent and have no absolute size to match against at all.
-
-| relation to a rung                       | declarations |
-| ---------------------------------------- | ------------ |
-| exactly a **blueprint** rung, same unit  | **20**       |
-| exactly a **shell** rung, same unit (px) | **0**        |
-| both                                     | **0**        |
-| neither                                  | 60           |
-
-The 20 are `0.8rem ×9` (`--t-small-size`), `0.72rem ×6` (`--t-mono-size`), `0.6rem ×5` (`--t-tiny-size`). Neither of the two remaining shared rungs is ever hit: `0.855rem` (`--t-body-size`) and `1.15rem` (`--t-title-size`) appear **zero** times. So the sheet was authored against the low half of the app scale.
-
-**"0 shell matches" is a same-unit statement, and stays true on the merits.** Numerically, at a 16px root, three sites do land on a shell rung — `.kit-btn`'s `0.8125rem` is 13px (`--t-small-size`) and `.asstStatLabel` / `.kit-ask-chip`'s `0.75rem` is 12px (`--t-mono-size`). They are still not conversions: #686's own bar is _same unit, not same computed px_, because a `rem`→`px` swap stops tracking a reader who has raised their browser default. Recorded here so the next measurement does not "discover" them.
-
-### What was bound — 16 sites, and what it costs
-
-`--t-<key>-size` resolves to the **blueprint** value the literal already carried, so **every one of the 16 is a zero-pixel change inside an app pane**. All the movement is on the shell:
-
-| rung | was (shell, 16px root) | becomes (shell) | delta | sites |
-| --- | --- | --- | --- | --- |
-| `--t-small-size` | 12.8px | 13px | **+0.2px** | 9 |
-| `--t-mono-size` | 11.52px | 12px | **+0.48px** | 3 of 6 |
-| `--t-tiny-size` | 9.6px | 11px | **+1.4px** | 4 of 5 |
-
-**No rule moves by more than 1.5px on either surface.** The `--t-tiny-size` group is the only visible one, and it moves in the direction legibility wants: 9.6px is _below_ the smallest size the shell scale names, so those four rules were rendering the chrome's smallest type off-scale and under the floor. The four are `.kit-ask-head .kit-ask-note`, `.kit-msg.ai .asstCopyBtn`, `.kit-ask-action .aa-label`, `.kit-ask-scope` — three mono uppercase eyebrows and one mono overlay button, all auto-sized by padding rather than by a fixed box.
-
-**The honest cost, stated once.** On the shell a bound rule swaps a `rem` for an absolute `px`, so it stops scaling with a raised browser root size. That is a real accessibility trade. It is accepted because the shell chrome around these components is already absolute px throughout (`font: var(--t-body)` and friends) — kit.css rendering in `rem` inside it was the outlier, and a reader who raises their root today gets kit components that grow while their container does not.
-
-### What was deliberately left literal — 4 of the 20
-
-A literal→token substitution is only safe if the literal carried no information. These four carry some:
-
-| site | value | why it stays |
-| --- | --- | --- |
-| `.kit-ask-model-btn` | `0.72rem` | `font: inherit` — a **sans** control. `--t-mono-size` matches its number, not its role. Binding would be naming-by-coincidence: the two agree on the blueprint surface today and would silently drift apart the moment the mono rung is retuned. |
-| `.kit-ask-applied .ck` | `0.72rem` | A check **glyph** centred in a `1.3rem × 1.3rem` circle. Fixed geometry; the size is optical centring, not type. |
-| `.kit-ask-msg-att` | `0.72rem` | Its `svg` child is `width/height: 0.85em` — the **icon geometry is derived from this number**. Binding resizes the icon too. Also sans, so it fails the role test as well. |
-| `.kit-ref-flag` | `0.6rem` | A badge with `0.05rem` (0.8px) vertical padding: the badge height **is** the line box, so +1.4px is +14% on the box, not on a label. It also sits inside `.kit-ref-tile`, which this same change resizes — two stacked changes on one composite. |
-
-That is the chip/badge geometry class lane (1) declined for the same reason, applied consistently here.
-
-### Rungs that do not exist — recorded as debt, not invented
-
-- **No shared rung above `title`.** `--t-display-size`, `--t-display-1-size`, `--t-h2-size` and `--t-h3-size` are **shell-only** — `blueprintType` has no `display` key. Naming one in `kit.css` produces an invalid declaration inside an app pane, dropped whole, leaving the element at its inherited size with nothing thrown and nothing logged. `.kit-msg.ai .asstStatValue` (`1.5rem`) and `.kit-viewer-nav` (`1.4rem`) therefore have no rung to reach for. Warned about in the `kit.css` header; **not** gated by the ratchet, whose `SHORTHAND_AS_SIZE` check catches `var(--t-body)` but not a well-formed shell-only `-size` rung.
-- **Nothing between `tiny` (0.6rem) and `mono` (0.72rem).** 17 declarations cluster at `0.66rem ×6`, `0.68rem ×4`, `0.7rem ×4`, `0.62rem ×2`, `0.625rem ×1` — the kit's real eyebrow band. This is the same gap the 94 shell eyebrows describe from the other side, and the same reason open decision (b) exists. Adding a rung to absorb them before that convergence lands would be a third `--r-lg`.
-- **The largest near-miss cluster is `0.85rem ×7`** (13.6px), 0.08px off `--t-body-size` on the blueprint but **+1.4px** on the shell. It is a near-miss, not an exact match, and #686 deferred the near-miss band as a whole. Quantified here so the next lane does not have to re-derive it.
+The headless block logic lives in `@centraid/design/blocks`. React DOM composition is still split between shell and inline blueprint markup; the consolidation remains a follow-up tracked by [#765](https://github.com/srikanth235/centraid/issues/765). The DOM custom elements that used to be a third rendering technology are gone ([#799](https://github.com/srikanth235/centraid/issues/799)): `Avatar`, `Meter` and `Skeleton` are React blocks in `packages/blueprints/apps/_shared`, and the status line is plain DOM in `packages/design/src/elements/feedback.ts`.
 
 ## Related docs
 
-| Doc | Covers |
+| Doc | Current contract |
 | --- | --- |
-| [protocol.md](protocol.md) | C1–C4 two-contract + COMPAT + wire purity |
-| [release.md](release.md) | D1–D6 prepare vs publish, patch/minor, beta |
-| [identifiers.md](identifiers.md) | J5 full `dev.centraid.*` table |
-| [enrollment.md](enrollment.md) | Apple / Azure / Play human steps |
-| [DESIGN.md](../DESIGN.md) | The canonical design document the #686 typography entry implements |
-| [TESTING.md](../TESTING.md) | L1/E2 PR vs nightly |
-| [SECURITY.md](../SECURITY.md) | F2 threat model |
+| [protocol.md](protocol.md) | Two-contract, COMPAT, wire-purity, RPC, and stream authority rules |
+| [release.md](release.md) | Versioning, surfaces, release gates, and recovery |
+| [identifiers.md](identifiers.md) | `dev.centraid.*` identifiers |
+| [enrollment.md](enrollment.md) | Human signing and public-service setup |
+| [TESTING.md](../TESTING.md) | PR/nightly lanes and app admission |
+| [SECURITY.md](../SECURITY.md) | Threat model and automated security gates |

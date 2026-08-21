@@ -348,7 +348,7 @@ accessibility zero-grey (15 cells).
   contract to vitest — keeps the existing `node --test` contract intact.
 - Playwright owner status prefers any expected/passed test over a co-located
   skip so deliberate product-punt skips do not demote multi-test files.
-- Issue #599's existing compatibility-matrix regrade remains approved; Issue #676 extends the ratchet with mobile cold-start and scroll-frames evidence cells.
+- Issue #599's existing compatibility-matrix regrade remains approved; Issue #676 extends the ratchet with mobile cold-start and scroll-frames evidence cells, and re-pins the tests/matrix.json fingerprint after removing #831's dangling replacesMinimumTestsFlow pointer (predecessor web-pending-overlay exists in no diffable base, which left every fresh PR red on ratchet-floors and lint:quality-knobs). Qualities, demonstratedRed and matrixGovernanceFingerprint are unchanged.
 
 ## User impact
 

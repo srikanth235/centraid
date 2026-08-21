@@ -1,0 +1,30 @@
+{
+  "_budget": 36,
+  "sites": {
+    "apps/mobile/src/lib/replica/native-session.test.ts": 1,
+    "apps/web/tests/e2e/perf-waterfall.spec.ts": 3,
+    "packages/server/src/engine/http/changes-sse.test.ts": 1,
+    "packages/server/src/automation/fire/cursor-engine.test.ts": 1,
+    "packages/server/src/automation/fire/cursor-invariants.test.ts": 1,
+    "packages/backup/src/interop-clawgnition.test.ts": 3,
+    "packages/blueprints/src/download-on-demand.test.ts": 1,
+    "packages/client/src/react/screens/AutomationEditorAnchorMention.test.tsx": 1,
+    "packages/client/src/react/screens/AutomationEditorScreen.test.tsx": 1,
+    "packages/client/src/react/shell/confirm.test.ts": 1,
+    "packages/client/src/replica/sqlite-worker.test.ts": 1,
+    "packages/server/src/backup/storage-usage.test.ts": 1,
+    "packages/server/src/cli/service-install.integration.test.ts": 1,
+    "packages/server/src/lifecycle/byte-plane-over-http.test.ts": 2,
+    "packages/server/src/routes/blob-routes-hardening.test.ts": 1,
+    "packages/server/src/serve/build-gateway.test.ts": 3,
+    "packages/server/src/serve/connection-limiter.test.ts": 2,
+    "packages/server/src/serve/device-plane.test.ts": 1,
+    "packages/server/src/serve/serve-scheduler-reconcile.test.ts": 1,
+    "packages/server/src/serve/serve.test.ts": 1,
+    "packages/server/src/serve/vault-plane-blob-sweep.test.ts": 2,
+    "packages/tunnel/src/tunnel.integration.test.ts": 2,
+    "packages/vault/src/blob/cache.test.ts": 1,
+    "packages/vault/src/gateway/locker-auth.test.ts": 2,
+    "tests/agent-e2e-pairing/flows/pairing-ticket-hygiene.mjs": 1
+  }
+}

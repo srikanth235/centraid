@@ -1,0 +1,143 @@
+/*
+ * Shared `/centraid/_*` route-path constants (issue #504 batch 2).
+ *
+ * Planes:
+ *   - `/centraid/_gateway/*`  shell/control plane
+ *   - `/centraid/_vault/*`    vault plane
+ *   - `/centraid/_apps/*`     apps store plane
+ *   - `/centraid/_web/*`      browser session plane
+ *
+ * App RPC is NOT a plane: a handler invocation is addressed under the app's
+ * own prefix — `POST /centraid/<appId>/actions/<action>` (an action) and
+ * `POST /centraid/<appId>/queries/<query>` (a query), with the declared
+ * handlers discoverable at `GET /centraid/<appId>/_describe` (issue #505,
+ * which retired the `/centraid/_tool/centraid_*` shim). Those paths are
+ * per-app and parametric, so they are minted by the helpers below rather
+ * than living in the flat `ROUTES` table.
+ *
+ * New flat top-level names under `/centraid/` without a plane prefix are
+ * forbidden without a migration plan (see docs/protocol.md).
+ */
+
+/** Shell / control plane prefix. */
+export const GATEWAY_PLANE_PREFIX = "/centraid/_gateway" as const;
+
+/** Vault plane prefix. */
+export const VAULT_PLANE_PREFIX = "/centraid/_vault" as const;
+
+/** Apps plane prefix. */
+export const APPS_PLANE_PREFIX = "/centraid/_apps" as const;
+
+/** Browser session plane prefix. */
+export const WEB_PLANE_PREFIX = "/centraid/_web" as const;
+
+/** Daily summary feature-plane prefix. */
+export const BRIEF_PLANE_PREFIX = "/centraid/_brief" as const;
+
+export const ROUTES = {
+  gatewayInfo: `${GATEWAY_PLANE_PREFIX}/info`,
+  gatewayHealth: `${GATEWAY_PLANE_PREFIX}/health`,
+  gatewayDevices: `${GATEWAY_PLANE_PREFIX}/devices`,
+  gatewayReplicaChanges: `${GATEWAY_PLANE_PREFIX}/replica/changes`,
+  gatewayEdges: `${GATEWAY_PLANE_PREFIX}/edges`,
+  gatewayCommons: `${GATEWAY_PLANE_PREFIX}/commons`,
+  gatewayScopedBlobs: `${GATEWAY_PLANE_PREFIX}/blobs`,
+  vaultStatus: `${VAULT_PLANE_PREFIX}/status`,
+  vaultErase: `${VAULT_PLANE_PREFIX}/vaults:erase`,
+  vaultBlocking: `${VAULT_PLANE_PREFIX}/blocking`,
+  vaultNotifications: `${VAULT_PLANE_PREFIX}/notifications`,
+  vaultNotificationsEvents: `${VAULT_PLANE_PREFIX}/notifications/events`,
+  vaultBlobs: `${VAULT_PLANE_PREFIX}/blobs`,
+  vaultReplicaBootstrap: `${VAULT_PLANE_PREFIX}/replica/bootstrap`,
+  vaultReplicaChanges: `${VAULT_PLANE_PREFIX}/changes`,
+  vaultReplicaIntents: `${VAULT_PLANE_PREFIX}/replica/intents`,
+  vaultScopes: `${VAULT_PLANE_PREFIX}/scopes`,
+  /** The grant plane (#825): standing shares of a subject with an audience. */
+  vaultGrants: `${VAULT_PLANE_PREFIX}/grants`,
+  /** What this vault will actually stand a grant over, and with which
+   *  capabilities — the declared registry a surface consults before drawing
+   *  the Share verb. */
+  vaultGrantSubjects: `${VAULT_PLANE_PREFIX}/grants/subjects`,
+  vaultApps: `${VAULT_PLANE_PREFIX}/apps`,
+  vaultConnections: `${VAULT_PLANE_PREFIX}/connections`,
+  vaultConnectionProviders: `${VAULT_PLANE_PREFIX}/connections/providers`,
+  vaultConnectionsAssist: `${VAULT_PLANE_PREFIX}/connections/assist`,
+  vaultConnectionsAssistComplete: `${VAULT_PLANE_PREFIX}/connections/assist/complete`,
+  vaultOAuthCallback: `${VAULT_PLANE_PREFIX}/oauth/callback`,
+  appsList: APPS_PLANE_PREFIX,
+  webSession: `${WEB_PLANE_PREFIX}/session`,
+  webControl: `${WEB_PLANE_PREFIX}/control`,
+  briefToday: `${BRIEF_PLANE_PREFIX}/today`,
+} as const;
+
+export type RouteName = keyof typeof ROUTES;
+
+/** Dynamic routes whose identifier component must be encoded by the caller. */
+export function vaultConnectionPath(encodedConnectionId: string): string {
+  return `${ROUTES.vaultConnections}/${encodedConnectionId}`;
+}
+
+/** One standing grant, by id. */
+export function vaultGrantPath(encodedGrantId: string): string {
+  return `${ROUTES.vaultGrants}/${encodedGrantId}`;
+}
+
+/** End one standing grant and send its removal out (#825, ruling G-revoke). */
+export function vaultGrantRevokePath(encodedGrantId: string): string {
+  return `${vaultGrantPath(encodedGrantId)}/revoke`;
+}
+
+export function vaultConnectionAuthorizePath(
+  encodedConnectionId: string
+): string {
+  return `${vaultConnectionPath(encodedConnectionId)}/authorize`;
+}
+
+/** Every known absolute path constant — used by the route-literal drift check. */
+export const ROUTE_PATHS: readonly string[] = Object.freeze(
+  Object.values(ROUTES)
+);
+
+/**
+ * Build the app-scoped action-invocation path (issue #505). `POST` here with
+ * a JSON body of `{ input?, intentId? }` runs the declared action; the app id
+ * and action name ride in the path, not the body.
+ */
+export function appActionPath(appId: string, action: string): string {
+  return `/centraid/${encodeURIComponent(appId)}/actions/${encodeURIComponent(action)}`;
+}
+
+/**
+ * Build the app-scoped query-invocation path (issue #505). `POST` here with a
+ * JSON body of `{ input? }` runs the declared query.
+ */
+export function appQueryPath(appId: string, query: string): string {
+  return `/centraid/${encodeURIComponent(appId)}/queries/${encodeURIComponent(query)}`;
+}
+
+/**
+ * Build the app-scoped describe path (issue #505). `GET` returns the app's
+ * manifest; an optional `?action=<name>` or `?query=<name>` narrows to one
+ * declared handler. Replaces the `centraid_describe` tool.
+ */
+export function appDescribePath(appId: string): string {
+  return `/centraid/${encodeURIComponent(appId)}/_describe`;
+}
+
+/**
+ * Build the app-scoped conversation-turn path (issue #420). `POST` opens an
+ * SSE stream driven by the app's declared-handler agent.
+ */
+export function appTurnPath(appId: string): string {
+  return `/centraid/${encodeURIComponent(appId)}/_turn`;
+}
+
+/** The shell-level vault-assistant turn surface (same SSE grammar). */
+export function assistantTurnPath(): string {
+  return `${VAULT_PLANE_PREFIX}/assistant/_turn`;
+}
+
+/** Resolve answer refs (`ref:type/id`) to renderable entity cards. */
+export function assistantResolvePath(): string {
+  return `${VAULT_PLANE_PREFIX}/assistant/resolve`;
+}

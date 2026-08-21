@@ -316,7 +316,7 @@ async function revokePushRegistration(): Promise<void> {
   );
 }
 
-// Deduplicate concurrent starts (Home + AppDetail can race on mount).
+// Deduplicate concurrent starts (Home and a cover can race on mount).
 let startInFlight: Promise<{ baseUrl: string } | undefined> | undefined;
 
 /**
@@ -336,7 +336,7 @@ export async function restartTunnel(): Promise<void> {
 
 /**
  * Start (or reuse) the localhost tunnel proxy for the paired peer.
- * Resolves the base URL every WebView + RN fetch should use. Returns
+ * Resolves the base URL every RN gateway fetch should use. Returns
  * `undefined` when unpaired or when the native module is unavailable
  * (Expo Go); throws PhoneLinkError when a start attempt fails.
  */

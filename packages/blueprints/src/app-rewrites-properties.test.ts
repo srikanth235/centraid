@@ -5,14 +5,11 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import { tempDir } from "@centraid/test-kit/temp-dir";
 
-import {
-  rewriteAutomationManifestNames,
-  rewriteIndexHtmlTitle,
-} from "./app-rewrites.js";
+import { rewriteAutomationManifestNames } from "./app-rewrites.js";
 
 /**
- * The four thin readFile/writeFile wrappers over the pure rewrites next door.
- * Split from `scaffold-files-properties.test.ts` (#656 Layer 3) — their whole
+ * The thin readFile/writeFile wrappers over the pure rewrites next door.
+ * Split from the app-meta property file (#656 Layer 3) — their whole
  * behaviour is "missing → no-op, changed → write", which is a different law
  * from the string transforms they wrap, and the combined file exceeded the
  * size cap.
@@ -26,27 +23,6 @@ describe("filesystem rewrite wrappers", () => {
   });
   afterEach(async () => {
     await fs.rm(dir, { recursive: true, force: true });
-  });
-
-  it("rewriteIndexHtmlTitle is a no-op when the app has no index.html", async () => {
-    await rewriteIndexHtmlTitle(dir, "New");
-    await expect(fs.access(path.join(dir, "index.html"))).rejects.toThrow(
-      /ENOENT/u
-    );
-  });
-
-  it("rewriteIndexHtmlTitle writes only when the title actually changes", async () => {
-    const file = path.join(dir, "index.html");
-    await fs.writeFile(file, "<title>Old</title>");
-    await rewriteIndexHtmlTitle(dir, "New");
-    await expect(fs.readFile(file, "utf8")).resolves.toBe("<title>New</title>");
-
-    // No <title> at all → the file is left byte-identical.
-    await fs.writeFile(file, "<p>no title here</p>");
-    await rewriteIndexHtmlTitle(dir, "New");
-    await expect(fs.readFile(file, "utf8")).resolves.toBe(
-      "<p>no title here</p>"
-    );
   });
 
   it("rewriteAutomationManifestNames is a no-op without an automations/ dir", async () => {

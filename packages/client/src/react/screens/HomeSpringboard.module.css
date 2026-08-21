@@ -1,0 +1,734 @@
+/* The Home springboard (issue #708, section A).
+
+   The tile is the one place in the product where a piece of every app is on
+   screen at once, so the INVARIANT header is what has to be identical — mark,
+   name, count — while the body structure is what has to differ. The text
+   remains on the shared tile register: section for headings, body for content,
+   and annotation for timestamps and counts. */
+
+/* Four columns, and rows that are minmax(<n>px, auto) rather than a fixed
+   height: at 150%+ text scale the row grows instead of slicing the tile's own
+   body. Every clamp inside a body is a line-clamp for the same reason — a
+   clipped baseline reads as a rendering bug. */
+.springboard {
+  display: grid;
+  gap: var(--sp-3);
+  grid-auto-rows: minmax(136px, auto);
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  /* A grid item's default `min-width: auto` is its CONTENT's minimum, so
+     without this the springboard refuses to be narrower than the widest
+     unbreakable thing inside it and pushes its own pane wide. */
+  min-inline-size: 0;
+}
+
+/* Size classes: small 1×1, medium 2×1, large 2×2. The class follows the app's
+   BODY — a mosaic needs area, prose needs measure, a figure or a chip needs
+   neither — which is what stops a springboard of content reading as a launcher
+   of identical rectangles. */
+.tile[data-size="medium"] {
+  grid-column: span 2;
+}
+
+.tile[data-size="large"] {
+  grid-column: span 2;
+  grid-row: span 2;
+}
+
+.tile {
+  background: var(--bg-elev);
+  border: 1px solid var(--line);
+  border-radius: var(--r-lg);
+  color: var(--text);
+  cursor: pointer;
+  display: grid;
+  /* The body takes whatever the row gives it above its own floor, so a tile
+     that spans two rows fills them instead of leaving a gap under itself. */
+  grid-template-rows: auto minmax(120px, 1fr);
+  /* THE COLUMN MUST BE ABLE TO GET SMALLER THAN ITS CONTENTS. Declared, not
+     left implicit: an implicit grid column is `auto`, which floors at the
+     content's min-content width — and several children here are deliberately
+     `white-space: nowrap` (`.readingTitle`, `.afterLine`, `.name`) so that
+     they can ellipsise. A nowrap run's min-content is the WHOLE string, so the
+     tile's one column sized itself to the longest untruncatable heading and
+     `overflow: hidden` below then sliced it. The ellipsis never appeared
+     because the text was never asked to fit. `minmax(0, 1fr)` removes that
+     floor, which is what turns the clipping back into truncation. */
+  grid-template-columns: minmax(0, 1fr);
+  overflow: hidden;
+  padding: 0;
+  text-align: start;
+  transition: border-color var(--dur-1) var(--ease);
+}
+
+.tile:hover {
+  border-color: var(--line-strong);
+}
+
+.tile:focus-visible {
+  outline: 2px solid var(--focus-ring-color);
+  outline-offset: 2px;
+}
+
+/* ── the invariant header ─────────────────────────────────────────────── */
+
+.head {
+  align-items: center;
+  display: flex;
+  gap: var(--sp-3);
+  padding: var(--sp-3) var(--sp-4);
+  /* So `.name`'s ellipsis has something to ellipsise against — a flex item
+     that cannot shrink hands its content width straight back up to the tile. */
+  min-inline-size: 0;
+}
+
+/* The identity mark. The ONLY place the tile spends the app's hue — never on
+   a control. `AppMark` owns the shared 26% radius and stroke treatment. */
+.mark {
+  /* AppMark owns the chip geometry and solved single-tone ink. This class is
+     retained as the Home layout hook for existing selectors/tests. */
+}
+
+.name {
+  color: var(--text);
+  flex: 1 1 auto;
+  font: var(--t-small-strong);
+  min-inline-size: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Numerics are mono and tabular in every app, without exception. */
+.count {
+  color: var(--text-faint);
+  flex: 0 0 auto;
+  font: var(--t-mono);
+  font-variant-numeric: var(--t-mono-numeric);
+}
+
+.body {
+  display: flex;
+  flex-direction: column;
+  min-block-size: 0;
+  /* Same reason as `.head`: every line-clamp and ellipsis below only works if
+     this box is allowed to be narrower than the prose inside it. */
+  min-inline-size: 0;
+  padding: 0 var(--sp-4) var(--sp-4);
+}
+
+/* ── photos: imagery, bleeding to the tile edge ───────────────────────── */
+
+.mosaic {
+  display: grid;
+  gap: 2px;
+  /* Four columns by two rows, per the handoff: on the 2×2 tile this is the
+     difference between a camera roll and four large crops of nothing. */
+  grid-auto-rows: 1fr;
+  grid-template-columns: repeat(4, 1fr);
+  grid-template-rows: 1fr 1fr;
+  /* The one body with no padding at all: the photo grid disappears behind the
+     imagery, which is the whole character of the app. */
+  margin: 0;
+  min-block-size: 0;
+  padding: 0;
+  position: relative;
+}
+
+.mosaicCell {
+  background: var(--bg-sunken);
+  block-size: 100%;
+  inline-size: 100%;
+  min-block-size: 60px;
+  object-fit: cover;
+}
+
+.mosaicMore {
+  background: var(--bg-hud);
+  border-radius: var(--r-sm);
+  color: var(--text-inv);
+  font: var(--t-mono);
+  font-variant-numeric: var(--t-mono-numeric);
+  inset-block-end: var(--sp-2);
+  inset-inline-end: var(--sp-2);
+  padding: 2px var(--sp-2);
+  position: absolute;
+}
+
+/* ── docs + notes: compact body previews ──────────────────────────────── */
+
+.readingTitle {
+  color: var(--text);
+  /* Docs is a ruled file list in the handoff: its row names use body ink and
+     weight, while Notes owns the stronger title role. */
+  font: var(--t-small);
+  margin: 0 0 var(--sp-1);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.reading {
+  color: var(--text);
+  display: -webkit-box;
+  /* A tile is a compact preview, not the document reading view. */
+  font: var(--t-small);
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+  line-clamp: 3;
+  margin: 0;
+  overflow: hidden;
+}
+
+.noteLine {
+  color: var(--text-soft);
+}
+
+.readingStamp {
+  color: var(--text-faint);
+  font: var(--t-mono);
+  font-variant-numeric: var(--t-mono-numeric);
+  margin-block-start: auto;
+  padding-block-start: var(--sp-2);
+}
+
+/* ── agenda: next event, after-line pinned to the bottom ──────────────── */
+
+.eventTime {
+  color: var(--text-soft);
+  font: var(--t-mono);
+  font-variant-numeric: var(--t-mono-numeric);
+}
+
+.eventTitle {
+  color: var(--text);
+  display: -webkit-box;
+  font: var(--t-small-strong);
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  margin: var(--sp-1) 0 0;
+  overflow: hidden;
+}
+
+/* The after-line sits on the tile's bottom edge whatever the event above it
+   does — that fixed baseline is the structure that makes an agenda tile
+   recognisable across a grid of eight. */
+.afterLine {
+  border-block-start: 1px solid var(--line);
+  color: var(--text-faint);
+  font: var(--t-small);
+  margin-block-start: auto;
+  overflow: hidden;
+  padding-block-start: var(--sp-2);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* ── people: overlapping face circles ─────────────────────────────────── */
+
+.faces {
+  align-items: center;
+  display: flex;
+  padding-block-start: var(--sp-1);
+}
+
+/* The hue arrives inline as `var(--c-<key>)` from `identityHueKey` — this is
+   identity, the one place the shell carries a person's colour (same rule as
+   the stem avatar). A custom property, not a hex, so the disc moves to the
+   dark ring with the theme and `--text-inv` below stays at AA on it. */
+.face {
+  align-items: center;
+  block-size: 30px;
+  border: 1.5px solid var(--bg-elev);
+  border-radius: var(--r-pill);
+  color: var(--text-inv);
+  display: flex;
+  font: var(--t-small-strong);
+  inline-size: 30px;
+  justify-content: center;
+}
+
+.face + .face {
+  /* Logical, so the stack mirrors under RTL along with everything else. */
+  margin-inline-start: -7px;
+}
+
+.facesMore {
+  color: var(--text-faint);
+  font: var(--t-mono);
+  font-variant-numeric: var(--t-mono-numeric);
+  margin-inline-start: var(--sp-2);
+}
+
+/* ── tasks: checkbox rows ─────────────────────────────────────────────── */
+
+.taskRows {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+  list-style: none;
+  margin: 0;
+  padding: var(--sp-1) 0 0;
+}
+
+.taskRow {
+  align-items: center;
+  color: var(--text);
+  display: flex;
+  font: var(--t-small);
+  gap: var(--sp-2);
+  min-inline-size: 0;
+}
+
+.taskBox {
+  block-size: 14px;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--r-sm);
+  flex: 0 0 auto;
+  inline-size: 14px;
+}
+
+.taskRow[data-done="true"] .taskBox {
+  background: var(--text);
+  border-color: var(--text);
+}
+
+.taskText {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.taskRow[data-done="true"] .taskText {
+  color: var(--text-faint);
+  text-decoration: line-through;
+}
+
+/* ── tally: one large figure in the numeric register ──────────────────── */
+
+.figure {
+  color: var(--text);
+  /* The display rung, in the numeric face: a balance is the one number on
+     Home big enough to read across a room, and it is still a ramp size. */
+  font: var(--t-display);
+  font-variant-numeric: var(--t-mono-numeric);
+  letter-spacing: var(--t-display-tracking);
+  margin-block-start: var(--sp-2);
+}
+
+.figureCaption {
+  color: var(--text-soft);
+  font: var(--t-small);
+}
+
+/* ── locker: a state chip ─────────────────────────────────────────────── */
+
+.chip {
+  align-self: flex-start;
+  background: var(--bg-sunken);
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+  color: var(--text-soft);
+  font: var(--t-eyebrow);
+  letter-spacing: var(--t-eyebrow-tracking);
+  margin-block-start: var(--sp-2);
+  padding: var(--sp-1) var(--sp-2);
+  text-transform: var(--t-eyebrow-transform);
+}
+
+.chip[data-tone="warn"] {
+  border-color: var(--warning);
+  color: var(--warning);
+}
+
+.chip[data-tone="ok"] {
+  color: var(--c-rose-text);
+}
+
+/* ── day one ──────────────────────────────────────────────────────────────
+
+   The vault has no content ANYWHERE: the lead sentence, then the first moves —
+   not eight tiles apologising in a grid.
+
+   NO card around it. It was a dashed box with `--sp-6` of its own padding
+   INSIDE the page gutter, so day one's text started ~40px from the edge while
+   Notifications, Automations and every other screen start at the gutter — Home,
+   the one screen a member sees first, was the one screen indented differently.
+   The box earned none of that: the moves below are already dashed, which is
+   where "not filled in yet" actually means something, and a second dashed
+   rectangle around them says nothing except that a rectangle is possible. */
+
+.firstRun {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-3);
+}
+
+.firstRunTitle {
+  color: var(--text);
+  font: var(--t-display);
+  letter-spacing: var(--t-display-tracking);
+  margin: 0;
+  text-wrap: balance;
+}
+
+.firstRunBody {
+  color: var(--text-soft);
+  font: var(--t-reading);
+  margin: 0;
+  max-inline-size: 62ch;
+}
+
+/* ── first moves ──────────────────────────────────────────────────────────
+
+   The doors under the day-one copy, and under a thin grid. These replace the
+   dashed placeholders that opened the empty app they were named after: same
+   dashes, same marks, but each one now lands somewhere that can take content.
+
+   The dashes are load-bearing. A dashed border reads as "not filled in yet"
+   where a solid one reads as "this is the finished thing, and it is empty" —
+   and it is the only visual difference from a real tile, so a move becoming a
+   tile is a fill rather than a re-layout. */
+
+.startLead {
+  color: var(--text-faint);
+  font: var(--t-eyebrow);
+  letter-spacing: var(--t-eyebrow-tracking);
+  margin: var(--sp-3) 0 0;
+  text-transform: var(--t-eyebrow-transform);
+}
+
+.moves {
+  display: grid;
+  gap: var(--sp-2);
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  list-style: none;
+  margin: var(--sp-2) 0 0;
+  padding: 0;
+}
+
+.move {
+  align-items: center;
+  background: transparent;
+  border: 1px dashed var(--line-strong);
+  border-radius: var(--r-md);
+  cursor: pointer;
+  display: flex;
+  gap: var(--sp-3);
+  inline-size: 100%;
+  min-block-size: 56px;
+  padding: var(--sp-3);
+  text-align: start;
+  transition:
+    background var(--dur-1) var(--ease),
+    border-color var(--dur-1) var(--ease);
+}
+
+/* The band under a populated grid: label only, one row tall. */
+.move[data-compact="true"] {
+  min-block-size: var(--h-control);
+  padding: var(--sp-2) var(--sp-3);
+}
+
+.move:hover {
+  background: var(--bg-hover);
+  border-color: var(--line-sel);
+}
+
+.move:focus-visible {
+  outline: 2px solid var(--focus-ring-color);
+  outline-offset: 2px;
+}
+
+.moveText {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-inline-size: 0;
+}
+
+/* A body-size action label; the hint below carries the secondary explanation. */
+.moveLabel {
+  color: var(--text);
+  font: var(--t-small);
+}
+
+/* What it becomes — the reason to press it, never an apology for the emptiness. */
+.moveHint {
+  color: var(--text-faint);
+  font: var(--t-small);
+}
+
+.moveMark {
+  /* AppMark owns the chip geometry and solved single-tone ink. */
+}
+
+/* ── the sample offer ─────────────────────────────────────────────────────
+
+   Under the real first moves and behind a rule. Ordering is an argument: an
+   offer of invented data placed ABOVE "connect your account" would tell a
+   member the demo matters more than their own archive, on the exact screen
+   where the opposite claim is being made for the first time.
+
+   No dashes here. Dashes mean "a thing that will be filled in", and this is not
+   one of the tiles — it is an aside about them. */
+
+.offer {
+  border-block-start: 1px solid var(--line);
+  margin-block-start: var(--sp-5);
+  padding-block-start: var(--sp-4);
+}
+
+.offerLead {
+  color: var(--text);
+  font: var(--t-body-strong);
+  margin: 0;
+}
+
+/* The disclosure, and it sits BEFORE the control rather than under it as an
+   apology: what the sample is, where it stays, and how it goes away. */
+.offerHint {
+  color: var(--text-soft);
+  font: var(--t-small);
+  margin: var(--sp-1) 0 var(--sp-3);
+  max-inline-size: 62ch;
+}
+
+.offerAction {
+  /* Secondary, never the filled ink. The filled control means "this commits",
+     and the one commit on this page is bringing in your OWN things. */
+  inline-size: auto;
+}
+
+/* The working state that stands in for the control while the sample loads.
+   Held to the disclosure's measure so the label, the counts and the rule line
+   up with the sentence that talked the member into pressing, instead of
+   striping the full width of Home. */
+.offerProgress {
+  max-inline-size: 62ch;
+}
+
+/* ── the sample notice ────────────────────────────────────────────────────
+
+   Sits in the conditions band with "out of room" and "two devices disagree",
+   because "some of what you are looking at is not yours" is the same KIND of
+   fact: about the vault, not about a preferences page.
+
+   Ruled on its leading edge rather than filled or tinted. A warning colour
+   would say something went wrong; nothing has. */
+
+.sampleNote {
+  align-items: flex-start;
+  background: var(--bg-elev);
+  border: 1px solid var(--line);
+  border-inline-start: 3px solid var(--text-soft);
+  border-radius: var(--r-md);
+  display: flex;
+  gap: var(--sp-3);
+  padding: var(--sp-3) var(--sp-4);
+}
+
+.sampleMark {
+  align-items: center;
+  block-size: 22px;
+  color: var(--text-soft);
+  display: flex;
+  flex: 0 0 auto;
+  justify-content: center;
+  inline-size: 22px;
+}
+
+.sampleText {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  gap: 2px;
+  min-inline-size: 0;
+}
+
+.sampleTitle {
+  color: var(--text);
+  font: var(--t-small-strong);
+}
+
+.sampleBody {
+  color: var(--text-soft);
+  font: var(--t-small);
+}
+
+.sampleAction {
+  flex: 0 0 auto;
+}
+
+/* Compact: the action drops under the text rather than squeezing it to a
+   column of single words. */
+@media (max-width: 720px) {
+  .sampleNote {
+    flex-wrap: wrap;
+  }
+
+  .sampleAction {
+    inline-size: 100%;
+  }
+}
+
+/* ── the fill ─────────────────────────────────────────────────────────────
+
+   The one orchestrated moment on this screen, and it happens ONCE: the render
+   right after a seed lands. Home stops being an instruction and becomes an
+   archive, tile by tile, in springboard order — so the eye follows the same
+   path it will use every day afterwards.
+
+   Not on a routine revisit. A grid that re-animates every time you come back
+   stops being a moment and becomes a tax. Duration goes to zero under the
+   global reduced-motion rule, and the tiles simply appear. */
+
+@keyframes tileFill {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+.springboard[data-filled="true"] .tile {
+  animation: tileFill var(--dur-2) var(--ease-entry) both;
+}
+
+/* The stagger is positional, so it lives in CSS rather than as an inline
+   custom property on every tile. That is not a style preference: the tile
+   carries NO inline style at all, because inline style on a tile is how a hue
+   would eventually get onto one, and `HomeSpringboard.test.tsx` guards exactly
+   that. 45ms apart — enough to read as a sequence, short enough that the last
+   tile is not still arriving after the reader has started using the first. */
+.springboard[data-filled="true"] .tile:nth-child(2) {
+  animation-delay: 45ms;
+}
+
+.springboard[data-filled="true"] .tile:nth-child(3) {
+  animation-delay: 90ms;
+}
+
+.springboard[data-filled="true"] .tile:nth-child(4) {
+  animation-delay: 135ms;
+}
+
+.springboard[data-filled="true"] .tile:nth-child(5) {
+  animation-delay: 180ms;
+}
+
+.springboard[data-filled="true"] .tile:nth-child(6) {
+  animation-delay: 225ms;
+}
+
+.springboard[data-filled="true"] .tile:nth-child(7) {
+  animation-delay: 270ms;
+}
+
+.springboard[data-filled="true"] .tile:nth-child(n + 8) {
+  animation-delay: 315ms;
+}
+
+/* ── the start band ───────────────────────────────────────────────────────
+
+   Sits under a grid that is already working, so it is quieter than day one:
+   no display serif, no paragraph, and a rule to separate it from the content
+   above rather than a second card competing with it. */
+
+.startBand {
+  border-block-start: 1px solid var(--line);
+  margin-block-start: var(--sp-5);
+  padding-block-start: var(--sp-4);
+}
+
+.startTitle {
+  color: var(--text-faint);
+  font: var(--t-eyebrow);
+  letter-spacing: var(--t-eyebrow-tracking);
+  margin: 0;
+  text-transform: var(--t-eyebrow-transform);
+}
+
+/* ── the vault-level conditions band ──────────────────────────────────── */
+
+.conditions {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-3);
+  margin-block-end: var(--sp-5);
+}
+
+/* SIZED BY ITS PANE, NOT THE WINDOW — the same rule GatewayScreen's `.page`
+   and DevicesCard already follow. The springboard never gets the whole
+   viewport: the stem takes `--w-stem` (240px) off the leading edge at every
+   width above the compact step, so a 760px window hands this grid about 500px
+   and a viewport media query is reading a number that is 240 too large. That
+   is exactly how four columns survived down to a pane where each tile was
+   120px wide and every heading clipped against its own edge.
+
+   The column tiers below are therefore `@container` queries on THIS element,
+   which is the box the tiles actually have to fit inside. */
+.section {
+  container: home-springboard / inline-size;
+  inline-size: 100%;
+  margin-block-end: var(--sp-5);
+  min-inline-size: 0;
+}
+
+/* ── the width tiers ──────────────────────────────────────────────────────
+   AT THE END OF THE FILE ON PURPOSE. These blocks override `.mosaic` and
+   `.tile[data-size]`, and they do it at the SAME specificity — `.mosaic` is
+   one class either way, and a container query adds none. So the only thing
+   deciding the winner is source order, and while these tiers sat at the top
+   the base `.mosaic` rule below them quietly won: on a narrow pane the
+   mosaic kept `grid-template-rows: 1fr 1fr` while
+   `.mosaicCell:nth-child(n + 5)` — two classes, so it DID win — hid the cells
+   that would have filled the second row. The result was a photo strip with an
+   empty band of tile under it, which is what this file looked like before the
+   tiers moved down here.
+
+   New tier rules go at the bottom, not the top. */
+
+/* Handoff geometry: four columns above 1040px, three between 720–1040px. The
+   query is on the actual content pane, so the stem and any host inspector are
+   already deducted before a tier is chosen. */
+@container home-springboard (max-width: 1040px) {
+  .springboard {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+/* Two columns below 720px. Keeping the tier on the pane rather than the
+   viewport prevents a desktop window with a hidden/claimed stem from making
+   the grid choose the wrong composition. */
+@container home-springboard (max-width: 720px) {
+  .springboard {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+/* At the narrower end of the two-column tier, large flattens to 2×1 — a 2×2
+   across half the screen is a tile you scroll past rather than read. */
+@container home-springboard (max-width: 540px) {
+  .springboard {
+    grid-auto-rows: minmax(152px, auto);
+  }
+
+  .tile[data-size="large"] {
+    grid-row: span 1;
+  }
+
+  /* One row of four when large flattens — the columns stay, so the mosaic
+     keeps its proportion instead of becoming four tall slivers. */
+  .mosaic {
+    grid-template-rows: 1fr;
+  }
+
+  .mosaicCell:nth-child(n + 5) {
+    display: none;
+  }
+}

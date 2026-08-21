@@ -76,7 +76,11 @@ export function checkHygieneGates() {
   if (!/\.gitleaks\.toml/u.test(ci)) {
     errors.push("ci.yml gitleaks job must pass --config .gitleaks.toml");
   }
-  if (!/\bgitleaks\b/u.test(ci.split("check:")[1] ?? "")) {
+  // Anchor on the top-level `check` job definition, not the first "check:"
+  // substring — gate names like `check:reachability` in earlier jobs would
+  // otherwise capture the wrong slice.
+  const checkJob = ci.slice(ci.indexOf("\n  check:"));
+  if (!/\bgitleaks\b/u.test(checkJob)) {
     errors.push("ci.yml `check` needs: list must include gitleaks");
   }
   if (gitleaksToml !== undefined && !/allowlist/iu.test(gitleaksToml)) {
@@ -92,7 +96,7 @@ export function checkHygieneGates() {
   if (!/osv-lockfile-scan\.mjs/u.test(ci)) {
     errors.push("ci.yml must run scripts/ci/osv-lockfile-scan.mjs");
   }
-  if (!/\bosv-scanner\b/u.test(ci.split("check:")[1] ?? "")) {
+  if (!/\bosv-scanner\b/u.test(checkJob)) {
     errors.push("ci.yml `check` needs: list must include osv-scanner");
   }
   if (osvToml !== undefined && osvToml.trim().length === 0) {

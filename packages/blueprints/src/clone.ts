@@ -2,18 +2,15 @@
 import { promises as fs } from "node:fs";
 import path from "node:path";
 
+import { validateAppId } from "./app-meta.js";
 import {
   applyAppVisualIdentity,
   applyManifestName,
   rewriteAutomationManifestNames,
-  rewriteIndexHtmlTitle,
-  rewriteTitleInHtml,
   stampAppVisualIdentity,
 } from "./app-rewrites.js";
-import type { ScaffoldFile } from "./scaffold-files.js";
-import type { AppInfo } from "./scaffold-types.js";
+import type { AppInfo, ScaffoldFile } from "./scaffold-types.js";
 import { AppScaffoldError } from "./scaffold-types.js";
-import { isDisplayNameTaken, validateAppId } from "./scaffold.js";
 
 /**
  * Options for {@link cloneTemplate}.
@@ -80,9 +77,8 @@ export async function cloneTemplate(
   await fs.mkdir(opts.appsDir, { recursive: true });
   await copyDir(opts.templateDir, destDir);
 
-  // Ensure the canonical centraid subdirs exist. `scaffoldApp`
-  // produces all four; this call backstops templates that pre-date
-  // one. Bundled templates may ship automations as
+  // Ensure the canonical centraid subdirs exist — this call backstops
+  // templates that pre-date one. Bundled templates may ship automations as
   // `automations/<id>/` folders (e.g.
   // `journal/automations/weekly-recap/`); those carry through
   // unchanged via `copyDir` above — this step only adds missing
@@ -100,11 +96,6 @@ export async function cloneTemplate(
     });
   }
   await rewritePackageJson(destDir, opts.newAppId);
-  // Keep the browser-tab title aligned with the new display name. The
-  // template's <title> is hardcoded to its own brand ("Hydrate"), which
-  // would otherwise leak into every clone's tab title even after the
-  // user renames the app.
-  if (opts.newName) await rewriteIndexHtmlTitle(destDir, opts.newName);
   // Automation templates carry a sibling `automation.json#name` whose
   // value the Automations page surfaces as the row title. Keep it in
   // sync with `app.json#name` so a clone of "Briefing" → "Briefing 2"
@@ -119,7 +110,6 @@ export async function cloneTemplate(
   }
 
   const stat = await fs.stat(destDir);
-  const hasIndex = await fileExists(path.join(destDir, "index.html"));
   const built = await hasAnyBuiltJs(destDir);
   const meta = await readAppMeta(destDir);
 
@@ -131,8 +121,37 @@ export async function cloneTemplate(
     name: meta.name,
     description: meta.description,
     ...(meta.kind ? { kind: meta.kind } : {}),
-    hasIndex,
   };
+}
+
+/**
+ * True when any sibling app under `appsDir` (other than `excludeId`,
+ * when given) already uses `name` as its `app.json#name`. Comparison is
+ * case-insensitive and whitespace-trimmed.
+ */
+export async function isDisplayNameTaken(
+  appsDir: string,
+  name: string,
+  opts: { excludeId?: string } = {}
+): Promise<boolean> {
+  const target = name.trim().toLowerCase();
+  if (!target) return false;
+  const entries = await fs
+    .readdir(appsDir, { withFileTypes: true })
+    .catch(() => []);
+  const findMatchingName = async (index: number): Promise<boolean> => {
+    const e = entries[index];
+    if (!e) return false;
+    if (!e.isDirectory()) return findMatchingName(index + 1);
+    if (opts.excludeId !== undefined && e.name === opts.excludeId)
+      return findMatchingName(index + 1);
+    if (e.name.startsWith("_") || e.name.startsWith("."))
+      return findMatchingName(index + 1);
+    const meta = await readAppMeta(path.join(appsDir, e.name));
+    if (meta.name && meta.name.trim().toLowerCase() === target) return true;
+    return findMatchingName(index + 1);
+  };
+  return findMatchingName(0);
 }
 
 /**
@@ -272,7 +291,6 @@ export interface CloneTemplateFilesOptions {
  * rewritten file map for the new app — same rewrites as the disk path:
  *   - `app.json` → fresh `id`, `name`, `version` "0.1.0", carried/overridden `description`
  *   - `package.json#name` → `centraid-app-<id>` (only if it followed the convention)
- *   - `index.html` `<title>` → new name
  *   - `automations/<id>/automation.json#name` + re-stamped `generated`
  * Seeds `automations/README.md` when the template ships no automations.
  */
@@ -352,13 +370,6 @@ export function cloneTemplateFiles(
   }
 
   if (opts.newName) {
-    const htmlIdx = byPath.get("index.html");
-    if (htmlIdx !== undefined) {
-      set(
-        "index.html",
-        rewriteTitleInHtml(out[htmlIdx]!.content, opts.newName)
-      );
-    }
     for (const f of out) {
       if (!/^automations\/[^/]+\/automation\.json$/u.test(f.path)) continue;
       const next = applyManifestName(f.content, opts.newName, {
@@ -493,8 +504,7 @@ async function readAppMeta(appDir: string): Promise<{
 }
 
 /**
- * Canonical centraid subdirs every app carries. Kept in sync with
- * `scaffoldApp` so cloned apps look identical to fresh ones.
+ * Canonical centraid subdirs every app carries.
  * Idempotent — `mkdir { recursive: true }` is a no-op on existing dirs,
  * so re-cloning or cloning an already-canonical template is fine.
  */
@@ -529,7 +539,7 @@ Existing automations appear in the desktop's App settings →
 Automations panel; this README is only seeded when the folder is
 empty, so seeing it means no automations ship with this app yet.
 
-To add one, ask the builder agent ("set up an automation that
+To add one, ask the assistant ("set up an automation that
 runs every Monday at 9am…") — it scaffolds both files and the
 desktop picks them up on the next sync. See the app root
 \`README.md\` for the full manifest shape.
@@ -559,15 +569,6 @@ async function dirExists(p: string): Promise<boolean> {
   try {
     const s = await fs.stat(p);
     return s.isDirectory();
-  } catch {
-    return false;
-  }
-}
-
-async function fileExists(p: string): Promise<boolean> {
-  try {
-    const s = await fs.stat(p);
-    return s.isFile();
   } catch {
     return false;
   }

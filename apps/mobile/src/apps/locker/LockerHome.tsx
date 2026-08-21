@@ -7,7 +7,6 @@ import React, {
   useState,
 } from "react";
 import {
-  ActivityIndicator,
   AppState,
   FlatList,
   Pressable,
@@ -15,14 +14,15 @@ import {
   View,
 } from "react-native";
 import type { ListRenderItemInfo } from "react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
+
+import { retryInSeconds } from "@centraid/blueprints/apps/_shared/shared-copy";
 
 import AppHeader from "../../kit/components/AppHeader";
-import AudiencePlacementSheet from "../../kit/components/AudiencePlacementSheet";
 import Icon from "../../kit/components/Icon";
 import { Text } from "../../kit/components/NativeText";
+import TopSafeArea from "../../kit/components/TopSafeArea";
 import { useReplica } from "../../kit/replica/ReplicaProvider";
-import { useTheme } from "../../kit/theme";
+import { t, useTheme } from "../../kit/theme";
 import { appQuery, resolveAppMeta } from "../../lib/gateway";
 import type { LockerScreenProps } from "../../navigation";
 import {
@@ -68,8 +68,7 @@ export default function LockerHome({
     null
   );
   const [detail, setDetail] = useState<LockerItem | null>(null);
-  const [shareItemId, setShareItemId] = useState("");
-  const [pendingItem, setPendingItem] = useState<LockerRow | null>(null);
+  const [revealItem, setRevealItem] = useState<LockerRow | null>(null);
   const [itemPassphrase, setItemPassphrase] = useState("");
   const [itemError, setItemError] = useState<string>();
   const [masked, setMasked] = useState(false);
@@ -102,7 +101,7 @@ export default function LockerHome({
         );
       setSessionToken("");
       setDetail(null);
-      setPendingItem(null);
+      setRevealItem(null);
       setPassphrase("");
       setItemPassphrase("");
       setItemError(undefined);
@@ -157,7 +156,7 @@ export default function LockerHome({
             : {
                 kind: "offline",
                 message:
-                  "Locker stays locked while the gateway is unreachable. Reconnect to reveal secrets.",
+                  "Locker stays locked while the gateway is unreachable — reconnect to reveal secrets.",
               }
         );
       }
@@ -236,7 +235,7 @@ export default function LockerHome({
           message:
             result.message ??
             (result.retryAfterMs
-              ? `Try again in ${Math.ceil(result.retryAfterMs / 1000)} seconds.`
+              ? retryInSeconds(Math.ceil(result.retryAfterMs / 1000))
               : "Authentication failed."),
         });
         return;
@@ -269,7 +268,7 @@ export default function LockerHome({
           kind: "locked",
           configured: true,
           message:
-            "The saved biometric credential changed. Unlock with your primary passphrase.",
+            "Biometric credential changed — unlock with your primary passphrase.",
         });
         return;
       }
@@ -359,12 +358,12 @@ export default function LockerHome({
           );
         if (!result.item) throw new Error("This Locker item no longer exists.");
         setDetail(result.item);
-        setPendingItem(null);
+        setRevealItem(null);
         setItemPassphrase("");
         setItemError(undefined);
         setActivityNonce((value) => value + 1);
       } catch (caughtError) {
-        setPendingItem(row);
+        setRevealItem(row);
         setItemPassphrase("");
         setItemError(
           caughtError instanceof Error
@@ -393,7 +392,7 @@ export default function LockerHome({
           // The explicit passphrase sheet below is the honest fallback.
         }
       }
-      setPendingItem(row);
+      setRevealItem(row);
     },
     [deviceCredentialId, revealWith]
   );
@@ -422,8 +421,20 @@ export default function LockerHome({
   const content = (() => {
     switch (screen.kind) {
       case "loading":
+        // The credential check + item list read are local and typically
+        // sub-frame; when they aren't, a static line reads honestly without
+        // claiming to know a duration this operation doesn't expose.
         return (
-          <ActivityIndicator color={colors.textFaint} style={styles.center} />
+          <View
+            style={[
+              styles.center,
+              { alignItems: "center", justifyContent: "center" },
+            ]}
+          >
+            <Text style={[t("small"), { color: colors.textFaint }]}>
+              Opening Locker…
+            </Text>
+          </View>
         );
       case "offline":
         return (
@@ -478,7 +489,7 @@ export default function LockerHome({
         return (
           <StateCard
             title="Locker is empty"
-            message="Add your first password, card, secure note, identity, Wi-Fi login, or standalone password."
+            message="Add your first password, card, note, identity, or Wi-Fi login."
             styles={styles}
           />
         );
@@ -508,7 +519,7 @@ export default function LockerHome({
                       Use biometrics for Locker
                     </Text>
                     <Text style={styles.biometricCopy}>
-                      Store a device-only credential. Your primary passphrase
+                      Stores a device-only credential; your primary passphrase
                       remains the recovery path.
                     </Text>
                   </Pressable>
@@ -542,7 +553,7 @@ export default function LockerHome({
   })();
 
   return (
-    <SafeAreaView style={styles.safe} edges={["top"]}>
+    <TopSafeArea style={styles.safe}>
       <AppHeader
         title={META.name}
         subtitle="Secrets stay online-only"
@@ -553,37 +564,28 @@ export default function LockerHome({
       {content}
       <ItemAuthModal
         error={itemError}
-        item={pendingItem}
+        item={revealItem}
         passphrase={itemPassphrase}
         placeholderColor={colors.textFaint}
         styles={styles}
         working={working}
         onChangePassphrase={setItemPassphrase}
         onClose={() => {
-          setPendingItem(null);
+          setRevealItem(null);
           setItemError(undefined);
         }}
         onReveal={() => {
-          if (pendingItem) void revealWith(pendingItem, itemPassphrase);
+          if (revealItem) void revealWith(revealItem, itemPassphrase);
         }}
       />
+      {/* No placement control here — A7: Locker is structurally excluded
+       *  from sharing (packages/blueprints/apps/_shared/placement-registry.ts).
+       *  A secret is the one thing v0 never lets a member place. */}
       <ItemDetailModal
         item={detail}
         styles={styles}
         onClose={() => setDetail(null)}
         onCopy={(value) => void copySecret(value)}
-        onShare={(itemId) => {
-          setDetail(null);
-          setShareItemId(itemId);
-        }}
-      />
-      <AudiencePlacementSheet
-        visible={Boolean(shareItemId)}
-        itemType="locker.item"
-        itemId={shareItemId}
-        sourceVaultId={replica.vaultId ?? ""}
-        noun="Locker item"
-        onClose={() => setShareItemId("")}
       />
       {masked ? (
         <View
@@ -594,6 +596,6 @@ export default function LockerHome({
           <Text style={styles.stateTitle}>Locker is hidden</Text>
         </View>
       ) : null}
-    </SafeAreaView>
+    </TopSafeArea>
   );
 }

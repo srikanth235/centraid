@@ -1,309 +1,272 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { JSX } from "react";
 
-import type { IconName } from "@centraid/design";
-
+import {
+  AUTOMATIONS_EMPTY_ACTION,
+  AUTOMATIONS_EMPTY_BODY,
+  AUTOMATIONS_EMPTY_TITLE,
+  automationsErrorBody,
+  AUTOMATIONS_ERROR_RETRY,
+  AUTOMATIONS_ERROR_TITLE,
+  AUTOMATIONS_SUGGESTIONS_NOTE,
+} from "../../automations-copy.js";
+import { SKELETON_NOTE } from "../../surface-copy.js";
 import type {
   AuOverviewData,
   AuOverviewRowDTO,
   AuOverviewRunDTO,
   AuOverviewSuggestionDTO,
-  AuStatusKind,
   AutomationsOverviewBridgeProps,
 } from "../screen-contracts.js";
-import { cx } from "../ui/cx.js";
-import { Icon, Button, KindBadge } from "../ui/index.js";
-import {
-  groupRuns,
-  runOrigin,
-  sortOverviewRows,
-} from "./automationsOverviewGrouping.js";
+import type { OpsState } from "../shell/opsBar.js";
+import { publishRouteSignals } from "../shell/routeVitals.js";
+import { PageSkeleton } from "../shell/status.js";
+import ChipsBlock from "../ui/ChipsBlock.js";
+import EmptyBlock from "../ui/EmptyBlock.js";
+import NoteBlock from "../ui/NoteBlock.js";
+import PanelBlock from "../ui/PanelBlock.js";
+import RowsBlock from "../ui/RowsBlock.js";
+import type { RowDef } from "../ui/RowsBlock.js";
+import SectionBlock from "../ui/SectionBlock.js";
+import { sortOverviewRows } from "./automationsOverviewGrouping.js";
 
-import au from "../styles/automation.module.css";
-import cardCss from "../ui/AppCard.module.css";
 import styles from "./AutomationsOverviewScreen.module.css";
-import homeCss from "./HomeScreen.module.css";
 
-// Automations overview (Automations UI revamp — see
-// receipts/issue-387-automations-ui-revamp.md; chat-thread redesign,
-// receipts/issue-539-automations-chat-thread.md): a grid of automation tiles
-// that mirrors the Home shelf (same `appsGrid`/AppCard family) — each tile
-// shows the automation's glyph, name, most-recent-run blurb, status + trigger,
-// and last-run foot, with attention/failed tiles surfaced first and given a
-// restrained danger accent. A secondary date-grouped recent-runs feed sits
-// below. Screen owns load/error/data; `loadData` (route) fetches + derives —
-// this component renders.
+// Automations overview — the v9 operational page (issue #765, spec §3).
+//
+// The screen is a SEQUENCE OF BLOCKS and nothing else: section heads, row
+// lists, a note. Its identity (title, the two verbs) lives in the app bar
+// (`opsBar.ts`), and its condition lives in the frame's status line — both fed
+// from here through `publishRouteSignals` at the one point the data resolves,
+// so the count line and the health line can never disagree about state.
+//
+// What the tile grid used to say, and where it went:
+//   glyph plate / hue        → gone. A hue per automation was decoration; the
+//                              list answers "what needs me?" by ORDER and by
+//                              the one net-toned row, not by colour.
+//   status pill              → the row's meta word ("Active", "Failing").
+//   attention badge          → a clause in the row's sub line, because a count
+//                              of things waiting on you is a sentence, not a
+//                              chip.
+//   last-run blurb + foot    → the row's sub line.
+//   date-grouped run feed    → one flat "recent runs across everything" list;
+//                              each run states its own time in its sub.
 
-const STATUS_META: Record<AuStatusKind, { icon: IconName; spin?: boolean }> = {
-  active: { icon: "Power" },
-  paused: { icon: "Pause" },
-  draft: { icon: "Pencil" },
-  running: { icon: "Loader", spin: true },
-  success: { icon: "CheckCircle" },
-  failed: { icon: "AlertTriangle" },
-};
+/** Rows past this many make the page `full` — the state that earns a filter
+ *  row. Below it the chips would be four controls over a list you can already
+ *  see all of. */
+const FULL_THRESHOLD = 8;
 
+/** How many runs the "across everything" list shows. Beyond this the section
+ *  stops being a glance and starts being a log; the run view is the log. */
 const RECENT_CAP = 10;
 
-function StatusPill({
-  kind,
-  label,
-}: {
-  kind: AuStatusKind;
-  label: string;
-}): JSX.Element {
-  const meta = STATUS_META[kind];
-  return (
-    <span className={au.auStatus} data-tone={kind} data-au-status={kind}>
-      <span
-        className={au.auStatusIc}
-        data-spin={meta.spin ? "true" : undefined}
-        aria-hidden="true"
-      >
-        <Icon name={meta.icon} size={10} />
-      </span>
-      <span>{label}</span>
-    </span>
-  );
+type ChipId = "all" | "failing" | "paused" | "drafts";
+
+const CHIP_LABEL: Record<ChipId, string> = {
+  all: "All",
+  drafts: "Drafts",
+  failing: "Failing",
+  paused: "Paused",
+};
+
+const CHIP_ORDER: readonly ChipId[] = ["all", "failing", "paused", "drafts"];
+
+// The empty state, the error plate and the skeleton note are the same words
+// mobile's Automations screen says, so they live in `../../automations-copy.js`
+// and `../../surface-copy.js` (issue #805).
+const EMPTY_TITLE = AUTOMATIONS_EMPTY_TITLE;
+const EMPTY_BODY = AUTOMATIONS_EMPTY_BODY;
+const EMPTY_ACTION = AUTOMATIONS_EMPTY_ACTION;
+const ERROR_TITLE = AUTOMATIONS_ERROR_TITLE;
+const ERROR_RETRY = AUTOMATIONS_ERROR_RETRY;
+
+function errorBody(sinceClock: string | null): string {
+  return automationsErrorBody(sinceClock ?? undefined);
 }
 
-/** Automation tile — mirrors HomeScreen's `AutoCard` (issue #539 chat-thread
- *  redesign): a gallery card with a glyph plate, name + last-run blurb, a
- *  status/trigger meta strip, and a kind-badge/last-run foot. Attention or a
- *  failed last run gives the tile a restrained danger-tinted accent + badge —
- *  the grid still answers "what needs me?" first via the attention-first sort. */
-function AutoTile({
-  row,
-  onOpen,
-}: {
-  row: AuOverviewRowDTO;
-  onOpen: (ref: string) => void;
-}): JSX.Element {
-  const needsYou = row.attentionCount > 0 || row.lastRunOk === false;
-  // Blurb = the most recent run's message; before the first run (or when the
-  // engine gave us no summary) fall back to the trigger so the card is never
-  // blank.
-  const blurb = row.lastRunSummary ?? row.triggerLabel;
-  return (
-    <div className={cardCss.wrap}>
-      <button
-        type="button"
-        className={cx(cardCss.card, cardCss.small, styles.tile)}
-        data-kind="automation"
-        data-attention={needsYou ? "true" : undefined}
-        data-last-failed={row.lastRunOk === false ? "true" : undefined}
-        data-testid="automation-row"
-        onClick={() => onOpen(row.ref)}
-      >
-        <div className={cardCss.head}>
-          <span
-            className={au.auGlyph}
-            data-hue={row.hue}
-            style={{ width: 52, height: 52 }}
-            aria-hidden="true"
-          >
-            <Icon name={row.glyphIcon as IconName} size={24} />
-          </span>
-          <div className={cx(cardCss.headText, styles.tileText)}>
-            <div className={cardCss.nameRow}>
-              <div className={cardCss.name} data-testid="automation-row-name">
-                {row.name}
-              </div>
-              {row.attentionCount > 0 ? (
-                <span
-                  className={styles.attentionBadge}
-                  title={`${row.attentionCount} item${row.attentionCount === 1 ? "" : "s"} waiting on you`}
-                >
-                  <Icon name="AlertTriangle" size={11} />
-                  <span>{row.attentionCount}</span>
-                </span>
-              ) : row.lastRunOk === false ? (
-                <span className={styles.failedBadge} title="Last run failed">
-                  Failed
-                </span>
-              ) : row.recentFailover ? (
-                <span
-                  className={styles.failoverBadge}
-                  title="The latest operation continued on a fallback agent"
-                >
-                  Fallback
-                </span>
-              ) : null}
-            </div>
-            <div className={cx(cardCss.desc, styles.tileBlurb)}>{blurb}</div>
-          </div>
-        </div>
-        <div className={styles.cardMeta}>
-          <StatusPill kind={row.statusKind} label={row.statusLabel} />
-          <span className={styles.cardTrig}>
-            <span aria-hidden="true">
-              <Icon name={row.triggerIcon as IconName} size={12} />
-            </span>
-            <span>{row.triggerLabel}</span>
-          </span>
-        </div>
-        <div className={cardCss.foot}>
-          <KindBadge kind="automation">
-            <span>Automation</span>
-          </KindBadge>
-          <span
-            className={cardCss.footTime}
-            data-ok={row.lastRunOk === true ? "true" : undefined}
-          >
-            {row.lastRunOk === true ? (
-              <span aria-hidden="true">
-                <Icon name="CheckCircle" size={13} />
-              </span>
-            ) : null}
-            <span>{row.lastRunLabel}</span>
-          </span>
-        </div>
-      </button>
-    </div>
-  );
+const LOADING_NOTE = SKELETON_NOTE;
+
+/**
+ * The suggestions note.
+ *
+ * The v9 brief's sentence is "Suggestions come from what you already do by
+ * hand." That is not true of this product: `loadOverviewSuggestions`
+ * (templatesData.ts) returns a curated slice of the TEMPLATE CATALOGUE, keyed
+ * off a fixed id list — nothing watches what you do by hand and nothing infers
+ * a rule from it. The second half of the sentence is true and load-bearing, so
+ * it stands verbatim; the provenance half states the provenance this product
+ * actually has. See the receipt for the mismatch.
+ */
+const SUGGESTIONS_NOTE = AUTOMATIONS_SUGGESTIONS_NOTE;
+
+function plural(n: number, word: string): string {
+  return `${n} ${word}${n === 1 ? "" : "s"}`;
 }
 
-function ActivityRow({
-  run,
-  onOpen,
-}: {
-  run: AuOverviewRunDTO;
-  onOpen: (automationId: string, runId: string) => void;
-}): JSX.Element {
-  return (
-    <button
-      type="button"
-      className={styles.activityRow}
-      data-ok={String(run.ok)}
-      onClick={() => onOpen(run.automationId, run.runId)}
-    >
-      <i
-        className={styles.activityDot}
-        data-ok={String(run.ok)}
-        aria-hidden="true"
-      />
-      <span className={styles.activityName}>{run.name}</span>
-      <span className={styles.activityOrigin} data-mono="true">
-        {runOrigin(run.metaLabel)}
-        {run.ok ? "" : " · failed"}
-      </span>
-      <span className={styles.activityWhen} data-mono="true">
-        {run.whenLabel}
-      </span>
-    </button>
-  );
+/** "4 August" — the day a failure streak began. Day and month only: a year on
+ *  a run that failed this week reads as an archive entry. */
+function dayLabel(ms: number): string {
+  return new Date(ms).toLocaleDateString(undefined, {
+    day: "numeric",
+    month: "long",
+  });
 }
 
-function HeaderActions({
-  onBrowseTemplates,
-  onNewAutomation,
-}: {
-  onBrowseTemplates: () => void;
-  onNewAutomation: () => void;
-}): JSX.Element {
-  return (
-    <div className={styles.actions}>
-      <Button
-        variant="secondary"
-        icon="Bolt"
-        label="Browse templates"
-        onClick={onBrowseTemplates}
-      />
-      <Button
-        variant="primary"
-        icon="Sparkle"
-        label="New automation"
-        onClick={onNewAutomation}
-      />
-    </div>
-  );
+/** "09:12" — the clock the error panel's "nothing has run since" clause takes. */
+function clockLabel(ms: number): string {
+  return new Date(ms).toLocaleTimeString(undefined, {
+    hour: "2-digit",
+    minute: "2-digit",
+  });
 }
 
-function SuggestionCard({
-  suggestion,
-  onAdd,
-}: {
-  suggestion: AuOverviewSuggestionDTO;
-  onAdd: (id: string) => void;
-}): JSX.Element {
-  return (
-    <div className={styles.suggestCard} data-testid="automation-suggestion">
-      <div className={styles.suggestMain}>
-        <div className={styles.suggestName}>{suggestion.name}</div>
-        <p className={styles.suggestDesc}>{suggestion.desc}</p>
-        {suggestion.triggerLabel ? (
-          <span className={styles.suggestTrigger} data-mono="true">
-            {suggestion.triggerLabel}
-          </span>
-        ) : null}
-      </div>
-      <Button
-        variant="secondary"
-        size="sm"
-        label="Add"
-        onClick={() => onAdd(suggestion.id)}
-      />
-    </div>
-  );
+interface FailureStreak {
+  /** How many runs in a row failed, newest-first, before the first success. */
+  count: number;
+  /** When the streak started — the OLDEST failure in it. */
+  startedAt: number;
 }
 
-function EmptyState({
-  suggestions,
-  onBrowseTemplates,
-  onNewAutomation,
-  onUseSuggestion,
-}: {
-  suggestions: AuOverviewSuggestionDTO[];
-  onBrowseTemplates: () => void;
-  onNewAutomation: () => void;
-  onUseSuggestion?: (templateId: string) => void;
-}): JSX.Element {
-  return (
-    <div className={styles.empty}>
-      <div className={styles.emptyIcon} aria-hidden="true">
-        <Icon name="Bolt" size={22} />
-      </div>
-      <div className={styles.emptyTitle}>No automations yet</div>
-      <p className={styles.emptyText}>
-        Automations run on a schedule or when your data changes — summarize
-        mail, sync calendars, or watch the vault. Start from a template or write
-        instructions from scratch.
-      </p>
-      {suggestions.length > 0 && onUseSuggestion ? (
-        <div
-          className={styles.suggestSection}
-          data-testid="automation-suggestions"
-        >
-          <div className={styles.sectionHead}>
-            <span className={styles.sectionLabel}>Suggested starters</span>
-          </div>
-          <div className={styles.suggestGrid}>
-            {suggestions.map((s) => (
-              <SuggestionCard
-                key={s.id}
-                suggestion={s}
-                onAdd={onUseSuggestion}
-              />
-            ))}
-          </div>
-        </div>
-      ) : null}
-      <div className={styles.emptyActions}>
-        <Button
-          variant="primary"
-          icon="Sparkle"
-          label="New automation"
-          onClick={onNewAutomation}
-        />
-        <Button
-          variant="secondary"
-          icon="Bolt"
-          label="Browse templates"
-          onClick={onBrowseTemplates}
-        />
-      </div>
-    </div>
+/**
+ * The unbroken run of failures at the head of an automation's history.
+ *
+ * Counted from the newest run backwards and stopped at the first success,
+ * which is what makes "has failed its last 3 runs" a true sentence rather than
+ * a total. `null` when the automation's newest run succeeded, or when the feed
+ * carries no run for it at all (the window is 100 runs per lane — a quiet
+ * automation can fall off the end of it).
+ */
+function failureStreak(
+  ref: string,
+  runs: readonly AuOverviewRunDTO[]
+): FailureStreak | null {
+  let count = 0;
+  let startedAt = 0;
+  for (const run of runs) {
+    if (run.automationId !== ref) continue;
+    if (run.ok) break;
+    count += 1;
+    startedAt = run.startedAt;
+  }
+  return count === 0 ? null : { count, startedAt };
+}
+
+/** The row's second line: what fires it, then how it last went. */
+function rowSub(
+  row: AuOverviewRowDTO,
+  streak: FailureStreak | null
+): string | undefined {
+  const parts = [row.triggerLabel];
+  if (streak)
+    parts.push(
+      `failed ${plural(streak.count, "run")} in a row, since ${dayLabel(streak.startedAt)}`
+    );
+  else if (row.lastRunOk === false) parts.push("last run failed");
+  else parts.push(row.lastRunLabel);
+  if (row.attentionCount > 0)
+    parts.push(`${plural(row.attentionCount, "item")} waiting on you`);
+  if (row.recentFailover) parts.push("ran on a fallback harness");
+  return parts.filter((part) => part.length > 0).join(" · ");
+}
+
+interface OverviewView {
+  memberRows: AuOverviewRowDTO[];
+  visibleRows: AuOverviewRowDTO[];
+  recognitionRows: AuOverviewRowDTO[];
+  runs: AuOverviewRunDTO[];
+  recognitionRuns: AuOverviewRunDTO[];
+  failing: AuOverviewRowDTO[];
+  streakByRef: Map<string, FailureStreak | null>;
+  countLine: string;
+  healthLabel: string;
+  healthDetail: string;
+  /** The automation the status line's one inline verb opens. */
+  failureRef: string | null;
+  /** The newest run's clock, kept for the error panel's "since" clause. */
+  lastRunClock: string | null;
+  empty: boolean;
+  full: boolean;
+}
+
+/** Everything the render and the published signals both need, derived once so
+ *  the count line and the status line cannot be computed from two different
+ *  readings of the same data. */
+function deriveView(data: AuOverviewData, chip: ChipId): OverviewView {
+  const memberRows = sortOverviewRows(
+    data.rows.filter((row) => row.systemLane === undefined)
   );
+  const recognitionRows = sortOverviewRows(
+    data.rows.filter((row) => row.systemLane === "recognition")
+  );
+  const runs = data.runs
+    .filter((run) => run.systemLane === undefined)
+    .slice(0, RECENT_CAP);
+  const recognitionRuns = data.runs
+    .filter((run) => run.systemLane === "recognition")
+    .slice(0, RECENT_CAP);
+
+  const streakByRef = new Map<string, FailureStreak | null>(
+    memberRows.map((row) => [
+      row.ref,
+      failureStreak(
+        row.ref,
+        data.runs.filter((run) => run.systemLane === undefined)
+      ),
+    ])
+  );
+  const failing = memberRows.filter((row) => row.lastRunOk === false);
+  const paused = memberRows.filter((row) => row.statusKind === "paused");
+  const drafts = memberRows.filter((row) => row.statusKind === "draft");
+
+  const visibleRows =
+    chip === "failing"
+      ? failing
+      : chip === "paused"
+        ? paused
+        : chip === "drafts"
+          ? drafts
+          : memberRows;
+
+  // The worst failure leads the status line: the longest streak, because "has
+  // failed its last 6 runs" is a different problem from "failed once".
+  const worst = [...failing].sort((a, b) => {
+    const aStreak = streakByRef.get(a.ref)?.count ?? 1;
+    const bStreak = streakByRef.get(b.ref)?.count ?? 1;
+    return bStreak - aStreak;
+  })[0];
+  const worstStreak = worst ? streakByRef.get(worst.ref) : null;
+
+  const newestRun = data.runs[0];
+  return {
+    countLine: [
+      plural(memberRows.length, "automation"),
+      `${failing.length} failing`,
+      `${paused.length} paused`,
+    ].join(" · "),
+    empty: memberRows.length === 0,
+    failing,
+    failureRef: worst?.ref ?? null,
+    full: memberRows.length >= FULL_THRESHOLD,
+    healthDetail: worst
+      ? worstStreak
+        ? `${worst.name} has failed its last ${plural(worstStreak.count, "run")}, since ${dayLabel(worstStreak.startedAt)}.`
+        : `${worst.name} failed its last run.`
+      : newestRun
+        ? `${plural(memberRows.length, "automation")} on this gateway · last run ${newestRun.whenLabel}.`
+        : `${plural(memberRows.length, "automation")} on this gateway · nothing has run yet.`,
+    healthLabel:
+      failing.length > 0
+        ? `${plural(failing.length, "automation")} failing`
+        : "Nothing is failing",
+    lastRunClock: newestRun ? clockLabel(newestRun.startedAt) : null,
+    memberRows,
+    recognitionRows,
+    recognitionRuns,
+    runs,
+    streakByRef,
+    visibleRows,
+  };
 }
 
 export default function AutomationsOverviewScreen({
@@ -312,19 +275,23 @@ export default function AutomationsOverviewScreen({
   onOpenAutomation,
   onOpenRun,
   onBrowseTemplates,
-  onNewAutomation,
   onUseSuggestion,
 }: AutomationsOverviewBridgeProps): JSX.Element {
   const [state, setState] = useState<AuOverviewData | "loading" | "error">(
     "loading"
   );
   const [errMsg, setErrMsg] = useState("");
-  const [filter, setFilter] = useState("");
+  const [chip, setChip] = useState<ChipId>("all");
+  const [lastReadAt, setLastReadAt] = useState<number | null>(null);
+  // Survives the transition INTO the error state: the panel's "nothing has run
+  // since 09:12" clause is about the last reading that worked, so it cannot
+  // come from the data the screen no longer has.
+  const [lastRunClock, setLastRunClock] = useState<string | null>(null);
 
   // Keep the latest loadData without rebinding reload. Routes historically pass
   // an inline async prop; if reload depended on that identity, every parent
-  // re-render remounted the load effect, thrashing error ↔ loading and detaching
-  // the Retry button mid-click (desktop e2e 8.2).
+  // re-render remounted the load effect, thrashing the error/Retry UI (desktop
+  // e2e 8.2).
   const loadDataRef = useRef(loadData);
   useEffect(() => {
     loadDataRef.current = loadData;
@@ -334,7 +301,12 @@ export default function AutomationsOverviewScreen({
     (): Promise<void> =>
       loadDataRef
         .current()
-        .then(setState)
+        .then((data) => {
+          setState(data);
+          setLastReadAt(Date.now());
+          const newest = data.runs[0];
+          if (newest) setLastRunClock(clockLabel(newest.startedAt));
+        })
         .catch((error: unknown) => {
           setErrMsg(error instanceof Error ? error.message : String(error));
           setState("error");
@@ -342,7 +314,7 @@ export default function AutomationsOverviewScreen({
     []
   );
 
-  /** The Retry affordance — the only path that puts the screen back into
+  /** The Reconnect affordance — the only path that puts the screen back into
    *  `loading`; the mount read starts there already. */
   const reload = useCallback((): void => {
     setState("loading");
@@ -375,177 +347,231 @@ export default function AutomationsOverviewScreen({
     };
   }, [loadSuggestions]);
 
+  const view = typeof state === "object" ? deriveView(state, chip) : null;
+  const opsState: OpsState =
+    state === "loading"
+      ? "loading"
+      : state === "error"
+        ? "error"
+        : view?.empty === true
+          ? "empty"
+          : view?.full === true
+            ? "full"
+            : "ready";
+
+  // The inline verb opens an automation that may have changed identity since
+  // the effect last ran; the handler is read through a ref so the published
+  // signal's deps stay primitive and the frame is not re-signalled on every
+  // parent render.
+  const openRef = useRef(onOpenAutomation);
+  useEffect(() => {
+    openRef.current = onOpenAutomation;
+  }, [onOpenAutomation]);
+
+  const countLine = view?.countLine ?? "";
+  const healthLabel = view?.healthLabel ?? "";
+  const healthDetail = view?.healthDetail ?? "";
+  const failureRef = view?.failureRef ?? null;
+  useEffect(() => {
+    publishRouteSignals("automations", {
+      count: countLine,
+      state: opsState,
+      ...(lastReadAt === null ? {} : { lastReadAt }),
+      ...(healthLabel
+        ? {
+            health: {
+              detail: healthDetail,
+              label: healthLabel,
+              ...(failureRef
+                ? {
+                    action: {
+                      label: "Open the failure",
+                      run: () => openRef.current(failureRef),
+                    },
+                  }
+                : {}),
+            },
+          }
+        : {}),
+      ...(failureRef ? { tone: "net" as const } : {}),
+    });
+  }, [countLine, opsState, lastReadAt, healthLabel, healthDetail, failureRef]);
+
   if (state === "loading") {
     return (
-      <div className={styles.page}>
-        <div className={styles.skelHead} aria-hidden="true" />
-        <output className={styles.loadingLabel}>Loading automations…</output>
-        <div className={styles.fleet} aria-hidden="true">
-          {[0, 1, 2, 3].map((i) => (
-            <div key={i} className={styles.skelRow} />
-          ))}
-        </div>
+      <div className={styles.page} data-testid="automations-loading">
+        <PageSkeleton label="Loading automations" rows={6} />
+        <NoteBlock>{LOADING_NOTE}</NoteBlock>
       </div>
     );
   }
 
   if (state === "error") {
     return (
-      <div className={styles.error} data-testid="automations-error">
-        <div className={styles.errorIcon} aria-hidden="true">
-          <Icon name="AlertCircle" size={22} />
-        </div>
-        <div className={styles.errorTitle}>Couldn&apos;t load automations</div>
-        <div className={styles.errorText}>
-          {errMsg || "Check the gateway and try again."}
-        </div>
-        <Button
-          variant="primary"
-          icon="Refresh"
-          label="Retry"
-          onClick={reload}
+      <div className={styles.page} data-testid="automations-error">
+        <PanelBlock
+          action={{ label: ERROR_RETRY, onClick: reload }}
+          body={errorBody(lastRunClock)}
+          eyebrow="Automations"
+          {...(errMsg ? { facts: [{ key: "Reason", value: errMsg }] } : {})}
+          title={ERROR_TITLE}
+          tone="net"
         />
       </div>
     );
   }
 
-  const { rows, runs, health } = state;
-  const activeCount = health.active;
-  const pausedCount = health.paused;
-  const draftCount = health.drafts;
-  const attentionCount = rows.filter(
-    (r) => r.attentionCount > 0 || r.lastRunOk === false
-  ).length;
+  // `view` is non-null on every path past the two early returns above: it is
+  // derived from the same `state` those branches eliminated.
+  const v = view as OverviewView;
 
-  const subtitle =
-    rows.length === 0
-      ? "Run on a schedule or when your data changes."
-      : [
-          `${activeCount} active`,
-          `${pausedCount} paused`,
-          draftCount > 0
-            ? `${draftCount} draft${draftCount === 1 ? "" : "s"}`
-            : null,
-          attentionCount > 0
-            ? `${attentionCount} need${attentionCount === 1 ? "s" : ""} attention`
-            : null,
-        ]
-          .filter((part): part is string => part !== null)
-          .join(" · ");
+  const automationRows: RowDef[] = v.visibleRows.map((row) => {
+    const streak = v.streakByRef.get(row.ref) ?? null;
+    const failing = row.lastRunOk === false;
+    const sub = rowSub(row, streak);
+    return {
+      action: {
+        label: "Open",
+        onClick: () => onOpenAutomation(row.ref),
+        // The one thing that distinguishes ten identical "Open" controls. It
+        // is a hint and not an `aria-label` because the button already renders
+        // visible text (aria-label discipline, issue #708 B.4); the shell
+        // lowers it to `title`, the phone to `accessibilityHint`.
+        hint: `Open ${row.name}`,
+      },
+      id: row.ref,
+      meta: failing ? "Failing" : row.statusLabel,
+      net: failing,
+      ...(sub ? { sub } : {}),
+      title: row.name,
+    };
+  });
 
-  const q = filter.trim().toLowerCase();
-  const sortedRows = sortOverviewRows(rows);
-  const visibleRows = q
-    ? sortedRows.filter(
-        (r) =>
-          r.name.toLowerCase().includes(q) ||
-          r.triggerLabel.toLowerCase().includes(q) ||
-          r.statusLabel.toLowerCase().includes(q)
-      )
-    : sortedRows;
+  const runRows = (runs: readonly AuOverviewRunDTO[]): RowDef[] =>
+    runs.map((run) => ({
+      action: {
+        label: "View",
+        onClick: () => onOpenRun(run.automationId, run.runId),
+        hint: `View the ${run.name} run from ${run.whenLabel}`,
+      },
+      id: run.runId,
+      meta: run.ok ? run.whenLabel : "Failed",
+      net: !run.ok,
+      sub: `${run.ok ? "Succeeded" : "Failed"} · ${run.summary} · ${run.whenLabel}`,
+      title: run.name,
+    }));
 
-  const recentRuns = runs.slice(0, RECENT_CAP);
-  const runGroups = groupRuns(recentRuns);
-  const isEmpty = rows.length === 0;
+  const suggestionRows: RowDef[] = onUseSuggestion
+    ? suggestions.map((suggestion) => ({
+        action: {
+          label: "Create",
+          onClick: () => onUseSuggestion(suggestion.id),
+          hint: `Create ${suggestion.name}`,
+        },
+        id: suggestion.id,
+        sub: suggestion.triggerLabel
+          ? `${suggestion.desc} · ${suggestion.triggerLabel}`
+          : suggestion.desc,
+        title: suggestion.name,
+      }))
+    : [];
 
   return (
     <div className={styles.page} data-testid="automations-overview">
-      <header className={styles.head}>
-        <div className={styles.headText}>
-          <h1 className={styles.title}>Automations</h1>
-          <p className={styles.subtitle}>{subtitle}</p>
-        </div>
-        {/* Empty state owns its CTAs so we don't double the same pair. */}
-        {isEmpty ? null : (
-          <HeaderActions
-            onBrowseTemplates={onBrowseTemplates}
-            onNewAutomation={onNewAutomation}
-          />
-        )}
-      </header>
-
-      {isEmpty ? (
-        <EmptyState
-          suggestions={suggestions}
-          onBrowseTemplates={onBrowseTemplates}
-          onNewAutomation={onNewAutomation}
-          onUseSuggestion={onUseSuggestion}
+      {v.empty ? (
+        <EmptyBlock
+          action={{ label: EMPTY_ACTION, onClick: onBrowseTemplates }}
+          body={EMPTY_BODY}
+          routine
+          title={EMPTY_TITLE}
         />
       ) : (
         <>
-          <section className={styles.section}>
-            <div className={styles.sectionHead}>
-              <span className={styles.sectionLabel}>Your automations</span>
-              <span className={styles.sectionCount}>{rows.length}</span>
-              {rows.length >= 4 ? (
-                <label className={styles.filterWrap}>
-                  <Icon name="Search" size={13} />
-                  <input
-                    className={styles.filterInput}
-                    type="search"
-                    value={filter}
-                    onChange={(e) => setFilter(e.target.value)}
-                    placeholder="Filter…"
-                    aria-label="Filter automations"
-                  />
-                </label>
-              ) : null}
-            </div>
-            {visibleRows.length === 0 ? (
-              <div className={styles.filterEmpty}>
-                No automations match “{filter.trim()}”.
-                <button
-                  type="button"
-                  className={styles.filterClear}
-                  onClick={() => setFilter("")}
-                >
-                  Clear filter
-                </button>
-              </div>
-            ) : (
-              <div
-                className={cx(homeCss.appsGrid, homeCss.appsGridSmall)}
-                data-testid="apps-grid"
-              >
-                {visibleRows.map((row) => (
-                  <AutoTile key={row.ref} row={row} onOpen={onOpenAutomation} />
-                ))}
-              </div>
-            )}
-          </section>
+          {v.full ? (
+            <ChipsBlock
+              ariaLabel="Filter automations"
+              chips={CHIP_ORDER.map((id) => ({
+                id,
+                label: CHIP_LABEL[id],
+                on: chip === id,
+              }))}
+              onPick={(id) => setChip(id as ChipId)}
+            />
+          ) : null}
+          <SectionBlock
+            label="Automations"
+            meta={
+              v.visibleRows.length === v.memberRows.length
+                ? String(v.memberRows.length)
+                : `${v.visibleRows.length} of ${v.memberRows.length}`
+            }
+          />
+          {automationRows.length > 0 ? (
+            <RowsBlock ariaLabel="Automations" rows={automationRows} />
+          ) : (
+            <NoteBlock>
+              {`No automation is ${CHIP_LABEL[chip].toLowerCase()} right now.`}
+            </NoteBlock>
+          )}
 
-          <section className={cx(styles.section, styles.activitySection)}>
-            <div className={styles.sectionHead}>
-              <span className={styles.sectionLabel}>Recent activity</span>
-            </div>
-            {recentRuns.length > 0 ? (
-              <div className={styles.activity}>
-                {runGroups.map((group) => (
-                  <div key={group.label} className={styles.activityGroup}>
-                    <span className={styles.activityGroupLabel}>
-                      {group.label}
-                    </span>
-                    <div className={styles.activityList}>
-                      {group.runs.map((run) => (
-                        <ActivityRow
-                          key={run.runId}
-                          run={run}
-                          onOpen={onOpenRun}
-                        />
-                      ))}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            ) : (
-              <div className={cx(styles.activity, styles.activityEmpty)}>
-                No runs yet. Open an automation and use <strong>Run now</strong>
-                , or wait for its trigger.
-              </div>
-            )}
-          </section>
+          <SectionBlock
+            label="Recent runs across everything"
+            meta={String(v.runs.length)}
+          />
+          {v.runs.length > 0 ? (
+            <RowsBlock ariaLabel="Recent runs" rows={runRows(v.runs)} />
+          ) : (
+            <NoteBlock>Nothing has run yet.</NoteBlock>
+          )}
         </>
       )}
+
+      {suggestionRows.length > 0 ? (
+        <>
+          <SectionBlock
+            label="Worth setting up"
+            meta={String(suggestionRows.length)}
+          />
+          <RowsBlock ariaLabel="Worth setting up" rows={suggestionRows} />
+          <NoteBlock>{SUGGESTIONS_NOTE}</NoteBlock>
+        </>
+      ) : null}
+
+      {v.recognitionRows.length > 0 ? (
+        <>
+          <SectionBlock
+            label="Recognition"
+            meta={`${v.recognitionRows.length} built-in`}
+          />
+          <RowsBlock
+            ariaLabel="Recognition recipes"
+            rows={v.recognitionRows.map((row) => ({
+              action: {
+                label: "Open",
+                onClick: () => onOpenAutomation(row.ref),
+                hint: `Open ${row.name}`,
+              },
+              id: row.ref,
+              meta: row.statusLabel,
+              sub: `${row.triggerLabel} · ${row.lastRunLabel}`,
+              title: row.name,
+            }))}
+          />
+        </>
+      ) : null}
+
+      {v.recognitionRuns.length > 0 ? (
+        <>
+          <SectionBlock
+            label="Recognition history"
+            meta={String(v.recognitionRuns.length)}
+          />
+          <RowsBlock
+            ariaLabel="Recognition history"
+            rows={runRows(v.recognitionRuns)}
+          />
+        </>
+      ) : null}
     </div>
   );
 }

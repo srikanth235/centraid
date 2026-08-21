@@ -30,6 +30,7 @@
  * Usage:
  *   node scripts/perf/app-weight.mjs --surface desktop
  *   node scripts/perf/app-weight.mjs --surface mobile
+ *   node scripts/perf/app-weight.mjs --surface web
  *   node scripts/perf/app-weight.mjs --surface desktop --report   # print, never fail
  */
 import { readdir, readFile, stat } from "node:fs/promises";
@@ -58,6 +59,21 @@ const SURFACES = {
     roots: ["dist/mobile-bundle-smoke/ios", "dist/mobile-bundle-smoke/android"],
     builtBy: "bun run --cwd apps/mobile ci:bundle",
   },
+  // #781 (#587 D21) — web was the one shipping surface with no shipped-weight
+  // budget. The transfer-byte ceilings in apps/web/tests/e2e/perf-budgets.ts
+  // fence what the BROWSER transfers on specific e2e journeys (compressed, and
+  // only the routes those journeys load); this weighs what `bun run web:build`
+  // actually ships, the same claim the desktop/mobile entries make.
+  web: {
+    budgetFile: "tests/experience-budgets/web.json",
+    roots: ["apps/web/dist"],
+    builtBy: "bun run web:build",
+    // `precompress.mjs` emits .br/.gz sidecars beside every static asset.
+    // They are alternate transport encodings of files already weighed —
+    // counting both the raw file and its compressed twins would triple-count
+    // the same product bytes (the same reasoning that excludes source maps).
+    extraDebugSuffixes: [".br", ".gz"],
+  },
 };
 
 /** Recursively list every file under `dir` as absolute paths. */
@@ -73,18 +89,20 @@ async function listFiles(dir) {
   return nested.flat();
 }
 
-function isDebugSidecar(file) {
-  return DEBUG_SUFFIXES.some((suffix) => file.endsWith(suffix));
+function isDebugSidecar(file, extraSuffixes = []) {
+  return [...DEBUG_SUFFIXES, ...extraSuffixes].some((suffix) =>
+    file.endsWith(suffix)
+  );
 }
 
 /** Weigh one root: shipped bytes, the largest shipped file, and the tail. */
-async function weighDirectory(absRoot) {
+async function weighDirectory(absRoot, extraSuffixes = []) {
   const files = await listFiles(absRoot);
   const sized = await Promise.all(
     files.map(async (file) => ({
       file: path.relative(absRoot, file),
       bytes: (await stat(file)).size,
-      debug: isDebugSidecar(file),
+      debug: isDebugSidecar(file, extraSuffixes),
     }))
   );
   const shipped = sized
@@ -162,7 +180,12 @@ async function main() {
         (entry) => entry.isDirectory(),
         () => false
       );
-      return present ? { rel, ...(await weighDirectory(abs)) } : { rel };
+      return present
+        ? {
+            rel,
+            ...(await weighDirectory(abs, surface.extraDebugSuffixes ?? [])),
+          }
+        : { rel };
     })
   );
   const results = [];

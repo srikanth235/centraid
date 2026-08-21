@@ -69,20 +69,11 @@ export function createCentraidApi(bridge: PreloadBridge) {
 
   return {
     onDeepLink: (cb: (url: string) => void) => deepLinkBuffer.subscribe(cb),
-    // File ASR is backed by an explicitly configured loopback model service in
-    // the main process; capability stays false until that adapter answers.
-    getHostCapabilities: async () => {
-      const transcript = await bridge
-        .invoke(Channel.DEVICE_TRANSCRIPT_AVAILABLE)
-        .then((value) => value === true)
-        .catch(() => false);
-      return hostCapabilities(transcript);
-    },
-    transcribeMedia: (input: {
-      bytes: ArrayBuffer;
-      mediaType: string;
-      filename?: string;
-    }) => bridge.invoke(Channel.DEVICE_TRANSCRIBE, input),
+    // Desktop file-ASR (device-transcription.ts, the on-device probe this
+    // used to make) is gone (issue #724 W6) — transcription now runs on the
+    // self-contained recognition automation, never a device compute lease, so
+    // this is a pure synchronous snapshot again.
+    getHostCapabilities: async () => hostCapabilities(),
 
     // Settings
     getSettings: () => bridge.invoke(Channel.SETTINGS_GET),
@@ -91,8 +82,8 @@ export function createCentraidApi(bridge: PreloadBridge) {
 
     // Apps: list/create/files/write/delete/update-meta moved to the
     // renderer's direct HTTP client (renderer/gateway-client.ts) under the
-    // thin-client pivot. The preview iframe points at the gateway draft URL
-    // (Phase 4), so only the local-only reveal-in-Finder stays on IPC.
+    // thin-client pivot. #799 retired the preview iframe with the rest of the
+    // served plane, so only the local-only reveal-in-Finder stays on IPC.
     openAppFolder: (input: { id: string }) =>
       bridge.invoke(Channel.APPS_OPEN, input),
 
@@ -213,7 +204,7 @@ export function createCentraidApi(bridge: PreloadBridge) {
     onVaultMetadataChanged: (cb: () => void) =>
       subscribe(bridge, Channel.VAULT_METADATA_PUSH, () => cb()),
 
-    // Templates, app chat, gateway-side user identity + prefs, coding-agent
+    // Templates, app conversation, gateway-side user identity + prefs, harness
     // detection, and the whole automations surface all moved to the
     // renderer's direct HTTP clients under the thin-client pivot — see
     // `renderer/gateway-client.ts` and `gateway-client-conversation.ts`.
@@ -264,11 +255,21 @@ export function createCentraidApi(bridge: PreloadBridge) {
  * package's frozen-by-convention exports through the bridge, and `toCss()` is
  * evaluated once here (it is pure and stable for the lifetime of the build,
  * and the renderer's `theme-vars.ts` injects the string into a <style> tag).
+ *
+ * `fontFaceCss` is `@centraid/design/fonts`' `toFontFaceCss()` output, already
+ * pointed at wherever THIS host serves the vendored `.woff2` files. It is
+ * concatenated AHEAD of the token CSS rather than shipped as a second field:
+ * `theme-vars.ts` prepends `cssText` as one <style> before anything resolves
+ * `--font-sans`, and a face declared after the first `var()` lookup would let
+ * the shell paint one frame in the UA default. One string, one injection.
  */
-export function createCentraidTokens(tokens: typeof DesignTokens) {
+export function createCentraidTokens(
+  tokens: typeof DesignTokens,
+  fontFaceCss: string
+) {
   return {
     apps: [...tokens.apps],
-    cssText: tokens.toCss(),
+    cssText: `${fontFaceCss}\n${tokens.toCss()}`,
     fonts: tokens.fonts,
     icons: tokens.icons,
     palette: tokens.palette,

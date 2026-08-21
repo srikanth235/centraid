@@ -6,12 +6,12 @@
   margin: 0 0 6px;
   font-family: var(--font-sans);
   font-weight: 600;
-  font-size: 26px;
+  font-size: var(--t-display-size);
   letter-spacing: -0.02em;
   color: var(--text);
 }
 .pageHead p {
   margin: 0;
-  font-size: 14px;
+  font-size: var(--t-small-size);
   color: var(--text-faint);
 }

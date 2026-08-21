@@ -10,6 +10,7 @@
 import { describe, expect, it } from "vitest";
 
 import * as designTokens from "@centraid/design";
+import { toFontFaceCss } from "@centraid/design/font-faces";
 
 import { Channel } from "./ipc-core.js";
 import type {
@@ -118,9 +119,19 @@ const EXPECTED_API_KEYS = [
   "setActiveVault",
   "setGatewayRememberDevice",
   "testGatewayConnection",
-  "transcribeMedia",
   "updateProfileMetadata",
 ];
+
+/**
+ * Members that reach no bridge channel at all — `getHostCapabilities` was
+ * the last member on this surface with a channel-backed device probe
+ * (`DEVICE_TRANSCRIPT_AVAILABLE`); with desktop's on-device file-ASR adapter
+ * deleted (issue #724 W6) it is a pure synchronous snapshot instead, so it
+ * moved out of `REQUEST_SURFACE` (which asserts every entry reaches exactly
+ * its declared channel) into this list instead of being dropped from the
+ * coverage check below.
+ */
+const PURE_SURFACE = ["getHostCapabilities"];
 
 const EXPECTED_TOKEN_KEYS = [
   "apps",
@@ -142,8 +153,6 @@ const EXPECTED_TOKEN_KEYS = [
  * nothing may be forwarded).
  */
 const REQUEST_SURFACE: Array<[string, ChannelName, unknown]> = [
-  ["getHostCapabilities", Channel.DEVICE_TRANSCRIPT_AVAILABLE, undefined],
-  ["transcribeMedia", Channel.DEVICE_TRANSCRIBE, { mediaType: "audio/wav" }],
   ["getSettings", Channel.SETTINGS_GET, undefined],
   ["saveSettings", Channel.SETTINGS_SAVE, { launchAtLogin: true }],
   ["openAppFolder", Channel.APPS_OPEN, { id: "notes" }],
@@ -227,6 +236,7 @@ describe("CentraidApi exposed surface", () => {
     const declared = [
       ...REQUEST_SURFACE.map(([name]) => name),
       ...EVENT_SURFACE.map(([name]) => name),
+      ...PURE_SURFACE,
       "onDeepLink",
     ].sort();
     expect(declared).toStrictEqual(EXPECTED_API_KEYS);
@@ -335,26 +345,14 @@ describe("CentraidApi event subscriptions", () => {
 });
 
 describe("CentraidApi host capabilities", () => {
-  it("reports transcript support when the device probe answers true", async () => {
+  it("reports transcript as permanently false — desktop's on-device ASR adapter is gone (issue #724 W6)", async () => {
     const { api, fake } = makeApi();
-    fake.results.set(Channel.DEVICE_TRANSCRIPT_AVAILABLE, true);
-    const caps = (await api.getHostCapabilities!()) as {
-      compute: { transcript: boolean };
-    };
-    expect(caps.compute.transcript).toBe(true);
-  });
-
-  it("falls back to no transcript support when the probe rejects", async () => {
-    const fake = fakeBridge();
-    const bridge: PreloadBridge = {
-      ...fake.bridge,
-      invoke: () => Promise.reject(new Error("no adapter")),
-    };
-    const api = createCentraidApi(bridge) as LooseApi;
     const caps = (await api.getHostCapabilities!()) as {
       compute: { transcript: boolean };
     };
     expect(caps.compute.transcript).toBe(false);
+    // No bridge channel is reached at all: this is a pure snapshot now.
+    expect(fake.invokes).toStrictEqual([]);
   });
 });
 
@@ -381,14 +379,17 @@ describe("CentraidApi leak containment", () => {
   });
 });
 
+/** The same relative base `preload.ts` passes for the file:// renderer. */
+const FONT_FACE_CSS = toFontFaceCss("fonts");
+
 describe("CentraidTokens", () => {
   it("exposes exactly the declared key set", () => {
-    const exposed = createCentraidTokens(designTokens);
+    const exposed = createCentraidTokens(designTokens, FONT_FACE_CSS);
     expect(Object.keys(exposed).sort()).toStrictEqual(EXPECTED_TOKEN_KEYS);
   });
 
   it("is JSON-cloneable apart from the pure tileFinish helper", () => {
-    const exposed = createCentraidTokens(designTokens) as Record<
+    const exposed = createCentraidTokens(designTokens, FONT_FACE_CSS) as Record<
       string,
       unknown
     >;
@@ -408,7 +409,7 @@ describe("CentraidTokens", () => {
   });
 
   it("copies list exports so the renderer cannot mutate the package's arrays", () => {
-    const exposed = createCentraidTokens(designTokens);
+    const exposed = createCentraidTokens(designTokens, FONT_FACE_CSS);
     expect(exposed.apps).not.toBe(designTokens.apps);
     expect(exposed.themePresets).not.toBe(designTokens.THEME_PRESETS);
     expect(exposed.apps).toStrictEqual([...designTokens.apps]);
@@ -416,12 +417,31 @@ describe("CentraidTokens", () => {
   });
 
   it("precomputes the token CSS the renderer injects", () => {
-    const exposed = createCentraidTokens(designTokens);
-    expect(exposed.cssText).toBe(designTokens.toCss());
+    const exposed = createCentraidTokens(designTokens, FONT_FACE_CSS);
+    expect(exposed.cssText).toBe(`${FONT_FACE_CSS}\n${designTokens.toCss()}`);
+  });
+
+  // The faces have to be DECLARED before the first `var(--font-sans)` lookup,
+  // and they have to point at the app's own bundle — a remote src would make
+  // the shell's typography depend on a network the desktop never promised.
+  it("declares the bundled faces ahead of the tokens, from relative paths", () => {
+    const { cssText } = createCentraidTokens(designTokens, FONT_FACE_CSS);
+    expect(cssText.indexOf("@font-face")).toBeLessThan(
+      cssText.indexOf("--font-sans")
+    );
+    const sources = [...cssText.matchAll(/src: url\((?<href>[^)]+)\)/gu)].map(
+      (match) => match.groups?.href
+    );
+    // FOUR: v8 leaves one Instrument Sans face at 400/600, each in latin +
+    // latin-ext. The platform code stack has no `@font-face` rule at all.
+    expect(sources).toHaveLength(4);
+    expect(
+      sources.filter((src) => src?.startsWith("fonts/") === true)
+    ).toHaveLength(4);
   });
 
   it("delegates tileFinish to the design-token implementation", () => {
-    const exposed = createCentraidTokens(designTokens);
+    const exposed = createCentraidTokens(designTokens, FONT_FACE_CSS);
     expect(exposed.tileFinish("#5B8DEF", "solid")).toStrictEqual(
       designTokens.tileFinish("#5B8DEF", "solid")
     );

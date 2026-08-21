@@ -9,6 +9,7 @@
 // `node --test`, which is the runner this lane uses. Same pattern as
 // scripts/lint-protocol-routes.test.mjs.
 import assert from "node:assert/strict";
+// oxlint-disable-next-line no-restricted-imports -- (#781) node --test lane: the kit's tempDir() registers a vitest afterAll at import time and throws here; removal is registered at creation via t.after below.
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -17,7 +18,7 @@ import test from "node:test";
 import { checkLawRegistry, collectLawTags } from "./lint-law-registry.mjs";
 
 const OWNER = "packages/backup/src/engine.test.ts";
-const OTHER = "packages/gateway/src/backup/backup-service.contract.test.ts";
+const OTHER = "packages/server/src/backup/backup-service.contract.test.ts";
 
 function fixture(t, files) {
   const root = mkdtempSync(path.join(tmpdir(), "centraid-law-registry-"));
@@ -174,6 +175,15 @@ test("non-test files are not scanned for tags", (t) => {
   const root = fixture(t, {
     [OWNER]: 'test("[law:backup-no-change] a")\n',
     "docs/laws.md": "the [law:backup-no-change] tag is documented here\n",
+  });
+  assert.deepEqual(run(root), []);
+});
+
+test("generated app-boot mirrors are not treated as second law owners", (t) => {
+  const root = fixture(t, {
+    [OWNER]: 'test("[law:backup-no-change] a")\n',
+    [`.app-boot/backup/${OWNER}`]:
+      'test("[law:backup-no-change] mirrored build product")\n',
   });
   assert.deepEqual(run(root), []);
 });

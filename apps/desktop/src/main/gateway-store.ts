@@ -121,6 +121,7 @@ export async function ensureLocalGateway(): Promise<GatewayProfile> {
     id: LOCAL_GATEWAY_ID,
     kind: "local",
     label: DEFAULT_LOCAL_LABEL,
+    rememberDevice: true,
     createdAt: new Date().toISOString(),
   };
   await replaceProfile(profile);

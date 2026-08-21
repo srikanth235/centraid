@@ -1,6 +1,10 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import type { JSX } from "react";
 
+import {
+  APPROVALS_ERROR_BODY,
+  APPROVALS_ERROR_TITLE,
+} from "../../../approvals-copy.js";
 import {
   decideOutboxItem,
   decideScopeRequest,
@@ -15,15 +19,35 @@ import {
   enableWebPushWake,
   syncWebNotifications,
 } from "../../../gateway-client-push.js";
-import { confirmVaultParked } from "../../../gateway-client-vault.js";
+import {
+  confirmVaultParked,
+  listAgents,
+  listEnrichEgressConsent,
+  revokeVaultGrant,
+  vaultApps,
+} from "../../../gateway-client-vault.js";
+import { RETRY_ACTION } from "../../../surface-copy.js";
 import ApprovalsScreen from "../../screens/ApprovalsScreen.js";
+import { groupGrantsByStore } from "../../screens/privacyStores.js";
+import type { StoreHolderDTO } from "../../screens/privacyStores.js";
+import NoteBlock from "../../ui/NoteBlock.js";
+import PanelBlock from "../../ui/PanelBlock.js";
 import { useShellActions } from "../actions.js";
 import PageScroll from "../PageScroll.js";
 import { useCachedQuery } from "../queryCache.js";
-import { PageEmpty, PageSkeleton } from "../status.js";
 import {
+  clearRouteSignals,
+  publishRouteSignals,
+  publishRouteVerbs,
+} from "../routeVitals.js";
+import { PageSkeleton } from "../status.js";
+import {
+  approvalsCountLine,
+  approvalsHealth,
+  approvalsState,
   buildGrantRow,
   buildActivityRow,
+  buildEnrichConsentRow,
   collapseAdjacentActivity,
   buildNeedsAuthRow,
   buildOutboxRow,
@@ -41,28 +65,57 @@ interface Approvals {
   notifications: Awaited<ReturnType<typeof getNotifications>>;
   grants: Awaited<ReturnType<typeof listOutboxGrants>>;
   review: Awaited<ReturnType<typeof getReview>>;
+  /** The store-ledger's raw ingredients (issue #708 A2) — kept as the wire
+   *  shapes here; `groupGrantsByStore` reshapes them at render time so a
+   *  revoke's optimistic edit (below) only has to splice one grant out of
+   *  one app/agent's list, not re-derive the whole grouping. */
+  apps: Awaited<ReturnType<typeof vaultApps>>;
+  agents: Awaited<ReturnType<typeof listAgents>>;
+  /** The enrichment egress answers on record (issue #807, Wave 3) — read
+   *  only; the page shows them and never re-asks the question here. `null`
+   *  when this gateway is older than the consent ledger. */
+  enrichConsent: Awaited<ReturnType<typeof listEnrichEgressConsent>> | null;
 }
 
 async function loadApprovals(reviewLimit: number): Promise<Approvals> {
-  const [notifications, grants, review] = await Promise.all([
-    getNotifications(true),
-    listOutboxGrants(),
-    getReview(reviewLimit),
-  ]);
-  return { notifications, grants, review };
+  const [notifications, grants, review, apps, agents, enrichConsent] =
+    await Promise.all([
+      getNotifications(true),
+      listOutboxGrants(),
+      getReview(reviewLimit),
+      vaultApps(),
+      listAgents(),
+      // A gateway too old to carry the ledger must not blank the whole page —
+      // and `null` rather than `[]` because the two are different facts: no
+      // answers on record, versus a gateway that cannot be asked. The section
+      // says which one it is (#815); every other section keeps working.
+      listEnrichEgressConsent().catch(() => null),
+    ]);
+  return { notifications, grants, review, apps, agents, enrichConsent };
 }
+
+/**
+ * What discarding a staged write costs, in the words of the call that performs
+ * it. The card states it in place: a member never leaves the sentence they are
+ * deciding about to answer a modal about it.
+ */
+const DISCARD_CONSEQUENCE = "Nothing will be sent. This can’t be undone.";
 
 // React-owned Notifications route (issues #306/#308/#647) — the desktop UI over the
 // vault's outbox/blocking/scope-request/grant surface, which shipped with no
 // renderer consumer at all. Loads `GET /_vault/blocking` (the unified notifications)
 // + `GET /_vault/outbox-grants` (standing rules), maps the wire rows to the
 // screen's DTOs (approvalsData.ts), and wires every decision back over
-// `gateway-client-outbox.ts`. Deny/revoke ride the shared confirm overlay,
-// same split as HomeRoute's delete flow.
+// `gateway-client-outbox.ts`. Every irreversible verb confirms IN PLACE on the
+// card or beside the row it belongs to (#815), so this route opens no overlay.
 export default function ApprovalsRoute(): JSX.Element {
-  const { confirm, showToast, navigate } = useShellActions();
+  const { showToast, navigate } = useShellActions();
   const [busyId, setBusyId] = useState<string | null>(null);
   const [reviewLimit, setReviewLimit] = useState(REVIEW_LIMIT_DEFAULT);
+  // The app bar's "Review all" verb, as a nonce rather than a callback into
+  // the screen: the bar renders above the outlet, so the route is the only
+  // place both can see, and a nonce makes a repeat press a fresh request.
+  const [reviewAll, setReviewAll] = useState<{ nonce: number } | null>(null);
 
   // The outbox decision an `outbox` notice deep-links to (#647 D10). The
   // nonce makes a repeat tap a fresh request; the screen owns the resulting
@@ -71,6 +124,17 @@ export default function ApprovalsRoute(): JSX.Element {
     itemId: string | null;
     nonce: number;
   } | null>(null);
+
+  // The last write the gateway refused, in its own words. It rides down to the
+  // screen rather than living only on the status line, because the sentence
+  // belongs beside the item it is about.
+  const [refusal, setRefusal] = useState<{
+    itemId: string | null;
+    message: string;
+    nonce: number;
+  } | null>(null);
+  /** Refusal count, so a second refusal of the SAME item is a fresh event. */
+  const refusals = useRef(0);
 
   // Cached and stale-while-revalidate (issue #659). Two things follow. An SSE
   // doorbell or a decision revalidates BEHIND the rendered page, so nothing the
@@ -100,6 +164,63 @@ export default function ApprovalsRoute(): JSX.Element {
     return () => controller.abort();
   }, [reload]);
 
+  // The frame's two verbs. "History" is the durable alert record, which lives
+  // on System's Alert history drill-in (`GatewayAlertsTab`) — one implementation,
+  // reached from both places, rather than a second copy of it here.
+  useEffect(() => {
+    publishRouteVerbs("approvals", {
+      onCommit: () =>
+        setReviewAll((prev) => ({ nonce: (prev?.nonce ?? 0) + 1 })),
+      onSecondary: () => navigate({ kind: "gateway", tab: "alerts" }),
+    });
+    return () => clearRouteSignals("approvals");
+  }, [navigate]);
+
+  // The count line and the status line, from the one query resolution that
+  // knows them — never from a render, which would let the bar and the body
+  // disagree about which state the page is in.
+  const pending =
+    state.status === "ready" ? state.data.notifications.decisions : null;
+  // Waiting = every decision, plus the notices that are a demand rather than
+  // news (an info-severity notice is an FYI and never blocks anyone, #665).
+  const waiting =
+    pending === null || state.status !== "ready"
+      ? -1
+      : pending.outbox.length +
+        pending.needsAuth.length +
+        pending.parked.length +
+        pending.scopeRequests.length +
+        state.data.notifications.notices.filter(
+          (notice) => notice.archivedAt === null && notice.severity !== "info"
+        ).length;
+  const standing =
+    state.status === "ready"
+      ? state.data.grants.filter((grant) => grant.revokedAt === null).length
+      : -1;
+  const lastReadAt = useRef<number | null>(null);
+  useEffect(() => {
+    if (state.status === "loading") {
+      publishRouteSignals("approvals", { state: "loading" });
+      return;
+    }
+    if (state.status === "error") {
+      publishRouteSignals("approvals", {
+        state: "error",
+        ...(lastReadAt.current === null
+          ? {}
+          : { lastReadAt: lastReadAt.current }),
+      });
+      return;
+    }
+    lastReadAt.current = Date.now();
+    const tally = { grants: standing, waiting };
+    publishRouteSignals("approvals", {
+      count: approvalsCountLine(tally),
+      health: approvalsHealth(tally),
+      state: approvalsState(tally),
+    });
+  }, [standing, state.status, waiting]);
+
   /**
    * Run one decision. The row leaves the page the moment the owner decides
    * (issue #659) — `apply` is the local edit describing that — and the wire
@@ -110,15 +231,20 @@ export default function ApprovalsRoute(): JSX.Element {
   const runDecision = async (
     id: string,
     action: () => Promise<void>,
-    apply: (previous: Approvals) => Approvals = (previous) => previous
+    apply: (previous: Approvals) => Approvals = (previous) => previous,
+    /** An outbox item id, when the reversal has a CARD to come back to — the
+     *  refused write returns exactly as it was, edit included, carrying the
+     *  gateway's own words (#815). */
+    itemId: string | null = null
   ): Promise<void> => {
     setBusyId(id);
     try {
       await mutate(apply, action);
     } catch (error) {
-      showToast(
-        `That didn’t go through: ${error instanceof Error ? error.message : String(error)}`
-      );
+      const message = error instanceof Error ? error.message : String(error);
+      refusals.current += 1;
+      setRefusal({ itemId, message, nonce: refusals.current });
+      showToast(`That didn’t go through: ${message}`);
     } finally {
       setBusyId(null);
     }
@@ -188,116 +314,119 @@ export default function ApprovalsRoute(): JSX.Element {
               : "Approved."
         );
       },
-      (previous) => withoutDecision(previous, "outbox", itemId)
+      (previous) => withoutDecision(previous, "outbox", itemId),
+      itemId
     );
   };
 
+  // Every irreversible verb below confirms IN PLACE, on the card or beside the
+  // row it belongs to (#815). The shell's modal is gone from this route: a
+  // sheet that covers the sentence a member is deciding about asks them to
+  // remember it instead of read it.
   const handleDenyOutbox = (itemId: string): void => {
-    void confirm({
-      title: "Discard this outbox item?",
-      message: "Nothing will be sent. This can’t be undone.",
-      confirmLabel: "Discard",
-      danger: true,
-    }).then((ok) => {
-      if (!ok) return;
-      void runDecision(
-        itemId,
-        async () => {
-          const outcome = await decideOutboxItem({
-            itemId,
-            decision: "discard",
-          });
-          const reason = reasonFor(outcome);
-          if (reason) throw new Error(reason);
-          showToast("Discarded — nothing was sent.");
-        },
-        (previous) => withoutDecision(previous, "outbox", itemId)
-      );
-    });
+    void runDecision(
+      itemId,
+      async () => {
+        const outcome = await decideOutboxItem({
+          itemId,
+          decision: "discard",
+        });
+        const reason = reasonFor(outcome);
+        if (reason) throw new Error(reason);
+        showToast("Discarded — nothing was sent.");
+      },
+      (previous) => withoutDecision(previous, "outbox", itemId),
+      itemId
+    );
   };
 
   const handleConfirmParked = (
     invocationId: string,
     approve: boolean
   ): void => {
-    const proceed = (): void => {
-      void runDecision(
-        invocationId,
-        async () => {
-          await confirmVaultParked({ invocationId, approve });
-          showToast(approve ? "Approved." : "Denied.");
-        },
-        (previous) => withoutDecision(previous, "parked", invocationId)
-      );
-    };
-    if (approve) {
-      proceed();
-      return;
-    }
-    void confirm({
-      title: "Deny this request?",
-      message: "The parked invocation will be denied and can’t be replayed.",
-      confirmLabel: "Deny",
-      danger: true,
-    }).then((ok) => ok && proceed());
+    void runDecision(
+      invocationId,
+      async () => {
+        await confirmVaultParked({ invocationId, approve });
+        showToast(approve ? "Approved." : "Denied.");
+      },
+      (previous) => withoutDecision(previous, "parked", invocationId)
+    );
   };
 
   const handleDecideScopeRequest = (
     requestId: string,
     approve: boolean
   ): void => {
-    const proceed = (): void => {
-      void runDecision(
-        requestId,
-        async () => {
-          await decideScopeRequest({ requestId, approve });
-          showToast(approve ? "Scope approved." : "Scope request denied.");
-        },
-        (previous) => withoutDecision(previous, "scopeRequests", requestId)
-      );
-    };
-    if (approve) {
-      proceed();
-      return;
-    }
-    void confirm({
-      title: "Deny this scope request?",
-      message:
-        "The app keeps its current access; it won’t be re-asked for this widening.",
-      confirmLabel: "Deny",
-      danger: true,
-    }).then((ok) => ok && proceed());
+    void runDecision(
+      requestId,
+      async () => {
+        await decideScopeRequest({ requestId, approve });
+        showToast(approve ? "Scope approved." : "Scope request denied.");
+      },
+      (previous) => withoutDecision(previous, "scopeRequests", requestId)
+    );
   };
 
   const handleRevokeGrant = (grantId: string): void => {
-    void confirm({
-      title: "Revoke this standing grant?",
-      message:
-        "Future items like this park for your review again; anything already approved but undrained reparks too.",
-      confirmLabel: "Revoke",
-      danger: true,
-    }).then((ok) => {
-      if (!ok) return;
-      void runDecision(
-        grantId,
-        async () => {
-          const outcome = await revokeOutboxGrant(grantId);
-          const reason = reasonFor(outcome);
-          if (reason) throw new Error(reason);
-          showToast("Grant revoked.");
-        },
-        // The row is filtered on `revokedAt` below, so stamping it is what
-        // makes the standing rule leave the list on the click.
-        (previous) => ({
-          ...previous,
-          grants: previous.grants.map((grant) =>
-            grant.grantId === grantId
-              ? { ...grant, revokedAt: new Date().toISOString() }
-              : grant
-          ),
-        })
-      );
-    });
+    void runDecision(
+      grantId,
+      async () => {
+        const outcome = await revokeOutboxGrant(grantId);
+        const reason = reasonFor(outcome);
+        if (reason) throw new Error(reason);
+        showToast("Grant revoked.");
+      },
+      // The row is filtered on `revokedAt` below, so stamping it is what
+      // makes the standing rule leave the list on the click.
+      (previous) => ({
+        ...previous,
+        grants: previous.grants.map((grant) =>
+          grant.grantId === grantId
+            ? { ...grant, revokedAt: new Date().toISOString() }
+            : grant
+        ),
+      })
+    );
+  };
+
+  /**
+   * Revoke one store-ledger holder (issue #708 A2). The ledger's "switch"
+   * strikes the row through rather than removing it — that local
+   * revoked-state bookkeeping lives in `ApprovalsScreen`, so this handler's
+   * only job is the wire call plus splicing the grant out of `apps`/`agents`
+   * so a background revalidate doesn't resurrect it before the screen's own
+   * snapshot has taken over showing the struck-through row.
+   */
+  const handleRevokeStoreGrant = (holder: StoreHolderDTO): void => {
+    void runDecision(
+      holder.grantId,
+      async () => {
+        await revokeVaultGrant({ grantId: holder.grantId });
+        showToast(`Revoked ${holder.holderLabel}’s access.`);
+      },
+      (previous) => ({
+        ...previous,
+        apps: previous.apps.map((app) =>
+          app.appId === holder.holderId
+            ? {
+                ...app,
+                grants: app.grants.filter((g) => g.grantId !== holder.grantId),
+              }
+            : app
+        ),
+        agents: previous.agents.map((agent) =>
+          agent.agentId === holder.holderId
+            ? {
+                ...agent,
+                grants: agent.grants.filter(
+                  (g) => g.grantId !== holder.grantId
+                ),
+              }
+            : agent
+        ),
+      })
+    );
   };
 
   const handleNoticeAction = (
@@ -331,21 +460,37 @@ export default function ApprovalsRoute(): JSX.Element {
   if (state.status === "loading") {
     return (
       <PageScroll>
-        <PageSkeleton rows={4} label="Loading Notifications…" />
+        <PageSkeleton rows={6} label="Loading Notifications…" />
+        <NoteBlock>
+          A row knows its shape before its content arrives, so nothing reflows
+          when it does.
+        </NoteBlock>
       </PageScroll>
     );
   }
   if (state.status === "error") {
+    // What failed, what is still safe, one way forward — the error shape every
+    // one of the six operational routes takes. The gateway's own words ride
+    // along as a fact, because "it didn't work" is not a diagnosis.
     return (
       <PageScroll>
-        <PageEmpty message={`Couldn’t load Notifications: ${state.error}`} />
+        <PanelBlock
+          action={{ label: RETRY_ACTION, onClick: reload }}
+          body={APPROVALS_ERROR_BODY}
+          eyebrow={APPROVALS_ERROR_TITLE}
+          facts={[{ key: "what it said", value: state.error }]}
+          tone="net"
+          wide
+        />
       </PageScroll>
     );
   }
 
-  const { notifications, grants, review } = state.data;
+  const { notifications, grants, review, apps, agents, enrichConsent } =
+    state.data;
   const blocking = notifications.decisions;
   const activity = collapseAdjacentActivity(review.map(buildActivityRow));
+  const storeGrants = groupGrantsByStore(apps, agents);
   // Truncated when the wire returned a full page at the current limit —
   // "See all" raises the cap in place (no separate audit-log screen).
   const activityTruncated =
@@ -358,6 +503,11 @@ export default function ApprovalsRoute(): JSX.Element {
         parked={blocking.parked.map(buildParkedRow)}
         scopeRequests={blocking.scopeRequests.map(buildScopeRequestRow)}
         grants={grants.filter((g) => g.revokedAt === null).map(buildGrantRow)}
+        storeGrants={storeGrants}
+        enrichConsent={(enrichConsent ?? []).map(buildEnrichConsentRow)}
+        enrichConsentReadable={enrichConsent !== null}
+        discardConsequence={DISCARD_CONSEQUENCE}
+        refusal={refusal}
         activity={activity}
         notices={notifications.notices.map((notice) => ({
           ...notice,
@@ -390,13 +540,24 @@ export default function ApprovalsRoute(): JSX.Element {
         onConfirmParked={handleConfirmParked}
         onDecideScopeRequest={handleDecideScopeRequest}
         onRevokeGrant={handleRevokeGrant}
+        onRevokeStoreGrant={handleRevokeStoreGrant}
         onReadNotice={(id) => handleNoticeAction(id, "read")}
         onArchiveNotice={(id) => handleNoticeAction(id, "archive")}
         onOpenNotice={(notice) => {
           const ref = notice.detail.automationRef;
           const appId = notice.detail.appId;
-          if (typeof ref === "string") {
+          // Recognition controls are the built-in automation recipes. A
+          // refusal therefore opens its recipe when the notice identifies
+          // one, and otherwise opens the collapsed Recognition fleet.
+          if (notice.kind.startsWith("commons-")) {
+            // Steward absence, commons growth and the identity fault
+            // (commons-notices.ts) are all acted on from People & circles on
+            // Household — the surface that offers the recovery ceremony.
+            navigate({ kind: "household" });
+          } else if (typeof ref === "string") {
             navigate({ kind: "automation-view", automationId: ref });
+          } else if (typeof notice.detail.enrichDomain === "string") {
+            navigate({ kind: "automations" });
           } else if (notice.kind === "gateway-health") {
             // Legacy rows only (issue #665): health no longer projects into the
             // Notifications, but cards written by an earlier build survive in vault.db
@@ -419,7 +580,9 @@ export default function ApprovalsRoute(): JSX.Element {
           }
         }}
         onSeeAllActivity={() => setReviewLimit(REVIEW_LIMIT_SEE_ALL)}
+        onOpenAlertHistory={() => navigate({ kind: "gateway", tab: "alerts" })}
         focusOutbox={focusOutbox}
+        reviewAll={reviewAll}
       />
     </PageScroll>
   );

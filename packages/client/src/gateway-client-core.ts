@@ -15,13 +15,7 @@
  * for the `file://` renderer origin).
  */
 
-import {
-  authHeaders,
-  enc,
-  GatewayClientError,
-  href,
-  VAULT_HEADER,
-} from "./gateway-auth.js";
+import { GatewayClientError, href, VAULT_HEADER } from "./gateway-auth.js";
 import type { GatewayAuth } from "./gateway-auth.js";
 
 export {
@@ -103,37 +97,6 @@ window.CentraidApi.onGatewayChanged(() => resetGatewayAuthCache());
 // so re-resolving auth is all that's needed (no wholesale reload).
 window.CentraidApi.onVaultChanged?.(() => resetGatewayAuthCache());
 
-/** Mint a one-time generated-app launch URL when the host uses browser sessions. */
-export async function appSessionUrl(
-  appId: string,
-  directPath: string,
-  draftSessionId?: string
-): Promise<string> {
-  const capabilities = await window.CentraidApi.getHostCapabilities?.();
-  const { baseUrl, token, iroh } = await auth();
-  if (!capabilities?.appSessions) {
-    return iroh && window.CentraidIroh
-      ? window.CentraidIroh.url(directPath)
-      : href(baseUrl, directPath);
-  }
-  const res = await doFetch(
-    baseUrl,
-    `/centraid/_apps/${enc(appId)}/web-session`,
-    {
-      method: "POST",
-      headers: authHeaders(token, "application/json"),
-      body: JSON.stringify(draftSessionId ? { draftSessionId } : {}),
-    }
-  );
-  const out = await readJson<{ launchPath: string }>(
-    res,
-    "open browser app session"
-  );
-  return iroh && window.CentraidIroh
-    ? window.CentraidIroh.url(out.launchPath)
-    : href(baseUrl, out.launchPath);
-}
-
 export async function doFetch(
   baseUrl: string,
   pathname: string,
@@ -197,7 +160,7 @@ export function nonJsonError(
   );
   return new GatewayClientError(
     "gateway_error",
-    `${op}: the gateway sent an unexpected response. It may be starting up or unreachable — check the console for details.`
+    `${op}: unexpected response — the gateway may be starting up or unreachable.`
   );
 }
 
@@ -207,7 +170,7 @@ export async function readJson<T>(res: Response, op: string): Promise<T> {
     if (res.status === 401 || res.status === 403) {
       throw new GatewayClientError(
         "auth_required",
-        `${op}: gateway rejected request (HTTP ${res.status}). Check your gateway token in Settings.`
+        `${op}: gateway rejected the request (HTTP ${res.status}) — check your token in Settings.`
       );
     }
     if (res.status === 404)

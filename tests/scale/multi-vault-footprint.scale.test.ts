@@ -32,7 +32,7 @@ import { rigDriftBudgetMs } from "../helpers/rig-budgets.js";
  * that ceiling in aggregate.
  *
  * Asserted against the `openVaultDb` contract, NOT against the gateway plane
- * layer: `packages/gateway/src/serve/vault-plane.ts` is concurrently gaining a
+ * layer: `packages/server/src/serve/vault-plane.ts` is concurrently gaining a
  * host-level total, and a rig pinned to a moving seam measures the seam rather
  * than the property.
  *
@@ -45,8 +45,8 @@ import { rigDriftBudgetMs } from "../helpers/rig-budgets.js";
  * | Rows per vault       | n/a    | bootstrap only — see below |
  *
  * Five is the declared year-3 vault count for one household: the gateway
- * auto-founds `Shared` + `Personal` on a fresh data dir (#603, ARCHITECTURE.md)
- * and a household adds one personal vault per additional member. The full
+ * auto-founds one marked `Personal` vault on a fresh data dir (#603,
+ * ARCHITECTURE.md) and a household adds four more vaults explicitly. The full
  * volume table lives in tests/experience-budgets/README.md.
  *
  * **The row volume is deliberately bootstrap-only, and that is a real limit of

@@ -7,11 +7,12 @@ import { describe, expect, test } from "vitest";
 import { BRAND, palette, radii, spacing, themes } from "./index.js";
 
 describe("tokens", () => {
-  test("brand teal is a stable hex identity color", () => {
+  test("the product mark is ink, and it is the primary text colour", () => {
     expect(BRAND).toMatch(/^#[0-9a-fA-F]{6}$/u);
+    expect(BRAND).toBe(themes.light.text);
   });
 
-  test("palette exposes required color keys used by shell chrome", () => {
+  test("palette exposes required color keys used by app identity", () => {
     expect(palette.forest).toMatch(/^#/u);
     expect(palette.teal).toMatch(/^#/u);
     expect(Object.keys(palette).length).toBeGreaterThan(5);

@@ -1,9 +1,9 @@
 import { createHash } from "node:crypto";
 import path from "node:path";
 
-import { ConversationStore } from "../../../packages/app-engine/src/conversation/store.js";
-import { ensureConversationLedger } from "../../../packages/app-engine/src/stores/gateway-db.js";
-import { buildGateway } from "../../../packages/gateway/src/serve/build-gateway.js";
+import { ConversationStore } from "../../../packages/server/src/engine/conversation/store.js";
+import { ensureConversationLedger } from "../../../packages/server/src/engine/stores/gateway-db.js";
+import { buildGateway } from "../../../packages/server/src/serve/build-gateway.js";
 
 const [root, faultPoint, mode = "crash"] = process.argv.slice(2);
 if (!root || !faultPoint) throw new Error("root and fault point required");
@@ -11,7 +11,10 @@ if (!root || !faultPoint) throw new Error("root and fault point required");
 const gateway = await buildGateway({
   paths: { vaultDir: path.join(root, "vault") },
 });
-await gateway.start("http://127.0.0.1");
+// Recovery only inspects the reopened vault/journal planes. Mounting code
+// hosts, schedulers, catalogs, and HTTP routes adds no crash-safety coverage
+// and can starve this 30-second fault test while the PR gate runs four lanes.
+if (mode !== "recover") await gateway.start("http://127.0.0.1");
 const vaultId = gateway.vaults.defaultVaultId();
 const plane = gateway.vaults.get(vaultId)!;
 const db = plane.db;
@@ -83,7 +86,7 @@ if (faultPoint === "journal-after-append") {
     userMessage: "acknowledged journal input",
     nodes: [],
     finalText: "acknowledged journal output",
-    adapter: { kind: "codex", sessionId: "quality-crash" },
+    harnessObservation: { kind: "codex", sessionId: "quality-crash" },
     startedAt: 1,
     endedAt: 2,
     ok: true,

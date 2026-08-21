@@ -10,13 +10,13 @@
  *
  * Favorite USED to be joined here too (a flags-scheme starred tag on the
  * canonical content item, issue #274). Issue #419 made it a first-class
- * `favorite` column on media.media_asset — the photos replica shape has to be
+ * `favorite` column on media.asset — the photos replica shape has to be
  * self-contained, and a native client cannot reconstruct a star from a
  * three-table concept join it was never granted. The tag path is gone, not
  * dual-written: the column is the only source of truth.
  *
  * NOT a query itself — the dispatcher resolves a query name straight to
- * `queries/<name>.js` (never a directory scan: packages/app-engine/src/
+ * `queries/<name>.js` (never a directory scan: packages/server/src/engine/
  * handlers/dispatcher.ts), so a plain helper module beside the handlers is
  * invisible to it and to build-manifest.mjs's install-copy walk; nothing
  * needs to know this file exists besides the two callers that import it.
@@ -37,6 +37,35 @@ interface SrcContent {
 interface RawPlace {
   place_id: string;
   name: string;
+  geo_lat?: number | null;
+  geo_lng?: number | null;
+  kind?: string | null;
+  address_json?: string | null;
+}
+
+/**
+ * The settlement name the opt-in gazetteer automation writes into a place's
+ * `address_json`, or null.
+ *
+ * Nothing writes it yet, so every branch here is the absent one today — which
+ * is exactly why it has to tolerate absence, blank, malformed JSON and a
+ * non-object payload without throwing. A place list that refuses to load
+ * because one row's address blob is unparseable would take the whole shelf
+ * down over a field nobody asked for.
+ */
+function gazetteerOf(addressJson: string | null | undefined): string | null {
+  if (typeof addressJson !== "string" || addressJson === "") return null;
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(addressJson);
+  } catch {
+    return null;
+  }
+  if (parsed === null || typeof parsed !== "object") return null;
+  const gazetteer = (parsed as { gazetteer?: unknown }).gazetteer;
+  if (gazetteer === null || typeof gazetteer !== "object") return null;
+  const name = (gazetteer as { name?: unknown }).name;
+  return typeof name === "string" && name.trim() !== "" ? name.trim() : null;
 }
 
 interface SchemeRow {
@@ -102,9 +131,21 @@ export async function readPlaces({
   purpose: string;
 }) {
   const result = await ctx.vault.read({ entity: "core.place", purpose });
+  // Coordinates ride along because the Places shelf DRAWS them (place-map.ts)
+  // — a place list without them can only be a list. They stay `null` for a
+  // place that has no geography at all (a room, a venue someone typed), which
+  // the map filters rather than plotting at 0°,0° off the coast of Africa.
+  // `kind` and the gazetteer name ride along because a location is a PHRASE
+  // before it is a pin (place-phrase.ts): the ladder needs to know which place
+  // is home to say "3.4 km NE of Home", and a settlement name outranks any
+  // phrase derived from geometry.
   const rows = ((result.rows ?? []) as unknown as RawPlace[]).map((p) => ({
     place_id: p.place_id,
     name: p.name,
+    lat: typeof p.geo_lat === "number" ? p.geo_lat : null,
+    lng: typeof p.geo_lng === "number" ? p.geo_lng : null,
+    kind: p.kind ?? null,
+    gazetteer: gazetteerOf(p.address_json),
   }));
   return { rows, byId: new Map(rows.map((p) => [p.place_id, p] as const)) };
 }
@@ -140,7 +181,7 @@ export async function readAssetJoins({
   ]);
 
   // Free-form labels (issue #352): core.tag_item targets the ASSET itself
-  // (target_type 'media.media_asset'), unlike the content-item-scoped
+  // (target_type 'media.asset'), unlike the content-item-scoped
   // favorite star above — see tags.ts's SUBJECT_PK. Each entry carries the
   // tag_id too: untag-asset.js removes by tag_id (core.untag_item), not by
   // label, so the UI needs it to render a working remove control.
@@ -163,7 +204,7 @@ export async function readAssetJoins({
     const labelTags = await ctx.vault.read({
       entity: "core.tag",
       where: [
-        { column: "target_type", op: "eq", value: "media.media_asset" },
+        { column: "target_type", op: "eq", value: "media.asset" },
         { column: "target_id", op: "in", value: assetIds },
       ],
       purpose,

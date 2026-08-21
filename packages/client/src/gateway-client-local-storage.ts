@@ -1,6 +1,6 @@
 /*
  * Renderer-side client for the gateway's LOCAL disk surface (issue #544 —
- * `packages/gateway/src/routes/storage-routes.ts`). Sibling of
+ * `packages/server/src/routes/storage-routes.ts`). Sibling of
  * `gateway-client-storage.ts`, which speaks to the same route prefix but
  * about the PROVIDER: that file answers "what does my storage provider hold",
  * this one answers "what is Centraid using on this machine, and what ceiling

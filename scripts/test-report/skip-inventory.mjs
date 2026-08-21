@@ -60,7 +60,12 @@ export const SCAN_INCLUDE = [
   "tests/**/*.test.ts",
   "tests/**/*.test.mjs",
   "tests/agent-e2e-*/flows/*.mjs",
-  "scripts/*.test.mjs",
+  // Recursive: a script test one directory down (`scripts/gateway-package/`,
+  // `apps/mobile/scripts/`) is a test like any other, and a single-segment glob
+  // silently exempted it from the budget — an invisible skip is the exact
+  // failure this gate exists to prevent.
+  "scripts/**/*.test.mjs",
+  "apps/*/scripts/**/*.test.mjs",
 ];
 
 /**

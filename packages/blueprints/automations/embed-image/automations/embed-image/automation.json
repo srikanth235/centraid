@@ -1,0 +1,30 @@
+{
+  "name": "Image embeddings",
+  "version": "0.1.0",
+  "description": "Embeds new photograph previews in bounded cursor batches.",
+  "enabled": false,
+  "prompt": "Build my seat-local similarity index from preview derivatives in bounded batches.",
+  "triggers": [
+    {
+      "kind": "data",
+      "entities": ["media.asset"],
+      "every": "*/5 * * * *"
+    }
+  ],
+  "requires": {},
+  "vault": {
+    "purpose": "dpv:ServiceProvision",
+    "why": "Reads image previews and writes vectors through the dedicated validated vector command.",
+    "scopes": [
+      { "schema": "media", "verbs": "read" },
+      { "schema": "enrich", "verbs": "read+act" }
+    ]
+  },
+  "enrich": {
+    "domain": "photos",
+    "capability": "embed-image",
+    "lane": "gateway"
+  },
+  "history": { "keep": { "count": 100 } },
+  "generated": { "by": "centraid-template", "at": "2026-08-10T00:00:00.000Z" }
+}

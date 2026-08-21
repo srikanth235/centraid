@@ -10,12 +10,12 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@centraid/core": "workspace:*",
     "@centraid/design": "workspace:*",
-    "@centraid/protocol": "workspace:*",
     "tldts": "7.4.9"
   },
   "devDependencies": {
-    "@playwright/test": "^1.62.0",
+    "@playwright/test": "~1.62.0",
     "sharp": "^0.35.3",
     "typescript": "catalog:"
   }

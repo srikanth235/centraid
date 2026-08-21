@@ -15,3 +15,9 @@ export { default as StatusPill } from "./StatusPill.js";
 export { default as KindBadge } from "./KindBadge.js";
 
 export { default as Gallery } from "./Gallery.js";
+
+// The v9 block vocabulary (issue #765) — the shared shapes every operational
+// route is assembled from — is imported DIRECTLY (`../ui/RowsBlock.js`), the
+// same way `states.tsx` is. A barrel re-export would make every block look
+// used to a grep the moment one of them is, which is exactly the signal the
+// consolidation sweep needs to keep reading.

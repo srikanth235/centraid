@@ -8,7 +8,7 @@ export default {
   // Custody remains the mutate seed (measured 100%). json-schema is property-
   // gated via matrix minimumTests; folding it in drops the package score below
   // the up-only vault floor until more schema mutants are killed.
-  // CI must build workspace deps (@centraid/blob-format) before Stryker —
+  // CI must build workspace deps (@centraid/core/blob) before Stryker —
   // unresolved package entries surface as "No tests were executed".
   mutate: ["src/blob/custody-proven.ts"],
   reporters: ["clear-text", "json"],

@@ -1,8 +1,9 @@
-import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { mkdirSync, writeFileSync } from "node:fs";
 import path from "node:path";
 
-import { afterAll, describe, expect, test } from "vitest";
+import { describe, expect, test } from "vitest";
+
+import { tempDirSync } from "@centraid/test-kit/temp-dir";
 
 import {
   changedFiles,
@@ -10,6 +11,7 @@ import {
   projectNameOf,
   resolveBase,
   run,
+  vitestProjectNames,
   workspaceDirOf,
 } from "./diff-coverage-run.mjs";
 
@@ -65,11 +67,14 @@ describe("run", () => {
 
 describe("workspaceDirOf", () => {
   test("maps packages/ and apps/ sources to their workspace dir", () => {
-    expect(workspaceDirOf("packages/gateway/src/serve/build-gateway.ts")).toBe(
-      "packages/gateway"
+    expect(workspaceDirOf("packages/server/src/serve/build-gateway.ts")).toBe(
+      "packages/server"
     );
     expect(workspaceDirOf("apps/mobile/src/lib/upload/enqueue.ts")).toBe(
       "apps/mobile"
+    );
+    expect(workspaceDirOf("packages/model-runtime/src/ctc.ts")).toBe(
+      "packages/model-runtime"
     );
     expect(
       workspaceDirOf("packages/blueprints/apps/tasks/handlers/create.ts")
@@ -91,11 +96,8 @@ describe("projectNameOf", () => {
     path.dirname(new URL(import.meta.url).pathname),
     "../.."
   );
-  const fixtureRoot = mkdtempSync(path.join(tmpdir(), "diff-coverage-run-"));
+  const fixtureRoot = tempDirSync("diff-coverage-run-");
   const relFixture = path.relative(repoRoot, fixtureRoot);
-  afterAll(() => {
-    rmSync(fixtureRoot, { recursive: true, force: true });
-  });
 
   test("a workspace with a vitest config reports its package name", () => {
     const dir = path.join(fixtureRoot, "with-vitest");
@@ -138,5 +140,17 @@ describe("projectNameOf", () => {
     );
     writeFileSync(path.join(dir, "vitest.config.ts"), "export default {}");
     expect(projectNameOf(path.join(relFixture, "unnamed"))).toBeNull();
+  });
+});
+
+describe("vitestProjectNames", () => {
+  test("adds the React Native transform companion to the mobile package", () => {
+    expect(
+      vitestProjectNames(["@centraid/server", "@centraid/mobile"])
+    ).toStrictEqual([
+      "@centraid/server",
+      "@centraid/mobile",
+      "@centraid/mobile-rn",
+    ]);
   });
 });

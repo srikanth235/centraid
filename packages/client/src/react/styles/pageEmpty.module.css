@@ -7,20 +7,20 @@
   gap: 14px;
   padding: 64px 24px;
   border: 0.5px dashed var(--line-strong);
-  border-radius: 16px;
+  border-radius: var(--r-lg);
   background: color-mix(in srgb, var(--bg-elev) 40%, transparent);
 }
 .pageEmptyIcon {
   width: 48px;
   height: 48px;
-  border-radius: var(--r-xl);
+  border-radius: var(--r-lg);
   display: grid;
   place-items: center;
   background: linear-gradient(160deg, var(--accent-light), var(--accent-deep));
   color: var(--text);
 }
 .pageEmptyText {
-  font-size: 14px;
+  font-size: var(--t-small-size);
   color: var(--text-faint);
   text-align: center;
 }

@@ -1,0 +1,134 @@
+/* Household → Sharing. Reuses DevicesCard.module.css's .row/.main/.meta/.glyph
+   shells (imported as `deviceStyles` in SharingCard.tsx) so a share row reads
+   as a sibling of a device row rather than a bolted-on style; this file only
+   carries what is genuinely new here. */
+
+.section {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.sectionTitle {
+  margin: 0;
+  font-size: var(--t-small-size);
+  font-weight: 600;
+  color: var(--text-soft);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.verbBadge {
+  font-family: var(--font-sans);
+  font-size: var(--t-control-size);
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  border-radius: var(--r-pill);
+  padding: 2px 7px;
+  white-space: nowrap;
+}
+.verbBadge[data-verb="give"] {
+  color: var(--text-faint);
+  background: color-mix(in srgb, var(--text) 8%, transparent);
+}
+.reason {
+  font-size: var(--t-control-size);
+  line-height: 1.4;
+  color: var(--text-faint);
+  overflow-wrap: anywhere;
+}
+
+.proposeForm {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 14px;
+}
+.proposeInput {
+  flex: 1 1 16ch;
+  min-width: 0;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--r-sm);
+  background: var(--bg);
+  color: var(--text);
+  font: inherit;
+  padding: 5px 8px;
+}
+
+.receiveSelect {
+  border: 1px solid var(--line-strong);
+  border-radius: var(--r-sm);
+  background: var(--bg);
+  color: var(--text);
+  font: inherit;
+  font-size: var(--t-control-size);
+  padding: 3px 6px;
+}
+
+.warn {
+  border: 1px solid color-mix(in srgb, var(--danger) 35%, var(--line));
+  border-radius: var(--r-md);
+  background: color-mix(in srgb, var(--danger) 8%, transparent);
+  color: var(--text);
+  padding: 10px 12px;
+  font: var(--t-small);
+}
+
+/* "Link with someone" (#726 audit finding 1) — the remote ceremony's
+   owner-facing door. Mirrors DevicePairPanel.module.css's ticket surface
+   (`.pairTicketSurface`/`.pairQr`/`.ticket`/`.ticketRow`) under its own
+   names since that file is a different component's scope. */
+.linkTicketPanel {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 10px 14px;
+}
+.linkTicketSurface {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 10px;
+}
+.linkTicketQr {
+  width: 140px;
+  height: 140px;
+  padding: 6px;
+  border-radius: var(--r-lg);
+  border: 1px solid var(--line);
+  background: var(--text);
+}
+.linkTicketPaste {
+  width: 100%;
+  box-sizing: border-box;
+  min-height: 64px;
+  resize: vertical;
+  padding: 8px 10px;
+  border: 0.5px solid var(--line);
+  border-radius: var(--r-md);
+  background: color-mix(in srgb, var(--text) 3%, transparent);
+  color: var(--text);
+  font-family: var(--font-sans);
+  font-size: var(--t-control-size);
+}
+.ticketRow {
+  display: flex;
+  align-items: stretch;
+  gap: 8px;
+  width: 100%;
+}
+.ticket {
+  flex: 1 1 auto;
+  min-width: 0;
+  font-family: var(--font-sans);
+  font-size: var(--t-control-size);
+  line-height: 1.5;
+  color: var(--text);
+  background: var(--bg-sunken, color-mix(in srgb, var(--text) 6%, transparent));
+  border: 0.5px solid var(--line);
+  border-radius: var(--r-md);
+  padding: 8px 10px;
+  overflow-wrap: anywhere;
+  max-height: 88px;
+  overflow-y: auto;
+}

@@ -39,7 +39,7 @@ export type CentraidCreateTrigger =
     };
 
 /** Scaffold a new automation app; mints a webhook secret when requested. */
-/** Soft connection binding (agent automations) — ids only, no secrets. */
+/** Soft connection binding (harness-backed automations) — ids only, no secrets. */
 export type CentraidConnectionBinding = {
   connectionId: string;
   kind: string;
@@ -77,7 +77,7 @@ export async function createAutomation(input: {
   /** Published connector declaration (pull/send automations). */
   connector?: CentraidConnectorSpec;
   apps?: string[];
-  runner?: string;
+  harness?: string;
   model?: string;
   historyKeep?: { count: number } | { days: number } | "all" | "errors";
   onFailure?: string;
@@ -135,9 +135,11 @@ export async function updateAutomation(input: {
   connections?: CentraidConnectionBinding[];
   connector?: CentraidConnectorSpec | null;
   /** `null` clears the manifest pin and restores the subsystem default. */
-  runner?: string | null;
-  /** `null` clears the manifest pin and restores the selected runner's default. */
+  harness?: string | null;
+  /** `null` clears the manifest pin and restores the selected harness's default. */
   model?: string | null;
+  /** Persisted recognition path used by both scheduled and manual fires. */
+  recognitionStep?: "deterministic" | "delegate";
 }): Promise<{
   row: CentraidAutomationRow | null;
   webhook?: { id: string; secret: string; url: string };
@@ -162,8 +164,11 @@ export async function updateAutomation(input: {
         ...(input.connector === undefined
           ? {}
           : { connector: input.connector }),
-        ...(input.runner === undefined ? {} : { runner: input.runner }),
+        ...(input.harness === undefined ? {} : { harness: input.harness }),
         ...(input.model === undefined ? {} : { model: input.model }),
+        ...(input.recognitionStep === undefined
+          ? {}
+          : { recognitionStep: input.recognitionStep }),
         sessionId,
         publish: true,
       }),

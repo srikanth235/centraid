@@ -2,9 +2,11 @@ import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 
 import react from "@vitejs/plugin-react";
+import type { Plugin } from "vite";
 import { defineConfig } from "vite";
 
-import { inlineBlueprintAliases } from "../../packages/client/src/react/blueprints/inline-vite-aliases.ts";
+import { FONT_FILES, toFontFaceCss } from "@centraid/design/font-faces";
+import { fontFilePath } from "@centraid/design/fonts";
 
 const fromHere = (path: string): string =>
   fileURLToPath(new URL(path, import.meta.url));
@@ -12,22 +14,86 @@ const fromHere = (path: string): string =>
 const appVersion = JSON.parse(readFileSync(fromHere("./package.json"), "utf8"))
   .version as string;
 
+/**
+ * Same-origin path the four Binding Layer faces are served from (#707).
+ *
+ * Absolute, not relative: the PWA is a single document served at every route
+ * (`/`, `/apps/…`, `/settings`), and the token <style> is injected once at
+ * boot — a relative `fonts/…` would resolve against whatever path the user
+ * happened to deep-link into, and 404 on all but the root.
+ */
+const FONT_BASE = "/fonts";
+
+/**
+ * Serve `@centraid/design`'s vendored `.woff2` files from this app's OWN
+ * origin, in dev and in the build.
+ *
+ * The faces are emitted as build assets rather than copied into `public/`:
+ * `public/` is a tracked source directory, and 160 KB of binaries that a
+ * build step regenerates does not belong in one (the iroh worker gets away
+ * with it only because it is gitignored). Emitting keeps the source tree
+ * clean and makes the manifest in `FONT_FILES` the single decider of what
+ * ships.
+ *
+ * A CDN is not an option here even though a CDN is the usual answer: the
+ * shell installs as a PWA and is expected to paint offline, its app surfaces
+ * run behind a strict CSP, and a cross-origin font is a third party learning
+ * every reader's IP on first paint.
+ */
+function centraidFonts(): Plugin {
+  const byPath = new Map(
+    FONT_FILES.map((file) => [`${FONT_BASE}/${file.fileName}`, file])
+  );
+  return {
+    name: "centraid-fonts",
+    // `vite dev` has no dist to read from; answer the same URLs from the
+    // package directory so dev and prod resolve identically.
+    configureServer(server) {
+      server.middlewares.use((req, res, next) => {
+        const file = byPath.get((req.url ?? "").split("?")[0] ?? "");
+        if (!file) {
+          next();
+          return;
+        }
+        res.setHeader("Content-Type", "font/woff2");
+        res.setHeader("Cache-Control", "no-cache");
+        res.end(readFileSync(fontFilePath(file)));
+      });
+    },
+    generateBundle() {
+      for (const file of FONT_FILES) {
+        this.emitFile({
+          type: "asset",
+          // Unhashed and outside `/assets/`: the URL is baked into the token
+          // CSS string the preload/boot injects, so it must be predictable,
+          // and `_headers` long-caches `/fonts/*` by that same literal path.
+          fileName: `fonts/${file.fileName}`,
+          source: readFileSync(fontFilePath(file)),
+        });
+      }
+    },
+  };
+}
+
 export default defineConfig({
   resolve: {
-    // Array form so the inline-app `./kit.ts` adapter alias sits alongside
-    // the package aliases (issue #505).
+    // Array form, and every pattern anchored: `@centraid/design` must not
+    // swallow its own subpaths.
     alias: [
-      ...inlineBlueprintAliases(),
       {
         find: "@centraid/client",
         replacement: fromHere("../../packages/client/src"),
       },
-      // The kit layer is a directory of served assets; the token layer is a
-      // single module. Anchor the root so `@centraid/design/kit/*` subpath
-      // imports resolve to files instead of into the token module's path.
       {
-        find: "@centraid/design/kit",
-        replacement: fromHere("../../packages/design/kit"),
+        // The browser element substrate the blueprint apps render on. Kept a
+        // subpath, never folded into the barrel: the design root export is
+        // reachable from Expo and must stay DOM-free.
+        find: /^@centraid\/design\/elements$/u,
+        replacement: fromHere("../../packages/design/src/elements/index.ts"),
+      },
+      {
+        find: /^@centraid\/design\/kit\.css$/u,
+        replacement: fromHere("../../packages/design/src/elements/kit.css"),
       },
       {
         find: /^@centraid\/design$/u,
@@ -38,6 +104,12 @@ export default defineConfig({
   define: {
     // Real package version for the web shell (issue #468 K9).
     __APP_VERSION__: JSON.stringify(appVersion),
+    // The `@font-face` block, generated in Node at config time and inlined as
+    // a string constant. `@centraid/design/fonts` reaches for `node:path`, so
+    // it can never be imported by the browser bundle — but its OUTPUT is a
+    // plain string, and `define` is the seam that already carries build-time
+    // facts into this app (issue #707).
+    __CENTRAID_FONT_FACE_CSS__: JSON.stringify(toFontFaceCss(FONT_BASE)),
   },
   build: {
     outDir: "dist",
@@ -100,12 +172,12 @@ export default defineConfig({
           groups: [
             {
               name: "shell-common",
-              test: /packages\/(?:client\/src\/(?:video-frame|gateway-auth|gateway-client-core|device-blob-source|gateway-client-devices|replica\/shell-session)|blob-format\/dist\/index)\.(?:ts|js)$/u,
+              test: /packages\/(?:client\/src\/(?:gateway-auth|gateway-client-core|device-blob-source|gateway-client-devices|replica\/shell-session)|blueprints\/apps\/_shared\/video-frame|blob-format\/dist\/index)\.(?:ts|js)$/u,
             },
           ],
         },
       },
     },
   },
-  plugins: [react()],
+  plugins: [react(), centraidFonts()],
 });

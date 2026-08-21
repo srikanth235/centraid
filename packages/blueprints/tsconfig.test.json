@@ -2,8 +2,18 @@
   "extends": "./tsconfig.json",
   "compilerOptions": {
     "noEmit": true,
-    "allowImportingTsExtensions": true
+    "allowImportingTsExtensions": true,
+    "lib": ["ES2023", "DOM", "DOM.Iterable"],
+    "rootDir": ".",
+    "paths": {
+      "@centraid/server/engine": ["../server/dist/engine/index.d.ts"]
+    }
   },
-  "include": ["src/**/*.ts", "src/**/*.d.ts"],
+  "include": [
+    "src/**/*.ts",
+    "src/**/*.tsx",
+    "src/**/*.d.ts",
+    "automations/**/*.ts"
+  ],
   "exclude": ["dist", "node_modules", "hydrate", "journal", "todos"]
 }

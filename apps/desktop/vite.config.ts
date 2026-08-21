@@ -3,8 +3,6 @@ import { fileURLToPath } from "node:url";
 import react from "@vitejs/plugin-react";
 import { defineConfig } from "vite";
 
-import { inlineBlueprintAliases } from "../../packages/client/src/react/blueprints/inline-vite-aliases.ts";
-
 // Builds the React coexistence island (issue #325, Phase 0) into the same
 // dist/renderer directory the vanilla tsc output lands in, as a single ES
 // module — `react-boot.js` — that the renderer loads via
@@ -28,16 +26,19 @@ export default defineConfig({
   // depending on the package being built first. (The former desktop-ui/ui-core
   // packages now live locally under src/renderer/react/ui — no alias needed.)
   resolve: {
-    // Array form so the inline-app `./kit.ts` adapter alias sits alongside
-    // the design token source alias (issue #505).
+    // Array form, and every pattern anchored: `@centraid/design` must not
+    // swallow its own subpaths.
     alias: [
-      ...inlineBlueprintAliases(),
-      // The kit layer is a directory of served assets; the token layer is a
-      // single module. Anchor the root so `@centraid/design/kit/*` subpath
-      // imports resolve to files instead of into the token module's path.
       {
-        find: "@centraid/design/kit",
-        replacement: fromHere("../../packages/design/kit"),
+        // The browser element substrate the blueprint apps render on. Kept a
+        // subpath, never folded into the barrel: the design root export is
+        // reachable from Expo and must stay DOM-free.
+        find: /^@centraid\/design\/elements$/u,
+        replacement: fromHere("../../packages/design/src/elements/index.ts"),
+      },
+      {
+        find: /^@centraid\/design\/kit\.css$/u,
+        replacement: fromHere("../../packages/design/src/elements/kit.css"),
       },
       {
         find: /^@centraid\/design$/u,

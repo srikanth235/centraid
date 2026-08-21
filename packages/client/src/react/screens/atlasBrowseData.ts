@@ -1,14 +1,11 @@
-// Pure grid/state helpers for the Vault Atlas Browse tab (issue #441 B3),
-// split out of AtlasBrowseTab.tsx so the component reads as UI, not plumbing.
-// Nothing here touches React or the network — it groups the picker, classifies
-// cell values, and computes row identity from column metadata so the editor and
-// the delete flow agree on what "this row" means.
+// Pure row/state helpers for the Data route's records section (issue #441 B3),
+// split out of the component so it reads as UI, not plumbing.
+// Nothing here touches React or the network — it classifies cell values and
+// computes row identity from column metadata so the table, the editor and the
+// delete flow agree on what "this row" means. The picker grouping went with the
+// table picker itself (#765): the kinds list picks the kind now.
 
-import type {
-  BrowseColumn,
-  BrowseDependent,
-  BrowseTableEntry,
-} from "../../gateway-client.js";
+import type { BrowseColumn, BrowseDependent } from "../../gateway-client.js";
 
 /**
  * The masked value a sealed column reads back as (#293/#298). The backend never
@@ -16,63 +13,6 @@ import type {
  * printing it, and the editor refuses to write it.
  */
 export const SEALED_SENTINEL = "«sealed»";
-
-/** One pack's worth of tables in the picker — a pack header + its tables. */
-export interface BrowsePackGroup {
-  pack: string;
-  packLabel: string;
-  tables: BrowseTableEntry[];
-}
-
-/** The picker split into ontology packs (first) and machinery bands (below). */
-export interface GroupedBrowseTables {
-  ontology: BrowsePackGroup[];
-  machinery: BrowsePackGroup[];
-}
-
-/**
- * Group the flat picker list into ontology-packs-first, machinery-bands-below,
- * filtered by a case-insensitive substring over the logical name + label. Packs
- * keep first-seen order (the backend already orders ontology before machinery);
- * an empty pack after filtering is dropped so the divider never floats over
- * nothing.
- */
-export function groupBrowseTables(
-  tables: BrowseTableEntry[],
-  query: string
-): GroupedBrowseTables {
-  const q = query.trim().toLowerCase();
-  const match = (t: BrowseTableEntry): boolean =>
-    q === "" ||
-    t.logical.toLowerCase().includes(q) ||
-    t.label.toLowerCase().includes(q) ||
-    t.physical.toLowerCase().includes(q);
-
-  const packs = new Map<string, BrowsePackGroup>();
-  const order: string[] = [];
-  for (const t of tables) {
-    if (!match(t)) continue;
-    let g = packs.get(t.pack);
-    if (!g) {
-      g = { pack: t.pack, packLabel: t.packLabel, tables: [] };
-      packs.set(t.pack, g);
-      order.push(t.pack);
-    }
-    g.tables.push(t);
-  }
-
-  const ontology: BrowsePackGroup[] = [];
-  const machinery: BrowsePackGroup[] = [];
-  for (const p of order) {
-    const g = packs.get(p);
-    if (!g) continue;
-    // A pack is machinery when all of its (matched) tables are machinery — the
-    // classification is per-table but packs don't straddle the divider.
-    const isMachinery = g.tables.every((t) => t.machinery);
-    (isMachinery ? machinery : ontology).push(g);
-  }
-  return { ontology, machinery };
-}
 
 /** True when a cell holds the sealed-column mask, never the real value. */
 export function isSealedValue(value: unknown): boolean {

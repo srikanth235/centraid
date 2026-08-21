@@ -1,0 +1,173 @@
+/* The search scaffold's states (issue #712 S1) — resting panel, searching
+   line, unreachable panel, no-results panel, and the grouped-hit rows above
+   a caller's own results. Extracted from Photos'
+   `components/SearchShelf.module.css`; the field/clear-control styling that
+   module also carries stays app-owned (the field itself is not this
+   scaffold's business — see SearchScaffold.tsx's header note).
+
+   Logical properties only. No text below 11px; the example chips are mono,
+   because they are literal queries a member can type back. */
+
+.panel {
+  max-inline-size: 520px;
+}
+.eyebrow {
+  margin: 0 0 var(--sp-2);
+  font: var(--t-eyebrow);
+  text-transform: var(--t-eyebrow-transform, uppercase);
+  letter-spacing: var(--t-eyebrow-tracking, 0.06em);
+  color: var(--text-soft);
+}
+.title {
+  margin: 0 0 var(--sp-3);
+  font: var(--t-title);
+  color: var(--text);
+}
+.body {
+  margin: 0 0 var(--sp-3);
+  font: var(--t-body);
+  color: var(--text-soft);
+}
+
+.examples {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-2);
+}
+.example {
+  font: var(--t-mono);
+}
+
+/* The `searching` state. Determinate copy on the page, never a spinner and
+   never a second surface: the count in it is a real number of real rows
+   already on screen. */
+.working {
+  margin: 0;
+  max-inline-size: 520px;
+  font: var(--t-small);
+  color: var(--text-soft);
+}
+.num {
+  font: var(--t-mono);
+  font-variant-numeric: var(--t-mono-numeric);
+  direction: var(--t-mono-direction);
+  unicode-bidi: var(--t-mono-bidi);
+  color: var(--text);
+}
+
+/* `unreachable` — a bordered `--net` panel, never a fill (§18: nothing
+   alarming is a large filled surface). */
+.unreachable {
+  max-inline-size: 520px;
+  padding: var(--sp-4);
+  border: 1px solid var(--net);
+  border-radius: var(--r-lg);
+}
+.unreachableTitle {
+  margin: 0 0 var(--sp-3);
+  font: var(--t-title);
+  color: var(--text);
+}
+
+/* The unreachable panel's fact rows: what still works, what does not. */
+.facts {
+  margin: 0 0 var(--sp-4);
+}
+.fact {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--sp-3);
+  min-block-size: var(--h-row);
+  padding-block: var(--sp-2);
+  border-block-end: 1px solid var(--line);
+}
+.factLabel {
+  font: var(--t-small);
+  color: var(--text-soft);
+}
+.factValue {
+  margin: 0;
+  font: var(--t-small);
+  color: var(--text);
+}
+
+/* A named per-scope reach gap beside otherwise-good results (issue #726
+   D10/D11): the scope that could not be reached is a fact next to the
+   results it did not stop from rendering — a lighter treatment than
+   `.unreachable`, since here the search itself DID answer. */
+.partial {
+  max-inline-size: 520px;
+  padding: var(--sp-4);
+  margin-block-end: var(--sp-4);
+  border: 1px solid var(--net);
+  border-radius: var(--r-lg);
+}
+.partialTitle {
+  margin: 0 0 var(--sp-2);
+  font: var(--t-small-strong);
+  color: var(--text);
+}
+
+/* The results footer and the grouped-hit rows above the caller's own list:
+   a ruled row per entity hit, with its own "Open →", in the mono register
+   because the counts on it are real numbers. */
+.resultsHead {
+  display: flex;
+  align-items: baseline;
+  gap: var(--sp-2);
+  font: var(--t-small-strong);
+  color: var(--text-soft);
+}
+
+.groups {
+  display: flex;
+  flex-direction: column;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.groupRow {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  min-block-size: var(--h-row);
+  padding-block: var(--sp-2);
+  border-block-end: 1px solid var(--line);
+}
+.groupText {
+  flex: 1;
+  min-inline-size: 0;
+}
+.groupTitle {
+  margin: 0;
+  font: var(--t-small-strong);
+  color: var(--text);
+}
+.groupMeta {
+  margin: 0;
+  font: var(--t-small);
+  color: var(--text-soft);
+}
+.groupHere {
+  flex: none;
+  font: var(--t-mono);
+  font-variant-numeric: var(--t-mono-numeric);
+  direction: var(--t-mono-direction);
+  unicode-bidi: var(--t-mono-bidi);
+  color: var(--text-soft);
+}
+.groupOpen {
+  flex: none;
+  margin: 0;
+  padding: 0;
+  border: none;
+  background: none;
+  color: var(--accent-text, var(--text));
+  font: var(--t-small-strong);
+  cursor: pointer;
+}
+.groupOpen:hover {
+  text-decoration: underline;
+}

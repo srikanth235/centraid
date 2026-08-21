@@ -1,0 +1,136 @@
+/* Stacked outcome columns (v9 §9).
+
+   PLOT HEIGHT is composed from the row rung and the spacing scale rather than
+   typed as a literal: 148 under a pointer (three rows plus a step) and 116 on
+   the compact form factor. The bar's own top radius takes the sub-control
+   rung, which is the smallest shape the system names — the brief draws 2, and
+   a fourth radius would be a local scale wearing a token. */
+
+.bars {
+  --bars-h: calc(var(--h-row) * 3 + var(--sp-4));
+  --bars-gap: var(--sp-1);
+
+  background: var(--bg-elev);
+  border: 1px solid var(--line);
+  border-radius: var(--r-lg);
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+  padding: var(--sp-4);
+}
+
+/* One column per day is the honest fold (#775), so a ninety-day window really
+   does draw ninety columns — at which point the gutter is what would eat the
+   plot. It steps down to the hairline gap rather than the chart sampling the
+   window away. */
+.bars[data-dense="true"] {
+  --bars-gap: var(--sp-hair);
+}
+
+.bars[data-compact="true"] {
+  --bars-h: calc(var(--h-row) * 2 + var(--sp-5) + var(--sp-1));
+  --bars-gap: var(--sp-gutter);
+
+  padding: var(--sp-3);
+}
+
+.plot {
+  align-items: flex-end;
+  block-size: var(--bars-h);
+  display: flex;
+  gap: var(--bars-gap);
+}
+
+/* A window still filling. The columns keep the width they would have at full
+   count and pack against the NEWEST end, so a short series reads as marks
+   arriving rather than as a solid block stretched over the plot — and the
+   shape does not jump when the next one lands. */
+.bars[data-partial="true"] .plot {
+  justify-content: flex-end;
+}
+
+.bars[data-partial="true"] .column {
+  flex: 0 0 auto;
+  inline-size: calc((100% - 29 * var(--bars-gap)) / 30);
+}
+
+.column {
+  block-size: 100%;
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: var(--sp-hair);
+  justify-content: flex-end;
+  min-inline-size: 0;
+}
+
+/* Succeeded is NEVER chromatic — it is the tertiary ink, the same rung the
+   axis labels take. */
+.ok {
+  background: var(--text-faint);
+  block-size: calc(var(--bar-ok, 0) * 1%);
+  border-start-end-radius: var(--r-sm);
+  border-start-start-radius: var(--r-sm);
+  display: block;
+}
+
+/* Stacked under a failed segment, the succeeded column loses its own top
+   corners: the two segments are one column, not two bars. */
+.ok[data-stacked="true"] {
+  border-start-end-radius: var(--r-xs);
+  border-start-start-radius: var(--r-xs);
+}
+
+/* Failed is the one chromatic segment in the chart, and it sits on top. */
+.fail {
+  background: var(--net);
+  block-size: calc(var(--bar-fail, 0) * 1%);
+  border-start-end-radius: var(--r-sm);
+  border-start-start-radius: var(--r-sm);
+  display: block;
+}
+
+.axis {
+  display: flex;
+  justify-content: space-between;
+}
+
+.axisLabel {
+  color: var(--text-faint);
+  direction: var(--t-mono-direction);
+  font: var(--t-mono);
+  font-variant-numeric: var(--t-mono-numeric);
+  unicode-bidi: var(--t-mono-bidi);
+}
+
+/* The peak line (#775). A plot with no value axis shows proportion and nothing
+   else, so the one column worth naming names itself here in words. */
+.note {
+  color: var(--text-soft);
+  font: var(--t-small);
+  margin: 0;
+  text-wrap: pretty;
+}
+
+.legend {
+  border-block-start: 1px solid var(--line);
+  display: flex;
+  gap: var(--sp-4);
+  padding-block-start: var(--sp-1);
+}
+
+.legendOk {
+  color: var(--text-faint);
+  direction: var(--t-mono-direction);
+  font: var(--t-mono);
+  font-variant-numeric: var(--t-mono-numeric);
+  unicode-bidi: var(--t-mono-bidi);
+}
+
+.legendFail {
+  color: var(--net);
+  direction: var(--t-mono-direction);
+  font: var(--t-mono);
+  font-variant-numeric: var(--t-mono-numeric);
+  unicode-bidi: var(--t-mono-bidi);
+}

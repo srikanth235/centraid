@@ -2,7 +2,7 @@
  * Renderer-side client for the offsite backup engine's HTTP surface
  * (`GET /centraid/_gateway/backup`, `POST /centraid/_gateway/backup/run`,
  * `POST /centraid/_gateway/backup/kit-confirmed` —
- * `packages/gateway/src/routes/backup-routes.ts`, issue #351's last
+ * `packages/server/src/routes/backup-routes.ts`, issue #351's last
  * workstream; wave 4 adds the recovery-kit confirmation gate). Backs the
  * Gateway page's Backup card.
  */

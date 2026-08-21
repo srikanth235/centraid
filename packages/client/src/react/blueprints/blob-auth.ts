@@ -1,15 +1,12 @@
 // Lightweight vault-blob authorizer (issue #505 Phase 4 / boot-size fix).
 //
-// `authorizeBlobUrl` used to live in `kit-inline.ts`, but that module is a
-// barrel (`export * from '@centraid/design/kit/kit.js'`, resolved to the
-// TypeScript source by the toolchain) — importing ONE
-// symbol from it dragged the entire served kit into whatever chunk the importer
-// landed in. Because `inline-blob-images.ts` (eager via InlineAppRoute → App)
-// imports `authorizeBlobUrl`, the full kit was being pulled into the shell's
-// boot chunk, regressing initial-load JS. This function needs nothing from the
-// kit — only the authed gateway client — so it lives here as its own leaf
-// module. `kit-inline.ts` re-exports it, so the served-kit consumers are
-// unchanged; `inline-blob-images.ts` imports it directly and stays kit-free.
+// A leaf module on purpose: `inline-blob-images.ts` is eager (InlineAppRoute →
+// App), so anything it imports lands in the shell's boot chunk. Reaching
+// `authorizeBlobUrl` through a barrel used to drag the whole app substrate in
+// with it and regress initial-load JS. Nothing here needs that substrate —
+// only the authed gateway client — so it stands alone, and every caller
+// (`inline-blob-images`, `blob-staging`, `homeTileContent`, the host client's
+// `blobUrl`/`blobText`) imports it directly.
 import {
   auth,
   authHeaders,
@@ -41,6 +38,22 @@ export function blobAuthHeaders(
   return { ...authHeaders(token), ...(scope ? { [VAULT_HEADER]: scope } : {}) };
 }
 
+/** Fetch vault bytes through the shell's authenticated gateway transport. */
+async function authorizedBlobResponse(
+  pathname: string,
+  scope?: string
+): Promise<Response | null> {
+  try {
+    const { baseUrl, token } = await auth();
+    const res = await doFetch(baseUrl, pathname, {
+      headers: blobAuthHeaders(token, scope),
+    });
+    return res.ok ? res : null;
+  } catch {
+    return null;
+  }
+}
+
 /**
  * Fetch a `/_vault/blobs/…` pathname through the authed gateway client and hand
  * back a `blob:` object URL for it (or null if the fetch is refused). The caller
@@ -57,14 +70,21 @@ export async function authorizeBlobUrl(
   pathname: string,
   scope?: string
 ): Promise<string | null> {
-  try {
-    const { baseUrl, token } = await auth();
-    const res = await doFetch(baseUrl, pathname, {
-      headers: blobAuthHeaders(token, scope),
-    });
-    if (!res.ok) return null;
-    return URL.createObjectURL(await res.blob());
-  } catch {
-    return null;
-  }
+  const res = await authorizedBlobResponse(pathname, scope);
+  return res ? URL.createObjectURL(await res.blob()) : null;
+}
+
+/**
+ * Read a text blob through the same authenticated door as `authorizeBlobUrl`.
+ * Returning the text directly is load-bearing for inline apps: fetching the
+ * object URL again would be a second request governed by the shell's CSP,
+ * whose `connect-src` intentionally does not admit `blob:`.
+ * @public
+ */
+export async function authorizeBlobText(
+  pathname: string,
+  scope?: string
+): Promise<string | null> {
+  const res = await authorizedBlobResponse(pathname, scope);
+  return res ? res.text() : null;
 }

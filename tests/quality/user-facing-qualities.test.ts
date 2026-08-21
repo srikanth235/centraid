@@ -10,7 +10,7 @@ import {
   ASSISTANT_APP_ID,
   ConversationHistoryStore,
   ensureConversationLedger,
-} from "@centraid/app-engine";
+} from "@centraid/server/engine";
 import {
   isSealedValue,
   sealAad,
@@ -34,21 +34,21 @@ import {
 import {
   startVaultMcpServer,
   VAULT_MCP_TOOL_REGISTRY,
-} from "../../packages/agent-runtime/src/backends/acp/vault-mcp-server.js";
-import { RUNNER_KINDS } from "../../packages/app-engine/src/conversation/turn.js";
-import { runFire } from "../../packages/automation/src/fire/fire.js";
+} from "../../packages/server/src/acp/backends/acp/vault-mcp-server.js";
+import { runFire } from "../../packages/server/src/automation/fire/fire.js";
 import {
   AUTOMATION_TRIGGER_KINDS,
   AUTOMATION_TRIGGER_REGISTRY,
-} from "../../packages/automation/src/manifest/manifest.js";
-import { makeAssistantRouteHandler } from "../../packages/gateway/src/routes/assistant-routes.js";
+} from "../../packages/server/src/automation/manifest/manifest.js";
+import { HARNESS_KINDS } from "../../packages/server/src/engine/conversation/turn.js";
+import { makeAssistantRouteHandler } from "../../packages/server/src/routes/assistant-routes.js";
 import {
   assertRouteSecurityCoverage,
   ROUTE_SECURITY_REGISTRY,
-} from "../../packages/gateway/src/routes/route-security.js";
-import { buildGateway } from "../../packages/gateway/src/serve/build-gateway.js";
-import { EXPECTED_HEALTH_COMPONENTS } from "../../packages/gateway/src/serve/health-registry.js";
-import { openVaultPlane } from "../../packages/gateway/src/serve/vault-plane.js";
+} from "../../packages/server/src/routes/route-security.js";
+import { buildGateway } from "../../packages/server/src/serve/build-gateway.js";
+import { EXPECTED_HEALTH_COMPONENTS } from "../../packages/server/src/serve/health-registry.js";
+import { openVaultPlane } from "../../packages/server/src/serve/vault-plane.js";
 import { forEachSequentially } from "../../packages/test-kit/src/sequential.js";
 import { tempDir } from "../../packages/test-kit/src/temp-dir.js";
 import {
@@ -61,6 +61,9 @@ import { createTestVault } from "../helpers/factories.js";
 
 const root = path.resolve(import.meta.dirname, "../..");
 
+const compareStrings = (left: string, right: string): number =>
+  left.localeCompare(right);
+
 async function json(file: string): Promise<Record<string, unknown>> {
   return JSON.parse(await readFile(path.join(root, file), "utf8")) as Record<
     string,
@@ -72,6 +75,141 @@ async function globFiles(pattern: string): Promise<string[]> {
   const files: string[] = [];
   for await (const file of glob(pattern, { cwd: root })) files.push(file);
   return files;
+}
+
+// U4 copy-density ratchet (#805). Member-facing prose is walked as raw string
+// literals — there is no TypeScript AST pass in this suite and none is wanted:
+// the gate is a ratchet over copy, not a type-aware linter. Precision beats
+// recall here, because a false positive on a non-UI string costs an audit
+// slice a wasted allowlist entry while a missed string only survives until the
+// next tighten. The pipeline is: strip comments and commentary prose -> pull
+// quoted literals (template literals carrying `${}` substitutions are skipped
+// on purpose, since a spliced value cannot be length- or sentence-judged from
+// source) -> keep only literals that read as prose (start with an uppercase
+// letter, three or more words, ≥ 16 chars, ≥ 70% letters, no code punctuation,
+// SQL, URLs, snake_case or arrow syntax) -> drop literals whose call site or
+// assignment target is a machine key (`id:`, `className=`, `console.log(`,
+// `startsWith(` …). What survives is judged by three rules: over 120 chars,
+// two or more sentence boundaries, or a banned filler word.
+const COPY_SCOPE = [
+  "packages/client/src/**/*.{ts,tsx}",
+  "packages/blueprints/apps/**/*.{ts,tsx}",
+  "apps/mobile/src/**/*.{ts,tsx}",
+  "apps/desktop/src/**/*.{ts,tsx}",
+  "apps/web/src/**/*.{ts,tsx}",
+  "apps/extension/src/**/*.{ts,tsx}",
+  "packages/design/src/**/*.{ts,tsx}",
+  // Server scope is deliberately narrow: only the route modules that mint
+  // strings the shell renders verbatim (connection presets, OAuth outcomes).
+  // Engine/automation/acp/serve strings are logs, protocol text and internal
+  // errors this walk cannot classify, so they stay out of reach.
+  "packages/server/src/routes/**/*.ts",
+];
+
+// packages/design/src/roles.ts documents design tokens in prose for the
+// gallery and DESIGN.md; those descriptions never reach a member's screen.
+const COPY_SKIP_FILE =
+  /(?:\.test\.|\.spec\.|\.stories\.|\.d\.ts$|__fixtures__|\/fixtures\/|-fixtures\.|^packages\/design\/src\/roles\.ts$)/u;
+
+const COPY_BANNED_FILLER =
+  /\b(?:please|successfully|simply|in order to|you can|we're sorry)\b/iu;
+
+const COPY_CODEY =
+  /(?:^[\s./#@-]|[<>{}]|=>|\$\{|::|\bhttps?:\/\/|\w\(\)|;\s|\|\||&&|\bSELECT\b|\bINSERT\b|\bUPDATE\b\s|\bFROM\b|\bWHERE\b|\bJOIN\b|_[a-z]|--|\bfunction\b|\bconst\b)/u;
+
+const COPY_PROSE_CHARS = /^[\p{L}\p{N}\s'’“”"(),.:;!?%$&+/–—-]+$/u;
+
+const COPY_MACHINE_KEY =
+  /(?:^|[^A-Za-z])(?:id|ids|key|keys|className|class|href|src|url|uri|path|paths|route|routes|testId|testID|dataTestId|icon|slug|kind|type|variant|color|tone|size|font|event|entity|column|table|sql|query|selector|locale|timeZone|format|mime|ext|scope|command|capability|permission|method|op|field|token|tag|tags|status|state|role|storageKey|channel|topic|schema|version|env|flag|feature|app|appId|blueprint|module|package|namespace)\s*[:=]\s*$/u;
+
+const COPY_MACHINE_CALL =
+  /(?:console\.\w+|require|import|describe|test|it|expect|createHash|new Error|new TypeError|matchMedia|querySelector\w*|getElementById|createElement|addEventListener|removeEventListener|setAttribute|getAttribute|startsWith|endsWith|includes|split|join|replace|replaceAll|match|has|get|set|emit|on|off|log|warn|debug|trace)\s*\(\s*$/u;
+
+/** Blank out comments so commentary prose never reaches the literal scanner. */
+function stripComments(source: string): string {
+  let out = "";
+  let mode: "code" | "line" | "block" | "string" = "code";
+  let quote = "";
+  for (let index = 0; index < source.length; index += 1) {
+    const char = source[index] as string;
+    const next = source[index + 1];
+    if (mode === "code") {
+      if (char === "/" && (next === "/" || next === "*")) {
+        mode = next === "/" ? "line" : "block";
+        out += "  ";
+        index += 1;
+        continue;
+      }
+      if (char === '"' || char === "'" || char === "`") {
+        mode = "string";
+        quote = char;
+      }
+      out += char;
+      continue;
+    }
+    if (mode === "line") {
+      if (char === "\n") mode = "code";
+      out += char === "\n" ? char : " ";
+      continue;
+    }
+    if (mode === "block") {
+      if (char === "*" && next === "/") {
+        mode = "code";
+        out += "  ";
+        index += 1;
+        continue;
+      }
+      out += char === "\n" ? char : " ";
+      continue;
+    }
+    out += char;
+    if (char === "\\") {
+      out += source[index + 1] ?? "";
+      index += 1;
+      continue;
+    }
+    if (char === quote) mode = "code";
+    else if (char === "\n" && quote !== "`") mode = "code";
+  }
+  return out;
+}
+
+/** Two or more sentences: an internal boundary plus a terminated tail. */
+function copySentenceCount(text: string): number {
+  const inner = text.match(/[.!?…](?=\s+["'(]?\p{Lu})/gu)?.length ?? 0;
+  return inner + (/[.!?…]["')]?\s*$/u.test(text) ? 1 : 0);
+}
+
+function scanCopy(
+  file: string,
+  rawSource: string
+): Array<{ file: string; literal: string; reasons: string[] }> {
+  const source = stripComments(rawSource);
+  const flagged: Array<{ file: string; literal: string; reasons: string[] }> =
+    [];
+  const pattern =
+    /(?<quote>['"`])(?<body>(?:\\.|(?!\k<quote>)[^\\])*)\k<quote>/gsu;
+  let match: RegExpExecArray | null;
+  while ((match = pattern.exec(source))) {
+    const raw = match.groups?.["body"] ?? "";
+    if (match.groups?.["quote"] === "`" && raw.includes("${")) continue;
+    const text = raw.replaceAll("\\n", " ").replaceAll("\\'", "'").trim();
+    if (text.length < 16) continue;
+    if (!/^\p{Lu}/u.test(text)) continue;
+    if (text.split(/\s+/u).length < 3) continue;
+    if (COPY_CODEY.test(text)) continue;
+    if (!COPY_PROSE_CHARS.test(text)) continue;
+    if (text.replace(/[^\p{L}]/gu, "").length / text.length < 0.7) continue;
+    const before = source.slice(Math.max(0, match.index - 60), match.index);
+    if (COPY_MACHINE_KEY.test(before) || COPY_MACHINE_CALL.test(before))
+      continue;
+    const reasons: string[] = [];
+    if (text.length > 120) reasons.push("length");
+    if (copySentenceCount(text) >= 2) reasons.push("sentences");
+    if (COPY_BANNED_FILLER.test(text)) reasons.push("filler");
+    if (reasons.length) flagged.push({ file, literal: text, reasons });
+  }
+  return flagged;
 }
 
 describe("issue #679 user-facing quality gates", () => {
@@ -148,9 +286,9 @@ describe("issue #679 user-facing quality gates", () => {
     );
     expect(
       (
-        db.vault
-          .prepare("SELECT count(*) AS n FROM media_media_asset")
-          .get() as { n: number }
+        db.vault.prepare("SELECT count(*) AS n FROM media_asset").get() as {
+          n: number;
+        }
       ).n
     ).toBe(11);
     expect(
@@ -299,14 +437,14 @@ describe("issue #679 user-facing quality gates", () => {
           appsDir: plane.db.dir,
           journalDbFile: path.join(plane.db.dir, "journal.db"),
           codeAppsDir,
-          runnerKind: RUNNER_KINDS[0],
+          harnessKind: HARNESS_KINDS[0],
           triggerKind: "scheduled",
           triggerOrigin: "cron",
           vaultFor: () => plane.agentBridgeFor("quality"),
         },
         {
           openDispatch: async () => ({
-            agentDispatcher: async () => "unused",
+            delegateDispatcher: async () => "unused",
             close: async () => undefined,
           }),
         }
@@ -318,12 +456,14 @@ describe("issue #679 user-facing quality gates", () => {
           .get(automationItemId)
       ).toMatchObject({ n: 1 });
       const automationAgent = plane.db.vault
-        .prepare("SELECT agent_id FROM agent_agent WHERE host_key = 'quality'")
+        .prepare(
+          "SELECT agent_id FROM consent_agent WHERE enrollment_key = 'quality'"
+        )
         .get() as { agent_id: string };
       const proposed = plane.db.journal
         .prepare(
           `SELECT invocation_id, status FROM agent_command_invocation
-            WHERE agent_id = ?
+            WHERE caller_id = ?
             ORDER BY requested_at DESC LIMIT 1`
         )
         .get(automationAgent.agent_id) as {
@@ -389,7 +529,7 @@ describe("issue #679 user-facing quality gates", () => {
     );
   });
 
-  test("F1: every runner, agent tool, and automation trigger persists through conversation/turn/item", async () => {
+  test("F1: every harness turn, harness tool, and automation trigger persists through conversation/turn/item", async () => {
     const db = await createTestVault();
     ensureConversationLedger(db.journal);
     const owner = db.vault
@@ -401,7 +541,7 @@ describe("issue #679 user-facing quality gates", () => {
       appsDir: path.join(db.dir, "apps"),
       journal: () => db.journal,
       journalDbFile: path.join(db.dir, "journal.db"),
-      runnerSessionDir: path.join(db.dir, "runner-sessions"),
+      harnessSessionDir: path.join(db.dir, "harness-sessions"),
     }));
     const starts: Array<{
       toolCallId: string;
@@ -481,7 +621,10 @@ describe("issue #679 user-facing quality gates", () => {
         endedAt: index * 2 + 2,
       })),
       finalText: "done",
-      adapter: { kind: RUNNER_KINDS[0]!, sessionId: "quality-mcp" },
+      harnessObservation: {
+        kind: HARNESS_KINDS[0]!,
+        sessionId: "quality-mcp",
+      },
       startedAt: 1,
       endedAt: 20,
       ok: true,
@@ -510,11 +653,11 @@ describe("issue #679 user-facing quality gates", () => {
     );
     await writeFile(
       path.join(automationDir, "handler.js"),
-      "export default async ({ ctx }) => ({ output: await ctx.agent('quality ledger') });\n"
+      "export default async ({ ctx }) => ({ output: await ctx.delegate('quality ledger') });\n"
     );
     await forEachSequentially(
-      [...RUNNER_KINDS.entries()],
-      async ([index, runnerKind]) => {
+      [...HARNESS_KINDS.entries()],
+      async ([index, harnessKind]) => {
         const triggerKind =
           AUTOMATION_TRIGGER_KINDS[index % AUTOMATION_TRIGGER_KINDS.length]!;
         const automationId = `gate-${index}`;
@@ -541,14 +684,14 @@ describe("issue #679 user-facing quality gates", () => {
             appsDir: db.dir,
             journalDbFile: path.join(db.dir, "journal.db"),
             codeAppsDir,
-            runnerKind,
+            harnessKind,
             triggerKind: "scheduled",
             triggerOrigin: triggerKind,
             input: { triggerKind },
           },
           {
             openDispatch: async () => ({
-              agentDispatcher: async () => `handled ${triggerKind}`,
+              delegateDispatcher: async () => `handled ${triggerKind}`,
               close: async () => undefined,
             }),
           }
@@ -558,14 +701,14 @@ describe("issue #679 user-facing quality gates", () => {
     );
     const persisted = db.journal
       .prepare(
-        `SELECT c.adapter_kind, t.trigger_origin, i.name
+        `SELECT c.harness_kind, t.trigger_origin, i.name
            FROM conversations c
            JOIN turns t ON t.conversation_id = c.id
            JOIN items i ON i.turn_id = t.id
           WHERE c.id = ? OR t.id LIKE 'quality-trigger-%'`
       )
       .all(session.id) as Array<{
-      adapter_kind: string;
+      harness_kind: string;
       trigger_origin: string;
       name: string;
     }>;
@@ -580,10 +723,10 @@ describe("issue #679 user-facing quality gates", () => {
         persisted.some((row) => row.trigger_origin === triggerKind),
         triggerKind
       ).toBe(true);
-    for (const runner of RUNNER_KINDS)
+    for (const harness of HARNESS_KINDS)
       expect(
-        persisted.some((row) => row.adapter_kind === runner),
-        runner
+        persisted.some((row) => row.harness_kind === harness),
+        harness
       ).toBe(true);
   });
 
@@ -624,9 +767,9 @@ describe("issue #679 user-facing quality gates", () => {
       { parties: 1, photos: 1, conversations: 1, turnsPerConversation: 1 }
     );
     const profile = year3VaultProfile();
-    expect(Object.keys(profile.sealedSentinels).sort()).toStrictEqual(
-      declared.toSorted()
-    );
+    expect(
+      Object.keys(profile.sealedSentinels).toSorted(compareStrings)
+    ).toStrictEqual(declared.toSorted(compareStrings));
     const device = db.vault
       .prepare("SELECT device_id, public_key FROM consent_device LIMIT 1")
       .get() as { device_id: string; public_key: string };
@@ -780,7 +923,7 @@ describe("issue #679 user-facing quality gates", () => {
       appsDir: path.join(t3Dir, "apps"),
       journal: () => db.journal,
       journalDbFile: path.join(t3Dir, "journal.db"),
-      runnerSessionDir: path.join(t3Dir, "runner-sessions"),
+      harnessSessionDir: path.join(t3Dir, "harness-sessions"),
     };
     const conversationStore = new ConversationHistoryStore(() => workspace);
     let providerEgressArtifact = "";
@@ -855,9 +998,9 @@ describe("issue #679 user-facing quality gates", () => {
       "replica-snapshot": JSON.stringify(replicaArtifact),
       "provider-egress": providerEgressArtifact,
     };
-    expect(Object.keys(surfaceArtifacts).toSorted()).toStrictEqual(
-      [...SEALED_LEAK_SURFACES].toSorted()
-    );
+    expect(
+      Object.keys(surfaceArtifacts).toSorted(compareStrings)
+    ).toStrictEqual([...SEALED_LEAK_SURFACES].toSorted(compareStrings));
     const enforcementArtifacts: Record<
       (typeof SEALED_ENFORCEMENT_POINTS)[number],
       string
@@ -869,9 +1012,9 @@ describe("issue #679 user-facing quality gates", () => {
       "fts-exclusion": JSON.stringify(ftsArtifact),
       "draft-stage-sealing": JSON.stringify(stagedArtifact),
     };
-    expect(Object.keys(enforcementArtifacts).toSorted()).toStrictEqual(
-      [...SEALED_ENFORCEMENT_POINTS].toSorted()
-    );
+    expect(
+      Object.keys(enforcementArtifacts).toSorted(compareStrings)
+    ).toStrictEqual([...SEALED_ENFORCEMENT_POINTS].toSorted(compareStrings));
     for (const [surface, artifact] of Object.entries({
       ...surfaceArtifacts,
       ...enforcementArtifacts,
@@ -888,7 +1031,7 @@ describe("issue #679 user-facing quality gates", () => {
       new Set(ROUTE_SECURITY_REGISTRY.map((route) => route.prefix)).size
     ).toBe(ROUTE_SECURITY_REGISTRY.length);
     for (const route of ROUTE_SECURITY_REGISTRY) {
-      expect(route.auth).toMatch(/^(?:public|device|member|admin)$/u);
+      expect(route.auth).toMatch(/^(?:public|device|owner|admin)$/u);
       expect(route.vaultScope).toMatch(/^(?:none|active|path)$/u);
       expect(route.auth !== "public" || Boolean(route.reason)).toBe(true);
     }
@@ -988,7 +1131,7 @@ describe("issue #679 user-facing quality gates", () => {
       "core.event",
       "health.measurement",
       "knowledge.note",
-      "media.media_asset",
+      "media.asset",
       "schedule.task",
       "social.message",
       "tally.transaction",
@@ -1052,6 +1195,63 @@ describe("issue #679 user-facing quality gates", () => {
       if (/aria-label=["'](?:Spaces?|Approvals?|Inbox)["']/u.test(source))
         violations.push(file);
     }
+    expect(violations).toStrictEqual([]);
+  });
+
+  test("U4: user-facing copy stays short, single-thought and filler-free", async () => {
+    // Tighten-only ceiling (#805). This number started at the day-one seed
+    // count (255) and may only ever fall: audit slices delete seeds from
+    // copyRatchet.entries and lower maxEntries, and this constant tracks them
+    // down. Raising it means new verbose copy shipped, which is the regression
+    // the gate exists to stop. Slice C (shared-string promotion) took it to
+    // 216 — 40 seeds deleted, one added for the deny sheet's allowlisted
+    // destructive-confirm sentences. Audit slices D1–D5 drained the rest: the
+    // 31 that remain are all consent, destructive-confirm, or
+    // security/privacy disclosures — the deliberate residue, not debt.
+    const COPY_SEED_CEILING = 31;
+    const allowlistFile = await json("tests/quality/copy-allowlist.json");
+    const ratchet = allowlistFile["copyRatchet"] as {
+      maxEntries: number;
+      entries: Array<{ file: string; literal: string; reason: string }>;
+    };
+    expect(ratchet.maxEntries).toBeLessThanOrEqual(COPY_SEED_CEILING);
+    expect(ratchet.entries.length).toBeLessThanOrEqual(ratchet.maxEntries);
+    const keyed = (entry: { file: string; literal: string }): string =>
+      `${entry.file} ${entry.literal}`;
+    expect(new Set(ratchet.entries.map(keyed)).size).toBe(
+      ratchet.entries.length
+    );
+    for (const entry of ratchet.entries)
+      expect(entry.reason.length).toBeGreaterThan(8);
+
+    const files = (await Promise.all(COPY_SCOPE.map(globFiles))).flat();
+    const walked = files
+      .map((file) => file.replaceAll("\\", "/"))
+      .filter((file) => !COPY_SKIP_FILE.test(file))
+      .toSorted(compareStrings);
+    expect(walked.length).toBeGreaterThan(1000);
+    const flagged = (
+      await Promise.all(
+        walked.map(async (file) =>
+          scanCopy(file, await readFile(path.join(root, file), "utf8"))
+        )
+      )
+    ).flat();
+    const allowed = new Set(ratchet.entries.map(keyed));
+    const present = new Set(flagged.map(keyed));
+    const violations = [
+      ...flagged
+        .filter((item) => !allowed.has(keyed(item)))
+        .map(
+          (item) =>
+            `unallowed ${item.reasons.join("+")} ${item.file}: ${item.literal.slice(0, 60)}`
+        ),
+      // Stale entries are violations too: an allowlisted string that no longer
+      // exists must leave the file, or the ceiling stops meaning anything.
+      ...ratchet.entries
+        .filter((entry) => !present.has(keyed(entry)))
+        .map((entry) => `stale ${entry.file}: ${entry.literal.slice(0, 60)}`),
+    ].toSorted(compareStrings);
     expect(violations).toStrictEqual([]);
   });
 

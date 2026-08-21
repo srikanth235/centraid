@@ -1,22 +1,22 @@
 import React, { useMemo, useState } from "react";
 import { Pressable, ScrollView, StyleSheet, View } from "react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
 
 import {
-  applyAgentCaptureKind,
+  applyDelegateCaptureKind,
   classifyCapture,
 } from "@centraid/client/capture";
 import type { CaptureKind, CapturePreview } from "@centraid/client/capture";
 
 import Icon from "../kit/components/Icon";
 import { Text, TextInput } from "../kit/components/NativeText";
+import TopSafeArea from "../kit/components/TopSafeArea";
 import { useReplicaQuery } from "../kit/hooks/useReplicaQuery";
 import { useReplica } from "../kit/replica/ReplicaProvider";
 import {
   surfaceWriteFailure,
   surfaceWriteOutcome,
 } from "../kit/replica/write-outcome";
-import { family, useTheme } from "../kit/theme";
+import { family, useTheme, radii, t } from "../kit/theme";
 import type { ThemeColors } from "../kit/theme";
 import { authHeader } from "../lib/gateway";
 import type { NativeWriteResult } from "../lib/replica/native-session";
@@ -71,7 +71,7 @@ export default function CaptureScreen({
         );
         if (response.ok) {
           const body = (await response.json()) as { preview?: unknown };
-          setPreview(applyAgentCaptureKind(local, body.preview));
+          setPreview(applyDelegateCaptureKind(local, body.preview));
         }
       } catch {
         // The deterministic preview and explicit destination picker remain.
@@ -156,7 +156,7 @@ export default function CaptureScreen({
   };
 
   return (
-    <SafeAreaView style={[styles.safe, { backgroundColor: colors.bg }]}>
+    <TopSafeArea style={[styles.safe, { backgroundColor: colors.bg }]}>
       <View style={styles.header}>
         <Pressable
           accessibilityRole="button"
@@ -181,8 +181,8 @@ export default function CaptureScreen({
       </View>
       <ScrollView contentContainerStyle={styles.content}>
         <Text style={[styles.help, { color: colors.textSoft }]}>
-          Type naturally. Centraid routes obvious captures offline and asks the
-          configured local agent only when the destination is ambiguous.
+          Centraid routes obvious captures offline, and asks the local harness
+          only when the destination is unclear.
         </Text>
         <TextInput
           autoFocus
@@ -192,7 +192,7 @@ export default function CaptureScreen({
             setText(value);
             setPreview(undefined);
           }}
-          placeholder="Remind me to call Priya…"
+          placeholder="Remind me to call Maya…"
           placeholderTextColor={colors.textFaint}
           style={[
             styles.editor,
@@ -330,7 +330,7 @@ export default function CaptureScreen({
           </>
         ) : null}
       </ScrollView>
-    </SafeAreaView>
+    </TopSafeArea>
   );
 }
 
@@ -415,20 +415,20 @@ function withoutStartsAt(preview: CapturePreview): CapturePreview {
 }
 
 const styles = StyleSheet.create({
-  choice: { borderRadius: 10, borderWidth: 1, padding: 11 },
+  choice: { borderRadius: radii.lg, borderWidth: 1, padding: 11 },
   choices: { gap: 8 },
   content: { gap: 14, padding: 20, paddingBottom: 60 },
   editor: {
-    borderRadius: 14,
+    borderRadius: radii.lg,
     borderWidth: 1,
     fontFamily: family.sansRegular,
-    fontSize: 16,
+    fontSize: t("body").fontSize,
     minHeight: 120,
     padding: 14,
     textAlignVertical: "top",
   },
   field: { gap: 7 },
-  fieldLabel: { fontFamily: family.sansBold, fontSize: 12 },
+  fieldLabel: { fontFamily: family.sansMedium, fontSize: t("mono").fontSize },
   header: {
     alignItems: "center",
     flexDirection: "row",
@@ -436,17 +436,19 @@ const styles = StyleSheet.create({
     paddingHorizontal: 18,
   },
   headerGap: { width: 24 },
-  help: { fontFamily: family.sansRegular, fontSize: 14, lineHeight: 20 },
+  help: {
+    ...t("body"),
+  },
   input: {
-    borderRadius: 10,
+    borderRadius: radii.lg,
     borderWidth: 1,
     fontFamily: family.sansRegular,
-    fontSize: 15,
+    fontSize: t("body").fontSize,
     padding: 12,
   },
   kind: {
     alignItems: "center",
-    borderRadius: 10,
+    borderRadius: radii.lg,
     borderWidth: 1,
     padding: 10,
   },
@@ -456,25 +458,30 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   kindText: {
-    fontFamily: family.sansBold,
-    fontSize: 12,
+    fontFamily: family.sansMedium,
+    fontSize: t("mono").fontSize,
     textTransform: "capitalize",
   },
   previewButton: {
     alignItems: "center",
-    borderRadius: 11,
+    borderRadius: radii.lg,
     borderWidth: 1,
     padding: 12,
   },
-  previewText: { fontFamily: family.sansBold, fontSize: 14 },
-  review: { fontFamily: family.monoMedium, fontSize: 11 },
+  previewText: { fontFamily: family.sansMedium, fontSize: t("body").fontSize },
+  review: { fontFamily: family.sansMedium, fontSize: t("control").fontSize },
   safe: { flex: 1 },
-  save: { alignItems: "center", borderRadius: 12, marginTop: 6, padding: 14 },
-  saveText: { fontFamily: family.sansBold, fontSize: 15 },
+  save: {
+    alignItems: "center",
+    borderRadius: radii.lg,
+    marginTop: 6,
+    padding: 14,
+  },
+  saveText: { fontFamily: family.sansMedium, fontSize: t("body").fontSize },
   title: {
     flex: 1,
-    fontFamily: family.sansBold,
-    fontSize: 21,
+    fontFamily: family.sansMedium,
+    fontSize: t("title").fontSize,
     textAlign: "center",
   },
 });

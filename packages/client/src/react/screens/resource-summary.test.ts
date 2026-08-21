@@ -23,8 +23,6 @@ const sample: ResourceProfileDTO = {
     workerMaxOldGenerationMb: 1280,
     workerPoolSize: 3,
     replicationConcurrency: 2,
-    staticBrotliQuality: 6,
-    staticGzipQuality: 7,
     sqliteSynchronous: "FULL",
     vaultSweepIntervalMs: 300_000,
     outboxIdleIntervalMs: 1000,
@@ -130,10 +128,6 @@ describe("resource-summary", () => {
       expect(rows).toContainEqual({
         label: "Outbox idle poll",
         value: "every 1s",
-      });
-      expect(rows).toContainEqual({
-        label: "Compression",
-        value: "brotli q6 · gzip q7",
       });
     });
   });

@@ -10,13 +10,10 @@
 // Kept dependency-free and shaped for the token vocabulary only: hex, `rgba()`
 // and the space-separated `hsl()` the blueprint layer emits.
 //
-// The accent-ramp derivation below lives in this same module rather than its
+// The solved-rung derivation below lives in this same module rather than its
 // own file because it is the only consumer of the maths, and because the
 // client's barrel sits at oxlint's `no-barrel-file` module cap — a second new
 // module reachable from the package index trips that gate.
-
-import { palette } from "./palette";
-import type { ColorKey } from "./palette";
 
 export type Rgb = readonly [number, number, number];
 
@@ -125,6 +122,20 @@ export function parseColor(value: string): ParsedColor {
   throw new Error(`unparseable colour: ${value}`);
 }
 
+/**
+ * A hex at an alpha, as `rgba()`.
+ *
+ * This is the one place a WASH is built from an opaque rung, so a tint of a
+ * role can never drift from the role it tints: change `NET` and `--net-wash`
+ * moves with it. The leading zero of the alpha is stripped to match the
+ * Binding Layer's own spelling (`rgba(154,59,46,.07)`), which is what the
+ * emitted sheets are compared against.
+ */
+export function rgbaHex(hex: string, alpha: number): string {
+  const { rgb } = parseColor(hex);
+  return `rgba(${rgb.join(",")},${alpha.toString().replace(/^0(?=\.)/u, "")})`;
+}
+
 /** Flatten a translucent foreground onto an opaque background. */
 export function composite(fg: ParsedColor, bg: Rgb): Rgb {
   return [
@@ -159,77 +170,19 @@ export function contrastRatio(foreground: string, background: string): number {
   return (Math.max(a, b) + 0.05) / (Math.min(a, b) + 0.05);
 }
 
-// ── Accent ramps ───────────────────────────────────────────────────────────
-
-export interface AccentRamp {
-  /** The accent at full saturation — the FAB, focus rings, selection edges. */
-  accent: string;
-  /** Lighter tint for "new" badges, and the FILLED rung on the dark ramp,
-   *  where the inverse ink is near-black and the fill has to be the light
-   *  half of the pair. */
-  light: string;
-  /** The accent as a FILLED surface on the light ramp: solved so `--text-inv`
-   *  clears AA on it (see `accentFillShade`). */
-  deep: string;
-  /** The accent as TEXT on a light surface. See `LIGHT_TEXT_SURFACE`. */
-  text: string;
-}
-
-const LIGHT_SHIFT = 0.1;
-
-/** The lightest surface an accent can be painted as text on (`--bg`). Text
- *  has to clear AA against it, so it is the one the shade is solved for. */
-const LIGHT_TEXT_SURFACE = "#FCFCFC";
-/** The ink a filled accent surface carries on the light ramp — `--text-inv`,
- *  which is a near-white, not pure white. Solving the fill against the ink
- *  that actually lands on it (rather than against `#fff`) is the difference
- *  between a button that measures 4.9:1 and one that measures 4.5:1. */
-const LIGHT_INVERSE_INK = "#F4F5F7";
-const AA_BODY = 4.5;
-/** Floor the FILL is solved to. Deliberately 0.3 above the 4.5 body floor:
- *  the search walks lightness in 1-point steps through 8-bit `hsl()`, so the
- *  margin is what keeps a rounding trip from landing a shipped fill at 4.49. */
-const AA_FILL = 4.8;
-
-function shiftLightness(base: string, delta: number): string {
-  const [h, s, l] = rgbToHsl(parseColor(base).rgb);
-  return toHex(hslToRgb(h, s, Math.max(0, Math.min(1, l + delta))));
-}
-
-/**
- * Darken `base` until it clears AA as body text on a light surface. A
- * saturated mid-lightness accent (BRAND is 2.0:1 on `--bg`) is illegible as a
- * link, so every accent needs this shade before it can be assigned to
- * `color:`.
- */
-function accentTextShade(base: string): string {
-  return darkenUntil(base, (candidate) =>
-    contrastRatio(candidate, LIGHT_TEXT_SURFACE)
-  );
-}
-
-/**
- * Darken `base` until `--text-inv` clears AA **on** it — the fill counterpart
- * of `accentTextShade`. The filled primary button is the one place the accent
- * carries text, and a mid-lightness accent cannot carry any fixed ink: BRAND
- * is 2.07:1 under white, and an app that retunes the accent to `--c-amber`
- * lands even lighter. Deepening the FILL is the only lever that works for
- * every hue, because CSS has no shipped way to pick the ink per background
- * (`color-contrast()` is still unimplemented).
- */
-function accentFillShade(base: string): string {
-  return darkenUntil(
-    base,
-    (candidate) => contrastRatio(LIGHT_INVERSE_INK, candidate),
-    AA_FILL
-  );
-}
+// ── Solved rungs ───────────────────────────────────────────────────────────
+//
+// The Binding Layer retired the multi-accent machinery: there is no accent hue
+// to derive a ramp from, because the accent IS the ink. What survives is the
+// solver — the walk that moves a colour along its OWN hue until it clears a
+// floor — because the palette-text rungs and the semantic states still need
+// it, and hand-picking them is how `--danger` shipped at 3.74:1 once already.
 
 /** Walk `base` along its own hue in 1-point lightness steps — `step` picks the
  *  direction — and return the FIRST shade whose `score` clears `floor`, i.e.
- *  the one closest to the owner's pick that the floor allows. Hue and
+ *  the one closest to the authored pick that the floor allows. Hue and
  *  saturation never move, so the result still reads as the same colour. */
-function walkUntil(
+export function walkUntil(
   base: string,
   score: (candidate: string) => number,
   floor: number,
@@ -248,120 +201,40 @@ function walkUntil(
   return toHex(hslToRgb(h, s, limit));
 }
 
-/** `walkUntil` in the deepening direction — the light ramp's solver. */
-function darkenUntil(
-  base: string,
-  score: (candidate: string) => number,
-  floor: number = AA_BODY
-): string {
-  return walkUntil(base, score, floor, -0.01);
-}
-
-// ── Palette hues as TEXT ───────────────────────────────────────────────────
-//
-// The eight `--c-*` hues are documented as icon FILLS, and they are tuned for
-// that: as `color:` on a near-white surface `--c-amber` is 2.3:1 and `--c-teal`
-// 3.2:1. `--accent-text` exists because the accent had exactly this problem;
-// the palette had no equivalent rung, so every surface that wanted a hue as
-// text hand-picked a darker literal of its own (the `docs` file-kind tints did
-// precisely that, and #686 removed those literals without noticing they were
-// doing solved-contrast work). This is that missing rung, solved by the same
-// machinery `--accent-text` uses, once per theme.
-
 /**
- * The surface each theme's palette-text rung is solved against: the hardest
- * one either emitter ships. Light is the shell's `--bg-sunken` (`#F0F1F3`) —
- * the DARKEST light surface, so every lighter one gains. Dark is the blueprint
- * `--bg-sunken` at the default `--bg-l: 10%` (`hsl(171 11% 19%)`) — the
- * LIGHTEST dark surface, for the same reason in the other direction.
+ * The surface every solved rung is scored against: the HARDEST one the system
+ * paints ink on in that theme. Light is `WALL` (`#F0EFED`) — the deepest
+ * paper the system paints, deeper than the page or any raised surface, so
+ * every lighter surface gains. Dark is the raised paper (`#171716`) — the
+ * LIGHTEST dark surface, for the same reason in the other direction. Both
+ * emitters now share one surface ramp, so one pair covers the shell, the
+ * blueprint layer and native alike.
  */
-const PALETTE_TEXT_SURFACE = {
-  dark: "#2b3634",
-  light: "#F0F1F3",
+export const SOLVE_SURFACE = {
+  dark: "#171716",
+  light: "#F0EFED",
 } as const;
 
-/**
- * The same idea, per EMITTER × theme, for the semantic states below. The
- * palette rung can take one surface for both emitters because it is solved to
- * the union-hardest; the semantic states cannot, because the shell's darkest
- * ramp (`--bg-elev` at `--bg-l: 5%`) is far darker than the blueprint's
- * (`--bg-sunken` at `--bg-l: 10%`), and solving the shell against the
- * blueprint's surface walks `--danger` from a red to a washed pink (`#e2a6a6`)
- * to buy contrast it never needed. Each entry is the HARDEST surface that
- * emitter actually paints:
- *   - `shellLight`   `--bg-sunken` `#F0F1F3` — the darkest light surface.
- *   - `shellDark`    `--bg-elev` at `--bg-l: 5%` — the lightest dark one.
- *   - `blueprintLight` `--bg-sunken` at the hue that makes it darkest (237).
- *   - `blueprintDark`  `--bg-sunken` at the default hue, `--bg-l: 10%`.
- * A non-default `--app-hue` moves the blueprint surfaces by under 0.15 in
- * ratio, which is inside the 0.3 margin `AA_SOLVED_TEXT` already carries.
- */
-const SEMANTIC_SURFACE = {
-  blueprintDark: "#2b3634",
-  blueprintLight: "#f1f1f6",
-  shellDark: "#181818",
-  shellLight: "#F0F1F3",
-} as const;
-
-/** Which emitter × theme a semantic state is being solved for. */
-export type SemanticRamp = keyof typeof SEMANTIC_SURFACE;
+/** Which theme a solved rung is being walked for. */
+export type SemanticRamp = keyof typeof SOLVE_SURFACE;
 
 /**
- * …plus a wash of the hue itself. A palette hue on type is almost never on a
- * bare surface: a coloured chip, badge, or thumbnail label sits on a weak tint
- * of its OWN hue, which has already walked the background toward the ink. So
- * the surface the rung is solved against is the hardest one WITH that wash on
- * it, and a bare surface is then strictly easier. 12% is the strength the tint
- * idiom uses (`tintBg()` in the `docs` app); it also moves the reference in the
- * harder direction for both themes — darker under light ink's opposite, lighter
- * under dark's — so it is a genuine worst case rather than an average.
+ * A state on type is usually on a weak tint of ITSELF — `color-mix(in oklab,
+ * var(--danger) 12%, transparent)` chips are the single largest bucket of
+ * `--danger` sites — so the surface a walk is scored against carries that
+ * wash. 12% is the strength the tint idiom uses, and it moves the reference in
+ * the harder direction for both themes, so it is a genuine worst case rather
+ * than an average.
  */
-const SELF_TINT = 0.12;
+export const SELF_TINT = 0.12;
 
 /**
  * Floor the solved TEXT rungs — palette hues and semantic states alike — are
- * walked to. 0.3 above the 4.5 body floor for the same reason `AA_FILL` is:
- * the search walks 8-bit `hsl()` in 1-point steps, and that margin is what
- * keeps a rounding trip from shipping a 4.49.
+ * walked to. 0.3 above the 4.5 body floor because the search walks 8-bit
+ * `hsl()` in 1-point steps, and that margin is what keeps a rounding trip from
+ * shipping a 4.49.
  */
-const AA_SOLVED_TEXT = 4.8;
-
-/** The palette hue `base` deepened (light) or lifted (dark) until it clears
- *  `AA_PALETTE_TEXT` on that theme's hardest surface under its own tint. */
-function paletteTextShade(base: string, kind: "light" | "dark"): string {
-  const surface = toHex(
-    composite(
-      { alpha: SELF_TINT, rgb: parseColor(base).rgb },
-      parseColor(PALETTE_TEXT_SURFACE[kind]).rgb
-    )
-  );
-  return walkUntil(
-    base,
-    (candidate) => contrastRatio(candidate, surface),
-    AA_SOLVED_TEXT,
-    kind === "light" ? -0.01 : 0.01
-  );
-}
-
-function paletteTextShades(kind: "light" | "dark"): Record<ColorKey, string> {
-  return Object.fromEntries(
-    Object.entries(palette).map(([name, hex]) => [
-      name,
-      paletteTextShade(hex, kind),
-    ])
-  ) as Record<ColorKey, string>;
-}
-
-/**
- * Every palette hue as a legible `color:`, per theme — emitted as
- * `--c-<name>-text` by both emitters. A surface that needs a palette hue on
- * type reads this instead of `--c-<name>`, exactly as it reads `--accent-text`
- * rather than `--accent`.
- */
-export const paletteText = {
-  dark: paletteTextShades("dark"),
-  light: paletteTextShades("light"),
-} as const;
+export const AA_SOLVED_TEXT = 4.8;
 
 // ── Semantic states as TEXT ────────────────────────────────────────────────
 //
@@ -391,7 +264,7 @@ export const paletteText = {
  * so red stays red and the three states stay tellable apart.
  */
 export function semanticShade(base: string, ramp: SemanticRamp): string {
-  const bg = parseColor(SEMANTIC_SURFACE[ramp]).rgb;
+  const bg = parseColor(SOLVE_SURFACE[ramp]).rgb;
   return walkUntil(
     base,
     (candidate) =>
@@ -402,16 +275,6 @@ export function semanticShade(base: string, ramp: SemanticRamp): string {
         )
       ),
     AA_SOLVED_TEXT,
-    ramp.endsWith("Light") ? -0.01 : 0.01
+    ramp === "light" ? -0.01 : 0.01
   );
-}
-
-/** Derive the full four-value ramp for an accent base colour. */
-export function accentRamp(base: string): AccentRamp {
-  return {
-    accent: base,
-    deep: accentFillShade(base),
-    light: shiftLightness(base, LIGHT_SHIFT),
-    text: accentTextShade(base),
-  };
 }

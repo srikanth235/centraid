@@ -158,6 +158,14 @@ async function doHydrate(): Promise<void> {
   const active = getActiveVaultLink();
   if (active) await projectActiveSlot(active);
   hydrated = true;
+
+  // Tell everyone who subscribed BEFORE the registry existed. `getActiveVaultLink`
+  // is a synchronous read of in-memory state that only exists after this async
+  // hydrate, so a screen that mounts first sees an empty registry and then waits
+  // on a change that never comes — every other write path emits, this one did
+  // not. Home rendered "No vault yet · not connected to a gateway" over a fully
+  // populated replica whenever it won that race.
+  emit();
 }
 
 export function listVaultLinks(): VaultLink[] {

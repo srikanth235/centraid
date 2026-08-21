@@ -1,0 +1,66 @@
+/* The view pair. THE SEGMENTED SHAPE IS PHOTOS' (`photos/components/
+   Toolbar.module.css` `.stepper` / `.rung`), token for token: one sunken
+   track, the held item RAISED out of it on `--bg-elev` with the selected
+   hairline, `gap: 0` so the segments read as one property and not as two
+   controls, and no fill anywhere — the view's one filled element belongs to
+   its commit.
+
+   Not `.kit-seg`: that is the settings-form control at 2.1rem segments inside
+   0.2rem of padding, which stands taller than the 34px row it would sit in.
+
+   Sizes come from the handoff's own control recipe: the track is `C.h` (34px,
+   `--h-control`) and each item is `seg - 4` inside it, which is
+   `--h-segmented`. The label is `--section` — `--t-small-strong` here — the
+   same rung Photos' `.select` takes in the same row. */
+
+.track {
+  /* A real <fieldset> (ViewToggle.tsx): clear the UA margin/min-size box, then
+     one `border` that both replaces the UA fieldset frame and draws the sunken
+     hairline. Two `border` declarations in this same rule trip css:S4656. */
+  margin: 0;
+  min-inline-size: 0;
+  display: flex;
+  flex: none;
+  /* THE PUSH TO THE TRAILING EDGE IS THE ROW'S, NOT THIS CONTROL'S. It used to
+     be a `margin-inline-start: auto` here, which was correct while this track
+     was the only thing the arrangement row ever carried. It stopped being
+     correct the moment the rail toggle joined it: a second auto margin does
+     not push harder, flexbox SPLITS the free space between them, and the two
+     controls that belong side by side ended up at opposite ends of an empty
+     row. `Chrome.module.css` `.toolbar[data-selecting="false"]` now says it
+     once, for whatever the row is carrying. */
+  gap: 0;
+  padding: 2px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+  background: var(--bg-sunken);
+}
+
+.item {
+  min-inline-size: 38px;
+  min-block-size: var(--h-segmented);
+  padding-inline: var(--sp-3);
+  border: 1px solid transparent;
+  border-radius: var(--r-sm);
+  background: transparent;
+  color: var(--text-soft);
+  font: var(--t-small-strong);
+  white-space: nowrap;
+  cursor: pointer;
+  transition:
+    color var(--dur-1) var(--ease),
+    background var(--dur-1) var(--ease);
+}
+.item:hover {
+  color: var(--text);
+}
+/* Raised out of the track: a surface and a hairline, never a fill. */
+.item[aria-pressed="true"] {
+  background: var(--bg-elev);
+  border-color: var(--line-sel);
+  color: var(--text);
+}
+.item:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
+}

@@ -5,10 +5,27 @@
 // `search`/`trash` queries return; `LockerDetail` is the full, secret-bearing
 // shape the single-item `item` query returns (the ONLY payload with secrets).
 
+/**
+ * The six item-type discriminants Locker's schema recognizes (issue #712
+ * C4) — the source of truth is the CHECK constraint on `locker_item.type`
+ * (`packages/vault/src/schema/domains-locker.ts`). Kept in lockstep with it
+ * by a source-scan tripwire (`locker-item-type.test.ts`), the same technique
+ * `placement-registry.test.ts` uses for vault's `SHAREABLE_ITEM_TYPES`: this
+ * file stays type-only (see above), so the union is restated here rather
+ * than derived from a runtime array vault could export.
+ */
+export type LockerItemType =
+  | "login"
+  | "card"
+  | "note"
+  | "identity"
+  | "wifi"
+  | "password";
+
 /** Secret-free decorated list row (items/search/trash queries). */
 export interface LockerRow {
   item_id: string;
-  type: string;
+  type: LockerItemType;
   title: string;
   subtitle?: string;
   favorite?: boolean;
@@ -24,7 +41,7 @@ export interface LockerRow {
 /** Full, secret-bearing item for the detail pane (single-item `item` query). */
 export interface LockerDetail {
   item_id: string;
-  type: string;
+  type: LockerItemType;
   title: string;
   username?: string | null;
   password?: string | null;
@@ -74,7 +91,7 @@ export interface WatchState {
 export interface EditSeed {
   mode: "new" | "edit";
   id?: string;
-  type: string;
+  type: LockerItemType;
   title: string;
   fields: Record<string, string>;
   tags: string;
@@ -86,7 +103,7 @@ export interface EditSeed {
 export interface SavePayload {
   mode: "new" | "edit";
   id?: string;
-  type: string;
+  type: LockerItemType;
   title: string;
   tags: string;
   alias?: string;
@@ -115,7 +132,7 @@ export interface AppState {
   authSession: string | null;
   authBusy: boolean;
   authError: string;
-  pendingItemId: string | null;
+  revealItemId: string | null;
   reauthOpen: boolean;
   gen: boolean;
   genLen: number;

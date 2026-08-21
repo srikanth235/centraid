@@ -261,7 +261,7 @@ export default function ResourceModeCard({
     setSavedNote(null);
     try {
       await saveMode(next);
-      setSavedNote("Saved. Applies fully on the next gateway restart.");
+      setSavedNote("Saved — applies fully on the next gateway restart.");
     } catch (caughtError) {
       setMode(prev);
       setError(
@@ -287,8 +287,8 @@ export default function ResourceModeCard({
         <span className={styles.panelMeta}>respect this machine</span>
       </div>
       <p className={styles.resourceLead}>
-        Choose how hard the gateway may work in the background. Foreground chat
-        and apps always stay first in line.
+        Choose how hard the gateway may work in the background — foreground chat
+        and apps always come first.
       </p>
 
       <div

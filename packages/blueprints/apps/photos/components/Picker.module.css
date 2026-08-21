@@ -1,90 +1,97 @@
-/* The album picker. Authored camelCase (old `picker-` prefix dropped). The
-   panel rides the shared `.kit-modal` shell as a compound so app-specific
-   grid shape keys off the pair. The tile's media (img/placeholder) is filled
-   imperatively by media.ts, whose global `is-placeholder`/`ph-tile-*` classes
-   land inside `.tile`. */
+/* The album picker, redrawn on the Binding Layer (v4 handoff §C, §D, §E).
+   "The picker is drawn as a panel in the content area, labelled as the dialog
+   it is" — so this file styles a PANEL, and nothing in it restyles a shared
+   control.
+
+   WHAT RETIRED HERE, and why:
+
+     * `.tile` and its four hand-rolled overlay rules — the Tile is a SHARED
+       control now (§C, Tile.module.css). A second square-cropped tile with its
+       own check circle and its own accent outline was a fork of it. The picker
+       renders the same `<Tile>` the timeline does, so a photograph looks the
+       same wherever it is offered.
+     * `grid-template-columns: repeat(auto-fill, minmax(6rem, 1fr))` — the grid
+       is JUSTIFIED (§4.1). Rows come from the shared `justify()` packer at the
+       picker's own row height, which means no photograph is cropped square and
+       no tile reflows when its bytes land.
+     * the `--accent` selection outline and the `--accent-deep` check pip —
+       Photos' hue never lands on a control (§18). Selection is 2px of ink,
+       drawn by the Tile itself.
+
+   INVARIANTS THIS FILE IS HELD TO (§18): spacing off the `--sp-*` scale, type
+   off the `--t-*` roles, colour only from tokens, logical properties only so
+   the panel mirrors under RTL, numerics mono + tabular, nothing below 11px.
+
+   The panel rides the shared `.kit-modal` shell as a compound class so the
+   picker's own box metrics key off the pair without restyling the shell. */
 
 :global(.kit-modal).panel {
-  width: min(40rem, 100%);
+  width: min(52rem, 100%);
   max-height: 85vh;
   display: flex;
   flex-direction: column;
-  gap: 0.75rem;
-  padding: 1rem;
+  gap: var(--sp-3);
+  padding: var(--sp-4);
 }
+
+/* ---- head: the dialog says what it is, in type on paper ---- */
+
 .head {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-1);
+}
+.title {
   margin: 0;
   font: var(--t-title);
-  letter-spacing: -0.01em;
 }
+.sub {
+  margin: 0;
+  font: var(--t-small);
+  color: var(--text-soft);
+}
+
+/* ---- the justified grid: 2px gutters, both axes (§4.1, §4.3) ---- */
+
 .grid {
   flex: 1;
   min-height: 8rem;
   overflow-y: auto;
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(6rem, 1fr));
-  gap: var(--sp-1);
-  align-content: start;
+  /* The packer is handed this element's own content width, so the reserve for
+     a scrollbar is already in `clientWidth` — nothing has to be guessed. */
+  overscroll-behavior: contain;
 }
-.empty {
-  grid-column: 1 / -1;
-  padding: 1.5rem 0;
-  text-align: center;
-}
-.tile {
-  position: relative;
-  aspect-ratio: 1;
-  padding: 0;
-  border: none;
-  border-radius: var(--ph-tile-r);
-  background: var(--bg-sunken);
-  overflow: hidden;
-  -webkit-tap-highlight-color: transparent;
-}
-.tile img,
-.tile video {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-  display: block;
-  pointer-events: none;
-}
-.tile:focus-visible {
-  outline: none;
-  box-shadow: var(--focus-ring);
-  outline-offset: -2px;
-}
-.tile[aria-pressed="true"] {
-  outline: 3px solid var(--accent);
-  outline-offset: -3px;
-  border-radius: var(--ph-tile-r-sel);
-}
-.tile[aria-pressed="true"]::after {
-  content: "✓";
-  position: absolute;
-  top: 0.3rem;
-  left: 0.3rem;
-  width: 1.25rem;
-  height: 1.25rem;
-  border-radius: 50%;
-  background: var(--accent-deep);
-  /* --accent-deep flips light/dark, so its ink must too: --text-inv, never
-     the theme-stable --text-inv (kit.css header contract, #686). */
-  color: var(--text-inv);
-  font-size: 0.75rem;
-  font-weight: 700;
+.row {
   display: flex;
-  align-items: center;
-  justify-content: center;
+  gap: var(--sp-gutter);
+  margin-block-end: var(--sp-gutter);
 }
+
+/* An empty picker keeps the panel's geometry and says one thing (§14). */
+.empty {
+  margin: 0;
+  padding-block: var(--sp-5);
+  text-align: center;
+  font: var(--t-body);
+  color: var(--text-soft);
+}
+
+/* ---- foot: the numeric register, then Cancel, then the ONE fill ---- */
+
 .foot {
   display: flex;
   align-items: center;
-  gap: 0.5rem;
+  gap: var(--sp-2);
 }
 .count {
-  margin-right: auto;
+  margin-inline-end: auto;
+  font: var(--t-small);
   color: var(--text-soft);
-  font-family: var(--font-mono);
-  font-size: var(--t-small-size);
+}
+/* Every numeral in the product is mono and tabular, so the count does not
+   jitter as it walks 9 → 10 (§18). */
+.countNum {
+  font: var(--t-mono);
+  font-variant-numeric: var(--t-mono-numeric);
+  color: var(--text);
 }

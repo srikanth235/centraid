@@ -11,6 +11,8 @@ import type { ReplicaBindValue } from "@centraid/client/replica/native";
 import { tempDirSync } from "@centraid/test-kit/temp-dir";
 
 import { MultiVaultReplicaReader } from "./multi-vault-reader";
+import type { NativeChangeFeed } from "./native-session";
+import { createNativeReplicaSession } from "./native-session";
 import { NodeSqliteDriver } from "./node-sqlite-driver";
 import { planReplicaRead } from "./replica-read-pushdown";
 
@@ -116,6 +118,37 @@ function documentSeeds(vaultId: string, count: number): DocumentSeed[] {
   }));
 }
 
+async function enqueueOfflineRename(
+  file: string,
+  documentId: string,
+  title: string
+): Promise<void> {
+  const changeFeed: NativeChangeFeed = {
+    subscribe: () => () => undefined,
+    setShapeIds: () => Promise.resolve(),
+    resume: () => Promise.resolve(),
+    setActive: () => undefined,
+  };
+  const session = await createNativeReplicaSession({
+    gatewayAuth: {
+      baseUrl: "http://127.0.0.1:1",
+      gatewayId: "offline-gateway",
+      vaultId: "personal",
+    },
+    fetcher: () => Promise.reject(new Error("pushdown test stays offline")),
+    changeFeed,
+    driver: new NodeSqliteDriver(file),
+    isConnected: () => false,
+    digest: () => Promise.resolve("rename-digest"),
+    idFactory: () => "intent-rename",
+  });
+  await session.write("docs", {
+    action: "rename",
+    input: { document_id: documentId, title },
+  });
+  await session.close();
+}
+
 function mount(
   root: string,
   files: ReadonlyArray<{ vaultId: string; databaseName: string }>
@@ -126,7 +159,7 @@ function mount(
     files.map((file) => ({
       vaultId: file.vaultId,
       label: file.vaultId,
-      role: "admin" as const,
+      canWrite: true as const,
       databaseName: file.databaseName,
     }))
   );
@@ -193,6 +226,32 @@ describe("mounted reads with pushdown", () => {
     ]);
     // One shape-metadata row plus the single matching document.
     expect(driver.rowsReturned).toBeLessThan(5);
+    reader.close();
+  });
+
+  test("an overlay adds only its addressed canonical row to a pushed page", async () => {
+    const root = tempDirSync("centraid-pushdown-overlay-");
+    const personal = path.join(root, "personal.db");
+    seed(personal, "personal", documentSeeds("personal", 500));
+    await enqueueOfflineRename(personal, "personal-499", "Household plan");
+    const { reader, driver } = mount(root, [
+      { vaultId: "personal", databaseName: personal },
+    ]);
+
+    const filtered = await reader.read("docs", {
+      entity: "core.document",
+      where: [{ column: "title", op: "eq", value: "Household plan" }],
+      limit: 100,
+    });
+
+    expect(
+      filtered.rows
+        .map((row) => row.values.document_id)
+        .sort((left, right) => String(left).localeCompare(String(right)))
+    ).toStrictEqual(["personal-0", "personal-499"]);
+    // Metadata, one pushed canonical hit, and one mutation-addressed base cross
+    // the driver. The other 498 vault rows remain inside SQLite.
+    expect(driver.rowsReturned).toBeLessThan(12);
     reader.close();
   });
 

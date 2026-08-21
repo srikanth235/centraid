@@ -1,7 +1,7 @@
 import crypto from "node:crypto";
 import path from "node:path";
 
-import type { GatewayServeHandle } from "@centraid/gateway";
+import type { GatewayServeHandle } from "@centraid/server";
 
 import { desktopSessionIdFor } from "./app-sessions.js";
 import {
@@ -31,7 +31,7 @@ import type {
   SupervisorState,
 } from "./gateway-supervisor-core.js";
 import { phoneLinkStatus } from "./phone-link.js";
-import { loadPersistedSettings, templatesCacheDir } from "./settings.js";
+import { templatesCacheDir } from "./settings.js";
 
 /**
  * Electron-flavored local-gateway lifecycle (issue #351 / #468).
@@ -42,7 +42,7 @@ import { loadPersistedSettings, templatesCacheDir } from "./settings.js";
  * `/centraid/_gateway/info` answers. Set `CENTRAID_EMBEDDED_GATEWAY=1`
  * to keep the legacy in-process `serve()` path (E2E / tests).
  *
- * Electron-only layer on top of `@centraid/gateway`:
+ * Electron-only layer on top of `@centraid/server`:
  *   - per-gateway lifecycle (`handles` map + `starting` dedupe)
  *   - safeStorage-backed secrets (remote profiles; a local detached daemon
  *     uses the desktop-minted per-launch loopback token, issue #505 phase 7)
@@ -181,7 +181,6 @@ function wrapDetached(handle: DetachedGatewayHandle): LocalGatewayRuntime {
 }
 
 async function startEmbedded(gatewayId: string): Promise<LocalGatewayRuntime> {
-  const settings = await loadPersistedSettings();
   const dataDir = localGatewayDataDir();
   const ownerId = await getOrCreateDesktopOwnerId();
   const token = crypto.randomBytes(32).toString("hex");
@@ -198,9 +197,6 @@ async function startEmbedded(gatewayId: string): Promise<LocalGatewayRuntime> {
     keyStore: desktopGatewayKeyStore(dataDir, LOCAL_GATEWAY_ID),
     token,
     ownerEndpointId: ownerId,
-    ...(settings.remoteTemplatesUrl
-      ? { remoteTemplatesUrl: settings.remoteTemplatesUrl }
-      : {}),
     sessionIdFor: desktopSessionIdFor,
     logTag: `local-gateway:${gatewayId}`,
   });

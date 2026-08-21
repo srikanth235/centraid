@@ -4,6 +4,7 @@ import { createRoot } from "react-dom/client";
 import type { Root } from "react-dom/client";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
+import type { CentraidGatewayDevice } from "../../gateway-client-devices.js";
 import type { UsageInput } from "../../storage-metrics.js";
 import BackupCard from "./BackupCard.js";
 import type { BackupCardProps, BackupStatusDTO } from "./BackupCard.js";
@@ -49,6 +50,9 @@ describe("screens/BackupCard", () => {
     onVerifyBucket?: (
       vaultId: string
     ) => Promise<{ vaultId: string; reconciliation: BackupReconciliationDTO }>;
+    loadDevices?: () => Promise<CentraidGatewayDevice[]>;
+    onRestore?: () => void;
+    readOnly?: boolean;
     now?: number;
   }): Promise<HTMLDivElement> {
     container = document.createElement("div");
@@ -66,6 +70,9 @@ describe("screens/BackupCard", () => {
           onExportRecoveryKit={props.onExportRecoveryKit}
           onUpdatePolicy={props.onUpdatePolicy}
           onVerifyBucket={props.onVerifyBucket}
+          loadDevices={props.loadDevices}
+          onRestore={props.onRestore}
+          readOnly={props.readOnly}
         />
       );
     });
@@ -126,9 +133,11 @@ describe("screens/BackupCard", () => {
           .mockResolvedValue({ configured: false, vaults: [] }),
         onRunNow: neverRun,
       });
-      expect(el.textContent).toContain("isn’t backed up offsite yet");
+      // The head's own meta says it, in the place a reader looks first - no
+      // banner underneath repeating it in a sentence (binding layer v11).
+      expect(el.textContent).toContain("no copies yet");
       expect(el.textContent).toContain(
-        "Until backup custody is configured on this gateway"
+        "Backup isn’t configured on this gateway"
       );
       expect(el.textContent).not.toContain("Settings → Storage");
       expect(el.textContent).toContain("somewhere offline");
@@ -487,6 +496,98 @@ describe("screens/BackupCard", () => {
         "Couldn’t reach the gateway: fetch failed"
       );
     });
+
+    it("leads with loss, names what is held back, and shows an outlined disabled Restore when no restore flow is wired (issue #708 A2)", async () => {
+      const status: BackupStatusDTO = {
+        configured: true,
+        provider: "Clawgnition",
+        vaults: [
+          {
+            vaultId: "v1",
+            name: "Main",
+            lastBackupAt: "2026-07-11T11:59:00.000Z",
+            lastVerifyAt: "2026-07-11T11:59:00.000Z",
+            lastWalDrainAt: "2026-07-11T11:59:30.000Z",
+            pendingOffsite: { count: 0, bytes: 0 },
+            policy: POLICY,
+          },
+        ],
+      };
+      const el = await mount({
+        loadStatus: vi
+          .fn<BackupCardProps["loadStatus"]>()
+          .mockResolvedValue(status),
+        onRunNow: neverRun,
+      });
+      expect(el.textContent).toContain(
+        "If this device died right now, you would lose almost nothing."
+      );
+      expect(el.textContent).toContain("What is held back");
+      expect(el.textContent).toContain(
+        "Nothing. A partial backup would be a promise Centraid could not keep."
+      );
+      const restoreBtn = [...el.querySelectorAll("button")].find((b) =>
+        b.textContent?.includes("Restore from backup")
+      ) as HTMLButtonElement;
+      expect(restoreBtn).toBeDefined();
+      expect(restoreBtn.disabled).toBe(true);
+      expect(restoreBtn.className).not.toContain("destructiveFilled");
+      expect(el.textContent).toContain("Restore from a backup");
+      const reasonId = restoreBtn.getAttribute("aria-describedby");
+      expect(reasonId).toBeTruthy();
+      expect(
+        el.querySelector(`#${CSS.escape(reasonId as string)}`)?.textContent
+      ).toContain("a gateway-side act today");
+      expect(restoreBtn.title).toBe("");
+    });
+
+    it("renders the paired-device list with the scope and last-seen in the mono register", async () => {
+      const status: BackupStatusDTO = {
+        configured: true,
+        vaults: [
+          {
+            vaultId: "v1",
+            name: "Main",
+            lastBackupAt: "2026-07-11T11:00:00.000Z",
+            lastVerifyAt: "2026-07-11T11:00:00.000Z",
+            lastWalDrainAt: "2026-07-11T11:00:00.000Z",
+            pendingOffsite: { count: 0, bytes: 0 },
+            policy: POLICY,
+          },
+        ],
+      };
+      const loadDevices = vi
+        .fn<() => Promise<CentraidGatewayDevice[]>>()
+        .mockResolvedValue([
+          {
+            deviceId: "d1",
+            endpointId: "ep1",
+            ownerId: "o1",
+            ownerLabel: "Ravi",
+            label: "Ravi’s Mac",
+            transport: "iroh",
+            vaultId: "v1",
+            vaultName: "Main",
+            lastUsedAt: "2026-07-11T10:00:00.000Z",
+            revoked: false,
+            rememberDevice: true,
+            current: true,
+          },
+        ]);
+      const el = await mount({
+        loadStatus: vi
+          .fn<BackupCardProps["loadStatus"]>()
+          .mockResolvedValue(status),
+        onRunNow: neverRun,
+        loadDevices,
+      });
+      await act(async () => {
+        await Promise.resolve();
+        await Promise.resolve();
+      });
+      expect(el.textContent).toContain("Ravi’s Mac");
+      expect(el.textContent).toContain("Main");
+    });
   });
 
   describe("BackupCard — recovery-kit gate", () => {
@@ -787,6 +888,24 @@ describe("screens/BackupCard", () => {
       expect(
         el.querySelector('[data-testid="exit-metered-note"]')
       ).not.toBeNull();
+    });
+
+    it("keeps live backup facts but removes every mutation control for a viewer", async () => {
+      const el = await mount({
+        loadStatus: vi
+          .fn<BackupCardProps["loadStatus"]>()
+          .mockResolvedValue(freshStatus),
+        onRunNow: neverRun,
+        readOnly: true,
+      });
+      expect(
+        el.querySelector('[data-testid="metric-freshness"]')
+      ).not.toBeNull();
+      expect(el.textContent).toContain("What is copied");
+      expect(el.textContent).not.toContain("Back up now");
+      expect(el.textContent).not.toContain("Verify now");
+      expect(el.textContent).not.toContain("Restore from backup");
+      expect(el.querySelector('input[type="file"]')).toBeNull();
     });
 
     it("drops the recovery-window metric when the provider promises no retention", async () => {

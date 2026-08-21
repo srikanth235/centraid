@@ -1,6 +1,6 @@
 # Civil time and cron timezone model (issues #570 and #630)
 
-`@centraid/time-engine` is the shared civil-time and recurrence core for Agenda, Tasks, Tally, and automation previews. It owns IANA wall-clock resolution, RRULE expansion, completion-relative next occurrences, stable original-occurrence identity, and occurrence/future exceptions. The app engine exposes that package to blueprints as `ctx.time`; blueprints must not implement their own UTC recurrence loops.
+`@centraid/core/time` is the shared civil-time and recurrence core for Agenda, Tasks, Tally, and automation previews. It owns IANA wall-clock resolution, RRULE expansion, completion-relative next occurrences, stable original-occurrence identity, and occurrence/future exceptions. The app engine exposes that package to blueprints as `ctx.time`; blueprints must not implement their own UTC recurrence loops.
 
 Temporal values carry an explicit meaning:
 
@@ -46,13 +46,13 @@ Missed fires during gateway downtime are still not backfilled (#149). DST policy
 
 | Concern | Location |
 | --- | --- |
-| Civil time + recurrence + exception expansion | `packages/time-engine/src/` |
-| Blueprint runtime surface | `packages/app-engine/src/worker/runner.ts` (`ctx.time`) |
-| Resolution + wall-clock extraction | `packages/automation/src/cron-timezone.ts` |
-| Matcher | `packages/automation/src/fire/cron-match.ts` |
-| Cursor / due instants | `packages/automation/src/fire/cron-cursor.ts` |
-| Manifest shape + IANA validation | `packages/automation/src/manifest/manifest.ts` |
-| Gateway default wiring | `packages/gateway/src/serve/build-gateway.ts` (`defaultCronTimeZone`) |
+| Civil time + recurrence + exception expansion | `packages/core/src/time/` |
+| Blueprint runtime surface | `packages/server/src/engine/worker/runner.ts` (`ctx.time`) |
+| Resolution + wall-clock extraction | `packages/server/src/automation/cron-timezone.ts` |
+| Matcher | `packages/server/src/automation/fire/cron-match.ts` |
+| Cursor / due instants | `packages/server/src/automation/fire/cron-cursor.ts` |
+| Manifest shape + IANA validation | `packages/server/src/automation/manifest/manifest.ts` |
+| Gateway default wiring | `packages/server/src/serve/build-gateway.ts` (`defaultCronTimeZone`) |
 | Client preview + labels | `packages/client/src/cron.ts` |
 | Editor timezone control | `packages/client/src/react/screens/AutomationEditorScreen.tsx` |
 | Settings default | `packages/client/src/react/screens/SettingsLayoutScreen.tsx` |

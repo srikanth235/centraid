@@ -5,7 +5,6 @@ import type { LocalUsageReportDTO } from "../../gateway-client-local-storage.js"
 import { cx } from "../ui/cx.js";
 import Icon from "../ui/Icon.js";
 import {
-  COMPONENT_PRESENTATION,
   budgetSummary,
   footprintScale,
   footprintSlices,
@@ -14,7 +13,6 @@ import {
 
 import a11y from "../styles/a11y.module.css";
 import controlsCss from "../styles/controls.module.css";
-import buttonCss from "../ui/Button.module.css";
 import gwStyles from "./GatewayScreen.module.css";
 import styles from "./LocalFootprintCard.module.css";
 
@@ -31,8 +29,11 @@ import styles from "./LocalFootprintCard.module.css";
 export interface LocalFootprintCardProps {
   report: LocalUsageReportDTO | null;
   loadError: string | null;
-  /** Full re-walk — an explicit owner action, never a poll. */
-  onRescan: () => void;
+  /**
+   * A full re-walk is in flight. The VERB lives on `StorageScreen`'s section
+   * head (v11) — this card only needs to know so its figures can say they are
+   * being remeasured; it no longer owns the button.
+   */
   rescanning: boolean;
 }
 
@@ -95,55 +96,9 @@ function OccupancyRail({
   );
 }
 
-function VaultBreakdown({
-  report,
-}: {
-  report: LocalUsageReportDTO;
-}): JSX.Element | null {
-  if (report.vaults.length === 0) return null;
-  return (
-    <details className={styles.byVault} data-testid="footprint-by-vault">
-      <summary>By vault</summary>
-      <div className={styles.byVaultBody}>
-        {report.vaults.map((vault) => (
-          <div key={vault.vaultId} className={styles.vaultRow}>
-            <div className={styles.vaultHead}>
-              <span className={styles.vaultName}>
-                {vault.name ?? vault.vaultId.slice(0, 8)}
-              </span>
-              <span className={styles.figure}>{formatBytes(vault.bytes)}</span>
-            </div>
-            <div className={styles.vaultParts}>
-              {vault.components
-                .filter((c) => c.bytes > 0)
-                .sort((a, b) => b.bytes - a.bytes)
-                .map((component) => (
-                  <span key={component.component} className={styles.vaultPart}>
-                    <i
-                      className={styles.chip}
-                      style={{
-                        background:
-                          COMPONENT_PRESENTATION[component.component].color,
-                      }}
-                    />
-                    {COMPONENT_PRESENTATION[component.component].label}
-                    <b className={styles.figure}>
-                      {formatBytes(component.bytes)}
-                    </b>
-                  </span>
-                ))}
-            </div>
-          </div>
-        ))}
-      </div>
-    </details>
-  );
-}
-
 export default function LocalFootprintCard({
   report,
   loadError,
-  onRescan,
   rescanning,
 }: LocalFootprintCardProps): JSX.Element {
   const [expanded, setExpanded] = useState<string | null>(null);
@@ -157,24 +112,11 @@ export default function LocalFootprintCard({
       className={cx(gwStyles.panel, styles.card)}
       data-testid="local-footprint-card"
     >
-      <div className={gwStyles.panelHead}>
-        <h2>On this machine</h2>
-        <button
-          type="button"
-          className={cx(buttonCss.btn, buttonCss.sm, controlsCss.soft)}
-          disabled={rescanning || !report}
-          onClick={onRescan}
-        >
-          <span
-            className={styles.rescanIcon}
-            data-spin={rescanning || undefined}
-          >
-            <Icon name={rescanning ? "Loader" : "Refresh"} size={13} />
-          </span>
-          <span>{rescanning ? "Measuring…" : "Rescan"}</span>
-        </button>
-      </div>
-
+      {/* NO HEAD OF ITS OWN (binding layer v11). "Capacity · 8.2 GB of 512 GB"
+          and the Rescan verb are `StorageScreen`'s section head, above this
+          container: a head inside the border reads as a caption on the card
+          rather than as the name of this stretch of the page, and the figure
+          was being stated twice — once in the head, once as the headline. */}
       <div className={styles.body}>
         {loadError ? (
           <div className={styles.loadError}>
@@ -182,7 +124,15 @@ export default function LocalFootprintCard({
           </div>
         ) : report ? (
           <>
-            <div className={styles.headline} data-status={report.limit.status}>
+            {/* `data-measuring` mutes the figures while a re-walk is in
+                flight: they are the PREVIOUS measurement until it lands, and a
+                number that looks live while it is stale is the one thing this
+                card must never do. */}
+            <div
+              className={styles.headline}
+              data-measuring={rescanning || undefined}
+              data-status={report.limit.status}
+            >
               <span className={styles.headlineFigure}>
                 {formatBytes(report.totalBytes)}
               </span>
@@ -238,8 +188,6 @@ export default function LocalFootprintCard({
                 );
               })}
             </div>
-
-            <VaultBreakdown report={report} />
 
             {report.disk ? (
               <div className={styles.diskLine}>

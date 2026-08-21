@@ -1,220 +1,268 @@
-/* The lightbox info panel's own classes. Authored camelCase (old `ph-` prefix
-   dropped). `.ph-faces` (host for faces.ts's imperatively-injected
-   `lightbox-faces-title`/`lightbox-face` children) STAYS GLOBAL in app.css.
-   The custody tone class is picked via an explicit lookup map in the component
-   (never a computed `styles['custody-' + tone]`). */
+/* The info panel's own classes (v4 handoff §7.2). The panel is PAPER, not
+   stage: the rail sits beside the stage but every row on it is a field the
+   member edits, and an editable field belongs on the page ramp where the
+   contract's own focus ring works. The panel's geometry — 320px rail / 64%
+   sheet with a grabber — lives with the stage in Lightbox.module.css, because
+   that is the layout question.
 
-.captionInput {
-  width: 100%;
-  font: var(--t-body-strong);
-  font-size: 14px;
+   `.ph-faces` (the host for faces.ts's imperatively-injected
+   `lightbox-faces-title`/`lightbox-face` children) STAYS GLOBAL, and the
+   People chips it injects are styled there. */
+
+.rowLabel {
+  font: var(--t-eyebrow);
+  text-transform: var(--t-eyebrow-transform);
+  letter-spacing: var(--t-eyebrow-tracking);
+  color: var(--text-faint);
+  margin-block: var(--sp-4) var(--sp-2);
+}
+.rowLabel:first-child {
+  margin-block-start: 0;
+}
+
+/* Caption: 13/1.5 with a DASHED underline — the panel's way of saying "this
+   is editable in place" without a pencil on every row (§7.2). */
+.caption {
+  inline-size: 100%;
+  font: var(--t-small);
+  line-height: 1.5;
   color: var(--text);
   background: none;
   border: none;
-  border-bottom: 1px solid var(--line);
-  padding: 0 0 var(--sp-2);
-  outline: none;
-  margin-bottom: var(--sp-4);
+  border-block-end: 1px dashed var(--line-strong);
+  border-radius: var(--r-xs);
+  padding: 0 0 var(--sp-1);
 }
-.captionInput:focus {
-  border-color: var(--line-strong);
+.caption:focus-visible {
+  border-block-end-color: var(--focus-ring-color);
 }
-.infoSectionLabel {
-  font: var(--t-control);
-  text-transform: uppercase;
-  letter-spacing: 0.09em;
-  color: var(--text-faint);
-  margin-bottom: var(--sp-2);
-}
-.detailsTaken {
-  margin-bottom: var(--sp-2);
-}
-.detailsTaken :global(.kit-input) {
-  font-family: var(--font-mono);
-  color: var(--text-soft);
-  font-size: 0.78rem;
-}
-.detailsGrid {
-  display: grid;
-  grid-template-columns: auto 1fr;
-  gap: var(--sp-2) 14px;
-  font: var(--t-small);
-  margin-bottom: 18px;
-}
-.detailsK {
+
+.captureInput {
+  inline-size: 100%;
   font: var(--t-mono);
-  font-size: 11px;
+  font-variant-numeric: var(--t-mono-numeric);
+  direction: var(--t-mono-direction);
+  unicode-bidi: var(--t-mono-bidi);
+  color: var(--text);
+  background: none;
+  border: none;
+  border-block-end: 1px dashed var(--line-strong);
+  border-radius: var(--r-xs);
+  padding: 0 0 var(--sp-1);
+}
+
+.rowValue {
+  font: var(--t-small);
+  line-height: 1.5;
+  color: var(--text);
+  margin: 0;
+}
+/* The note beside a value: the timezone, where a time came from, who set a
+   place. A recessive state takes its own token on the leaf (§18) — never a
+   container `opacity`. */
+.rowNote {
+  font: var(--t-mono);
+  font-variant-numeric: var(--t-mono-numeric);
+  direction: var(--t-mono-direction);
+  unicode-bidi: var(--t-mono-bidi);
   color: var(--text-faint);
+  margin: var(--sp-1) 0 0;
 }
-.detailsV {
-  color: var(--text-soft);
-  word-break: break-word;
+
+/* A value that is itself the control that edits it. */
+.editable {
+  font: var(--t-small);
+  color: var(--text);
+  background: none;
+  border: none;
+  border-block-end: 1px dashed var(--line-strong);
+  padding: 0;
 }
-.custodyOk {
-  color: var(--accent-text);
+.inlineAction {
+  font: inherit;
+  color: var(--link);
+  background: none;
+  border: none;
+  padding: 0;
+  text-decoration: underline;
 }
-.custodyWarn {
-  color: var(--custody-warn);
-}
-.custodyDanger {
-  color: var(--danger);
-}
+
 .placeEditor {
   display: flex;
   align-items: center;
-  gap: 0.3rem;
-  margin-bottom: 18px;
+  gap: var(--sp-2);
   flex-wrap: wrap;
 }
 .placeEditor select {
   flex: 1;
-  min-width: 0;
+  min-inline-size: 0;
 }
-.placeEmpty {
-  flex: 1 1 100%;
-  margin: 0.2rem 0 0;
+
+/* The panel's own map: the Places projection at thumbnail size, with the
+   member's "exact location" action under it. Capped rather than fluid — the
+   figure answers "roughly whereabouts", and one that grew with the rail would
+   start competing with the photograph the panel is describing. */
+.mapSlot {
+  display: flex;
+  flex-direction: column;
+  align-items: start;
+  gap: var(--sp-2);
+  max-inline-size: 280px;
+  margin-block-start: var(--sp-3);
 }
-.placeChip {
-  display: inline-flex;
-  align-self: flex-start;
-  padding: var(--sp-1) var(--sp-3);
-  border: 1px solid var(--line);
-  border-radius: 999px;
-  background: var(--bg-sunken);
-  color: var(--text-soft);
-  font: var(--t-small);
-  font-size: 12px;
-  margin-bottom: 18px;
-}
-.placeChip:hover {
-  border-color: var(--line-strong);
-  color: var(--text);
-}
+
+/* Chips: 24px, 999px radius, hairline (§7.2). Tags and People share them, and
+   so do the album chips — a chip is a chip. */
 .chipRow {
   display: flex;
   flex-wrap: wrap;
   gap: var(--sp-2);
-  margin-bottom: 18px;
 }
-.albumChoice {
+.chip {
+  block-size: 24px;
+  display: inline-flex;
+  align-items: center;
+  padding-inline: var(--sp-3);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--r-pill);
+  background: none;
+  color: var(--text);
+  font: var(--t-control);
+  white-space: nowrap;
+}
+.chip:hover {
+  border-color: var(--text-soft);
+}
+/* A selected chip takes an 8% ink wash, not the filled ink variant — a panel
+   can hold many selected albums, and "one filled ink element per view" is the
+   rule (§18). */
+.chip[data-active="true"] {
+  background: color-mix(in oklab, var(--text) 8%, transparent);
+  border-color: var(--text-soft);
+}
+/* A chip with a tail: the album, then the control that makes this photograph
+   its cover. One seam, so the two read as one thing with two parts. */
+.chipPair {
   display: inline-flex;
   align-items: stretch;
 }
-.albumChip {
-  padding: 6px var(--sp-3);
-  border-radius: 999px;
-  border: 1px solid var(--line);
-  background: var(--bg-elev);
-  color: var(--text-soft);
-  font: var(--t-small);
-  font-size: 12px;
+.chipPair .chip {
+  border-start-end-radius: 0;
+  border-end-end-radius: 0;
 }
-.albumChip[data-active="true"] {
-  border-color: var(--line-strong);
-  background: var(--accent-soft);
-  color: var(--accent-text);
-  font-weight: 600;
-}
-.albumChoice:has(.coverButton) .albumChip {
-  border-radius: 999px 0 0 999px;
-}
-.coverButton {
+.chipTail {
+  block-size: 24px;
+  padding-inline: var(--sp-2);
   border: 1px solid var(--line-strong);
-  border-left: 0;
-  border-radius: 0 999px 999px 0;
-  background: var(--accent-soft);
-  color: var(--accent-text);
-  font: var(--t-small);
-  font-size: 11px;
-  padding: 6px var(--sp-2);
-}
-.coverButton:disabled {
+  border-inline-start: 0;
+  border-start-end-radius: var(--r-pill);
+  border-end-end-radius: var(--r-pill);
+  background: none;
   color: var(--text-faint);
+  font: var(--t-control);
+  white-space: nowrap;
+}
+.chipTail:disabled {
+  color: var(--text-disabled);
   cursor: default;
 }
-.tagChipX,
-.tagChipNew {
-  padding: var(--sp-1) 10px;
-  border-radius: 999px;
-  border: 1px solid var(--line);
-  background: var(--bg-elev);
+.chipInput {
+  block-size: 24px;
+  inline-size: 8rem;
+  padding-inline: var(--sp-3);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--r-pill);
+  background: none;
+  color: var(--text);
+  font: var(--t-control);
+}
+
+/* A refused write: what was tried, why, what to do (§7.2, §13). Bordered
+   `--net`, never a filled alarm and never a red dot. */
+.refusal {
+  display: block;
+  margin-block-start: var(--sp-4);
+  padding: var(--sp-3);
+  border: 1px solid var(--net);
+  border-radius: var(--r-md);
+}
+.refusalHead {
+  font: var(--t-small-strong);
+  color: var(--net);
+  margin: 0;
+}
+.refusalNote {
+  font: var(--t-small);
   color: var(--text-soft);
+  margin: var(--sp-2) 0 0;
+}
+
+.rule {
+  border: none;
+  border-block-start: 1px solid var(--line);
+  margin-block: var(--sp-5);
+}
+
+/* The facts, in the numeric register (§7.2). Every one of them is a literal
+   the member could read off the file, so every one of them is mono, tabular,
+   and reads in order under RTL. */
+.facts {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: var(--sp-2) var(--sp-4);
+}
+.factRow {
+  display: contents;
+}
+.factKey {
   font: var(--t-mono);
-  font-size: 11px;
+  font-variant-numeric: var(--t-mono-numeric);
+  color: var(--text-faint);
 }
-.tagChipNew:hover {
-  border-color: var(--accent);
-  color: var(--accent-text);
+.factValue {
+  font: var(--t-mono);
+  font-variant-numeric: var(--t-mono-numeric);
+  direction: var(--t-mono-direction);
+  unicode-bidi: var(--t-mono-bidi);
+  color: var(--text-soft);
+  word-break: break-word;
 }
-.tagInput {
-  border-radius: 999px;
-  font-size: 0.75rem;
-  padding: 0.25rem 0.7rem;
-  width: 8rem;
+
+/* Where the original currently lives — one paragraph, in the reading voice
+   rather than the numeric one, because it is an explanation and not a fact. */
+.origin {
+  font: var(--t-small);
+  line-height: 1.5;
+  color: var(--text-soft);
+  margin: var(--sp-4) 0 0;
 }
+
 .activity {
   display: flex;
   flex-direction: column;
-  margin-bottom: 10px;
+  gap: var(--sp-3);
 }
+/* One event: its sentence over its receipt line, tighter inside than the
+   gap between events so each pair reads as one entry. */
 .activityRow {
   display: flex;
-  gap: var(--sp-3);
-  padding-bottom: 14px;
-}
-.activityDot {
-  width: 8px;
-  height: 8px;
-  border-radius: 999px;
-  background: var(--accent-fill);
-  margin-top: var(--sp-1);
-  flex-shrink: 0;
-}
-.activityBody {
-  min-width: 0;
+  flex-direction: column;
+  gap: 2px;
 }
 .activityText {
   font: var(--t-small);
   color: var(--text);
 }
 .activityMeta {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  margin-top: 2px;
-}
-.activityMeta span:first-child {
   font: var(--t-mono);
-  font-size: 10.5px;
+  font-variant-numeric: var(--t-mono-numeric);
+  direction: var(--t-mono-direction);
+  unicode-bidi: var(--t-mono-bidi);
   color: var(--text-faint);
+  margin-block-start: 2px;
 }
-.receiptChip {
-  font: var(--t-mono);
-  font-size: 9.5px;
-  color: var(--accent-text);
-  border: 1px solid var(--accent-soft);
-  border-radius: 4px;
-  padding: 0 var(--sp-1);
-}
-.deleteLink {
-  width: 100%;
-  border: 1px solid var(--line);
-  border-radius: var(--r-md);
-  background: none;
-  color: var(--danger);
-  font: var(--t-small);
-  padding: var(--sp-2);
-  margin-top: var(--sp-1);
-}
-.deleteLink:hover {
-  border-color: var(--danger);
-  background: color-mix(in oklab, var(--danger) 8%, transparent);
-}
-.note {
-  color: var(--text-soft);
-  font-size: 0.78rem;
-  margin: var(--sp-2) 0 0;
-}
-.note:empty {
-  display: none;
+
+.scopeName {
+  font: var(--t-small-strong);
+  color: var(--text);
 }

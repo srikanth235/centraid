@@ -19,6 +19,18 @@
 
 .shell {
   composes: kit-app-shell kit-app-defer-drawer from global;
+  /* THE PAGE MARGIN IS DECLARED ONCE, HERE, AND INHERITED — the same fix
+     Photos made (apps/photos/Chrome.module.css). Every row that spans the pane
+     carried its own: the scroll host a hardcoded 22px, and then the breadcrumb,
+     the filter row and the caption each added `--sp-4` INSIDE it. Rows in the
+     scroll were double-padded — crumb text and filter pills at 38px above cards
+     that began at 22 — and the strip, which is not inside the scroll, landed
+     its first label at a third value again. The handoff gives `breadBlock` and
+     `filterBlock` no inline padding at all for exactly this reason: the stage
+     owns the margin, and a block that adds its own cannot line up with the one
+     beside it. One property now, read by every row, and the compact rung is a
+     one-line change instead of a five-line one. */
+  --content-margin: 22px;
   /* Docs-specific tokens folded from app.css :root. The shared blueprint layer
      supplies everything else.
 
@@ -62,26 +74,33 @@
   --app-drawer-width: 274px;
 }
 
-/* Knob: appFont swaps the body/UI sans face. The host sets data-app-font on the
-   inline scope wrapper (pushKnobToInlineRoot); app.css's :root[data-app-font]
-   rules aren't loaded inline, so re-express them here keyed on that wrapper.
-   Each branch REBINDS the sans role to another token-owned face rather than
-   naming a family: `unset` on a custom property falls back to inheritance, i.e.
-   the :root default stack, so "sans" needs no literal of its own. */
-:global(.centraid-inline-scope[data-app-font="sans"]) {
-  --font-sans: unset;
-}
-:global(.centraid-inline-scope[data-app-font="serif"]) {
-  --font-sans: var(--font-serif);
-}
-:global(.centraid-inline-scope[data-app-font="mono"]) {
-  --font-sans: var(--font-mono);
+/* ---------- Identity (two knobs; everything else is contract) ---------- */
+
+/* Docs' identity is TEAL — hue 210, `--c-teal` — which is the slot `apps.ts`
+   assigns it on the Binding Layer's identity wheel, what `app.json`'s
+   `colorKey` already says, and what the shell's launcher tile already paints.
+   Until now this file declared neither knob, so the app rendered under
+   whatever identity the shell's injected layer last carried: the launcher
+   promised teal and the app itself answered in the host neutral.
+
+   Since the Binding Layer flip `--app-hue` is ONLY the wheel slot — the
+   neutrals are the system's literal paper and no longer read it
+   (packages/design/src/blueprint.ts) — so the identity declaration is these
+   two lines and nothing else. The rule doubles the class (`.shell.shell` →
+   0,2,0) to beat the shell's injected `.centraid-inline-scope` block (0,1,0),
+   which is appended to <head> at runtime and would otherwise win the tie. */
+.shell.shell {
+  --app-hue: 210;
+  --app-identity: var(--c-teal);
 }
 
 /* ---------- Sidebar (static chrome; nav rows/folders/storage → *.module.css) ---------- */
 
 .side {
   composes: kit-app-side from global;
+  /* Navigation belongs to the host stem. Keeping this node mounted preserves
+     the served/inline slot contract while preventing a second desktop nav. */
+  display: none;
 }
 .brand {
   composes: kit-app-brand from global;
@@ -106,60 +125,49 @@
   position: relative;
   margin-bottom: 14px;
 }
+/* The one filled ink element in this view. `.kit-btn.primary` owns the fill,
+   the ink pair, the focus ring, the control height and the hover step (which
+   moves AWAY from the ink it carries); this rule adds only the full-width
+   sidebar layout. No local shadow (surfaces are paper — `--shadow-*` is for a
+   dialog/sheet/popover), no brightness filter and no scale-on-press: both are
+   outside the two-case motion grammar. */
 .new {
-  display: flex;
-  align-items: center;
-  gap: var(--sp-2);
   width: 100%;
-  padding: var(--sp-3) 14px;
-  border: none;
-  border-radius: var(--r-md);
-  background: var(--accent-deep);
-  /* --accent-deep flips light/dark, so its ink must too: --text-inv, never
-     the theme-stable --text-inv (kit.css header contract, #686). */
-  color: var(--text-inv);
-  font: var(--t-body-strong);
-  box-shadow: var(--shadow-sm);
-  transition: filter 0.14s var(--ease);
+  justify-content: flex-start;
+  padding-inline: var(--sp-3);
 }
 .new span {
-  text-align: left;
+  text-align: start;
 }
 .newChev {
-  margin-left: auto;
-  opacity: 0.85;
-}
-.new:hover {
-  filter: brightness(1.07);
-}
-.new:active {
-  transform: scale(0.99);
+  margin-inline-start: auto;
 }
 .newMenu {
   position: absolute;
   top: calc(100% + 6px);
-  left: 0;
-  right: 0;
+  inset-inline-start: 0;
+  inset-inline-end: 0;
   z-index: 40;
   background: var(--bg-elev);
   border: 1px solid var(--line);
-  border-radius: 12px;
+  border-radius: var(--r-lg);
   box-shadow: var(--shadow-lg);
   padding: var(--sp-1);
-  animation: kit-rise 0.16s var(--ease);
+  animation: kit-rise var(--dur-2) var(--ease-entry);
 }
 
-.nav {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-}
+/* `.nav` (the sidebar's smart-nav column) is gone with `SmartNav`: the shelf
+   strip carries All / Recently changed / Starred, and an unused rule is a
+   claim about a region that no longer exists. */
+/* The eyebrow role, taken whole from the ramp — `--t-eyebrow` already carries
+   the caps + tracking as their own tokens, so a local 0.09em/uppercase pair is
+   a second, unmeasured copy of a role that exists. */
 .sectionLabel {
-  font: var(--t-control);
+  font: var(--t-eyebrow);
+  letter-spacing: var(--t-eyebrow-tracking);
+  text-transform: var(--t-eyebrow-transform);
   color: var(--text-faint);
-  text-transform: uppercase;
-  letter-spacing: 0.09em;
-  padding: var(--sp-4) 10px var(--sp-2);
+  padding: var(--sp-4) var(--sp-3) var(--sp-2);
 }
 .folders {
   display: flex;
@@ -171,7 +179,7 @@
 }
 .storage {
   border: 1px solid var(--line);
-  border-radius: 12px;
+  border-radius: var(--r-lg);
   padding: var(--sp-3) var(--sp-3);
   background: var(--bg-elev);
 }
@@ -187,8 +195,7 @@
   flex-shrink: 0;
 }
 .consentLine span {
-  font: var(--t-small);
-  font-size: 11.5px;
+  font: var(--t-control);
 }
 
 .scrim {
@@ -196,6 +203,7 @@
   /* Now a real <button> (kit-plain-btn) so the dismiss gesture is keyboard
      reachable; keep the plain-div cursor it always had. */
   cursor: default;
+  display: none;
 }
 
 /* ---------- Main (static chrome) ---------- */
@@ -204,118 +212,106 @@
   composes: kit-app-main from global;
 }
 
-.topbar {
-  composes: kit-app-topbar from global;
+/* The toolbar row above the strip (the handoff's `barRow`, and the geometry
+   `apps/photos/components/Toolbar.module.css` already uses for the same row):
+   34px of controls, the page margin, no rule of its own. `--app-topbar-*` is
+   no longer read at all — `kit-app-topbar`'s 66px band with a border-bottom
+   was a header, and the title and count it seemed to belong to are the frame's
+   app bar. */
+.toolbar {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  min-block-size: var(--h-control);
+  padding: var(--sp-2) var(--content-margin);
+  flex-wrap: wrap;
+  flex-shrink: 0;
 }
-.hamburger {
-  composes: kit-app-hamburger from global;
+/* SELECTING IS A STATE OF THIS ROW, not a second bar. The row is the same box
+   at the same height in the same place — what changes is what it carries, so
+   nothing below it moves when a member picks something. The entrance is the
+   product's own rise, kept from the pill this replaced: the CONTENTS arrive,
+   the region does not appear. */
+/* THE ARRANGEMENT STATE SITS AT THE TRAILING EDGE — the rail toggle and the
+   List/Grid pair, together, in that order. Said here rather than by an auto
+   margin on one of the controls, because the row is what has an edge and
+   because two controls each claiming the slack share it instead of stacking.
+
+   The SELECTION state is not pushed: its count leads and its verbs follow, so
+   it fills the row from the start. */
+.toolbar[data-selecting="false"] {
+  justify-content: flex-end;
 }
-/* kit.css's .kit-search owns the pill/icon/input look; docs keeps only the
-   layout placement (max-width, flex basis) in the topbar row. */
-.search {
-  flex: 1;
-  max-width: 460px;
-}
-.topbarTools {
-  composes: kit-app-tools from global;
-}
-/* Grid/list toggle: kit.css .kit-seg; segments are icon-only squares here. */
-.topbarTools :global(.kit-seg) > button {
-  width: 32px;
-  padding: 0;
-}
-.askMount {
-  composes: kit-app-ask-mount from global;
+.toolbar[data-selecting="true"] {
+  animation: kit-rise var(--dur-2) var(--ease-entry);
 }
 
 /* Trust banners: kit.css .kit-banner owns the shape; .banner is only the layout
-   hook aligning it with the padded topbar/toolbar. */
+   hook aligning it with the rest of the padded chrome. */
 .banner {
   /* The notice banner is an `<output>` (its native role IS status), which is
      inline by default — the banner shape needs a block box. */
   display: block;
-  margin: 14px 22px 0;
+  margin: 14px var(--content-margin) 0;
 }
 
-/* Toolbar */
-.toolbar {
-  display: flex;
-  align-items: center;
-  gap: 14px;
-  padding: var(--sp-4) 22px var(--sp-3);
-  flex-wrap: wrap;
-  flex-shrink: 0;
-}
-.toolbarTitle {
-  min-width: 0;
-}
-.title {
-  font: var(--t-title);
-  letter-spacing: -0.01em;
-}
-.sub {
-  font: var(--t-small);
-  color: var(--text-soft);
-  margin-top: 1px;
-}
-.toolbarTools {
-  margin-left: auto;
-  display: flex;
-  align-items: center;
-  gap: var(--sp-2);
-  flex-wrap: wrap;
-}
-.chips {
-  display: flex;
-  gap: var(--sp-2);
-  flex-wrap: wrap;
-}
-.toolbarDiv {
-  width: 1px;
-  height: 22px;
-  background: var(--line);
-  margin: 0 2px;
-}
+/* `.toolbar` and everything it held — `.toolbarTitle` / `.title` / `.sub`,
+   then `.chips` / `.toolbarTools` / `.toolbarDiv` — are gone with the row
+   itself. The display-serif view name restated the app bar's title and count
+   one region below them at three times the size; the tag rail and compact sort
+   button that replaced it restated the filter pills and the column heads. Docs'
+   reading register still leads — it leads in the READING VIEW, which is the
+   screen that holds a document, and in the first-run empty state's display
+   serif. A drive is a table, and a table's name belongs in the bar above it. */
 
 /* Bulk bar (its contents come from BulkBar.module.css) */
-.bulk {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  margin: 0 22px 10px;
-  padding: var(--sp-2) 10px var(--sp-2) var(--sp-4);
-  border: 1px solid var(--line-strong);
-  border-radius: var(--r-pill);
-  background: var(--accent-soft);
-  animation: kit-rise 0.18s var(--ease);
-}
-
 /* Scroll region */
-.scroll {
+/* The scroller and the details rail, side by side (Chrome.tsx). `position:
+   relative` because the rail is the containing block's trailing column and
+   anything the route pins inside the content — not inside the scroll — hangs
+   off this box. */
+.content {
   flex: 1;
   min-height: 0;
+  display: flex;
+  position: relative;
+}
+.scroll {
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
   overflow: auto;
-  padding: 2px 22px 40px;
+  padding: 2px var(--content-margin) 40px;
 }
 
 /* ---------- Grid + list containers ---------- */
 .grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(158px, 1fr));
+  /* Wide enough that a card's excerpt sets more than a few words per line —
+     the reading measure the card can afford. */
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
   gap: 14px;
 }
+/* Raised PAPER, not an elevated plane: `--bg-elev` plus a hairline is the
+   whole treatment. `--shadow-*` belongs to a dialog, a sheet and a popover
+   and to nothing else. */
 .listwrap {
   border: 1px solid var(--line);
-  border-radius: var(--r-xl);
+  border-radius: var(--r-lg);
   overflow: hidden;
   background: var(--bg-elev);
-  box-shadow: var(--shadow-sm);
 }
+/* The head is an EYEBROW BAND, not a record. Its own 8px pad made it 41px —
+   taller than a row should be and all but the same height as one, so the set
+   opened with two rows of which the first was a label. The handoff's band is
+   a flat 32px (`docRowsBlock`'s `headCss`), which is a rung below the row and
+   reads as the lid on the set rather than the top of it. */
 .listHead {
   display: flex;
   align-items: center;
   gap: var(--sp-3);
-  padding: var(--sp-2) 14px;
+  height: 32px;
+  padding: 0 14px;
   border-bottom: 1px solid var(--line);
   background: var(--bg-sunken);
 }
@@ -329,7 +325,6 @@
 .shell.denied .scrim,
 .shell.denied .topbar,
 .shell.denied .toolbar,
-.shell.denied .bulk,
 .shell.denied .scroll {
   display: none;
 }
@@ -357,24 +352,22 @@
   composes: kit-app-side-open from global;
 }
 .shell.isNarrow.sideOpen .scrim {
-  animation: kit-fade 0.2s ease;
+  animation: kit-fade var(--dur-2) var(--ease-entry);
 }
-.shell.isNarrow .topbar,
-.shell.isNarrow .toolbar {
-  padding-left: var(--sp-4);
-  padding-right: var(--sp-4);
+.shell.isNarrow .topbar {
+  padding-inline: var(--sp-4);
 }
 .shell.isNarrow .banner {
-  margin-left: var(--sp-4);
-  margin-right: var(--sp-4);
+  margin-inline: var(--sp-4);
 }
-.shell.isNarrow .bulk {
-  margin-left: var(--sp-4);
-  margin-right: var(--sp-4);
+.shell.isNarrow {
+  --content-margin: var(--sp-4);
 }
 .shell.isNarrow .scroll {
-  padding-left: var(--sp-4);
-  padding-right: var(--sp-4);
+  /* Clearance for the host shell's compact action button, which floats over
+     the bottom of the app pane — without it the last row's metadata sits
+     underneath it. */
+  padding-block-end: calc(var(--sp-6) * 3);
 }
 .shell.isNarrow .grid {
   grid-template-columns: repeat(2, 1fr);

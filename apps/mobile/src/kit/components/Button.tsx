@@ -1,29 +1,30 @@
 import React, { useMemo } from "react";
-import { Pressable, View, StyleSheet } from "react-native";
+import { Pressable, StyleSheet, View } from "react-native";
 import type { StyleProp, ViewStyle } from "react-native";
 
 import { nativeButtonStyle } from "@centraid/design";
-import type { IconName, NativeButtonStyle } from "@centraid/design";
+import type { ButtonVariant, NativeButtonStyle } from "@centraid/design";
+import type { ButtonData } from "@centraid/design/blocks";
 
 import { spacing, t, useTheme } from "../theme";
-import type { ThemeColors } from "../theme";
 import Icon from "./Icon";
 import { Text } from "./NativeText";
 
-export type ButtonVariant =
-  | "primary"
-  | "secondary"
-  | "quiet"
-  | "destructive"
-  | "destructiveFilled";
-
-export interface ButtonProps {
+/**
+ * `label`, `icon` and `disabled` are the shared half (`ButtonData`); `label` is
+ * narrowed to required here because this kit has no children escape hatch.
+ *
+ * There is no `size`: the 44px touch floor is the size. There is no `commit`
+ * either, and that is a decision rather than a gap — see `ButtonData`.
+ */
+export interface ButtonProps extends ButtonData {
   label: string;
   onPress: () => void;
   variant?: ButtonVariant;
-  icon?: IconName;
-  disabled?: boolean;
   style?: StyleProp<ViewStyle>;
+  /** What distinguishes this instance of a repeated verb. A HINT, not a label:
+   *  the control already renders its visible word (#708 B.4). */
+  accessibilityHint?: string;
 }
 
 export default function Button({
@@ -33,88 +34,50 @@ export default function Button({
   icon,
   disabled,
   style,
+  accessibilityHint,
 }: ButtonProps): React.JSX.Element {
-  const isPrimary = variant === "primary";
-  const isDestructive = variant === "destructive";
-  const isDestructiveFilled = variant === "destructiveFilled";
   const { colors, radii, targetMin } = useTheme();
-  const styles = useMemo(() => {
-    const recipeStyle = nativeButtonStyle(variant, {
-      colors,
-      radii,
-      targetMin,
-    });
-    return makeStyles(colors, recipeStyle);
-  }, [colors, radii, targetMin, variant]);
-
+  const recipeStyle = useMemo(
+    () => nativeButtonStyle(variant, { colors, radii, targetMin }, disabled),
+    [colors, radii, targetMin, variant, disabled]
+  );
+  const styles = useMemo(() => makeStyles(recipeStyle), [recipeStyle]);
   return (
     <Pressable
+      accessibilityHint={accessibilityHint}
       accessibilityRole="button"
       accessibilityState={{ disabled }}
-      hitSlop={{ bottom: 4, left: 4, right: 4, top: 4 }}
       onPress={disabled ? undefined : onPress}
       style={({ pressed }) => [
         styles.base,
-        styles.variant,
-        disabled && styles.disabled,
         pressed && !disabled && styles.pressed,
         style,
       ]}
     >
       <View style={styles.row}>
-        {icon ? (
-          <Icon
-            name={icon}
-            size={14}
-            color={
-              disabled
-                ? colors.textDisabled
-                : isPrimary || isDestructiveFilled
-                  ? colors.textInv
-                  : isDestructive
-                    ? colors.danger
-                    : colors.text
-            }
-          />
-        ) : null}
-        <Text
-          style={[
-            styles.label,
-            (isPrimary || isDestructiveFilled) && styles.labelPrimary,
-            isDestructive && styles.labelDestructive,
-            disabled && styles.labelDisabled,
-          ]}
-        >
-          {label}
-        </Text>
+        {icon ? <Icon name={icon} size={14} color={recipeStyle.color} /> : null}
+        <Text style={styles.label}>{label}</Text>
       </View>
     </Pressable>
   );
 }
 
-const makeStyles = (colors: ThemeColors, recipeStyle: NativeButtonStyle) =>
+const makeStyles = (recipeStyle: NativeButtonStyle) =>
   StyleSheet.create({
     base: {
+      backgroundColor: recipeStyle.backgroundColor,
+      borderColor: recipeStyle.borderColor,
       borderRadius: recipeStyle.borderRadius,
       borderWidth: 1,
       minHeight: recipeStyle.minHeight,
-      paddingHorizontal: 14,
-      paddingVertical: 10,
+      paddingHorizontal: recipeStyle.paddingHorizontal,
     },
-    disabled: { borderColor: colors.lineStrong, opacity: 0.45 },
     label: { ...t("smallStrong"), color: recipeStyle.color },
-    labelDestructive: { color: recipeStyle.color },
-    labelDisabled: { color: colors.textDisabled },
-    labelPrimary: { color: colors.textInv },
     pressed: { opacity: 0.85 },
     row: {
       alignItems: "center",
       flexDirection: "row",
       gap: spacing[2],
       justifyContent: "center",
-    },
-    variant: {
-      backgroundColor: recipeStyle.backgroundColor,
-      borderColor: recipeStyle.borderColor,
     },
   });

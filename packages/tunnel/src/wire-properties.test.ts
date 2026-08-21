@@ -4,6 +4,7 @@ import { fc } from "@centraid/test-kit/fast-check";
 
 import {
   encodeHeaderFrame,
+  isPeerPlaneTarget,
   MAX_HEADER_FRAME_BYTES,
   parsePairQrPayload,
   sanitizeHeaders,
@@ -201,5 +202,36 @@ describe("tunnel wire property", () => {
       ),
       { numRuns: 8, seed: 53284 }
     );
+  });
+
+  test("peer-plane targets stay confined after URL parsing", () => {
+    for (const target of [
+      "/centraid/_peer/link/redeem",
+      "/centraid/_peer/blobs/a1b2c3?range=0-1023",
+      "/centraid/_peer/route/assert",
+      "/centraid/_peer/x#fragment",
+    ]) {
+      expect(isPeerPlaneTarget(target)).toBe(true);
+    }
+
+    for (const target of [
+      undefined,
+      42,
+      "/centraid/_gateway/tunnel/authorize",
+      "/centraid/_vault/blobs",
+      "/centraid/_peer",
+      "/centraid/_peer/",
+      "/centraid/_peerish/x",
+      "/centraid/_peer/../_gateway/devices",
+      "/centraid/_peer/./../_gateway",
+      "/centraid/_peer/%2e%2e/_gateway",
+      "/centraid/_peer/a%2f..%2fb",
+      "/centraid/_peer/a\\..\\b",
+      "/centraid/_peer/a b",
+      "//centraid/_peer/x",
+      "",
+    ]) {
+      expect(isPeerPlaneTarget(target)).toBe(false);
+    }
   });
 });

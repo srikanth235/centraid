@@ -172,6 +172,39 @@ describe("people", () => {
     expect(profile.cadence_days).toBe(7);
   });
 
+  test("cadence 0 is storable — 'never reach out' (issue #821)", () => {
+    const cadenceOf = (partyId: string): number =>
+      (
+        db.vault
+          .prepare("SELECT cadence_days FROM people_profile WHERE party_id = ?")
+          .get(partyId) as { cadence_days: number }
+      ).cadence_days;
+    // Minted at zero: a person the owner keeps but never wants nagged about.
+    const never = addPerson({ display_name: "Uncle Ray", cadence_days: 0 });
+    expect(cadenceOf(never)).toBe(0);
+    // And an existing cadence can be turned off after the fact.
+    const someone = addPerson();
+    expect(
+      invoke("people.set_cadence", { party_id: someone, cadence_days: 0 })
+        .status
+    ).toBe("executed");
+    expect(cadenceOf(someone)).toBe(0);
+    // Zero is the floor, not an opening: negatives are still contract failures.
+    const negative = invoke("people.set_cadence", {
+      party_id: someone,
+      cadence_days: -1,
+    });
+    expect(negative.status).toBe("failed");
+    assert(negative.status === "failed");
+    expect(negative.reason).toBe("input schema violation");
+    expect(cadenceOf(someone)).toBe(0);
+    const negativeAdd = invoke("people.add_person", {
+      display_name: "Nope",
+      cadence_days: -1,
+    });
+    expect(negativeAdd.status).toBe("failed");
+  });
+
   test("trash_person is recoverable and undo refuses an expired revision", () => {
     const partyId = addPerson({ role: "Friend" });
     const trashed = out<{ revision_id: string }>(

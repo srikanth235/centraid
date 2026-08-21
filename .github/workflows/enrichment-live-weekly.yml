@@ -1,0 +1,96 @@
+name: enrichment-live-weekly
+
+on:
+  schedule:
+    - cron: "20 8 * * 1" # Monday 08:20 UTC
+  workflow_dispatch:
+
+concurrency:
+  group: enrichment-live-weekly-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  real-model-goldens:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: ./.github/actions/setup
+      - name: Restore pinned native runtime and model weights
+        id: model_cache
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            packages/model-runtime/runtime/node_modules
+            packages/model-runtime/runtime/bun.lock
+            packages/model-runtime/runtime/models
+          key: enrichment-models-${{ runner.os }}-${{ hashFiles('packages/model-runtime/models.lock.json', 'packages/model-runtime/runtime/package.json') }}
+      - name: Install and verify pinned model runtime
+        run: bun run --cwd packages/model-runtime setup
+      - name: Save pinned model runtime
+        if: steps.model_cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            packages/model-runtime/runtime/node_modules
+            packages/model-runtime/runtime/bun.lock
+            packages/model-runtime/runtime/models
+          key: enrichment-models-${{ runner.os }}-${{ hashFiles('packages/model-runtime/models.lock.json', 'packages/model-runtime/runtime/package.json') }}
+      - name: Run capability handshake and real-weight goldens
+        run: bun run test:enrich:live
+      - name: Upload real-model evidence
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: enrichment-live-evidence
+          path: artifacts/enrichment-live/
+          retention-days: 14
+      - name: Save evidence for the nightly health report
+        if: always()
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: artifacts/enrichment-live/
+          key: enrichment-live-${{ runner.os }}-${{ github.run_id }}
+
+  live-failure-issue:
+    needs: [real-model-goldens]
+    if: >
+      always() && github.event_name == 'schedule' && github.ref == 'refs/heads/main' && (
+        contains(join(needs.*.result, ','), 'failure') ||
+        contains(join(needs.*.result, ','), 'cancelled')
+      )
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      issues: write
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Open or update tracking issue
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RESULT: ${{ needs.real-model-goldens.result }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          set -euo pipefail
+          cat > /tmp/body.md <<EOF
+          Weekly enrichment real-model evidence failed.
+
+          - Run: ${RUN_URL}
+          - Workflow: enrichment-live-weekly / real-model-goldens
+          - Result: \`${RESULT}\`
+
+          Expected response: triage, fix, or document a temporary waiver within 24 hours or before the next scheduled run, whichever comes first. The latest artifact is retained for 14 days and the next nightly health report renders it with the weekly lane's eight-day freshness window.
+
+          _Auto-filed by enrichment-live-weekly.yml. Prefer updating this issue over opening duplicates._
+          EOF
+          node scripts/ci/file-tracking-issue.mjs \
+            --title '[enrichment-live] real-model goldens red' \
+            --search '[enrichment-live] real-model goldens red' \
+            --body-file /tmp/body.md \
+            --label tech-debt \
+            --run-url "$RUN_URL"

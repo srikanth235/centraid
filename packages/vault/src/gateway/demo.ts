@@ -24,6 +24,35 @@ export interface DemoPurgeResult {
   receiptId: string;
 }
 
+/**
+ * Derived rows a hard delete must clear FIRST or its FK refuses the delete.
+ *
+ * The lifecycle purge sweep already spells the doctrine — "derivatives go with
+ * their parent" (gateway/duties.ts) — and the demo purge is the same hard
+ * delete, so it owes the same cleanup. Without this, seeding any image (issue
+ * #708's photo roll, or any real ingest once the gateway's preview backstop
+ * has run) leaves `core_content_derivative` rows holding their content item
+ * hostage and the one-click purge reports it blocked forever. Only rebuildable
+ * projections belong here: a thumb/thumbhash/phash regenerates from the bytes,
+ * so clearing it destroys no owner meaning. Orphaned CAS bytes fall to the
+ * local orphan sweep exactly as they do on the lifecycle path.
+ */
+const DEPENDENT_ROWS: Record<string, { table: string; column: string }[]> = {
+  "core.content_item": [
+    { table: "core_content_derivative", column: "content_id" },
+  ],
+  // A staged import row is not owner meaning — it is the batch's own line
+  // items, and it cannot outlive the batch it belongs to (its FK says so).
+  // Photos' scenario stages face proposals through the ordinary publisher
+  // road (issue #712), which is the same road any enricher takes, so without
+  // this the batch is reported blocked for ever and the one-click purge stops
+  // being one act. This differs from the content-derivative case above — an
+  // import row does not regenerate — but the deletion is still lossless in
+  // the only sense that matters here: the batch is going, and a line item of
+  // a deleted batch describes nothing.
+  "sync.import_batch": [{ table: "sync_import_row", column: "batch_id" }],
+};
+
 interface SeedRow {
   seed_id: string;
   app_id: string;
@@ -85,7 +114,14 @@ export function purgeDemoRows(
         continue;
       }
       const pk = pkColumn(db.vault, ref.physical);
+      // A savepoint so a row that turns out to be blocked keeps its derived
+      // rows: they are only expendable when the parent actually goes.
+      db.vault.exec("SAVEPOINT demo_purge_row");
       try {
+        for (const dep of DEPENDENT_ROWS[row.target_type] ?? [])
+          db.vault
+            .prepare(`DELETE FROM "${dep.table}" WHERE "${dep.column}" = ?`)
+            .run(row.target_id);
         const res = db.vault
           .prepare(`DELETE FROM "${ref.physical}" WHERE "${pk}" = ?`)
           .run(row.target_id);
@@ -97,9 +133,12 @@ export function purgeDemoRows(
         }
         dropSeed.run(row.seed_id);
         progressed = true;
+        db.vault.exec("RELEASE demo_purge_row");
       } catch {
         // FK constraint: something still references this row. Another pass
         // may free it (a sibling demo row deletes first); otherwise report.
+        db.vault.exec("ROLLBACK TO demo_purge_row");
+        db.vault.exec("RELEASE demo_purge_row");
         blocked.push(row);
       }
     }

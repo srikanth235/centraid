@@ -410,6 +410,108 @@ export async function validateMatrix(matrix, options = {}) {
   errors.push(...flowValidation.flatMap((result) => result.errors));
   warnings.push(...flowValidation.flatMap((result) => result.warnings));
 
+  // #725 — dense app × shared-engine conformance. A pass points at one real
+  // canonical flow; a structural exclusion carries the seat-doctrine anchor.
+  const appEngines = matrix.appEngines;
+  if (!appEngines || !Array.isArray(appEngines.engines)) {
+    errors.push("matrix has no appEngines engine registry");
+  } else {
+    const engineIds = new Set();
+    const engines = new Map();
+    for (const engine of appEngines.engines) {
+      if (!engine?.id || engineIds.has(engine.id))
+        errors.push(
+          `appEngines engine id missing or duplicated: ${engine?.id ?? "(missing)"}`
+        );
+      engineIds.add(engine?.id);
+      engines.set(engine?.id, engine);
+      if (!flowIds.has(engine?.flow))
+        errors.push(
+          `appEngines engine ${engine?.id ?? "(missing)"} references unknown flow ${engine?.flow ?? "(missing)"}`
+        );
+    }
+    const declaredApps = new Set();
+    for (const app of appEngines.apps ?? []) {
+      if (!app?.id || declaredApps.has(app.id))
+        errors.push(
+          `appEngines app id missing or duplicated: ${app?.id ?? "(missing)"}`
+        );
+      declaredApps.add(app?.id);
+      for (const engineId of engineIds) {
+        const cell = app?.engines?.[engineId];
+        if (!cell) {
+          errors.push(`appEngines ${app?.id}.${engineId} is missing`);
+          continue;
+        }
+        if (cell.status === "pass") {
+          const expectedFlow = engines.get(engineId)?.flow;
+          if (cell.flow !== expectedFlow || !flowIds.has(cell.flow))
+            errors.push(
+              `appEngines ${app.id}.${engineId} must reference real gate ${expectedFlow}`
+            );
+        } else if (cell.status === "skip") {
+          if (!cell.reason?.trim())
+            errors.push(
+              `appEngines ${app.id}.${engineId} skip has no structural reason`
+            );
+          if (cell.citation !== appEngines.seatDoctrine)
+            errors.push(
+              `appEngines ${app.id}.${engineId} skip must cite ${appEngines.seatDoctrine}`
+            );
+        } else {
+          errors.push(
+            `appEngines ${app.id}.${engineId} has invalid status ${cell.status}`
+          );
+        }
+      }
+      for (const engineId of Object.keys(app?.engines ?? {}))
+        if (!engineIds.has(engineId))
+          errors.push(
+            `appEngines ${app.id} references unknown engine ${engineId}`
+          );
+    }
+    if (options.checkFiles !== false) {
+      const appManifests = [];
+      for await (const manifest of glob("packages/blueprints/apps/*/app.json", {
+        cwd: options.root ?? root,
+      })) {
+        appManifests.push(path.posix.basename(path.posix.dirname(manifest)));
+      }
+      const expectedApps = appManifests
+        .filter((id) => !id.startsWith("_"))
+        .sort();
+      const actualApps = [...declaredApps].sort();
+      if (JSON.stringify(actualApps) !== JSON.stringify(expectedApps))
+        errors.push(
+          `appEngines app registry must exactly match bundled apps: expected ${expectedApps.join(", ")}; got ${actualApps.join(", ")}`
+        );
+      const [doctrinePath, anchor] = String(
+        appEngines.seatDoctrine ?? ""
+      ).split("#");
+      try {
+        const doctrine = await readFile(
+          path.join(options.root ?? root, doctrinePath),
+          "utf8"
+        );
+        const heading = String(anchor ?? "")
+          .split("-")
+          .map((word) => word.replace(/^./u, (letter) => letter.toUpperCase()))
+          .join(" ");
+        if (
+          !anchor ||
+          !new RegExp(`^#{1,6}\\s+${heading}\\s*$`, "imu").test(doctrine)
+        )
+          errors.push(
+            `appEngines seat doctrine anchor does not exist: ${appEngines.seatDoctrine}`
+          );
+      } catch {
+        errors.push(
+          `appEngines seat doctrine does not exist: ${appEngines.seatDoctrine}`
+        );
+      }
+    }
+  }
+
   if (
     options.checkWorkspaceCompleteness !== false &&
     options.checkFiles !== false

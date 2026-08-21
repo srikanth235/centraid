@@ -1,10 +1,10 @@
 # Mobile offline data
 
-Centraid's native Photos and Docs surfaces are vault-free views: they read one device-local projection assembled from every enrolled vault on the current gateway. A focused vault is only the default write target. It is not a read filter and switching it does not tear down or reopen the read plane.
+Centraid's native Photos surface is a vault-free view (Docs was the second such surface until it was removed pending its v11 design handoff; the rebuild inherits this contract unchanged): they read one device-local projection assembled from every enrolled vault on the current gateway. A focused vault is only the default write target. It is not a read filter and switching it does not tear down or reopen the read plane.
 
 ## Mounted read plane
 
-The phone keeps one replica SQLite file per vault and mounts at most four into one read-only op-sqlite connection with `ATTACH DATABASE`. Each result carries its source vault, source label, and whether the current member may write there. Content rows with the same SHA are displayed once with all source badges. Search runs the same bounded FTS query in every attached database, then merges ranked results locally.
+The phone keeps one replica SQLite file per vault and mounts at most four into one read-only op-sqlite connection with `ATTACH DATABASE`. Each result carries its source vault, source label, and whether the current owner may write there. Content rows with the same SHA are displayed once with all source badges. Search runs the same bounded FTS query in every attached database, then merges ranked results locally.
 
 SHA dedupe never separates authority from identity. The canonical row retains one source vault and that source's item id as a pair; a writable source wins when the same bytes also exist in a read-only source. Other sources are badges, not candidate write targets. Favorite/star/archive/trash/move affordances use that canonical role and degrade together when it is read-only; Add may still copy a readable item into another writable target.
 
@@ -22,10 +22,10 @@ The replica wire has four invariants that every client observes:
 
 - A canonical SQLite write transaction gets one `commitId`. Delta pages extend through the end of that commit group, so a page boundary never exposes half of one transaction. Retention cutoffs use the same boundary rule.
 - Projected changes carry the row's canonical `rowVersion` when it is nonzero; an omitted version means version zero. Local application ignores an older upsert or delete when a newer version is already stored, which makes overlapping bootstrap convergence and reconnect replay safe.
-- Offline intents may carry `baseVersions`. The gateway compares those preconditions before dispatch, returns a structured conflict with expected and actual versions, and the client removes the optimistic overlay while retaining the conflict outcome for the activity/attention surface.
+- Offline intents may carry `baseVersions`. The gateway compares those preconditions before dispatch and returns a structured conflict with expected and actual versions. The client retains the projected row, reason, and both versions until the member edits/retries or discards it.
 - `coverage` and `durability` are explicit status/result fields. A partial preview is readable and searchable, but it is labeled partial and is never treated as a completed cold start; a memory fallback is labeled non-durable and cannot create a remembered replica identity.
 
-The browser intent store upgrades additively to its outcome journal: pending IndexedDB intents are preserved while the journal is added. Native SQLite uses the same settle-then-scrub contract. Settled outcomes retain status, reason, conflict details, and settlement time, but never the sensitive queued input. Foreground and background catch-up follow `hasMore` with a bounded sequential loop; an interrupted loop resumes from the last committed cursor.
+The browser and native outbox storage contracts are unchanged. Executed intents use the existing settlement path, which removes input and journals the outcome. Denied/conflict/failed results instead use the existing atomic transition primitive to remain unsettled with their input and row projection. Edit/retry mints a fresh immutable intent id and payload hash, adds its projection first, then truthfully journals the old terminal result; an engine-private supersession marker lets startup finish that handoff if the process stops between those existing store operations. That marker never enters query validation: browser and multi-vault native reads share one presentation function that strips engine-private fields before applying the projected row. The presentation/revision clone follows the replica's JSON-shaped value grammar and does not require the browser-only `structuredClone` global; the native restart regression runs with that global absent to match Hermes. Revision identity also comes from the blueprint's declared edit-action projection, not by scanning arbitrary `*_id` inputs, so a child write may safely reference a pending parent. A mounted filtered/limited read keeps its SQL-pushed canonical page and adds only canonical row ids addressed by pending mutations before composition; one outbox row therefore cannot turn a bounded Home read into a vault-sized scan. Discard journals the last real non-executed result rather than inventing execution. No IndexedDB version, SQLite table, serialized `IntentState`, or `IntentRecordStore` method changes for this overlay. Locker add/edit secrets are explicit online-only actions: browser inline, served, and native callers never present secret plaintext to a durable session. Ordinary non-secret Locker item actions remain outbox-visible through metadata-only row patches. Foreground and background catch-up follow `hasMore` with a bounded sequential loop; an interrupted loop resumes from the last committed cursor.
 
 One gateway SSE connection multiplexes independent vault cursors. A frame never combines cursors or data across vaults. Foreground UI reports human states (`Offline on this phone`, `Gateway asleep`, `Syncing recent changes`, and `Updated …`) plus a timestamp for every source. Revocation produces a scoped tombstone: the local cursor and rows for that source are purged without affecting other mounted vaults.
 
@@ -37,7 +37,7 @@ Mobile reads `/centraid/_gateway/info` before constructing either foreground or 
 
 ## Offline changes and cross-vault placement
 
-Ordinary writes stay in each replica's durable intent outbox. Add/Move uses a separate device outbox keyed by a durable link token. Reconciliation always:
+Ordinary writes stay in each replica's durable intent outbox. A first-open write made before any bootstrap is also admitted there: the action input is durable immediately, while its optimistic row projection waits until bootstrap supplies the shape catalog. Add/Move uses a separate device outbox keyed by a durable link token. Reconciliation always:
 
 1. commits or confirms the target projection;
 2. records that target receipt in the gateway database;
@@ -46,13 +46,21 @@ Ordinary writes stay in each replica's durable intent outbox. Add/Move uses a se
 
 Replay is idempotent. A crash can leave a completed target and pending source removal, but cannot delete the source before the target exists. Queued changes may be cancelled. Permission denial, terminal failure, and parked retries remain visible until dismissed.
 
+### Commons writes and cursors
+
+A circle-backed commons is not mounted as a special borrowed scope. Its domain rows and blobs are real residents of each joined member vault, so the ordinary per-vault replica, backup, search, and attachment paths cover them. The phone still has exactly one physical replica cursor for that vault even when the vault participates in many commons.
+
+Offline commons writes use the durable `share_commons_intent` rail. A pending row is an honest UI overlay, not an optimistic domain record; it can say “waiting for Alice's device” when the grant's steward is unavailable. After the steward verifies capability, container allowlist, member-vault signature, and replay nonce, the executed/refused outcome receives the next per-grant sequence and the member catches up normally.
+
+`share_commons_cursor(grant_id, member_vault_id)` is a logical operation offset alongside the physical replica cursor. Ten Tally groups in one vault therefore mean one vault cursor plus ten grant offsets, not eleven sync engines. The vault cursor transports resulting row changes; each grant's steward sequence independently orders that group's writes. Late join and restore begin from a closure checkpoint at sequence N, then consume the tail. Removal or revocation detaches and scrubs only that grant's lineage; other vault rows, outboxes, grants, and cursors remain intact.
+
 ## Background work and push privacy
 
 The Expo background task maps to BGTaskScheduler on iOS and WorkManager on Android. It runs the same pull, intent, placement, and upload queues as the foreground and calls the same metered/battery upload policy. Platform timing is opportunistic; correctness always comes from the durable outboxes and the next foreground pull.
 
 The focused write target is ordered before the other cached scopes before the four-scope cap is applied. Upload rows persist that target vault, and headless reconciliation keeps the corresponding mounted sessions alive through canonical follow-up replay; transferred bytes therefore cannot settle without their app mutation merely because the app was backgrounded.
 
-The gateway push relay is wake-only. Its payload contains no vault id, item id, title, content, cursor, or member data. Push delivery can make a background pull happen earlier, but loss or throttling cannot lose data. iOS background push is therefore treated as an optimization, in line with Expo's delivery guidance.
+The gateway push relay is wake-only. Its payload contains no vault id, item id, title, content, cursor, or owner data. Push delivery can make a background pull happen earlier, but loss or throttling cannot lose data. iOS background push is therefore treated as an optimization, in line with Expo's delivery guidance.
 
 ## Thumbnail packs and budgets
 
@@ -83,7 +91,7 @@ Locker is stricter than the ordinary replica plane. Its native cover performs au
 
 ## Performance guardrails
 
-The checked 50,000-row fixture spans 2016–2025 across four mounted household sources. On the 2026-07-29 development host it measured a 562.6 ms cold merged/sorted read, a 1.5 ms federated FTS lookup, and 22,188,032 projection bytes. At that observed density the 5,000-row bootstrap window is 2,218,804 bytes. The same evidence lane encodes twelve reproducible 256px/82%-quality thumbnail samples: the 13,726-byte p95 projects a 12,820,084-byte recent-90-day plus 5%-favorite pack for each 12,500-item source, within its 128 MiB ceiling. The lane enforces the 1,000 ms, 100 ms, 4 MiB bootstrap-page, and 128 MiB thumbnail ceilings. Native build/install/launch checks prove the new modules load on both platforms; the committed mobile journey lane remains the owner of React-frame, airplane-mode, and reconnect-drain evidence.
+The checked 50,000-row fixture spans 2016–2025 across four mounted household sources. Its current pending-write variant adds 200 durable SQLite outbox mutations (50 per vault) before starting either timer. On the 2026-08-11 macOS arm64 development host it measured a 778.4 ms cold 5,000-row merged/sorted read, a 4.5 ms federated FTS lookup, and 22,622,208 projection bytes. At that observed density the 5,000-row bootstrap window is 2,262,221 bytes. The browser perf lane separately opens IndexedDB, enqueues 200 intents, and budgets their full overlay enumeration/composition at one tenth of its registered 2,500 ms real-I/O ceiling. The same native evidence lane encodes twelve reproducible 256px/82%-quality thumbnail samples: the 13,726-byte p95 projects a 12,820,084-byte recent-90-day plus 5%-favorite pack for each 12,500-item source, within its 128 MiB ceiling. The lane enforces the 1,000 ms cold, 100 ms search, 4 MiB bootstrap-page, and 128 MiB thumbnail ceilings; `tests/experience-budgets/mobile.json` records the volume, probe, observation, and headroom. Native build/install/launch checks prove the modules load on both platforms; the Android mobile journey owns the airplane-mode UI/process proof, with the rendered SQLite restart companion covering the same production reader on iOS-compatible infrastructure.
 
 ### Where 50,000 rows came from, and where it stops (#659)
 

@@ -8,14 +8,18 @@ import type {
   OnboardingPath,
 } from "./OnboardingScreen.js";
 
-import styles from "./RecoverScreen.module.css";
+// The chooser is step ZERO of onboarding, so it wears onboarding's sheet. It
+// used to borrow RecoverScreen's module, which is how the product's first
+// screen and its second screen ended up looking like two different apps.
+import styles from "./OnboardingScreen.module.css";
 
 /**
  * First run branches on PLATFORM, not on gateway state (issue #603).
  *
  * There is no founding ceremony and no "uninitialized" gateway any more: a
- * fresh gateway founds "Shared" + "Personal" at construction, so the only
- * question left is which gateway this device should talk to.
+ * fresh gateway founds one marked personal vault at construction, so the
+ * only question left is which gateway this device should talk to. Shared
+ * vaults are created later by an explicit owner action.
  *
  *   - Desktop (Electron) can answer two ways, so it gets a chooser: start a
  *     fresh gateway on this Mac, or join one that already exists with a pair
@@ -24,12 +28,12 @@ import styles from "./RecoverScreen.module.css";
  *     browser tab — so it renders the ticket path directly, with no chooser
  *     and no probe.
  *
- * Both paths end at the same profile step (docs/platform-gating.md: presentation
- * branch, never an auth branch).
+ * Both paths hand off to the shell after one connection act. Profile details
+ * are optional Settings choices, not an onboarding gate.
  */
 export interface FirstRunGateProps {
-  /** Fresh path completion (identity + connected gateway) — boot writes the
-   *  profile + onboarding stamp and swaps in the app. */
+  /** Completion after the gateway connection — boot writes the stamp and
+   *  swaps in the app. */
   onOnboardingComplete: (
     input: OnboardingCompleteInput
   ) => Promise<void> | void;
@@ -62,12 +66,10 @@ export default function FirstRunGate({
       data-mounted="true"
       data-testid="first-run-choice"
     >
-      <div className={styles.stageBg} aria-hidden="true" />
-      <div className={styles.stageGlow} aria-hidden="true" />
-      <div className={styles.card} data-theme="dark">
+      <div className={styles.card}>
         <div className={styles.eyebrow}>
           <span className={styles.eyebrowDot} aria-hidden="true" />
-          CENTRAID
+          Centraid
         </div>
         <h1 className={styles.title}>
           Welcome to <em>Centraid</em>.

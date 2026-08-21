@@ -271,8 +271,8 @@
             The Electron shell is where you live day to day: the app grid, the assistant, the
             automations panel with its live run stream, and Settings — vaults, phone pairing,
             connections, import. It embeds a gateway for the local case and dials remote ones
-            through the same transport tiers, injecting the bearer token and vault header so iframed
-            apps just work. Switching vaults is a client-side act: same gateway, different world.
+            through the same transport tiers, injecting the bearer token and vault header for every
+            app request. Switching vaults is a client-side act: same gateway, different world.
           </p>
           <p class="aside">
             The shell is also where parked things surface — outbox items, consent requests,
@@ -334,9 +334,9 @@
             the loop.
           </p>
           <p>
-            <b>Your apps</b> — anything built on the desktop — still open in a WebView over the
-            tunnel: the same responsive HTML, live SSE updates, search across your tiles. Building
-            apps stays a desktop act; the phone renders, it doesn't author.
+            <b>Every app</b> is a native screen here, not a web view of one: the same eight
+            first-party apps as the desktop, rendered by Expo over the same replica and app RPC,
+            with live updates and search across your tiles.
           </p>
           <p>
             Two touches earn a mention. <b>"Free up space"</b> is the one and only UI that deletes
@@ -356,11 +356,11 @@
       <!-- §09 RUNTIMES -->
       <section class="dark" id="runtimes">
         <div class="wrap">
-          <p class="eyebrow r">§09 · agent runtimes</p>
+          <p class="eyebrow r">§09 · harness runtimes</p>
           <h2 class="r" style="--d: 0.06s">Bring your own <em>brain.</em></h2>
           <p class="lede r" style="--d: 0.12s">
-            Chat turns, builder sessions and automation fires all run through one injected turn
-            contract — the gateway doesn't care which agent runtime satisfies it. Two do today:
+            Chat turns, workspace turns and automation fires all run through one injected turn
+            contract — the gateway doesn't care which harness runtime satisfies it. Two do today:
           </p>
           <div class="grid cols-2" style="margin-top: 26px">
             <div class="card r" style="--d: 0.1s">
@@ -384,7 +384,7 @@
             <p>
               There is no single "active agent" anymore — only a default and a set of
               <b>routing lanes</b>. Settings → <b>Agents</b> resolves each subsystem — Assistant,
-              In-app Ask, Builder, Automations — to its own (agent, model) pair, any lane free to
+              In-app Ask, Automations — to its own (agent, model) pair, any lane free to
               inherit the default. Whatever the brain, the leash is identical: agents see the vault
               only through <code>vault_sql</code> / <code>vault_invoke</code> /
               <code>vault_content</code>, and the model tiering is capability-based, not

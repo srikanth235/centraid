@@ -1,7 +1,8 @@
-/* Gateway → Overview → People & devices → "Pair a device for <person>".
-   Co-located with DevicePairPanel.tsx + DevicePairTarget.tsx. Split out of
-   DevicesCard.module.css so neither file has to carry both the roster and the
-   mint form; the two share only `.spin`/`.rowError`, imported from there. */
+/* Gateway → Overview → People & devices → "Pair a device for yourself"
+   (#726: self-pair is the only shape — there is no person or role to pick).
+   Co-located with DevicePairPanel.tsx. Split out of DevicesCard.module.css so
+   neither file has to carry both the roster and the mint form; the two share
+   only `.spin`/`.rowError`, imported from there. */
 .pair {
   display: flex;
   flex-direction: column;
@@ -12,7 +13,7 @@
   background: color-mix(in srgb, var(--accent) 5%, transparent);
 }
 .pairLead {
-  font-size: var(--t-mono-size);
+  font-size: var(--t-control-size);
   line-height: 1.5;
   color: var(--text-soft);
 }
@@ -21,68 +22,6 @@
   font-weight: 600;
 }
 
-/* Who the ticket is for, then what they may reach — the picker never offers a
-   bare text field for an existing person (var(--text) Decision 10). */
-.pairTarget {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-}
-.pairField {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-.pairFieldLabel {
-  font-size: var(--t-control-size);
-  color: var(--text-faint);
-}
-.pairSelect,
-.pairInput {
-  appearance: none;
-  width: 100%;
-  max-width: 280px;
-  padding: 6px 9px;
-  font-size: 12.5px;
-  color: var(--text);
-  background: var(--bg-sunken, color-mix(in srgb, var(--text) 5%, transparent));
-  border: 1px solid var(--line);
-  border-radius: 8px;
-}
-.pairSelect:focus-visible,
-.pairInput:focus-visible {
-  outline: 2px solid
-    color-mix(in srgb, var(--focus-ring-color) 55%, transparent);
-  outline-offset: 1px;
-}
-
-.grantGroup {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  margin: 0;
-  padding: 10px;
-  border: 1px solid var(--line);
-  border-radius: var(--r-lg);
-}
-.grantRow {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  flex-wrap: wrap;
-  gap: 8px;
-}
-.grantCheck {
-  display: inline-flex;
-  align-items: center;
-  gap: 7px;
-  font-size: 12.5px;
-  color: var(--text-soft);
-  cursor: pointer;
-}
-.grantCheck input {
-  accent-color: var(--accent);
-}
 .grantSummary {
   display: flex;
   flex-wrap: wrap;
@@ -90,10 +29,54 @@
 }
 .grantSummary span {
   padding: 2px 8px;
-  border-radius: 999px;
+  border-radius: var(--r-pill);
   background: color-mix(in srgb, var(--accent) 10%, transparent);
   color: var(--accent-deep, var(--accent));
-  font-size: 10.5px;
+  font-size: var(--t-control-size);
+}
+
+/* "Add someone" (#726 P1): the hosting-posture sentences on a minted-person
+   ticket, and the one input the mint needs. */
+.postureNote {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 10px 12px;
+  border-radius: var(--r-sm);
+  background: color-mix(in srgb, var(--text) 4%, transparent);
+  font-size: var(--t-control-size);
+  line-height: 1.5;
+  color: var(--text-soft);
+}
+.postureNote p {
+  margin: 0;
+}
+.nameField {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  flex-basis: 100%;
+}
+.nameFieldLabel {
+  font-size: var(--t-control-size);
+  font-weight: 600;
+  color: var(--text);
+}
+.nameInput {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 9px 12px;
+  background: color-mix(in srgb, var(--text) 3%, transparent);
+  border: 0.5px solid var(--line);
+  border-radius: var(--r-md);
+  font-size: var(--t-small-size);
+  color: var(--text);
+  outline: none;
+  caret-color: var(--accent);
+}
+.nameInput:focus {
+  border-color: color-mix(in srgb, var(--accent) 55%, transparent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 16%, transparent);
 }
 
 .pairForm {
@@ -103,19 +86,19 @@
   flex-wrap: wrap;
   gap: 12px;
 }
-/* Full-basis so the hint claims its own line directly under the role group,
-   rather than competing with the lifetime presets for the same row. */
+/* Full-basis so the hint claims its own line above the lifetime presets,
+   rather than competing with them for the same row. */
 .roleHint {
   flex-basis: 100%;
   margin: -4px 0 0;
-  font-size: 11.5px;
+  font-size: var(--t-control-size);
   line-height: 1.45;
   color: var(--text-faint);
 }
 .ttlGroup {
   display: inline-flex;
   border: 1px solid var(--line);
-  border-radius: 8px;
+  border-radius: var(--r-md);
   overflow: hidden;
 }
 .ttlPreset {
@@ -123,7 +106,7 @@
   border: none;
   background: transparent;
   color: var(--text-faint);
-  font-size: 11.5px;
+  font-size: var(--t-control-size);
   padding: 5px 11px;
   cursor: pointer;
 }
@@ -174,13 +157,13 @@
 .ticket {
   flex: 1 1 auto;
   min-width: 0;
-  font-family: var(--font-mono);
+  font-family: var(--font-sans);
   font-size: var(--t-control-size);
   line-height: 1.5;
   color: var(--text);
   background: var(--bg-sunken, color-mix(in srgb, var(--text) 6%, transparent));
   border: 0.5px solid var(--line);
-  border-radius: 8px;
+  border-radius: var(--r-md);
   padding: 8px 10px;
   overflow-wrap: anywhere;
   max-height: 88px;
@@ -199,8 +182,8 @@
   gap: 8px;
 }
 .pairExpiry {
-  font-family: var(--font-mono);
-  font-size: 10.5px;
+  font-family: var(--font-sans);
+  font-size: var(--t-control-size);
   color: var(--text-faint);
 }
 @media (max-width: 620px) {

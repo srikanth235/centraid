@@ -1,4 +1,6 @@
 import { relativeTime } from "../../../app-format.js";
+import { APPROVALS_HEALTH_DETAIL } from "../../../approvals-copy.js";
+import type { EnrichConsentRecord } from "../../../enrich-policy.js";
 import type {
   OutboxGrant,
   OutboxItem,
@@ -8,6 +10,7 @@ import type {
 } from "../../../gateway-client-outbox.js";
 import type { VaultParkedEntry } from "../../../gateway-client-vault.js";
 import type {
+  ApprovalsEnrichConsentRowDTO,
   ApprovalsGrantRowDTO,
   ApprovalsNeedsAuthRowDTO,
   ApprovalsOutboxRowDTO,
@@ -15,6 +18,62 @@ import type {
   ApprovalsScopeRequestRowDTO,
   ApprovalsActivityRowDTO,
 } from "../../screens/ApprovalsScreen.js";
+
+// ── What the frame says about this page (issue #765) ──────────────────────
+// The count line under the title, the state that decides which verbs the bar
+// offers, and the one persistent status sentence. They live here, beside the
+// DTO builders, because all three are derived from the same fetch the builders
+// map — a screen that computed them separately could disagree with the bar it
+// is rendering under.
+
+/** What the page has to say about, counted. */
+export interface ApprovalsTally {
+  /** Decisions plus the notices that are a demand rather than news. */
+  waiting: number;
+  /** Standing grants still in force. */
+  grants: number;
+}
+
+/**
+ * Above this many waiting items the queue stops being scannable and earns its
+ * filter chips. It is the `full` state — not a different page, just the same
+ * one admitting it is long.
+ */
+export const APPROVALS_FULL_AT = 4;
+
+export function approvalsState(
+  tally: ApprovalsTally
+): "ready" | "full" | "empty" {
+  if (tally.waiting === 0) return "empty";
+  return tally.waiting > APPROVALS_FULL_AT ? "full" : "ready";
+}
+
+function plural(n: number, one: string, many: string): string {
+  return `${n} ${n === 1 ? one : many}`;
+}
+
+/** The app bar's count line. Empty says what is still true, not what is
+ *  missing — there is no zero here, only "nothing waiting". */
+export function approvalsCountLine(tally: ApprovalsTally): string {
+  const standing = plural(tally.grants, "standing grant", "standing grants");
+  if (tally.waiting === 0) return `Nothing waiting · ${standing}`;
+  return `${plural(tally.waiting, "decision waiting", "decisions waiting")} · ${standing}`;
+}
+
+/**
+ * The status line in ready/full. No inline action: every verb this page offers
+ * is attached to the thing it acts on, and a status line that offered a
+ * shortcut past that would be offering to decide for you.
+ */
+export function approvalsHealth(tally: ApprovalsTally): {
+  label: string;
+  detail: string;
+} {
+  return {
+    detail: APPROVALS_HEALTH_DETAIL,
+    label: `${tally.waiting} waiting on you`,
+  };
+}
 
 /** Titlecase a snake/dot-separated key for the detail panel's field labels. */
 function labelFor(key: string): string {
@@ -256,4 +315,46 @@ export function collapseAdjacentActivity(
     }
   }
   return out;
+}
+
+/*
+ * The egress-consent ledger's rows (issue #807, Wave 3).
+ *
+ * The Privacy page reads the vault's answers back; it does not re-ask them.
+ * So this maps a stored answer to words and nothing else: no "revoke" verb, no
+ * inferred state, and a declined answer rendered exactly as plainly as a
+ * granted one — a consent surface that hid its refusals would be a record of
+ * only the yeses.
+ */
+
+/** What each egress class means where a member reads it. */
+const EGRESS_PHRASE: Record<EnrichConsentRecord["egress"], string> = {
+  "on-device": "on this device",
+  gateway: "on your gateway",
+  provider: "at a third-party provider",
+};
+
+/** The capability id as a sentence-cased label — the same treatment activity
+ *  rows give an unmapped verb, so a capability this build never heard of still
+ *  reads as English. */
+export function enrichCapabilityLabel(capability: string): string {
+  const spaced = capability.replace(/[._-]+/gu, " ").trim();
+  if (spaced.length === 0) return capability;
+  return spaced.charAt(0).toUpperCase() + spaced.slice(1);
+}
+
+/** Map one wire `EnrichConsentRecord` to the screen's row DTO. */
+export function buildEnrichConsentRow(
+  record: EnrichConsentRecord
+): ApprovalsEnrichConsentRowDTO {
+  const answer = record.decision === "granted" ? "Granted" : "Declined";
+  const where = EGRESS_PHRASE[record.egress];
+  const scope =
+    record.scopeRef.length > 0 ? ` · ${record.scopeRef}` : " · this vault";
+  return {
+    id: `${record.capability}:${record.egress}:${record.scopeRef}`,
+    meta: record.egress,
+    sub: `${answer} · ${where}${scope} · ${relativeTime(record.decidedAt)}`,
+    title: enrichCapabilityLabel(record.capability),
+  };
 }

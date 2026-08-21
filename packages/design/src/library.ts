@@ -20,7 +20,9 @@ export const library = {
   "tile-gap": "11px",
   "tile-h": "248px",
   "tile-icon": "44px",
-  "tile-icon-radius": "12px",
+  // 26% of the 44px chip — the identity-mark radius is a share of its own
+  // size, so it holds at 14px and at 44px. See `iconChipRadius()`.
+  "tile-icon-radius": "11.44px",
   "tile-pad": "15px 16px",
   "tile-radius": "12px",
 } as const;

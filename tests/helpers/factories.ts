@@ -7,7 +7,7 @@ import type {
   BuildGatewayOptions,
   BuiltGateway,
   GatewayPaths,
-} from "@centraid/gateway";
+} from "@centraid/server";
 import { tempDir } from "@centraid/test-kit/temp-dir";
 import { bootstrappedVault } from "@centraid/test-kit/vault";
 import type { OpenVaultOptions, VaultDb } from "@centraid/vault";

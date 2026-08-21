@@ -2,7 +2,7 @@ import type {
   AuEditorTriggerDTO,
   AutomationEditorData,
 } from "../../screen-contracts.js";
-import type { AutomationAgentEditorData } from "./automationEditorAgentData.js";
+import type { AutomationHarnessEditorData } from "./automationEditorHarnessData.js";
 
 /** Pure create-mode DTO builder for template/watch-entity prefills. */
 export function buildCreateAutomationEditorData(opts: {
@@ -14,9 +14,9 @@ export function buildCreateAutomationEditorData(opts: {
   watchEntity?: string;
   instructions: string;
   name: string;
-  agent?: AutomationAgentEditorData;
+  harness?: AutomationHarnessEditorData;
 }): AutomationEditorData {
-  const { template, watchEntity, instructions, name, agent } = opts;
+  const { template, watchEntity, instructions, name, harness } = opts;
   const triggers: AuEditorTriggerDTO[] =
     template?.triggerKind === "webhook"
       ? [{ id: null, kind: "webhook", pending: true }]
@@ -36,9 +36,9 @@ export function buildCreateAutomationEditorData(opts: {
     name: template?.name ?? name,
     onFailure: null,
     rowId: null,
-    runner: null,
+    harness: null,
     triggers,
     webhook: null,
-    ...agent,
+    ...harness,
   };
 }

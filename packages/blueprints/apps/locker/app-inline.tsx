@@ -7,6 +7,7 @@
 
 import type { InlineAppModule } from "../inline-types.ts";
 import { Root, CHANGE_TABLES } from "./app-root.tsx";
+import pendingProjection from "./pending-projection.ts";
 import authQuery from "./queries/auth.ts";
 import itemQuery from "./queries/item.ts";
 import itemsQuery from "./queries/items.ts";
@@ -15,6 +16,7 @@ import trashQuery from "./queries/trash.ts";
 
 const lockerInlineApp: InlineAppModule = {
   appId: "locker",
+  pendingProjection,
   changeTables: CHANGE_TABLES,
   // The query defaults are typed against the ambient `HandlerArgs`; the inline
   // contract types `ctx` as `unknown`, so bridge the two here (the shell builds
@@ -29,8 +31,7 @@ const lockerInlineApp: InlineAppModule = {
   kitAsk: {
     scope: "locker",
     placeholder: "Ask your locker…",
-    intro:
-      "Ask me to find a login, add a card, or generate a strong password. Writes show for your approval before they touch the vault — secrets never leave a field unless you copy or reveal them.",
+    intro: "Ask me to find a login, add a card, or generate a strong password.",
     suggest: [
       "Find my GitHub login",
       "Add a new credit card",

@@ -1,22 +1,98 @@
-/* The selection toolbar's own bits. Authored camelCase (old `bar-`/`album-
-   menu-` prefixes dropped). `.bar-menu-wrap` is NOT here — it stays global in
-   app.css because app.tsx's away-click handler queries `.bar-menu-wrap` on
-   the static selection bar. The popover rides `.kit-popover` as a compound to
-   keep the specificity that beat kit.css. */
+/* The selection bar's own bits (v4 handoff §6). Authored camelCase.
+   `.bar-menu-wrap` stays a global, unprefixed class on purpose — the
+   away-click listener in selection.tsx queries `document` for it on the
+   static `#selectionBar` host, the same way the pre-v4 bar did. The popover
+   rides `.kit-popover` as a compound selector to keep the specificity that
+   beats kit.css (kit.css loads after this module).
+
+   Logical properties only (§18): the bar, the actions row and the read-only
+   reason line all mirror under RTL without a second rule. */
 
 .count {
-  font-family: var(--font-mono);
-  font-size: 0.82rem;
-  font-weight: 500;
+  /* "Count in 20px tabular mono" (§6) — a one-off size the shared `--t-mono`
+     role (fixed at 11.5px) does not carry, so the family and the numeric
+     modifiers travel from their own tokens rather than a literal font stack
+     (B3: a numeric pins its own direction, or a mixed digit/word run reorders
+     under RTL). */
+  font: var(--t-title);
+  font-variant-numeric: var(--t-mono-numeric);
+  direction: var(--t-mono-direction);
+  unicode-bidi: var(--t-mono-bidi);
   white-space: nowrap;
 }
-.btn {
+
+.countLabel {
+  font: var(--t-body);
+  color: var(--text-soft);
   white-space: nowrap;
 }
+
+.spacer {
+  flex: 1;
+  min-inline-size: var(--sp-2);
+}
+
+.actions {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-1);
+  /* It's a <fieldset> for the group semantics — none of the browser chrome. */
+  border: 0;
+  margin: 0;
+  padding: 0;
+  min-inline-size: 0;
+}
+
+/* An action button carries its label only once the bar itself measures wide
+   enough (§6, §15) — `labelled` is a prop, not a media query, because the
+   same viewport width crosses the threshold at different bar widths once the
+   info rail or the stem opens or closes. */
+.action {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-1);
+  height: 2.25rem;
+  padding-inline: var(--sp-2);
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+  background: transparent;
+  color: var(--text);
+  white-space: nowrap;
+}
+
+.actionLabel {
+  font: var(--t-control);
+}
+
+/* A recessive (disabled) state takes its own token on the leaf — never a
+   container opacity (§18). */
+.action:disabled {
+  color: var(--text-faint);
+  border-color: var(--line);
+  cursor: default;
+}
+
+/* Destructive is an outlined `--net` button, never filled (§18). `--net` is
+   the "this leaves the device" / consequential-action role; `--danger` is its
+   fallback where a host has not yet published it. */
+.action.destructive {
+  color: var(--net, var(--danger));
+  border-color: var(--net, var(--danger));
+}
+.action.destructive:disabled {
+  color: var(--text-faint);
+  border-color: var(--line);
+}
+
+.menuWrap {
+  position: relative;
+  display: flex;
+}
+
 :global(.kit-popover).albumMenu {
   position: absolute;
-  bottom: calc(100% + 0.5rem);
-  left: 50%;
+  bottom: calc(100% + var(--sp-2));
+  inset-inline-start: 50%;
   transform: translateX(-50%);
   display: flex;
   flex-direction: column;
@@ -31,19 +107,131 @@
   text-overflow: ellipsis;
 }
 .albumMenuEmpty {
-  padding: 0.6rem 0.7rem;
+  padding: var(--sp-2) var(--sp-2);
   max-width: 14rem;
 }
-.close {
-  width: 2.5rem;
-  height: 2.5rem;
+
+.selectAll {
+  background: none;
   border: none;
-  border-radius: 50%;
-  background: transparent;
-  color: var(--text-soft);
-  font-size: 1.2rem;
-  line-height: 1;
+  padding: 0;
+  font: var(--t-control);
+  color: var(--text);
+  text-decoration: underline;
+  white-space: nowrap;
+  flex-shrink: 0;
 }
-.close:hover {
-  background: var(--bg-sunken);
+
+.done {
+  height: 2.25rem;
+  padding-inline: var(--sp-3);
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+  background: transparent;
+  color: var(--text);
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+/* The read-only reason (§6): stated inline under the bar in `--net` mono,
+   never a tooltip. `flex-basis: 100%` forces it onto its own line inside the
+   bar's flex row (Chrome.module.css owns the row itself). */
+.reason {
+  flex-basis: 100%;
+  font: var(--t-mono);
+  font-variant-numeric: var(--t-mono-numeric);
+  direction: var(--t-mono-direction);
+  unicode-bidi: var(--t-mono-bidi);
+  color: var(--net, var(--danger));
+  padding-block-start: var(--sp-1);
+}
+
+/* ---------- The desktop/PWA row (§6 close-out) ---------- */
+
+/* The row `#toolbarMount` takes while a selection is active — the same flex
+   row geometry the toolbar row itself uses (Toolbar.module.css `.toolbar`),
+   because it is the SAME row, carrying different content, not a floating
+   pill anymore. */
+.bar {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  padding: var(--sp-2) var(--content-margin);
+  flex-wrap: wrap;
+}
+
+/* ---------- The phone's "Add to album" sheet (§6) ---------- */
+
+.phoneSheet {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+  padding: var(--sp-3);
+  border-block-start: 1px solid var(--line);
+  background: var(--bg-elev);
+  max-block-size: 50vh;
+  overflow-y: auto;
+}
+
+.phoneSheetHead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-2);
+}
+
+.phoneSheetTitle {
+  font: var(--t-control);
+  color: var(--text);
+}
+
+.phoneSheetCancel {
+  background: none;
+  border: none;
+  padding: 0;
+  font: var(--t-control);
+  color: var(--text-soft);
+}
+
+.phoneSheetList {
+  display: flex;
+  flex-direction: column;
+}
+
+/* ---------- The phone's bottom bar (§6, §D) — five 56px targets ---------- */
+
+.bottomBar {
+  display: flex;
+  align-items: stretch;
+}
+
+.bottomAction {
+  flex: 1;
+  min-inline-size: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+  height: 56px;
+  border: none;
+  background: none;
+  color: var(--text);
+}
+.bottomAction:disabled {
+  color: var(--text-faint);
+}
+.bottomAction.destructive {
+  color: var(--net, var(--danger));
+}
+.bottomAction.destructive:disabled {
+  color: var(--text-faint);
+}
+
+.bottomActionLabel {
+  font: var(--t-control);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-inline-size: 100%;
 }

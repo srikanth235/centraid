@@ -6,19 +6,40 @@
 // Expiry is availability: a vanished device needs no cleanup tick before a
 // second device can claim the row. Completion is token + device bound and an
 // already-completed duplicate is a harmless `false`.
+//
+// THE LANE SPLIT (issue #724). This queue leases exactly the work a BROWSER
+// can do with the platform it already has: rasterize a preview, grab a video
+// poster frame, pull text out of a PDF. Everything model-shaped — OCR,
+// transcription, embedding — left this lane and now runs on the gateway's one
+// self-contained recognition automations.
+//
+// Why not both lanes: a capability offered in two places is a capability with
+// two answers to "which model produced this row, and is it current?" — the
+// device lane has no model identity at all, so a transcript a phone
+// contributed could never be found by a version bump. One lane per
+// capability, and the model-shaped ones belong where the model is versioned.
+// The device lane keeps the three rungs that are pure format conversion, where
+// "which implementation ran" genuinely does not change the answer.
+//
+// The `enrich_request.required_capability` CHECK in `schema/enrich.ts` still
+// accepts `ocr`/`transcript`/`embedding` and is deliberately NOT narrowed:
+// that is a pre-release, single-rung, edit-in-place schema, so an already
+// created table keeps the CHECK it was created with no matter what the DDL
+// text says, and rows queued by an earlier build must stay a legal SELECT
+// forever — the gateway sweep reads exactly those rows. Application code
+// narrows; the CHECK refuses to be the thing that turns an old row unreadable.
+// (Same argument, same words, as the `enrich_policy` tier rename above it.)
 
 import { randomUUID } from "node:crypto";
 import type { DatabaseSync } from "node:sqlite";
 
 import type { DerivativeVariant } from "../blob/derivatives.js";
 
+/** What a paired DEVICE may lease. See the lane split in the header. */
 export const ENRICHMENT_CAPABILITIES = [
   "previews",
   "poster",
   "pdfText",
-  "ocr",
-  "transcript",
-  "embedding",
 ] as const;
 export type EnrichmentCapability = (typeof ENRICHMENT_CAPABILITIES)[number];
 
@@ -144,6 +165,10 @@ export function queueDeviceEnrichmentRequest(
     );
 }
 
+// Audio has no row here any more: its only device rung was `transcript`, which
+// is now the transcript automation's (see the lane split). A recording therefore
+// queues no device job at all, and its transcript arrives from the gateway's
+// own sweep rather than from whichever phone happened to be charging.
 const DEVICE_DERIVATIVE_RULES: readonly {
   matches: (mediaType: string) => boolean;
   sqlPredicate: string;
@@ -152,15 +177,7 @@ const DEVICE_DERIVATIVE_RULES: readonly {
   {
     matches: (mediaType) => mediaType.startsWith("video/"),
     sqlPredicate: "media_type LIKE 'video/%'",
-    wanted: [
-      { capability: "poster", variant: "poster" },
-      { capability: "transcript", variant: "transcript" },
-    ],
-  },
-  {
-    matches: (mediaType) => mediaType.startsWith("audio/"),
-    sqlPredicate: "media_type LIKE 'audio/%'",
-    wanted: [{ capability: "transcript", variant: "transcript" }],
+    wanted: [{ capability: "poster", variant: "poster" }],
   },
   {
     matches: (mediaType) => mediaType === "application/pdf",

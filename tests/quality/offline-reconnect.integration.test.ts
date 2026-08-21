@@ -8,15 +8,18 @@ import { IDBFactory, IDBKeyRange } from "fake-indexeddb";
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 
 import { SqliteIntentStore } from "../../apps/mobile/src/lib/replica/sqlite-intent-store.js";
-import { Dispatcher, Registry } from "../../packages/app-engine/src/index.js";
 import { IndexedDbIntentStore } from "../../packages/client/src/replica/intent-store.js";
 import { IntentQueue } from "../../packages/client/src/replica/intents.js";
 import { NodeSqliteDriver } from "../../packages/client/src/replica/node-sqlite-test-driver.js";
 import type { IntentOutcome } from "../../packages/client/src/replica/types.js";
-import { handleReplicaIntent } from "../../packages/gateway/src/routes/replica-intent-route.js";
-import type { ReplicaIntentDispatcher } from "../../packages/gateway/src/routes/replica-intent-route.js";
-import { replicaDispatchOutcome } from "../../packages/gateway/src/serve/build-gateway.js";
-import { openVaultPlane } from "../../packages/gateway/src/serve/vault-plane.js";
+import {
+  Dispatcher,
+  Registry,
+} from "../../packages/server/src/engine/index.js";
+import { handleReplicaIntent } from "../../packages/server/src/routes/replica-intent-route.js";
+import type { ReplicaIntentDispatcher } from "../../packages/server/src/routes/replica-intent-route.js";
+import { replicaDispatchOutcome } from "../../packages/server/src/serve/build-gateway.js";
+import { openVaultPlane } from "../../packages/server/src/serve/vault-plane.js";
 import { forEachSequentially } from "../../packages/test-kit/src/sequential.js";
 import { tempDir } from "../../packages/test-kit/src/temp-dir.js";
 
@@ -114,7 +117,7 @@ describe("R2 product offline/reconnect transport", () => {
       void handleReplicaIntent(req, res, {
         plane,
         access: {
-          role: "write",
+          canWrite: true,
           rememberDevice: true,
           deviceId: String(req.headers["x-device-id"]),
           appId: "planner",

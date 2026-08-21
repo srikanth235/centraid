@@ -20,8 +20,6 @@ import {
   installDesktopAssistHandoff,
 } from "../assist-oauth-handoff.js";
 import { resetGatewayAuthCache } from "../gateway-client-core.js";
-import { renameGatewayMember } from "../gateway-client-members.js";
-import { updateVault } from "../gateway-client-vault.js";
 import { isWebHost } from "./host-platform.js";
 import FirstRunGate from "./screens/FirstRunGate.js";
 import StartupErrorScreen from "./screens/StartupErrorScreen.js";
@@ -29,7 +27,7 @@ import App from "./shell/App.js";
 import ErrorBoundary from "./shell/ErrorBoundary.js";
 import { Gallery } from "./ui/index.js";
 
-// Install terminal replica cleanup before any AppFrame asks for a local read;
+// Install terminal replica cleanup before any app route asks for a local read;
 // inactive gateway removal and vault switches must also reach dormant storage.
 void import("../replica/shell-session.js")
   .then((module) => module.installReplicaStorageLifecycle())
@@ -151,75 +149,29 @@ void (async (): Promise<void> => {
   );
   // Both throws are deliberate: OnboardingScreen catches whatever
   // `onOnboardingComplete` rejects with and renders it inline, so a failed
-  // profile write or settings save shows up instead of silently stranding the
-  // user on a "completed" first run that never persisted.
-  const enterApp = async (): Promise<void> => {
+  // settings save shows up instead of silently stranding the user on a
+  // "completed" first run that never persisted.
+  const enterApp = async (options?: {
+    seedSampleOnFirstRun?: boolean;
+  }): Promise<void> => {
     resetGatewayAuthCache();
     await window.CentraidApi.saveSettings({
       onboardingCompletedAt: new Date().toISOString(),
     });
-    shellRoot.render(wrap(<App />));
+    shellRoot.render(
+      wrap(<App seedSampleOnFirstRun={options?.seedSampleOnFirstRun} />)
+    );
   };
   const renderFirstRun = (): void => {
     shellRoot.render(
       wrap(
         <FirstRunGate
           host={isWebHost() ? "web" : "desktop"}
-          onOnboardingComplete={async ({
-            displayName,
-            avatarColor,
-            gatewayId,
-            vaultId,
-            ownerVault,
-            memberId,
-            path,
-          }) => {
-            // Write metadata to the gateway this run actually connected.
-            await window.CentraidApi.updateProfileMetadata({
-              id: gatewayId || "local",
-              displayName,
-              avatarColor,
-            });
-            // The name belongs to the PERSON: without this it lived only in
-            // device-local settings, invisible to every surface, and Household
-            // kept showing the placeholder "You". `memberId` is set only when
-            // onboarding actually asked, so a returning device never renames
-            // someone who already has a name. Non-fatal for the same reason the
-            // vault rename below is: the user is already in.
-            if (memberId && displayName) {
-              await renameGatewayMember(memberId, displayName).catch(
-                (error: unknown) => {
-                  console.error(
-                    "[first-run] naming the household member failed",
-                    error
-                  );
-                }
-              );
-            }
-            resetGatewayAuthCache();
-            if (path === "fresh" && vaultId && ownerVault && displayName) {
-              // The auto-founded owner vault ships as "Personal"; first run
-              // makes it theirs. `ownerVault` is false when this run landed on
-              // a reinstall's existing data, where the fallback vault is the
-              // SHARED one — renaming that would rename everyone's vault
-              // (issue #603 C10). Deliberately non-fatal — the user is already
-              // in, and a generically-named vault is a cosmetic problem they
-              // can fix in Settings, not a reason to block onboarding. Logged
-              // rather than swallowed so it is diagnosable. Gated on a non-empty
-              // `displayName` because the gateway rejects a blank vault name —
-              // a run that never asked for one must leave "Personal" alone.
-              await updateVault({
-                vaultId,
-                name: displayName,
-                color: avatarColor,
-              }).catch((error: unknown) => {
-                console.error(
-                  "[first-run] renaming the Personal vault failed",
-                  error
-                );
-              });
-            }
-            await enterApp();
+          onOnboardingComplete={async () => {
+            // Profile details are deliberately deferred to Settings → You.
+            // The first visit should get straight to the useful surface, with
+            // a removable sample week already being prepared there.
+            await enterApp({ seedSampleOnFirstRun: true });
           }}
         />
       )

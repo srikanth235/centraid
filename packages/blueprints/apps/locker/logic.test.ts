@@ -37,7 +37,7 @@ function state(): AppState {
     authSession: "session",
     authBusy: false,
     authError: "",
-    pendingItemId: null,
+    revealItemId: null,
     reauthOpen: false,
     gen: false,
     genLen: 20,

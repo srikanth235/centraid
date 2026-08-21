@@ -13,7 +13,7 @@ export default async function tagAsset({ body, ctx }: HandlerArgs) {
     const outcome = await ctx.vault.invoke({
       command: "core.tag_item",
       input: {
-        subject_type: "media.media_asset",
+        subject_type: "media.asset",
         subject_id: String(input.asset_id ?? ""),
         label: String(input.label ?? ""),
       },

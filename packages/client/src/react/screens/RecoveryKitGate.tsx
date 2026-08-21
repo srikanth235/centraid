@@ -73,9 +73,7 @@ export default function RecoveryKitGate({
       setSelectedKit(JSON.parse(await file.text()) as unknown);
       setSelectedName(file.name);
     } catch {
-      setError(
-        "That file is not valid JSON. Re-select the recovery kit you just saved."
-      );
+      setError("That file isn’t a recovery kit — select the one you saved.");
     }
   };
 

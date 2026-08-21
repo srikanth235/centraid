@@ -1,20 +1,23 @@
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync } from "node:fs";
 import path from "node:path";
 
 import { describe, expect, it } from "vitest";
 
 const packageDir = path.resolve(import.meta.dirname, "..");
 const appDir = path.join(packageDir, "apps");
-const systemApps = [
-  "agenda",
-  "docs",
-  "locker",
-  "notes",
-  "people",
-  "photos",
-  "tally",
-  "tasks",
-];
+// The system apps that currently DRAW something. Agenda, Notes, Tally and
+// Tasks are off this list because their interfaces were removed whole pending
+// a ground-up redesign — there is no chrome of theirs to hold to the shared
+// shell. Each returns here with its rebuilt chrome.
+const systemApps = ["docs", "locker", "people", "photos"];
+
+/** Every bundled app on disk, drawing or not. The bans below are about what an
+ *  app must NEVER carry, so they are asked of the directory listing rather
+ *  than the curated list — an app with no chrome yet can still be caught
+ *  reintroducing a served entrypoint. */
+const allApps = readdirSync(appDir, { withFileTypes: true })
+  .filter((entry) => entry.isDirectory() && !entry.name.startsWith("_"))
+  .map((entry) => entry.name);
 
 describe("shared blueprint CSS", () => {
   it("composes the canonical app shell in all system blueprints", () => {
@@ -30,7 +33,7 @@ describe("shared blueprint CSS", () => {
   });
 
   it("keeps all system-app wall styling in the shared inline layers", () => {
-    for (const app of systemApps) {
+    for (const app of allApps) {
       expect(
         existsSync(path.join(appDir, app, "wall.css")),
         `${app}/wall.css`
@@ -45,6 +48,11 @@ describe("shared blueprint CSS", () => {
   });
 
   it("does not reintroduce retired global chrome selectors", () => {
+    // Scanned across each app's WHOLE source tree rather than one chrome file:
+    // the three apps below have no chrome at the moment (see systemApps), and a
+    // rule keyed to a file that does not exist would quietly assert nothing.
+    // Reading the tree keeps the ban live through the rebuild, wherever the new
+    // chrome ends up living.
     const retiredSelectors = {
       agenda: [".ag-shell", ".ag-side", ".ag-topbar"],
       notes: [".nt-side", ".nt-topbar", ".nt-hamburger"],
@@ -52,29 +60,80 @@ describe("shared blueprint CSS", () => {
     };
 
     for (const [app, selectors] of Object.entries(retiredSelectors)) {
-      const css = readFileSync(
-        path.join(appDir, app, "Chrome.module.css"),
-        "utf8"
-      );
+      const source = appSource(path.join(appDir, app));
       for (const selector of selectors) {
-        expect(
-          css,
-          `${app}/Chrome.module.css contains ${selector}`
-        ).not.toContain(selector);
+        expect(source, `${app} source contains ${selector}`).not.toContain(
+          selector
+        );
       }
     }
   });
 
-  it("does not ship served React or CSS entrypoints for inline system apps", () => {
-    for (const app of systemApps) {
+  it("does not ship served React, HTML or CSS entrypoints for inline system apps", () => {
+    for (const app of allApps) {
       expect(
         existsSync(path.join(appDir, app, "app.tsx")),
         `${app}/app.tsx`
       ).toBe(false);
-      const html = readFileSync(path.join(appDir, app, "index.html"), "utf8");
-      expect(html, `${app}/index.html`).not.toMatch(
-        /<script|<link rel="stylesheet"/u
-      );
+      // The main client compiles these apps; no bundled app carries a
+      // document the gateway could serve (issue #799).
+      expect(
+        existsSync(path.join(appDir, app, "index.html")),
+        `${app}/index.html`
+      ).toBe(false);
     }
   });
+
+  it("gives Docs ViewToggle .track one border — fieldset reset plus hairline, not two declarations", () => {
+    const css = readFileSync(
+      path.join(appDir, "docs", "components", "ViewToggle.module.css"),
+      "utf8"
+    );
+    const track = cssRuleBody(css, ".track");
+    const borders = propertyValues(track, "border");
+    expect(
+      borders,
+      "css:S4656 forbids a second border on .track"
+    ).toStrictEqual(["1px solid var(--line)"]);
+    expect(propertyValues(track, "margin")).toStrictEqual(["0"]);
+    expect(propertyValues(track, "min-inline-size")).toStrictEqual(["0"]);
+  });
 });
+
+/** Every CSS and component source under one app, concatenated. */
+function appSource(root: string): string {
+  return readdirSync(root, { withFileTypes: true })
+    .flatMap((entry) => {
+      const target = path.join(root, entry.name);
+      if (entry.isDirectory()) return [appSource(target)];
+      return /\.(?:css|ts|tsx)$/u.test(entry.name)
+        ? [readFileSync(target, "utf8")]
+        : [];
+    })
+    .join("\n");
+}
+
+function cssRuleBody(css: string, selector: string): string {
+  const start = css.indexOf(`${selector} {`);
+  expect(start, `missing ${selector} rule`).toBeGreaterThanOrEqual(0);
+  const open = css.indexOf("{", start);
+  let depth = 0;
+  for (let i = open; i < css.length; i++) {
+    const ch = css[i];
+    if (ch === "{") depth += 1;
+    else if (ch === "}") {
+      depth -= 1;
+      if (depth === 0) return css.slice(open + 1, i);
+    }
+  }
+  throw new Error(`unclosed ${selector} rule`);
+}
+
+function propertyValues(block: string, property: string): string[] {
+  const uncommented = block.replace(/\/\*[\s\S]*?\*\//gu, " ");
+  const escaped = property.replace(/[.*+?^${}()|[\]\\]/gu, "\\$&");
+  const matches = uncommented.matchAll(
+    new RegExp(`(?:^|[;\\s])${escaped}\\s*:\\s*([^;]+)`, "gu")
+  );
+  return [...matches].map((match) => match[1]!.trim());
+}

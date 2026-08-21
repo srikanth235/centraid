@@ -17,13 +17,13 @@
 // The one gap the backstop has to close is that the vault runtime carries NO
 // raster codec (packages/vault stays dependency-light — uuid only), so the
 // codec is an INJECTED interface: the gateway package owns the actual
-// jpeg-js/pngjs implementation (packages/gateway/src/preview) and hands it in
+// jpeg-js/pngjs implementation (packages/server/src/preview) and hands it in
 // via VaultDb.previewCodec. This file is the dependency-free orchestration —
 // it decides WHAT is missing and stages the results through the existing
 // ingest/promote path (variant/variant_of), so dedup, custody and
 // replication all "just work" with no new plumbing.
 
-import { BLOB_MEDIUM_EDGE, BLOB_TINY_EDGE } from "@centraid/blob-format";
+import { BLOB_MEDIUM_EDGE, BLOB_TINY_EDGE } from "@centraid/core/blob";
 
 import type { VaultDb } from "../db.js";
 import { nowIso } from "../ids.js";

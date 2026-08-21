@@ -95,10 +95,12 @@ export function changedFiles(baseRef) {
 /**
  * Map a repo-relative source path to the workspace directory owning it.
  * @param {string} filePath Repo-relative path.
- * @returns {string | null} e.g. "packages/gateway", or null.
+ * @returns {string | null} e.g. "packages/server", or null.
  */
 export function workspaceDirOf(filePath) {
-  const m = /^(?<workspaceDir>(?:packages|apps)\/[^/]+)\//u.exec(filePath);
+  const m = /^(?<workspaceDir>(?:packages|apps|tools)\/[^/]+)\//u.exec(
+    filePath
+  );
   return m?.groups?.workspaceDir ?? null;
 }
 
@@ -123,6 +125,18 @@ export function projectNameOf(dir) {
   } catch {
     return null;
   }
+}
+
+/**
+ * Expand package-level project names to any companion Vitest projects that
+ * own a deliberately separate transform/runtime lane.
+ * @param {string[]} names Package-level Vitest project names.
+ * @returns {string[]} Concrete project names accepted by `--project`.
+ */
+export function vitestProjectNames(names) {
+  return names.flatMap((name) =>
+    name === "@centraid/mobile" ? [name, "@centraid/mobile-rn"] : [name]
+  );
 }
 
 /**
@@ -210,8 +224,9 @@ function main() {
   }
 
   const names = [...projects].sort();
+  const testProjectNames = vitestProjectNames(names);
   console.log(
-    `diff-coverage-run: ${names.length} project(s) — ${names.join(", ")}`
+    `diff-coverage-run: ${testProjectNames.length} project(s) — ${testProjectNames.join(", ")}`
   );
 
   // Handler tests load built workers from dist, so dist must match src. turbo
@@ -231,7 +246,7 @@ function main() {
     "--config",
     "vitest.diff-coverage.config.ts",
     "--coverage",
-    ...names.map((n) => `--project=${n}`),
+    ...testProjectNames.map((n) => `--project=${n}`),
   ]);
   if (testStatus !== 0) return testStatus;
 

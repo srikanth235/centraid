@@ -28,9 +28,9 @@ export interface RegistryGateway {
   gatewayKind: "local" | "remote";
 }
 
-/** One vault as a gateway reported it. Roles are NOT part of this: only the
- *  active gateway's member scopes carry a role (`GET /_vault/scopes` answers
- *  for the calling member on the gateway this client addresses). */
+/** One vault as a gateway reported it. Ownership is NOT part of this: only the
+ *  active gateway's owner scopes carry `canWrite` (`GET /_vault/scopes`
+ *  answers for the calling owner on the gateway this client addresses). */
 export interface RegistryVault {
   vaultId: string;
   name: string;
@@ -145,12 +145,11 @@ export function buildGatewayRows(
 
 // ── The flattened, vault-only switcher list (issue #665) ───────────────────
 
-/** A vault the CALLING MEMBER holds a role in on the ACTIVE gateway — the one
- *  place a role is known, straight from `useMemberScopes`. */
-export interface MemberVaultScope {
+/** A vault the CALLING OWNER owns on the ACTIVE gateway — the one place
+ *  ownership is known, straight from `useOwnerScopes`. */
+export interface OwnerVaultScope {
   id: string;
   label: string;
-  role: string;
   isActive: boolean;
 }
 
@@ -232,15 +231,15 @@ export function railStatus(row: GatewayRow): "ready" | "loading" | "error" {
 /**
  * Flatten every registered gateway's vaults into ONE list (issue #665).
  *
- * The active gateway's vaults come from the member's scope registry, because
- * that is the only source that carries a role; every other gateway contributes
- * whatever its `listGatewayVaults` probe last returned. The gateway is named
- * only as quiet subtitle context, and only when more than one is registered —
- * with a single gateway there is nothing to disambiguate.
+ * The active gateway's vaults come from the owner's scope registry; every
+ * other gateway contributes whatever its `listGatewayVaults` probe last
+ * returned. The gateway is named only as quiet subtitle context, and only
+ * when more than one is registered — with a single gateway there is nothing
+ * to disambiguate.
  */
 export function buildVaultRows(
   rows: readonly GatewayRow[],
-  scopes: readonly MemberVaultScope[],
+  scopes: readonly OwnerVaultScope[],
   activeGatewayId: string
 ): SwitcherVaultRow[] {
   // A host that exposes no gateway list at all (stubbed bridges, an older web
@@ -255,15 +254,15 @@ export function buildVaultRows(
       label: scope.label,
       selectable: true,
       status: "ready" as const,
-      subtitle: `${scope.role} vault`,
+      subtitle: "Vault",
       vaultId: scope.id,
     }));
   const multi = rows.length > 1;
   // Which row is the one this client is actually talking to. Normally the id
   // match, but the web host reports `activeGatewayId: 'web'` while listing its
   // single connection under its EndpointId — with one gateway registered there
-  // is nothing else it could be, and getting this wrong would drop the roles
-  // and the active check mark.
+  // is nothing else it could be, and getting this wrong would drop the active
+  // check mark.
   const activeRow =
     rows.find((row) => row.isActive) ??
     (rows.length === 1 ? rows[0] : undefined);
@@ -271,13 +270,9 @@ export function buildVaultRows(
   for (const row of rows) {
     const state = railStatus(row);
     const isActiveGateway = row === activeRow;
-    const known: Array<{ vaultId: string; name: string; role?: string }> =
+    const known: Array<{ vaultId: string; name: string }> =
       isActiveGateway && scopes.length > 0
-        ? scopes.map((scope) => ({
-            vaultId: scope.id,
-            name: scope.label,
-            role: scope.role,
-          }))
+        ? scopes.map((scope) => ({ vaultId: scope.id, name: scope.label }))
         : [...(row.vaults ?? [])];
     if (known.length === 0) {
       out.push({
@@ -295,12 +290,7 @@ export function buildVaultRows(
     }
     for (const vault of known) {
       const context = multi ? [row.gatewayLabel] : [];
-      const lead =
-        state === "error"
-          ? [gatewayStatusCopy(row)]
-          : vault.role
-            ? [`${vault.role} vault`]
-            : [];
+      const lead = state === "error" ? [gatewayStatusCopy(row)] : [];
       out.push({
         gatewayId: row.gatewayId,
         gatewayLabel: row.gatewayLabel,

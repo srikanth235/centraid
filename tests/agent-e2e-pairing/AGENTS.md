@@ -14,7 +14,7 @@ node tests/agent-e2e-pairing/flows/pairing-ticket-hygiene.mjs     # non-burning 
 node tests/agent-e2e-pairing/flows/cross-network-relay.mjs        # real relay transport, needs Docker
 ```
 
-The harness spawns `centraid-gateway serve` on a **fresh** data dir and passes no bootstrap flag: since issue #603 the daemon auto-founds `Shared` + `Personal` at construction, and `--init-vault` no longer exists. The lifecycle flow explicitly targets **`Shared`**; the registry default is the marked Personal vault, and an unscoped `pair` targets Personal. The former `vps-phone-founding` flow (empty VPS → first phone owner + wrapped kit) is **deleted** along with the founding plane it exercised; the `gateway.journey` matrix cell now points at `device-pairing-lifecycle.mjs`.
+The harness spawns `centraid-gateway serve` on a **fresh** data dir and passes no bootstrap flag: since issue #603 the daemon auto-founds one marked `Personal` vault at construction, and `--init-vault` no longer exists. The lifecycle flow targets **`Personal`**, and an unscoped `pair` targets the same marked default. Shared vaults are created later by an explicit owner action. The former `vps-phone-founding` flow (empty VPS → first phone owner + wrapped kit) is **deleted** along with the founding plane it exercised; the `gateway.journey` matrix cell now points at `device-pairing-lifecycle.mjs`.
 
 Verdict at `runs/<runId>/verdict.md`; daemon output at `runs/<runId>/gateway.log`. On FAIL the workspace is kept — `gateway.db`, `keys/`, `vaults/`, and `gateway.log` are the ground truth to inspect. The Docker flow copies `gateway.db` into its run workspace before tearing down the container.
 
@@ -46,5 +46,5 @@ Verdict at `runs/<runId>/verdict.md`; daemon output at `runs/<runId>/gateway.log
 - [lib/device-redeem.mjs](lib/device-redeem.mjs) — the device role, run standalone inside the device container by `cross-network-relay`.
 - [flows/device-pairing-lifecycle.mjs](flows/device-pairing-lifecycle.mjs) — canonical example of the loopback-flow shape.
 - [flows/cross-network-relay.mjs](flows/cross-network-relay.mjs) — canonical example of the Docker-flow shape.
-- [`packages/gateway/src/serve/pairing-store.ts`](../../packages/gateway/src/serve/pairing-store.ts), [`enrollment-store.ts`](../../packages/gateway/src/serve/enrollment-store.ts), [`../cli/endpoint-host.ts`](../../packages/gateway/src/cli/endpoint-host.ts) — the policy under test.
+- [`packages/server/src/serve/pairing-store.ts`](../../packages/server/src/serve/pairing-store.ts), [`enrollment-store.ts`](../../packages/server/src/serve/enrollment-store.ts), [`../cli/endpoint-host.ts`](../../packages/server/src/cli/endpoint-host.ts) — the policy under test.
 - [`packages/tunnel/src/gateway-endpoint.ts`](../../packages/tunnel/src/gateway-endpoint.ts) — the ALPNs and pair protocol frames.

@@ -8,12 +8,12 @@ import {
   createAutomation,
   deleteAutomation,
   getBlocking,
+  invokeAutomationAndAwait,
   listAgents,
   listTemplates,
   listOutboxGrants,
   readAutomationSource,
   rotateAutomationWebhookSecret,
-  runAutomationNow,
   setAutomationEnabled,
   getUserPrefs,
   listVaultEntityTypes,
@@ -30,15 +30,16 @@ import { buildFeatured } from "../../screens/SettingsConnectionsScreen.js";
 import type { ConnectionRowDTO } from "../../screens/SettingsConnectionsScreen.js";
 import { useShellActions } from "../actions.js";
 import PageScroll from "../PageScroll.js";
+import { useShellCapabilities } from "../useCapabilities.js";
 import { openWebhookReveal } from "../webhookReveal.js";
 import {
   loadCompileAttempts,
   loadTurnSteps,
   watchTurnSteps,
 } from "./automationCompileData.js";
-import { buildAutomationAgentEditorData } from "./automationEditorAgentData.js";
 import { buildCreateAutomationEditorData } from "./automationEditorCreateData.js";
 import { loadAutomationEditorData } from "./automationEditorData.js";
+import { buildAutomationHarnessEditorData } from "./automationEditorHarnessData.js";
 import { triggerToDto, vaultForTriggers } from "./automationEditorTriggers.js";
 import { deriveAutomationHero } from "./automationsData.js";
 import {
@@ -50,7 +51,7 @@ import {
   loadConnectionProvidersData,
   loadConnectionsData,
 } from "./settingsConnectionsData.js";
-import { loadProviders } from "./settingsProvidersData.js";
+import { loadHarnesses } from "./settingsHarnessesData.js";
 
 export { vaultForTriggers } from "./automationEditorTriggers.js";
 
@@ -143,6 +144,10 @@ export default function AutomationEditorRoute({
   watchEntity?: string;
 }): JSX.Element {
   const { navigate, showToast, confirm } = useShellActions();
+  // The editor lives behind the automations gate, but connectors is its OWN
+  // gate: a gateway may run automations with no connector plane at all, and
+  // the editor degrades to "no provider accounts" rather than erroring.
+  const { connectors } = useShellCapabilities();
   // `refIdRef` is the automation's `ref` once it exists on the gateway —
   // `undefined` at mount for a brand-new create flow, set by `loadData` (edit
   // mode) or by `onSave`'s create-mode branch (first save mints the row).
@@ -163,9 +168,9 @@ export default function AutomationEditorRoute({
           rowRef.current = loaded.row;
           refIdRef.current = loaded.row?.ref ?? automationId ?? null;
           if (!loaded.row) {
-            const [templates, agentStatus, prefs] = await Promise.all([
+            const [templates, harnessStatus, prefs] = await Promise.all([
               templateId ? listTemplates() : Promise.resolve([]),
-              loadProviders(),
+              loadHarnesses(),
               getUserPrefs().catch(() => ({}) as Record<string, unknown>),
             ]);
             const template = templates.find((entry) => entry.id === templateId);
@@ -175,7 +180,7 @@ export default function AutomationEditorRoute({
                 : null;
             return {
               ...buildCreateAutomationEditorData({
-                agent: buildAutomationAgentEditorData(agentStatus),
+                harness: buildAutomationHarnessEditorData(harnessStatus),
                 ...(template ? { template } : {}),
                 ...(watchEntity ? { watchEntity } : {}),
                 instructions: loaded.instructions,
@@ -184,13 +189,13 @@ export default function AutomationEditorRoute({
               defaultCronTimeZone,
             };
           }
-          const [{ baseUrl }, blocking, grants, agents, agentStatus, prefs] =
+          const [{ baseUrl }, blocking, grants, agents, harnessStatus, prefs] =
             await Promise.all([
               auth(),
               getBlocking(),
               listOutboxGrants(),
               listAgents(),
-              loadProviders(),
+              loadHarnesses(),
               getUserPrefs().catch(() => ({}) as Record<string, unknown>),
             ]);
           const hero = deriveAutomationHero(loaded.row, baseUrl);
@@ -202,8 +207,9 @@ export default function AutomationEditorRoute({
             automationId: loaded.row.ref,
             connectors: loaded.connectors,
             consent: filterConsentForAutomation(
-              agents.find((agent) => agent.hostKey === loaded.row?.ownerApp)
-                ?.agentId,
+              agents.find(
+                (agent) => agent.enrollmentKey === loaded.row?.ownerApp
+              )?.agentId,
               blocking,
               grants
             ),
@@ -215,10 +221,10 @@ export default function AutomationEditorRoute({
             name: loaded.name,
             onFailure: loaded.onFailure,
             rowId: loaded.rowId,
-            runner: loaded.runner,
+            harness: loaded.harness,
             triggers: loaded.triggers.map(triggerToDto),
             webhook: hero.webhook,
-            ...buildAutomationAgentEditorData(agentStatus),
+            ...buildAutomationHarnessEditorData(harnessStatus),
           };
         }}
         onSave={async (fields) => {
@@ -239,9 +245,9 @@ export default function AutomationEditorRoute({
                 ...(connections === undefined
                   ? { connections: [] }
                   : { connections }),
-                ...(fields.runner === undefined
+                ...(fields.harness === undefined
                   ? {}
-                  : { runner: fields.runner }),
+                  : { harness: fields.harness }),
                 ...(fields.model === undefined ? {} : { model: fields.model }),
               });
               if (row) rowRef.current = row;
@@ -250,7 +256,7 @@ export default function AutomationEditorRoute({
               // reveal `onRotateWebhook` uses below (webhookReveal.ts).
               if (webhook) {
                 await openWebhookReveal(webhook, {
-                  note: "This secret is shown once. Copy it now — you won't see it again.",
+                  note: "Shown once — copy it now.",
                   title: "Webhook minted",
                 });
               }
@@ -268,7 +274,7 @@ export default function AutomationEditorRoute({
                 ? { vault: vaultForTriggers(fields.triggers) }
                 : {}),
               ...(connections ? { connections } : {}),
-              ...(fields.runner ? { runner: fields.runner } : {}),
+              ...(fields.harness ? { harness: fields.harness } : {}),
               ...(fields.model ? { model: fields.model } : {}),
             });
             if (row) {
@@ -277,7 +283,7 @@ export default function AutomationEditorRoute({
             }
             if (webhook) {
               await openWebhookReveal(webhook, {
-                note: "This secret is shown once. Copy it now — you won't see it again.",
+                note: "Shown once — copy it now.",
                 title: "Webhook minted",
               });
             }
@@ -347,24 +353,34 @@ export default function AutomationEditorRoute({
           }
           return entityTypeCache;
         }}
-        loadConnectorCatalog={loadEditorConnectorCatalog}
-        configureConnection={async (input) => {
-          const result = await configureConnection({
-            allowedHosts: input.allowedHosts,
-            apiKey: input.apiKey,
-            authUrl: input.authUrl,
-            clientId: input.clientId,
-            clientSecret: input.clientSecret,
-            credKind: input.credKind,
-            kind: input.connectorKind,
-            label: input.label,
-            provider: input.providerId,
-            scopes: input.scopes,
-            tokenUrl: input.tokenUrl,
-          });
-          return { connectionId: result.connectionId };
-        }}
-        beginAuthorize={beginConnectionAuthorize}
+        connectorsEnabled={connectors}
+        {...(connectors
+          ? {
+              // Withdrawn, not merely hidden (C1): with the connectors
+              // experiment off the vault connections + OAuth callback routes
+              // are unmounted, so handing the screen loaders that can only
+              // 404 would leave the failure to be discovered by request
+              // instead of stated once by the capability.
+              beginAuthorize: beginConnectionAuthorize,
+              configureConnection: async (input) => {
+                const result = await configureConnection({
+                  allowedHosts: input.allowedHosts,
+                  apiKey: input.apiKey,
+                  authUrl: input.authUrl,
+                  clientId: input.clientId,
+                  clientSecret: input.clientSecret,
+                  credKind: input.credKind,
+                  kind: input.connectorKind,
+                  label: input.label,
+                  provider: input.providerId,
+                  scopes: input.scopes,
+                  tokenUrl: input.tokenUrl,
+                });
+                return { connectionId: result.connectionId };
+              },
+              loadConnectorCatalog: loadEditorConnectorCatalog,
+            }
+          : {})}
         showToast={showToast}
         onReadSource={async () => {
           const ref = refIdRef.current;
@@ -379,7 +395,9 @@ export default function AutomationEditorRoute({
             // same rail as the compile that produced the plan. Navigating to
             // the run viewer is an explicit "Full trace" click, not a side
             // effect of pressing Test.
-            const { turnId } = await runAutomationNow({ automationId: ref });
+            const { turnId } = await invokeAutomationAndAwait({
+              automationId: ref,
+            });
             return turnId;
           } catch (error) {
             showToast(
@@ -446,7 +464,7 @@ export default function AutomationEditorRoute({
               automationId: ref,
             });
             await openWebhookReveal(webhook, {
-              note: "This secret is shown once. Update your caller now — you won't see it again.",
+              note: "Shown once — update your caller now.",
               title: "New webhook secret",
             });
             showToast("Webhook secret regenerated");

@@ -1,423 +1,435 @@
-import React, {
-  memo,
-  useCallback,
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-} from "react";
-import { FlatList, Pressable, RefreshControl, View } from "react-native";
-import type { ListRenderItemInfo } from "react-native";
-import {
-  SafeAreaView,
-  useSafeAreaInsets,
-} from "react-native-safe-area-context";
+// AUTOMATIONS — what this vault does on its own (#765, spec §3).
+//
+// The page is a SEQUENCE OF BLOCKS and nothing else: a section head, a row
+// list, a run feed, the suggestions, a note. What the tile-shaped cards used
+// to carry, and where each part went:
+//
+//   the On/Off pill      → the row's state word (`Active` / `Paused`), plus
+//                          the one quiet verb in the row's expansion, so the
+//                          write survives; the pill's colour does not, because
+//                          a fill is not a state word.
+//   the schedule line    → the row's sub line, first clause.
+//   the description      → gone from the list. The row's second line is what
+//                          fires it and how it last went (spec §3); the
+//                          automation's own prose belongs where it is opened.
+//   `Run now` per card   → the automation's thread, which already carries it,
+//                          and which `Open` now reaches.
+//   the starter gallery  → the `Worth setting up` section, with the note that
+//                          says where those suggestions really come from.
+//
+// TWO DELIBERATE WITHHOLDINGS.
+//  - `New automation` (the reference's filled commit) is ABSENT. Authoring an
+//    automation means writing a manifest — a blueprint act with no mobile
+//    surface and no route on `lib/automations.ts` to reach. A filled verb that
+//    opened nothing would be the one thing this page cannot afford. When
+//    mobile grows an author flow, the verb lands here and nowhere else.
+//  - `Templates` is the quiet verb, and it is honest about what it is: on this
+//    surface the template catalogue IS the `Worth setting up` list further
+//    down the same page, so the verb takes you there rather than opening a
+//    second screen that would hold the same six rows. It is withheld entirely
+//    when the catalogue came back empty.
+//
+// THE ROW'S ONE TRAILING SLOT is spoken for by `Open` (spec §3). Pausing a
+// live automation is a capability this phone already had, so it keeps a
+// control: one quiet verb in the row's own expansion (`RowsBlock`'s documented
+// escape hatch), under the line it belongs to. A paused row needs no
+// expansion — its trailing verb is already `Resume`, which is the reference's
+// own verb for that row.
 
+import React, { useCallback, useMemo, useRef } from "react";
+import { RefreshControl, ScrollView, View } from "react-native";
+import type { LayoutChangeEvent } from "react-native";
+
+import { AUTOMATIONS_SUGGESTIONS_NOTE } from "@centraid/client/automations-copy";
+import { SKELETON_NOTE } from "@centraid/client/surface-copy";
+
+import Button from "../../kit/components/Button";
+import ChipsBlock from "../../kit/components/ChipsBlock";
+import EmptyBlock from "../../kit/components/EmptyBlock";
+import FeatureOffPlace from "../../kit/components/FeatureOffPlace";
+import { healthLineFor } from "../../kit/components/health-line";
+import HealthLine from "../../kit/components/HealthLine";
 import HomeKey from "../../kit/components/HomeKey";
-import Icon from "../../kit/components/Icon";
 import { Text } from "../../kit/components/NativeText";
-import { showToast } from "../../kit/components/Toast";
-import { spacing, useTheme } from "../../kit/theme";
-import {
-  cloneAutomationTemplate,
-  listAutomationTemplates,
-  runAutomation,
-} from "../../lib/automations";
-import type { AutomationRow, AutomationTemplate } from "../../lib/automations";
+import NoteBlock from "../../kit/components/NoteBlock";
+import PanelBlock from "../../kit/components/PanelBlock";
+import PlaceHeader from "../../kit/components/PlaceHeader";
+import RowsBlock from "../../kit/components/RowsBlock";
+import type { RowsBlockRow } from "../../kit/components/RowsBlock";
+import SectionBlock from "../../kit/components/SectionBlock";
+import SkeletonRows from "../../kit/components/SkeletonRows";
+import TopSafeArea from "../../kit/components/TopSafeArea";
+import { useReplica } from "../../kit/replica/ReplicaProvider";
+import { useTheme } from "../../kit/theme";
 import type { AutomationsScreenProps } from "../../navigation";
-import { makeStyles } from "./Automations.styles";
+import {
+  automationRowCopy,
+  automationsHealth,
+  countSentence,
+  EMPTY_ACTION,
+  EMPTY_BODY,
+  EMPTY_TITLE,
+  ERROR_RETRY,
+  ERROR_TITLE,
+  errorBody,
+  filterChips,
+  matchesFilter,
+  runRowCopy,
+  showingSentence,
+  suggestionRowCopy,
+  worstFailure,
+} from "./automations-model";
+import type { AutomationRowCopy } from "./automations-model";
+import { styles } from "./Automations.styles";
 import AutomationThread from "./AutomationThread";
-import { useAutomations } from "./useAutomations";
-import type { AutomationsState } from "./useAutomations";
+import { RECENT_CAP, useAutomations } from "./useAutomations";
+import type { AutomationsController } from "./useAutomations";
+
+/** Why a skeleton, said once, under the skeleton (spec §10). */
+const LOADING_NOTE = SKELETON_NOTE;
+
+/**
+ * The suggestions note.
+ *
+ * The reference's sentence is "Suggestions come from what you already do by
+ * hand." That is not true of this product: the list is a curated slice of the
+ * TEMPLATE CATALOGUE (`listAutomationTemplates`), keyed off a fixed id list —
+ * nothing watches what a member does by hand and nothing infers a rule from
+ * it. The second half of the sentence is true and load-bearing, so it stands
+ * verbatim; the provenance half states the provenance this product has. Same
+ * words as the desktop screen, so both surfaces make one promise.
+ */
+const SUGGESTIONS_NOTE = AUTOMATIONS_SUGGESTIONS_NOTE;
+
+/** What the run feed says when the vault has automations but no history. */
+const NO_RUNS_NOTE =
+  "Nothing has run yet — run an automation once, or wait for its trigger.";
 
 export default function AutomationsScreen({
   navigation,
   route,
 }: AutomationsScreenProps): React.JSX.Element {
   const focusedRef = route.params?.automationRef;
+  // The gate is read here, above both branches, so a gateway with automations
+  // switched off never mounts the hooks that would read routes it does not
+  // serve. `undefined` is unknown, not off — no gateway has answered yet, and
+  // the page's own states already handle a gateway that will not talk.
+  const { features } = useReplica();
+  if (features && !features.automations)
+    return (
+      <FeatureOffPlace
+        feature="automations"
+        onLeave={() => navigation.goBack()}
+        title="Automations"
+      />
+    );
   return focusedRef ? (
     <AutomationThread
       automationRef={focusedRef}
       onLeave={() => navigation.goBack()}
     />
   ) : (
-    <AutomationsList navigation={navigation} route={route} />
+    <AutomationsPlace navigation={navigation} route={route} />
   );
 }
 
-function AutomationsList({
+interface BodyProps {
+  page: AutomationsController;
+  copies: readonly AutomationRowCopy[];
+  onOpen: (ref: string) => void;
+  onBrowseTemplates: () => void;
+  onSuggestionsLayout: (event: LayoutChangeEvent) => void;
+}
+
+function AutomationsBody({
+  page,
+  copies,
+  onOpen,
+  onBrowseTemplates,
+  onSuggestionsLayout,
+}: BodyProps): React.JSX.Element {
+  const { state } = page;
+
+  if (state === "loading")
+    return (
+      <>
+        <SkeletonRows accessibilityLabel="Reading your automations" />
+        <NoteBlock text={LOADING_NOTE} />
+      </>
+    );
+
+  if (state === "error")
+    return (
+      <PanelBlock
+        body={
+          page.load.kind === "error" && page.load.unpaired
+            ? page.load.reason
+            : errorBody(page.lastRunClock)
+        }
+        eyebrow="Automations"
+        facts={
+          page.load.kind === "error" && !page.load.unpaired
+            ? [
+                {
+                  key: "what happened",
+                  net: true,
+                  value: page.load.reason,
+                },
+              ]
+            : undefined
+        }
+        action={{ label: ERROR_RETRY, onPress: page.retry }}
+        title={ERROR_TITLE}
+        tone="net"
+      />
+    );
+
+  const suggestions = (
+    <View onLayout={onSuggestionsLayout}>
+      {page.templates.length > 0 ? (
+        <>
+          <SectionBlock
+            label="Worth setting up"
+            meta={String(page.templates.length)}
+          />
+          <RowsBlock
+            accessibilityLabel="Worth setting up"
+            rows={page.templates.map((template) => {
+              const copy = suggestionRowCopy(template, page.installing);
+              return {
+                action: {
+                  hint: `${copy.action} ${copy.title}`,
+                  label: copy.action,
+                  onPress: () => page.install(template),
+                },
+                key: copy.key,
+                sub: copy.sub,
+                title: copy.title,
+              };
+            })}
+          />
+          <NoteBlock text={SUGGESTIONS_NOTE} />
+        </>
+      ) : null}
+    </View>
+  );
+
+  if (state === "empty")
+    return (
+      <>
+        <EmptyBlock
+          {...(page.templates.length > 0
+            ? { action: { label: EMPTY_ACTION, onPress: onBrowseTemplates } }
+            : {})}
+          body={EMPTY_BODY}
+          routine
+          title={EMPTY_TITLE}
+        />
+        {suggestions}
+      </>
+    );
+
+  const full = state === "full";
+  const shown = full
+    ? copies.filter((copy) => matchesFilter(copy.status, page.filter))
+    : copies;
+  const automationRows: RowsBlockRow[] = shown.map((copy) => ({
+    action: {
+      hint: `${copy.action} ${copy.title}`,
+      label: copy.action,
+      onPress: () =>
+        copy.act === "resume"
+          ? page.setEnabled(copy.ref, true)
+          : onOpen(copy.ref),
+    },
+    key: copy.key,
+    meta: copy.meta,
+    net: copy.net,
+    sub: copy.sub,
+    title: copy.title,
+    // The pause write, kept where the trailing slot could not hold it.
+    ...(copy.act === "open"
+      ? {
+          children: (
+            <View style={styles.pause}>
+              <Button
+                label="Pause"
+                onPress={() => page.setEnabled(copy.ref, false)}
+                variant="secondary"
+              />
+            </View>
+          ),
+        }
+      : {}),
+  }));
+  const runs = page.runs.slice(0, RECENT_CAP);
+
+  return (
+    <>
+      {full ? (
+        <ChipsBlock
+          accessibilityLabel="Filter automations"
+          chips={filterChips(page.filter).map((chip) => ({
+            id: chip.key,
+            label: chip.label,
+            on: chip.on,
+            onPress: () => page.setFilter(chip.key),
+          }))}
+        />
+      ) : null}
+      <SectionBlock
+        label="Automations"
+        meta={
+          shown.length === copies.length
+            ? countSentence(copies)
+            : showingSentence(shown.length, copies.length)
+        }
+      />
+      {automationRows.length > 0 ? (
+        <RowsBlock accessibilityLabel="Automations" rows={automationRows} />
+      ) : (
+        <NoteBlock text="No automation is in that state right now." />
+      )}
+
+      <SectionBlock
+        label="Recent runs across everything"
+        meta={String(runs.length)}
+      />
+      {runs.length > 0 ? (
+        <RowsBlock
+          accessibilityLabel="Recent runs"
+          rows={runs.map((run) => {
+            const copy = runRowCopy(run, page.now);
+            return {
+              action: {
+                hint: `View ${copy.title}`,
+                label: "View",
+                onPress: () => onOpen(copy.ref),
+              },
+              key: copy.key,
+              meta: copy.meta,
+              net: copy.net,
+              sub: copy.sub,
+              title: copy.title,
+            };
+          })}
+        />
+      ) : (
+        <NoteBlock text={NO_RUNS_NOTE} />
+      )}
+      {suggestions}
+    </>
+  );
+}
+
+function AutomationsPlace({
   navigation,
 }: AutomationsScreenProps): React.JSX.Element {
   const { colors } = useTheme();
-  const insets = useSafeAreaInsets();
-  const styles = useMemo(() => makeStyles(colors), [colors]);
-  const { state, refreshing, refresh, toggle } = useAutomations();
-  const [templates, setTemplates] = useState<AutomationTemplate[]>([]);
-  const [installing, setInstalling] = useState<string | null>(null);
+  const page = useAutomations();
+  const scroll = useRef<ScrollView>(null);
+  // Where the suggestions section starts, so the quiet verb can take the
+  // member to the catalogue that is already on this page.
+  const suggestionsY = useRef(0);
+  const ink = useMemo(
+    () => ({
+      error: { color: colors.net },
+      safe: { backgroundColor: colors.bg },
+    }),
+    [colors]
+  );
 
-  useEffect(() => {
-    let mounted = true;
-    void listAutomationTemplates()
-      .then((rows) => {
-        if (mounted) setTemplates(rows);
-      })
-      .catch(() => {
-        if (mounted) setTemplates([]);
-      });
-    return () => {
-      mounted = false;
-    };
+  const open = useCallback(
+    (ref: string): void => {
+      // `push`, not `navigate`: the thread is a card ON TOP of the list, so
+      // leaving it returns here rather than to Home.
+      navigation.push("Automations", { automationRef: ref });
+    },
+    [navigation]
+  );
+
+  const browseTemplates = useCallback((): void => {
+    const view = scroll.current;
+    if (view) view.scrollTo({ animated: true, y: suggestionsY.current });
   }, []);
 
-  const install = useCallback(
-    (template: AutomationTemplate): void => {
-      if (installing) return;
-      setInstalling(template.id);
-      void cloneAutomationTemplate(template.id)
-        .then(async () => {
-          await refresh();
-          showToast({
-            message: `${template.name} is ready to use.`,
-            tone: "accent",
-          });
-        })
-        .catch((error: unknown) => {
-          showToast({
-            message: `Could not add automation: ${error instanceof Error ? error.message : "Please try again."}`,
-            tone: "danger",
-          });
-        })
-        .finally(() => setInstalling(null));
-    },
-    [installing, refresh]
-  );
+  const onSuggestionsLayout = useCallback((event: LayoutChangeEvent): void => {
+    suggestionsY.current = event.nativeEvent.layout.y;
+  }, []);
 
-  const rows = useMemo(
-    () => (state.kind === "ready" ? state.rows : []),
-    [state]
+  const copies = useMemo(
+    () =>
+      page.rows.map((row) =>
+        automationRowCopy(row, {
+          known: page.known,
+          now: page.now,
+          runs: page.runs,
+        })
+      ),
+    [page.rows, page.known, page.now, page.runs]
   );
-
-  const renderRow = useCallback(
-    ({ item }: ListRenderItemInfo<AutomationRow>): React.JSX.Element => (
-      <AutomationCard
-        row={item}
-        focused={false}
-        toggle={toggle}
-        styles={styles}
-        colors={colors}
-      />
-    ),
-    [colors, styles, toggle]
+  const health = healthLineFor(
+    page.state,
+    automationsHealth(copies, page.runs, page.now)
   );
+  const worst = worstFailure(copies);
 
   return (
-    <SafeAreaView style={styles.safe} edges={["top"]}>
-      <View style={styles.header}>
-        <HomeKey variant="leave" onPress={() => navigation.goBack()} />
-        <View style={styles.headerText}>
-          <Text style={styles.title}>Automations</Text>
-          <Text style={styles.subtitle}>
-            Conversations that run on their own
-          </Text>
-        </View>
-      </View>
-
-      <FlatList
-        data={rows}
-        keyExtractor={automationKey}
-        contentContainerStyle={[
-          styles.list,
-          // The back key now lives in the header, so the list only needs to clear
-          // the home-indicator safe area.
-          { paddingBottom: insets.bottom + spacing[4] },
-        ]}
-        refreshControl={
-          <RefreshControl
-            refreshing={refreshing}
-            onRefresh={() => void refresh()}
-            tintColor={colors.textFaint}
-          />
-        }
-        ListEmptyComponent={
-          <EmptyState state={state} styles={styles} colors={colors} />
-        }
-        ListFooterComponent={
-          templates.length > 0 && state.kind === "ready" ? (
-            <AutomationGallery
-              templates={templates}
-              installing={installing}
-              onInstall={install}
-              styles={styles}
-              colors={colors}
+    <TopSafeArea edges={["top"]} style={[styles.safe, ink.safe]}>
+      <View style={styles.page}>
+        <View style={styles.head}>
+          <HomeKey onPress={() => navigation.goBack()} variant="leave" />
+          <View style={styles.headBar}>
+            {/* No filled commit — see the file header. The quiet verb follows
+                the reference's gating (hidden while loading), and is withheld
+                on error too, where the section it scrolls to is not drawn. */}
+            <PlaceHeader
+              title="Automations"
+              {...(page.templates.length > 0 &&
+              page.state !== "loading" &&
+              page.state !== "error"
+                ? {
+                    secondary: { label: "Templates", onPress: browseTemplates },
+                  }
+                : {})}
             />
-          ) : null
-        }
-        // No getItemLayout and no windowing overrides: a vault holds a handful
-        // of automations, and each card's height varies with the optional
-        // description (up to 3 lines) and the focused banner.
-        renderItem={renderRow}
-      />
-    </SafeAreaView>
-  );
-}
-
-// An automation's `ref` is its vault-unique address, so it is already the
-// stable row identity.
-const automationKey = (row: AutomationRow): string => row.ref;
-
-type Styles = ReturnType<typeof makeStyles>;
-type Colors = ReturnType<typeof useTheme>["colors"];
-
-function AutomationGallery({
-  templates,
-  installing,
-  onInstall,
-  styles,
-  colors,
-}: {
-  templates: AutomationTemplate[];
-  installing: string | null;
-  onInstall: (template: AutomationTemplate) => void;
-  styles: Styles;
-  colors: Colors;
-}): React.JSX.Element {
-  return (
-    <View style={styles.gallery} accessibilityRole="summary">
-      <View style={styles.galleryHead}>
-        <Text style={styles.galleryTitle}>Starter gallery</Text>
-        <Text style={styles.gallerySubtitle}>
-          Cross-app workflows you can add to this vault
-        </Text>
-      </View>
-      {templates.map((template) => {
-        const busy = installing === template.id;
-        return (
-          <View key={template.id} style={styles.templateCard}>
-            <View style={styles.templateIcon} accessibilityElementsHidden>
-              <Icon name="zap" size={16} color={colors.accent} />
-            </View>
-            <View style={styles.templateCopy}>
-              <Text style={styles.templateName}>{template.name}</Text>
-              <Text style={styles.templateDesc} numberOfLines={3}>
-                {template.desc}
-              </Text>
-              {template.triggerLabel ? (
-                <Text style={styles.templateTrigger}>
-                  {template.triggerLabel}
-                </Text>
-              ) : null}
-            </View>
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel={`Add ${template.name}`}
-              accessibilityState={{ busy, disabled: installing !== null }}
-              disabled={installing !== null}
-              onPress={() => onInstall(template)}
-              style={[styles.addBtn, busy && styles.dim]}
-            >
-              <Text style={styles.addBtnText}>{busy ? "Adding…" : "Add"}</Text>
-            </Pressable>
           </View>
-        );
-      })}
-    </View>
-  );
-}
-
-function EmptyState({
-  state,
-  styles,
-  colors,
-}: {
-  state: AutomationsState;
-  styles: Styles;
-  colors: Colors;
-}): React.JSX.Element {
-  if (state.kind === "loading") {
-    return (
-      <View style={styles.emptyWrap}>
-        <Text style={styles.emptyCopy}>Opening your automations…</Text>
-      </View>
-    );
-  }
-  if (state.kind === "no-gateway") {
-    return (
-      <View style={styles.emptyWrap}>
-        <Icon name="zap-off" size={30} color={colors.accent} />
-        <Text style={styles.emptyTitle}>Not connected</Text>
-        <Text style={styles.emptyCopy}>
-          Connect your desktop to see your automations and run them from here.
-        </Text>
-      </View>
-    );
-  }
-  if (state.kind === "error") {
-    return (
-      <View style={styles.emptyWrap}>
-        <Icon name="alert-circle" size={30} color={colors.accent} />
-        <Text style={styles.emptyTitle}>Could not load automations</Text>
-        <Text style={styles.emptyCopy}>{state.message}</Text>
-        <Text style={styles.emptyHint}>Pull to refresh to retry.</Text>
-      </View>
-    );
-  }
-  // ready + no rows
-  return (
-    <View style={styles.emptyWrap}>
-      <Icon name="zap" size={30} color={colors.accent} />
-      <Text style={styles.emptyTitle}>No automations yet</Text>
-      <Text style={styles.emptyCopy}>
-        An automation is a saved conversation that fires on a trigger. Pick a
-        starter below or create one on desktop.
-      </Text>
-    </View>
-  );
-}
-
-type RunState = "idle" | "running" | "started";
-
-const AutomationCard = memo(
-  ({
-    row,
-    focused,
-    toggle,
-    styles,
-    colors,
-  }: {
-    row: AutomationRow;
-    focused: boolean;
-    toggle: (ref: string, next: boolean) => Promise<void>;
-    styles: Styles;
-    colors: Colors;
-  }): React.JSX.Element => {
-    const [run, setRun] = useState<RunState>("idle");
-    const [busyToggle, setBusyToggle] = useState(false);
-    // A transient "Started" state settles back to "idle" on a timer; the mounted
-    // ref keeps that late setState from firing after the card unmounts.
-    const mounted = useRef(true);
-    useEffect(() => {
-      mounted.current = true;
-      return () => {
-        mounted.current = false;
-      };
-    }, []);
-
-    const fire = useCallback((): void => {
-      if (run === "running") return;
-      setRun("running");
-      void runAutomation(row.ref)
-        .then(() => {
-          if (!mounted.current) return;
-          setRun("started");
-          setTimeout(() => {
-            if (mounted.current) setRun("idle");
-          }, 2200);
-        })
-        .catch((error: unknown) => {
-          if (mounted.current) setRun("idle");
-          showToast({
-            message: `Could not run: ${error instanceof Error ? error.message : "Please try again."}`,
-            tone: "danger",
-          });
-        });
-    }, [run, row.ref]);
-
-    const flip = useCallback((): void => {
-      if (busyToggle) return;
-      setBusyToggle(true);
-      void toggle(row.ref, !row.enabled)
-        .catch((error: unknown) => {
-          showToast({
-            message: `Could not update: ${error instanceof Error ? error.message : "The change was not saved."}`,
-            tone: "danger",
-          });
-        })
-        .finally(() => {
-          if (mounted.current) setBusyToggle(false);
-        });
-    }, [busyToggle, toggle, row.ref, row.enabled]);
-
-    const runLabel =
-      run === "running"
-        ? "Running…"
-        : run === "started"
-          ? "Started"
-          : "Run now";
-
-    return (
-      <View
-        style={[styles.card, focused && { borderColor: colors.accent }]}
-        accessibilityLabel={
-          focused ? `${row.name}, opened from Notifications` : undefined
-        }
-      >
-        <View style={styles.cardHead}>
-          <Text style={styles.cardName} numberOfLines={1}>
-            {row.name}
-          </Text>
-          <Pressable
-            accessibilityRole="switch"
-            accessibilityState={{ checked: row.enabled, disabled: busyToggle }}
-            accessibilityLabel={`${row.enabled ? "Disable" : "Enable"} ${row.name}`}
-            onPress={flip}
-            style={[
-              styles.togglePill,
-              {
-                backgroundColor: row.enabled ? colors.accent : colors.bgSunken,
-              },
-              busyToggle && styles.dim,
-            ]}
-          >
-            <Text
-              style={[
-                styles.toggleText,
-                { color: row.enabled ? colors.textInv : colors.textFaint },
-              ]}
-            >
-              {row.enabled ? "On" : "Off"}
-            </Text>
-          </Pressable>
         </View>
-
-        <View style={styles.scheduleRow}>
-          <Icon name="clock" size={12} color={colors.textFaint} />
-          <Text style={styles.scheduleText}>{row.scheduleLabel}</Text>
-        </View>
-
-        {focused ? (
-          <Text style={[styles.scheduleText, { color: colors.accent }]}>
-            Opened from Notifications
-          </Text>
-        ) : null}
-
-        {row.description ? (
-          <Text style={styles.description} numberOfLines={3}>
-            {row.description}
-          </Text>
-        ) : null}
-
-        <View style={styles.cardActions}>
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel={`Run ${row.name} now`}
-            onPress={fire}
-            disabled={run === "running"}
-            style={[
-              styles.runBtn,
-              { borderColor: colors.lineStrong },
-              run !== "idle" && styles.dim,
-            ]}
-          >
-            <Icon
-              name={run === "started" ? "check" : "play"}
-              size={13}
-              color={colors.accent}
+        <ScrollView
+          contentContainerStyle={styles.body}
+          keyboardShouldPersistTaps="handled"
+          ref={scroll}
+          refreshControl={
+            <RefreshControl
+              onRefresh={() => void page.refresh()}
+              refreshing={page.refreshing}
+              tintColor={colors.textFaint}
             />
-            <Text style={styles.runText}>{runLabel}</Text>
-          </Pressable>
-        </View>
+          }
+          style={styles.scroll}
+        >
+          {page.actionError ? (
+            <Text style={[styles.actionError, ink.error]}>
+              {page.actionError}
+            </Text>
+          ) : null}
+          <AutomationsBody
+            copies={copies}
+            onBrowseTemplates={browseTemplates}
+            onOpen={open}
+            onSuggestionsLayout={onSuggestionsLayout}
+            page={page}
+          />
+        </ScrollView>
       </View>
-    );
-  }
-);
-AutomationCard.displayName = "AutomationCard";
+      {/* Docked above the bottom edge: the line is standing chrome, not
+          content, so it does not scroll with the blocks. */}
+      <HealthLine
+        text={health.text}
+        {...(health.action && worst
+          ? { action: health.action, onAction: () => open(worst.ref) }
+          : {})}
+      />
+    </TopSafeArea>
+  );
+}

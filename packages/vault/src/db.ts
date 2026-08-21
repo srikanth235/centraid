@@ -35,6 +35,11 @@ import {
   sealKeyFileFor,
 } from "./schema/sealed.js";
 import {
+  ephemeralVaultIdentitySeed,
+  identityKeyFileFor,
+  loadOrCreateVaultIdentitySeed,
+} from "./schema/vault-identity.js";
+import {
   applyVaultFootprint,
   assertVaultFootprint,
 } from "./vault-footprint.js";
@@ -52,6 +57,13 @@ export interface VaultDb {
    * ciphertext only. In-memory vaults get an ephemeral key.
    */
   sealKey: Buffer;
+  /**
+   * The vault's own Ed25519 signing seed (issue #726 P1) — same custody as
+   * `sealKey`, minted at creation, loaded (or lazily minted) on every later
+   * open. In-memory vaults get an ephemeral seed. Derive the public key with
+   * `vaultIdentityPublicKey`; sign with `signWithVaultIdentity`.
+   */
+  identitySeed: Buffer;
   /** Host-selected custody store that owns the on-disk seal-key envelope. */
   keyStore?: KeyStore;
   /**
@@ -156,6 +168,8 @@ export interface OpenVaultOptions {
   keyStore?: KeyStore;
   /** Override the seal key (custody managed by the caller). */
   sealKey?: Buffer;
+  /** Override the identity seed (tests — a fixed keypair to assert against). */
+  identitySeed?: Buffer;
   /** Override the local blob tier (tests inject a MemoryBlobStore). */
   blobStore?: LocalBlobStore;
   /**
@@ -179,6 +193,28 @@ export interface OpenVaultOptions {
    * with no codec: the backstop simply doesn't run.
    */
   previewCodec?: PreviewCodec;
+  /**
+   * Host-injected loadable SQLite extensions for the CANONICAL vault handle
+   * (issue #721 E3), following the same injection precedent as `previewCodec`
+   * directly above: `packages/vault` is deliberately dependency-light and ships
+   * no native modules, so the gateway host owns the npm package that carries
+   * the platform binary (`sqlite-vec`) and hands in the loader.
+   *
+   * Called ONCE PER HANDLE, immediately after open — extension registration is
+   * connection-scoped, and a `DatabaseProvider` handle does not survive a vault
+   * switch, so there is nothing to reuse across opens.
+   *
+   * The hook MUST NOT throw for a platform where the extension is unavailable;
+   * it is expected to report that itself and return. A vault that cannot load
+   * a vector extension still opens and still searches — the query plane falls
+   * back to the exact JS cosine scan (`enrich/similarity.ts`). Derived data
+   * enriches, it never gates.
+   *
+   * Only the vault file gets this. `journal.db` carries receipts and the
+   * conversation ledger, no vectors, so widening its attack surface would buy
+   * nothing.
+   */
+  loadExtensions?: (db: DatabaseSync) => void;
   /** Host-wide pressure gate for detached replication and other maintenance. */
   shouldDeferBackgroundWork?: () => boolean;
   /** Hardware-profile cap for concurrent remote blob pushes. */
@@ -196,10 +232,22 @@ export interface OpenVaultOptions {
 function openFile(
   location: string,
   synchronous: "FULL" | "NORMAL" = "FULL",
-  footprint?: Partial<VaultFootprintBudget>
+  footprint?: Partial<VaultFootprintBudget>,
+  loadExtensions?: (db: DatabaseSync) => void
 ): DatabaseSync {
   try {
-    const db = new DatabaseSync(location);
+    // `allowExtension` must be decided at CONSTRUCTION — node:sqlite refuses
+    // `enableLoadExtension` on a handle opened without it — so the capability
+    // is granted only to handles a host actually wired a loader for (issue
+    // #721 E3). Every other handle keeps today's surface exactly.
+    const db = new DatabaseSync(
+      location,
+      loadExtensions ? { allowExtension: true } : {}
+    );
+    // Load BEFORE any pragma or migration: the loader's own SQL (a version
+    // probe) must run on a handle that is otherwise untouched, and a vec-backed
+    // query issued during migration would otherwise find no functions.
+    loadExtensions?.(db);
     db.exec("PRAGMA foreign_keys = ON");
     if (location !== ":memory:") {
       // auto_vacuum=INCREMENTAL bounds journal.db (issue #438): the ledger-band
@@ -295,7 +343,12 @@ export function openVaultDb(options: OpenVaultOptions = {}): VaultDb {
   let journal: DatabaseSync;
   let local: LocalBlobStore;
   if (dir === undefined) {
-    vault = openFile(":memory:", options.synchronous, footprint);
+    vault = openFile(
+      ":memory:",
+      options.synchronous,
+      footprint,
+      options.loadExtensions
+    );
     // The journal is the durable execution/receipt proof used to reclaim
     // vault-side invocation markers. It stays FULL even when an operator
     // explicitly relaxes the canonical vault to NORMAL.
@@ -306,7 +359,8 @@ export function openVaultDb(options: OpenVaultOptions = {}): VaultDb {
     vault = openFile(
       path.join(dir, "vault.db"),
       options.synchronous,
-      footprint
+      footprint,
+      options.loadExtensions
     );
     journal = openFile(path.join(dir, "journal.db"), "FULL", footprint);
     local = options.blobStore ?? new FsBlobStore(path.join(dir, "blobs"));
@@ -343,6 +397,16 @@ export function openVaultDb(options: OpenVaultOptions = {}): VaultDb {
     (dir === undefined
       ? ephemeralSealKey()
       : resolveSealKey(vault, sealKeyFileFor(dir), options.keyStore));
+  // The vault's own signing identity (issue #726 P1) — minted alongside the
+  // DEK, same custody, no fingerprint gate (see `vault-identity.ts`).
+  const identitySeed =
+    options.identitySeed ??
+    (dir === undefined
+      ? ephemeralVaultIdentitySeed()
+      : loadOrCreateVaultIdentitySeed(
+          identityKeyFileFor(dir),
+          options.keyStore
+        ));
   const blobContentKeys = new BlobContentKeyRegistry(vault, sealKey);
 
   // One remote per settings snapshot — rebuilt only when the bag changes.
@@ -481,6 +545,7 @@ export function openVaultDb(options: OpenVaultOptions = {}): VaultDb {
     journal,
     dir: dir ?? ":memory:",
     sealKey,
+    identitySeed,
     ...(options.keyStore ? { keyStore: options.keyStore } : {}),
     blobs: new BlobCustody(local, remoteTier, blobCache, (sha) =>
       desiredStoreForSha(vault, sha)

@@ -5,7 +5,7 @@
   "description": "Your notebooks as a projection of the vault: notes live in knowledge.note over canonical content_item bodies, nothing stored here. Creating, editing, filing, pinning and deleting all run through the knowledge domain's typed commands — consent-checked, contract-checked and receipted, with act consent granted per command. Revoke the grant and the app goes dark while the notes and receipts remain the owner's.",
   "version": "0.8.1",
   "iconKey": "Book",
-  "colorKey": "forest",
+  "colorKey": "slate",
   "vault": {
     "purpose": "dpv:ServiceProvision",
     "why": "Shows and manages your notes and notebooks.",
@@ -66,7 +66,7 @@
       },
       {
         "schema": "media",
-        "table": "media_asset",
+        "table": "asset",
         "verbs": "read"
       },
       {
@@ -814,26 +814,6 @@
   ],
   "knobs": [
     {
-      "key": "appFont",
-      "label": "Font",
-      "type": "segmented",
-      "default": "sans",
-      "options": [
-        {
-          "value": "sans",
-          "label": "Sans"
-        },
-        {
-          "value": "serif",
-          "label": "Serif"
-        },
-        {
-          "value": "mono",
-          "label": "Mono"
-        }
-      ]
-    },
-    {
       "key": "appWidth",
       "label": "Width",
       "type": "segmented",
@@ -897,5 +877,11 @@
         }
       ]
     }
-  ]
+  ],
+  "seats": {
+    "byteBearing": true,
+    "originActs": ["capture", "voice"],
+    "disabledOn": [],
+    "northStar": "apple-notes"
+  }
 }

@@ -29,6 +29,7 @@ import {
   alpnBytes,
   encodeHeaderFrame,
   PAIR_ALPN,
+  PEER_LINK_ALPN,
   readBody,
   readHeaderFrame,
   sanitizeHeaders,
@@ -94,6 +95,12 @@ export interface TunnelClient {
   ) => Promise<GatewayPairResponse>;
   /** Dial the desktop's/gateway's tunnel ALPN. */
   connect: (ticket: string) => Promise<Connection>;
+  /**
+   * Dial another GATEWAY's peer plane (`centraid/gw-link/1`, issue #726 P3).
+   * Requests over this connection reach `/centraid/_peer/*` and nothing else,
+   * and are answered as typed states — the caller is protocol code, not a UI.
+   */
+  connectPeer: (ticket: string) => Promise<Connection>;
   close: () => Promise<void>;
 }
 
@@ -137,6 +144,10 @@ export async function createTunnelClient(
     connect: async (ticket) => {
       const addr = iroh.EndpointTicket.fromString(ticket).endpointAddr();
       return await endpoint.connect(addr, alpnBytes(TUNNEL_ALPN));
+    },
+    connectPeer: async (ticket) => {
+      const addr = iroh.EndpointTicket.fromString(ticket).endpointAddr();
+      return await endpoint.connect(addr, alpnBytes(PEER_LINK_ALPN));
     },
     close: () => endpoint.close(),
   };

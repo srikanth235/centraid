@@ -3,9 +3,9 @@
   "id": "photos",
   "name": "Photos",
   "description": "Your photo library as a projection of the personal vault: the meaning — assets, albums, captions, capture times — is owned in the vault, while the bytes are rented behind each content item's content_uri. Uploading, captioning, deleting and organizing into albums all run through typed media commands — consent-checked, receipted, and deduped on identical bytes. No data of its own — revoke the grant and the app goes dark while the library stays the owner's.",
-  "version": "0.4.0",
+  "version": "0.4.1",
   "iconKey": "Camera",
-  "colorKey": "ochre",
+  "colorKey": "amber",
   "vault": {
     "purpose": "dpv:ServiceProvision",
     "why": "Shows your photo library and albums, and lets you upload, caption and organize.",
@@ -18,10 +18,13 @@
       { "schema": "core", "table": "concept_scheme", "verbs": "read" },
       { "schema": "core", "table": "collection", "verbs": "read" },
       { "schema": "core", "table": "collection_entry", "verbs": "read" },
+      { "schema": "social", "table": "circle", "verbs": "read" },
+      { "schema": "social", "table": "circle_member", "verbs": "read" },
       { "schema": "media", "table": "add_asset", "verbs": "act" },
       { "schema": "media", "table": "update_asset", "verbs": "act" },
       { "schema": "media", "table": "delete_asset", "verbs": "act" },
       { "schema": "media", "table": "restore_asset", "verbs": "act" },
+      { "schema": "media", "table": "purge_asset", "verbs": "act" },
       { "schema": "media", "table": "create_album", "verbs": "act" },
       { "schema": "media", "table": "rename_album", "verbs": "act" },
       { "schema": "media", "table": "set_album_cover", "verbs": "act" },
@@ -30,16 +33,20 @@
       { "schema": "media", "table": "add_to_album", "verbs": "act" },
       { "schema": "media", "table": "remove_from_album", "verbs": "act" },
       { "schema": "media", "table": "face_region", "verbs": "read" },
+      { "schema": "media", "table": "face_cluster", "verbs": "read" },
+      { "schema": "media", "table": "memory", "verbs": "read" },
+      { "schema": "media", "table": "memory_member", "verbs": "read" },
       { "schema": "core", "table": "party", "verbs": "read" },
-      { "schema": "media", "table": "confirm_face", "verbs": "act" },
-      { "schema": "media", "table": "reject_face", "verbs": "act" },
+      { "schema": "media", "table": "answer_face_proposal", "verbs": "act" },
       { "schema": "core", "table": "place", "verbs": "read" },
       { "schema": "media", "table": "set_asset_place", "verbs": "act" },
+      { "schema": "media", "table": "name_place", "verbs": "act" },
       { "schema": "core", "table": "tag_item", "verbs": "act" },
       { "schema": "core", "table": "untag_item", "verbs": "act" },
       { "schema": "enrich", "table": "policy", "verbs": "read" },
       { "schema": "enrich", "table": "request_enrichment", "verbs": "act" },
-      { "schema": "blob", "table": "custody_state", "verbs": "read" }
+      { "schema": "blob", "table": "custody_state", "verbs": "read" },
+      { "schema": "blob", "table": "custody_rollup", "verbs": "read" }
     ]
   },
   "actionSideEffect": "vault-write",
@@ -67,6 +74,12 @@
             "type": "string",
             "minLength": 1,
             "maxLength": 200
+          },
+          "source_asset_id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200,
+            "description": "The asset these bytes were derived from — what the editor stamps on the new photograph it saves beside the original (issue #711). Absent for anything that is not a derived copy."
           },
           "title": { "type": "string" },
           "width": { "type": "integer", "minimum": 1 },
@@ -101,7 +114,7 @@
     },
     {
       "name": "update-asset",
-      "description": "Recaption a photo, fix its capture time, or toggle its favorite heart through media.update_asset (the title lives on the content item; favorite lives on the asset).",
+      "description": "Recaption a photo, fix its capture time, or toggle its favorite heart or its archived flag through media.update_asset (the title lives on the content item; favorite and archived live on the asset — archiving hides a photo from the timeline without trashing it).",
       "confirmation": "none",
       "input": {
         "type": "object",
@@ -151,6 +164,28 @@
       "name": "restore",
       "description": "Bring a trashed photo (and its bytes) back through media.restore_asset; metadata survives intact, album membership does not. Restoring a live photo fails.",
       "confirmation": "none",
+      "input": {
+        "type": "object",
+        "properties": {
+          "asset_id": { "type": "string", "minLength": 1 }
+        },
+        "required": ["asset_id"],
+        "additionalProperties": false
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "status": { "type": "string" },
+          "output": { "type": "object" },
+          "reason": { "type": "string" }
+        }
+      },
+      "writes": []
+    },
+    {
+      "name": "purge-asset",
+      "description": "Delete one ALREADY-TRASHED photo forever through media.purge_asset. Irreversible: the asset row, its faces, tags, album membership and annotations go now, and the bytes are handed to the gateway's next storage sweep. A photo that is not in the trash is refused, as is one an edited copy still names as its source — purge the copy first.",
+      "confirmation": "required",
       "input": {
         "type": "object",
         "properties": {
@@ -329,38 +364,20 @@
       "writes": []
     },
     {
-      "name": "confirm-face",
-      "description": "Confirm one enricher face proposal as a person through media.confirm_face (issue #299) — the owner half of the propose-and-confirm loop.",
+      "name": "answer-face",
+      "description": "Answer one enricher face proposal through media.answer_face_proposal (issue #712) — one verb, three answers: confirm names the person, reject refuses it for good, dismiss keeps the face and deliberately leaves it unnamed. Replaces confirm-face/reject-face, which between them could not express an answer that finishes a review queue.",
       "confirmation": "none",
       "input": {
         "type": "object",
         "properties": {
           "region_id": { "type": "string", "minLength": 1 },
+          "answer": {
+            "type": "string",
+            "enum": ["confirm", "reject", "dismiss"]
+          },
           "party_id": { "type": "string", "minLength": 1 }
         },
-        "required": ["region_id", "party_id"],
-        "additionalProperties": false
-      },
-      "output": {
-        "type": "object",
-        "properties": {
-          "status": { "type": "string" },
-          "output": { "type": "object" },
-          "reason": { "type": "string" }
-        }
-      },
-      "writes": []
-    },
-    {
-      "name": "reject-face",
-      "description": "Reject one enricher face proposal through media.reject_face (issue #299); the derived region row deletes and can always re-derive.",
-      "confirmation": "none",
-      "input": {
-        "type": "object",
-        "properties": {
-          "region_id": { "type": "string", "minLength": 1 }
-        },
-        "required": ["region_id"],
+        "required": ["region_id", "answer"],
         "additionalProperties": false
       },
       "output": {
@@ -384,6 +401,33 @@
           "place_id": { "type": "string", "minLength": 1 }
         },
         "required": ["asset_id"],
+        "additionalProperties": false
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "status": { "type": "string" },
+          "output": { "type": "object" },
+          "reason": { "type": "string" }
+        }
+      },
+      "writes": []
+    },
+    {
+      "name": "name-place",
+      "description": "Name a place through media.name_place (issue #816) — the member's own name for somewhere the vault knows only as a coordinate, plus an optional kind ('home' is what anchors a relative phrase elsewhere). Writes core.place.name only; the gazetteer's derived address survives a rename.",
+      "confirmation": "none",
+      "input": {
+        "type": "object",
+        "properties": {
+          "place_id": { "type": "string", "minLength": 1 },
+          "name": { "type": "string", "minLength": 1, "maxLength": 120 },
+          "kind": {
+            "type": "string",
+            "enum": ["home", "work", "venue", "city", "region", "other"]
+          }
+        },
+        "required": ["place_id", "name"],
         "additionalProperties": false
       },
       "output": {
@@ -466,6 +510,23 @@
   ],
   "queries": [
     {
+      "name": "storage",
+      "description": "The whole library's byte custody, as the gateway's standing blob sweep counted it (blob.custody_rollup): per-bucket counts and bytes for the five custody states, plus `freeable` (locally resident originals with a proved copy elsewhere) and `local-unproven` (locally resident originals with no such proof, which no surface may offer to release). Seven small rows — the aggregate the bounded library window cannot give, and which no app can compute for itself because local-CAS presence is a filesystem fact. `computedAt` is null until the sweep has run, and must be rendered as \u201cnot counted yet\u201d rather than as zeroes.",
+      "input": {
+        "type": "object",
+        "properties": {},
+        "additionalProperties": false
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "rollup": { "type": "object" },
+          "vaultDenied": { "type": "object" },
+          "error": { "type": "string" }
+        }
+      }
+    },
+    {
       "name": "library",
       "description": "A bounded recent window of live media assets (newest by captured_at) with their content items' content_uri and media_type plus the albums they belong to — never a whole-table pull; trashed assets ride separately (newest 200) with their days-until-purge, and `truncated` says older photos exist beyond the window. Issue #352 phase 3/4: each asset also carries `place`, `tags` and `custody_state`; `places` is the full known place list. Issue #599: `before` is a keyset cursor (only assets captured strictly earlier), and `tail` reports the oldest timestamp this page reached — pass it back as the next `before`.",
       "input": {
@@ -518,6 +579,43 @@
       }
     },
     {
+      "name": "face-queue",
+      "description": "The Face review surface's vault-wide queue (issue #711): one ordered page of unconfirmed media.face_region proposals with a match count (never a percentage — README.md:285), first-seen capture date, and the source photograph, plus confirmed/unmatched totals for the status line.",
+      "input": {
+        "type": "object",
+        "properties": {},
+        "additionalProperties": false
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "queue": { "type": "array" },
+          "unmatchedTotal": { "type": "number" },
+          "confirmedTotal": { "type": "number" },
+          "people": { "type": "array" },
+          "denied": { "type": "boolean" }
+        }
+      }
+    },
+    {
+      "name": "people",
+      "description": "The People shelf's roster: every person confirmed on a face (with how many photographs carry them and which ones) alongside the unconfirmed face proposals sitting next to them, grouped by candidate identity where the enricher offered one and never carrying a name — plus the same vault-wide unmatched count queries/face-queue.ts derives, so the shelf's pending note needs no second read.",
+      "input": {
+        "type": "object",
+        "properties": {},
+        "additionalProperties": false
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "people": { "type": "array" },
+          "proposals": { "type": "array" },
+          "unmatchedTotal": { "type": "number" },
+          "vaultDenied": { "type": "object" }
+        }
+      }
+    },
+    {
       "name": "search",
       "description": "Title/caption search over the whole live library via FTS5 (issue #352) — not just the loaded window: matches core.content_item titles, joins albums/favorite the same way the library query does, and returns rows shaped for the same grid.",
       "input": {
@@ -552,7 +650,7 @@
     },
     {
       "name": "enrichment-status",
-      "description": "Whether face-proposer enrichment is enabled for this vault (issue #352 phase 3/4): reads enrich.policy for the photos domain. `tier` is 'off' | 'local' | 'model'.",
+      "description": "Whether face enrichment is enabled for this vault (issue #352 phase 3/4): reads enrich.policy for the photos domain. `tier` is 'off' | 'device' | 'gateway' (issue #712 C5).",
       "input": {
         "type": "object",
         "additionalProperties": false
@@ -567,17 +665,6 @@
     }
   ],
   "knobs": [
-    {
-      "key": "appFont",
-      "label": "Font",
-      "type": "segmented",
-      "default": "sans",
-      "options": [
-        { "value": "sans", "label": "Sans" },
-        { "value": "serif", "label": "Serif" },
-        { "value": "mono", "label": "Mono" }
-      ]
-    },
     {
       "key": "appWidth",
       "label": "Width",
@@ -611,5 +698,11 @@
         { "value": "hide", "label": "Hide" }
       ]
     }
-  ]
+  ],
+  "seats": {
+    "byteBearing": true,
+    "originActs": ["camera"],
+    "disabledOn": [],
+    "northStar": "google-photos"
+  }
 }

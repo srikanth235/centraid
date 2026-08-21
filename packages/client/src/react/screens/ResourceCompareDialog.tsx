@@ -94,8 +94,7 @@ export default function ResourceCompareDialog({
           <div className={styles.headText}>
             <h3 className={styles.title}>Compare resource modes</h3>
             <p className={styles.sub}>
-              What each mode grants the gateway’s background work. Foreground
-              chat and apps always come first.
+              What each mode grants the gateway’s background work.
             </p>
           </div>
           <button

@@ -1,3 +1,4 @@
+// governance: allow-repo-hygiene file-size-limit — one flat glyph registry, on the same ground roles.ts is waived: it is a normative TABLE, and every consumer (desktop renderer, mobile <Path>, the icon resolver) reads the whole map. A split would put half the product's marks in a second file with no rule for which half, and a mark landing in the wrong half is a lookup that silently returns nothing.
 // Lucide-style icons as raw SVG path data, viewBox 24x24.
 // Each entry is an ordered list of `<path>` definitions. Consumers either
 // wrap them in an SVG string (desktop renderer) or a react-native-svg
@@ -6,6 +7,14 @@
 export interface IconPath {
   d: string;
   fill?: "currentColor";
+  /** `fill-rule="evenodd"` — the knockout rule the handoff brief's app-icon
+   *  silhouette contract specifies ("App icons": identity lives in the
+   *  primary silhouette as evenodd knockouts, so the container tint reads as
+   *  negative space). No shipped icon sets this yet (see
+   *  icons-contract.test.ts's app-icon silhouette suite) — it exists so a
+   *  future filled compound mark has somewhere real to declare it, rendered
+   *  by `pathMarkup` below the moment it does. */
+  fillRule?: "evenodd";
 }
 
 // Defined as `as const` so the keys narrow to a literal union for IconName,
@@ -97,6 +106,18 @@ const ICON_DATA = {
     { d: "M11 18h2" },
   ],
   Monitor: [{ d: "M3 4h18v12H3z" }, { d: "M9 20h6M12 16v4" }],
+  // A DESK MACHINE AND A HANDSET, not one screen. `Monitor` is a single
+  // display, and the Devices destination lists every device paired to the
+  // vault — a phone, a laptop, a tablet. One screen standing for a set of
+  // screens is the kind of near-miss that reads as correct until you count
+  // the things on the page it opens.
+  Devices: [
+    { d: "M9 17H4a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1h13a1 1 0 0 1 1 1v3" },
+    {
+      d: "M14 11h6a1 1 0 0 1 1 1v8a1 1 0 0 1-1 1h-6a1 1 0 0 1-1-1v-8a1 1 0 0 1 1-1z",
+    },
+    { d: "M7 21h4" },
+  ],
   Command: [
     {
       d: "M9 7.5A2.5 2.5 0 1 0 6.5 10H10v4H6.5A2.5 2.5 0 1 0 9 16.5V13h6v3.5A2.5 2.5 0 1 0 17.5 14H14v-4h3.5A2.5 2.5 0 1 0 15 7.5V11H9z",
@@ -122,6 +143,15 @@ const ICON_DATA = {
     {
       d: "M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z",
     },
+  ],
+  // STORED RECORDS, not stored files. The Data destination is the vault's
+  // structured store — rows a query answers from — and `Folder` is the mark
+  // this product already spends on documents you filed yourself. Reusing it
+  // here made two different destinations wear one glyph.
+  Database: [
+    { d: "M12 3c4.4 0 8 1.3 8 3s-3.6 3-8 3-8-1.3-8-3 3.6-3 8-3z" },
+    { d: "M4 6v6c0 1.7 3.6 3 8 3s8-1.3 8-3V6" },
+    { d: "M4 12v6c0 1.7 3.6 3 8 3s8-1.3 8-3v-6" },
   ],
   Paperclip: [
     {
@@ -358,9 +388,13 @@ const ICON_DATA = {
       d: "M20 11.5a7.5 7.5 0 0 1-8 7.5 8.5 8.5 0 0 1-4-.9L4 20l1.1-3.5A7.5 7.5 0 1 1 20 11.5z",
     },
   ],
+  // Symmetric about x=12, the box's centre line, which is also where the point
+  // at the bottom sits. The previous curve drew its lobes with their own centre
+  // at x=9.25 while keeping the point at 12, so the glyph leaned left and its
+  // right lobe collapsed into a notch — visible at every size.
   Heart: [
     {
-      d: "M12 20s-7-4.4-9.2-8.4C1.3 8.9 2.6 6 5.4 6c1.8 0 3 1 3.6 2 .6-1 1.8-2 3.6-2 2.8 0 4.1 2.9 2.6 5.6C19 15.6 12 20 12 20z",
+      d: "M12 20s-7-4.4-7-9.4A3.8 3.8 0 0 1 12 8a3.8 3.8 0 0 1 7 2.6c0 5-7 9.4-7 9.4z",
     },
   ],
   Pin: [{ d: "M9 4h6l-1 6 3 3v2H7v-2l3-3-1-6zM12 15v5" }],
@@ -370,6 +404,40 @@ const ICON_DATA = {
     { d: "M8 9h.01" },
   ],
   Grid: [{ d: "M3 3h7v7H3zM14 3h7v7h-7zM3 14h7v7H3zM14 14h7v7h-7z" }],
+  // A PRINTER: the paper going in above, the machine, the sheet coming out.
+  // Three subpaths and no fill, so it reads at 18px on the stage's near-black
+  // the same way it reads at 15px in a menu on paper.
+  Print: [
+    { d: "M7 8V4a1 1 0 0 1 1-1h8a1 1 0 0 1 1 1v4" },
+    {
+      d: "M7 18H5a2 2 0 0 1-2-2v-4a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v4a2 2 0 0 1-2 2h-2",
+    },
+    { d: "M7 14h10v6a1 1 0 0 1-1 1H8a1 1 0 0 1-1-1z" },
+  ],
+  // A PAGE WITH ITS CORNER TURNED, and a table. The two glyphs a file browser
+  // needs to say what a row holds without spelling the kind out in three
+  // capital letters. `Archive` is a box and `Grid` is four detached squares —
+  // neither reads as a document or as a sheet at 18px, which is why these are
+  // their own entries rather than a reuse.
+  FileText: [
+    { d: "M6 3h7l5 5v13a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1z" },
+    { d: "M13 3v5h5" },
+  ],
+  Table: [{ d: "M4 4h16v16H4z" }, { d: "M4 10h16M4 15h16M10 4v16" }],
+  // The row menu's remaining three. A drive's kebab names Open, Details and
+  // Tag among its verbs, and a menu where some items wear a glyph and others
+  // wear a gap reads as a menu with something missing.
+  OpenExternal: [
+    { d: "M14 4h6v6" },
+    { d: "M20 4 11 13" },
+    { d: "M18 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h5" },
+  ],
+  Tag: [{ d: "M4 11 11 4h8v8l-7 7z" }, { d: "M15.5 8.5h.01" }],
+  Info: [
+    { d: "M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0z" },
+    { d: "M12 11v5" },
+    { d: "M12 8h.01" },
+  ],
   Layers: [{ d: "m12 3 9 5-9 5-9-5 9-5zM3 12l9 5 9-5M3 16l9 5 9-5" }],
   Maximize: [{ d: "M8 3H3v5M16 3h5v5M8 21H3v-5M21 16v5h-5" }],
   List: [{ d: "M4 6h16M4 12h16M4 18h16" }],
@@ -414,6 +482,105 @@ const ICON_DATA = {
     { d: "M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0z" },
     { d: "m9 9 6 6M15 9l-6 6" },
   ],
+
+  // Photos v4 handoff (issue #711/#707, "New icon keys" — CHANGELOG v4 -
+  // Photos.md §B2): the shelves, the selection set and the viewer bar. Same
+  // contract as every other mark — single-tone stroke on a 24 grid, fill:
+  // none, round caps and joins; the caller sets stroke-width (1.6, 1.75 below
+  // 16px) and `aria-hidden` at render time. Lowercase keys match the
+  // handoff's own key *names* — the handoff itself calls this path data
+  // "placeholder stroke paths" (its "New icon keys this design needs" row),
+  // not final artwork. None of the ten shared keys (album, dupe, heart,
+  // info, person, place, removeFrom, restore, share, trash) is byte-for-byte
+  // identical to the handoff's path data. `heart` was a genuine bug — its
+  // lobes were drawn centred at x=9.25 while the bottom point sat at x=12,
+  // so the glyph leaned left and the right lobe collapsed into a notch — and
+  // has been replaced with the handoff's curve, which is symmetric about
+  // x=12. The other nine are a deliberate deviation, not an oversight:
+  //   - `trash` and `share` reuse this file's app-wide `Trash`/`Share`
+  //     artwork verbatim, so those glyphs look identical everywhere they
+  //     appear instead of drawing a second, different-looking version for
+  //     Photos alone.
+  //   - `restore` deliberately does NOT reuse the handoff's generic circular
+  //     undo-arrow: that arc shape is already `Reset`/`Refresh`/`History`
+  //     below, and a fourth near-identical circular arrow under yet another
+  //     name would be indistinguishable from those at a glance. It draws a
+  //     trash can with an up-arrow instead — unambiguous for "bring this
+  //     back from Recently Deleted."
+  //   - `place` keeps its pin with an explicit ring instead of the handoff's
+  //     pin, whose dot is a zero-length `M12 9.5v.01` — that only renders
+  //     because of round line-caps, a guarantee react-native-svg does not
+  //     make, so the handoff's own mark risks disappearing on mobile.
+  //   - `removeFrom` keeps a self-contained circle-minus. The handoff's is a
+  //     bare `M5 12h14` line with no circle; it is never actually wired to a
+  //     button in the mockup (it appears only in the handoff's own "new icon
+  //     keys" documentation row) and would read as nothing more than a
+  //     horizontal divider without a circular button chrome around it that
+  //     this codebase does not guarantee.
+  //   - `album`, `dupe`, `info` and `person` differ in path data and/or
+  //     subpath count (a photo-stack vs. a folder for `album`; a merged
+  //     line+dot vs. three separate subpaths for `info`) but render as the
+  //     same recognizable pictogram at 24px with no asymmetry or clipping.
+  //     `person` also matches this file's `User` glyph exactly, again for
+  //     cross-surface consistency rather than accident.
+  // None of this claims parity with the handoff's path data — only that
+  // each glyph reads correctly, and, where it deviates, why.
+  heart: [
+    {
+      d: "M12 20s-7-4.4-7-9.4A3.8 3.8 0 0 1 12 8a3.8 3.8 0 0 1 7 2.6c0 5-7 9.4-7 9.4z",
+    },
+  ],
+  album: [
+    { d: "M4 7h13v13a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1z" },
+    { d: "M7 4h13v13a1 1 0 0 1-1 1H8a1 1 0 0 1-1-1V4z" },
+  ],
+  place: [
+    { d: "M12 21s7-7.58 7-12a7 7 0 0 0-14 0c0 4.42 7 12 7 12z" },
+    { d: "M12 11.5a2.5 2.5 0 1 0 0-5 2.5 2.5 0 0 0 0 5z" },
+  ],
+  // Catalog automations use the Lucide name (`place-names` in index.json).
+  // Same pin as `place` — not Lucide's zero-length-dot MapPin, which
+  // react-native-svg may drop (see the `place` comment above).
+  MapPin: [
+    { d: "M12 21s7-7.58 7-12a7 7 0 0 0-14 0c0 4.42 7 12 7 12z" },
+    { d: "M12 11.5a2.5 2.5 0 1 0 0-5 2.5 2.5 0 0 0 0 5z" },
+  ],
+  person: [
+    { d: "M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8z" },
+    { d: "M4.5 20.5a7.5 7.5 0 0 1 15 0" },
+  ],
+  dupe: [
+    {
+      d: "M9 9h10a1 1 0 0 1 1 1v10a1 1 0 0 1-1 1H9a1 1 0 0 1-1-1V10a1 1 0 0 1 1-1z",
+    },
+    { d: "M5 15H4a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1h10a1 1 0 0 1 1 1v1" },
+  ],
+  trash: [
+    {
+      d: "M3 6h18M8 6V4a1 1 0 0 1 1-1h6a1 1 0 0 1 1 1v2M5 6l1 14a2 2 0 0 0 2 2h8a2 2 0 0 0 2-2l1-14M10 11v6M14 11v6",
+    },
+  ],
+  restore: [
+    {
+      d: "M4 7h16M6 7l1 12a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2l1-12M8 7V5a1 1 0 0 1 1-1h6a1 1 0 0 1 1 1v2",
+    },
+    { d: "M12 15V9M9 12l3-3 3 3" },
+  ],
+  add: [{ d: "M12 5v14M5 12h14" }],
+  share: [
+    { d: "M4 12v7a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-7" },
+    { d: "M16 6l-4-4-4 4M12 2v14" },
+  ],
+  download: [{ d: "M12 3v12m0 0 4-4m-4 4-4-4M5 21h14" }],
+  removeFrom: [
+    { d: "M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0z" },
+    { d: "M8 12h8" },
+  ],
+  info: [
+    { d: "M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0z" },
+    { d: "M12 16v-4M12 8h.01" },
+  ],
+  more: [{ d: "M6 12h.01M12 12h.01M18 12h.01" }],
 } as const;
 
 export type IconName = keyof typeof ICON_DATA;
@@ -448,16 +615,24 @@ export function iconForConcept(concept: IconConcept): IconName {
   return ICON_CONCEPTS[concept];
 }
 
+/** Markup for one path entry — the seam the app-icon silhouette contract
+ *  activates on: a path that declares `fillRule: "evenodd"` renders a real
+ *  `fill-rule="evenodd"` attribute, so a future filled compound mark is
+ *  enforceable on day one rather than needing a second pass through the
+ *  renderer later. Exported so the contract test can exercise it directly
+ *  without a shipped icon having to carry one first. */
+export function pathMarkup(iconPath: IconPath): string {
+  const fill =
+    iconPath.fill === "currentColor"
+      ? ' fill="currentColor" stroke="none"'
+      : "";
+  const fillRule =
+    iconPath.fillRule === "evenodd" ? ' fill-rule="evenodd"' : "";
+  return `<path d="${iconPath.d}"${fill}${fillRule}/>`;
+}
+
 export function iconPathMarkup(name: IconName): string {
-  return icons[name]
-    .map((path) => {
-      const fill =
-        path.fill === "currentColor"
-          ? ' fill="currentColor" stroke="none"'
-          : "";
-      return `<path d="${path.d}"${fill}/>`;
-    })
-    .join("");
+  return icons[name].map(pathMarkup).join("");
 }
 
 export function iconSvg(

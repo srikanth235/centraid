@@ -1,623 +1,77 @@
-/* Approvals page (issues #306/#308) — co-located styles for
-   ApprovalsScreen.tsx. Scoped by Vite CSS Modules. Mirrors the
-   InsightsScreen header/panel look: paper/ink tokens, 0.5px hairlines,
-   quiet color-mix hovers — no bespoke palette. */
+/* Notifications (issues #765, #815).
+ *
+ * The screen is assembled from the shared block kit (`ui/*Block`), so almost
+ * everything this module used to carry — the page header, the group heads, the
+ * row family, the notice tiles, the coloured decision accents — is gone rather
+ * than restyled: a screen that redraws a shared shape is how the six of them
+ * drifted apart in the first place. The v11 pass took the rest: the staged
+ * write's editor, its always-allow checkbox and its facts now belong to
+ * `ui/DecideBlock`, which is the block a decision IS.
+ *
+ * What is left is the two things no block owns: the DETAIL an activity row
+ * expands to, and the page's own vertical rhythm. Tokens only, logical
+ * properties only.
+ */
+
 .page {
-  max-width: 880px;
-  margin: 0 auto;
   display: flex;
   flex-direction: column;
-  gap: 26px;
+  padding-block-end: var(--sp-6);
 }
 
-/* Header — title cluster + a one-line count. */
-.head {
+/* ── Row detail (the RowsBlock `children` slot) ─────────────────────────── */
+
+.detailBody {
   display: flex;
   flex-direction: column;
-  gap: 6px;
-}
-.title {
-  display: flex;
-  align-items: center;
-  gap: 11px;
-}
-.titleIcon {
-  width: 30px;
-  height: 30px;
-  border-radius: 9px;
-  display: grid;
-  place-items: center;
-  color: var(--text);
-  background: linear-gradient(155deg, var(--accent-light), var(--accent-deep));
-}
-.title h1 {
-  margin: 0;
-  font-family: var(--font-sans);
-  font-weight: 600;
-  font-size: 25px;
-  letter-spacing: -0.02em;
-  color: var(--text);
-}
-.subtitle {
-  margin: 0;
-  font: var(--t-body);
-  font-size: var(--t-small-size);
-  color: var(--text-faint);
+  gap: var(--sp-3);
 }
 
-.groups {
+/* One strip of quiet verbs. A row's detail never carries a filled control:
+   the view's one commit belongs to the decision card that is open. */
+.detailActions {
   display: flex;
-  flex-direction: column;
-  gap: 26px;
-}
-
-.groupHead {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  margin-bottom: 10px;
-}
-.groupIcon {
-  display: inline-flex;
-  color: var(--text-faint);
-}
-.groupHead h2 {
-  margin: 0;
-  font-family: var(--font-sans);
-  font-weight: 600;
-  font-size: 14px;
-  letter-spacing: -0.01em;
-  color: var(--text);
-}
-.groupCount {
-  font-family: var(--font-mono);
-  font-size: 10.5px;
-  letter-spacing: 0.02em;
-  color: var(--text-ghost);
-  padding: 1px 6px;
-  border-radius: 999px;
-  border: 0.5px solid var(--line);
-}
-
-.list {
-  display: flex;
-  flex-direction: column;
-  border-radius: var(--r-xl);
-  border: 0.5px solid var(--line);
-  background: var(--bg-elev);
-  overflow: hidden;
-}
-.row {
-  border-bottom: 0.5px solid var(--line);
-}
-.row:last-child {
-  border-bottom: none;
-}
-.rowMain {
-  width: 100%;
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  padding: 12px 16px;
-  background: none;
-  border: none;
-  font: inherit;
-  color: inherit;
-  text-align: left;
-  cursor: pointer;
-}
-button.rowMain {
-  transition: background 0.12s ease;
-}
-button.rowMain:hover {
-  background: color-mix(in oklab, var(--text) 4%, transparent);
-}
-.row[data-expanded="true"] .rowMain {
-  background: color-mix(in oklab, var(--accent) 6%, transparent);
-}
-/* Deep-linked from an outbox notice (var(--text) D10): mark WHICH row the tap meant,
-   so landing in a list of similar sends is not a guess. */
-.row[data-focused="true"] {
-  box-shadow: inset 2px 0 0 0 var(--accent);
-}
-.rowIcon {
-  display: grid;
-  place-items: center;
-  width: 26px;
-  height: 26px;
-  border-radius: 8px;
-  flex: none;
-  color: var(--text-faint);
-  background: color-mix(in oklab, var(--text) 5%, transparent);
-}
-.warnIcon {
-  color: var(--danger);
-  background: color-mix(in oklab, var(--danger) 12%, transparent);
-}
-.rowBody {
-  flex: 1 1 auto;
-  min-width: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-}
-.rowTitle {
-  font-size: 13.5px;
-  font-weight: 600;
-  color: var(--text);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.rowSub {
-  font-size: var(--t-mono-size);
-  color: var(--text-faint);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-/* Parked row's caller line: WHO is asking, badge + display name inline
-   (issue: parked-invocation trust legibility — a raw id slug with no
-   caller-kind indicator gave the owner no way to tell app vs automation
-   vs assistant apart before approving a destructive command). */
-.rowSubCaller {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-}
-.rowMeta {
-  font-family: var(--font-mono);
-  font-size: 10.5px;
-  color: var(--text-ghost);
-  flex: none;
-}
-.inlineActions {
-  display: flex;
-  gap: 8px;
-  flex: none;
-  margin-left: 8px;
-}
-
-.detail {
-  padding: 4px 16px 16px 54px;
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-}
-.fields {
-  margin: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-.field {
-  display: grid;
-  grid-template-columns: 84px 1fr;
-  gap: 10px;
-  align-items: baseline;
-}
-.field dt {
-  margin: 0;
-  font-family: var(--font-mono);
-  font-size: 9.5px;
-  letter-spacing: 0.06em;
-  color: var(--text-ghost);
-  text-transform: uppercase;
-}
-.field dd {
-  margin: 0;
-  font-size: var(--t-small-size);
-  color: var(--text-soft);
-  white-space: pre-wrap;
-  word-break: break-word;
-}
-.detailNote {
-  margin: 0;
-  font-size: 12.5px;
-  color: var(--text-faint);
-  font-style: italic;
-}
-.editInput,
-.editTextarea {
-  width: 100%;
-  box-sizing: border-box;
-  padding: 6px 9px;
-  border-radius: 8px;
-  border: 0.5px solid var(--line);
-  background: var(--bg-sunken);
-  font-family: inherit;
-  font-size: 12.5px;
-  color: var(--text);
-}
-.editTextarea {
-  min-height: 76px;
-  resize: vertical;
-  line-height: 1.45;
-}
-.editInput:focus,
-.editTextarea:focus {
-  outline: none;
-  border-color: var(--accent);
-}
-.alwaysAllow {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  font-size: 12.5px;
-  color: var(--text-soft);
-}
-.editNote {
-  margin: 0;
-  font-size: 11.5px;
-  color: var(--text-ghost);
-}
-.inputPreview {
-  margin: 0;
-  padding: 10px 12px;
-  border-radius: 8px;
-  border: 0.5px solid var(--line);
-  background: var(--bg-sunken);
-  font-family: var(--font-mono);
-  font-size: 11.5px;
-  color: var(--text-soft);
-  white-space: pre-wrap;
-  word-break: break-word;
-  max-height: 180px;
-  overflow: auto;
-}
-.actions {
-  display: flex;
-  justify-content: flex-end;
-  gap: 8px;
-}
-.denyBtn {
-  color: var(--danger);
-}
-
-/* Standing grants — always rendered, own empty state. */
-.grantsSection {
-  padding-top: 4px;
-  border-top: 0.5px solid var(--line);
-}
-.grantsList {
-  display: flex;
-  flex-direction: column;
-  border-radius: var(--r-xl);
-  border: 0.5px solid var(--line);
-  background: var(--bg-elev);
-  overflow: hidden;
-}
-.grantRow {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 10px 16px;
-  border-bottom: 0.5px solid var(--line);
-  font-size: 12.5px;
-  color: var(--text-soft);
-}
-.grantRow:last-child {
-  border-bottom: none;
-}
-.grantActor {
-  font-weight: 600;
-  color: var(--text);
-}
-.grantVerb {
-  font-family: var(--font-mono);
-  font-size: var(--t-control-size);
-  color: var(--text-faint);
-}
-.grantTarget {
-  flex: 1 1 auto;
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  font-family: var(--font-mono);
-  font-size: var(--t-control-size);
-}
-.grantMeta {
-  font-family: var(--font-mono);
-  font-size: 10.5px;
-  color: var(--text-ghost);
-  flex: none;
-}
-.grantsEmpty {
-  margin: 10px 0 0;
-  font-size: 12.5px;
-  color: var(--text-ghost);
-}
-
-.notificationsFilters {
-  display: flex;
-  gap: 6px;
   flex-wrap: wrap;
-  margin: 0 0 20px;
-  padding: 0;
-  border: 0;
+  gap: var(--sp-2);
 }
-/* Notices are FLAT — transparent + one hairline — so the elevated decision
-   list above them reads as the heavier thing. Elevation arrives on hover
-   only. (`var(--bg-elev)` used to sit here; it is not a token.) */
-.noticeRow {
+
+/* ── Facts inside a row's detail ────────────────────────────────────────── */
+/* The same key/value geometry `PanelBlock` and `DecideBlock` use, at the row's
+   own indent — `--w-key-col` is the shared metric, so a fact list reads
+   identically wherever it lands. */
+
+.facts {
   display: flex;
-  align-items: center;
-  gap: 10px;
-  padding-left: 12px;
-  border: 0.5px solid var(--line);
-  border-radius: var(--r-lg);
-  background: transparent;
-  overflow: hidden;
-  transition: background 0.12s ease;
-}
-.noticeRow:hover {
-  background: var(--bg-sunken);
+  flex-direction: column;
+  gap: var(--sp-2);
+  margin: 0;
 }
 
-/* Correspondent identity tile — a palette hue derived from the source, so the
-   same automation/agent/app always presents the same colour + glyph.
-   Two rungs per hue, not one: `--notice-hue` is the FILL (the 18% wash) and
-   `--notice-ink` is the glyph on top of it. Painting the glyph with the fill
-   put `--c-amber` on an 18% `--c-amber` wash — 1.9:1, under even the 3:1
-   non-text floor. */
-.noticeTile {
-  display: grid;
-  place-items: center;
-  width: 27px;
-  height: 27px;
-  border-radius: 8px;
+.fact {
+  display: flex;
+  gap: var(--sp-3);
+}
+
+.factKey {
+  color: var(--text-faint);
   flex: none;
-  color: var(--notice-ink, var(--text-faint));
-  /* 12%, not the 18% this shipped at: the ink rung is solved for a 12% wash
-     of its own hue, and at 18% indigo and violet fall back under AA (4.44 /
-     4.49). Same normalisation #686 already applied to the state washes. */
-  background: color-mix(in oklab, var(--notice-hue) 12%, transparent);
-}
-.noticeTile[data-hue="amber"] {
-  --notice-hue: var(--c-amber);
-  --notice-ink: var(--c-amber-text);
-}
-.noticeTile[data-hue="forest"] {
-  --notice-hue: var(--c-forest);
-  --notice-ink: var(--c-forest-text);
-}
-.noticeTile[data-hue="indigo"] {
-  --notice-hue: var(--c-indigo);
-  --notice-ink: var(--c-indigo-text);
-}
-.noticeTile[data-hue="ochre"] {
-  --notice-hue: var(--c-ochre);
-  --notice-ink: var(--c-ochre-text);
-}
-.noticeTile[data-hue="rose"] {
-  --notice-hue: var(--c-rose);
-  --notice-ink: var(--c-rose-text);
-}
-.noticeTile[data-hue="slate"] {
-  --notice-hue: var(--c-slate);
-  --notice-ink: var(--c-slate-text);
-}
-.noticeTile[data-hue="teal"] {
-  --notice-hue: var(--c-teal);
-  --notice-ink: var(--c-teal-text);
-}
-.noticeTile[data-hue="violet"] {
-  --notice-hue: var(--c-violet);
-  --notice-ink: var(--c-violet-text);
+  font: var(--t-eyebrow);
+  inline-size: var(--w-key-col);
 }
 
-/* Unread: a 6px dot, not a coloured left rail (rails are off-system here).
-   "Mark read" in the row's actions is the textual half of the signal. */
-.unreadDot {
-  width: 6px;
-  height: 6px;
-  border-radius: 999px;
-  flex: none;
-  background: var(--accent);
-}
-
-/* Severity as a word. Amber on a light ground needs a darkened ink to stay
-   legible; the dark theme takes the raw hue back. */
-.severityPill {
-  display: inline-block;
-  margin-right: 6px;
-  padding: 0 6px;
-  border-radius: 999px;
-  font-size: var(--t-control-size);
-  font-weight: 500;
-  vertical-align: baseline;
-}
-.noticeRow[data-severity="high"] .severityPill {
-  color: color-mix(in oklab, var(--danger) 80%, var(--text));
-  background: color-mix(in oklab, var(--danger) 14%, transparent);
-}
-/* `--c-amber-text` is already solved per theme, so the hand-mixed light value
-   and the dark override it needed both collapse into the one rung. */
-.noticeRow[data-severity="warning"] .severityPill {
-  color: var(--c-amber-text);
-  background: color-mix(in oklab, var(--c-amber) 16%, transparent);
-}
-
-/* Failure-streak strip on a collapsed notice — one bar per attempt, capped. */
-.streak {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-}
-.streakOverflow {
-  font-family: var(--font-mono);
-  font-size: 10.5px;
-  color: var(--text-ghost);
-}
-.streakBars {
-  display: inline-flex;
-  align-items: flex-end;
-  gap: 2px;
-}
-.streakBar {
-  width: 3px;
-  height: 10px;
-  border-radius: 1px;
-  background: color-mix(in oklab, var(--text) 20%, transparent);
-}
-.noticeRow[data-severity="high"] .streakBar {
-  background: color-mix(in oklab, var(--danger) 55%, transparent);
-}
-.noticeRow[data-severity="warning"] .streakBar {
-  background: color-mix(in oklab, var(--c-amber) 60%, transparent);
-}
-.noticeBody {
-  display: grid;
+.factValue {
+  color: var(--text);
   flex: 1;
-  min-width: 0;
-  gap: 3px;
-  padding: 12px 14px 12px 0;
-  border: 0;
-  background: transparent;
-  color: inherit;
-  text-align: left;
-  cursor: pointer;
-}
-.noticeHeadline {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  min-width: 0;
-  font-size: var(--t-small-size);
-  font-weight: 600;
-  color: var(--text);
-}
-.noticeHeadlineText {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.noticeMeta,
-.noticeDetail {
-  font-size: 11.5px;
-  color: var(--text-ghost);
-}
-.noticeDetail {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.noticeActions {
-  display: flex;
-  gap: 4px;
-  flex: none;
-  padding-right: 10px;
+  font: var(--t-annot-label);
+  margin: 0;
+  min-inline-size: 0;
+  text-wrap: pretty;
+  word-break: break-word;
 }
 
-/* Recent activity (issue #552) — decision accents, risk rail, collapse ×N. */
-.activityHead {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  flex-wrap: wrap;
-}
-.activityHead .groupHead {
-  margin-bottom: 0;
-}
-.activityFilters {
-  display: inline-flex;
-  gap: 4px;
-  margin-bottom: 10px;
-}
-.filterChip {
-  font: inherit;
-  font-size: 11.5px;
-  padding: 3px 10px;
-  border-radius: 999px;
-  border: 0.5px solid var(--line);
-  background: transparent;
-  color: var(--text-faint);
-  cursor: pointer;
-}
-.filterChip[data-active="true"] {
-  background: color-mix(in oklab, var(--accent) 12%, transparent);
-  border-color: color-mix(in oklab, var(--accent) 40%, var(--line));
-  color: var(--text);
-}
-.activityRow {
-  position: relative;
-}
-.activityRow .rowMain {
-  padding-left: 16px;
-}
-.riskMarker {
-  position: absolute;
-  left: 0;
-  top: 10px;
-  bottom: 10px;
-  width: 3px;
-  border-radius: 0 var(--r-xs) var(--r-xs) 0;
-  background: color-mix(in oklab, var(--danger) 70%, var(--accent));
-}
-.decisionAllow .activityIcon {
-  color: color-mix(in oklab, var(--text) 90%, var(--text));
-  background: color-mix(in oklab, var(--text) 14%, transparent);
-}
-.decisionDeny .activityIcon {
-  color: color-mix(in oklab, var(--danger) 90%, var(--text));
-  background: color-mix(in oklab, var(--danger) 14%, transparent);
-}
-.decisionParked .activityIcon {
-  color: color-mix(in oklab, var(--text) 90%, var(--text));
-  background: color-mix(in oklab, var(--text) 14%, transparent);
-}
-.decisionBadge {
-  display: inline-block;
-  margin-left: 8px;
-  font-size: 10px;
-  font-weight: 600;
-  letter-spacing: 0.02em;
-  text-transform: uppercase;
-  padding: 1px 6px;
-  border-radius: 999px;
-  vertical-align: middle;
-  color: var(--text-faint);
-  border: 0.5px solid var(--line);
-  background: color-mix(in oklab, var(--text) 4%, transparent);
-}
-.decisionAllow .decisionBadge {
-  color: color-mix(in oklab, var(--text) 95%, var(--text));
-  border-color: color-mix(in oklab, var(--text) 35%, var(--line));
-  background: color-mix(in oklab, var(--text) 10%, transparent);
-}
-.decisionDeny .decisionBadge {
-  color: color-mix(in oklab, var(--danger) 95%, var(--text));
-  border-color: color-mix(in oklab, var(--danger) 35%, var(--line));
-  background: color-mix(in oklab, var(--danger) 10%, transparent);
-}
-.decisionParked .decisionBadge {
-  color: color-mix(in oklab, var(--text) 95%, var(--text));
-  border-color: color-mix(in oklab, var(--text) 35%, var(--line));
-  background: color-mix(in oklab, var(--text) 10%, transparent);
-}
-.countMarker {
-  display: inline-block;
-  margin-left: 6px;
-  font-family: var(--font-mono);
-  font-size: var(--t-control-size);
-  font-weight: 600;
-  color: var(--text-faint);
-  vertical-align: middle;
-}
-.attribution {
-  font-size: 11.5px;
-  color: var(--text-ghost);
-  font-style: italic;
-}
-.monoId {
-  font-family: var(--font-mono);
-  font-size: var(--t-control-size);
-  word-break: break-all;
-}
-.seeAllRow {
-  display: flex;
-  justify-content: center;
-  margin-top: 10px;
+.factValue[data-mono="true"] {
+  direction: var(--t-mono-direction);
+  font: var(--t-mono);
+  font-variant-numeric: var(--t-mono-numeric);
+  unicode-bidi: var(--t-mono-bidi);
 }

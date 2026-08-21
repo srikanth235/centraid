@@ -7,7 +7,7 @@ const ADMIN_TOKEN = "centraid-web-e2e-token";
 const GATEWAY_ENDPOINT_ID = "web-e2e-gateway";
 const GATEWAY_ENDPOINT_TICKET = "web-e2e-control-transport";
 
-test("boots as a PWA, establishes a cookie control session, and runs an isolated app", async ({
+test("boots as a PWA and establishes a cookie control session", async ({
   page,
 }) => {
   const gatewayResponses: Array<{ url: string; status: number }> = [];
@@ -52,17 +52,9 @@ test("boots as a PWA, establishes a cookie control session, and runs an isolated
           rememberDevice: true,
         })
       );
-      // The fixture app is published to the app store but never *installed*
-      // (no Home pin), so the shell classifies it as a DRAFT — and drafts,
-      // the builder preview, and Publish are all gated behind the
-      // `builderEnabled` dev flag (issue #434, default false). This flow
-      // exercises exactly those builder surfaces, so opt the harness in.
       localStorage.setItem(
         "centraid.web.v1.settings",
-        JSON.stringify({
-          onboardingCompletedAt: new Date().toISOString(),
-          builderEnabled: true,
-        })
+        JSON.stringify({ onboardingCompletedAt: new Date().toISOString() })
       );
     },
     {
@@ -91,10 +83,14 @@ test("boots as a PWA, establishes a cookie control session, and runs an isolated
     return { status: response.status, text: await response.text() };
   }, API_URL);
   expect(appsProbe.status, appsProbe.text).toBe(200);
-  expect(appsProbe.text).toContain("web-e2e");
+  // The proxied listing is the gateway's own, not a canned body: every vault
+  // mounts the eight bundled system apps, so `tasks` must be in it.
+  expect(appsProbe.text).toContain('"tasks"');
 
+  // Home is the content springboard (#708) — custom apps open via the command
+  // palette, not a library card on Home.
   await expect(
-    page.locator('[data-app-id="web-e2e"]'),
+    page.locator('nav[aria-label="Apps"]').first(),
     JSON.stringify(gatewayResponses, null, 2)
   ).toBeVisible();
   expect(
@@ -105,69 +101,25 @@ test("boots as a PWA, establishes a cookie control session, and runs an isolated
 
   const manifest = await page.request.get("/manifest.webmanifest");
   expect(manifest.ok()).toBeTruthy();
-  await expect(manifest.json()).resolves.toMatchObject({
-    share_target: {
-      action: "/?capture=shared",
-      method: "GET",
-      params: { text: "text", title: "title", url: "url" },
-    },
-    shortcuts: expect.arrayContaining([
-      expect.objectContaining({
-        name: "Quick capture",
-        url: "/?capture=shortcut",
-      }),
-    ]),
-  });
+  // Quick capture is retired on this seat — the assistant is the one place a
+  // stray thought goes, so the manifest declares neither a share target nor a
+  // capture shortcut and no `?capture=` URL opens anything.
+  const manifestBody = (await manifest.json()) as {
+    share_target?: unknown;
+    shortcuts?: Array<{ name?: string; url?: string }>;
+  };
+  expect(manifestBody.share_target).toBeUndefined();
+  expect(
+    (manifestBody.shortcuts ?? []).map((shortcut) => shortcut.name)
+  ).not.toContain("Quick capture");
+  expect(
+    (manifestBody.shortcuts ?? []).some((shortcut) =>
+      shortcut.url?.includes("capture")
+    )
+  ).toBe(false);
   await expect
     .poll(() =>
       page.evaluate(() => navigator.serviceWorker.controller !== null)
     )
     .toBe(true);
-
-  await page
-    .locator('[data-app-id="web-e2e"] [data-testid="app-tile"]')
-    .click();
-  const preview = page.frameLocator('iframe[title="App preview"]');
-  await expect(
-    preview.getByRole("heading", { name: "Web E2E App" })
-  ).toBeVisible();
-  await expect(preview.locator("#ready")).toHaveText("generated app ready");
-
-  const previewPing = await preview.locator("body").evaluate(async () => {
-    return window.centraid.read({ query: "ping", input: {} });
-  });
-  expect(previewPing).toEqual({ pong: true, surface: "web" });
-
-  await page.getByRole("button", { name: "Publish", exact: true }).click();
-  await expect(
-    page.getByText("Already up to date — added to Home.")
-  ).toBeVisible();
-  await page.getByRole("button", { name: "Home", exact: true }).click();
-  await expect(page.locator('[data-app-id="web-e2e"]').first()).toBeVisible();
-  await page
-    .locator('[data-app-id="web-e2e"] [data-testid="app-tile"]')
-    .first()
-    .click();
-  const app = page.frameLocator('iframe[title="app"]');
-  await expect(app.getByRole("heading", { name: "Web E2E App" })).toBeVisible();
-  await expect(app.locator("#ready")).toHaveText("generated app ready");
-
-  const ping = await app.locator("body").evaluate(async () => {
-    return window.centraid.read({ query: "ping", input: {} });
-  });
-  expect(ping).toEqual({ pong: true, surface: "web" });
-
-  const frame = page
-    .frames()
-    .find((candidate) => candidate.url().includes("/centraid/web-e2e/"))!;
-  const confinement = await frame.evaluate(async () => {
-    const [apps, controlLocal] = await Promise.all([
-      fetch("/centraid/_apps"),
-      fetch("/centraid/_web/control?path=%2Fcentraid%2F_apps", {
-        credentials: "include",
-      }),
-    ]);
-    return { apps: apps.status, control: controlLocal.status };
-  });
-  expect(confinement).toEqual({ apps: 401, control: 401 });
 });

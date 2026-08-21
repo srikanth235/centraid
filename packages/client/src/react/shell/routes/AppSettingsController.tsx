@@ -4,24 +4,27 @@ import { createRoot } from "react-dom/client";
 import type { Root } from "react-dom/client";
 
 import { formatDuration, triggersSummary } from "../../../app-format.js";
+import type { EnrichDomain } from "../../../enrich-policy.js";
 import {
   listAutomations,
+  listEnrichProfiles,
   runAutomationNow,
   setAutomationEnabled,
 } from "../../../gateway-client.js";
 import type { AppSettingsSnapshot } from "../../screen-contracts.js";
+import AppEnrichmentSurface from "../../screens/AppEnrichmentSurface.js";
 import AppSettingsPanel from "../../screens/AppSettingsPanel.js";
 import VaultScreen from "../../screens/VaultScreen.js";
-import { iconSvg } from "../iconSvg.js";
+import { useShellCapabilities } from "../useCapabilities.js";
 import {
   buildVaultProps,
+  enrichDomainForApp,
   fetchAppKnobValues,
+  loadAppEnrichment,
   fetchAppManifestRaw,
   knobsManifestFrom,
   manifestVaultBlock,
-  pushKnobToAppFrame,
   pushKnobToInlineRoot,
-  reloadAppFrame,
   waitForAutomationRun,
   writeAppKnobValue,
 } from "./appSettingsData.js";
@@ -32,6 +35,26 @@ type RunState =
   | { kind: "idle" }
   | { kind: "running" }
   | { kind: "done"; ok: boolean; durationMs: number; error?: string };
+
+/**
+ * Render the app popover's Enrichment pane into the host the panel provides.
+ * At module scope so the JSX is not built during the controller's render.
+ */
+function mountEnrichmentPane(
+  host: HTMLElement,
+  domain: EnrichDomain,
+  onOpenSettings: () => void,
+  mountInto: (host: HTMLElement, node: JSX.Element) => void
+): void {
+  mountInto(
+    host,
+    <AppEnrichmentSurface
+      load={() => loadAppEnrichment(domain)}
+      loadProfiles={listEnrichProfiles}
+      onOpenSettings={onOpenSettings}
+    />
+  );
+}
 
 function mountRunsPane(
   host: HTMLElement,
@@ -50,6 +73,8 @@ export interface AppSettingsControllerProps {
   initialTab?: "appearance" | "vault";
   onClose: () => void;
   onOpenAutomations: () => void;
+  /** Open Settings → Enrichment, where this app's policy is authored (#807). */
+  onOpenEnrichmentSettings: () => void;
   onOpenOrder: (ref: string) => void;
   onRename: () => void;
   onShare: () => void;
@@ -57,8 +82,7 @@ export interface AppSettingsControllerProps {
   onDelete: () => void;
   /** Bundled install serving in place (issue #434) — danger action is Uninstall. */
   bundled?: boolean;
-  /** Inline route (issue #505): the app's root element, so knob edits push
-   *  straight to it instead of the (absent) iframe. */
+  /** The inline app's root element — knob edits push straight to it. */
   inlineRoot?: HTMLElement | null;
   showToast: (message: string) => void;
 }
@@ -66,7 +90,7 @@ export interface AppSettingsControllerProps {
 /**
  * The app-settings popover, ported to React (issue #325, R4). Successor to the
  * deleted app-appview.ts `openAppSettingsReact`: it owns the gateway I/O (knob
- * persistence + live iframe push, automation run/toggle) and pushes a snapshot
+ * persistence + live inline push, automation run/toggle) and pushes a snapshot
  * into AppSettingsPanel, while the two deep sub-trees — the run-history list and
  * the vault consent pane — mount into the host divs the panel provides, as their
  * own React roots (RunsPane / VaultScreen).
@@ -77,6 +101,7 @@ export default function AppSettingsController({
   initialTab,
   onClose,
   onOpenAutomations,
+  onOpenEnrichmentSettings,
   onOpenOrder,
   onRename,
   onShare,
@@ -86,6 +111,18 @@ export default function AppSettingsController({
   inlineRoot,
   showToast,
 }: AppSettingsControllerProps): JSX.Element {
+  // The per-app Automations tab is a cross-link INTO the gated surface, so it
+  // reads the same one verdict the launcher does rather than discovering the
+  // absence by request.
+  const { automations } = useShellCapabilities();
+  // The app popover's Enrichment tab exists only for an app whose data shape
+  // HAS capabilities (#807); everything it shows is the gateway's answer for
+  // that domain. The one-shot's `onEnrichOnce` is deliberately NOT passed: the
+  // vault command behind it (`enrich.request_enrichment`) is reached by an
+  // app's own action with its capability pinned, and no owner-plane seam
+  // enqueues one for an arbitrary profile yet, so the picker says so rather
+  // than firing something else. TODO(#807): pass it once that seam exists.
+  const enrichDomain = enrichDomainForApp(appId);
   // Mutable snapshot inputs — refs so the async fetches + run streams mutate in
   // place and re-push without re-rendering this controller.
   const knobs = useRef<AppKnob[] | null>(null);
@@ -99,9 +136,6 @@ export default function AppSettingsController({
   const alive = useRef(true);
   // React roots mounted into the panel's host divs, disposed on unmount.
   const subRoots = useRef(new Map<HTMLElement, Root>());
-
-  const finish = window.CentraidTokens.tileFinish(app.color, "gradient");
-  const headerIcon = iconSvg(app.iconKey || "Sparkle", 15, 1.85);
 
   const runDto = (
     ref: string
@@ -117,10 +151,7 @@ export default function AppSettingsController({
 
   const buildSnapshot = (): AppSettingsSnapshot => ({
     appName: app.name,
-    iconSvg: headerIcon,
-    iconBg: finish.background,
-    iconColor: finish.glyphColor,
-    iconShadow: finish.boxShadow ?? null,
+    appMark: { colorKey: app.colorKey, iconKey: app.iconKey },
     accent: app.color,
     vaultVisible: vaultVisible.current,
     automationsBadge: automationsBadge.current,
@@ -181,24 +212,29 @@ export default function AppSettingsController({
         pushRef.current();
       }
     });
-    void listAutomations().then((all) => {
-      if (!alive.current) return;
-      orders.current = all.filter((r) => r.manifest.apps?.includes(appId));
-      automationsBadge.current =
-        orders.current.length === 0 ? null : orders.current.length;
-      pushRef.current();
-    });
+    // Not merely a hidden tab: with the automations experiment off the
+    // gateway does not mount `/centraid/_automations` at all, so this read
+    // would reject against a route that is not there (C1 — ask the capability,
+    // never the 404).
+    if (automations) {
+      void listAutomations().then((all) => {
+        if (!alive.current) return;
+        orders.current = all.filter((r) => r.manifest.apps?.includes(appId));
+        automationsBadge.current =
+          orders.current.length === 0 ? null : orders.current.length;
+        pushRef.current();
+      });
+    }
 
     return () => {
       alive.current = false;
       roots.forEach((r) => r.unmount());
       roots.clear();
     };
-  }, [appId]);
+  }, [appId, automations]);
 
   const pushKnob = (key: string, value: string): void => {
     if (inlineRoot) pushKnobToInlineRoot(inlineRoot, key, value);
-    else pushKnobToAppFrame(key, value);
   };
 
   const commitKnob = (key: string, value: string): void => {
@@ -270,6 +306,7 @@ export default function AppSettingsController({
   return (
     <AppSettingsPanel
       initialTab={initialTab}
+      automationsVisible={automations}
       onReady={(u) => {
         updater.current = u;
         u(buildSnapshot());
@@ -280,6 +317,17 @@ export default function AppSettingsController({
       onToggleOrder={(ref, enabled) => void toggleOrder(ref, enabled)}
       onOpenOrder={onOpenOrder}
       onOpenAutomations={onOpenAutomations}
+      {...(enrichDomain
+        ? {
+            onMountEnrichment: (host: HTMLElement) =>
+              mountEnrichmentPane(
+                host,
+                enrichDomain,
+                onOpenEnrichmentSettings,
+                mountInto
+              ),
+          }
+        : {})}
       onRename={onRename}
       onShare={onShare}
       onReveal={onReveal}
@@ -294,7 +342,9 @@ export default function AppSettingsController({
             host,
             <VaultScreen
               {...buildVaultProps(appId, block, {
-                onAccessChanged: () => reloadAppFrame(),
+                // No frame to reload since the served-app plane retired
+                // (issue #799): an inline app reads the vault through the
+                // live change feed, so a grant edit lands without a remount.
                 onParkedCount: (count) => {
                   vaultBadge.current = count === 0 ? null : count;
                   push();

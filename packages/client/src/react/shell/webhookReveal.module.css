@@ -2,8 +2,8 @@
   margin: 0 0 14px;
 }
 .fieldLabel {
-  font-family: var(--font-mono);
-  font-size: 9.5px;
+  font-family: var(--font-sans);
+  font-size: var(--t-control-size);
   letter-spacing: 0.06em;
   text-transform: uppercase;
   color: var(--text-ghost);
@@ -17,11 +17,11 @@
 .fieldValue {
   flex: 1;
   min-width: 0;
-  font-family: var(--font-mono);
-  font-size: 12.5px;
+  font-family: var(--font-sans);
+  font-size: var(--t-small-size);
   color: var(--text);
   padding: 9px 11px;
-  border-radius: 8px;
+  border-radius: var(--r-md);
   background: color-mix(in oklab, var(--text) 4%, transparent);
   border: 1px solid var(--line);
   overflow-x: auto;
@@ -39,9 +39,9 @@
   gap: 7px;
   margin: 4px 0 0;
   padding: 10px 12px;
-  border-radius: 8px;
+  border-radius: var(--r-md);
   background: color-mix(in oklab, var(--c-amber) 12%, transparent);
   color: var(--text-soft);
-  font-size: var(--t-mono-size);
+  font-size: var(--t-control-size);
   line-height: 1.4;
 }

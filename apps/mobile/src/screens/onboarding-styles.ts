@@ -11,7 +11,7 @@
 
 import { StyleSheet } from "react-native";
 
-import { family } from "../kit/theme";
+import { borders, family, radii, t } from "../kit/theme";
 // Straight from the pure resolver, not the theme barrel: this runs at module
 // scope, and the barrel drags in React/RN-only surface that screens' tests mock.
 import { resolveTheme } from "../kit/theme/resolve";
@@ -62,14 +62,14 @@ export const styles = StyleSheet.create({
   },
   avatarInitial: {
     color: C.onBrand,
-    fontFamily: family.sansBold,
-    fontSize: 19,
+    fontFamily: family.sansMedium,
+    fontSize: t("reading").fontSize,
   },
   center: { alignItems: "center" },
   doneBadge: {
     alignItems: "center",
     backgroundColor: C.brand,
-    borderRadius: 38,
+    borderRadius: radii.lg,
     height: 76,
     justifyContent: "center",
     marginBottom: 22,
@@ -78,23 +78,21 @@ export const styles = StyleSheet.create({
   error: {
     color: C.danger,
     fontFamily: family.sansRegular,
-    fontSize: 13,
+    fontSize: t("mono").fontSize,
     marginTop: 14,
   },
   fieldLabel: {
     color: C.textGhost,
-    fontFamily: family.monoMedium,
-    fontSize: 11,
+    fontFamily: family.sansMedium,
+    fontSize: t("control").fontSize,
     letterSpacing: 1,
     marginBottom: 9,
   },
   fieldGap: { marginTop: 20 },
   h1: {
     color: C.text,
-    fontFamily: family.sansBold,
-    fontSize: 31,
+    ...t("display"),
     letterSpacing: -0.8,
-    lineHeight: 37,
     marginBottom: 12,
   },
   h1Accent: { color: C.brand },
@@ -108,69 +106,72 @@ export const styles = StyleSheet.create({
   input: {
     backgroundColor: C.fieldBg,
     borderColor: C.fieldLine,
-    borderRadius: 13,
-    borderWidth: StyleSheet.hairlineWidth,
+    borderRadius: radii.lg,
+    borderWidth: borders.hairline,
     color: C.text,
     fontFamily: family.sansRegular,
-    fontSize: 16,
+    fontSize: t("body").fontSize,
     height: 52,
     paddingHorizontal: 16,
   },
   lede: {
     color: C.textFaint,
-    fontFamily: family.sansRegular,
-    fontSize: 15,
-    lineHeight: 23,
+    ...t("body"),
     marginBottom: 24,
   },
   ledeStrong: { color: C.textSoft },
   note: {
     color: C.textFaint,
-    fontFamily: family.sansRegular,
-    fontSize: 13,
-    lineHeight: 19,
+    ...t("small"),
     marginTop: 14,
   },
   phrase: {
     backgroundColor: C.fieldBg,
     borderColor: C.fieldLine,
-    borderRadius: 14,
-    borderWidth: StyleSheet.hairlineWidth,
+    borderRadius: radii.lg,
+    borderWidth: borders.hairline,
     color: C.text,
-    fontFamily: family.monoRegular,
-    fontSize: 15,
-    lineHeight: 26,
-    minHeight: 120,
-    padding: 15,
+    fontFamily: family.sansRegular,
+    fontSize: t("body").fontSize,
+    height: 64,
+    paddingHorizontal: 15,
   },
   pressed: { opacity: 0.82 },
   primary: {
     alignItems: "center",
     backgroundColor: C.brand,
-    borderRadius: 14,
+    borderRadius: radii.lg,
     flexDirection: "row",
     gap: 8,
     height: 52,
     justifyContent: "center",
     marginTop: 28,
   },
-  primaryLabel: { color: C.onBrand, fontFamily: family.sansBold, fontSize: 16 },
+  primaryLabel: {
+    color: C.onBrand,
+    fontFamily: family.sansMedium,
+    fontSize: t("body").fontSize,
+  },
   safe: { backgroundColor: C.bg, flex: 1 },
   /** The pairing step's primary action — deliberately taller and heavier than
    *  `primary`, because it is the way in rather than one option among two. */
   scanBtn: {
     alignItems: "center",
     backgroundColor: C.brand,
-    borderRadius: 18,
+    borderRadius: radii.lg,
     gap: 10,
     marginTop: 26,
     paddingVertical: 20,
   },
-  scanBtnLabel: { color: C.onBrand, fontFamily: family.sansBold, fontSize: 17 },
+  scanBtnLabel: {
+    color: C.onBrand,
+    fontFamily: family.sansMedium,
+    fontSize: t("reading").fontSize,
+  },
   scanFrame: {
     aspectRatio: 1,
     backgroundColor: WAIVED.viewfinder,
-    borderRadius: 22,
+    borderRadius: radii.lg,
     marginTop: 8,
     overflow: "hidden",
     width: "100%",
@@ -189,7 +190,11 @@ export const styles = StyleSheet.create({
     justifyContent: "center",
     width: SWATCH,
   },
-  swatchMark: { color: C.onBrand, fontFamily: family.sansBold, fontSize: 14 },
+  swatchMark: {
+    color: C.onBrand,
+    fontFamily: family.sansMedium,
+    fontSize: t("body").fontSize,
+  },
   swatchRow: { flexDirection: "row", flexWrap: "wrap", gap: 12 },
   textBtn: {
     alignItems: "center",
@@ -200,7 +205,7 @@ export const styles = StyleSheet.create({
   textBtnLabel: {
     color: C.textFaint,
     fontFamily: family.sansMedium,
-    fontSize: 15,
+    fontSize: t("body").fontSize,
   },
   topRow: {
     alignItems: "center",
@@ -210,8 +215,8 @@ export const styles = StyleSheet.create({
   wordmark: { alignItems: "center", flexDirection: "row", gap: 8 },
   wordmarkText: {
     color: C.textFaint,
-    fontFamily: family.monoMedium,
-    fontSize: 11,
+    fontFamily: family.sansMedium,
+    fontSize: t("control").fontSize,
     letterSpacing: 2,
   },
 });

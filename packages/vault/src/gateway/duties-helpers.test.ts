@@ -155,7 +155,6 @@ describe("duties-helpers", () => {
     const result = sweepLifecycle(db, owner);
     expect(result).toMatchObject({
       grantsExpired: 0,
-      sharesExpired: 0,
       contentPurged: 0,
       assetsPurged: 0,
       notesPurged: 0,

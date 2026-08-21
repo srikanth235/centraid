@@ -72,7 +72,7 @@ describe("phash-clustering.scale", () => {
        VALUES (?, 'image/jpeg', ?, ?, 1024, ?)`
     );
     const asset = db.vault.prepare(
-      `INSERT INTO media_media_asset (asset_id, content_id, kind, captured_at)
+      `INSERT INTO media_asset (asset_id, content_id, kind, captured_at)
        VALUES (?, ?, 'photo', ?)`
     );
     const phash = db.vault.prepare(
@@ -176,7 +176,7 @@ describe("phash-clustering.scale", () => {
       .run("f".repeat(64), now);
     db.vault
       .prepare(
-        `INSERT INTO media_media_asset (asset_id, content_id, kind, captured_at)
+        `INSERT INTO media_asset (asset_id, content_id, kind, captured_at)
          VALUES ('zz-late-asset', 'zz-late-content', 'photo', ?)`
       )
       .run(now);

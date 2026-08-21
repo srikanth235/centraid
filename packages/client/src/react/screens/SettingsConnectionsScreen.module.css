@@ -1,136 +1,16 @@
-/* Connectors gallery — featured tile grid + detail sheet (reference-style). */
+/* Connectors (#765). The PAGE is block-kit only — sections, rows, chips, a
+   note — so nothing here styles a section head, a row, or an empty state; those
+   shapes live in `react/ui/*Block` and are shared with the other five
+   operational routes. What is left is the Connect sheet: a modal with a
+   credential form in it, which is not a block and is not shared. */
 
 .page {
-  max-width: 960px;
-  margin: 0 auto;
   display: flex;
   flex-direction: column;
-  gap: 28px;
-}
-
-/* Title row: Connectors + New Connector */
-.toolbar {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 16px;
-  flex-wrap: wrap;
-}
-.titleBlock {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  min-width: 0;
-}
-.title {
-  margin: 0;
-  font: var(--t-title);
-  color: var(--text);
-}
-.subtitle {
-  margin: 0;
-  font-size: var(--t-small-size);
-  line-height: 1.45;
-  color: var(--text-faint);
-  max-width: 42rem;
-}
-.toolbarActions {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  flex-wrap: wrap;
-}
-.searchWrap {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  padding: 8px 12px;
-  min-width: 180px;
-  border: 0.5px solid var(--line);
-  border-radius: 999px;
-  background: var(--bg-elev);
-  color: var(--text-faint);
-}
-.searchWrap:focus-within {
-  border-color: color-mix(in srgb, var(--accent) 50%, transparent);
-  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 14%, transparent);
-}
-.searchInput {
-  flex: 1;
-  min-width: 0;
-  border: 0;
-  background: transparent;
-  font-size: var(--t-small-size);
-  color: var(--text);
-  outline: none;
-  caret-color: var(--accent);
-}
-.searchInput::placeholder {
-  color: var(--text-ghost);
-}
-
-/* Section labels */
-.section {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-}
-.sectionLabel {
-  font-family: var(--font-mono);
-  font-size: 10.5px;
-  font-weight: 600;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  color: var(--text-ghost);
-}
-
-/* Featured 2-col tile grid */
-.grid {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 10px;
-}
-/* Two-up crowds the tile (name + auth badge collide) once the pane narrows —
-   drop to a single column so the label and badge always have room. */
-@media (max-width: 760px) {
-  .grid {
-    grid-template-columns: 1fr;
-  }
-}
-@media (max-width: 640px) {
-  .grid {
-    grid-template-columns: 1fr;
-  }
-}
-
-.tile {
-  display: flex;
-  align-items: center;
-  gap: 14px;
-  width: 100%;
-  text-align: left;
-  padding: 14px 16px;
-  border: 0.5px solid var(--line);
-  border-radius: var(--r-xl);
-  background: var(--bg-elev);
-  font: inherit;
-  color: var(--text);
-  cursor: pointer;
-  transition:
-    background 0.14s ease,
-    border-color 0.14s ease,
-    box-shadow 0.14s ease;
-}
-.tile:hover {
-  background: color-mix(in srgb, var(--text) 3%, var(--bg-elev));
-  border-color: color-mix(in srgb, var(--text) 12%, var(--line));
-}
-.tile:focus-visible {
-  outline: none;
-  box-shadow: 0 0 0 2px var(--accent);
-}
-.tileConnected {
-  border-color: color-mix(in srgb, var(--success) 35%, var(--line));
+  /* No gap: the blocks own their own block-start rhythm (a section head draws
+     its own rule and margin), and a second gap here would double it. */
+  margin-inline: auto;
+  max-inline-size: 960px;
 }
 
 /* Soft tile + multicolor brand glyph (Grok-style), not a solid letter badge. */
@@ -179,71 +59,8 @@
   flex: none;
 }
 
-.tileMain {
-  flex: 1;
-  min-width: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-}
-.tileName {
-  font-size: 14px;
-  font-weight: 600;
-  color: var(--text);
-}
-.tileMeta {
-  font-size: var(--t-mono-size);
-  color: var(--text-faint);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-.tileBadge {
-  flex: none;
-  font-family: var(--font-mono);
-  font-size: 9.5px;
-  font-weight: 600;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  color: var(--success);
-}
-
-/* Connected rows */
-.connectedList {
-  display: flex;
-  flex-direction: column;
-  border: 0.5px solid var(--line);
-  border-radius: var(--r-xl);
-  background: var(--bg-elev);
-  overflow: hidden;
-}
-.row {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  padding: 14px 16px;
-}
-.row + .row {
-  border-top: 0.5px solid var(--line);
-}
-.rowMain {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  flex: 1;
-  min-width: 0;
-  margin: 0;
-  padding: 0;
-  border: 0;
-  background: transparent;
-  color: inherit;
-  text-align: left;
-  cursor: pointer;
-  font: inherit;
-}
-.rowMain:hover .rowName {
-  color: var(--accent);
-}
+/* Sheet-local sync list (what a connector COULD sync). The page's own attached
+   syncs are a rows block; this one lives inside a 440px modal. */
 .syncList {
   display: flex;
   flex-direction: column;
@@ -270,7 +87,7 @@
 }
 .healthBlock {
   margin: 10px 0 4px;
-  font-size: var(--t-mono-size);
+  font-size: var(--t-control-size);
   color: var(--text-soft);
 }
 
@@ -283,12 +100,12 @@
   border-radius: var(--r-lg);
   border: 0.5px solid var(--line);
   background: var(--bg-sunken, var(--bg-elev));
-  font-size: var(--t-mono-size);
+  font-size: var(--t-control-size);
   color: var(--text-soft);
   line-height: 1.4;
 }
 .authKindBanner strong {
-  font-size: var(--t-mono-size);
+  font-size: var(--t-control-size);
   font-weight: 600;
   letter-spacing: 0.02em;
   color: var(--text);
@@ -301,101 +118,10 @@
   color: var(--accent);
 }
 
-.tileBadgeMuted {
-  flex: none;
-  font-family: var(--font-mono);
-  font-size: 9px;
-  font-weight: 600;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  color: var(--text-faint);
-  padding: 3px 6px;
-  border-radius: var(--r-md);
-  border: 0.5px solid var(--line);
-}
-
-.dot {
-  width: 9px;
-  height: 9px;
-  border-radius: 50%;
-  flex: none;
-  background: var(--conn-health, var(--text-faint));
-  box-shadow: 0 0 0 3px
-    color-mix(in oklab, var(--conn-health, var(--text-faint)) 16%, transparent);
-}
-.dot[data-health="ok"] {
-  --conn-health: var(--success);
-}
-.dot[data-health="needs-auth"] {
-  --conn-health: var(--c-amber);
-}
-.dot[data-health="paused"] {
-  --conn-health: var(--text-faint);
-}
-.dot[data-health="failing"] {
-  --conn-health: var(--danger);
-}
-
-.rowMeta {
-  flex: 1;
-  min-width: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-}
-.rowName {
-  font-family: var(--font-sans);
-  font-size: 14px;
-  font-weight: 600;
-  letter-spacing: -0.01em;
-}
-.rowSub {
-  font-family: var(--font-mono);
-  font-size: var(--t-control-size);
-  color: var(--text-faint);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-.rowAuthNote {
-  font-size: var(--t-control-size);
-  color: var(--c-amber-text);
-}
-
-.healthLabel {
-  flex: none;
-  font-family: var(--font-mono);
-  font-size: 9.5px;
-  font-weight: 600;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  color: var(--conn-health, var(--text-faint));
-}
-.healthLabel[data-health="ok"] {
-  --conn-health: var(--success);
-}
-/* `.dot` above keeps the FILL; this label is 9.5px mono type. */
-.healthLabel[data-health="needs-auth"] {
-  --conn-health: var(--c-amber-text);
-}
-.healthLabel[data-health="paused"] {
-  --conn-health: var(--text-faint);
-}
-.healthLabel[data-health="failing"] {
-  --conn-health: var(--danger);
-}
-
-.rowActions {
-  flex: none;
-  display: flex;
-  align-items: center;
-  gap: 6px;
-}
-
 .emptyNote {
   padding: 18px 16px;
   border: 0.5px dashed var(--line-strong);
-  border-radius: var(--r-xl);
+  border-radius: var(--r-lg);
   font-size: var(--t-small-size);
   color: var(--text-faint);
   text-align: center;
@@ -415,7 +141,7 @@
   width: min(440px, 100%);
   max-height: min(88vh, 720px);
   overflow: auto;
-  border-radius: 18px;
+  border-radius: var(--r-lg);
   background: var(--bg-elev);
   border: 0.5px solid var(--line);
   box-shadow: 0 24px 64px color-mix(in srgb, var(--text) 28%, transparent);
@@ -437,13 +163,13 @@
 }
 .sheetTitle {
   margin: 0;
-  font-size: 17px;
+  font-size: var(--t-reading-size);
   font-weight: 600;
   color: var(--text);
 }
 .sheetTag {
   margin: 2px 0 0;
-  font-size: var(--t-mono-size);
+  font-size: var(--t-control-size);
   color: var(--text-faint);
 }
 .sheetClose {
@@ -451,7 +177,7 @@
   width: 32px;
   height: 32px;
   border: 0;
-  border-radius: 8px;
+  border-radius: var(--r-md);
   background: transparent;
   color: var(--text-faint);
   cursor: pointer;
@@ -470,18 +196,18 @@
 }
 .sheetBlurb {
   margin: 0;
-  font-size: 13.5px;
+  font-size: var(--t-small-size);
   line-height: 1.5;
   color: var(--text-soft);
 }
 .about {
   border: 0.5px solid var(--line);
-  border-radius: 12px;
+  border-radius: var(--r-lg);
   overflow: hidden;
 }
 .aboutHead {
   padding: 10px 12px;
-  font-size: var(--t-mono-size);
+  font-size: var(--t-control-size);
   font-weight: 600;
   color: var(--text-faint);
   border-bottom: 0.5px solid var(--line);
@@ -499,7 +225,7 @@
   flex: none;
   width: 28px;
   height: 28px;
-  border-radius: 8px;
+  border-radius: var(--r-md);
   display: grid;
   place-items: center;
   background: color-mix(in srgb, var(--text) 5%, transparent);
@@ -517,7 +243,7 @@
   color: var(--text);
 }
 .aboutDesc {
-  font-size: var(--t-mono-size);
+  font-size: var(--t-control-size);
   line-height: 1.4;
   color: var(--text-faint);
 }
@@ -528,7 +254,7 @@
   padding-top: 4px;
 }
 .sheetNote {
-  font-size: 11.5px;
+  font-size: var(--t-control-size);
   line-height: 1.45;
   color: var(--text-ghost);
 }
@@ -553,8 +279,8 @@
 .wizardLabel {
   display: block;
   margin-bottom: 6px;
-  font-size: var(--t-mono-size);
-  font-weight: 500;
+  font-size: var(--t-control-size);
+  font-weight: 600;
   color: var(--text);
 }
 /* Helper caption under a wizard input — explains naming / multi-account, and
@@ -562,7 +288,7 @@
 .wizardHint {
   display: block;
   margin-top: 6px;
-  font-size: 11.5px;
+  font-size: var(--t-control-size);
   line-height: 1.45;
   color: var(--text-ghost);
 }
@@ -575,7 +301,7 @@
   padding: 9px 12px;
   background: color-mix(in srgb, var(--text) 3%, transparent);
   border: 0.5px solid var(--line);
-  border-radius: 8px;
+  border-radius: var(--r-md);
   font-size: var(--t-small-size);
   color: var(--text);
   outline: none;
@@ -602,9 +328,9 @@
   gap: 9px;
   padding: 9px 10px;
   border: 0.5px solid var(--line);
-  border-radius: 9px;
+  border-radius: var(--r-md);
   color: var(--text);
-  font-size: var(--t-mono-size);
+  font-size: var(--t-control-size);
   cursor: pointer;
 }
 .scopeOption input {
@@ -618,7 +344,7 @@
 }
 .scopeOption small {
   color: var(--text-ghost);
-  font-size: 10.5px;
+  font-size: var(--t-control-size);
 }
 .scopeOption[data-disabled="true"] {
   color: var(--text-ghost);
@@ -628,7 +354,7 @@
 .manualHandoff {
   margin-top: 12px;
   color: var(--text-faint);
-  font-size: var(--t-mono-size);
+  font-size: var(--t-control-size);
 }
 .manualHandoff summary {
   cursor: pointer;
@@ -660,7 +386,7 @@
   border: 0;
   background: transparent;
   color: var(--text-faint);
-  font-family: var(--font-mono);
+  font-family: var(--font-sans);
   font-size: var(--t-control-size);
   cursor: pointer;
   padding: 2px 0;
@@ -674,7 +400,7 @@
   display: flex;
   flex-direction: column;
   gap: 6px;
-  font-size: var(--t-mono-size);
+  font-size: var(--t-control-size);
   line-height: 1.5;
   color: var(--text-soft);
 }
@@ -684,7 +410,7 @@
   gap: 8px;
 }
 
-/* Picker list (New Connector modal) */
+/* Picker list (the Connect sheet's own catalog) */
 .pickerList {
   display: flex;
   flex-direction: column;
@@ -698,7 +424,7 @@
   text-align: left;
   padding: 12px;
   border: 0.5px solid var(--line);
-  border-radius: 12px;
+  border-radius: var(--r-lg);
   background: transparent;
   font: inherit;
   color: var(--text);
@@ -707,11 +433,18 @@
 .pickerItem:hover {
   background: color-mix(in srgb, var(--text) 3.5%, transparent);
 }
+.pickerMain {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
 .pickerName {
-  font-size: 14px;
+  font-size: var(--t-small-size);
   font-weight: 600;
 }
 .pickerSub {
-  font-size: var(--t-mono-size);
+  font-size: var(--t-control-size);
   color: var(--text-faint);
 }

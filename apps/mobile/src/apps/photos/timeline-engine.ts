@@ -57,7 +57,7 @@ const IDLE_UPLOAD_POLL_MS = 30_000;
 const WALK_RECOMPUTE_DEBOUNCE_MS = 250;
 
 const REPLICA_ENTITIES = [
-  "media.media_asset",
+  "media.asset",
   "core.content_item",
   "core.content_derivative",
   "media.asset_phash",
@@ -483,6 +483,9 @@ class PhotoTimelineEngine {
           favorite: value<number>(asset, "favorite") === 1,
           archived: Boolean(value<string>(asset, "archived_at")),
           deleted: Boolean(value<string>(asset, "deleted_at")),
+          purgeAt:
+            value<string>(asset, "purge_at") ??
+            value<string>(item!, "purge_at"),
           backupState: "remote-only",
           source: "replica",
           sourceVaultId: scopeId,

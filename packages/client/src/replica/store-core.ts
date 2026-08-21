@@ -3,6 +3,7 @@ import {
   OnlineOnlyError,
   ReplicaProtocolError,
   ReplicaRebootstrapRequiredError,
+  ReplicaSearchRefusedError,
 } from "./errors.js";
 import type { RebootstrapReason } from "./errors.js";
 import { applyOptimisticMutations, evaluateReplicaRead } from "./query.js";
@@ -10,6 +11,8 @@ import {
   REPLICA_LOCAL_SEARCH,
   replicaFtsMatchExpression,
   replicaLocalSearchSpec,
+  replicaPendingSearchMatch,
+  replicaPendingSearchRank,
   replicaSearchRequiredColumns,
 } from "./search.js";
 import {
@@ -430,6 +433,11 @@ export class ReplicaSqliteStore {
         `Shape does not contain entity ${request.shapeId}/${request.entity}`
       );
     }
+    if (schema.hasUnavailableFields) {
+      throw new ReplicaSearchRefusedError(
+        `${request.entity} has fields withheld by this scope`
+      );
+    }
     const spec = replicaLocalSearchSpec(request.entity);
     const required = replicaSearchRequiredColumns(spec);
     const missing = required.filter(
@@ -467,24 +475,18 @@ export class ReplicaSqliteStore {
         mutation.entity === request.entity
     );
     const indexed = new Set(required);
-    for (const mutation of relevant) {
-      if (
+    const indexedUpserts = relevant.filter(
+      (mutation) =>
         mutation.op === "upsert" &&
         Object.keys(mutation.values).some((column) => indexed.has(column))
-      ) {
-        throw new OnlineOnlyError(
-          "ranking a pending edit to indexed text requires canonical SQLite search"
-        );
-      }
-    }
-    // A pending delete can remove at most one canonical hit. Pull one bounded
-    // replacement per delete so applying the overlay still fills the limit.
+    );
+    const indexedRowIds = new Set(indexedUpserts.map((entry) => entry.rowId));
+    // Any overlay can remove a canonical hit or add a provisional one. Pull a
+    // bounded replacement per mutation so the final page still fills its
+    // requested limit after local composition.
     const hasOpaqueIdentity =
       schema.primaryKey === REPLICA_SYNTHETIC_PRIMARY_KEY;
-    const fetchLimit =
-      limit +
-      relevant.filter((mutation) => mutation.op === "delete").length +
-      (hasOpaqueIdentity ? 1 : 0);
+    const fetchLimit = limit + relevant.length + (hasOpaqueIdentity ? 1 : 0);
     if (fetchLimit > 10_000) {
       throw new OnlineOnlyError(
         "the pending search overlay exceeds the local bounded work limit"
@@ -518,9 +520,66 @@ export class ReplicaSqliteStore {
       ...(row.server_version > 0 ? { rowVersion: row.server_version } : {}),
     }));
     const canonicalHitIds = new Set(rows.map((row) => row.rowId));
-    const overlaid = applyOptimisticMutations(rows, relevant, schema).filter(
-      (row) => canonicalHitIds.has(row.rowId)
+    // Indexed edits/adds may not be present in canonical FTS. Read only their
+    // addressed canonical rows, then apply the same mutation stream used by
+    // ordinary reads. New rows begin from the mutation itself.
+    const addressed: StoredRow[] = [];
+    const addressedIds = [...indexedRowIds].filter(
+      (rowId) => !canonicalHitIds.has(rowId)
     );
+    for (let offset = 0; offset < addressedIds.length; offset += 400) {
+      const chunk = addressedIds.slice(offset, offset + 400);
+      addressed.push(
+        ...this.all<StoredRow>(
+          `SELECT row_id, payload_json, oversized_json, server_version
+             FROM replica_row
+            WHERE shape_id = ? AND entity = ?
+              AND row_id IN (${chunk.map(() => "?").join(", ")})`,
+          [request.shapeId, request.entity, ...chunk]
+        )
+      );
+    }
+    const candidates = [
+      ...rows,
+      ...addressed.map((row) => ({
+        rowId: row.row_id,
+        values: JSON.parse(row.payload_json) as ReplicaRow,
+        oversizedFields: parseStringArray(
+          row.oversized_json,
+          "oversized fields"
+        ),
+        hasUnavailableFields: schema.hasUnavailableFields === true,
+        ...(row.server_version > 0 ? { rowVersion: row.server_version } : {}),
+      })),
+    ];
+    const overlaid = applyOptimisticMutations(candidates, relevant, schema)
+      .flatMap((row, index) => {
+        if (!indexedRowIds.has(row.rowId))
+          return canonicalHitIds.has(row.rowId) ? [row] : [];
+        const local = replicaPendingSearchMatch(
+          row.values,
+          spec,
+          request.query
+        );
+        if (!local.matches) return [];
+        return [
+          {
+            ...row,
+            values: {
+              ...row.values,
+              _rank: replicaPendingSearchRank(index),
+              _snippet: local.snippet,
+            },
+          },
+        ];
+      })
+      .sort(
+        (left, right) =>
+          Number(left.values._rank ?? 0) - Number(right.values._rank ?? 0) ||
+          String(left.values[schema.primaryKey] ?? left.rowId).localeCompare(
+            String(right.values[schema.primaryKey] ?? right.rowId)
+          )
+      );
     if (!hasOpaqueIdentity) {
       const nonTextPrimary = overlaid.find(
         (row) => typeof row.values[schema.primaryKey] !== "string"

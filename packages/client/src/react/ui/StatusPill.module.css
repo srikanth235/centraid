@@ -7,11 +7,11 @@
   align-items: center;
   flex: 0 0 auto;
   gap: 5px;
-  font-family: var(--font-mono);
-  font-size: 9.5px;
+  /* The micro role whole. Family + size + weight set separately left the
+     line-height inheriting whatever the card gave it (#799). */
+  font: var(--t-control);
   letter-spacing: 0.1em;
   text-transform: uppercase;
-  font-weight: 500;
   color: var(--text-faint);
 }
 .status[data-tone="new"] {
@@ -34,7 +34,7 @@
 .dot {
   width: 5px;
   height: 5px;
-  border-radius: 999px;
+  border-radius: var(--r-pill);
   background: currentColor;
   box-shadow: 0 0 0 2px color-mix(in srgb, currentColor 18%, transparent);
 }

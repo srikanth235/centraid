@@ -4,7 +4,7 @@
  * not restored, matching the benchmark's trash model. Restoring a live
  * photo fails as a precondition, not an error. Risk low.
  *
- * @type {import('@centraid/app-engine').ActionHandler}
+ * @type {import('@centraid/server/engine').ActionHandler}
  */
 export default async function restore({ body, ctx }: HandlerArgs) {
   const input = (body ?? {}) as Record<string, unknown>;

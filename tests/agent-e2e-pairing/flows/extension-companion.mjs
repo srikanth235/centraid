@@ -41,8 +41,8 @@ try {
       .split("\n")
       .filter(Boolean)
       .map((line) => JSON.parse(line));
-    const vaultId = vaults.find((vault) => vault.name === "Shared")?.vaultId;
-    if (!vaultId) throw new Error("auto-founded Shared vault was not found");
+    const vaultId = vaults.find((vault) => vault.name === "Personal")?.vaultId;
+    if (!vaultId) throw new Error("auto-founded Personal vault was not found");
     const headers = {
       authorization: `Bearer ${ctx.gateway.token}`,
       "content-type": "application/json",
@@ -79,7 +79,7 @@ try {
     if (!add.ok)
       throw new Error(`Locker seed failed: ${add.status} ${await add.text()}`);
 
-    const { raw: ticket } = await ctx.mintTicket({ vault: "Shared" });
+    const { raw: ticket } = await ctx.mintTicket({ vault: "Personal" });
     const context = await chromium.launchPersistentContext("", {
       headless: false,
       args: [
@@ -93,10 +93,39 @@ try {
         (await context.waitForEvent("serviceworker"));
       const extensionId = new URL(worker.url()).host;
       const page = await context.newPage();
+      // Keep the popup's own console in the job log: the scheduled lane's
+      // only other trace is a 7-day artifact, and #675 accumulated 13
+      // untriaged failures because the actual pairing error never reached
+      // stdout (the timeout below only said "resolved to hidden").
+      const popupConsole = [];
+      page.on("console", (message) =>
+        popupConsole.push(`[popup:${message.type()}] ${message.text()}`)
+      );
       await page.goto(`chrome-extension://${extensionId}/popup.html`);
       await page.getByLabel("Pairing code").fill(ticket);
       await page.getByRole("button", { name: "Pair device" }).click();
-      await page.getByText("Paired gateway").waitFor({ timeout: 30_000 });
+      try {
+        await page.getByText("Paired gateway").waitFor({ timeout: 30_000 });
+      } catch (waitError) {
+        // Surface WHY pairing never completed: the popup writes its pairing
+        // failure into #notice, and the MV3 worker records any stored state.
+        const notice = await page
+          .locator("#notice")
+          .textContent()
+          .catch(() => null);
+        const stored = await worker
+          .evaluate(async () => {
+            const all = await chrome.storage.local.get(null);
+            return all["centraid.companion.v1.pairing"] ?? null;
+          })
+          .catch(() => "unreadable");
+        for (const line of popupConsole.slice(-20)) ctx.note(line);
+        throw new Error(
+          `popup never reached the paired state in 30s — ` +
+            `#notice=${JSON.stringify(notice)} storedPairing=${JSON.stringify(stored)}`,
+          { cause: waitError }
+        );
+      }
       const pairing = await worker.evaluate(async () => {
         const all = await chrome.storage.local.get(null);
         return all["centraid.companion.v1.pairing"];

@@ -2,7 +2,8 @@
 // app-root.tsx: how a `library` read reaches N scopes on this host, and how a
 // refetch is deferred. Both are pure plumbing with no app state, which is why
 // they live here rather than inside the mount closure.
-import { subscribeReadUpdates } from "./kit.ts";
+import { subscribeReadUpdates } from "@centraid/design/elements";
+
 import type { ScopeReadResult } from "./library-store.ts";
 import type { LibraryData } from "./types.ts";
 

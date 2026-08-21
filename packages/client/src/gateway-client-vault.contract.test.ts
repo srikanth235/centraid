@@ -13,6 +13,7 @@ import {
   outbox,
   state,
   vault,
+  vaultImports,
 } from "./gateway-client-contract-fixtures.js";
 
 installGatewayContractHarness();
@@ -47,16 +48,16 @@ describe("renderer gateway owner-plane contracts", () => {
     });
     await vault.vaultDemoStatus();
     await vault.vaultDemoLoad("daily");
-    await vault.vaultImportStage({
+    await vaultImports.vaultImportStage({
       filename: "invoices.csv",
       text: "id,total\n1,5",
       accountName: "Work",
       currency: "USD",
     });
-    await vault.vaultImportsList();
-    await vault.vaultImportRows("batch-1");
-    await vault.vaultImportPublish("batch-1");
-    await vault.vaultImportDiscard("batch-1");
+    await vaultImports.vaultImportsList();
+    await vaultImports.vaultImportRows("batch-1");
+    await vaultImports.vaultImportPublish("batch-1");
+    await vaultImports.vaultImportDiscard("batch-1");
     await vault.vaultConnections();
     await vault.vaultConnectionSetStatus("connection-1", "paused");
 

@@ -37,17 +37,17 @@
   gap: 2px;
   padding: 2px;
   border: 0.5px solid var(--line);
-  border-radius: var(--r-pill, 999px);
+  border-radius: var(--r-pill);
   background: var(--bg-elev);
 }
 .segBtn {
   padding: 5px 12px;
   border: 0;
-  border-radius: var(--r-pill, 999px);
+  border-radius: var(--r-pill);
   background: transparent;
   color: var(--text-faint);
   font-family: var(--font-sans);
-  font-size: var(--t-mono-size);
+  font-size: var(--t-control-size);
   cursor: pointer;
   transition:
     color 0.15s var(--ease),
@@ -67,11 +67,11 @@
 .qChip {
   padding: 6px 13px;
   border: 0.5px solid var(--line);
-  border-radius: var(--r-pill, 999px);
+  border-radius: var(--r-pill);
   background: var(--bg-elev);
   color: var(--text-soft);
   font-family: var(--font-sans);
-  font-size: var(--t-mono-size);
+  font-size: var(--t-control-size);
   cursor: pointer;
   transition:
     border-color 0.15s var(--ease),
@@ -133,7 +133,7 @@
   min-width: 0;
   overflow-x: auto;
   border: 0.5px solid var(--line);
-  border-radius: var(--r-xl, 14px);
+  border-radius: var(--r-lg);
   background:
     radial-gradient(
       circle at 50% 46%,
@@ -180,10 +180,10 @@
   height: 30px;
   padding: 0;
   border: 0.5px solid var(--line);
-  border-radius: var(--r-pill, 999px);
+  border-radius: var(--r-pill);
   background: var(--bg-elev);
   color: var(--text-soft);
-  font-family: var(--font-mono);
+  font-family: var(--font-sans);
   font-size: var(--t-small-size);
   line-height: 1;
   cursor: pointer;
@@ -205,7 +205,7 @@
   display: flex;
   flex-direction: column;
   border: 0.5px solid var(--line);
-  border-radius: var(--r-xl, 14px);
+  border-radius: var(--r-lg);
   background: var(--bg-elev);
   overflow: hidden;
 }
@@ -229,8 +229,8 @@
   align-items: center;
   gap: 10px;
   margin: 0 0 10px;
-  font-family: var(--font-mono);
-  font-size: 10.5px;
+  font-family: var(--font-sans);
+  font-size: var(--t-control-size);
   letter-spacing: 0.06em;
   text-transform: uppercase;
   color: var(--text-ghost);
@@ -260,7 +260,7 @@
   font-size: var(--t-control-size);
 }
 .crumb {
-  font-family: var(--font-mono);
+  font-family: var(--font-sans);
   font-size: var(--t-control-size);
   background: none;
   border: 0;
@@ -283,12 +283,12 @@
   gap: 6px;
   margin-top: 11px;
   padding: 5px 10px;
-  border-radius: var(--r-pill, 999px);
+  border-radius: var(--r-pill);
   border: 0.5px solid var(--line);
   background: var(--bg-sunken);
   color: var(--text-soft);
-  font-family: var(--font-mono);
-  font-size: 10.5px;
+  font-family: var(--font-sans);
+  font-size: var(--t-control-size);
   letter-spacing: 0.03em;
   cursor: pointer;
   transition: color 0.15s var(--ease);
@@ -298,7 +298,7 @@
   border-color: var(--accent);
 }
 .backBtn:disabled {
-  opacity: 0.4;
+  color: var(--text-disabled);
   cursor: default;
 }
 
@@ -323,7 +323,7 @@
 }
 .dSig {
   margin: 0 0 12px;
-  font-family: var(--font-mono);
+  font-family: var(--font-sans);
   font-size: var(--t-control-size);
   color: var(--text-soft);
   word-break: break-all;
@@ -334,7 +334,7 @@
   display: inline-block;
   width: 7px;
   height: 7px;
-  border-radius: 50%;
+  border-radius: var(--r-pill);
   background: var(--pack-c, var(--text-ghost));
   margin-right: 6px;
   vertical-align: 1px;
@@ -365,8 +365,8 @@
   color: var(--text-ghost);
 }
 .dFigK {
-  font-family: var(--font-mono);
-  font-size: 9.5px;
+  font-family: var(--font-sans);
+  font-size: var(--t-control-size);
   letter-spacing: 0.06em;
   text-transform: uppercase;
   color: var(--text-ghost);
@@ -402,7 +402,7 @@
 }
 .sampleRow {
   font-family: var(--font-sans);
-  font-size: var(--t-mono-size);
+  font-size: var(--t-control-size);
   color: var(--text-soft);
   line-height: 1.35;
   overflow: hidden;
@@ -410,8 +410,8 @@
   white-space: nowrap;
 }
 .sampleMore {
-  font-family: var(--font-mono);
-  font-size: 10px;
+  font-family: var(--font-sans);
+  font-size: var(--t-control-size);
   letter-spacing: 0.04em;
   color: var(--text-ghost);
 }
@@ -429,11 +429,11 @@
   gap: 6px;
   padding: 4px 10px;
   border: 0.5px solid var(--line);
-  border-radius: var(--r-pill, 999px);
+  border-radius: var(--r-pill);
   background: transparent;
   color: var(--text-soft);
-  font-family: var(--font-mono);
-  font-size: 10.5px;
+  font-family: var(--font-sans);
+  font-size: var(--t-control-size);
   cursor: pointer;
   transition:
     border-color 0.15s var(--ease),
@@ -445,7 +445,7 @@
   color: var(--text);
 }
 .chip[aria-pressed="false"] {
-  opacity: 0.55;
+  color: var(--text-faint);
 }
 .chip[aria-pressed="true"] {
   border-color: var(--accent);
@@ -454,7 +454,7 @@
 .chipDot {
   width: 7px;
   height: 7px;
-  border-radius: 50%;
+  border-radius: var(--r-pill);
   background: var(--text-ghost);
   flex: none;
 }
@@ -463,7 +463,7 @@
 }
 .chipCount {
   color: var(--text-ghost);
-  font-size: 9.5px;
+  font-size: var(--t-control-size);
   font-variant-numeric: tabular-nums;
 }
 .roFoot {
@@ -475,7 +475,7 @@
 }
 .roFoot b {
   color: var(--text-soft);
-  font-weight: 500;
+  font-weight: 600;
 }
 
 /* legend */
@@ -512,7 +512,7 @@
 .lgSelf {
   height: 10px;
   width: 10px;
-  border-radius: 50%;
+  border-radius: var(--r-pill);
   border: 1.2px solid var(--text-faint);
   justify-self: center;
 }
@@ -520,7 +520,7 @@
 .lgRing {
   height: 12px;
   width: 12px;
-  border-radius: 50%;
+  border-radius: var(--r-pill);
   border: 1.2px solid var(--text-ghost);
   box-shadow: inset 0 0 0 3px transparent;
   outline: 1.2px solid var(--line-strong);
@@ -529,14 +529,14 @@
 }
 .lgText {
   font-family: var(--font-sans);
-  font-size: 10.5px;
+  font-size: var(--t-control-size);
   color: var(--text-faint);
   line-height: 1.35;
 }
 .lgText b {
   display: block;
   color: var(--text);
-  font-weight: 500;
+  font-weight: 600;
 }
 
 /* ── Caption strip — the instrument's measured-fact footer ──────────────── */
@@ -546,10 +546,10 @@
   gap: 14px 34px;
   padding: 13px 18px;
   border: 0.5px solid var(--line);
-  border-radius: var(--r-xl, 14px);
+  border-radius: var(--r-lg);
   background: var(--bg-elev);
-  font-family: var(--font-mono);
-  font-size: 9.5px;
+  font-family: var(--font-sans);
+  font-size: var(--t-control-size);
   letter-spacing: 0.07em;
   text-transform: uppercase;
   color: var(--text-ghost);
@@ -562,7 +562,7 @@
 }
 .captionNum {
   font-family: var(--font-sans);
-  font-size: 17px;
+  font-size: var(--t-reading-size);
   line-height: 1;
   letter-spacing: 0;
   color: var(--text);
@@ -614,8 +614,8 @@
   animation: atlasSpin 240s linear infinite;
 }
 .ringTick {
-  font-family: var(--font-mono);
-  font-size: 9px;
+  font-family: var(--font-sans);
+  font-size: var(--t-control-size);
   letter-spacing: 0.12em;
   text-transform: uppercase;
   fill: var(--text-ghost);
@@ -645,8 +645,8 @@
   stroke-width: 1;
 }
 .sectorName {
-  font-family: var(--font-mono);
-  font-size: 8px;
+  font-family: var(--font-sans);
+  font-size: var(--t-control-size);
   letter-spacing: 0.22em;
   text-transform: uppercase;
   fill: var(--sector-c, var(--text-ghost));
@@ -744,14 +744,14 @@
   fill: var(--accent);
 }
 .coreK {
-  font-family: var(--font-mono);
-  font-size: 7px;
+  font-family: var(--font-sans);
+  font-size: var(--t-control-size);
   letter-spacing: 0.14em;
   fill: var(--text-ghost);
 }
 .coreCaption {
-  font-family: var(--font-mono);
-  font-size: 9px;
+  font-family: var(--font-sans);
+  font-size: var(--t-control-size);
   letter-spacing: 0.02em;
   fill: var(--text-faint);
   paint-order: stroke;
@@ -802,8 +802,8 @@
   fill: transparent;
 }
 .nodeLabel {
-  font-family: var(--font-mono);
-  font-size: 7.6px;
+  font-family: var(--font-sans);
+  font-size: var(--t-control-size);
   letter-spacing: 0.02em;
   fill: var(--text-faint);
   paint-order: stroke;
@@ -819,7 +819,7 @@
   animation-delay: calc(var(--dly, 0ms) + 140ms);
 }
 .nodeLabelBig {
-  font-size: 9px;
+  font-size: var(--t-control-size);
   fill: var(--text-soft);
   opacity: 1;
 }
@@ -833,8 +833,8 @@
 /* the physical SQL name, shown only at the Everything level — a quiet mono
    second line under the friendly label, demoted so the human name still leads */
 .nodeSubLabel {
-  font-family: var(--font-mono);
-  font-size: 5.6px;
+  font-family: var(--font-sans);
+  font-size: var(--t-control-size);
   letter-spacing: 0.02em;
   fill: var(--text-ghost);
   paint-order: stroke;
@@ -861,28 +861,7 @@
   transition: opacity 0.2s var(--ease);
 }
 
-@media (prefers-reduced-motion: reduce) {
-  .edges,
-  .nodeBody,
-  .nodeHalo,
-  .nodeLabel,
-  .nodeSubLabel,
-  .nodeDim,
-  .chip,
-  .qChip,
-  .segBtn,
-  .backBtn {
-    transition-duration: 0.01ms;
-  }
-  .graticule,
-  .dial,
-  .coreBezel,
-  .coreGlow,
-  .ringGuideDashed,
-  .edge,
-  .nodeBody,
-  .nodeLabel,
-  .nodeSubLabel {
-    animation: none;
-  }
-}
+/* No `prefers-reduced-motion` block: the token layer honours it in ONE
+   global rule, which already zeroes every transition/animation duration
+   above (the 0.01ms non-zero override this file used to carry never actually
+   applied — the global rule's `!important` always won over it). */

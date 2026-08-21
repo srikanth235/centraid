@@ -1,0 +1,26 @@
+{
+  "name": "Place names",
+  "version": "0.1.0",
+  "description": "Off until you turn it on. Names the nearest town for places that only have coordinates, using a settlement list bundled with Centraid and looked up on this device — nothing is sent anywhere. Your own names for places always win and are never changed.",
+  "enabled": false,
+  "prompt": "For places I have not named, find the nearest settlement in the bundled GeoNames list on this device and record it as a derived name, in bounded batches. Never touch a name I typed. Bundled data: GeoNames (geonames.org), cities15000 snapshot 2017-02-27, licensed CC-BY 3.0 — see LICENSE-GEONAMES.md.",
+  "triggers": [
+    { "kind": "data", "entities": ["core.place"], "every": "*/5 * * * *" }
+  ],
+  "requires": {},
+  "vault": {
+    "purpose": "dpv:ServiceProvision",
+    "why": "Reads places that have coordinates and writes only the derived gazetteer record inside address_json, through the dedicated validated command. Never writes a place's name.",
+    "scopes": [
+      { "schema": "core", "verbs": "read" },
+      { "schema": "media", "verbs": "act" }
+    ]
+  },
+  "enrich": {
+    "domain": "photos",
+    "capability": "place-names",
+    "lane": "gateway"
+  },
+  "history": { "keep": { "count": 100 } },
+  "generated": { "by": "centraid-template", "at": "2026-08-17T00:00:00.000Z" }
+}

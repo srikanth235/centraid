@@ -1,8 +1,14 @@
 /**
- * Types shared by the app scaffolders (moved here when `@centraid/agent-harness`
- * was dissolved — issue #145). `AppScaffoldError` is the renamed `HarnessError`;
- * it carries a machine-readable `code` the gateway maps to an HTTP status.
+ * Types shared by the app clone path here and the automation scaffolder in
+ * `@centraid/server/automation`. `AppScaffoldError` carries a machine-readable `code`
+ * the gateway maps to an HTTP status.
  */
+
+/** A single file in a scaffold/clone file map. `path` is app-relative, posix. */
+export interface ScaffoldFile {
+  path: string;
+  content: string;
+}
 
 export interface AppInfo {
   id: string;
@@ -19,15 +25,9 @@ export interface AppInfo {
   name?: string;
   /**
    * Optional one-line description read from `app.json#description`. Templates
-   * seed this when cloned (carried from the template manifest); the user can
-   * edit it inline in the builder topbar.
+   * seed this when cloned (carried from the template manifest).
    */
   description?: string;
-  /**
-   * Whether `index.html` exists at the app root — i.e. the app is
-   * preview-ready as a static site.
-   */
-  hasIndex?: boolean;
   /**
    * App classification read from `app.json#kind`: `'automation'` marks a
    * UI-less automation app (Automations page), `'app'` / undefined a normal

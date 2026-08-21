@@ -1,5 +1,5 @@
 // S1 — Identity: who is calling? Every caller authenticates as a row
-// (consent.app.signing_key, agent.agent, consent.device). No credential, no
+// (consent.app.signing_key, consent.agent, consent.device). No credential, no
 // path to data. An unknown caller is dropped at transport: there is no
 // grantee to receipt against, so nothing enters the model — not even a
 // denial row.
@@ -71,11 +71,11 @@ export function authenticate(vault: DatabaseSync, cred: Credential): Identity {
     };
   }
   if (cred.kind === "agent") {
-    // Session binding: an agent call rides an enrolled device's key.
+    // Session binding: an autonomous agent principal rides an enrolled device's key.
     const device = deviceRow(vault, cred.deviceId, cred.deviceKey);
     const row = vault
       .prepare(
-        "SELECT agent_id, party_id, status FROM agent_agent WHERE agent_id = ?"
+        "SELECT agent_id, party_id, status FROM consent_agent WHERE agent_id = ?"
       )
       .get(cred.agentId) as AgentRow | undefined;
     if (!row || row.status !== "active")
@@ -87,8 +87,8 @@ export function authenticate(vault: DatabaseSync, cred: Credential): Identity {
       partyId: row.party_id,
       mayAct: device.trust === "full",
       ...(cred.scopeClamp ? { scopeClamp: cred.scopeClamp } : {}),
-      ...(cred.onBehalfOfMember
-        ? { onBehalfOfMember: cred.onBehalfOfMember }
+      ...(cred.onBehalfOfOwner
+        ? { onBehalfOfOwner: cred.onBehalfOfOwner }
         : {}),
     };
   }

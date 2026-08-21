@@ -7,16 +7,15 @@
 # To carve out a sub-check for your repo, use `governance directive modify` to
 # amend this script (or `governance directive remove` to drop the directive
 # entirely). Threshold tunables — MAX_FILE_SIZE_MB and FILE_SIZE_LIMIT — default
-# in the pack-owned `defaults.conf` beside this script and are overridden
-# per-repo in `.governance/conf/governance-kit/foundation/repo-hygiene.conf` (or
-# the matching GOVERNANCE_* env vars, which win); they are applied below.
+# in the pack-owned manifest beside this script and are overridden
+# per-repo in `.governance/conf/governance-kit/foundation/repo-hygiene.conf`;
+# they are applied below.
 set -u
 source "$(dirname "$0")/../../../../../lib.sh"
 directive_start "repo-hygiene"
 require_git
 
-DEFAULTS="$(dirname "$0")/defaults.conf"
-[[ -f "$DEFAULTS" ]] || { violation "broken install: $DEFAULTS missing (threshold defaults unavailable)"; directive_end; }
+MANIFEST="$(dirname "$0")/directive.yaml"
 
 ROOT="$(git rev-parse --show-toplevel)"
 cd "$ROOT" || exit 1
@@ -31,7 +30,7 @@ done < <(git grep -InE '^(<<<<<<< |=======$|>>>>>>> )' -- \
     ':!**/evals/**' 2>/dev/null || true)
 
 # ── large-files ─────────────────────────────────────────────────
-_LIMIT_MB="$(conf_get repo-hygiene MAX_FILE_SIZE_MB "$DEFAULTS")"
+_LIMIT_MB="$(conf_get repo-hygiene MAX_FILE_SIZE_MB "$MANIFEST")"
 _LIMIT_BYTES=$((_LIMIT_MB * 1024 * 1024))
 _file_size() {
     stat -f%z "$1" 2>/dev/null && return 0
@@ -49,23 +48,10 @@ while IFS= read -r f; do
 done < <(git ls-files)
 
 # ── build-artifacts ─────────────────────────────────────────────
-_artifacts=(
-    '*.pyc|Python bytecode'
-    '*.pyo|Python optimized bytecode'
-    '__pycache__/**|Python cache dir'
-    '*.class|Java class file'
-    '*.o|compiled object file'
-    'node_modules/**|node_modules committed'
-    'dist/**|dist/ build output'
-    'build/**|build/ output'
-    'target/**|target/ (JVM / Rust) build output'
-    'out/**|out/ build output'
-    '.DS_Store|macOS metadata'
-    'Thumbs.db|Windows metadata'
-    '*.swp|editor swap file'
-    '*.swo|editor swap file'
-)
-for entry in "${_artifacts[@]}"; do
+_artifacts=()
+while IFS= read -r entry; do [[ -n "$entry" ]] && _artifacts+=("$entry"); done \
+    < <(conf_list repo-hygiene "$MANIFEST" ARTIFACT_PATTERNS)
+for entry in ${_artifacts[@]+"${_artifacts[@]}"}; do
     IFS='|' read -r pattern label <<<"$entry"
     while IFS= read -r f; do
         [[ -z "$f" ]] && continue
@@ -74,16 +60,17 @@ for entry in "${_artifacts[@]}"; do
 done
 
 # ── debug-statements ────────────────────────────────────────────
-_dbg=(
-    "console.log|console\.log\s*\(|*.js *.jsx *.ts *.tsx *.mjs *.cjs"
-    "debugger statement|^[[:space:]]*debugger[[:space:]]*;?|*.js *.jsx *.ts *.tsx *.mjs *.cjs"
-    "Python breakpoint|^[[:space:]]*breakpoint\s*\(|*.py"
-    "pdb.set_trace|import pdb|*.py"
-    "Rust dbg! macro|\bdbg!\s*\(|*.rs"
-    "fmt.Println debug|^[[:space:]]*fmt\.Println\s*\(|*.go"
-)
-for entry in "${_dbg[@]}"; do
-    IFS='|' read -r label pattern pathspec <<<"$entry"
+_dbg=()
+while IFS= read -r entry; do [[ -n "$entry" ]] && _dbg+=("$entry"); done \
+    < <(conf_list repo-hygiene "$MANIFEST" DEBUG_PATTERNS)
+for entry in ${_dbg[@]+"${_dbg[@]}"}; do
+    # The regex may itself contain an alternation (`|`), so split the stable
+    # label and pathspec delimiters explicitly instead of letting `read` cut
+    # the pattern at its first alternation.
+    label="${entry%%|*}"
+    _debug_rule="${entry#*|}"
+    pathspec="${_debug_rule##*|}"
+    pattern="${_debug_rule%|*}"
     # shellcheck disable=SC2206
     _pathspec_args=($pathspec)
     while IFS=: read -r file line_no _; do
@@ -100,21 +87,13 @@ for entry in "${_dbg[@]}"; do
 done
 
 # ── file-size-limit ─────────────────────────────────────────────
-_LIMIT="$(conf_get repo-hygiene FILE_SIZE_LIMIT "$DEFAULTS")"
-_exts=(
-    "*.py" "*.js" "*.jsx" "*.ts" "*.tsx" "*.mjs" "*.cjs"
-    "*.go" "*.rs" "*.rb" "*.java" "*.kt" "*.scala"
-    "*.c" "*.cc" "*.cpp" "*.h" "*.hpp"
-    "*.swift" "*.php" "*.cs"
-)
-_excludes=(
-    ":!vendor/**"
-    ":!**/node_modules/**"
-    ":!**/generated/**"
-    ":!**/*_pb2.py"
-    ":!**/*.pb.go"
-    ":!**/migrations/**"
-)
+_LIMIT="$(conf_get repo-hygiene FILE_SIZE_LIMIT "$MANIFEST")"
+_exts=()
+while IFS= read -r entry; do [[ -n "$entry" ]] && _exts+=("$entry"); done \
+    < <(conf_list repo-hygiene "$MANIFEST" SOURCE_PATTERNS)
+_excludes=()
+while IFS= read -r entry; do [[ -n "$entry" ]] && _excludes+=(":!$entry"); done \
+    < <(conf_list repo-hygiene "$MANIFEST" EXCLUDE_PATTERNS)
 while IFS= read -r file; do
     [[ -z "$file" ]] && continue
     [[ ! -f "$file" ]] && continue

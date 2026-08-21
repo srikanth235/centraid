@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * ACP min-version drift guard (issue #504 batch 6).
- * Ensures registry defaultBin entries remain documented in docs/runners.md
+ * Ensures registry defaultBin entries remain documented in docs/harnesses.md
  * and every kind declares a minVersion object.
  */
 
@@ -10,10 +10,10 @@ import path from "node:path";
 
 const root = path.resolve(import.meta.dirname, "..");
 const registry = readFileSync(
-  path.join(root, "packages/agent-runtime/src/registry.ts"),
+  path.join(root, "packages/server/src/acp/registry.ts"),
   "utf8"
 );
-const runnersDoc = readFileSync(path.join(root, "docs/runners.md"), "utf8");
+const runnersDoc = readFileSync(path.join(root, "docs/harnesses.md"), "utf8");
 
 const minVersionObjs = [
   ...registry.matchAll(/minVersion:\s*\{\s*major:\s*\d+/gu),
@@ -40,7 +40,7 @@ const missing = bins.filter(
 );
 if (missing.length) {
   process.stderr.write(
-    `lint-acp-min-versions: defaultBin missing from docs/runners.md: ${missing.join(", ")}\n`
+    `lint-acp-min-versions: defaultBin missing from docs/harnesses.md: ${missing.join(", ")}\n`
   );
   process.exit(1);
 }

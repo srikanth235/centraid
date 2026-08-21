@@ -36,7 +36,7 @@
   max-height: min(760px, calc(100vh - 72px));
   background: var(--bg-elev);
   border: 1px solid var(--line);
-  border-radius: var(--r-xl);
+  border-radius: var(--r-lg);
   z-index: 60;
   box-shadow: var(--shadow-lg);
   animation: wn-rise 0.22s cubic-bezier(0.2, 0.7, 0.2, 1);
@@ -53,8 +53,8 @@
 .heading {
   margin: 0;
   font-family: var(--font-sans);
-  font-weight: 700;
-  font-size: 24px;
+  font-weight: 600;
+  font-size: var(--t-display-size);
   letter-spacing: -0.025em;
   color: var(--text);
 }
@@ -65,7 +65,7 @@
   width: 30px;
   height: 30px;
   border: none;
-  border-radius: 8px;
+  border-radius: var(--r-md);
   background: transparent;
   color: var(--text-soft);
   cursor: pointer;
@@ -84,20 +84,20 @@
   padding: 40px 0 32px;
   text-align: center;
   color: var(--text-soft);
-  font-size: 14px;
+  font-size: var(--t-small-size);
 }
 .status p {
   margin: 0 0 6px;
 }
 .statusDetail {
-  font-size: 12.5px;
+  font-size: var(--t-small-size);
   color: color-mix(in oklab, var(--text-soft) 80%, transparent);
 }
 .retry {
   margin-top: 12px;
   padding: 7px 14px;
   border: 1px solid var(--line);
-  border-radius: 8px;
+  border-radius: var(--r-md);
   background: transparent;
   color: var(--text);
   font-size: var(--t-small-size);
@@ -127,7 +127,7 @@
 }
 .date {
   display: block;
-  font-size: var(--t-mono-size);
+  font-size: var(--t-control-size);
   color: var(--text-soft);
   margin-bottom: 2px;
 }
@@ -146,8 +146,8 @@
   flex-shrink: 0;
 }
 .version {
-  font-family: var(--font-mono);
-  font-size: 11.5px;
+  font-family: var(--font-sans);
+  font-size: var(--t-control-size);
   color: var(--text-soft);
   background: color-mix(in oklab, var(--text) 6%, transparent);
   border: 1px solid var(--line);
@@ -179,7 +179,7 @@
 
 /* Release notes markdown (bare tags emitted by changelogNotesToHtml). */
 .notes {
-  font-size: 13.5px;
+  font-size: var(--t-small-size);
   line-height: 1.5;
   color: var(--text-soft);
 }
@@ -209,8 +209,8 @@
   font-weight: 600;
 }
 .notes code {
-  font-family: var(--font-mono);
-  font-size: 0.9em;
+  font-family: var(--font-code);
+  font-size: var(--t-small-size);
   background: color-mix(in oklab, var(--text) 7%, transparent);
   border-radius: var(--r-sm);
   padding: 1px 5px;
@@ -226,7 +226,7 @@
 .ghLink {
   display: inline-block;
   margin-top: 10px;
-  font-size: 12.5px;
+  font-size: var(--t-small-size);
   color: var(--accent);
   text-decoration: none;
 }

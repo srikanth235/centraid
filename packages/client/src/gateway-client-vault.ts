@@ -53,32 +53,48 @@ export interface VaultListEntry {
 
 /**
  * One SCOPE an app may be mounted over, from `GET /_vault/scopes?app=<id>`
- * (issue #599). A scope is a vault the CALLING MEMBER holds a role in — their
- * own plus every audience they belong to — so this is the household-aware
- * successor to `listVaults`, which answers per DEVICE enrollment and carries
- * neither the member's role nor whether the app is installed there.
+ * (issue #599). A scope is a vault the CALLING OWNER owns (#726) — so this is
+ * the ownership-aware successor to `listVaults`, which answers per DEVICE
+ * enrollment and carries neither `canWrite` nor whether the app is installed
+ * there.
  *
- * Order is the gateway's: oldest vault first, which puts the member's own
+ * Order is the gateway's: oldest vault first, which puts the owner's own
  * (primary) scope first. `installed` is present only when `app` was named.
  */
 export interface AppScopeEntry {
   vaultId: string;
   label: string;
+  /**
+   * Whether this is the member's OWN vault — the durable founding marker
+   * (issue #711 item H). An app's "somewhere other than my own" marker is
+   * exactly `personal === false`, never a match on `label`. Optional only
+   * because a gateway older than the marker omits it, and "unknown" must read
+   * as the member's own (unmarked) rather than falsely marking everything.
+   */
+  personal?: boolean;
   color?: string;
   icon?: string;
-  /** The calling member's role in this scope. `read` cannot write. */
-  role: string;
+  /** Ownership-sourced writability (#726): a vault you own is writable.
+   *  Supplied by the gateway, never derived client-side from a role. */
+  canWrite: boolean;
   installed?: boolean;
 }
 
 /**
- * The scopes one app may mount for the calling member. `undefined` when the
- * gateway mounts no scopes plane (route 404s) — an older gateway, not an error;
- * callers fall back to the single ambient scope.
+ * The whole scopes answer: the rows this app is mounted over (issue #599).
  */
-export async function listAppScopes(
+export interface AppScopePlane {
+  scopes: AppScopeEntry[];
+}
+
+/**
+ * The scopes plane for one app. `undefined` when the gateway mounts none
+ * (route 404s) — an older gateway, not an error; callers fall back to the
+ * single ambient scope.
+ */
+export async function readAppScopePlane(
   appId?: string
-): Promise<AppScopeEntry[] | undefined> {
+): Promise<AppScopePlane | undefined> {
   const { baseUrl, token } = await auth();
   const path = appId
     ? `/centraid/_vault/scopes?app=${encodeURIComponent(appId)}`
@@ -91,11 +107,17 @@ export async function listAppScopes(
     await res.body?.cancel().catch(() => {});
     return undefined;
   }
-  const body = await readJson<{ scopes: AppScopeEntry[] }>(
-    res,
-    "list app scopes"
-  );
-  return body.scopes;
+  return await readJson<AppScopePlane>(res, "list app scopes");
+}
+
+/**
+ * Just the rows (the shell's own scope registry). `undefined` has the same
+ * meaning as above.
+ */
+export async function listAppScopes(
+  appId?: string
+): Promise<AppScopeEntry[] | undefined> {
+  return (await readAppScopePlane(appId))?.scopes;
 }
 
 /** One scope of a grant or a manifest request: schema-wide or one table. */
@@ -130,7 +152,7 @@ export interface VaultAppEntry {
 
 export interface VaultAgentEntry {
   agentId: string;
-  hostKey: string;
+  enrollmentKey: string;
   partyId: string;
   name: string;
   modelRef: string;
@@ -429,143 +451,6 @@ export async function vaultDemoLoad(appId: string): Promise<{ rows: number }> {
   return readJson<{ rows: number }>(res, "load demo data");
 }
 
-/** One staged import batch as the shell lists it (issue #290 phase 2). */
-export interface VaultImportBatch {
-  batchId: string;
-  status: "draft" | "published" | "discarded";
-  createdAt: string;
-  resolvedAt: string | null;
-  summary: Record<string, number>;
-  kind: string | null;
-  label: string | null;
-}
-
-/** One staged row for review. */
-export interface VaultImportRow {
-  seq: number;
-  entityType: string;
-  externalId: string;
-  disposition: "create" | "update" | "skip" | "merge-candidate";
-  note: string | null;
-  publishedEntityId: string | null;
-  mapping: string;
-}
-
-/** Stage a dropped file into a reviewable draft batch. */
-export async function vaultImportStage(input: {
-  filename?: string;
-  text?: string;
-  base64?: string;
-  directoryName?: string;
-  files?: { path: string; text: string }[];
-  accountName?: string;
-  currency?: string;
-}): Promise<{
-  batchId: string;
-  kind: string;
-  staged: Record<string, number>;
-  total: number;
-  unrouted: string[];
-}> {
-  const { baseUrl, token } = await auth();
-  const res = await doFetch(baseUrl, "/centraid/_vault/imports", {
-    method: "POST",
-    headers: authHeaders(token, "application/json"),
-    body: JSON.stringify(input),
-  });
-  return readJson(res, "stage import");
-}
-
-/** Download the verified all-data portable bundle. */
-export async function vaultPortableExport(): Promise<{
-  blob: Blob;
-  filename: string;
-}> {
-  const { baseUrl, token } = await auth();
-  const res = await doFetch(baseUrl, "/centraid/_vault/imports/export", {
-    method: "GET",
-    headers: authHeaders(token),
-  });
-  if (!res.ok) {
-    await readJson(res, "export portable vault");
-    throw new Error("portable export failed");
-  }
-  const disposition = res.headers.get("content-disposition") ?? "";
-  const filename =
-    /filename="(?<filename>[^"]+)"/u.exec(disposition)?.groups?.filename ??
-    "centraid-vault.zip";
-  return { blob: await res.blob(), filename };
-}
-
-/** Batches, newest first. */
-export async function vaultImportsList(): Promise<VaultImportBatch[]> {
-  const { baseUrl, token } = await auth();
-  const res = await doFetch(baseUrl, "/centraid/_vault/imports", {
-    method: "GET",
-    headers: authHeaders(token),
-  });
-  const body = await readJson<{ batches: VaultImportBatch[] }>(
-    res,
-    "list imports"
-  );
-  return body.batches;
-}
-
-/** The staged rows of one batch, for review. */
-export async function vaultImportRows(
-  batchId: string
-): Promise<VaultImportRow[]> {
-  const { baseUrl, token } = await auth();
-  const res = await doFetch(
-    baseUrl,
-    `/centraid/_vault/imports/${enc(batchId)}`,
-    {
-      method: "GET",
-      headers: authHeaders(token),
-    }
-  );
-  const body = await readJson<{ rows: VaultImportRow[] }>(
-    res,
-    "read import batch"
-  );
-  return body.rows;
-}
-
-/** Publish a reviewed draft batch. */
-export async function vaultImportPublish(batchId: string): Promise<{
-  created: number;
-  updated: number;
-  skipped: number;
-  failed: unknown[];
-}> {
-  const { baseUrl, token } = await auth();
-  const res = await doFetch(
-    baseUrl,
-    `/centraid/_vault/imports/${enc(batchId)}/publish`,
-    {
-      method: "POST",
-      headers: authHeaders(token),
-    }
-  );
-  return readJson(res, "publish import");
-}
-
-/** Discard a draft batch. */
-export async function vaultImportDiscard(
-  batchId: string
-): Promise<{ receiptId: string }> {
-  const { baseUrl, token } = await auth();
-  const res = await doFetch(
-    baseUrl,
-    `/centraid/_vault/imports/${enc(batchId)}/discard`,
-    {
-      method: "POST",
-      headers: authHeaders(token),
-    }
-  );
-  return readJson(res, "discard import");
-}
-
 /** One connection's health (issue #290 phase 4). */
 export interface VaultConnection {
   connectionId: string;
@@ -614,3 +499,5 @@ export async function vaultConnectionSetStatus(
   );
   await readJson(res, "set connection status");
 }
+
+export * from "./gateway-client-vault-enrich.js";

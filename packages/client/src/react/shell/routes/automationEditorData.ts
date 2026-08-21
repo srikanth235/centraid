@@ -24,9 +24,9 @@ export interface AutomationEditorLoadResult {
   connectors: AuEditorConnectorsDTO | null;
   /** Manifest `onFailure`, `null` when unset or in create mode. */
   onFailure: string | null;
-  /** Explicit manifest `requires.runner`; `null` inherits subsystem prefs. */
-  runner: string | null;
-  /** Explicit manifest `requires.model`; `null` inherits runner prefs. */
+  /** Explicit manifest `requires.harness`; `null` inherits subsystem prefs. */
+  harness: string | null;
+  /** Explicit manifest `requires.model`; `null` inherits harness prefs. */
   model: string | null;
 }
 
@@ -38,7 +38,7 @@ const DEFAULT_EDITOR_LOAD: AutomationEditorLoadResult = {
   onFailure: null,
   row: null,
   rowId: null,
-  runner: null,
+  harness: null,
   triggers: [],
 };
 
@@ -46,12 +46,12 @@ const DEFAULT_EDITOR_LOAD: AutomationEditorLoadResult = {
  *  that the renderer's ambient `CentraidAutomationManifest` type
  *  (`centraid-api.d.ts`) doesn't declare yet — `requires.secrets`,
  *  `connector`, and `vault` all validate server-side
- *  (`packages/automation/src/manifest/manifest.ts`) but haven't been added
+ *  (`packages/server/src/automation/manifest/manifest.ts`) but haven't been added
  *  to the renderer's stale mirror. Same "cast past a stale ambient type"
  *  pattern as the `prompt` cast below; drop once the ambient type catches
  *  up. */
 interface ManifestConnectorExtra {
-  requires: { secrets?: readonly string[]; runner?: string };
+  requires: { secrets?: readonly string[]; harness?: string };
   connector?: {
     kind: string;
     label: string;
@@ -156,7 +156,7 @@ export async function loadAutomationEditorData(input: {
     onFailure: row.manifest.onFailure ?? null,
     row,
     rowId: row.id,
-    runner: row.manifest.requires.runner ?? null,
+    harness: row.manifest.requires.harness ?? null,
     triggers: row.triggers,
   };
 }

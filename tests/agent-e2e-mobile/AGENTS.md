@@ -4,7 +4,7 @@ Notes for any agent (or human) writing or running flows in this folder. Pair wit
 
 ## What this layer is for
 
-A loose, exploratory complement to whatever scripted-mobile tier eventually lands in `apps/mobile/tests/e2e/` (Detox is the planned inhabitant — not wired up yet). The harness ([`lib/harness.mjs`](lib/harness.mjs)) discovers a booted iOS Simulator **or Android emulator**, checks `dev.centraid.mobile` is installed and Metro is reachable, allocates a run dir, and exposes a `ctx` surface (`run`, `restart`, `note`) to the flow body via `runFlow(slug, fn)`. Each `ctx.run(yaml)` spawns `maestro test` once with cwd set to the run's `screenshots/` dir, so `takeScreenshot:` directives land there.
+The single mobile journey layer for both exploratory work and committed native regression. The harness ([`lib/harness.mjs`](lib/harness.mjs)) discovers a booted iOS Simulator **or Android emulator**, checks `dev.centraid.mobile` is installed and Metro is reachable, allocates a run dir, and exposes a `ctx` surface (`run`, `restart`, `ensureDemo`, `configureGateway`, `note`) to the flow body via `runFlow(slug, fn)`. Each `ctx.run(yaml)` spawns `maestro test` once with cwd set to the run's `screenshots/` dir, so `takeScreenshot:` directives land there.
 
 `MAESTRO_PLATFORM=ios|android` forces a target when both are running; otherwise iOS is preferred. `state.json` and `verdict.md` record the chosen platform alongside the udid.
 
@@ -14,10 +14,9 @@ The structural payoff over flat YAML is **`ctx.restart()`** (stopApp + relaunch 
 
 | Symptom | Where it belongs |
 | --- | --- |
-| Hard invariant that must never flake in CI | `apps/mobile/tests/e2e/` (Detox, when wired up) |
-| End-to-end mobile journey ("set gateway, open an app, see the WebView load, come back") | here |
+| Hard native invariant that must never flake in CI | a committed Maestro flow here |
+| End-to-end mobile journey ("pair a gateway, open an app cover, come back") | here |
 | Visual / copy / "does this feel right" judgment | here |
-| DOM-level assertion inside the in-app WebView | Playwright over CDP into the WebView |
 | Native unit test | `apps/mobile/ios/CentraidTests/` (doesn't exist yet) |
 
 ## Running a flow
@@ -71,7 +70,7 @@ Getting `mobile-e2e` green (#474/#478) surfaced six flows that were green while 
 
 - **Batch directives per `ctx.run()`.** Each call costs ~hundreds of ms (process spawn + Maestro warm-up + driver handshake). 15 separate `ctx.run()` calls is a minute of overhead. Group them.
 - **Keep iOS flows short.** Maestro `2.0-dev.1`'s iOS driver gets flaky past ~10 commands on iOS 26.4 — driver disconnects during text input, `kAXErrorInvalidUIElement` from the accessibility tree. Not a flow-author bug; it's a known prerelease-toolchain issue. Android (UIAutomator2) is more stable — when a flow needs to be long, validate it on Android first. See "Known caveats" in [README.md](README.md#known-caveats).
-- **Pairing has two valid identity exits.** A ticket can enroll a roster member whose name is already known; onboarding then skips the profile form and goes directly to the personalized Done screen. An unnamed member still sees the profile form. Shared pairing helpers must accept and prove both branches instead of waiting unconditionally for “Who’s using this phone?”.
+- **Pairing has two valid identity exits.** A ticket can enroll an owner whose name is already known (e.g. an earlier flow already named them); onboarding then skips the profile form and goes directly to the personalized Done screen. An owner still carrying the placeholder label sees the profile form instead — which is what every FIRST pairing against a fresh gateway gets, since minting can no longer preset a name (#726). Shared pairing helpers must accept and prove both branches instead of waiting unconditionally for "Who's using this phone?".
 - **Selectors prefer accessibility text over coordinates.** RN components expose `accessibilityLabel` as the iOS-level accessibility text — Maestro's `tapOn: { text: "..." }` matches that. Coordinates rot the moment a layout changes.
 - **Anchor with regex when you need exact text.** `tapOn: "Settings"` matches both the Home header gear icon (accessibility text "Settings") AND the "Check settings" body button. Use `tapOn: { text: "^Settings$" }` to isolate the gear.
 - **Pre-flight checks are part of `setup()`.** The harness already fails loudly when no sim is booted, Centraid.app isn't installed, or Metro isn't reachable. Don't paper over those in a flow — fix the environment.

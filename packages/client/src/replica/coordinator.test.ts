@@ -11,13 +11,27 @@ import type {
   ReplicaChangePuller,
   ReplicaCoordinatorOptions,
 } from "./coordinator.js";
-import { ReplicaRebootstrapRequiredError } from "./errors.js";
+import { OnlineOnlyGuard, ReplicaRebootstrapRequiredError } from "./errors.js";
 import { MemoryIntentStore } from "./intent-store.js";
 import { IntentQueue } from "./intents.js";
+import { NodeSqliteDriver } from "./node-sqlite-test-driver.js";
+import { guardReplicaRow } from "./query.js";
+import { ReplicaSqliteStore } from "./store-core.js";
+import type { ReplicaStore } from "./store.js";
 import type {
+  ApplyChangesResult,
+  OptimisticMutation,
+  ReplicaBootstrapHeader,
   ReplicaChangeBatch,
   ReplicaCursor,
+  ReplicaReadRequest,
+  ReplicaReadResult,
+  ReplicaReadWireResult,
+  ReplicaSearchRequest,
+  ReplicaSearchWireResult,
   ReplicaSnapshot,
+  ReplicaSnapshotRow,
+  ReplicaStatus,
 } from "./types.js";
 import { ReplicaWorkerClient } from "./worker-client.js";
 import type { ReplicaWorkerLike } from "./worker-client.js";
@@ -165,6 +179,91 @@ const snapshot: ReplicaSnapshot = {
 };
 
 describe(ReplicaCoordinator, () => {
+  test("captures canonical row versions and refreshes them atomically on retry", async () => {
+    const store = promisedStore(
+      new ReplicaSqliteStore(new NodeSqliteDriver(), "vault-a", "memory")
+    );
+    const intentIds = ["intent-original", "intent-retry"];
+    const intents = new IntentQueue(new MemoryIntentStore(), {
+      idFactory: () => intentIds.shift()!,
+    });
+    const replica = new ReplicaCoordinator(store, intents);
+    await replica.bootstrap({
+      ...windowedHeader(),
+      cursor: { epoch: "epoch-1", seq: 4 },
+      rows: [
+        {
+          shapeId: "shape-agenda",
+          entity: "core.event",
+          rowId: "event-1",
+          values: { id: "event-1", title: "Canonical" },
+          rowVersion: 4,
+        },
+      ],
+    });
+    const optimistic: OptimisticMutation[] = [
+      {
+        op: "upsert",
+        shapeId: "shape-agenda",
+        entity: "core.event",
+        rowId: "event-1",
+        values: { id: "event-1", title: "Offline" },
+      },
+    ];
+
+    await expect(
+      replica.captureBaseVersions(optimistic)
+    ).resolves.toStrictEqual([
+      {
+        shapeId: "shape-agenda",
+        entity: "core.event",
+        rowId: "event-1",
+        version: 4,
+      },
+    ]);
+    await replica.enqueue({
+      appId: "agenda",
+      action: "unknown-edit",
+      input: { event_id: "event-1", title: "Offline" },
+      optimistic,
+      baseVersions: [
+        {
+          shapeId: "shape-agenda",
+          entity: "core.event",
+          rowId: "event-1",
+          version: 3,
+        },
+      ],
+    });
+    await replica.claimNextIntent();
+    await replica.applyIntentOutcome({
+      intentId: "intent-original",
+      status: "conflict",
+      conflict: {
+        shapeId: "shape-agenda",
+        entity: "core.event",
+        rowId: "event-1",
+        expectedVersion: 3,
+        actualVersion: 4,
+      },
+    });
+
+    await expect(replica.retryIntent("intent-original")).resolves.toMatchObject(
+      {
+        intentId: "intent-retry",
+        state: "queued",
+        baseVersions: [{ rowId: "event-1", version: 4 }],
+      }
+    );
+    await expect(intents.list()).resolves.toMatchObject([
+      { intentId: "intent-retry", state: "queued" },
+    ]);
+    await expect(intents.listSettled()).resolves.toMatchObject([
+      { intentId: "intent-original", status: "conflict" },
+    ]);
+    await replica.close();
+  });
+
   test("uses an in-memory outbox when requested persistence falls back to memory", async () => {
     const worker = new StateWorker();
     const indexedDbFactory = {
@@ -515,8 +614,19 @@ describe(ReplicaCoordinator, () => {
         { intentId: "persisted", status: "denied", reason: "grant expired" },
       ],
     });
-    await expect(intents.list()).resolves.toStrictEqual([]);
-    await expect(intents.overlayMutations()).resolves.toStrictEqual([]);
+    await expect(intents.list()).resolves.toMatchObject([
+      { intentId: "persisted", state: "denied", reason: "grant expired" },
+    ]);
+    await expect(intents.overlayMutations()).resolves.toMatchObject([
+      {
+        rowId: "task-1",
+        values: {
+          __centraid_pending_key: "persisted",
+          __centraid_pending_status: "denied",
+          __centraid_pending_reason: "grant expired",
+        },
+      },
+    ]);
     await replica.close();
   });
 
@@ -674,4 +784,246 @@ describe(ReplicaCoordinator, () => {
     expect((await client.status()).cursor).toBeNull();
     await replica.close();
   });
+
+  /**
+   * Boot regression: the gateway answers a not-yet-bootstrapped replica with a
+   * `rebootstrap` frame, which lands while the shell is already walking a
+   * windowed bootstrap. Wiping the store there deletes
+   * `replica_bootstrap_progress` between two pages, and the walk then dies with
+   * "No replica bootstrap is open" — a bootstrap killed by the very demand it
+   * was already satisfying.
+   */
+  test("a feed rebootstrap demand does not wipe an open windowed bootstrap", async () => {
+    const store = promisedStore(
+      new ReplicaSqliteStore(new NodeSqliteDriver(), "vault-a", "memory")
+    );
+    const feed = createFeed();
+    const onRebootstrapRequired = vi.fn<(detail: unknown) => void>();
+    const replica = new ReplicaCoordinator(
+      store,
+      new IntentQueue(new MemoryIntentStore()),
+      {
+        changeFeed: feed,
+        pullChanges: async () => {
+          throw new Error("the walk must not pull changes");
+        },
+        onRebootstrapRequired,
+      }
+    );
+    const header = windowedHeader();
+
+    await replica.bootstrapBegin(header);
+    feed.emit({
+      type: "centraid:vault-rebootstrap",
+      detail: { reason: "schema-mismatch" },
+    });
+    await flushMacrotasks();
+
+    // The walk must still own the store.
+    await replica.bootstrapPage([]);
+    const cursor: ReplicaCursor = { epoch: "replica-1", seq: 2 };
+    await expect(
+      replica.bootstrapCommit(cursor, header)
+    ).resolves.toStrictEqual(cursor);
+    // …and the demand is honoured once the walk seals, not swallowed: the wipe
+    // and the notification both land, just after the commit instead of under it.
+    expect(onRebootstrapRequired).toHaveBeenCalledWith({
+      reason: "schema-mismatch",
+    });
+    expect((await store.status()).cursor).toBeNull();
+  });
+
+  // `syncNow` is the pull-on-demand inverse of the push-driven feed above: a
+  // caller that just finished a gateway-side write (Home's sample seed) awaits
+  // it so its very next read sees the rows, instead of racing the SSE nudge.
+  test("syncNow pulls to the gateway head without waiting for a feed nudge", async () => {
+    const worker = new StateWorker();
+    const { client } = await ReplicaWorkerClient.connect(
+      {
+        dbName: "/centraid-replica-sync-now.sqlite3",
+        vaultId: "vault",
+        remember: false,
+      },
+      () => worker
+    );
+    const pulledFrom: ReplicaCursor[] = [];
+    const replica = new ReplicaCoordinator(
+      client,
+      new IntentQueue(new MemoryIntentStore()),
+      {
+        pullChanges: async (cursor): Promise<ReplicaChangeBatch> => {
+          pulledFrom.push(cursor);
+          // Two pages, then caught up: the loop must follow `hasMore` rather
+          // than stopping at the first batch, or a seed bigger than one commit
+          // group would still paint half-empty tiles.
+          const seq = cursor.seq + 1;
+          return {
+            protocolVersion: 1,
+            schemaEpoch: "schema",
+            from: cursor,
+            to: { epoch: "epoch", seq },
+            changes: [],
+            hasMore: seq < 2,
+          };
+        },
+      }
+    );
+    await replica.bootstrap(snapshot);
+
+    await replica.syncNow();
+
+    expect(pulledFrom).toStrictEqual([
+      { epoch: "epoch", seq: 0 },
+      { epoch: "epoch", seq: 1 },
+    ]);
+    expect((await client.status()).cursor).toStrictEqual({
+      epoch: "epoch",
+      seq: 2,
+    });
+    await replica.close();
+  });
+
+  test("syncNow resolves without pulling before the first bootstrap", async () => {
+    const worker = new StateWorker();
+    const { client } = await ReplicaWorkerClient.connect(
+      {
+        dbName: "/centraid-replica-sync-cold.sqlite3",
+        vaultId: "vault",
+        remember: false,
+      },
+      () => worker
+    );
+    const pullChanges = vi.fn<ReplicaChangePuller>();
+    const replica = new ReplicaCoordinator(
+      client,
+      new IntentQueue(new MemoryIntentStore()),
+      { pullChanges }
+    );
+
+    // No cursor yet: the bootstrap walk owns the first fill, and pulling
+    // changes from nowhere is a protocol error waiting to happen.
+    await replica.syncNow();
+
+    expect(pullChanges).not.toHaveBeenCalled();
+    await replica.close();
+  });
+
+  test("syncNow stops cleanly when the gateway reports no progress", async () => {
+    const worker = new StateWorker();
+    const { client } = await ReplicaWorkerClient.connect(
+      {
+        dbName: "/centraid-replica-sync-flat.sqlite3",
+        vaultId: "vault",
+        remember: false,
+      },
+      () => worker
+    );
+    const replica = new ReplicaCoordinator(
+      client,
+      new IntentQueue(new MemoryIntentStore()),
+      {
+        pullChanges: async (cursor): Promise<ReplicaChangeBatch> => ({
+          protocolVersion: 1,
+          schemaEpoch: "schema",
+          from: cursor,
+          to: cursor,
+          changes: [],
+        }),
+      }
+    );
+    await replica.bootstrap(snapshot);
+
+    await replica.syncNow();
+
+    // Nothing beyond the cursor: no batch is applied and no loop spins.
+    expect(
+      worker.requests.filter((request) => request.op === "apply-changes")
+    ).toHaveLength(0);
+    await replica.close();
+  });
 });
+
+function windowedHeader(): ReplicaBootstrapHeader {
+  return {
+    protocolVersion: 1,
+    vaultId: "vault-a",
+    schemaEpoch: "schema-1",
+    shapes: [
+      {
+        shapeId: "shape-agenda",
+        appId: "agenda",
+        purpose: "dpv:ServiceProvision",
+        entities: [
+          { entity: "core.event", primaryKey: "id", columns: ["id", "title"] },
+        ],
+      },
+    ],
+  };
+}
+
+/**
+ * The synchronous store core behind the async `ReplicaStore` seam — the same
+ * adapter shape the web worker and the native store fill. The coordinator under
+ * test therefore drives a REAL replica, which is what makes "a bootstrap is
+ * open" enforceable; a hand-rolled fake would have to restate the invariant it
+ * is supposed to be proving.
+ */
+function promisedStore(core: ReplicaSqliteStore): ReplicaStore {
+  return {
+    status: () => Promise.resolve(core.status() as ReplicaStatus),
+    catalog: () => Promise.resolve(core.catalog()),
+    bootstrap: (full: ReplicaSnapshot) => Promise.resolve(core.bootstrap(full)),
+    bootstrapBegin: (header: ReplicaBootstrapHeader) => {
+      core.bootstrapBegin(header);
+      return Promise.resolve(undefined);
+    },
+    bootstrapPage: (rows: ReplicaSnapshotRow[]) => {
+      core.bootstrapPage(rows);
+      return Promise.resolve(undefined);
+    },
+    bootstrapPreview: (cursor: ReplicaCursor) => {
+      core.bootstrapPreview(cursor);
+      return Promise.resolve(undefined);
+    },
+    bootstrapCommit: (cursor: ReplicaCursor) =>
+      Promise.resolve(core.bootstrapCommit(cursor)),
+    applyChanges: (batch: ReplicaChangeBatch): Promise<ApplyChangesResult> =>
+      Promise.resolve(core.applyChanges(batch)),
+    read: (
+      request: ReplicaReadRequest,
+      mutations: OptimisticMutation[] = []
+    ): Promise<ReplicaReadResult> => {
+      const result = core.read(request, mutations);
+      const guard = new OnlineOnlyGuard();
+      return Promise.resolve({
+        rows: result.rows.map((row) => guardReplicaRow(row, guard)),
+        receiptId: `replica:${result.cursor.epoch}:${result.cursor.seq}`,
+        dependency: result.dependency,
+        coverage: result.coverage,
+      });
+    },
+    readWire: (
+      request: ReplicaReadRequest,
+      mutations: OptimisticMutation[] = []
+    ): Promise<ReplicaReadWireResult> =>
+      Promise.resolve(core.read(request, mutations)),
+    searchWire: (
+      request: ReplicaSearchRequest,
+      mutations: OptimisticMutation[] = []
+    ): Promise<ReplicaSearchWireResult> =>
+      Promise.resolve(core.search(request, mutations)),
+    wipe: () => {
+      core.wipe();
+      return Promise.resolve(undefined);
+    },
+    close: () => {
+      core.close();
+      return Promise.resolve();
+    },
+    purge: () => {
+      core.wipe();
+      core.close();
+      return Promise.resolve();
+    },
+  };
+}

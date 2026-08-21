@@ -1,9 +1,15 @@
 // Built-in product catalog — the shipped blueprint apps, not demo placeholders.
 // Shared across desktop + mobile so launcher identity cannot drift by client.
+//
+// `colorKey` names the app's slot on the identity hue wheel (`APP_HUES` in
+// palette.ts). The Binding Layer assigns them by content character, not by
+// taste: locker 0 (rose), photos 28 (amber), tasks 70 (ochre), agenda 150
+// (forest), docs 210 (teal), notes 255 (slate), tally 290 (indigo), people
+// 320 (violet). Home takes no hue at all — it renders in `--text-soft`.
 
 import type { IconName } from "./icons";
 import { palette } from "./palette";
-import type { ColorKey, ColorHex } from "./palette";
+import type { ColorHex, ColorKey } from "./palette";
 
 export interface AppMeta {
   id: string;
@@ -19,56 +25,56 @@ export interface AppMetaResolved extends AppMeta {
 
 const BUILTIN_APPS: readonly AppMeta[] = [
   {
-    colorKey: "amber",
+    colorKey: "slate",
     desc: "Write and revisit durable notes.",
     iconKey: "Book",
     id: "notes",
     name: "Notes",
   },
   {
-    colorKey: "rose",
+    colorKey: "violet",
     desc: "Keep people and relationships close.",
     iconKey: "AddressBook",
     id: "people",
     name: "People",
   },
   {
-    colorKey: "teal",
+    colorKey: "amber",
     desc: "Browse and protect your photos.",
     iconKey: "Camera",
     id: "photos",
     name: "Photos",
   },
   {
-    colorKey: "violet",
+    colorKey: "rose",
     desc: "Keep private secrets behind a lock.",
     iconKey: "Lock",
     id: "locker",
     name: "Locker",
   },
   {
-    colorKey: "forest",
+    colorKey: "indigo",
     desc: "See balances and simple trends.",
     iconKey: "Receipt",
     id: "tally",
     name: "Tally",
   },
   {
-    colorKey: "indigo",
+    colorKey: "ochre",
     desc: "Capture the next thing to do.",
     iconKey: "Check",
     id: "tasks",
     name: "Tasks",
   },
   {
-    colorKey: "ochre",
+    colorKey: "teal",
     desc: "Read and organize your documents.",
     iconKey: "Folder",
     id: "docs",
     name: "Docs",
   },
   {
-    colorKey: "slate",
+    colorKey: "forest",
     desc: "Keep dates, events, and plans together.",
     iconKey: "Calendar",
     id: "agenda",

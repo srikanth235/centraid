@@ -3,7 +3,7 @@ import { createRoot } from "react-dom/client";
 import type { Root } from "react-dom/client";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import type { MemberScope } from "../memberScope.js";
+import type { OwnerScope } from "../ownerScope.js";
 import ScopePicker from "./ScopePicker.js";
 
 // The picker is what let the vault switcher go (#599, Decision 14): the target
@@ -20,11 +20,10 @@ describe("ScopePicker suite", () => {
     host = null;
   });
 
-  function scope(over: Partial<MemberScope> = {}): MemberScope {
+  function scope(over: Partial<OwnerScope> = {}): OwnerScope {
     return {
       id: "v1",
       label: "Personal",
-      role: "admin",
       canWrite: true,
       ...over,
     };
@@ -38,14 +37,14 @@ describe("ScopePicker suite", () => {
     return host;
   }
 
-  const MANY: MemberScope[] = [
+  const MANY: OwnerScope[] = [
     scope(),
-    scope({ id: "v2", label: "Family", role: "write" }),
-    scope({ id: "v3", label: "Neighbours", role: "read", canWrite: false }),
+    scope({ id: "v2", label: "Family" }),
+    scope({ id: "v3", label: "Neighbours", canWrite: false }),
   ];
 
   describe(ScopePicker, () => {
-    it("offers only vaults this member can write to — a read-only vault is not a target", () => {
+    it("offers only vaults this owner can write to — a read-only vault is not a target", () => {
       const el = render(
         <ScopePicker
           scopes={MANY}
@@ -63,15 +62,16 @@ describe("ScopePicker suite", () => {
       expect(options.join(" ")).not.toContain("Neighbours");
     });
 
-    it("labels each option with ownership words, not the wire role", () => {
+    it("labels each option with the vault name alone — no role badge, no wire word", () => {
       const el = render(
         <ScopePicker scopes={MANY} value="v1" onChange={() => {}} label="In" />
       );
-      const text = el.textContent ?? "";
-      expect(text).toContain("Owner");
-      expect(text).toContain("Member");
-      expect(text).not.toMatch(/\badmin\b/u);
-      expect(text).not.toMatch(/\bvault\b/iu);
+      const options = [...el.querySelectorAll("option")].map(
+        (o) => o.textContent
+      );
+      expect(options).toStrictEqual(["Personal", "Family"]);
+      expect(el.textContent).not.toMatch(/\badmin\b/u);
+      expect(el.textContent).not.toMatch(/\bvault\b/iu);
     });
 
     it("collapses to a plain statement when there is only one writable vault", () => {
@@ -82,7 +82,6 @@ describe("ScopePicker suite", () => {
             scope({
               id: "v3",
               label: "Neighbours",
-              role: "read",
               canWrite: false,
             }),
           ]}

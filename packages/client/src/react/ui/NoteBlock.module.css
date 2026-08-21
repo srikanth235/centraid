@@ -1,0 +1,10 @@
+/* The rule-explaining note (v9 §8). A measure, not a width. */
+
+.note {
+  color: var(--text-faint);
+  font: var(--t-body);
+  margin: 0;
+  max-inline-size: 60ch;
+  padding-block: var(--sp-2) var(--sp-4);
+  text-wrap: pretty;
+}

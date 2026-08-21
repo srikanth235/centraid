@@ -9,7 +9,7 @@
  *   - `streamTurn` POSTs `/centraid/<appId>/_turn` and parses the SSE stream
  *     into the gateway's native `TurnStreamEvent`s (fetch + ReadableStream
  *     reader, not `EventSource` — we need a POST body + the Bearer header).
- *     The gateway-side runner (Phase 3a `makeUnifiedConversationRunner`) runs the
+ *     The gateway-side harness (Phase 3a `makeUnifiedConversationRunner`) runs the
  *     turn in the app's draft worktree with the union of tools, so one turn
  *     can both tweak the app's code and operate its data.
  *   - the chat-history surface (`/_centraid-conversations/apps/<appId>/sessions…`)
@@ -22,19 +22,14 @@
 import {
   appTurnPath,
   assistantTurnPath,
-  resolvePath,
-  conversationStatusPath,
-  blobsPath,
-} from "@centraid/design/kit/conversation-client.js";
-// Shared chat-client core (issue #420): the ONE SSE parser + wire-route
-// builders + the documented TurnStreamEvent union, from the canonical kit copy.
-import { consumeSse } from "@centraid/design/kit/turn-stream.js";
-import type { TurnStreamEvent } from "@centraid/design/kit/turn-stream.js";
+  assistantResolvePath,
+} from "@centraid/core/protocol";
 
 import type {
-  CentraidAgentsStatus,
-  CentraidRunnerStatus,
+  CentraidHarnessesStatus,
+  CentraidHarnessStatus,
 } from "./centraid-api.js";
+import { conversationStatusPath, blobsPath } from "./conversation-routes.js";
 import {
   auth,
   authHeaders,
@@ -43,52 +38,55 @@ import {
   scopedAuthHeaders,
   GatewayClientError,
 } from "./gateway-client-core.js";
+// The ONE SSE parser + the documented TurnStreamEvent union.
+import { consumeSse } from "./turn-stream.js";
+import type { TurnStreamEvent } from "./turn-stream.js";
 
-export { type TurnStreamEvent } from "@centraid/design/kit/turn-stream.js";
+export { type TurnStreamEvent } from "./turn-stream.js";
 
 // Re-exported so every consumer keeps importing the union from this barrel; the
-// definition now lives in one place (the wire contract, turn-stream.d.ts).
+// definition now lives in one place (the wire contract, turn-stream.ts).
 
 /**
- * Runner preflight + model catalog from the ACTIVE gateway. Reads the
- * gateway's own `GET /centraid/_turn/runner-status` — so a remote gateway
- * reports its own configured runner and models, and the chat picker
+ * Harness preflight + model catalog from the ACTIVE gateway. Reads the
+ * gateway's own `GET /centraid/_turn/harness-status` — so a remote gateway
+ * reports its own configured harness and models, and the chat picker
  * can list them.
  */
-export async function getRunnerStatus(
+export async function getHarnessStatus(
   opts: { refresh?: boolean } = {}
-): Promise<CentraidRunnerStatus> {
+): Promise<CentraidHarnessStatus> {
   const { baseUrl, token } = await auth();
   const path = opts.refresh
-    ? "/centraid/_turn/runner-status?refresh=1"
-    : "/centraid/_turn/runner-status";
+    ? "/centraid/_turn/harness-status?refresh=1"
+    : "/centraid/_turn/harness-status";
   const res = await doFetch(baseUrl, path, {
     method: "GET",
     headers: authHeaders(token),
   });
-  return readJson<CentraidRunnerStatus>(res, "fetch runner status");
+  return readJson<CentraidHarnessStatus>(res, "fetch harness status");
 }
 
 /**
- * Which coding-agent credentials are present on the ACTIVE gateway's host.
- * Reads the gateway's `GET /centraid/_agents/status` — detection lives
- * beside the runner, so a remote gateway reports its own host's agents
+ * Which harness credentials are present on the ACTIVE gateway's host.
+ * Reads the gateway's `GET /centraid/_harnesses/status` — detection lives
+ * beside the harness, so a remote gateway reports its own host's agents
  * rather than whatever is installed on the desktop.
  */
-export async function getAgentsStatus(
+export async function getHarnessesStatus(
   opts: { refresh?: boolean } = {}
-): Promise<CentraidAgentsStatus> {
+): Promise<CentraidHarnessesStatus> {
   const { baseUrl, token } = await auth();
-  // `?refresh=1` re-enumerates each agent's models (issue #188). A plain load
+  // `?refresh=1` re-enumerates each harness's models (issue #188). A plain load
   // returns the catalog cache.
   const path = opts.refresh
-    ? "/centraid/_agents/status?refresh=1"
-    : "/centraid/_agents/status";
+    ? "/centraid/_harnesses/status?refresh=1"
+    : "/centraid/_harnesses/status";
   const res = await doFetch(baseUrl, path, {
     method: "GET",
     headers: authHeaders(token),
   });
-  return readJson<CentraidAgentsStatus>(res, "fetch agents status");
+  return readJson<CentraidHarnessesStatus>(res, "fetch agents status");
 }
 
 /** An attachment already uploaded to the blob CAS, referenced on the next turn. */
@@ -112,8 +110,8 @@ export interface StreamTurnInput {
    * onto the vault register. Absent = builder chat (unchanged).
    */
   register?: "ask" | "build";
-  /** Per-conversation runner selection; does not mutate the device default. */
-  runnerKind?: string;
+  /** Per-conversation harness selection; does not mutate the device default. */
+  harnessKind?: string;
   model?: string;
   thinking?: string;
   /** Files uploaded ahead of the turn (issue #190). */
@@ -280,7 +278,7 @@ export async function streamTurn(
       conversationId: input.conversationId,
       message: input.message,
       ...(input.register ? { register: input.register } : {}),
-      ...(input.runnerKind ? { runnerKind: input.runnerKind } : {}),
+      ...(input.harnessKind ? { harnessKind: input.harnessKind } : {}),
       ...(input.model ? { model: input.model } : {}),
       ...(input.thinking ? { thinking: input.thinking } : {}),
       ...(input.retryOf ? { retryOf: input.retryOf } : {}),
@@ -334,7 +332,7 @@ export async function streamAssistantTurn(
     JSON.stringify({
       conversationId: input.conversationId,
       message: input.message,
-      ...(input.runnerKind ? { runnerKind: input.runnerKind } : {}),
+      ...(input.harnessKind ? { harnessKind: input.harnessKind } : {}),
       ...(input.model ? { model: input.model } : {}),
       ...(input.thinking ? { thinking: input.thinking } : {}),
       ...(input.retryOf ? { retryOf: input.retryOf } : {}),
@@ -379,7 +377,7 @@ export async function resolveAssistantRefs(
 ): Promise<AssistantRefCard[]> {
   if (refs.length === 0) return [];
   const { baseUrl, token } = await auth();
-  const res = await doFetch(baseUrl, resolvePath(), {
+  const res = await doFetch(baseUrl, assistantResolvePath(), {
     method: "POST",
     headers: authHeaders(token, "application/json"),
     body: JSON.stringify({ refs }),

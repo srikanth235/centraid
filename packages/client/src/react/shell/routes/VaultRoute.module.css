@@ -1,0 +1,24 @@
+/* Vault — the merged custody surface (v11).
+
+   ONE MEASURE for the whole page, and that is the point of the file. The two
+   halves this route composes each carried their own: 1120 for the census and
+   1080 for the roster, which stacked in one scroll drew a column that visibly
+   stepped in halfway down. A page measure is a property of the PAGE, so it is
+   stated once, here, and neither half states one any more.
+
+   Every direction is logical: the column centres in the inline axis and
+   mirrors whole under RTL from the stage's single `dir`. */
+
+.page {
+  display: flex;
+  flex-direction: column;
+  /* Every child is a flex item in a column; without this they inherit
+     `min-width: auto` and refuse to shrink below their content, so the page
+     scrolls sideways instead of the blocks reflowing. */
+  min-inline-size: 0;
+  /* The reading column every ops page shares. Not a token: it is a page
+     measure, not a component metric, and the other screens state the same
+     1120 outright. */
+  max-inline-size: 1120px;
+  padding: var(--sp-4) var(--sp-5) var(--sp-6);
+}

@@ -1,0 +1,48 @@
+/* THE COLOUR SWATCH ROW, and nothing else.
+   Every other block on the edit screen is a shared recipe
+   (`shared.module.css`: the field, the chip row, the commits). The swatch row
+   is the one shape that file does not carry, and it is a metric — a circle in
+   two rungs, a chosen border — rather than a colour: the fill arrives from
+   `EditRoute.tsx` as `var(--c-<hue>)`, so no hue is named here.
+
+   Tokens only, no declared custom properties, logical properties throughout. */
+
+/* A native `<fieldset>`, so the browser's own chrome for one is reset here
+   rather than at the call site — the same reset `.chipRow` makes. */
+.swatches {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sp-2);
+  padding: var(--sp-2) 0;
+  margin: 0;
+  border: none;
+  min-inline-size: 0;
+}
+
+/* 40px on touch, 32px on a pointer surface — the handoff's two rungs. The
+   chosen swatch takes a 2px ink border and the rest a transparent one of the
+   same width, so choosing a colour cannot resize the row. */
+.swatch {
+  flex: none;
+  inline-size: 40px;
+  block-size: 40px;
+  padding: 0;
+  border: 2px solid transparent;
+  border-radius: var(--r-pill);
+  cursor: pointer;
+  transition: border-color var(--dur-1) var(--ease);
+}
+.swatch[aria-pressed="true"] {
+  border-color: var(--text);
+}
+.swatch:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
+}
+@media (pointer: fine) {
+  .swatch {
+    inline-size: 32px;
+    block-size: 32px;
+  }
+}

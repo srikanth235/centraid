@@ -34,7 +34,7 @@ const shapes: ReplicaShape[] = [
     purpose: "dpv:ServiceProvision",
     entities: [
       {
-        entity: "media.media_asset",
+        entity: "media.asset",
         primaryKey: "asset_id",
         columns: ["asset_id", "captured_at"],
       },
@@ -56,14 +56,14 @@ function fakeCoordinator(): ShellReplicaCoordinator {
     readWire: vi.fn<ShellReplicaCoordinator["readWire"]>().mockResolvedValue({
       rows: [],
       cursor: { epoch: "e", seq: 1 },
-      dependency: { shapeId: "shape-media", entity: "media.media_asset" },
+      dependency: { shapeId: "shape-media", entity: "media.asset" },
     }),
     searchWire: vi
       .fn<ShellReplicaCoordinator["searchWire"]>()
       .mockResolvedValue({
         rows: [],
         cursor: { epoch: "e", seq: 1 },
-        dependency: { shapeId: "shape-media", entity: "media.media_asset" },
+        dependency: { shapeId: "shape-media", entity: "media.asset" },
       }),
     enqueue: vi.fn<ShellReplicaCoordinator["enqueue"]>(),
     claimNextIntent: vi
@@ -74,6 +74,12 @@ function fakeCoordinator(): ShellReplicaCoordinator {
     markIntentAwaitingChange:
       vi.fn<ShellReplicaCoordinator["markIntentAwaitingChange"]>(),
     applyIntentOutcome: vi.fn<ShellReplicaCoordinator["applyIntentOutcome"]>(),
+    discardIntent: vi
+      .fn<ShellReplicaCoordinator["discardIntent"]>()
+      .mockResolvedValue(false),
+    retryIntent: vi
+      .fn<ShellReplicaCoordinator["retryIntent"]>()
+      .mockResolvedValue(undefined),
     recoverSending: vi
       .fn<ShellReplicaCoordinator["recoverSending"]>()
       .mockResolvedValue([]),

@@ -178,6 +178,7 @@ type Responder = () => Response;
 interface FakeGateway {
   on: (pathFragment: string, responder: Responder) => FakeGateway;
   readonly baseUrls: readonly string[];
+  readonly pathnames: readonly string[];
   readonly fetcher: (
     baseUrl: string,
     pathname: string,
@@ -189,8 +190,10 @@ interface FakeGateway {
 function createGateway(): FakeGateway {
   const queues = new Map<string, Responder[]>();
   const baseUrls: string[] = [];
+  const pathnames: string[] = [];
   const gateway: FakeGateway = {
     baseUrls,
+    pathnames,
     on(pathFragment, responder) {
       const queue = queues.get(pathFragment) ?? [];
       queue.push(responder);
@@ -199,6 +202,7 @@ function createGateway(): FakeGateway {
     },
     fetcher: (baseUrl, pathname) => {
       baseUrls.push(baseUrl);
+      pathnames.push(pathname);
       for (const [fragment, queue] of queues) {
         if (pathname.includes(fragment) && queue.length > 0) {
           return Promise.resolve(queue.shift()!());
@@ -397,6 +401,44 @@ describe(createNativeReplicaSession, () => {
         // device swap.
         "9fb4ce111fbf05254e7437936d9e5082d6888dd4112fe38c8254c6d1beff844f"
       );
+    } finally {
+      await session.close();
+    }
+  });
+
+  test("durably queues a first-open offline write before bootstrap", async () => {
+    const gateway = createGateway();
+    const feed = createFeed();
+    const session = await createNativeReplicaSession({
+      gatewayAuth,
+      fetcher: gateway.fetcher,
+      changeFeed: feed,
+      driver: new NodeSqliteDriver(),
+      digest: nodeDigest,
+      idFactory: sequentialIds(),
+      isConnected: () => false,
+    });
+    try {
+      await expect(
+        session.write("photos", {
+          action: "photos.favorite",
+          input: { assetId: "asset-1", favorite: true },
+        })
+      ).resolves.toStrictEqual({
+        intentId: "intent-1",
+        status: "queued",
+        reason: "waiting for a connection",
+      });
+
+      await expect(session.coordinator.intents.list()).resolves.toMatchObject([
+        {
+          intentId: "intent-1",
+          state: "queued",
+          input: { assetId: "asset-1", favorite: true },
+          optimistic: [],
+        },
+      ]);
+      expect(gateway.pathnames).toStrictEqual([]);
     } finally {
       await session.close();
     }

@@ -8,7 +8,7 @@ import {
   backupDeviceMedia,
   backupDocument,
 } from "../../lib/upload/media-producer";
-import { showToast } from "../components/Toast";
+import { postStatus } from "../components/status-line";
 import { useReplica } from "../replica/ReplicaProvider";
 import { ShareIntentGate, processShareIntent } from "./share-ingest";
 
@@ -102,10 +102,7 @@ export function ShareIntentIngest(): null {
                     fileSize: (path) => new File(path).size,
                     reset: resetShareIntent,
                     alert: (title, message) =>
-                      showToast({
-                        message: `${title}: ${message}`,
-                        tone: "danger",
-                      }),
+                      postStatus(`${title}: ${message}`),
                   },
                   session,
                   gatewayBase,

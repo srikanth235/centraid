@@ -1,0 +1,99 @@
+/* Row list (v9 §9). Hairlines are INTERNAL only: the container draws the one
+   outer edge, and the rows draw the seams between themselves. */
+
+.rows {
+  background: var(--bg-elev);
+  border: 1px solid var(--line);
+  border-radius: var(--r-lg);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+/* One of several lists stacked under one head. The margin is what makes two
+   groups read as two statements instead of one list with a seam in it — the
+   smallest step in the scale, because they are still the same subject. */
+.rows[data-stacked="true"] {
+  margin-block-end: var(--sp-2);
+}
+
+/* The shell carries the seam, not the row, so a row that has expanded detail
+   under it still reads as ONE entry with one line above it. */
+.rowShell + .rowShell {
+  border-block-start: 1px solid var(--line);
+}
+
+.row {
+  align-items: center;
+  display: flex;
+  gap: var(--sp-3);
+  min-block-size: var(--h-row);
+  padding: var(--sp-2) var(--sp-3);
+}
+
+.text {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: var(--sp-hair);
+  min-inline-size: 0;
+}
+
+/* The title is ALWAYS the primary ink — a net-toned row states its exception
+   in the sub and the meta, never by recolouring what the row IS. */
+.title {
+  color: var(--text);
+  font: var(--t-body);
+  text-wrap: pretty;
+}
+
+.row[data-off="true"] .title,
+.row[data-struck="true"] .title {
+  color: var(--text-disabled);
+}
+
+/* Revoked, and still on the record. The rule goes through the TITLE only — the
+   sub still has to be readable, because it is what says who lost the store and
+   when. The row keeps its height and its hairlines: it is a real row, not a
+   receding one, and the recession is a token on this leaf rather than an
+   opacity on the container. */
+.row[data-struck="true"] .title {
+  text-decoration: line-through;
+}
+
+.sub {
+  color: var(--text-faint);
+  direction: var(--t-mono-direction);
+  font: var(--t-mono);
+  font-variant-numeric: var(--t-mono-numeric);
+  text-wrap: pretty;
+  unicode-bidi: var(--t-mono-bidi);
+}
+
+.meta {
+  color: var(--text-faint);
+  direction: var(--t-mono-direction);
+  flex: none;
+  font: var(--t-mono);
+  font-variant-numeric: var(--t-mono-numeric);
+  unicode-bidi: var(--t-mono-bidi);
+}
+
+.row[data-net="true"] .sub,
+.row[data-net="true"] .meta {
+  color: var(--net);
+}
+
+/* Always outlined. The `destructive` variant supplies the `--net` border and
+   ink; nothing here fills a row action, because the view's one filled control
+   is its commit and it lives in the app bar. */
+.action {
+  flex: none;
+  white-space: nowrap;
+}
+
+/* The expanded editor a row can carry (Notifications' outbox). It is inside
+   the row's own shell, indented to the row's text column. */
+.detail {
+  padding: 0 var(--sp-3) var(--sp-3);
+}

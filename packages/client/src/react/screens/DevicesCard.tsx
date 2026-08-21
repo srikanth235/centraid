@@ -6,47 +6,48 @@ import type {
   GatewayDeviceTicket,
   GatewayDeviceTicketInput,
   GatewayDeviceWorkDepth,
-  GatewayMember,
+  GatewayOwner,
 } from "../../gateway-client.js";
 import { startVisibilityTicker } from "../shell/routes/visibility-ticker.js";
-import { cx } from "../ui/cx.js";
-import Icon from "../ui/Icon.js";
-import { groupDevicesByMember, vaultsFromGroups } from "./device-groups.js";
-import type { GroupedDevice } from "./device-groups.js";
-import DeviceMemberGroup from "./DeviceMemberGroup.js";
+import Button from "../ui/Button.js";
+import NoteBlock from "../ui/NoteBlock.js";
+import { groupDevicesByOwner } from "./device-groups.js";
+import type { GroupedDevice, OwnerGroup } from "./device-groups.js";
+import DeviceOwnerGroup from "./DeviceOwnerGroup.js";
 import DevicePairPanel from "./DevicePairPanel.js";
 
-import controlsCss from "../styles/controls.module.css";
-import buttonCss from "../ui/Button.module.css";
-import styles from "./DevicesCard.module.css";
-import gwStyles from "./GatewayScreen.module.css";
+import styles from "./HouseholdScreen.module.css";
 
-// Gateway → Overview → People & devices: the owner surface over the daemon's
-// member roster + `EnrollmentStore` (issues #392, #599).
+// Devices → the roster half of the page (issues #392, #726; v9 shape #765).
 //
-// It is people-first because authority is: a role is authored on a PERSON and
-// devices inherit it, so "Priya's phone is admin but her laptop is read-only"
-// isn't a state this card can even display. Each group is one person, their
-// access in ownership words, and the hardware acting as them.
+// It is people-first because a device is always somebody's. A vault has
+// exactly one owner and a device caller sees only its own owner's roster row,
+// so the block this page almost always renders is the caller's own — "Yours" —
+// and "Other people" appears only on a gateway that really does hold more than
+// one person's hardware.
 //
-// The two removal verbs are deliberately different affordances:
-//   Revoke device  (per row)    — "this phone was stolen". The person keeps
-//                                 their access and their other devices.
-//   Remove <person> (per group) — "she moved out". One atomic act that drops
-//                                 their roles and every device they own.
+// "Revoke device" ("this phone was stolen") is the only removal verb offered
+// — removing the PERSON is a host-custody act on this machine
+// (`owners-routes.ts`), never reachable from a device-token client.
 //
-// Revoking no longer deletes the row; it tombstones it, so a past write still
-// resolves to the device that made it. Tombstones live in a collapsed
-// disclosure at the foot of their person's group — present for audit, absent
-// from every count and every action.
+// "Add someone" (#726 P1) mints a NEW person a vault of their own, hosted on
+// this machine, then shows the SAME ticket panel "Pair a device" renders — the
+// two entry points open one `DevicePairPanel`, one self-paired and one
+// `forPerson`, rather than two implementations of a ticket screen.
+//
+// The data half lives in `useDeviceRoster` rather than in this component: the
+// page's app-bar count line and status line are published from the counts, and
+// the frame renders ABOVE the outlet, so the screen — not a card inside it —
+// has to be the thing that holds them.
 
-export interface DevicesCardProps {
-  /** Live clock (parent ticks it each second) — drives the humanized ages. */
-  now: number;
+/** Poll cadence — same order of magnitude as the Backups card. */
+const POLL_MS = 15_000;
+
+export interface DeviceRosterWiring {
   loadDevices: () => Promise<CentraidGatewayDevice[]>;
   onRevokeDevice: (
     deviceId: string,
-    options?: { confirmLastAdmin?: string }
+    options?: { confirmLastDevice?: string }
   ) => Promise<{ removed: boolean }>;
   onRenameDevice?: (
     deviceId: string,
@@ -55,57 +56,57 @@ export interface DevicesCardProps {
   /** Eager local cleanup after this renderer successfully revokes itself. */
   onCurrentDeviceRevoked?: () => Promise<void>;
   /**
-   * The household roster. Optional so a gateway with no member surface (or a
-   * test) still renders — the groups then come from the devices alone.
+   * The caller's own owner row. Optional so a gateway with no owner surface
+   * (or a test) still renders — the group then comes from the devices alone.
    */
-  loadMembers?: () => Promise<GatewayMember[]>;
-  /** Remove a PERSON. Absent = the card offers only per-device revocation. */
-  onRemoveMember?: (
-    memberId: string,
-    options?: { confirmLastAdmin?: string }
-  ) => Promise<{ removed: boolean }>;
-  /**
-   * Mint a one-time pairing ticket (`POST _gateway/devices/ticket`). Optional
-   * so a host that can't mint (or a test) simply hides "Pair a device".
-   */
-  onCreateTicket?: (
-    input?: GatewayDeviceTicketInput
-  ) => Promise<GatewayDeviceTicket>;
+  loadOwners?: () => Promise<GatewayOwner[]>;
   onUpdateCompute?: (
     device: CentraidGatewayDevice,
     contributeWhileCharging: boolean
   ) => Promise<CentraidGatewayDevice>;
   loadWorkStatus?: () => Promise<GatewayDeviceWorkDepth[]>;
-  /**
-   * Whether the viewer owns any vault here. A read-only member saw live
-   * `Revoke device` / `Remove <person>` buttons whose clicks the gateway
-   * refused with no feedback (onboarding run B11); the roster now renders
-   * read-only rows for them instead.
-   */
-  canAdminister?: boolean;
 }
 
-/** Poll cadence — same order of magnitude as the Backups card. */
-const POLL_MS = 15_000;
+export interface DeviceRoster {
+  status: "loading" | "ready" | "error";
+  /** The message the gateway (or the network) gave, in the error state. */
+  error: string | null;
+  /** The caller's own person, when any device names them. */
+  self?: OwnerGroup;
+  /** Everyone else with hardware on this gateway — usually nobody. */
+  others: OwnerGroup[];
+  /** Live hardware, counted once per device rather than per enrollment. */
+  deviceCount: number;
+  personCount: number;
+  /** Work the gateway has queued for contributing devices. `hasWork` is false
+   *  on a host with no work plane at all, which is not the same as a plane
+   *  with nothing in it. */
+  hasWork: boolean;
+  queued: number;
+  leased: number;
+  refresh: () => void;
+  revoke: (device: GroupedDevice, confirmLastDevice?: string) => Promise<void>;
+  rename: (device: GroupedDevice, label: string) => Promise<void>;
+  updateCompute: (device: GroupedDevice, enabled: boolean) => Promise<void>;
+  canRename: boolean;
+  canCompute: boolean;
+}
 
-export default function DevicesCard({
-  now,
-  loadDevices,
-  onRevokeDevice,
-  onRenameDevice,
-  onCurrentDeviceRevoked,
-  loadMembers,
-  onRemoveMember,
-  onCreateTicket,
-  onUpdateCompute,
-  loadWorkStatus,
-  canAdminister = true,
-}: DevicesCardProps): JSX.Element {
+/** The roster's data half: one poll, and the three writes a device answers to. */
+export function useDeviceRoster(wiring: DeviceRosterWiring): DeviceRoster {
+  const {
+    loadDevices,
+    loadOwners,
+    loadWorkStatus,
+    onRevokeDevice,
+    onRenameDevice,
+    onCurrentDeviceRevoked,
+    onUpdateCompute,
+  } = wiring;
   const [devices, setDevices] = useState<CentraidGatewayDevice[] | null>(null);
-  const [members, setMembers] = useState<GatewayMember[]>([]);
+  const [owners, setOwners] = useState<GatewayOwner[]>([]);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [workDepth, setWorkDepth] = useState<GatewayDeviceWorkDepth[]>([]);
-  const [pairing, setPairing] = useState(false);
   const mountedRef = useRef(true);
 
   const refresh = useCallback((): void => {
@@ -119,20 +120,20 @@ export default function DevicesCard({
         if (!mountedRef.current) return;
         setLoadError(error instanceof Error ? error.message : String(error));
       });
-    void loadMembers?.()
+    void loadOwners?.()
       .then((list) => {
-        if (mountedRef.current) setMembers(list);
+        if (mountedRef.current) setOwners(list);
       })
       // A roster the gateway won't serve is not fatal: the devices still name
-      // their people, so the card degrades to device-derived groups.
+      // their people, so the page degrades to device-derived groups.
       .catch(() => undefined);
     void loadWorkStatus?.()
       .then((depth) => {
         if (mountedRef.current) setWorkDepth(depth);
       })
-      // Poll failures are transient; retain the last successful work badge.
+      // Poll failures are transient; retain the last successful work figure.
       .catch(() => undefined);
-  }, [loadDevices, loadMembers, loadWorkStatus]);
+  }, [loadDevices, loadOwners, loadWorkStatus]);
 
   useEffect(() => {
     mountedRef.current = true;
@@ -146,24 +147,30 @@ export default function DevicesCard({
   }, [refresh]);
 
   const revoke = useCallback(
-    async (device: GroupedDevice, confirmLastAdmin?: string): Promise<void> => {
+    async (
+      device: GroupedDevice,
+      confirmLastDevice?: string
+    ): Promise<void> => {
       // "Revoke device" means the hardware, so every enrollment it holds goes
       // — one per vault it reached. Chained rather than `Promise.all`: the
-      // gateway refuses the enrollment that would strand a vault's last owner,
-      // and that refusal has to surface before the rest are dropped.
+      // gateway refuses the enrollment that would strand the owner's last
+      // device for a vault, and that refusal has to surface before the rest
+      // are dropped.
       await device.enrollmentIds.reduce(
         (chain, enrollmentId) =>
           chain.then(async () => {
             await onRevokeDevice(
               enrollmentId,
-              confirmLastAdmin === undefined ? undefined : { confirmLastAdmin }
+              confirmLastDevice === undefined
+                ? undefined
+                : { confirmLastDevice }
             );
           }),
         Promise.resolve()
       );
       if (device.current) await onCurrentDeviceRevoked?.();
       // Optimistically drop the rows; a background refresh reconciles (and
-      // brings the tombstone back under the group's revoked disclosure).
+      // brings the tombstone back at the foot of its block).
       if (mountedRef.current) {
         const dropped = new Set(device.enrollmentIds);
         setDevices(
@@ -191,27 +198,6 @@ export default function DevicesCard({
     [onRenameDevice]
   );
 
-  const removeMember = useCallback(
-    async (memberId: string, confirmLastAdmin?: string): Promise<void> => {
-      if (!onRemoveMember) return;
-      await onRemoveMember(
-        memberId,
-        confirmLastAdmin === undefined ? undefined : { confirmLastAdmin }
-      );
-      if (mountedRef.current) {
-        setMembers((prev) =>
-          prev.filter((member) => member.memberId !== memberId)
-        );
-        setDevices(
-          (prev) =>
-            prev?.filter((device) => device.memberId !== memberId) ?? prev
-        );
-      }
-      refresh();
-    },
-    [onRemoveMember, refresh]
-  );
-
   const updateCompute = useCallback(
     async (device: GroupedDevice, enabled: boolean): Promise<void> => {
       if (!onUpdateCompute) return;
@@ -228,112 +214,147 @@ export default function DevicesCard({
   );
 
   const groups = useMemo(
-    () => groupDevicesByMember(devices ?? [], members),
-    [devices, members]
+    () => groupDevicesByOwner(devices ?? [], owners),
+    [devices, owners]
   );
-  const vaults = useMemo(() => vaultsFromGroups(groups), [groups]);
-  const selfMemberId = groups.find((group) => group.isSelf)?.memberId;
 
-  const people = groups.length;
-  // Count hardware, not enrollment rows: a browser paired into two vaults is
-  // one device, and counting its rows read as "4 devices" for two.
-  const liveCount = groups.reduce(
-    (sum, group) => sum + group.devices.length,
-    0
-  );
-  const queued = workDepth.reduce((sum, depth) => sum + depth.available, 0);
-  const leased = workDepth.reduce((sum, depth) => sum + depth.leased, 0);
+  // `isSelf` is set by the device making the request; an admin caller sees no
+  // such row, so the first group (already sorted self-first) stands in as the
+  // one whose devices these are.
+  const self = groups.find((group) => group.isSelf) ?? groups[0];
+  const others = groups.filter((group) => group !== self);
+  return {
+    canCompute: onUpdateCompute !== undefined,
+    canRename: onRenameDevice !== undefined,
+    // Count hardware, not enrollment rows: a browser paired into two vaults is
+    // one device, and counting its rows read as "4 devices" for two.
+    deviceCount: groups.reduce((sum, group) => sum + group.devices.length, 0),
+    error: loadError,
+    hasWork: loadWorkStatus !== undefined,
+    leased: workDepth.reduce((sum, depth) => sum + depth.leased, 0),
+    others,
+    personCount: groups.length,
+    queued: workDepth.reduce((sum, depth) => sum + depth.available, 0),
+    refresh,
+    rename,
+    revoke,
+    status: loadError ? "error" : devices ? "ready" : "loading",
+    updateCompute,
+    ...(self ? { self } : {}),
+  };
+}
 
+export interface DevicesCardProps {
+  roster: DeviceRoster;
+  /** Live clock (parent ticks it each second) — drives the humanized ages. */
+  now: number;
+  /**
+   * Mint a one-time pairing ticket (`POST _gateway/devices/ticket`). Absent on
+   * a host that can't mint, which withdraws both pairing entry points.
+   */
+  onCreateTicket?: (
+    input?: GatewayDeviceTicketInput
+  ) => Promise<GatewayDeviceTicket>;
+  /** The page's "Pair a device" commit lives in the app bar, so the panel it
+   *  opens is controlled from the screen rather than owned here. */
+  pairing?: boolean;
+  onPairingChange?: (open: boolean) => void;
+}
+
+/** The roster's view half: "Yours", then everyone else, then the rule. */
+export default function DevicesCard({
+  roster,
+  now,
+  onCreateTicket,
+  pairing = false,
+  onPairingChange,
+}: DevicesCardProps): JSX.Element {
+  const [addingPerson, setAddingPerson] = useState(false);
+  const actions = {
+    ...(roster.canRename ? { onRename: roster.rename } : {}),
+    ...(roster.canCompute ? { onUpdateCompute: roster.updateCompute } : {}),
+    onRevoke: roster.revoke,
+  };
+  const others = roster.others.filter((group) => group.devices.length > 0);
+  const otherDevices = others.flatMap((group) => group.devices);
+  const otherRevoked = others.flatMap((group) => group.revoked);
   return (
-    <section className={cx(gwStyles.panel, styles.card)}>
-      <div className={gwStyles.panelHead}>
-        <h2>People &amp; devices</h2>
-        <div className={styles.headRight}>
-          {devices && people > 0 ? (
-            <span className={gwStyles.panelMeta}>
-              {people} {people === 1 ? "person" : "people"} · {liveCount} device
-              {liveCount === 1 ? "" : "s"}
-            </span>
-          ) : null}
-          {loadWorkStatus ? (
-            <span
-              className={gwStyles.panelMeta}
-              data-testid="device-work-depth"
-            >
-              {queued} queued · {leased} leased
-            </span>
-          ) : null}
-          {onCreateTicket && canAdminister && !pairing ? (
-            <button
-              type="button"
-              className={cx(buttonCss.btn, buttonCss.sm, controlsCss.soft)}
-              onClick={() => setPairing(true)}
-            >
-              <Icon name="Plus" size={13} />
-              <span>Pair a device</span>
-            </button>
-          ) : null}
-        </div>
-      </div>
+    <>
+      {onCreateTicket && pairing ? (
+        <DevicePairPanel
+          now={now}
+          onCreateTicket={onCreateTicket}
+          onClose={() => {
+            onPairingChange?.(false);
+            roster.refresh();
+          }}
+        />
+      ) : null}
+      {onCreateTicket && addingPerson ? (
+        <DevicePairPanel
+          now={now}
+          forPerson
+          onCreateTicket={onCreateTicket}
+          onClose={() => {
+            setAddingPerson(false);
+            roster.refresh();
+          }}
+        />
+      ) : null}
 
-      <div className={styles.body}>
-        {onCreateTicket && canAdminister && pairing ? (
-          <DevicePairPanel
+      {/* A block with no rows is an empty scaffold, not a section: on a
+          gateway with nothing paired the page's empty state says so instead. */}
+      {roster.self &&
+      roster.self.devices.length + roster.self.revoked.length > 0 ? (
+        <DeviceOwnerGroup
+          devices={roster.self.devices}
+          label="Yours"
+          now={now}
+          revoked={roster.self.revoked}
+          {...actions}
+        />
+      ) : null}
+
+      {otherDevices.length > 0 ? (
+        <>
+          <DeviceOwnerGroup
+            devices={otherDevices}
+            label="Other people"
             now={now}
-            onCreateTicket={onCreateTicket}
-            onClose={() => {
-              setPairing(false);
-              refresh();
-            }}
-            members={members}
-            {...(selfMemberId === undefined
-              ? {}
-              : { currentMemberId: selfMemberId })}
-            vaults={vaults}
+            revoked={otherRevoked}
+            showOwner
+            {...actions}
           />
-        ) : null}
-        {loadError ? (
-          <div className={styles.loadError}>
-            Couldn’t list paired devices: {loadError}
-          </div>
-        ) : devices ? (
-          groups.length === 0 ? (
-            <div className={gwStyles.panelEmpty}>
-              No devices are paired with this gateway yet. Pair a browser or
-              phone with a one-time ticket, and it will show up here — revocable
-              in one click.
-            </div>
-          ) : (
-            <div className={styles.groups}>
-              {groups.map((group) => (
-                <DeviceMemberGroup
-                  key={group.memberId}
-                  label={group.label}
-                  roles={group.roles}
-                  devices={group.devices}
-                  revoked={group.revoked}
-                  isSelf={group.isSelf}
-                  now={now}
-                  onRevokeDevice={revoke}
-                  canAdminister={canAdminister}
-                  {...(onRenameDevice ? { onRenameDevice: rename } : {})}
-                  {...(onUpdateCompute
-                    ? { onUpdateCompute: updateCompute }
-                    : {})}
-                  {...(onRemoveMember
-                    ? {
-                        onRemoveMember: (confirmLastAdmin?: string) =>
-                          removeMember(group.memberId, confirmLastAdmin),
-                      }
-                    : {})}
-                />
-              ))}
-            </div>
-          )
-        ) : (
-          <div className={gwStyles.panelEmpty}>Checking paired devices…</div>
-        )}
-      </div>
-    </section>
+          <NoteBlock>
+            A person on your vault host reaches only what you placed in a shared
+            space.
+          </NoteBlock>
+        </>
+      ) : null}
+
+      {roster.hasWork ? (
+        <NoteBlock>
+          <span data-testid="device-work-depth">
+            {roster.queued} queued · {roster.leased} leased
+          </span>{" "}
+          — indexing work these devices may pick up while charging.
+        </NoteBlock>
+      ) : null}
+
+      {onCreateTicket && !pairing && !addingPerson ? (
+        <p className={styles.asideAction}>
+          {/* Not a second commit: "Pair a device" is the page's one filled
+              verb and it lives in the app bar. This mints a NEW person, which
+              is a different act and a rarer one. */}
+          <Button
+            commit={false}
+            label="Add someone"
+            onClick={() => setAddingPerson(true)}
+            size="sm"
+            variant="secondary"
+          />
+        </p>
+      ) : null}
+    </>
   );
 }

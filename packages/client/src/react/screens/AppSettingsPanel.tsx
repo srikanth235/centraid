@@ -1,11 +1,14 @@
 import { useEffect, useRef, useState } from "react";
 import type { CSSProperties, JSX } from "react";
 
+import type { IconName } from "@centraid/design";
+
 import type {
   AppKnobDTO,
   AppSettingsBridgeProps,
   AppSettingsSnapshot,
 } from "../screen-contracts.js";
+import AppMark from "../ui/AppMark.js";
 import { cx } from "../ui/cx.js";
 import { Icon, IconButton } from "../ui/index.js";
 
@@ -15,25 +18,28 @@ import segCss from "../styles/seg.module.css";
 import swatchCss from "../styles/swatch.module.css";
 import styles from "./AppSettingsPanel.module.css";
 
-type Tab = "appearance" | "automations" | "vault" | "manage";
+type Tab = "appearance" | "automations" | "vault" | "enrichment" | "manage";
 
 // The shared icon set lacks palette/wrench glyphs, so the tab strip carries
 // small inline SVGs — identical markup to the vanilla popover.
 const TAB_GLYPH: Record<Tab, string> = {
   appearance:
-    '<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="13.5" cy="6.5" r="1.5"/><circle cx="17.5" cy="10.5" r="1.5"/><circle cx="8.5" cy="7.5" r="1.5"/><circle cx="6.5" cy="12.5" r="1.5"/><path d="M12 2a10 10 0 0 0 0 20 2.5 2.5 0 0 0 2-4 2.5 2.5 0 0 1 2-4h2a4 4 0 0 0 4-4 10 10 0 0 0-10-8z"/></svg>',
+    '<svg aria-hidden="true" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="13.5" cy="6.5" r="1.5"/><circle cx="17.5" cy="10.5" r="1.5"/><circle cx="8.5" cy="7.5" r="1.5"/><circle cx="6.5" cy="12.5" r="1.5"/><path d="M12 2a10 10 0 0 0 0 20 2.5 2.5 0 0 0 2-4 2.5 2.5 0 0 1 2-4h2a4 4 0 0 0 4-4 10 10 0 0 0-10-8z"/></svg>',
   automations:
-    '<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2L4 14h7l-1 8 9-12h-7l1-8z"/></svg>',
+    '<svg aria-hidden="true" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2L4 14h7l-1 8 9-12h-7l1-8z"/></svg>',
   vault:
-    '<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2l8 4v5c0 5-3.5 9-8 11-4.5-2-8-6-8-11V6z"/></svg>',
+    '<svg aria-hidden="true" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2l8 4v5c0 5-3.5 9-8 11-4.5-2-8-6-8-11V6z"/></svg>',
+  enrichment:
+    '<svg aria-hidden="true" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l1.9 4.6L18.5 9.5l-4.6 1.9L12 16l-1.9-4.6L5.5 9.5l4.6-1.9z"/><path d="M18 15l.9 2.1 2.1.9-2.1.9L18 21l-.9-2.1-2.1-.9 2.1-.9z"/></svg>',
   manage:
-    '<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M14.7 6.3a4 4 0 0 1-5.4 5.4l-5.6 5.6a2 2 0 1 0 2.8 2.8l5.6-5.6a4 4 0 0 1 5.4-5.4l-3 3-2.2-2.2 3-3z"/></svg>',
+    '<svg aria-hidden="true" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M14.7 6.3a4 4 0 0 1-5.4 5.4l-5.6 5.6a2 2 0 1 0 2.8 2.8l5.6-5.6a4 4 0 0 1 5.4-5.4l-3 3-2.2-2.2 3-3z"/></svg>',
 };
 
 const TABS: { id: Tab; label: string }[] = [
   { id: "appearance", label: "Appearance" },
   { id: "automations", label: "Automations" },
   { id: "vault", label: "Vault" },
+  { id: "enrichment", label: "Enrichment" },
   { id: "manage", label: "Manage" },
 ];
 
@@ -236,12 +242,15 @@ export default function AppSettingsPanel(
     bundled,
     onMountRuns,
     onMountVault,
+    onMountEnrichment,
     initialTab = "appearance",
+    automationsVisible = true,
   } = props;
   const [snap, setSnap] = useState<AppSettingsSnapshot | null>(null);
   const [tab, setTab] = useState<Tab>(initialTab);
   const [deleteArmed, setDeleteArmed] = useState(false);
   const vaultMounted = useRef(false);
+  const enrichmentMounted = useRef(false);
 
   useEffect(() => {
     onReady((s) => setSnap(s));
@@ -269,8 +278,8 @@ export default function AppSettingsPanel(
 
   const panelStyle = { "--accent-color": snap.accent } as CSSProperties;
   const iconStyle: CSSProperties = {
-    background: snap.iconBg,
-    color: snap.iconColor,
+    background: snap.iconBg ?? "var(--bg-elev)",
+    color: snap.iconColor ?? "var(--text)",
     ...(snap.iconShadow ? { boxShadow: snap.iconShadow } : {}),
   };
 
@@ -288,12 +297,21 @@ export default function AppSettingsPanel(
         style={panelStyle}
       >
         <div className={styles.settingsHeader}>
-          <span
-            className={styles.settingsIcon}
-            style={iconStyle}
-            // oxlint-disable-next-line react/no-danger -- #639 the complete HTML source is a reviewed local SVG/icon catalog value.
-            dangerouslySetInnerHTML={{ __html: snap.iconSvg }}
-          />
+          {snap.appMark ? (
+            <AppMark
+              className={styles.settingsIcon}
+              colorKey={snap.appMark.colorKey}
+              iconKey={snap.appMark.iconKey as IconName}
+              size={40}
+            />
+          ) : (
+            <span
+              className={styles.settingsIcon}
+              style={iconStyle}
+              // oxlint-disable-next-line react/no-danger -- #639 the complete HTML source is a reviewed local SVG/icon catalog value.
+              dangerouslySetInnerHTML={{ __html: snap.iconSvg ?? "" }}
+            />
+          )}
           <div className={styles.settingsHeaderText}>
             <div className={styles.settingsName}>{snap.appName}</div>
             <div className={styles.settingsEyebrow}>App settings</div>
@@ -311,6 +329,12 @@ export default function AppSettingsPanel(
           <div className={cx(segCss.seg, styles.settingsTabs)}>
             {TABS.map((t) => {
               if (t.id === "vault" && !snap.vaultVisible) return null;
+              // Same rule as the vault tab above: a tab the gateway cannot
+              // serve is absent, never present-and-empty.
+              if (t.id === "automations" && !automationsVisible) return null;
+              // Same rule again: an app whose data shape has no enrichment
+              // capabilities gets no Enrichment tab (issue #807).
+              if (t.id === "enrichment" && !onMountEnrichment) return null;
               const badge =
                 t.id === "automations"
                   ? snap.automationsBadge
@@ -423,6 +447,17 @@ export default function AppSettingsPanel(
           />
         </div>
 
+        <div className={styles.settingsPane} hidden={tab !== "enrichment"}>
+          <div
+            ref={(node) => {
+              if (node && onMountEnrichment && !enrichmentMounted.current) {
+                enrichmentMounted.current = true;
+                onMountEnrichment(node);
+              }
+            }}
+          />
+        </div>
+
         <div className={styles.settingsPane} hidden={tab !== "manage"}>
           <div className={styles.settingsManage}>
             <ManageItem
@@ -444,36 +479,47 @@ export default function AppSettingsPanel(
               onClick={onReveal}
             />
           </div>
-          <div className={styles.settingsDanger}>
-            <div className={styles.settingsDangerLabel}>Danger zone</div>
-            <button
-              type="button"
-              className={cx(styles.settingsMenuItem, styles.settingsDangerItem)}
-              data-danger="true"
-              data-armed={deleteArmed ? "true" : undefined}
-              onClick={() => (deleteArmed ? onDelete() : setDeleteArmed(true))}
-            >
-              <span className={styles.settingsMenuIcon}>
-                <Icon name="Trash" size={13} />
-              </span>
-              <span className={styles.settingsMenuText}>
-                <span className={styles.settingsMenuLabel}>
-                  {bundled ? "Uninstall app" : "Delete app"}
-                </span>
-                <span className={styles.settingsMenuSub}>
-                  {bundled
-                    ? "Revokes its access. Your data stays in your vault."
-                    : "Removes the app, its data, and its scheduled automations."}
-                </span>
-              </span>
-              <span
-                className={styles.settingsConfirmPill}
-                hidden={!deleteArmed}
+          {/* A first-party app has no danger zone (issue #708). It is installed
+              at vault mount and reinstalled at every mount after that, so an
+              Uninstall here would undo itself on the next gateway start — and a
+              verb that quietly reverses is worse than no verb. The question it
+              was really asked to answer, "what can this app reach?", is answered
+              where it belongs: the Vault tab beside this one, per grant, with a
+              revoke that stays revoked. Code-store apps keep Delete; they are
+              the member's own, and nothing reinstates them. */}
+          {bundled ? null : (
+            <div className={styles.settingsDanger}>
+              <div className={styles.settingsDangerLabel}>Danger zone</div>
+              <button
+                type="button"
+                className={cx(
+                  styles.settingsMenuItem,
+                  styles.settingsDangerItem
+                )}
+                data-danger="true"
+                data-armed={deleteArmed ? "true" : undefined}
+                onClick={() =>
+                  deleteArmed ? onDelete() : setDeleteArmed(true)
+                }
               >
-                click to confirm
-              </span>
-            </button>
-          </div>
+                <span className={styles.settingsMenuIcon}>
+                  <Icon name="Trash" size={13} />
+                </span>
+                <span className={styles.settingsMenuText}>
+                  <span className={styles.settingsMenuLabel}>Delete app</span>
+                  <span className={styles.settingsMenuSub}>
+                    Removes the app, its data, and its scheduled automations.
+                  </span>
+                </span>
+                <span
+                  className={styles.settingsConfirmPill}
+                  hidden={!deleteArmed}
+                >
+                  click to confirm
+                </span>
+              </button>
+            </div>
+          )}
         </div>
       </dialog>
     </>

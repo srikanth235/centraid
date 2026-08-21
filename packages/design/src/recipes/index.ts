@@ -17,7 +17,7 @@ export const RECIPE_NAMES = [
   "Segmented",
   "Dialog",
   "Sheet",
-  "Toast",
+  "StatusLine",
   "Banner",
   "Empty",
   "Loading",
@@ -51,7 +51,6 @@ export const BUTTON_VARIANTS = [
   "secondary",
   "quiet",
   "destructive",
-  "destructiveFilled",
 ] as const;
 
 export type ButtonVariant = (typeof BUTTON_VARIANTS)[number];
@@ -65,19 +64,25 @@ export interface Recipe {
   haptics?: "affirm" | "change" | "destructive" | "none";
 }
 
+// State roles, after the Binding Layer flip:
+//   • focus is the RING, at 2px with a 2px offset — never a wash, because a
+//     wash under a filled ink control is invisible;
+//   • selection is the reserved LINK hue, the one hue allowed off a control;
+//   • disabled takes its own leaf token, never a container opacity;
+//   • a state change is `--dur-1` (140ms), an entry is `--dur-2` (280ms).
 const baseStates = (
   rest: readonly string[],
   overrides: Partial<Record<RecipeState, readonly string[]>> = {}
 ): Readonly<Record<RecipeState, readonly string[]>> => ({
   disabled: ["--text-disabled", "--o-disabled", "--dur-1"],
-  focus: ["--accent-soft", "--line-strong"],
+  focus: ["--focus-ring", "--focus-ring-color"],
   hover: ["--bg-hover", "--dur-1"],
   invalid: ["--danger", "--dur-1"],
   loading: ["--dur-2"],
-  open: ["--accent-soft", "--dur-2"],
+  open: ["--scrim", "--dur-2", "--ease-entry"],
   pressed: ["--bg-press", "--dur-1"],
   rest,
-  selected: ["--accent-soft", "--accent-text"],
+  selected: ["--bg-sel", "--line-sel"],
   ...overrides,
 });
 
@@ -102,29 +107,36 @@ const makeRecipe = (
 });
 
 export const RECIPES: Readonly<Record<RecipeName, Recipe>> = {
-  AppHeader: makeRecipe("AppHeader", ["--bg", "--sp-4", "--r-md"]),
+  AppHeader: makeRecipe("AppHeader", ["--bg", "--sp-4", "--t-display"]),
   AppTile: makeRecipe(
     "AppTile",
-    ["--bg-elev", "--r-xl", "--sp-4", "--line"],
+    ["--bg-elev", "--r-lg", "--density-pad", "--line"],
     {},
     ["name and icon have a labelled fallback"]
   ),
   Avatar: makeRecipe(
     "Avatar",
-    ["--r-pill", "--text-inv", "--accent-soft"],
+    ["--r-pill", "--text-inv", "--app-identity"],
     {},
     ["person identity has an accessible name"]
   ),
   Badge: makeRecipe("Badge", [
-    "--accent-soft",
-    "--accent-text",
-    "--r-pill",
+    "--line",
+    "--text-soft",
+    "--r-md",
     "--t-eyebrow",
   ]),
   Banner: makeRecipe("Banner", ["--bg-elev", "--line", "--r-md", "--sp-4"]),
   Button: makeRecipe(
     "Button",
-    ["--target-min", "--r-md", "--sp-3", "--t-small-strong", "--dur-1"],
+    [
+      "--h-control",
+      "--target-min",
+      "--r-md",
+      "--sp-3",
+      "--t-small-strong",
+      "--dur-1",
+    ],
     {
       disabled: ["--text-disabled", "--o-disabled", "--dur-1"],
       loading: ["--dur-2"],
@@ -139,16 +151,11 @@ export const RECIPES: Readonly<Record<RecipeName, Recipe>> = {
   ),
   Checkbox: makeRecipe(
     "Checkbox",
-    ["--target-min", "--r-xs", "--line-strong", "--accent-fill"],
+    ["--target-min", "--r-sm", "--line-strong", "--accent-fill"],
     {},
     ["native checkbox semantics"]
   ),
-  Chip: makeRecipe("Chip", [
-    "--r-pill",
-    "--sp-2",
-    "--t-control",
-    "--accent-soft",
-  ]),
+  Chip: makeRecipe("Chip", ["--r-md", "--sp-2", "--t-control", "--line"]),
   DateTimeField: makeRecipe(
     "DateTimeField",
     ["--target-min", "--r-md", "--line", "--t-control"],
@@ -158,13 +165,13 @@ export const RECIPES: Readonly<Record<RecipeName, Recipe>> = {
   ),
   Dialog: makeRecipe(
     "Dialog",
-    ["--bg-elev", "--r-xl", "--sp-5", "--shadow-lg"],
+    ["--bg-elev", "--r-lg", "--sp-5", "--shadow-lg"],
     { open: ["--scrim", "--dur-2"] },
     ["focus is contained", "labelled dialog", "escape closes when safe"],
     ["web", "blueprint", "native"]
   ),
   Empty: makeRecipe("Empty", ["--bg-sunken", "--sp-5", "--text-soft"]),
-  Error: makeRecipe("Error", ["--danger", "--accent-soft", "--sp-4"]),
+  Error: makeRecipe("Error", ["--danger", "--net", "--sp-4"]),
   IconButton: makeRecipe(
     "IconButton",
     ["--target-min", "--r-pill", "--t-control"],
@@ -175,32 +182,33 @@ export const RECIPES: Readonly<Record<RecipeName, Recipe>> = {
   ),
   ListRow: makeRecipe(
     "ListRow",
-    ["--target-min", "--sp-4", "--line"],
-    { selected: ["--accent-soft", "--accent-text"] },
+    ["--density-row", "--target-min", "--density-pad", "--line"],
+    { selected: ["--bg-sel", "--line-sel"] },
     ["row action is labelled"]
   ),
   Loading: makeRecipe("Loading", ["--bg-sunken", "--sp-4", "--dur-2"], {
-    loading: ["--accent-soft", "--dur-2"],
+    loading: ["--accent-fill", "--dur-2", "--ease-entry"],
   }),
-  Nav: makeRecipe("Nav", ["--bg", "--sp-4", "--line"], {
-    selected: ["--accent-soft", "--accent-text"],
+  Nav: makeRecipe("Nav", ["--w-stem", "--bg-chrome", "--text-soft", "--line"], {
+    selected: ["--text", "--app-identity"],
   }),
   Progress: makeRecipe("Progress", [
     "--bg-sunken",
     "--accent-fill",
     "--r-pill",
     "--dur-2",
+    "--t-mono",
   ]),
   Search: makeRecipe(
     "Search",
-    ["--target-min", "--bg-sunken", "--r-pill", "--t-body"],
-    { focus: ["--accent-soft", "--line-strong"] },
+    ["--h-control", "--bg-sunken", "--r-md", "--t-body"],
+    { focus: ["--focus-ring", "--focus-ring-color"] },
     ["search landmark", "clear action labelled"],
     ["web", "blueprint", "native"]
   ),
   Segmented: makeRecipe(
     "Segmented",
-    ["--target-min", "--bg-sunken", "--r-md", "--sp-1"],
+    ["--h-segmented", "--bg-sunken", "--r-md", "--sp-1"],
     { selected: ["--bg-elev", "--text"] },
     ["tablist or radiogroup semantics"]
   ),
@@ -212,9 +220,36 @@ export const RECIPES: Readonly<Record<RecipeName, Recipe>> = {
   ),
   Sheet: makeRecipe(
     "Sheet",
-    ["--bg-elev", "--r-xl", "--sp-5", "--shadow-lg"],
+    ["--bg-elev", "--r-lg", "--sp-5", "--shadow-lg"],
     { open: ["--scrim", "--dur-2"] },
     ["focus is contained", "labelled sheet", "safe-area padding"],
+    ["web", "blueprint", "native"]
+  ),
+  StatusLine: makeRecipe(
+    "StatusLine",
+    [
+      "--bg",
+      "--line",
+      "--h-control",
+      "--t-mono",
+      "--t-mono-numeric",
+      "--t-mono-direction",
+      "--t-mono-bidi",
+      "--text-soft",
+      "--text-faint",
+    ],
+    {
+      // The determinate bar for a long local operation: track then fill,
+      // never a spinner. A state change (message swap, bar width) is the
+      // one-line update-in-place transition, not an entry animation.
+      loading: ["--bg-elev", "--text", "--dur-1", "--ease"],
+    },
+    [
+      "role=status",
+      "aria-live=polite",
+      "one persistent line; no stacking, no auto-dismiss animation",
+      "inline action is a labelled control with a visible focus ring, never bare text",
+    ],
     ["web", "blueprint", "native"]
   ),
   Surface: makeRecipe("Surface", ["--bg-elev", "--r-lg", "--line", "--sp-4"]),
@@ -232,14 +267,6 @@ export const RECIPES: Readonly<Record<RecipeName, Recipe>> = {
     { invalid: ["--danger", "--dur-1"] },
     ["label and error are associated", "multiline grows without losing focus"],
     ["web", "blueprint", "native"]
-  ),
-  Toast: makeRecipe(
-    "Toast",
-    ["--bg-elev", "--r-md", "--shadow-md", "--sp-4"],
-    {},
-    ["status/live-region tone is explicit"],
-    ["web", "blueprint", "native"],
-    "affirm"
   ),
   Tooltip: makeRecipe(
     "Tooltip",

@@ -2,11 +2,10 @@ import type { JSX } from "react";
 
 import type { AppMetaResolved, TileVariant } from "@centraid/design";
 
+import AppMark from "./AppMark.js";
 import { cx } from "./cx.js";
-import Icon from "./Icon.js";
 import KindBadge from "./KindBadge.js";
 import StatusPill from "./StatusPill.js";
-import { tileVisual } from "./tile-visual.js";
 
 import styles from "./AppCard.module.css";
 
@@ -26,12 +25,11 @@ export interface AppCardProps {
 
 /**
  * Home-grid app tile — icon plate + name/blurb + footer, styled by the
- * co-located `AppCard.module.css` (shared with the Home shelf and Discover
+ * co-located `AppCard.module.css` (shared with the Home shelf and Starred
  * grid, which compose richer tiles from the same module). Desktop-specific
  * (there is no mobile twin for this exact composite; mobile's simpler
- * launcher `<Tile>` is the closest cousin). The icon plate's finish is
- * computed through `tileVisual`, the one place desktop + mobile agree on
- * tile paint.
+ * launcher `<Tile>` is the closest cousin). App identity is rendered through
+ * the shared `AppMark` primitive so desktop surfaces keep one stroke contract.
  */
 export default function AppCard({
   app,
@@ -41,7 +39,9 @@ export default function AppCard({
   small = false,
   onOpen,
 }: AppCardProps): JSX.Element {
-  const { finish } = tileVisual(app, variant);
+  // Keep the preference in the public API for existing callers; identity
+  // artwork itself now follows the handoff's single-tone mark contract.
+  void variant;
   return (
     <button
       type="button"
@@ -51,15 +51,8 @@ export default function AppCard({
       onClick={onOpen}
     >
       <div className={styles.head}>
-        <div
-          className={styles.icon}
-          style={{
-            background: finish.background,
-            boxShadow: finish.boxShadow,
-            color: finish.glyphColor,
-          }}
-        >
-          <Icon name={app.iconKey} size={24} strokeWidth={1.9} />
+        <div className={styles.icon}>
+          <AppMark colorKey={app.colorKey} iconKey={app.iconKey} size={40} />
           {tone ? <span className={styles.iconDot} data-tone={tone} /> : null}
         </div>
         <div className={styles.headText}>

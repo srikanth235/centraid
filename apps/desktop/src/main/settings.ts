@@ -38,10 +38,6 @@ import { mergePersistedSettings } from "./settings-merge.js";
 export interface PersistedSettings {
   /** Active gateway id. Defaults to `'local'` on a fresh install. */
   activeGatewayId: string;
-  /** Developer-only gate for the conversational app builder. Absent → hidden. */
-  builderEnabled?: boolean;
-  /** Optional URL the home shelf hits for remote-template updates. */
-  remoteTemplatesUrl?: string;
   /**
    * The active vault the client addresses on each gateway (issue #289),
    * keyed by gateway id. The server no longer holds an active-vault
@@ -101,9 +97,8 @@ export interface PersistedSettings {
 }
 
 export interface DesktopSettings {
-  /** Remote gateway base URL — e.g. http://127.0.0.1:8765. (Formerly
-   * inherited from `@centraid/agent-harness`'s `HarnessConfig`; inlined
-   * here in #141 Phase 5 so the desktop drops that dependency.) */
+  /** Remote gateway base URL — e.g. http://127.0.0.1:8765. Inlined here in
+   * #141 Phase 5 so desktop settings do not depend on the turn runtime. */
   gatewayUrl: string;
   /**
    * Bearer token sent as `Authorization: Bearer <token>` to the gateway.
@@ -113,8 +108,6 @@ export interface DesktopSettings {
   gatewayToken?: string;
   /** Persisted — the gateway the renderer is currently pointing at. */
   activeGatewayId: string;
-  /** Developer-only gate for the conversational app builder. */
-  builderEnabled?: boolean;
   /**
    * The vault the renderer is addressing on the active gateway (issue
    * #289), or `undefined` to let the gateway pick. Sent as the
@@ -141,8 +134,6 @@ export interface DesktopSettings {
    * explicitly set one.
    */
   activeProfileAvatarColor: string;
-  /** UI prefs (unchanged from earlier shapes). */
-  remoteTemplatesUrl?: string;
   /**
    * ISO timestamp the user finished first-run onboarding. Absent on a
    * fresh install — the renderer gates on this to show onboarding
@@ -190,12 +181,6 @@ function narrow(raw: Record<string, unknown>): PersistedSettings {
       typeof activeRaw === "string" && activeRaw.length > 0
         ? activeRaw
         : base.activeGatewayId,
-    ...(typeof raw.builderEnabled === "boolean"
-      ? { builderEnabled: raw.builderEnabled }
-      : {}),
-    ...(typeof raw.remoteTemplatesUrl === "string"
-      ? { remoteTemplatesUrl: raw.remoteTemplatesUrl }
-      : {}),
     ...sanitizeVaultMap(raw.activeVaultByGateway),
     ...(typeof raw.onboardingCompletedAt === "string"
       ? { onboardingCompletedAt: raw.onboardingCompletedAt }
@@ -342,13 +327,7 @@ async function resolveEffective(
     activeProfileAvatarColor: resolved.profile.avatarColor ?? BRAND,
     gatewayUrl: resolved.url,
     gatewayToken: resolved.token,
-    ...(p.builderEnabled === undefined
-      ? {}
-      : { builderEnabled: p.builderEnabled }),
     ...(activeVaultId === undefined ? {} : { activeVaultId }),
-    ...(p.remoteTemplatesUrl === undefined
-      ? {}
-      : { remoteTemplatesUrl: p.remoteTemplatesUrl }),
     ...(p.onboardingCompletedAt === undefined
       ? {}
       : { onboardingCompletedAt: p.onboardingCompletedAt }),
@@ -458,13 +437,9 @@ export async function setActiveVaultId(
 }
 
 /**
- * Where remote-fetched template copies are cached for a given gateway.
- * The cache is gateway-data disposable state, outside Electron userData.
- * Today the
- * `remoteTemplatesUrl` setting is single-valued (one feed per machine),
- * so the cache content will usually be identical across gateways —
- * the per-gateway slot future-proofs per-gateway template feeds at
- * the cost of duplicate bytes on disk in the single-feed case.
+ * Where per-gateway template copies are cached. The cache is gateway-data
+ * disposable state, outside Electron userData; a copy under it shadows the
+ * bundled template when its semver is higher.
  */
 export function templatesCacheDir(activeGatewayId: string): string {
   return gatewayTemplatesCacheDir(activeGatewayId);

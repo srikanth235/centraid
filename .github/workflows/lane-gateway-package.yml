@@ -32,7 +32,7 @@ jobs:
       - name: Build gateway dependency closure
         # turbo honors package.json dependsOn so protocol → vault → app-engine →
         # agent-runtime → automation → gateway build in order (full graph).
-        run: bun run turbo run build --filter=@centraid/gateway
+        run: bun run turbo run build --filter=@centraid/server
 
       - name: Probe unit tests
         run: node --test scripts/gateway-package/probe.test.mjs
@@ -47,7 +47,7 @@ jobs:
           node scripts/gateway-package/trace.mjs --out=artifacts/gateway-package-trace.json
 
       - name: Host install smoke
-        run: node scripts/gateway-package/smoke.mjs --gateway-bin packages/gateway/dist/cli/cli.js --port 18787
+        run: node scripts/gateway-package/smoke.mjs --gateway-bin packages/server/dist/cli/cli.js --port 18787
 
       - uses: docker/setup-buildx-action@bb05f3f5519dd87d3ba754cc423b652a5edd6d2c # v4.2.0
 

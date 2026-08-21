@@ -55,7 +55,6 @@ export async function runBackgroundReplicaSync(): Promise<void> {
   if (!baseUrl) return;
   await requireMobileOfflineGateway({
     baseUrl,
-    gatewayId: active.gatewayId,
     online: true,
   });
   const storageLocation = replicaStorageDirectory();
@@ -128,7 +127,9 @@ export async function runBackgroundReplicaSync(): Promise<void> {
         async (scope): Promise<MountedReplicaScope> => ({
           vaultId: scope.vaultId,
           label: scope.label ?? "Vault",
-          role: scope.role ?? "read",
+          // Absent means the gateway predates the ownership wire — fail
+          // closed, exactly as the role-era default read as read-only.
+          canWrite: scope.canWrite ?? false,
           databaseName: await nativeReplicaDatabasePath(
             { gatewayId: active.gatewayId, vaultId: scope.vaultId },
             nativeReplicaDigest,

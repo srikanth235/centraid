@@ -1,0 +1,691 @@
+// governance: allow-repo-hygiene file-size-limit prepared-statement block + row mappers for every conversation-ledger column; splitting the statement table from its mappers would decouple the two halves that must change together
+/*
+ * Prepared-statement block + raw-row mappers for `ConversationStore`.
+ *
+ * Split out of `conversation-store.ts` to keep that file under the repo's
+ * 500-line cap. The SQL targets the per-app runtime DB's conversation ledger
+ * (`conversations`, `turns`, `items`, `attachments`, `automation_state` — see
+ * `gateway-db.ts` RUNTIME_MIGRATIONS).
+ *
+ * Issue #190: the conversation is the spine. `turns.conversation_id` is a
+ * NOT NULL same-file FK (CASCADE). Each automation FIRE is its own execution
+ * conversation (`kind='automation'`, `automation_id=<ref>`, fresh id), so an
+ * automation's run history is `conversations WHERE automation_id = ?` — each
+ * row a single independent execution — and `automation_state` (keyed by
+ * `automation_id`) is the only thing that persists across them.
+ */
+
+import type { DatabaseSync, StatementSync } from "node:sqlite";
+
+import type {
+  Conversation,
+  Turn,
+  Item,
+  Attachment,
+  AutomationStateEntry,
+  AutomationTriggerKind,
+  AutomationTriggerOrigin,
+  ItemKind,
+  RunKind,
+} from "./schema.js";
+import type { HarnessUsageSnapshot } from "./turn.js";
+
+export interface RawConversation {
+  id: string;
+  kind: string;
+  user_id: string;
+  app_id: string | null;
+  automation_id: string | null;
+  title: string;
+  harness_kind: string | null;
+  harness_session_id: string | null;
+  harness_usage_json: string | null;
+  hydration_count?: number;
+  last_hydrated_at?: number | null;
+  turn_count: number;
+  pinned: number;
+  archived: number;
+  created_at: number;
+  updated_at: number;
+}
+
+export interface RawTurn {
+  id: string;
+  conversation_id: string;
+  seq: number;
+  parent_turn_id: string | null;
+  trigger: string;
+  trigger_origin: string | null;
+  note: string | null;
+  summary: string | null;
+  output_json: string | null;
+  retry_of: string | null;
+  idempotency_key: string | null;
+  hydration_tokens?: number | null;
+  ok: number;
+  error: string | null;
+  feedback: string | null;
+  pinned: number;
+  started_at: number;
+  ended_at: number | null;
+  total_input_tokens: number | null;
+  total_output_tokens: number | null;
+  total_cache_read_tokens: number | null;
+  total_cache_write_tokens: number | null;
+  total_cost_usd: number | null;
+  step_count: number | null;
+  tool_count: number | null;
+}
+
+export interface RawItem {
+  id: string;
+  turn_id: string;
+  ordinal: number;
+  call_id: string | null;
+  batch_id: number | null;
+  kind: string;
+  role: string | null;
+  text: string | null;
+  name: string | null;
+  args_json: string | null;
+  output_json: string | null;
+  raw_json: string | null;
+  child_turn_id: string | null;
+  model: string | null;
+  harness: string | null;
+  effort: string | null;
+  input_tokens: number | null;
+  output_tokens: number | null;
+  cache_read_tokens: number | null;
+  cache_write_tokens: number | null;
+  cost_usd: number | null;
+  cost_source: string | null;
+  app_id: string | null;
+  ok: number;
+  error: string | null;
+  started_at: number;
+  ended_at: number | null;
+  duration_ms: number | null;
+}
+
+export interface RawAttachment {
+  id: string;
+  item_id: string;
+  hash: string;
+  mime: string;
+  size_bytes: number;
+  source: string | null;
+  filename: string | null;
+  workspace_path: string | null;
+  created_at: number;
+}
+
+export interface RawState {
+  automation_id: string;
+  key: string;
+  value_json: string;
+  updated_at: number;
+}
+
+export function conversationFromRaw(raw: RawConversation): Conversation {
+  let harnessUsageSnapshot: HarnessUsageSnapshot | undefined;
+  if (raw.harness_usage_json !== null) {
+    try {
+      harnessUsageSnapshot = JSON.parse(
+        raw.harness_usage_json
+      ) as HarnessUsageSnapshot;
+    } catch {
+      // A corrupt optional accounting snapshot must not hide the conversation.
+    }
+  }
+  return {
+    id: raw.id,
+    kind: raw.kind as RunKind,
+    userId: raw.user_id,
+    ...(raw.app_id === null ? {} : { appId: raw.app_id }),
+    ...(raw.automation_id === null ? {} : { automationId: raw.automation_id }),
+    title: raw.title,
+    ...(raw.harness_kind === null ? {} : { harnessKind: raw.harness_kind }),
+    ...(raw.harness_session_id === null
+      ? {}
+      : { harnessSessionId: raw.harness_session_id }),
+    ...(harnessUsageSnapshot ? { harnessUsageSnapshot } : {}),
+    hydrationCount: Number(raw.hydration_count ?? 0),
+    ...(raw.last_hydrated_at == null
+      ? {}
+      : { lastHydratedAt: raw.last_hydrated_at }),
+    turnCount: Number(raw.turn_count),
+    pinned: raw.pinned !== 0,
+    archived: raw.archived !== 0,
+    createdAt: raw.created_at,
+    updatedAt: raw.updated_at,
+  };
+}
+
+export function turnFromRaw(raw: RawTurn): Turn {
+  return {
+    turnId: raw.id,
+    conversationId: raw.conversation_id,
+    seq: raw.seq,
+    ...(raw.parent_turn_id === null
+      ? {}
+      : { parentTurnId: raw.parent_turn_id }),
+    triggerKind: raw.trigger as AutomationTriggerKind,
+    ...(raw.trigger_origin === null
+      ? {}
+      : { triggerOrigin: raw.trigger_origin as AutomationTriggerOrigin }),
+    ...(raw.note === null ? {} : { note: raw.note }),
+    ...(raw.retry_of === null ? {} : { retryOf: raw.retry_of }),
+    ...(raw.idempotency_key === null
+      ? {}
+      : { idempotencyKey: raw.idempotency_key }),
+    ...(raw.hydration_tokens == null
+      ? {}
+      : { hydrationTokens: raw.hydration_tokens }),
+    startedAt: raw.started_at,
+    ...(raw.ended_at === null ? {} : { endedAt: raw.ended_at }),
+    ok: raw.ok !== 0,
+    ...(raw.error === null ? {} : { error: raw.error }),
+    ...(raw.feedback === "up" || raw.feedback === "down"
+      ? { feedback: raw.feedback }
+      : {}),
+    ...(raw.summary === null ? {} : { summary: raw.summary }),
+    ...(raw.output_json === null ? {} : { outputJson: raw.output_json }),
+    pinned: raw.pinned !== 0,
+    ...(raw.total_input_tokens === null
+      ? {}
+      : { totalInputTokens: raw.total_input_tokens }),
+    ...(raw.total_output_tokens === null
+      ? {}
+      : { totalOutputTokens: raw.total_output_tokens }),
+    ...(raw.total_cache_read_tokens === null
+      ? {}
+      : { totalCacheReadTokens: raw.total_cache_read_tokens }),
+    ...(raw.total_cache_write_tokens === null
+      ? {}
+      : { totalCacheWriteTokens: raw.total_cache_write_tokens }),
+    ...(raw.total_cost_usd === null
+      ? {}
+      : { totalCostUsd: raw.total_cost_usd }),
+    ...(raw.step_count === null ? {} : { stepCount: raw.step_count }),
+    ...(raw.tool_count === null ? {} : { toolCount: raw.tool_count }),
+  };
+}
+
+export function itemFromRaw(raw: RawItem): Item {
+  return {
+    itemId: raw.id,
+    turnId: raw.turn_id,
+    ordinal: raw.ordinal,
+    ...(raw.call_id === null ? {} : { callId: raw.call_id }),
+    ...(raw.batch_id === null ? {} : { batchId: raw.batch_id }),
+    kind: raw.kind as ItemKind,
+    ...(raw.role === null ? {} : { role: raw.role as "user" | "assistant" }),
+    ...(raw.text === null ? {} : { text: raw.text }),
+    ...(raw.name === null ? {} : { name: raw.name }),
+    ...(raw.args_json === null ? {} : { argsJson: raw.args_json }),
+    ...(raw.output_json === null ? {} : { outputJson: raw.output_json }),
+    ...(raw.raw_json === null ? {} : { rawJson: raw.raw_json }),
+    ok: raw.ok !== 0,
+    ...(raw.error === null ? {} : { error: raw.error }),
+    startedAt: raw.started_at,
+    ...(raw.ended_at === null ? {} : { endedAt: raw.ended_at }),
+    ...(raw.duration_ms === null ? {} : { durationMs: raw.duration_ms }),
+    ...(raw.input_tokens === null ? {} : { inputTokens: raw.input_tokens }),
+    ...(raw.output_tokens === null ? {} : { outputTokens: raw.output_tokens }),
+    ...(raw.cache_read_tokens === null
+      ? {}
+      : { cacheReadTokens: raw.cache_read_tokens }),
+    ...(raw.cache_write_tokens === null
+      ? {}
+      : { cacheWriteTokens: raw.cache_write_tokens }),
+    ...(raw.model === null ? {} : { model: raw.model }),
+    ...(raw.harness === null ? {} : { harness: raw.harness }),
+    ...(raw.effort === null ? {} : { effort: raw.effort }),
+    ...(raw.cost_usd === null ? {} : { costUsd: raw.cost_usd }),
+    ...(raw.cost_source === "harness" || raw.cost_source === "estimated"
+      ? { costSource: raw.cost_source }
+      : {}),
+    ...(raw.app_id === null ? {} : { appId: raw.app_id }),
+    ...(raw.child_turn_id === null ? {} : { childTurnId: raw.child_turn_id }),
+  };
+}
+
+export function attachmentFromRaw(raw: RawAttachment): Attachment {
+  return {
+    id: raw.id,
+    itemId: raw.item_id,
+    hash: raw.hash,
+    mime: raw.mime,
+    sizeBytes: raw.size_bytes,
+    ...(raw.source === null ? {} : { source: raw.source }),
+    ...(raw.filename === null ? {} : { filename: raw.filename }),
+    ...(raw.workspace_path === null
+      ? {}
+      : { workspacePath: raw.workspace_path }),
+    createdAt: raw.created_at,
+  };
+}
+
+export function stateFromRaw(raw: RawState): AutomationStateEntry {
+  return {
+    automationId: raw.automation_id,
+    key: raw.key,
+    valueJson: raw.value_json,
+    updatedAt: raw.updated_at,
+  };
+}
+
+export interface PreparedStatements {
+  insertConversation: StatementSync;
+  updateAutomationConversation: StatementSync;
+  getConversation: StatementSync;
+  getConversationWithCount: StatementSync;
+  listConversations: StatementSync;
+  searchConversations: StatementSync;
+  setConversationPinned: StatementSync;
+  setConversationArchived: StatementSync;
+  renameConversation: StatementSync;
+  deleteConversationForUser: StatementSync;
+  deleteConversationById: StatementSync;
+  deleteConversationByAutomation: StatementSync;
+  titleOf: StatementSync;
+  setTitle: StatementSync;
+  setKind: StatementSync;
+  touchConversation: StatementSync;
+  noteTurnWithHarness: StatementSync;
+  noteTurnKindOnly: StatementSync;
+  noteTurnNoHarness: StatementSync;
+  maxSeq: StatementSync;
+  insertTurn: StatementSync;
+  finishTurn: StatementSync;
+  getTurn: StatementSync;
+  deleteTurn: StatementSync;
+  getTurnByIdempotency: StatementSync;
+  listTurnsWindow: StatementSync;
+  listTurnsFiltered: StatementSync;
+  listTurnsByAutomation: StatementSync;
+  listInFlightAutomationTurns: StatementSync;
+  setTurnPinned: StatementSync;
+  setTurnFeedback: StatementSync;
+  pruneAutomationByCount: StatementSync;
+  pruneAutomationByDays: StatementSync;
+  pruneAutomationErrorsOnly: StatementSync;
+  insertItem: StatementSync;
+  insertMessageIn: StatementSync;
+  openItem: StatementSync;
+  closeItem: StatementSync;
+  listItems: StatementSync;
+  listItemsForConversation: StatementSync;
+  messageInText: StatementSync;
+  insertAttachment: StatementSync;
+  listAttachmentsForItem: StatementSync;
+  listAttachmentsForTurn: StatementSync;
+  listAttachmentsForConversation: StatementSync;
+  referencedHashes: StatementSync;
+  listArchiveSegments: StatementSync;
+  upsertState: StatementSync;
+  getState: StatementSync;
+  deleteState: StatementSync;
+  deleteStateByAutomation: StatementSync;
+}
+
+// Reconstructed transcript length = total items across the conversation's
+// turns (one `message_in` per turn + each step/tool item).
+const CONV_COLS = `c.id, c.kind, c.user_id, c.app_id, c.automation_id, c.title,
+        c.harness_kind, c.harness_session_id, c.harness_usage_json,
+        c.hydration_count, c.last_hydrated_at, c.turn_count, c.pinned, c.archived,
+        c.created_at, c.updated_at`;
+
+export function prepare(db: DatabaseSync): PreparedStatements {
+  return {
+    insertConversation: db.prepare(`
+      INSERT INTO conversations
+        (id, kind, user_id, app_id, automation_id, title,
+         harness_kind, harness_session_id, harness_usage_json,
+         turn_count, pinned, created_at, updated_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, NULL, NULL, 0, 0, ?, ?)
+    `),
+    updateAutomationConversation: db.prepare(`
+      UPDATE conversations
+      SET app_id = COALESCE(?, app_id), title = COALESCE(?, title), updated_at = ?
+      WHERE id = ? AND kind = 'automation' AND automation_id = ?
+    `),
+    getConversation: db.prepare(
+      `SELECT ${CONV_COLS} FROM conversations c WHERE c.id = ?`
+    ),
+    getConversationWithCount: db.prepare(`
+      SELECT ${CONV_COLS},
+        c.item_count AS msg_count
+      FROM conversations c WHERE c.id = ? AND c.user_id = ?
+    `),
+    // App scoping is a column filter (`?3 IS NULL OR c.app_id = ?`): the
+    // ledger file is per VAULT, one shared `journal.db` (#280). Pinned threads
+    // sort first (issue #420); archived rows still come back so the sidebar can
+    // group them, they're just ordered last within their pin bucket.
+    listConversations: db.prepare(`
+      SELECT ${CONV_COLS},
+        c.item_count AS msg_count
+      FROM conversations c
+      WHERE c.user_id = ? AND c.kind IN ('chat','build')
+        AND (? IS NULL OR c.app_id = ?)
+      ORDER BY c.archived ASC, c.pinned DESC, c.updated_at DESC
+      LIMIT ?
+    `),
+    // FTS5 search over titles + inbound message text (issue #420, Wave 3),
+    // mirroring the vault's search: rank order + snippet() for match context.
+    // Archived threads are out of the way, so they stay out of results.
+    searchConversations: db.prepare(`
+      SELECT ${CONV_COLS},
+        c.item_count AS msg_count,
+        snippet(fts_conversation, -1, '⟦', '⟧', '…', 12) AS snippet
+      FROM fts_conversation
+      JOIN conversations c ON c.id = fts_conversation.conversation_id
+      WHERE fts_conversation MATCH ?
+        AND c.user_id = ? AND c.kind IN ('chat','build')
+        AND (? IS NULL OR c.app_id = ?)
+        AND c.archived = 0
+      ORDER BY fts_conversation.rank
+      LIMIT ?
+    `),
+    setConversationPinned: db.prepare(
+      `UPDATE conversations SET pinned = ?, updated_at = ? WHERE id = ? AND user_id = ?`
+    ),
+    setConversationArchived: db.prepare(
+      `UPDATE conversations SET archived = ?, updated_at = ? WHERE id = ? AND user_id = ?`
+    ),
+    renameConversation: db.prepare(
+      `UPDATE conversations SET title = ?, updated_at = ? WHERE id = ? AND user_id = ?`
+    ),
+    deleteConversationForUser: db.prepare(
+      `DELETE FROM conversations WHERE id = ? AND user_id = ?`
+    ),
+    deleteConversationById: db.prepare(
+      `DELETE FROM conversations WHERE id = ?`
+    ),
+    deleteConversationByAutomation: db.prepare(
+      `DELETE FROM conversations WHERE automation_id = ?`
+    ),
+    titleOf: db.prepare(
+      `SELECT title FROM conversations WHERE id = ? AND user_id = ?`
+    ),
+    setTitle: db.prepare(
+      `UPDATE conversations SET title = ?, updated_at = ? WHERE id = ? AND user_id = ?`
+    ),
+    setKind: db.prepare(
+      `UPDATE conversations SET kind = ? WHERE id = ? AND user_id = ?`
+    ),
+    touchConversation: db.prepare(
+      `UPDATE conversations SET updated_at = ? WHERE id = ? AND user_id = ?`
+    ),
+    noteTurnWithHarness: db.prepare(`
+      UPDATE conversations
+      SET turn_count = turn_count + 1, updated_at = ?, harness_kind = ?,
+          harness_session_id = ?, harness_usage_json = ?,
+          hydration_count = hydration_count + ?,
+          last_hydrated_at = CASE WHEN ? = 1 THEN ? ELSE last_hydrated_at END
+      WHERE id = ? AND user_id = ?
+    `),
+    noteTurnKindOnly: db.prepare(`
+      UPDATE conversations
+      SET turn_count = turn_count + 1, updated_at = ?, harness_kind = ?,
+          hydration_count = hydration_count + ?,
+          last_hydrated_at = CASE WHEN ? = 1 THEN ? ELSE last_hydrated_at END
+      WHERE id = ? AND user_id = ?
+    `),
+    noteTurnNoHarness: db.prepare(`
+      UPDATE conversations
+      SET turn_count = turn_count + 1, updated_at = ?
+      WHERE id = ? AND user_id = ?
+    `),
+    maxSeq: db.prepare(
+      `SELECT COALESCE(MAX(seq), -1) AS m FROM turns WHERE conversation_id = ?`
+    ),
+    insertTurn: db.prepare(`
+      INSERT INTO turns
+        (id, conversation_id, seq, parent_turn_id, trigger, trigger_origin,
+         retry_of, idempotency_key, note, hydration_tokens, started_at, ok)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0)
+    `),
+    // Σ over this turn's own step/delegate items; step/tool counts. SUM over an
+    // empty set yields NULL — correct in-flight semantics.
+    finishTurn: db.prepare(`
+      UPDATE turns SET
+        ended_at = $endedAt, ok = $ok, error = $error, summary = $summary,
+        output_json = $outputJson,
+        total_input_tokens = (
+          SELECT SUM(input_tokens) FROM items
+          WHERE turn_id = $tid AND kind IN ('step','delegate')),
+        total_output_tokens = (
+          SELECT SUM(output_tokens) FROM items
+          WHERE turn_id = $tid AND kind IN ('step','delegate')),
+        total_cache_read_tokens = (
+          SELECT SUM(cache_read_tokens) FROM items
+          WHERE turn_id = $tid AND kind IN ('step','delegate')),
+        total_cache_write_tokens = (
+          SELECT SUM(cache_write_tokens) FROM items
+          WHERE turn_id = $tid AND kind IN ('step','delegate')),
+        total_cost_usd = (
+          SELECT SUM(cost_usd) FROM items
+          WHERE turn_id = $tid AND kind IN ('step','delegate')),
+        step_count = (SELECT COUNT(*) FROM items WHERE turn_id = $tid AND kind = 'step'),
+        tool_count = (SELECT COUNT(*) FROM items WHERE turn_id = $tid AND kind = 'tool')
+      WHERE id = $tid
+    `),
+    getTurn: db.prepare(`SELECT * FROM turns WHERE id = ?`),
+    // Scoped + guarded (see `ConversationStore.deleteTurn`): only an UNFINISHED
+    // turn, and only within the caller's user scope when one is supplied
+    // (`NULL` = no owner filter, for callers that hold just a run id).
+    deleteTurn: db.prepare(`
+      DELETE FROM turns
+      WHERE id = ? AND ended_at IS NULL
+        AND EXISTS (
+          SELECT 1 FROM conversations c
+          WHERE c.id = turns.conversation_id AND (? IS NULL OR c.user_id = ?)
+        )
+    `),
+    // Idempotency lookup (issue #420): the most recent recorded turn on a
+    // conversation carrying the given key. A key is written once per user send;
+    // newest-first is defensive against any accidental reuse.
+    getTurnByIdempotency: db.prepare(`
+      SELECT * FROM turns
+      WHERE conversation_id = ? AND idempotency_key = ?
+      ORDER BY seq DESC LIMIT 1
+    `),
+    /*
+     * The transcript window (issue #659 G5): the NEWEST `?3` turns strictly
+     * older than the `?2` cursor, returned oldest-first so the fold is
+     * unchanged.
+     *
+     * `ORDER BY seq DESC` in the subquery is load-bearing. The first cut of
+     * this was `ORDER BY seq ASC LIMIT ?`, which caps materialization but
+     * returns the OLDEST N — so paginating with it would have shown a reader
+     * the beginning of their conversation and silently hidden the recent part.
+     * A transcript opens to its tail; that is the end the limit must keep.
+     *
+     * A NULL cursor means "from the live end". One row past the limit is
+     * fetched so `hasMore` is answered by the same query rather than a second
+     * COUNT.
+     *
+     * Anonymous `?` with the cursor bound TWICE, matching every other statement
+     * in this file (see `listTurnsFiltered`). Numbered `?N` placeholders are not
+     * positionally bindable on the pinned Node's `node:sqlite` — it throws
+     * "column index out of range" — so the repeated value is the portable form,
+     * not a stylistic preference.
+     */
+    listTurnsWindow: db.prepare(`
+      SELECT * FROM (
+        SELECT * FROM turns
+         WHERE conversation_id = ? AND (? IS NULL OR seq < ?)
+         ORDER BY seq DESC
+         LIMIT ?
+      ) ORDER BY seq ASC
+    `),
+    listTurnsFiltered: db.prepare(`
+      SELECT * FROM turns
+      WHERE conversation_id = ?
+        AND (? IS NULL OR started_at >= ?)
+        AND (? IS NULL OR ok = ?)
+      ORDER BY started_at DESC LIMIT ?
+    `),
+    // An automation's history is the turns of its one stable conversation.
+    listTurnsByAutomation: db.prepare(`
+      SELECT t.* FROM turns t JOIN conversations c ON t.conversation_id = c.id
+      WHERE c.automation_id = ?
+        AND (? IS NULL OR t.started_at >= ?)
+        AND (? IS NULL OR t.ok = ?)
+      ORDER BY t.started_at DESC LIMIT ?
+    `),
+    listInFlightAutomationTurns: db.prepare(`
+      SELECT t.* FROM turns t JOIN conversations c ON t.conversation_id = c.id
+      WHERE c.kind = 'automation' AND t.ended_at IS NULL
+      ORDER BY t.started_at DESC LIMIT ?
+    `),
+    setTurnPinned: db.prepare(`UPDATE turns SET pinned = ? WHERE id = ?`),
+    // Message-level 👍/👎 (issue #420). `?1` is 'up' | 'down' | NULL (clear).
+    setTurnFeedback: db.prepare(
+      `UPDATE turns SET feedback = ? WHERE id = ? AND conversation_id = ?`
+    ),
+    // Retention is per turn within the automation's stable conversation.
+    // Deleting a turn cascades its items and attachments; pinned turns survive.
+    pruneAutomationByCount: db.prepare(`
+      DELETE FROM turns
+      WHERE conversation_id IN (SELECT id FROM conversations WHERE automation_id = ?)
+        AND id NOT IN (
+          SELECT t.id FROM turns t JOIN conversations c ON t.conversation_id = c.id
+          WHERE c.automation_id = ? ORDER BY t.started_at DESC LIMIT ?
+        )
+        AND pinned = 0
+    `),
+    pruneAutomationByDays: db.prepare(`
+      DELETE FROM turns
+      WHERE conversation_id IN (SELECT id FROM conversations WHERE automation_id = ?)
+        AND started_at < ? AND pinned = 0
+    `),
+    // keep='errors': drop the successful fires, keep failures (+ pinned).
+    pruneAutomationErrorsOnly: db.prepare(`
+      DELETE FROM turns
+      WHERE conversation_id IN (SELECT id FROM conversations WHERE automation_id = ?)
+        AND ok = 1 AND pinned = 0
+    `),
+    insertItem: db.prepare(`
+      INSERT INTO items (
+        id, turn_id, ordinal, call_id, batch_id, kind, role, text, model, harness, effort,
+        input_tokens, output_tokens, cache_read_tokens, cache_write_tokens, cost_usd,
+        cost_source,
+        app_id, name, args_json, output_json, raw_json, child_turn_id,
+        ok, error, started_at, ended_at, duration_ms
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `),
+    // The inbound message (issue #190) — ordinal 0 of the turn. Attachments
+    // hang off the returned item id.
+    insertMessageIn: db.prepare(`
+      INSERT INTO items (id, turn_id, ordinal, kind, role, text, ok, started_at)
+      VALUES (?, ?, ?, 'message_in', ?, ?, 1, ?)
+    `),
+    // Ledger-tail hybrid (issue #158): durable "running" row, ended_at NULL.
+    openItem: db.prepare(`
+      INSERT INTO items (
+        id, turn_id, ordinal, call_id, batch_id, kind, app_id, name, args_json, raw_json,
+        ok, started_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?)
+    `),
+    closeItem: db.prepare(`
+      UPDATE items SET
+        ok = $ok, output_json = $outputJson, raw_json = COALESCE($rawJson, raw_json),
+        error = $error,
+        child_turn_id = $childTurnId,
+        input_tokens = $inputTokens, output_tokens = $outputTokens,
+        cache_read_tokens = $cacheReadTokens, cache_write_tokens = $cacheWriteTokens,
+        model = $model, harness = $harness, effort = $effort, cost_usd = $costUsd,
+        cost_source = $costSource,
+        ended_at = $endedAt, duration_ms = $durationMs
+      WHERE id = $itemId
+    `),
+    listItems: db.prepare(`
+      SELECT * FROM items WHERE turn_id = ? ORDER BY ordinal ASC, started_at ASC
+    `),
+    // Every item of a conversation — or of one WINDOW of it — in ONE query
+    // (issue #659 G5). Rendering a transcript used to run one listItems per
+    // turn, so a 200-turn thread cost 200 round trips through the
+    // prepared-statement + row-mapping path. The optional seq bounds let the
+    // batching and the windowing compose instead of fight: a page reads one
+    // page's rows, not the conversation's. The ordering matches listItems
+    // within a turn, so the folded transcript is byte-identical either way.
+    listItemsForConversation: db.prepare(`
+      SELECT i.* FROM items i JOIN turns t ON t.id = i.turn_id
+      WHERE t.conversation_id = ?
+        AND (? IS NULL OR t.seq >= ?)
+        AND (? IS NULL OR t.seq <= ?)
+      ORDER BY t.seq ASC, i.ordinal ASC, i.started_at ASC
+    `),
+    messageInText: db.prepare(
+      `SELECT text FROM items WHERE turn_id = ? AND kind = 'message_in' ORDER BY ordinal ASC LIMIT 1`
+    ),
+    insertAttachment: db.prepare(`
+      INSERT INTO attachments
+        (id, item_id, hash, mime, size_bytes, source, filename, workspace_path, created_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `),
+    listAttachmentsForItem: db.prepare(
+      `SELECT * FROM attachments WHERE item_id = ? ORDER BY created_at ASC`
+    ),
+    listAttachmentsForTurn: db.prepare(`
+      SELECT a.* FROM attachments a JOIN items i ON a.item_id = i.id
+      WHERE i.turn_id = ? ORDER BY a.created_at ASC
+    `),
+    // The conversation-wide companion to listItemsForConversation (#659 G5):
+    // one query instead of one per message-bearing item. Most threads have no
+    // attachments at all, which is exactly why the per-item query was pure
+    // overhead.
+    listAttachmentsForConversation: db.prepare(`
+      SELECT a.* FROM attachments a
+        JOIN items i ON a.item_id = i.id
+        JOIN turns t ON t.id = i.turn_id
+      WHERE t.conversation_id = ?
+        AND (? IS NULL OR t.seq >= ?)
+        AND (? IS NULL OR t.seq <= ?)
+      ORDER BY a.created_at ASC
+    `),
+    // The blob-GC live set (issue #190) UNIONED with every hash an archived
+    // segment references (issue #438 decision 4) — both unpruned AND pruned
+    // conversation_archive rows, because archived history still points at those
+    // attachment bytes forever (archiving changes temperature, never existence).
+    // Deleting the conversation CASCADE-drops its archive rows and releases the
+    // hashes on the one true-deletion path.
+    referencedHashes: db.prepare(`
+      SELECT DISTINCT hash FROM (
+        SELECT hash FROM attachments WHERE workspace_path IS NULL
+        UNION
+        SELECT j.value AS hash
+          FROM conversation_archive ca, json_each(ca.attachment_hashes_json) j
+      )
+    `),
+    // Wave-3 rehydration (issue #438 decision 9): the archive-index rows for a
+    // conversation, ordered by seq. `pruned_at` distinguishes a sealed-AND-pruned
+    // range (raw rows gone → must fetch the segment blob to render it) from an
+    // archived-but-not-yet-pruned range (raw rows still live → served as today).
+    listArchiveSegments: db.prepare(`
+      SELECT id, seq_from, seq_to, segment_sha256, pruned_at
+        FROM conversation_archive
+       WHERE conversation_id = ?
+       ORDER BY seq_from ASC
+    `),
+    upsertState: db.prepare(`
+      INSERT INTO automation_state (automation_id, key, value_json, updated_at)
+      VALUES (?, ?, ?, ?)
+      ON CONFLICT(automation_id, key) DO UPDATE SET
+        value_json = excluded.value_json,
+        updated_at = excluded.updated_at
+    `),
+    getState: db.prepare(
+      `SELECT * FROM automation_state WHERE automation_id = ? AND key = ?`
+    ),
+    deleteState: db.prepare(
+      `DELETE FROM automation_state WHERE automation_id = ? AND key = ?`
+    ),
+    deleteStateByAutomation: db.prepare(
+      `DELETE FROM automation_state WHERE automation_id = ?`
+    ),
+  };
+}

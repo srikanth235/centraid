@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import {
   existsSync,
+  // oxlint-disable-next-line no-restricted-imports -- (#781) node --test lane: the kit's tempDir() registers a vitest afterAll at import time and throws here; removal runs in the try/finally at the use site.
   mkdtempSync,
   readFileSync,
   readlinkSync,
@@ -60,7 +61,7 @@ test("gateway runtime package list closes over production workspace dependencies
 
 test("assembleRuntime rewrites @centraid links and resolves under out only", (t) => {
   if (!canAssemble()) {
-    t.skip("gateway package dist missing — build @centraid/gateway first");
+    t.skip("gateway package dist missing — build @centraid/server first");
     return;
   }
   const out = mkdtempSync(path.join(tmpdir(), "centraid-assemble-"));
@@ -94,14 +95,14 @@ test("assembleRuntime rewrites @centraid links and resolves under out only", (t)
     assert.equal(existsSync(path.join(scope, "client")), false);
 
     // Module resolution from assembled gateway must not hit monorepo packages/.
-    const fromFile = path.join(out, "packages/gateway/dist/cli/cli.js");
+    const fromFile = path.join(out, "packages/server/dist/cli/cli.js");
     const req = createRequire(fromFile);
-    const resolved = req.resolve("@centraid/app-engine");
+    const resolved = req.resolve("@centraid/server/engine");
     assert.ok(
       underOut(resolved, out),
       `resolve must stay under out, got ${resolved}`
     );
-    const monoPkg = realpathSync(path.join(root, "packages", "app-engine"));
+    const monoPkg = realpathSync(path.join(root, "packages", "server"));
     const resR = realpathSync(resolved);
     assert.equal(
       resR === monoPkg || resR.startsWith(monoPkg + path.sep),
@@ -111,7 +112,7 @@ test("assembleRuntime rewrites @centraid links and resolves under out only", (t)
 
     // Runtime deps (e.g. esbuild) must survive bun's .bun store remap.
     const reqFromEngine = createRequire(
-      path.join(out, "packages/app-engine/dist/index.js")
+      path.join(out, "packages/server/dist/index.js")
     );
     assert.doesNotThrow(() => reqFromEngine.resolve("esbuild"));
     assert.ok(underOut(reqFromEngine.resolve("esbuild"), out));
@@ -119,7 +120,7 @@ test("assembleRuntime rewrites @centraid links and resolves under out only", (t)
     // Idempotent rewrite.
     rewriteRuntimeSymlinks(out, root);
     assert.equal(
-      path.isAbsolute(readlinkSync(path.join(scope, "gateway"))),
+      path.isAbsolute(readlinkSync(path.join(scope, "server"))),
       false
     );
   } finally {

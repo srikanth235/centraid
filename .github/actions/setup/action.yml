@@ -189,8 +189,19 @@ runs:
         key: ${{ steps.cargo-verify.outputs.cache-primary-key }}
 
     # No Bun cache: a cold `bun install` is faster than restoring one (#538).
+    # Retry extract flakes (`pdfjs-dist` tarball) without unpinning the lockfile.
     - name: Install dependencies
       if: inputs.install == 'true'
       shell: bash
       working-directory: ${{ inputs.working-directory }}
-      run: bun install --frozen-lockfile
+      run: |
+        set -euo pipefail
+        attempt=1
+        until bun install --frozen-lockfile; do
+          if [ "$attempt" -ge 3 ]; then
+            exit 1
+          fi
+          echo "::warning::bun install failed (attempt ${attempt}); retrying"
+          attempt=$((attempt + 1))
+          sleep 5
+        done

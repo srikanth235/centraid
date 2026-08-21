@@ -7,15 +7,19 @@
 // deliberately colliding id and prove that a command aimed at one scope touches
 // ONLY that scope.
 //
-// LAYOUT NOTE. Apps import the kit as a SIBLING (`./kit.ts`) even though at
-// rest it lives in `kit/` — the gateway serves it from a shared dir, and
-// app-boot-harness.ts reproduces that with symlinks into a mirrored tree.
-// These modules are unit-testable without a booted app, so the same trick is
-// applied in miniature: the real sources are copied into a temp dir beside two
-// stubs (`kit.ts`, `outcomes.ts`) and imported from there. The modules UNDER
-// TEST are byte-identical copies, so this is still testing the real code — only
-// the two effect boundaries are replaced.
-import { copyFileSync, mkdirSync, writeFileSync } from "node:fs";
+// LAYOUT NOTE. These modules are unit-testable without a booted app, so the
+// real sources are copied into a temp dir beside two stubs and imported from
+// there; shared pure helpers keep their production-relative path under
+// `_shared/`. The modules UNDER TEST are byte-identical apart from ONE
+// rewritten specifier, so this is still testing the real code — only the two
+// effect boundaries are replaced.
+//
+// The design package's element layer is stubbed rather than loaded because
+// importing it defines custom elements, which needs a DOM this node-side suite
+// has no reason to boot. It cannot be `vi.mock`ed: the copies are loaded by
+// native `import()` from outside the project root (vite refuses a module
+// there), which never reaches vitest's module registry.
+import { copyFileSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
 
@@ -87,22 +91,37 @@ const COPIED = [
   "selection-actions.ts",
 ];
 
-const dir = tempDirSync("photos-asset-key-");
-mkdirSync(dir, { recursive: true });
-for (const file of COPIED)
-  copyFileSync(path.join(PHOTOS, file), path.join(dir, file));
+const ELEMENTS = "@centraid/design/elements";
 
-// The kit surface these two modules actually touch. `format.ts` wants three
-// formatting helpers; `selection-actions.ts` wants `toast`.
+const root = tempDirSync("photos-asset-key-");
+const dir = path.join(root, "photos");
+mkdirSync(dir, { recursive: true });
+for (const file of COPIED) {
+  writeFileSync(
+    path.join(dir, file),
+    readFileSync(path.join(PHOTOS, file), "utf8").replaceAll(
+      `"${ELEMENTS}"`,
+      '"./elements-stub.ts"'
+    )
+  );
+}
+mkdirSync(path.join(root, "_shared"), { recursive: true });
+copyFileSync(
+  path.resolve(PHOTOS, "../_shared/selection-engine.ts"),
+  path.join(root, "_shared/selection-engine.ts")
+);
+
+// The element surface these two modules actually touch. `format.ts` wants two
+// formatting helpers; `selection-actions.ts` wants `statusLine`.
 writeFileSync(
-  path.join(dir, "kit.ts"),
-  `export const BLOB_ROUTE = '/centraid/_vault/blobs';
-export const fmtBytes = (n: number): string => String(n);
+  path.join(dir, "elements-stub.ts"),
+  `export const fmtBytes = (n: number): string => String(n);
 export const localDayKey = (at: string | Date): string =>
   (at instanceof Date ? at.toISOString() : String(at)).slice(0, 10);
-export const toast = (): void => undefined;
+export const statusLine = (): void => undefined;
 `
 );
+
 // The command boundary, recording instead of dispatching. Every assertion below
 // is about WHAT the real batch code asked for and IN WHICH SCOPE.
 writeFileSync(
@@ -114,6 +133,7 @@ export const act = (action: string, input: unknown, scope?: string | null) => {
   return Promise.resolve({ status: 'executed' });
 };
 export const narrate = (): boolean => false;
+export const notice = (): void => undefined;
 export const writeTarget = () => ({ disabled: false, scopeId: 'vault-own', label: 'Library' });
 `
 );

@@ -20,10 +20,10 @@ import {
 } from "./atlasBrowseData.js";
 import type { EditorState } from "./atlasBrowseData.js";
 
-import styles from "./AtlasBrowseTab.module.css";
+import styles from "./AtlasRecordsSection.module.css";
 
-// The row editor drawer (issue #441 B3), split out of AtlasBrowseTab. An insert
-// or edit form whose writes ride the gateway's journalled command path — never
+// The row editor drawer (issue #441 B3), split out of the records section. An
+// insert or edit form whose writes ride the gateway's journalled command path — never
 // raw SQL. Sealed columns render as read-only chips and are never written; pk
 // columns are auto-minted on insert; FK columns get a reference-picker combobox.
 

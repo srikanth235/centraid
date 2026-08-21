@@ -18,6 +18,7 @@ import type {
   NativeWriteInput,
   NativeWriteResult,
 } from "./native-session";
+import type { CommonsIntent, CommonsRecord } from "./placement-transport";
 
 export interface MultiVaultSessionOptions {
   reader: MultiVaultReplicaReader;
@@ -26,6 +27,7 @@ export interface MultiVaultSessionOptions {
   focusedVaultId: () => string | undefined;
   createId: () => string;
   sendPlacement: (input: PlacementIntent) => Promise<PlacementRecord>;
+  sendCommons?: (input: CommonsIntent) => Promise<CommonsRecord>;
   isConnected: () => boolean;
   isNetworkWorkAllowed?: () => Promise<boolean>;
   onScopePulled?: (vaultId: string) => void;
@@ -39,6 +41,7 @@ export class MultiVaultReplicaSession implements MobileReplicaSession {
   readonly #focusedVaultId: () => string | undefined;
   readonly #createId: () => string;
   readonly #sendPlacement: (input: PlacementIntent) => Promise<PlacementRecord>;
+  readonly #sendCommons: (input: CommonsIntent) => Promise<CommonsRecord>;
   readonly #isConnected: () => boolean;
   readonly #isNetworkWorkAllowed: () => Promise<boolean>;
   readonly #onScopePulled: ((vaultId: string) => void) | undefined;
@@ -51,6 +54,10 @@ export class MultiVaultReplicaSession implements MobileReplicaSession {
     this.#focusedVaultId = options.focusedVaultId;
     this.#createId = options.createId;
     this.#sendPlacement = options.sendPlacement;
+    this.#sendCommons =
+      options.sendCommons ??
+      (() =>
+        Promise.reject(new Error("Sharing is unavailable in this session.")));
     this.#isConnected = options.isConnected;
     this.#isNetworkWorkAllowed =
       options.isNetworkWorkAllowed ?? (() => Promise.resolve(true));
@@ -75,11 +82,9 @@ export class MultiVaultReplicaSession implements MobileReplicaSession {
     const focused = this.#focusedVaultId();
     const target =
       (focused &&
-      this.#scopes.some(
-        (scope) => scope.vaultId === focused && scope.role !== "read"
-      )
+      this.#scopes.some((scope) => scope.vaultId === focused && scope.canWrite)
         ? focused
-        : this.#scopes.find((scope) => scope.role !== "read")?.vaultId) ??
+        : this.#scopes.find((scope) => scope.canWrite)?.vaultId) ??
       this.#scopes[0]?.vaultId;
     if (!target) throw new Error("No mounted replica scope accepts writes");
     return this.writeTo(target, appId, input);
@@ -94,7 +99,7 @@ export class MultiVaultReplicaSession implements MobileReplicaSession {
       (candidate) => candidate.vaultId === vaultId
     );
     if (!scope) throw new Error(`Vault ${vaultId} is not mounted`);
-    if (scope.role === "read")
+    if (!scope.canWrite)
       throw new Error(`${scope.label} is read-only for this member`);
     const session = this.#sessions.get(vaultId);
     if (!session) throw new Error(`Vault ${vaultId} has no write session`);
@@ -152,6 +157,40 @@ export class MultiVaultReplicaSession implements MobileReplicaSession {
       [...this.#sessions.values()].map((session) => session.close())
     );
     this.#reader.close();
+  }
+
+  async discardPendingWrite(
+    intentId: string,
+    vaultId?: string
+  ): Promise<boolean> {
+    const candidates = vaultId
+      ? [this.#sessions.get(vaultId)].filter(
+          (session): session is NativeReplicaSession => Boolean(session)
+        )
+      : [...this.#sessions.values()];
+    for (const session of candidates) {
+      // Intent ids are globally unique. Stop at the one outbox that owns it.
+      // oxlint-disable-next-line no-await-in-loop
+      if (await session.discardPendingWrite(intentId)) return true;
+    }
+    return false;
+  }
+
+  async retryPendingWrite(
+    intentId: string,
+    vaultId?: string
+  ): Promise<NativeWriteResult | undefined> {
+    const candidates = vaultId
+      ? [this.#sessions.get(vaultId)].filter(
+          (session): session is NativeReplicaSession => Boolean(session)
+        )
+      : [...this.#sessions.values()];
+    for (const session of candidates) {
+      // oxlint-disable-next-line no-await-in-loop
+      const replacement = await session.retryPendingWrite(intentId);
+      if (replacement) return replacement;
+    }
+    return undefined;
   }
 
   async pendingChanges(): Promise<
@@ -223,6 +262,13 @@ export class MultiVaultReplicaSession implements MobileReplicaSession {
     });
     if (this.#isConnected()) await this.flushPlacements();
     return this.#reader.placement(record.linkToken) ?? record;
+  }
+
+  share(input: CommonsIntent): Promise<CommonsRecord> {
+    if (!this.#isConnected()) {
+      return Promise.reject(new Error("Sharing needs a gateway connection."));
+    }
+    return this.#sendCommons(input);
   }
 
   placements(): PlacementRecord[] {

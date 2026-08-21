@@ -18,7 +18,7 @@ import {
   cbsfDirectoryAad,
   cbsfFrameAad,
   encodeCbsfDirectory,
-} from "@centraid/blob-format";
+} from "@centraid/core/blob";
 
 import { readDirectBlob } from "./device-blob-source.js";
 

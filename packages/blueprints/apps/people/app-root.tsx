@@ -1,57 +1,81 @@
-// governance: allow-repo-hygiene file-size-limit — this file holds the app's whole orchestration as one React tree by design (#505); it is smaller than the served app.tsx + app-inline.tsx it replaces. Splitting it belongs to the app's own code evolution, not this migration.
-// People — query-free React tree (issue #505). Holds the `Root` component and
-// every constant, helper and type it needs that does NOT depend on the
-// node-side `./queries/*` handler modules. The shell's InlineAppModule
-// descriptor imports `Root` and `CHANGE_TABLES` from here and adds the query
-// wiring; there is deliberately no parallel served-system-app entry.
-
+// People, rebuilt from the Binding Layer v12 handoff: the orchestrator.
+//
+// This file wires the app and draws none of it. It owns the two mutable bags
+// (`state`, `data`), builds the read factory (`logic.ts`) and the write
+// factory (`writes.ts`) once, feeds the frame (title, count, verbs, band,
+// status line), and hands each screen the props `types.ts` freezes. The
+// screens live in `components/`; the recipes they are built from live in
+// `components/shared.module.css`, declared exactly once.
+//
+// THE VAULT LINK IS DRAWN, as far as the contract lets it be. `queries/*` now
+// answer the sharing plane (`queries/_shared.ts`), so the ring, the two filter
+// chips, the vault-counting tiles and status lines, and the person screen's
+// `Vaults` + `Shared with them` sections are all here — and all of them fall
+// back to wave 1's link-free rendering when `links_available` is false, which
+// is what a parked `share.*` scope looks like from in here.
+//
+// THE GRANT PLANE IS THE PERSON SCREEN'S OWN READ (#825). `Share` and
+// `Revoke` are live there, and neither travels through `logic.ts` or
+// `writes.ts`: the plane is the gateway's door, not one of this app's vault
+// queries, so `components/PersonGrants.tsx` holds it and this file supplies
+// only the two things a host owes it — the roster, which is where a party id
+// has a name, and the frame's one status line.
+//
+// STILL ABSENT, and absence rather than omission: the six record sections the
+// handoff itself excludes (lists, journal, tasks, gifts, debts, typed
+// relationships, edit history).
 import {
   useCallback,
   useEffect,
-  useMemo,
+  useLayoutEffect,
   useReducer,
   useRef,
   useState,
 } from "react";
-import type { KeyboardEvent, ReactElement } from "react";
+import type { ReactElement } from "react";
 
-import { identityColor } from "@centraid/design";
-
-import type { InlineAppProps } from "../inline-types.ts";
-import { Chrome } from "./Chrome.tsx";
-import { Activity } from "./components/Activity.tsx";
-import { AddPersonModal } from "./components/AddPersonModal.tsx";
-import { BulkBar } from "./components/BulkBar.tsx";
-import { Details } from "./components/Details.tsx";
-import { GridCard } from "./components/Grid.tsx";
-import { Journal } from "./components/Journal.tsx";
-import { ListHead, ListRow, WindowFoot } from "./components/List.tsx";
-import { NewMenu } from "./components/NewMenu.tsx";
-import { Icon } from "./components/Shared.tsx";
 import {
-  JournalNav,
-  ListList,
-  SmartNav,
-  Storage,
-} from "./components/Sidebar.tsx";
-import { StatusChips } from "./components/Toolbar.tsx";
-import { TrashCard } from "./components/TrashCard.tsx";
-import { avatarColor, listName } from "./format.ts";
-import { I } from "./icons.ts";
-import {
-  closePopover,
-  debounce,
-  isPopoverOpen,
   observeWidth,
   onDataChange,
   onFocusRefresh,
-  readFailed,
-} from "./kit.ts";
+} from "@centraid/design/elements";
+
+import { publishOutcome } from "../_shared/app-frame.tsx";
+import { libraryReachability } from "../_shared/view-state-kit.ts";
+import type { InlineAppProps } from "../inline-types.ts";
+import { Chrome } from "./Chrome.tsx";
+import { ConfirmHost } from "./components/ConfirmHost.tsx";
+import { PeopleRouteBody } from "./components/PeopleRouteBody.tsx";
+import { appBar, bandClaim } from "./frame.tsx";
 import { createLogic } from "./logic.ts";
-import type { AppData, AppState, Nav, Person, PersonList } from "./types.ts";
+import { STATUS } from "./people-copy.ts";
+import {
+  EDIT,
+  LOG,
+  MERGE,
+  PERSON,
+  SEARCH,
+  TRASH,
+  shelfFromSegment,
+} from "./shelves.ts";
+import type {
+  AppData,
+  AppState,
+  ComposerKey,
+  ComposerState,
+  LogDraft,
+  PersonDraft,
+  RosterFilter,
+} from "./types.ts";
+import { DEFAULT_CADENCE, makeData, makeState } from "./view-state.ts";
+import { createWrites } from "./writes.ts";
 
-import styles from "./Chrome.module.css";
-
+/**
+ * Vault entities this app's queries read — the doorbell filter. Restored in
+ * full from the list the wall preserved: an app that declared fewer would
+ * sleep through a change it renders, and one that declared more would wake on
+ * every unrelated write.
+ */
 export const CHANGE_TABLES = [
   "people.profile",
   "people.important_date",
@@ -69,345 +93,93 @@ export const CHANGE_TABLES = [
   "knowledge.annotation",
 ];
 
-interface PeoplePayload {
-  people?: Person[];
-  lists?: PersonList[];
-  truncated?: boolean;
-  vaultDenied?: { code?: string; message?: string };
-}
-interface SearchPayload {
-  people?: Person[];
-}
-interface TrashPayload {
-  people?: Person[];
-  vaultDenied?: { code?: string; message?: string };
+interface Core {
+  logic: ReturnType<typeof createLogic>;
+  writes: ReturnType<typeof createWrites>;
 }
 
-// Knobs: read the initial default view from the app ROOT element (the host sets
-// data-app-* there), not documentElement (#505 trap 5).
-function initialView(rootEl: HTMLElement | null): "grid" | "list" {
-  return rootEl?.dataset.appView === "list" ? "list" : "grid";
-}
-
-function makeState(view: "grid" | "list"): AppState {
-  return {
-    view,
-    nav: { kind: "all" },
-    chip: "all",
-    sortKey: "last",
-    sortDir: -1,
-    search: "",
-    searchResults: null,
-    searchSeq: 0,
-    selected: new Set<string>(),
-    detailsId: null,
-    detailPerson: null,
-    detailAdders: {},
-    newMenuOpen: false,
-    addModalOpen: false,
-    creatingList: false,
-    renamingListId: null,
-    narrow: false,
-    peopleWindow: 200,
-    peopleTruncated: false,
-    journalData: null,
-    dashboardData: null,
-    visibleRows: [],
-  };
-}
-
-const TOOLBAR_TITLES: Record<Exclude<Nav["kind"], "list">, string> = {
-  all: "All people",
-  reconnect: "Reconnect",
-  upcoming: "Upcoming",
-  starred: "Favorites",
-  journal: "Journal",
-  activity: "Activity",
-  trash: "Trash",
-};
-const SORT_NAMES: Record<AppState["sortKey"], string> = {
-  last: "Last spoke",
-  name: "Name",
-  cadence: "Cadence",
-};
-
-export function Root({ rootRef }: InlineAppProps): ReactElement {
+export function Root({
+  rootRef,
+  frame,
+  compact = false,
+}: InlineAppProps): ReactElement {
   const [, bump] = useReducer((n: number) => n + 1, 0);
-  const [loaded, setLoaded] = useState(false);
   const [narrow, setNarrow] = useState(false);
-  const [sideOpen, setSideOpen] = useState(false);
-  const rootElRef = useRef<HTMLDivElement | null>(null);
-  const newWrapRef = useRef<HTMLDivElement | null>(null);
-  const dataRef = useRef<AppData>({ people: [], trash: [], lists: [] });
-  const stateRef = useRef<AppState>(makeState(initialView(null)));
-  const logicRef = useRef<ReturnType<typeof createLogic> | null>(null);
-  const consentRef = useRef<{ message: string } | null>(null);
-  const readFailedShownRef = useRef(false);
+  const [loaded, setLoaded] = useState(false);
+  const [readFailedState, setReadFailedState] = useState(false);
+  const [consent, setConsent] = useState<{ message: string } | null>(null);
 
-  const refresh = useCallback(async () => {
+  const rootElRef = useRef<HTMLDivElement | null>(null);
+  const searchInputRef = useRef<HTMLInputElement | null>(null);
+  const stateRef = useRef<AppState>(makeState());
+  const dataRef = useRef<AppData>(makeData());
+  const coreRef = useRef<Core | null>(null);
+  /** The status line is carrying a write's OUTCOME, so the ambient sentence
+   *  stays out of the way until the member navigates. */
+  const outcomeHeld = useRef(false);
+
+  if (!coreRef.current) {
     const state = stateRef.current;
     const data = dataRef.current;
-    const logic = logicRef.current;
-    let next: PeoplePayload | undefined;
-    let trash: TrashPayload | undefined;
-    try {
-      [next, trash] = await Promise.all([
-        window.centraid.read<PeoplePayload>({
-          query: "people",
-          input: { limit: state.peopleWindow },
-        }),
-        window.centraid.read<TrashPayload>({
-          query: "trash",
-          input: {},
-        }),
-      ]);
-    } catch {
-      readFailed(document.querySelector<HTMLElement>("#noticeBanner"));
-      readFailedShownRef.current = true;
-      setLoaded(true);
-      return;
-    }
-    if (readFailedShownRef.current) {
-      readFailedShownRef.current = false;
-      logic?.notice("");
-    }
-    const denied = next?.vaultDenied;
-    consentRef.current = denied ? { message: denied.message ?? "" } : null;
-    if (denied) {
-      setLoaded(true);
-      bump();
-      return;
-    }
-    const incoming = next ?? data;
-    data.people = incoming.people ?? [];
-    data.trash = trash?.vaultDenied ? [] : (trash?.people ?? []);
-    data.lists = incoming.lists ?? [];
-    state.peopleTruncated = Boolean(next?.truncated);
-    state.selected = new Set(
-      [...state.selected].filter((id) =>
-        data.people.some((p) => p.party_id === id)
-      )
-    );
-    if (
-      state.detailsId &&
-      !data.people.some((p) => p.party_id === state.detailsId)
-    ) {
-      state.detailsId = null;
-      state.detailPerson = null;
-    }
-    setLoaded(true);
-    bump();
-  }, []);
-
-  if (!logicRef.current) {
-    logicRef.current = createLogic({
-      state: stateRef.current,
-      data: dataRef.current,
-      render: bump,
-      refresh,
-      renderRows: bump,
-      renderDetails: bump,
-      renderModal: bump,
-      renderNewMenu: bump,
+    const render = (): void => bump();
+    const logic = createLogic({
+      state,
+      data,
+      render,
+      setLoaded,
+      setConsent,
+      setReadFailed: setReadFailedState,
     });
+    const writes = createWrites({
+      frame,
+      refresh: logic.refresh,
+      hold: () => {
+        outcomeHeld.current = true;
+      },
+      notice: logic.notice,
+    });
+    coreRef.current = { logic, writes };
   }
-  const logic = logicRef.current;
-  const {
-    addJournalEntry: handleAddJournalEntry,
-    addPerson: handleAddPerson,
-    cancelCreateList: handleCancelCreateList,
-    cancelRenameList: handleCancelRenameList,
-    clearSelected: handleClearSelected,
-    closeAddModal: handleCloseAddModal,
-    closeDetails: handleCloseDetails,
-    createList: handleCreateList,
-    deleteList: handleDeleteList,
-    favoriteSelected: handleFavoriteSelected,
-    openAddModal: handleOpenAddModal,
-    openDetails: handleOpenDetails,
-    openPersonMenu: handleOpenPersonMenu,
-    renameList: handleRenameList,
-    showMorePeople: handleShowMorePeople,
-    startCreateList: handleStartCreateList,
-    startRenameList: handleStartRenameList,
-    toggleAdder: handleToggleAdder,
-    toggleAllVisible: handleToggleAllVisible,
-    toggleSelect: handleToggleSelect,
-    toggleStar: handleToggleStar,
-    restorePerson: handleRestorePerson,
-  } = logic;
 
-  const setRoot = useCallback(
-    (el: HTMLDivElement | null) => {
-      rootElRef.current = el;
-      rootRef(el);
-      if (el) {
-        const view = initialView(el);
-        if (view !== stateRef.current.view) {
-          stateRef.current.view = view;
-          bump();
-        }
-      }
-    },
-    [rootRef]
-  );
+  const core = coreRef.current;
+  const { logic } = core;
+  const { writes } = core;
+  const state = stateRef.current;
+  const data = dataRef.current;
 
-  // Nav select is logic.selectNav (verbatim); wrap only to also close the React-
-  // controlled narrow drawer (served toggles a class on #root, which is inert here).
-  const handleSelectNav = useCallback(
-    (nav: Nav) => {
-      setSideOpen(false);
-      void logic.selectNav(nav);
-    },
-    [logic]
-  );
+  // Seed the compact layout BEFORE the first paint. `observeWidth` in the
+  // mount effect below only fires post-paint, so without this the phone form
+  // factor would paint at desktop metrics for one frame.
+  useLayoutEffect(() => {
+    const element = rootElRef.current;
+    if (!element) return;
+    const isNarrow =
+      element.dataset.appWidth === "narrow" ||
+      compact ||
+      element.clientWidth < 860;
+    if (isNarrow !== stateRef.current.narrow) {
+      stateRef.current.narrow = isNarrow;
+      setNarrow(isNarrow);
+    }
+  }, [compact]);
 
-  const applySearch = useMemo(
-    () =>
-      debounce(async () => {
-        const state = stateRef.current;
-        const input = document.querySelector(
-          "#searchInput"
-        ) as HTMLInputElement | null;
-        const q = (input?.value ?? "").trim();
-        if (q === state.search) return;
-        state.search = q;
-        logic.clearSelection();
-        if (!q) {
-          state.searchResults = null;
-          bump();
-          return;
-        }
-        if (state.nav.kind === "journal" || state.nav.kind === "activity")
-          state.nav = { kind: "all" };
-        const seq = ++state.searchSeq;
-        let rows: Person[] = [];
-        try {
-          const res = await window.centraid.read<SearchPayload>({
-            query: "search",
-            input: { term: q },
-          });
-          rows = res?.people ?? [];
-        } catch {
-          rows = [];
-        }
-        if (seq !== state.searchSeq) return;
-        state.searchResults = rows;
-        bump();
-      }, 150),
-    [logic]
-  );
-
-  const onSearchKeyDown = useCallback((e: KeyboardEvent<HTMLInputElement>) => {
-    if (e.key !== "Escape") return;
-    e.preventDefault();
-    const inp = e.currentTarget;
-    const state = stateRef.current;
-    if (!inp.value && !state.search) return;
-    inp.value = "";
-    state.searchSeq += 1;
-    state.search = "";
-    state.searchResults = null;
-    state.selected.clear();
-    bump();
-  }, []);
-
-  const onSort = useCallback(() => {
-    const state = stateRef.current;
-    const keys: AppState["sortKey"][] = ["last", "name", "cadence"];
-    const next = keys[(keys.indexOf(state.sortKey) + 1) % keys.length]!;
-    state.sortKey = next;
-    state.sortDir = next === "name" || next === "cadence" ? 1 : -1;
-    bump();
-  }, []);
-
-  const onSelectView = useCallback((view: "grid" | "list") => {
-    stateRef.current.view = view;
-    bump();
-  }, []);
-
-  const onToggleNewMenu = useCallback(() => {
-    stateRef.current.newMenuOpen = !stateRef.current.newMenuOpen;
-    bump();
-  }, []);
-
-  // ---- chrome wiring: doorbell, focus, keys, click-outside, width ----
   useEffect(() => {
-    const stopDoorbell = onDataChange(CHANGE_TABLES, () => void refresh());
-    const stopFocus = onFocusRefresh(() => void refresh());
-
-    const onKey = (e: globalThis.KeyboardEvent): void => {
-      const target = e.target;
-      const editing =
-        target instanceof HTMLInputElement ||
-        target instanceof HTMLTextAreaElement ||
-        (target instanceof HTMLElement && target.isContentEditable);
-      if (e.key === "/" && !editing && !e.metaKey && !e.ctrlKey && !e.altKey) {
-        e.preventDefault();
-        document.querySelector<HTMLInputElement>("#searchInput")?.focus();
-        return;
+    const stopDoorbell = onDataChange(
+      CHANGE_TABLES,
+      () => void logic.refresh(),
+      {
+        debounceMs: 200,
       }
-      if (isPopoverOpen()) {
-        if (e.key !== "Escape") return;
-        closePopover();
-        return;
-      }
-      const state = stateRef.current;
-      if (
-        e.key.toLowerCase() === "n" &&
-        !editing &&
-        !e.metaKey &&
-        !e.ctrlKey &&
-        !e.altKey &&
-        !state.addModalOpen &&
-        !state.detailsId
-      ) {
-        e.preventDefault();
-        handleOpenAddModal();
-        return;
-      }
-      if (e.key !== "Escape") return;
-      if (state.addModalOpen) {
-        handleCloseAddModal();
-        return;
-      }
-      if (state.detailsId) {
-        handleCloseDetails();
-        return;
-      }
-      if (state.newMenuOpen) {
-        state.newMenuOpen = false;
-        bump();
-        return;
-      }
-      setSideOpen(false);
-    };
-    const onDocClick = (e: MouseEvent): void => {
-      const state = stateRef.current;
-      if (
-        state.newMenuOpen &&
-        newWrapRef.current &&
-        e.target instanceof Node &&
-        !newWrapRef.current.contains(e.target)
-      ) {
-        state.newMenuOpen = false;
-        bump();
-      }
-    };
-    window.addEventListener("keydown", onKey);
-    document.addEventListener("click", onDocClick);
+    );
+    const stopFocus = onFocusRefresh(() => void logic.refresh());
     const stopWidth = rootElRef.current
       ? observeWidth(rootElRef.current, 860, (isNarrow: boolean) => {
           stateRef.current.narrow = isNarrow;
           setNarrow(isNarrow);
-          if (!isNarrow) setSideOpen(false);
         })
       : () => {};
-
-    void refresh();
+    void logic.refresh();
     return () => {
-      window.removeEventListener("keydown", onKey);
-      document.removeEventListener("click", onDocClick);
       stopDoorbell();
       stopFocus();
       stopWidth();
@@ -415,413 +187,364 @@ export function Root({ rootRef }: InlineAppProps): ReactElement {
     // eslint-disable-next-line react-hooks/exhaustive-deps -- mount-once wiring, stable deps via refs (#505)
   }, []);
 
-  // Dismiss any open kebab/move popover on every committed re-render — the React
-  // analogue of app.tsx's `render()` calling closePopover() up front. Opening the
-  // popover triggers no state change (no commit), so it survives its own open.
-  useEffect(() => {
-    closePopover();
-  });
+  // OFFLINE IS READ, NEVER INVENTED (`_shared/view-state-kit.ts`): the host's
+  // own knob first, then the evidence of a read that actually came back failed.
+  const offline =
+    libraryReachability({
+      hostStatus: rootElRef.current?.dataset.gatewayStatus ?? null,
+      readFailed: readFailedState,
+    }) === "unreachable";
 
-  // ---------- Derivation (port of render()/renderToolbar()/renderRows()) ----------
-  const state = stateRef.current;
-  const data = dataRef.current;
+  // ---- navigation + screen handlers ----
 
-  // A list can vanish under us (deleted elsewhere) — fall back to All.
-  if (state.nav.kind === "list") {
-    const listId = state.nav.listId;
-    if (!data.lists.some((c) => c.list_id === listId))
-      state.nav = { kind: "all" };
-  }
-  const nav = state.nav;
-  const rows = logic.currentRows();
-  state.visibleRows = rows;
+  const navigate = useCallback(
+    (shelf: typeof state.shelf, personId?: string | null) => {
+      outcomeHeld.current = false;
+      logic.go(shelf, personId);
+    },
+    [logic]
+  );
 
-  const isPeople = [
-    "all",
-    "reconnect",
-    "upcoming",
-    "starred",
-    "list",
-    "trash",
-  ].includes(nav.kind);
-  let title =
-    nav.kind === "list" ? listName(data, nav.listId) : TOOLBAR_TITLES[nav.kind];
-  if (state.search.trim()) title = `Results for "${state.search.trim()}"`;
+  // The screens take handlers by name, so the few that are `logic`'s own
+  // functions are bound here rather than passed through raw — one naming
+  // convention for every callback a route receives.
+  const handleTermChange = logic.setSearch;
+  const handleClearSearch = logic.clearSearch;
+  const handleToggleSection = logic.toggleSection;
+  const handleBack = logic.goBack;
 
-  const n = rows.length;
-  let sub: string;
-  if (nav.kind === "journal")
-    sub = "A private line about your days and the people in them";
-  else if (nav.kind === "activity")
-    sub = "Every touch you have logged, most recent first";
-  else if (state.search.trim()) sub = `${n} ${n === 1 ? "match" : "matches"}`;
-  else if (nav.kind === "reconnect")
-    sub = `${n} overdue · sorted by how long it has been`;
-  else if (nav.kind === "upcoming")
-    sub = `${n} with reminders · birthdays and dates`;
-  else if (nav.kind === "starred") sub = `${n} favorite${n === 1 ? "" : "s"}`;
-  else if (nav.kind === "trash")
-    sub = `${n} in trash · auto-purge after 30 days`;
-  else sub = `${n} ${n === 1 ? "person" : "people"}`;
+  const openPerson = useCallback(
+    (partyId: string) => navigate(PERSON, partyId),
+    [navigate]
+  );
 
-  const sortLabel = `${SORT_NAMES[state.sortKey]} ${state.sortDir === 1 ? "↑" : "↓"}`;
+  const openLog = useCallback(
+    (partyId: string) => {
+      state.log = { party_id: partyId, kind: "Message", text: "" };
+      navigate(LOG, partyId);
+    },
+    [navigate, state]
+  );
 
-  // ---------- Board (scroll contents — journal / activity / empty / grid / list) ----------
-  let board: ReactElement;
-  if (nav.kind === "journal") {
-    board = (
-      <Journal
-        entries={state.journalData?.entries ?? []}
-        onSubmit={handleAddJournalEntry}
-        onOpenDetails={handleOpenDetails}
-      />
-    );
-  } else if (nav.kind === "activity") {
-    board = (
-      <Activity
-        recent={state.dashboardData?.recent ?? []}
-        onOpenDetails={handleOpenDetails}
-      />
-    );
-  } else if (nav.kind === "trash") {
-    board =
-      rows.length === 0 ? (
-        <div className="kit-empty">
-          <div className="kit-empty-icon">
-            <Icon svg={I.del} />
-          </div>
-          <div className="kit-empty-title">Trash is empty</div>
-          <div className="kit-empty-sub">
-            Deleted people stay recoverable here for 30 days.
-          </div>
-          <button
-            type="button"
-            className="kit-btn"
-            onClick={() => handleSelectNav({ kind: "all" })}
-          >
-            View people
-          </button>
-        </div>
-      ) : (
-        <div className={styles.grid}>
-          {rows.map((person) => (
-            <TrashCard
-              key={person.party_id}
-              person={person}
-              onRestore={handleRestorePerson}
-            />
-          ))}
-        </div>
+  const openEdit = useCallback(() => {
+    const person = data.person;
+    state.draft = {
+      party_id: person?.party_id ?? null,
+      name: person?.name ?? "",
+      role: person?.role ?? "",
+      avatar_color: person?.avatar_color ?? null,
+      cadence_days: person?.cadence_days ?? DEFAULT_CADENCE,
+    };
+    navigate(EDIT);
+  }, [data, navigate, state]);
+
+  const openNew = useCallback(() => {
+    state.draft = {
+      party_id: null,
+      name: "",
+      role: "",
+      avatar_color: null,
+      cadence_days: DEFAULT_CADENCE,
+    };
+    navigate(EDIT, null);
+  }, [navigate, state]);
+
+  const selectFilter = useCallback(
+    (filter: RosterFilter) => {
+      state.filter = filter;
+      bump();
+    },
+    [state]
+  );
+
+  const composerChange = useCallback(
+    (patch: Partial<ComposerState>) => {
+      if (!state.composer) return;
+      state.composer = { ...state.composer, ...patch };
+      bump();
+    },
+    [state]
+  );
+
+  const composerSave = useCallback(() => {
+    const composer = state.composer;
+    const person = data.person;
+    if (!composer || !person) return;
+    state.composer = null;
+    bump();
+    if (composer.key === "notes")
+      void writes.addNote(person.party_id, composer.value, person.name);
+    else if (composer.key === "dates")
+      void writes.addImportantDate(
+        person.party_id,
+        composer.label,
+        composer.monthDay,
+        person.name
       );
-  } else if (rows.length === 0) {
-    const searching = !!state.search.trim();
-    const emptyTitle = searching
-      ? "No matches"
-      : nav.kind === "starred"
-        ? "No favorites yet"
-        : nav.kind === "reconnect"
-          ? "All caught up"
-          : "No one here yet";
-    const emptySub = searching
-      ? "Try fewer words."
-      : nav.kind === "reconnect"
-        ? "Nobody is overdue right now — nice."
-        : "Add someone from the New button to start keeping in touch.";
-    board = (
-      <div className="kit-empty">
-        <div className="kit-empty-icon">
-          <Icon svg={I.people} />
-        </div>
-        <div className="kit-empty-title">{emptyTitle}</div>
-        <div className="kit-empty-sub">{emptySub}</div>
-        <button
-          type="button"
-          className="kit-btn"
-          onClick={() => {
-            if (searching) {
-              const input = document.querySelector(
-                "#searchInput"
-              ) as HTMLInputElement | null;
-              if (input) input.value = "";
-              state.searchSeq += 1;
-              state.search = "";
-              state.searchResults = null;
-              bump();
-            } else if (nav.kind === "reconnect") {
-              handleSelectNav({ kind: "all" });
-            } else {
-              handleOpenAddModal();
-            }
-          }}
-        >
-          {searching
-            ? "Clear search"
-            : nav.kind === "reconnect"
-              ? "View everyone"
-              : "Add person"}
-        </button>
-      </div>
-    );
-  } else {
-    const foot =
-      state.peopleTruncated && !state.search.trim() ? (
-        <div className={styles.windowFoot}>
-          <WindowFoot
-            peopleWindow={state.peopleWindow}
-            onShowMore={handleShowMorePeople}
-          />
-        </div>
-      ) : null;
-    board =
-      state.view === "grid" ? (
-        <>
-          <div className={styles.grid}>
-            {rows.map((p) => (
-              <GridCard
-                key={p.party_id}
-                p={p}
-                selectedIds={state.selected}
-                onOpenDetails={handleOpenDetails}
-                onToggleSelect={handleToggleSelect}
-                onToggleStar={handleToggleStar}
-              />
-            ))}
-          </div>
-          {foot}
-        </>
-      ) : (
-        <>
-          <div className={styles.listwrap}>
-            {state.narrow ? null : (
-              <div className={styles.listHead}>
-                <ListHead
-                  rows={rows}
-                  selectedIds={state.selected}
-                  onToggleAll={handleToggleAllVisible}
-                />
-              </div>
-            )}
-            <div>
-              {rows.map((p) => (
-                <ListRow
-                  key={p.party_id}
-                  p={p}
-                  data={data}
-                  selectedIds={state.selected}
-                  search={state.search}
-                  onOpenDetails={handleOpenDetails}
-                  onToggleSelect={handleToggleSelect}
-                  onOpenMenu={handleOpenPersonMenu}
-                />
-              ))}
-            </div>
-          </div>
-          {foot}
-        </>
-      );
-  }
+    else
+      void writes.saveChannel(person.party_id, {
+        kind: composer.kind,
+        value: composer.value,
+        ...(composer.label ? { label: composer.label } : {}),
+      });
+  }, [data, state, writes]);
 
-  // ---------- Profile drawer ----------
-  let details: ReactElement | null = null;
-  if (state.detailsId) {
-    const dp = state.detailPerson;
-    const nameGuess =
-      dp?.name ??
-      data.people.find((p) => p.party_id === state.detailsId)?.name ??
-      "";
-    const color = dp ? avatarColor(dp) : identityColor(nameGuess);
-    details = (
-      <Details
-        key={`${state.detailsId}:${dp ? "loaded" : "loading"}`}
-        person={dp}
-        nameGuess={nameGuess}
-        color={color}
-        adders={{ ...state.detailAdders }}
-        onClose={handleCloseDetails}
-        onMove={(anchor) => handleOpenPersonMenu(anchor, dp!)}
-        onMessage={() => logic.logInteraction(dp!, "Message", "Sent a message")}
-        onCall={() => logic.logInteraction(dp!, "Call", "Gave them a call")}
-        onToggleStar={() => handleToggleStar(dp!)}
-        onToggleAdder={handleToggleAdder}
-        onAddRelationship={(fields) =>
-          logic.drawerAct(
-            "add-relationship",
-            { party_id: dp!.party_id, ...fields },
-            "Relationship added"
-          )
-        }
-        onAddDate={(fields) =>
-          logic.drawerAct(
-            "add-important-date",
-            { party_id: dp!.party_id, ...fields },
-            "Date added"
-          )
-        }
-        onToggleReminder={(dateId) =>
-          logic.drawerAct(
-            "toggle-reminder",
-            { date_id: dateId },
-            "Reminder updated"
-          )
-        }
-        onAddTask={(fields) =>
-          logic.drawerAct(
-            "add-task",
-            { party_id: dp!.party_id, ...fields },
-            "Task added"
-          )
-        }
-        onToggleTask={(taskId) =>
-          logic.drawerAct("toggle-task", { task_id: taskId }, "Task updated")
-        }
-        onAddNote={(fields) =>
-          logic.drawerAct(
-            "add-note",
-            { party_id: dp!.party_id, ...fields },
-            "Note added"
-          )
-        }
-        onAddGift={(fields) =>
-          logic.drawerAct(
-            "add-gift",
-            { party_id: dp!.party_id, ...fields },
-            "Gift idea added"
-          )
-        }
-        onToggleGift={(giftId) =>
-          logic.drawerAct("toggle-gift", { gift_id: giftId }, "Gift updated")
-        }
-        onAddDebt={(fields) =>
-          logic.drawerAct(
-            "add-debt",
-            { party_id: dp!.party_id, ...fields },
-            "Debt added"
-          )
-        }
-        onSettleDebt={(debtId) =>
-          logic.drawerAct("settle-debt", { debt_id: debtId }, "Debt settled")
-        }
-        onSaveContact={(fields) => logic.saveContactChannel(dp!, fields)}
-        onDeleteContact={(channelId) =>
-          void logic.deleteContactChannel(dp!, channelId)
-        }
-        onEdit={(fields) => logic.editPerson(dp!, fields)}
-        onSetCadence={(cadenceDays) => logic.setCadence(dp!, cadenceDays)}
-        onTrash={() => logic.trashPerson(dp!)}
-        onUndo={(revisionId) => void logic.undoPerson(dp!.party_id, revisionId)}
-        mergeCandidates={data.people.filter(
-          (person2) => person2.party_id !== dp?.party_id
-        )}
-        onMerge={(targetPartyId) => void logic.mergePerson(dp!, targetPartyId)}
-      />
-    );
-  }
+  const draftChange = useCallback(
+    (patch: Partial<PersonDraft>) => {
+      if (!state.draft) return;
+      state.draft = { ...state.draft, ...patch };
+      bump();
+    },
+    [state]
+  );
 
-  const modal = state.addModalOpen ? (
-    <AddPersonModal
-      lists={data.lists}
-      onSubmit={handleAddPerson}
-      onClose={handleCloseAddModal}
+  const logChange = useCallback(
+    (patch: Partial<LogDraft>) => {
+      if (!state.log) return;
+      state.log = { ...state.log, ...patch };
+      bump();
+    },
+    [state]
+  );
+
+  // ---- the route ----
+
+  // `loading` is passed at every call site rather than folded into `base`:
+  // "a read has not landed yet" is the gate every empty state in the app sits
+  // behind, and the honesty test for it reads the JSX (`src/state-honesty.test.ts`).
+  const routeBody = (
+    <PeopleRouteBody
+      data={data}
+      loaded={loaded}
+      mergeCandidates={() => logic.mergeCandidates()}
+      narrow={narrow}
+      offline={offline}
+      onAddPerson={openNew}
+      onCancel={handleBack}
+      onClearSearch={handleClearSearch}
+      onComposerCancel={() => {
+        state.composer = null;
+        bump();
+      }}
+      onComposerChange={composerChange}
+      onComposerSave={composerSave}
+      onDeleteChannel={(channel) => void writes.deleteChannel(channel)}
+      onDraftChange={draftChange}
+      onDraftSave={() => {
+        const draft = state.draft;
+        if (!draft) return;
+        void writes.savePerson(draft, data.person);
+        handleBack();
+      }}
+      onEdit={openEdit}
+      onLogChange={logChange}
+      onLogPerson={openLog}
+      onLogSave={() => {
+        const draft = state.log;
+        const name = data.person?.name ?? "";
+        if (!draft) return;
+        void writes.logTouch(draft, name);
+        handleBack();
+      }}
+      onMerge={() => navigate(MERGE, state.personId)}
+      onMergeConfirm={() => {
+        if (!data.person || !state.mergeSourceId) return;
+        state.confirm = {
+          kind: "merge",
+          party_id: data.person.party_id,
+          source_party_id: state.mergeSourceId,
+        };
+        bump();
+      }}
+      onOpenComposer={(key: ComposerKey) => {
+        state.composer = {
+          key,
+          value: "",
+          label: "",
+          kind: "phone",
+          monthDay: "01-01",
+        };
+        bump();
+      }}
+      onOpenPerson={openPerson}
+      onPersonLog={() => data.person && openLog(data.person.party_id)}
+      onPersonToggleStar={() =>
+        data.person && void writes.toggleStar(data.person)
+      }
+      onPickSource={(partyId) => {
+        state.mergeSourceId = partyId;
+        bump();
+      }}
+      onRestore={(person) => void writes.restorePerson(person)}
+      onSelectFilter={selectFilter}
+      onSelectTile={(tile) => {
+        // Every tile lands on the roster under the filter it names — the
+        // two link tiles included, which is what makes `Vaults` and
+        // `To link` navigations rather than badges.
+        if (tile === "starred") selectFilter("starred");
+        else if (tile === "reconnect") selectFilter("due");
+        else if (tile === "linked") selectFilter("linked");
+        else if (tile === "to_link") selectFilter("unlinked");
+        else selectFilter("all");
+        navigate(null);
+      }}
+      onStatus={(message) => {
+        // A share or a revoke is an OUTCOME, so it holds the line exactly as
+        // a People write's own outcome does, until the member navigates.
+        outcomeHeld.current = true;
+        publishOutcome(frame, { text: message });
+      }}
+      onTermChange={handleTermChange}
+      onToggleReminder={(dateId, label) => {
+        const date = data.person?.dates.find((d) => d.date_id === dateId);
+        void writes.toggleReminder(dateId, label, date?.reminder_on ?? false);
+      }}
+      onToggleSection={handleToggleSection}
+      onToggleStar={(person) => void writes.toggleStar(person)}
+      onTrash={() => {
+        if (!data.person) return;
+        state.confirm = { kind: "trash", party_id: data.person.party_id };
+        bump();
+      }}
+      personRow={(partyId) => logic.personRow(partyId)}
+      searchInputRef={(el) => {
+        searchInputRef.current = el;
+      }}
+      state={state}
     />
-  ) : null;
+  );
+
+  // ---- the two modal confirms ----
+
+  const confirm = state.confirm;
+  const confirmSubject = logic.personRow(confirm?.party_id ?? null);
+  const confirmSource = logic.personRow(confirm?.source_party_id ?? null);
+  const overlays = (
+    <ConfirmHost
+      confirm={confirm}
+      subjectName={confirmSubject?.name ?? null}
+      sourceName={confirmSource?.name ?? null}
+      onCancel={() => {
+        state.confirm = null;
+        bump();
+      }}
+      onConfirm={() => {
+        state.confirm = null;
+        bump();
+        if (!confirm || !confirmSubject) return;
+        if (confirm.kind === "trash") {
+          void writes.trashPerson(confirmSubject);
+          navigate(null, null);
+          return;
+        }
+        if (!confirmSource) return;
+        void writes.mergePeople(confirmSource, confirmSubject).then((ok) => {
+          if (ok) {
+            state.merged = true;
+            bump();
+          }
+        });
+      }}
+    />
+  );
+
+  // ---- the frame ----
+
+  const counts = logic.rosterCounts();
+  const barCountValue =
+    state.shelf === null
+      ? counts.people
+      : state.shelf === TRASH
+        ? data.trash.length
+        : state.shelf === SEARCH
+          ? (state.searchResults?.length ?? 0)
+          : null;
+  const handedOff = narrow;
+  // The roster's bar carries `<k> of <m> linked` on a pointer surface, where
+  // there is room for the pair. On the compact surface the plain people count
+  // stands — the handoff gives the phone the shorter meta.
+  const linkedMeta =
+    state.shelf === null && data.linksAvailable && !handedOff
+      ? STATUS.barLinked(counts.linked, counts.people)
+      : null;
+  useEffect(() => {
+    frame.setAppBar(
+      appBar({
+        shelf: state.shelf,
+        count: barCountValue,
+        compact: handedOff,
+        ...(linkedMeta ? { linkedMeta } : {}),
+        ...(data.person ? { personName: data.person.name } : {}),
+        ...(state.shelf === null
+          ? { onAdd: openNew, onTrash: () => navigate(TRASH) }
+          : {}),
+        ...(state.shelf === PERSON ? { onEdit: openEdit } : {}),
+      })
+    );
+  }, [
+    frame,
+    state.shelf,
+    barCountValue,
+    handedOff,
+    linkedMeta,
+    data.person,
+    openNew,
+    openEdit,
+    navigate,
+    state,
+    data,
+  ]);
+
+  useEffect(() => {
+    if (!narrow) {
+      frame.claimBand(null);
+      return;
+    }
+    frame.claimBand(
+      bandClaim(state.shelf, (segment) => navigate(shelfFromSegment(segment)))
+    );
+  }, [frame, state.shelf, narrow, navigate, state]);
+
+  // The AMBIENT sentence, replaced in place by any write's own outcome until
+  // the member navigates (`writes.ts` holds the line; `navigate` releases it).
+  useEffect(() => {
+    if (outcomeHeld.current) return;
+    const text = logic.ambientStatus();
+    publishOutcome(frame, text ? { text } : null);
+  }, [
+    frame,
+    logic,
+    state.shelf,
+    state.search,
+    counts.people,
+    counts.due,
+    counts.starred,
+    counts.linked,
+    counts.toLink,
+    data.linksAvailable,
+  ]);
+
+  // Hand the bar, the band and the line back when People stops being the route.
+  useEffect(() => {
+    return () => {
+      frame.setAppBar(null);
+      frame.claimBand(null);
+      frame.clearStatus();
+    };
+  }, [frame]);
 
   return (
-    // Fill the app pane (a flex child of the route body) so the inline chrome gets
-    // real width — otherwise it collapses to content width and the component-width
-    // narrow observer wrongly flips to the phone drawer layout (#505 trap 1). The
-    // People token layer (Chrome.module.css `.appRoot`) rides this same element,
-    // which the host also stamps with `.centraid-inline-scope`.
-    <div
-      ref={setRoot}
-      className={styles.appRoot}
-      style={{
-        display: "flex",
-        flexDirection: "column",
-        flex: 1,
-        minWidth: 0,
-        minHeight: 0,
+    <Chrome
+      shelf={state.shelf}
+      narrow={narrow}
+      bandOwned={handedOff}
+      consent={consent}
+      onSelectShelf={(shelf) => navigate(shelf)}
+      rootRef={(el) => {
+        rootElRef.current = el;
+        rootRef(el);
       }}
-    >
-      <Chrome
-        narrow={narrow}
-        loading={!loaded}
-        sideOpen={sideOpen}
-        newMenuOpen={state.newMenuOpen}
-        view={state.view}
-        title={title}
-        sub={sub}
-        showPeopleTools={isPeople}
-        sortLabel={sortLabel}
-        consent={consentRef.current}
-        bulkCount={state.selected.size}
-        onOpenSide={() => setSideOpen(true)}
-        onCloseSide={() => setSideOpen(false)}
-        onToggleNewMenu={onToggleNewMenu}
-        onSelectView={onSelectView}
-        onSort={onSort}
-        onSearchInput={applySearch}
-        onSearchKeyDown={onSearchKeyDown}
-        newWrapRef={(el) => {
-          newWrapRef.current = el;
-        }}
-        sidebarNav={
-          <SmartNav
-            navKind={nav.kind}
-            people={data.people}
-            trash={data.trash}
-            onSelectNav={handleSelectNav}
-          />
-        }
-        sidebarLists={
-          <ListList
-            lists={data.lists}
-            people={data.people}
-            navKind={nav.kind}
-            navListId={nav.kind === "list" ? nav.listId : undefined}
-            renamingListId={state.renamingListId}
-            creatingList={state.creatingList}
-            onSelectNav={handleSelectNav}
-            onStartRename={handleStartRenameList}
-            onDeleteList={handleDeleteList}
-            onRenameCommit={handleRenameList}
-            onRenameCancel={handleCancelRenameList}
-            onCreateCommit={handleCreateList}
-            onCreateCancel={handleCancelCreateList}
-          />
-        }
-        sidebarJournalNav={
-          <JournalNav navKind={nav.kind} onSelectNav={handleSelectNav} />
-        }
-        sidebarStorage={<Storage people={data.people} lists={data.lists} />}
-        newMenu={
-          state.newMenuOpen ? (
-            <NewMenu
-              onAddPerson={handleOpenAddModal}
-              onNewList={handleStartCreateList}
-            />
-          ) : null
-        }
-        statusChips={
-          <StatusChips
-            chip={state.chip}
-            onSelect={(key) => {
-              state.chip = key;
-              logic.clearSelection();
-              bump();
-            }}
-          />
-        }
-        bulk={
-          <BulkBar
-            n={state.selected.size}
-            onFavorite={handleFavoriteSelected}
-            onClear={handleClearSelected}
-          />
-        }
-        board={board}
-        details={details}
-        modal={modal}
-      />
-    </div>
+      slots={{ scroll: routeBody, overlays }}
+    />
   );
 }

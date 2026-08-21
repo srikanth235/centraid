@@ -86,11 +86,12 @@ describe("validate-nightly-wiring structure (#545)", () => {
     );
     for (const suite of [
       "home-loads",
-      "template-gate",
       "native-v0-resilience",
       "volume-proof",
       "cold-start",
       "scroll-frames",
+      "photos",
+      "places-seat",
     ]) {
       // The matrix is a literal list for scheduled/all runs and a JSON
       // expression for targeted workflow_dispatch runs; both must retain the

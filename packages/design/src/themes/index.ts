@@ -1,23 +1,40 @@
 // Centraid — themes barrel.
 // Collects every preset under this folder into a typed registry +
 // ordered display list. The desktop/web shell drinks from here via CSS vars
-// (`toCss()`). Mobile does NOT import these presets: it lowers the blueprint
-// emit instead — `apps/mobile/scripts/generate-theme.ts` runs
-// `toBlueprintCss()` through `src/kit/theme/generate.ts` into the checked-in
-// `src/kit/theme/tokens.generated.ts`, which `useTheme()` reads.
+// (`toCss()`). Mobile reaches the same theme values through the concrete typed
+// `toNativeTheme()` lowering; it neither parses CSS nor keeps a copied theme.
 
 import { darkTheme, lightTheme } from "./centraid";
 
+// `PAGE` and `WALL` are deliberately NOT re-exported here (or from the
+// package root). A consumer reaching for the literal instead of the `--bg`
+// role is exactly the per-app page retune the one-page rule exists to
+// prevent — see docs/traps/design-tokens.md, "There is ONE page, and an app
+// does not retune it."
 export type { Theme } from "./shared";
 export {
-  ACCENT_PALETTE,
-  ACCENT_DEEP,
+  ACCENT_HOVER,
+  BRAND_DARK,
+  ACCENT_HOVER_DARK,
   ACCENT_LIGHT,
-  ACCENT_TEXT_LIGHT,
+  ACCENT_LIGHT_DARK,
   BRAND,
+  DUR_ENTRY,
+  DUR_STATE,
   EASE,
+  EASE_ENTRY,
+  LINK,
+  LINK_DARK,
+  NET,
+  NET_DARK,
+  ON_STAGE,
+  ON_STAGE_SOFT,
+  RING,
+  RING_DARK,
+  STAGE,
+  STAGE_LINE,
+  STAGE_SUNKEN,
 } from "./shared";
-export type { AccentKey } from "./shared";
 
 export { darkTheme, lightTheme } from "./centraid";
 

@@ -295,8 +295,8 @@ export default function BackupInventoryPanel({
         </>
       ) : (
         <p className={styles.inventoryEmpty}>
-          Awaiting the first provider inventory audit. Attachment safety remains
-          pinned until the remote is verified.
+          Awaiting the first provider inventory audit — attachment safety stays
+          pinned until then.
         </p>
       )}
 

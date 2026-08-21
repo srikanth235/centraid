@@ -1,134 +1,26 @@
-/* The Vault Atlas (issue #441 Part B) — co-located styles for AtlasScreen.tsx
-   and the two placeholder tabs. This file owns the page frame: head, the
-   underline tab strip (shared vocabulary with the Gateway page), the Kinds
-   loading/error lines, and the "coming in this PR" empty state the Relations
-   and Browse placeholders render until their real bodies land. The Kinds tab
-   carries its own module (AtlasKindsTab.module.css). */
+/* The Data route (v9 §6, issue #765).
+
+   The page is a single vertical block list, so this module owns almost
+   nothing: the blocks bring their own geometry from `react/ui/`, the head and
+   the count line live in the app bar, and the health line lives on the status
+   line. What is left is the column the blocks stack in, and the one slot the
+   orrery opens into. The head/tab-strip/loading/error families that used to
+   live here went with the tab strip. */
 
 .page {
-  max-width: 1120px;
-  margin: 0 auto;
   display: flex;
   flex-direction: column;
-  gap: 18px;
+  margin-inline: auto;
+  /* The reading column every ops page shares. Not a token: it is a page
+     measure, not a component metric, and the other screens state the same
+     1120 outright. */
+  max-inline-size: 1120px;
 }
 
-/* Header — title cluster + one-line orientation. Mirrors GatewayScreen. */
-.head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 24px;
-  flex-wrap: wrap;
-}
-.title {
-  display: flex;
-  align-items: center;
-  gap: 11px;
-}
-.titleIcon {
-  width: 30px;
-  height: 30px;
-  border-radius: 9px;
-  display: grid;
-  place-items: center;
-  color: var(--text-inv);
-  background: linear-gradient(155deg, var(--accent-light), var(--accent-deep));
-}
-.title h1 {
-  margin: 0;
-  font-family: var(--font-sans);
-  font-weight: 600;
-  font-size: 25px;
-  letter-spacing: -0.02em;
-  color: var(--text);
-}
-.headMeta {
-  font-family: var(--font-mono);
-  font-size: 9.5px;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  color: var(--text-ghost);
-}
-
-/* Tab strip — Kinds / Relations / Browse. Plain underline tabs (page-level
-   navigation), same shape as the Gateway page's strip. */
-.tabs {
-  display: flex;
-  gap: 4px;
-  border-bottom: 0.5px solid var(--line);
-}
-.tab {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  font-family: var(--font-mono);
-  font-size: var(--t-control-size);
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-  padding: 10px 4px 9px;
-  margin: 0 8px;
-  color: var(--text-faint);
-  background: none;
-  border: none;
-  border-bottom: 2px solid transparent;
-  cursor: pointer;
-  transition:
-    color 0.15s var(--ease),
-    border-color 0.15s var(--ease);
-}
-.tab:first-child {
-  margin-left: 0;
-}
-.tab:hover {
-  color: var(--text);
-}
-.tabActive {
-  color: var(--text);
-  border-color: var(--accent);
-}
-
-/* Kinds loading + error lines. */
-.loading,
-.error {
-  font-family: var(--font-mono);
-  font-size: var(--t-mono-size);
-  color: var(--text-faint);
-  padding: 24px 4px;
-}
-.error {
-  color: var(--danger);
-}
-
-/* Placeholder empty state — Relations + Browse until their bodies land. */
-.comingSoon {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  text-align: center;
-  gap: 12px;
-  padding: 56px 24px;
-  border: 0.5px dashed var(--line-strong);
-  border-radius: var(--r-xl);
-  background: var(--bg-sunken);
-}
-.comingSoonIcon {
-  width: 46px;
-  height: 46px;
-  border-radius: 12px;
-  display: grid;
-  place-items: center;
-  color: var(--text-faint);
-  background: var(--bg-elev);
-  border: 0.5px solid var(--line);
-}
-.comingSoonTitle {
-  font: var(--t-title);
-  color: var(--text);
-}
-.comingSoonBody {
-  margin: 0;
-  max-width: 46ch;
-  font: var(--t-small);
-  color: var(--text-faint);
+/* The orrery, opened from its row inside the relations block. It sits in the
+   row's detail slot, so it takes the container's inline padding and only has
+   to give the chart room to be a chart. */
+.map {
+  padding-block: var(--sp-3);
+  padding-inline: var(--sp-3);
 }

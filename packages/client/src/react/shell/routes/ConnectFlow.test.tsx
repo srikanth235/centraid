@@ -195,8 +195,16 @@ describe("ConnectFlow scenarios", () => {
 
     it("local: picking a different existing vault and committing calls setActiveVault + onDone", async () => {
       listVaultsMock.mockResolvedValue([
-        { ownerPartyId: "party-1", vaultId: "a", name: "Personal" },
-        { ownerPartyId: "party-1", vaultId: "b", name: "Work" },
+        {
+          ownerPartyId: "party-1",
+          vaultId: "a",
+          name: "Personal",
+        },
+        {
+          ownerPartyId: "party-1",
+          vaultId: "b",
+          name: "Work",
+        },
       ]);
       const onDone = onDoneMock();
       const el = mount({ context: "switcher", onDone });
@@ -219,8 +227,16 @@ describe("ConnectFlow scenarios", () => {
 
     it("local: creating a new vault calls createVault + setActiveVault", async () => {
       listVaultsMock.mockResolvedValue([
-        { ownerPartyId: "party-1", vaultId: "a", name: "Personal" },
-        { ownerPartyId: "party-1", vaultId: "b", name: "Work" },
+        {
+          ownerPartyId: "party-1",
+          vaultId: "a",
+          name: "Personal",
+        },
+        {
+          ownerPartyId: "party-1",
+          vaultId: "b",
+          name: "Work",
+        },
       ]);
       const el = mount({ context: "switcher", onDone: onDoneMock() });
       click(radios(el, "This Mac")[0]);

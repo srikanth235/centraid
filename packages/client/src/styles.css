@@ -20,14 +20,14 @@ body {
   margin: 0;
   padding: 0;
   height: 100%;
+  -webkit-font-smoothing: auto;
+  font-feature-settings: normal;
+  text-rendering: auto;
 }
 body {
   font-family: var(--font-sans);
-  font-feature-settings: "ss01", "cv11";
   background: var(--bg);
   color: var(--text);
-  -webkit-font-smoothing: antialiased;
-  text-rendering: optimizeLegibility;
   overflow: hidden;
   /* Safe-area for notched devices / PWA home-screen (issue #468 K6). */
   padding-bottom: env(safe-area-inset-bottom, 0px);

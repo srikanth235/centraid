@@ -91,7 +91,7 @@ const TEST_SEAM_IMPORTS = {
     {
       group: ["@centraid/*/src/*", "@centraid/*/dist/*"],
       message:
-        "Import from the package root barrel (e.g. '@centraid/app-engine'), not its internals — keeps each package's public surface the real contract. See governance: no-deep-imports.",
+        "Import from the package root barrel (e.g. '@centraid/server/engine'), not its internals — keeps each package's public surface the real contract. See governance: no-deep-imports.",
     },
   ],
 };
@@ -101,8 +101,18 @@ const TEST_SEAM_IMPORTS = {
 // back off in the last override.
 const VITEST_TEST_FILES = [
   "**/*.{test,spec}.{ts,tsx}",
+  // #781 — `.test.mjs` was invisible to the seam rules (11 files carried raw
+  // mkdtemp*). Widened, not carved: node:test-runner files that genuinely
+  // cannot import the kit (tempDir() registers a vitest afterAll at import
+  // time) suppress per-line with a justification instead of being excluded
+  // here wholesale.
+  "**/*.test.mjs",
   "**/*.test-fixtures.ts",
   "tests/helpers/**/*.ts",
+  // #781 — the agent-e2e harness/flow sources drive the nightly journeys and
+  // had the same seam exposure (Math.random ports in the pairing harness);
+  // they are test infrastructure, so the seam rules apply.
+  "tests/agent-e2e-*/**/*.mjs",
 ];
 
 // Hermes compatibility, kept separate so the mobile/time-engine *test* files
@@ -146,6 +156,20 @@ export default defineConfig({
     "**/node_modules/**",
     "apps/oauth-worker/worker-configuration.d.ts",
     "apps/web/src/generated/**",
+    // Release-generated recognition bundles carry minified/transformed module
+    // imports that are not authored lint input. Their source modules are
+    // linted under packages/model-runtime and the emitted handlers have
+    // manifest, behavior, and size conformance tests.
+    "packages/blueprints/automations/photo-ocr/automations/photo-ocr/handler.js",
+    "packages/blueprints/automations/embed-image/automations/embed-image/handler.js",
+    "packages/blueprints/automations/embed-text/automations/embed-text/handler.js",
+    "packages/blueprints/automations/faces/automations/faces/handler.js",
+    // `place-names` (#816) is the same kind of artefact for a different reason:
+    // no model, but a vendored settlement table inlined into the bundle. Its
+    // authored halves — the handler and the lookup — are linted under
+    // packages/model-runtime.
+    "packages/blueprints/automations/place-names/automations/place-names/handler.js",
+    "packages/blueprints/automations/transcript/automations/transcript/handler.js",
   ]),
   rules: {
     // Ultracite's core preset contains type-aware rules. They cannot execute
@@ -203,7 +227,7 @@ export default defineConfig({
           {
             group: ["@centraid/*/src/*", "@centraid/*/dist/*"],
             message:
-              "Import from the package root barrel (e.g. '@centraid/app-engine'), not its internals \u2014 keeps each package's public surface the real contract. See governance: no-deep-imports.",
+              "Import from the package root barrel (e.g. '@centraid/server/engine'), not its internals \u2014 keeps each package's public surface the real contract. See governance: no-deep-imports.",
           },
         ],
       },
@@ -313,24 +337,6 @@ export default defineConfig({
       rules: {
         "no-throw-literal": "off",
         "prefer-promise-reject-errors": "off",
-      },
-    },
-    {
-      // This large ES5-style in-page store is fixture data for the visual
-      // harness and is never shipped. Rewriting its syntax would add risk
-      // without improving the product; keep the useful runtime undefined-name
-      // check while leaving style to the fixture's established form.
-      files: ["packages/blueprints/visual-harness/mock-centraid.js"],
-      env: {
-        browser: true,
-        es2024: true,
-        node: false,
-      },
-      rules: {
-        ...Object.fromEntries(
-          Object.keys(core.rules ?? {}).map((rule) => [rule, "off"])
-        ),
-        "no-undef": "error",
       },
     },
     // The vitest preset applies through `overrides`, and an extended preset's
@@ -448,24 +454,7 @@ export default defineConfig({
       },
     },
     {
-      files: ["packages/app-engine/**/*.ts"],
-      rules: {
-        "no-restricted-imports": [
-          "error",
-          {
-            patterns: [
-              {
-                group: ["@centraid/*"],
-                message:
-                  "app-engine is the stable core of the dependency DAG \u2014 it must not import other @centraid packages. Mode/runtime specifics belong at entrypoints (desktop main, gateway CLI). See governance: module-layering.",
-              },
-            ],
-          },
-        ],
-      },
-    },
-    {
-      files: ["packages/automation/**/*.ts"],
+      files: ["packages/server/src/engine/**/*.ts"],
       rules: {
         "no-restricted-imports": [
           "error",
@@ -473,13 +462,36 @@ export default defineConfig({
             patterns: [
               {
                 group: [
-                  "@centraid/agent-runtime",
-                  "@centraid/agent-runtime/*",
-                  "@centraid/gateway",
-                  "@centraid/gateway/*",
+                  "@centraid/*",
+                  "../automation",
+                  "../automation/*",
+                  "../acp",
+                  "../acp/*",
                 ],
                 message:
-                  "automation must not depend on an agent backend \u2014 execution and scheduling are injected callbacks (it depends on app-engine, never on agent-runtime/gateway). See governance: module-layering.",
+                  "engine is the stable core of the server DAG — it must not import automation, acp, or other @centraid packages. Seams are path-based after #801.",
+              },
+            ],
+          },
+        ],
+      },
+    },
+    {
+      files: ["packages/server/src/automation/**/*.ts"],
+      rules: {
+        "no-restricted-imports": [
+          "error",
+          {
+            patterns: [
+              {
+                group: [
+                  "@centraid/server/acp",
+                  "@centraid/server/acp/*",
+                  "../acp",
+                  "../acp/*",
+                ],
+                message:
+                  "automation must not import the ACP turn driver — execution is an injected callback. Seams are path-based after #801.",
               },
               {
                 group: ["@centraid/*/src/*", "@centraid/*/dist/*"],
@@ -498,7 +510,7 @@ export default defineConfig({
       // redbox in the exact-HEAD journey, and time-engine is bundled into
       // native Agenda/Tally. Keep compatibility mechanical rather than relying
       // on Node-based unit tests, whose newer Array prototype masks the bug.
-      files: ["apps/mobile/src/**", "packages/time-engine/src/**"],
+      files: ["apps/mobile/src/**", "packages/core/src/time/**"],
       rules: {
         "no-restricted-properties": ["error", ...HERMES_ARRAY_PROPERTIES],
       },
@@ -521,8 +533,8 @@ export default defineConfig({
       files: [
         "apps/mobile/src/**/*.{test,spec}.{ts,tsx}",
         "apps/mobile/src/**/*.test-fixtures.ts",
-        "packages/time-engine/src/**/*.{test,spec}.{ts,tsx}",
-        "packages/time-engine/src/**/*.test-fixtures.ts",
+        "packages/core/src/time/**/*.{test,spec}.{ts,tsx}",
+        "packages/core/src/time/**/*.test-fixtures.ts",
       ],
       rules: {
         "no-restricted-properties": [

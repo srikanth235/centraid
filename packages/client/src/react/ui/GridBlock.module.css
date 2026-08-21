@@ -1,0 +1,199 @@
+/* Records grid (#775).
+
+   Every value here is a token or a composition of tokens, and every direction
+   is logical: the grid mirrors under RTL with no second rule, and its columns
+   overflow toward the trailing edge rather than "the right".
+
+   The two figures the spacing scale does not name outright are composed FROM
+   it rather than typed: the widest a single cell grows before it elides, and
+   the narrowest it may be squeezed to. Both are read in the inline axis, so
+   both are `--sp-6` multiples like every other measure in this file. */
+
+.wrap {
+  --grid-cell-max: calc(var(--sp-6) * 9);
+  --grid-cell-min: calc(var(--sp-6) * 3);
+
+  background: var(--bg-elev);
+  border: 1px solid var(--line);
+  border-radius: var(--r-lg);
+  overflow: hidden;
+}
+
+/* The grid scrolls in the INLINE axis rather than dropping columns: a census
+   whose columns disappeared on a narrower canvas would answer its own
+   question differently depending on the window. */
+.grid {
+  border-collapse: collapse;
+  display: block;
+  inline-size: 100%;
+  overflow-x: auto;
+  white-space: nowrap;
+}
+
+/* ── Header ─────────────────────────────────────────────────────────────── */
+
+/* The same sunken band the records table uses — one band recipe, two blocks. */
+.head {
+  background: var(--bg-sunken);
+  block-size: var(--sp-6);
+  border-block-end: 1px solid var(--line-strong);
+  padding: 0;
+  text-align: start;
+}
+
+.sortBtn,
+.fixedHead {
+  align-items: center;
+  background: none;
+  block-size: 100%;
+  border: 0;
+  color: var(--text-faint);
+  display: flex;
+  font: var(--t-eyebrow);
+  letter-spacing: var(--t-eyebrow-tracking);
+  text-transform: var(--t-eyebrow-transform);
+  gap: var(--sp-1);
+  inline-size: 100%;
+  padding-inline: var(--sp-3);
+  text-align: start;
+}
+
+.sortBtn {
+  cursor: pointer;
+  transition: color var(--dur-1) var(--ease);
+}
+
+.sortBtn:hover {
+  color: var(--text);
+}
+
+.sortBtn:focus-visible {
+  outline: 2px solid var(--focus-ring-color);
+  outline-offset: -2px;
+}
+
+.colName {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* The key badges — declared once above the column, never repeated per cell. */
+.badge {
+  background: var(--bg-hover);
+  border-radius: var(--r-sm);
+  color: var(--text-soft);
+  flex: none;
+  font: var(--t-mono);
+  font-variant-numeric: var(--t-mono-numeric);
+  padding-inline: var(--sp-1);
+}
+
+.arrow {
+  color: var(--text-soft);
+  flex: none;
+}
+
+/* ── Rows ───────────────────────────────────────────────────────────────── */
+
+.row {
+  block-size: var(--h-row);
+}
+
+.row + .row .cell,
+.row + .row .menuSlot {
+  border-block-start: 1px solid var(--line);
+}
+
+.cell {
+  color: var(--text);
+  font: var(--t-body);
+  max-inline-size: var(--grid-cell-max);
+  min-inline-size: var(--grid-cell-min);
+  overflow: hidden;
+  padding-inline: var(--sp-3);
+  text-align: start;
+  text-overflow: ellipsis;
+}
+
+/* The per-column register. Identifiers, counts and moments are tabular,
+   isolated and ltr; prose is ordinary ink. One grid carries both, which is
+   why the register is declared per column rather than per table. */
+.cell[data-register="mono"] {
+  direction: var(--t-mono-direction);
+  font: var(--t-mono);
+  font-variant-numeric: var(--t-mono-numeric);
+  unicode-bidi: var(--t-mono-bidi);
+}
+
+/* The two absences. They share one recessive ink on the LEAF — never a
+   container opacity — and are told apart by their word, because a null and an
+   empty string are different facts about the record. */
+.absent {
+  color: var(--text-ghost);
+  font: var(--t-mono);
+  font-variant-numeric: var(--t-mono-numeric);
+}
+
+/* A value the store will not print. `--seam` is the "not for you, and not
+   wrong" ink; a sealed column is exactly that, and spending `--net` on it
+   would say the value had left the device. */
+.sealed {
+  align-items: center;
+  border: 1px solid var(--seam);
+  border-radius: var(--r-pill);
+  color: var(--seam);
+  display: inline-flex;
+  font: var(--t-mono);
+  font-variant-numeric: var(--t-mono-numeric);
+  gap: var(--sp-1);
+  padding-inline: var(--sp-2);
+}
+
+/* Click-to-expand. A long value is cut somewhere, and the cut has to be
+   reversible: this is the text step — ink plus a hover ground — and not a
+   bounded control, because a thousand of them would be a thousand buttons. */
+.expand {
+  background: none;
+  border: 0;
+  color: var(--text);
+  cursor: pointer;
+  font: var(--t-body);
+  padding: 0;
+  text-align: start;
+  text-decoration: underline dotted;
+  text-underline-offset: var(--sp-1);
+}
+
+.expand:hover {
+  color: var(--accent-hover);
+}
+
+.expand:focus-visible {
+  outline: 2px solid var(--focus-ring-color);
+  outline-offset: 2px;
+}
+
+/* An opened cell stops being one line: it is the only place in the grid where
+   a value is allowed to wrap, and it wraps rather than being clipped. */
+.expand[data-expanded="true"] {
+  display: block;
+  white-space: normal;
+}
+
+/* The row's overflow control and the header's spacer are the same width, so
+   the last value column lines up whether or not a row has a menu. */
+.menuSlot {
+  inline-size: var(--target-min);
+  padding: 0;
+}
+
+.caption {
+  border-block-start: 1px solid var(--line);
+  color: var(--text-faint);
+  direction: var(--t-mono-direction);
+  font: var(--t-mono);
+  font-variant-numeric: var(--t-mono-numeric);
+  margin: 0;
+  padding: var(--sp-2) var(--sp-3);
+  unicode-bidi: var(--t-mono-bidi);
+}

@@ -42,7 +42,7 @@ interface Store {
     detail: { tables?: string[]; source?: string; scope?: string } | undefined
   ) => void;
   merged: () => {
-    assets: (Asset & { scope_id: string })[];
+    rows: (Asset & { scope_id: string })[];
     horizonScopeIds: string[];
   };
   scope: (scopeId: string) => {
@@ -85,7 +85,7 @@ interface Call {
 }
 
 const SCOPES = ["own", "family", "club"];
-const TABLES = new Set(["media.media_asset", "core.content_item"]);
+const TABLES = new Set(["media.asset", "core.content_item"]);
 
 let calls: Call[];
 let answers: Map<string, LibraryData>;
@@ -155,12 +155,12 @@ describe("photos-library-store suite", () => {
       const store = makeStore();
       await store.refreshAll();
       expect(calls).toStrictEqual([{ scopes: SCOPES, input: { limit: 500 } }]);
-      expect(store.merged().assets.map((a) => a.asset_id)).toStrictEqual([
+      expect(store.merged().rows.map((a) => a.asset_id)).toStrictEqual([
         "o1",
         "f1",
         "k1",
       ]);
-      expect(store.merged().assets.map((a) => a.scope_id)).toStrictEqual([
+      expect(store.merged().rows.map((a) => a.scope_id)).toStrictEqual([
         "own",
         "family",
         "club",
@@ -172,7 +172,7 @@ describe("photos-library-store suite", () => {
       await store.refreshAll();
       calls = [];
 
-      store.handleChange({ tables: ["media.media_asset"], scope: "family" });
+      store.handleChange({ tables: ["media.asset"], scope: "family" });
       await Promise.resolve();
       await Promise.resolve();
 
@@ -185,7 +185,7 @@ describe("photos-library-store suite", () => {
       await store.refreshAll();
       calls = [];
 
-      store.handleChange({ tables: ["media.media_asset"] });
+      store.handleChange({ tables: ["media.asset"] });
       await Promise.resolve();
       await Promise.resolve();
 
@@ -237,7 +237,7 @@ describe("photos-library-store suite", () => {
         },
       });
       await store.refreshAll();
-      expect(store.merged().assets.map((a) => a.asset_id)).toStrictEqual([
+      expect(store.merged().rows.map((a) => a.asset_id)).toStrictEqual([
         "o1",
         "k1",
       ]);
@@ -320,7 +320,7 @@ describe("photos-library-store suite", () => {
       expect(store.scope("family").tail).toBe("2026-07-02");
       // With nothing truncated any more, the horizon lifts and the previously
       // withheld older assets join the timeline in date order.
-      expect(store.merged().assets.map((a) => a.asset_id)).toStrictEqual([
+      expect(store.merged().rows.map((a) => a.asset_id)).toStrictEqual([
         "o1",
         "f1",
         "k1",
@@ -352,7 +352,7 @@ describe("photos-library-store suite", () => {
       await store.showMore();
       calls = [];
 
-      store.handleChange({ tables: ["media.media_asset"], scope: "family" });
+      store.handleChange({ tables: ["media.asset"], scope: "family" });
       await Promise.resolve();
       await Promise.resolve();
 

@@ -38,7 +38,6 @@ export function routeKey(route: ShellRoute): string {
         : "assistant";
     case "home":
     case "insights":
-    case "discover":
     case "starred":
     case "automations":
     case "connectors":
@@ -49,7 +48,9 @@ export function routeKey(route: ShellRoute): string {
     case "templates":
       return route.kind;
     case "gateway":
-      return route.tab ? `gateway:${route.tab}` : "gateway";
+      return ["gateway", route.tab, route.focus, route.cause]
+        .filter(Boolean)
+        .join(":");
     case "automation-editor":
       return `automation-editor:${route.automationId ?? "new"}`;
     case "automation-view":
@@ -60,10 +61,6 @@ export function routeKey(route: ShellRoute): string {
       return `app:${route.id}`;
     case "automation-builder":
       return `automation-builder:${route.automationId}`;
-    case "builder":
-      return route.appContext
-        ? `builder:${route.appContext.id}`
-        : `builder:new:${route.initialPrompt ?? ""}`;
   }
 }
 

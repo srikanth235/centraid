@@ -58,8 +58,8 @@ describe("diffMutationFloors", () => {
   test("flags a package mutation score decrease", () => {
     expect(
       diffMutationFloors(
-        { "packages/vault": 80, "packages/automation": 70 },
-        { "packages/vault": 75, "packages/automation": 70 }
+        { "packages/vault": 80, "packages/server/src/automation": 70 },
+        { "packages/vault": 75, "packages/server/src/automation": 70 }
       )
     ).toEqual(['mutation floor "packages/vault" decreased 80 → 75']);
   });
@@ -113,6 +113,126 @@ describe("diffMinimumTests", () => {
       ],
     };
     expect(diffMinimumTests(base, head)).toEqual([]);
+  });
+
+  test("allows an explicitly approved ID rename without lowering the cell floor", () => {
+    const base = {
+      flows: [
+        {
+          id: "old-name",
+          surface: "runtime",
+          dimension: "compat",
+          tier: "unit",
+          minimumTests: 10,
+        },
+      ],
+    };
+    const head = {
+      flows: [
+        {
+          id: "new-name",
+          surface: "runtime",
+          dimension: "compat",
+          tier: "unit",
+          minimumTests: 10,
+          replacesMinimumTestsFlow: "old-name",
+          approvedMinimumTestsDeviation: "issue #743 vocabulary-only rename",
+        },
+      ],
+    };
+    expect(diffMinimumTests(base, head)).toEqual([]);
+  });
+
+  test("rejects a prose-approved ID rename without an explicit predecessor", () => {
+    const base = {
+      flows: [
+        {
+          id: "old-name",
+          surface: "runtime",
+          dimension: "compat",
+          tier: "unit",
+          minimumTests: 10,
+        },
+      ],
+    };
+    const head = {
+      flows: [
+        {
+          id: "new-name",
+          surface: "runtime",
+          dimension: "compat",
+          tier: "unit",
+          minimumTests: 10,
+          approvedMinimumTestsDeviation: "issue #743 vocabulary-only rename",
+        },
+      ],
+    };
+    expect(diffMinimumTests(base, head)).toHaveLength(1);
+  });
+
+  test("never lets one replacement satisfy two removed flow floors", () => {
+    const base = {
+      flows: [
+        {
+          id: "old-a",
+          surface: "runtime",
+          dimension: "compat",
+          tier: "unit",
+          minimumTests: 10,
+        },
+        {
+          id: "old-b",
+          surface: "runtime",
+          dimension: "compat",
+          tier: "unit",
+          minimumTests: 10,
+        },
+      ],
+    };
+    const head = {
+      flows: [
+        {
+          id: "new-name",
+          surface: "runtime",
+          dimension: "compat",
+          tier: "unit",
+          minimumTests: 10,
+          replacesMinimumTestsFlow: "old-a",
+          approvedMinimumTestsDeviation: "issue #743 vocabulary-only rename",
+        },
+      ],
+    };
+    expect(diffMinimumTests(base, head)).toEqual([
+      'flow "old-b" removed (had minimumTests 10); add one approved replacement with replacesMinimumTestsFlow: "old-b" or restore the flow',
+    ]);
+  });
+
+  test("rejects an approved ID rename that lowers the cell floor", () => {
+    const base = {
+      flows: [
+        {
+          id: "old-name",
+          surface: "runtime",
+          dimension: "compat",
+          tier: "unit",
+          minimumTests: 10,
+        },
+      ],
+    };
+    const head = {
+      flows: [
+        {
+          id: "new-name",
+          surface: "runtime",
+          dimension: "compat",
+          tier: "unit",
+          minimumTests: 9,
+          replacesMinimumTestsFlow: "old-name",
+          approvedMinimumTestsDeviation: "issue #743 vocabulary-only rename",
+        },
+      ],
+    };
+    expect(diffMinimumTests(base, head)).toHaveLength(1);
   });
 
   test("allows increase", () => {
@@ -208,6 +328,65 @@ describe("ratchetFloors", () => {
     });
     expect(waived).toBe(true);
     expect(errors).toEqual([]);
+  });
+
+  test("an UNCHANGED approvedDeviation does not waive a floor decrease (#781)", () => {
+    const ledger = "permanent provenance ledger text carried since #565";
+    const { errors, waived } = ratchetFloors({
+      baseFloors: { lines: 30, approvedDeviation: ledger },
+      headFloors: { lines: 20, approvedDeviation: ledger },
+      baseMatrix: { flows: [] },
+      headMatrix: { flows: [] },
+    });
+    expect(waived).toBe(false);
+    expect(errors.some((e) => e.includes("decreased 30"))).toBe(true);
+  });
+
+  test("an UNCHANGED approvedDeviation does not waive a floor deletion (#781)", () => {
+    const ledger = "permanent provenance ledger text carried since #565";
+    const { errors } = ratchetFloors({
+      baseFloors: {
+        "packages/vault/src/**": { lines: 90 },
+        approvedDeviation: ledger,
+      },
+      headFloors: { approvedDeviation: ledger },
+      baseMatrix: { flows: [] },
+      headMatrix: { flows: [] },
+    });
+    expect(errors.some((e) => e.includes("removed"))).toBe(true);
+  });
+
+  test("an UNCHANGED mutation approvedDeviation does not waive (#781)", () => {
+    const ledger = "mutation ledger";
+    const { errors, waived } = ratchetFloors({
+      baseFloors: { lines: 30 },
+      headFloors: { lines: 30 },
+      baseMatrix: { flows: [] },
+      headMatrix: { flows: [] },
+      baseMutation: { "packages/vault": 80, approvedDeviation: ledger },
+      headMutation: { "packages/vault": 70, approvedDeviation: ledger },
+    });
+    expect(waived).toBe(false);
+    expect(errors.some((e) => e.includes("mutation floor"))).toBe(true);
+  });
+
+  test("an UNCHANGED perf approvedDeviation does not waive a widen (#781)", () => {
+    const { errors } = ratchetFloors({
+      baseFloors: { lines: 30 },
+      headFloors: { lines: 30 },
+      baseMatrix: { flows: [] },
+      headMatrix: { flows: [] },
+      perfBudgets: [
+        {
+          label: "tests/suite-wall-clock.json",
+          base: { totalMs: 100 },
+          head: { totalMs: 999 },
+          approvedDeviation: "same ledger text",
+          baseApprovedDeviation: "same ledger text",
+        },
+      ],
+    });
+    expect(errors.some((e) => e.includes("widened"))).toBe(true);
   });
 
   test("fails floor decrease without waiver", () => {

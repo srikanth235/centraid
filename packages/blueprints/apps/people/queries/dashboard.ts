@@ -9,11 +9,22 @@
  * from the `people` window; this query is the same judgment server-side —
  * used for the Activity feed and as a stable summary surface.
  *
+ * A cadence of 0 days means "no cadence set", not "overdue every day": those
+ * people are excluded from Reconnect entirely rather than pinned to the top of
+ * it forever.
+ *
+ * The counts also carry `linked` / `to_link` — how many of these people have a
+ * vault of their own. That read denies independently (People's `share.*`
+ * scopes are newer than the app), and a denial leaves the pair null while the
+ * four original counts stand.
+ *
  * TS conversion note: the vault read surface returns `Record<string, unknown>`
  * rows (see HandlerCtx.vault), so each raw row set is cast once to a typed
  * shape (`as unknown as X[]`) at its read site. Handler logic is otherwise
  * byte-for-byte the pre-conversion JS.
  */
+
+import { readLiveBindings } from "./_shared.ts";
 
 interface RawProfile {
   party_id: string;
@@ -117,7 +128,14 @@ export default async function dashboard({ ctx }: HandlerArgs) {
         reconnect: [],
         upcoming: [],
         recent: [],
-        counts: { all: 0, reconnect: 0, upcoming: 0, starred: 0 },
+        counts: {
+          all: 0,
+          reconnect: 0,
+          upcoming: 0,
+          starred: 0,
+          linked: 0,
+          to_link: 0,
+        },
       };
     }
 
@@ -129,7 +147,7 @@ export default async function dashboard({ ctx }: HandlerArgs) {
         )?.concept_id ?? null)
       : null;
 
-    const [parties, tags, dates, activityLinks] = await Promise.all([
+    const [parties, tags, dates, activityLinks, bindings] = await Promise.all([
       ctx.vault.read({
         entity: "core.party",
         where: [{ column: "party_id", op: "in", value: partyIds }],
@@ -161,6 +179,8 @@ export default async function dashboard({ ctx }: HandlerArgs) {
         ],
         purpose,
       }),
+      // Null means the sharing plane is unreadable, not that nobody is linked.
+      readLiveBindings(ctx.vault, partyIds),
     ]);
 
     const partyRows = (parties.rows ?? []) as unknown as RawParty[];
@@ -225,6 +245,7 @@ export default async function dashboard({ ctx }: HandlerArgs) {
     }
 
     const reconnect = profileRows
+      .filter((pr) => pr.cadence_days > 0)
       .map((pr) => ({
         pr,
         over:
@@ -259,6 +280,15 @@ export default async function dashboard({ ctx }: HandlerArgs) {
       })
       .filter((row) => row !== null);
 
+    const linked =
+      bindings === null
+        ? null
+        : new Set(
+            bindings
+              .filter((b) => byParty.has(b.party_id))
+              .map((b) => b.party_id)
+          ).size;
+
     return {
       reconnect,
       upcoming,
@@ -268,6 +298,8 @@ export default async function dashboard({ ctx }: HandlerArgs) {
         reconnect: reconnect.length,
         upcoming: upcoming.length,
         starred,
+        linked,
+        to_link: linked === null ? null : profileRows.length - linked,
       },
     };
   } catch (error) {
@@ -276,7 +308,14 @@ export default async function dashboard({ ctx }: HandlerArgs) {
       reconnect: [],
       upcoming: [],
       recent: [],
-      counts: { all: 0, reconnect: 0, upcoming: 0, starred: 0 },
+      counts: {
+        all: 0,
+        reconnect: 0,
+        upcoming: 0,
+        starred: 0,
+        linked: null,
+        to_link: null,
+      },
       vaultDenied: { code: e.code, message: e.message },
     };
   }

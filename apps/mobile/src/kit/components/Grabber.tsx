@@ -1,7 +1,7 @@
 import React from "react";
 import { StyleSheet, View } from "react-native";
 
-import { useTheme } from "../theme";
+import { useTheme, radii } from "../theme";
 
 // The sheet "grabber": a small rounded bar centered at the very top of an app
 // cover. In the springboard model each app presents as a full-screen modal that
@@ -23,7 +23,7 @@ export default function Grabber(): React.JSX.Element {
 
 const styles = StyleSheet.create({
   bar: {
-    borderRadius: 2.5,
+    borderRadius: radii.sm,
     height: 5,
     width: 36,
   },

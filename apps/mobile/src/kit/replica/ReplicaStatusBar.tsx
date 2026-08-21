@@ -1,6 +1,5 @@
 import React, { useMemo, useState } from "react";
 import {
-  ActivityIndicator,
   Alert,
   Modal,
   Pressable,
@@ -11,15 +10,47 @@ import {
 
 import { formatRelativeTime } from "@centraid/design";
 
+import {
+  STORAGE_FULL_ACTION_LABEL,
+  STORAGE_FULL_CAUSE,
+  STORAGE_FULL_CONSEQUENCE,
+} from "../../lib/replica/replica-storage-error";
+import { clearPinnedThumbnailPacks } from "../../lib/replica/thumbnail-pack";
 import Icon from "../components/Icon";
 import { Text } from "../components/NativeText";
-import { family, radii, useTheme } from "../theme";
+import OutOfRoom from "../components/OutOfRoom";
+import { borders, family, radii, t, useTheme } from "../theme";
 import { usePendingChanges } from "./pending-changes";
+import { replicaStatusRow } from "./replica-status";
 import { useReplica } from "./ReplicaProvider";
 
 const DIVERGENCE_MS = 24 * 60 * 60 * 1_000;
 
-/** Human status only: no cursor, epoch, replica, or internal storage jargon. */
+/**
+ * Human status only: no cursor, epoch, replica, or internal storage jargon.
+ *
+ * **It says nothing when there is nothing wrong.** This bar mounts on roughly
+ * twenty app screens, and in the settled case it drew a permanent row reading
+ * `Updated 10m ago` with a `Refresh` button on the other end — above Photos'
+ * own count, above the first photograph. Neither half earned that row:
+ *
+ *  - **Refresh** is the third way to do the same thing. Every screen carrying
+ *    this bar scrolls, and pull-to-refresh is the gesture a phone already has;
+ *    a labelled button for it is a control that exists because the desktop had
+ *    one. The action label is kept for the states where the gesture would NOT
+ *    help — a sleeping gateway needs waking, not pulling — and those states are
+ *    the only ones that still render it.
+ *  - **Updated 10m ago** is a fact about the vault, not about Photos, and the
+ *    vault has one screen: Home already carries an ambient line saying how much
+ *    is in it and whether the gateway is answering
+ *    (screens/home/HomeStatusLine.tsx). Repeating a per-route copy of it made
+ *    freshness look like something each app owns separately.
+ *
+ * So `current` renders no row at all. Everything that is genuinely worth
+ * interrupting a member for — offline, asleep, syncing, first-sync progress,
+ * sources disagreeing by a day, pending changes, out of room — still renders
+ * exactly as before, and now has the row to itself.
+ */
 export default function ReplicaStatusBar(): React.JSX.Element {
   const { colors } = useTheme();
   const {
@@ -28,6 +59,7 @@ export default function ReplicaStatusBar(): React.JSX.Element {
     reachability = "device-offline",
     bootstrapProgress = [],
     refresh,
+    storageFull,
   } = useReplica();
   const [open, setOpen] = useState(false);
   // One AppState-gated ticker serves every mounted status bar; see
@@ -42,24 +74,15 @@ export default function ReplicaStatusBar(): React.JSX.Element {
     newest !== undefined &&
     oldest !== undefined &&
     newest - oldest >= DIVERGENCE_MS;
-  const label = useMemo(() => {
-    if (reachability === "device-offline") return "Offline on this phone";
-    if (reachability === "gateway-asleep") return "Gateway asleep";
-    if (reachability === "syncing") return "Syncing recent changes…";
-    return newest
-      ? `Updated ${formatRelativeTime(newest)}`
-      : "Available offline";
-  }, [newest, reachability]);
-  const tint = reachability === "current" ? colors.accent : colors.danger;
-  const action =
-    reachability === "device-offline"
-      ? "Check network"
-      : reachability === "gateway-asleep"
-        ? "Wake help"
-        : reachability === "syncing"
-          ? "Sync now"
-          : "Refresh";
+  // The replica bar's copy lives in a pure module, tested independently.
+  const { label, action, actionable } = useMemo(
+    () => replicaStatusRow(reachability),
+    [reachability]
+  );
+  // Red when the member can act on it, neutral when they are waiting.
+  const tint = actionable ? colors.danger : colors.textFaint;
   const refreshReplica = (): void => {
+    // Wake-help is gated to gateway-asleep; other actions use pull-to-refresh.
     if (reachability !== "gateway-asleep") {
       void refresh?.();
       return;
@@ -73,59 +96,130 @@ export default function ReplicaStatusBar(): React.JSX.Element {
       ]
     );
   };
-  const bootstrapLabel =
+  // `pages` and the source count are real numerics — mono and tabular, per
+  // the ramp's "numerics are mono and tabular in every app, without
+  // exception" — so the sentence is split around the number rather than
+  // interpolated into one plain string.
+  const bootstrap:
+    | { prefix: string; count?: number; suffix: string }
+    | undefined =
     bootstrapProgress.length === 0
       ? undefined
       : bootstrapProgress.length === 1
         ? bootstrapProgress[0]!.phase === "first-page"
-          ? `${bootstrapProgress[0]!.vaultLabel}: recent items ready; older history syncing`
-          : `${bootstrapProgress[0]!.vaultLabel}: ${bootstrapProgress[0]!.pages} pages ready; older history syncing`
-        : `${bootstrapProgress.length} sources: recent items ready; older history syncing`;
+          ? {
+              prefix: `${bootstrapProgress[0]!.vaultLabel}: `,
+              suffix: "recent items ready; older history syncing",
+            }
+          : {
+              prefix: `${bootstrapProgress[0]!.vaultLabel}: `,
+              count: bootstrapProgress[0]!.pages,
+              suffix: " pages ready; older history syncing",
+            }
+        : {
+            prefix: "",
+            count: bootstrapProgress.length,
+            suffix: " sources: recent items ready; older history syncing",
+          };
+
+  // `out of room` pre-empts the normal status row: the reachability/bootstrap
+  // language above ("Offline", "Syncing…") is about network state, not disk
+  // state, and would be a second, contradicting explanation for the same
+  // paused sync.
+  if (storageFull) {
+    return (
+      <View style={styles.outOfRoomWrap}>
+        <OutOfRoom
+          cause={STORAGE_FULL_CAUSE}
+          consequence={STORAGE_FULL_CONSEQUENCE}
+          actionLabel={STORAGE_FULL_ACTION_LABEL}
+          onAction={() => {
+            clearPinnedThumbnailPacks();
+            void refresh?.();
+          }}
+        />
+      </View>
+    );
+  }
 
   return (
     <>
-      <View style={[styles.wrap, { borderColor: colors.line }]}>
-        <View style={[styles.dot, { backgroundColor: tint }]} />
-        <Text style={[styles.label, { color: colors.textSoft }]}>{label}</Text>
-        <Pressable
-          accessibilityLabel={action}
-          disabled={!refresh}
-          onPress={refreshReplica}
-          style={styles.refresh}
-        >
-          {reachability === "syncing" ? (
-            <ActivityIndicator size="small" color={colors.accent} />
+      {/* When `label` is undefined, render nothing for this state (offline is
+          one such state). The row is conditional in its entirety unless pending
+          changes exist. */}
+      {label || pending.length > 0 ? (
+        <View style={[styles.wrap, { borderColor: colors.line }]}>
+          {label ? (
+            <>
+              <View style={[styles.dot, { backgroundColor: tint }]} />
+              <Text style={[styles.label, { color: colors.textSoft }]}>
+                {label}
+              </Text>
+            </>
+          ) : (
+            // Nothing to say, but something to show: the chip keeps the
+            // trailing edge it has whenever a label is present.
+            <View style={styles.spacer} />
+          )}
+          {action ? (
+            <Pressable
+              accessibilityLabel={action}
+              disabled={!refresh}
+              onPress={refreshReplica}
+              style={styles.refresh}
+            >
+              {/* No spinning glyph while syncing — the label above already says
+                  "Syncing recent changes…", and the bootstrap line below carries
+                  the one exact count this operation actually has. */}
+              <Text style={[styles.refreshText, { color: colors.accent }]}>
+                {action}
+              </Text>
+            </Pressable>
           ) : null}
-          <Text style={[styles.refreshText, { color: colors.accent }]}>
-            {action}
-          </Text>
-        </Pressable>
-        <Pressable
-          accessibilityLabel={`Pending changes ${pending.length}`}
-          onPress={() => {
-            refreshPending();
-            setOpen(true);
-          }}
-          style={[styles.pending, { backgroundColor: colors.bgSunken }]}
-        >
-          <Text style={[styles.pendingText, { color: colors.text }]}>
-            Pending changes {pending.length}
-          </Text>
-          <Icon name="chevron-right" size={14} color={colors.textFaint} />
-        </Pressable>
-      </View>
-      {bootstrapLabel ? (
+          {/* A standing badge at zero is exactly what §18 forbids — "0 pending
+              changes" is not information a member needs to see permanently, so
+              this chip renders only once there is something to report. */}
+          {pending.length > 0 ? (
+            <Pressable
+              accessibilityLabel={`Pending changes ${pending.length}`}
+              onPress={() => {
+                refreshPending();
+                setOpen(true);
+              }}
+              style={[styles.pending, { backgroundColor: colors.bgSunken }]}
+            >
+              <Text style={[styles.pendingText, { color: colors.text }]}>
+                Pending changes{" "}
+                <Text style={[t("mono"), { color: colors.text }]}>
+                  {pending.length.toLocaleString()}
+                </Text>
+              </Text>
+              <Icon name="chevron-right" size={14} color={colors.textFaint} />
+            </Pressable>
+          ) : null}
+        </View>
+      ) : null}
+      {bootstrap ? (
         <View style={[styles.bootstrap, { backgroundColor: colors.bgSunken }]}>
           <Icon name="download-cloud" size={13} color={colors.accent} />
           <Text style={[styles.bootstrapText, { color: colors.textSoft }]}>
-            {bootstrapLabel}
+            {bootstrap.prefix}
+            {bootstrap.count === undefined ? null : (
+              <Text style={[t("mono"), { color: colors.textSoft }]}>
+                {bootstrap.count.toLocaleString()}
+              </Text>
+            )}
+            {bootstrap.suffix}
           </Text>
         </View>
       ) : null}
       {diverged ? (
         <View style={[styles.divergence, { backgroundColor: colors.bgSunken }]}>
+          {/* A non-alarming fact — sources settle at different times, which
+              is expected of a multi-vault replica, not a fault — so this
+              carries no alarm glyph, matching the no-icon banner grammar
+              (:4867-4873) rather than a danger-tinted alert-circle. */}
           <View style={styles.divergenceHeading}>
-            <Icon name="alert-circle" size={14} color={colors.danger} />
             <Text style={[styles.divergenceText, { color: colors.textSoft }]}>
               Sources last updated at different times.
             </Text>
@@ -273,18 +367,23 @@ function humanStatus(status: string): string {
 }
 
 const styles = StyleSheet.create({
-  action: { fontFamily: family.sansBold, fontSize: 12 },
+  action: { fontFamily: family.sansMedium, fontSize: t("mono").fontSize },
   card: {
     alignItems: "center",
     borderRadius: radii.md,
-    borderWidth: StyleSheet.hairlineWidth,
+    borderWidth: borders.hairline,
     flexDirection: "row",
     gap: 12,
     padding: 14,
   },
   cardCopy: { flex: 1 },
-  cardMeta: { fontFamily: family.sansRegular, fontSize: 11, marginTop: 3 },
-  cardTitle: { fontFamily: family.sansBold, fontSize: 14 },
+  cardMeta: {
+    fontFamily: family.sansRegular,
+    fontSize: t("control").fontSize,
+    marginTop: 3,
+  },
+  cardTitle: { fontFamily: family.sansMedium, fontSize: t("body").fontSize },
+  outOfRoomWrap: { padding: 14 },
   bootstrap: {
     alignItems: "center",
     flexDirection: "row",
@@ -295,7 +394,7 @@ const styles = StyleSheet.create({
   bootstrapText: {
     flex: 1,
     fontFamily: family.sansRegular,
-    fontSize: 11,
+    fontSize: t("control").fontSize,
   },
   divergence: {
     gap: 7,
@@ -307,33 +406,45 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     gap: 7,
   },
-  divergenceText: { flex: 1, fontFamily: family.sansRegular, fontSize: 11 },
-  dot: { borderRadius: 4, height: 7, width: 7 },
+  divergenceText: {
+    flex: 1,
+    fontFamily: family.sansRegular,
+    fontSize: t("control").fontSize,
+  },
+  dot: { borderRadius: radii.sm, height: 7, width: 7 },
   empty: {
     fontFamily: family.sansRegular,
-    fontSize: 14,
+    fontSize: t("body").fontSize,
     paddingVertical: 40,
     textAlign: "center",
   },
-  label: { flex: 1, fontFamily: family.sansRegular, fontSize: 11 },
+  label: {
+    flex: 1,
+    fontFamily: family.sansRegular,
+    fontSize: t("control").fontSize,
+  },
   list: { gap: 10, padding: 18 },
   pending: {
     alignItems: "center",
-    borderRadius: 999,
+    borderRadius: radii.pill,
     flexDirection: "row",
     gap: 3,
     paddingHorizontal: 9,
     paddingVertical: 5,
   },
-  pendingText: { fontFamily: family.sansBold, fontSize: 10 },
-  reason: { fontFamily: family.sansRegular, fontSize: 11, marginTop: 6 },
+  pendingText: { fontFamily: family.sansMedium, fontSize: t("mono").fontSize },
+  reason: {
+    fontFamily: family.sansRegular,
+    fontSize: t("control").fontSize,
+    marginTop: 6,
+  },
   refresh: {
     alignItems: "center",
     flexDirection: "row",
     gap: 4,
     paddingVertical: 7,
   },
-  refreshText: { fontFamily: family.sansBold, fontSize: 10 },
+  refreshText: { fontFamily: family.sansMedium, fontSize: t("mono").fontSize },
   sheet: { flex: 1 },
   sheetHeader: {
     alignItems: "center",
@@ -341,13 +452,22 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     padding: 18,
   },
-  source: { fontFamily: family.sansRegular, fontSize: 10, marginTop: 4 },
-  subtitle: { fontFamily: family.sansRegular, fontSize: 11, marginTop: 3 },
-  title: { fontFamily: family.sansBold, fontSize: 22 },
+  source: {
+    fontFamily: family.sansRegular,
+    fontSize: t("mono").fontSize,
+    marginTop: 4,
+  },
+  spacer: { flex: 1 },
+  subtitle: {
+    fontFamily: family.sansRegular,
+    fontSize: t("control").fontSize,
+    marginTop: 3,
+  },
+  title: { fontFamily: family.sansMedium, fontSize: t("title").fontSize },
   wrap: {
     alignItems: "center",
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderTopWidth: StyleSheet.hairlineWidth,
+    borderBottomWidth: borders.hairline,
+    borderTopWidth: borders.hairline,
     flexDirection: "row",
     gap: 7,
     minHeight: 36,

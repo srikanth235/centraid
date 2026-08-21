@@ -5,7 +5,7 @@ import path from "node:path";
 
 import { describe, afterEach, expect, test } from "vitest";
 
-import { serve } from "@centraid/gateway";
+import { serve } from "@centraid/server";
 import { forEachSequentially } from "@centraid/test-kit/sequential";
 import { tempDir } from "@centraid/test-kit/temp-dir";
 import { aesGcmKeyProtector, KeyStore } from "@centraid/vault";
@@ -13,6 +13,14 @@ import { aesGcmKeyProtector, KeyStore } from "@centraid/vault";
 import { startDesktopEmbeddedGateway } from "./embedded-gateway.js";
 
 const roots: string[] = [];
+
+// These scenarios provision complete encrypted vaults, including every stable
+// app and automation agent. The parity case provisions four vaults across two
+// gateways; the founding case provisions one. Focused runs remain well below
+// these limits, while the headroom keeps full-suite worker contention from
+// turning successful boots into test-runner timeouts.
+const PARITY_TIMEOUT_MS = 120_000;
+const FOUNDING_TIMEOUT_MS = 30_000;
 
 describe("embedded-gateway-layout scenarios", () => {
   afterEach(async () =>
@@ -34,7 +42,7 @@ describe("embedded-gateway-layout scenarios", () => {
 
   /**
    * Quiet the boot warmers so this suite never depends on network or on local
-   * coding-agent CLIs being present.
+   * coding harness CLIs being present.
    *
    * - PricingWarmer (#445) refreshes LiteLLM into `model-pricing.json` when the
    *   host pins a cache path and the on-disk table is stale/absent. A fresh
@@ -118,71 +126,86 @@ describe("embedded-gateway-layout scenarios", () => {
     ].sort();
   }
 
-  test("actual Electron embed and headless daemon produce identical complete trees", async () => {
-    const desktopRoot = await tempDir("desktop-embedded-layout-");
-    const headlessRoot = await tempDir("headless-layout-");
-    roots.push(desktopRoot, headlessRoot);
-    await Promise.all([
-      seedWarmerCaches(desktopRoot),
-      seedWarmerCaches(headlessRoot),
-    ]);
-    const protector = aesGcmKeyProtector(Buffer.alloc(32, 0x42));
-    const desktop = await startDesktopEmbeddedGateway({
-      dataDir: desktopRoot,
-      paths: pathsFor(desktopRoot),
-      keyStore: new KeyStore(path.join(desktopRoot, "keys"), { protector }),
-      token: "desktop-layout-token",
-      ownerEndpointId: "desktop-device",
-    });
-    desktop.vaults.current().walShipper?.tick();
-    await desktop.close();
-
-    const headless = await serve({
-      paths: { ...pathsFor(headlessRoot), dataDir: headlessRoot },
-      keyStore: new KeyStore(path.join(headlessRoot, "keys"), { protector }),
-      token: "headless-layout-token",
-      hostDeviceEndpointId: "desktop-device",
-    });
-    headless.vaults.current().walShipper?.tick();
-    await headless.close();
-
-    expect(normalizeDynamicNames(await treeShape(desktopRoot))).toStrictEqual(
-      normalizeDynamicNames(await treeShape(headlessRoot))
-    );
-  }, 30_000);
-
-  test("actual Electron embed auto-founds Shared + Personal on a fresh data dir", async () => {
-    // Issue #603: the desktop passes no founding options at all — a fresh data
-    // dir is founded by the gateway itself at construction. This is the desktop
-    // half of that contract: start the real embed, ask it for its vault list,
-    // and expect the two auto-founded vaults with no ceremony in between.
-    const root = await tempDir("desktop-embedded-autofound-");
-    roots.push(root);
-    await seedWarmerCaches(root);
-    const gateway = await startDesktopEmbeddedGateway({
-      dataDir: root,
-      paths: pathsFor(root),
-      keyStore: new KeyStore(path.join(root, "keys"), {
-        protector: aesGcmKeyProtector(Buffer.alloc(32, 0x43)),
-      }),
-      token: "desktop-autofound-token",
-      ownerEndpointId: "a".repeat(64),
-    });
-    try {
-      const response = await fetch(`${gateway.url}/centraid/_vault/vaults`, {
-        headers: { Authorization: "Bearer desktop-autofound-token" },
+  test(
+    "actual Electron embed and headless daemon produce identical complete trees",
+    async () => {
+      const desktopRoot = await tempDir("desktop-embedded-layout-");
+      const headlessRoot = await tempDir("headless-layout-");
+      roots.push(desktopRoot, headlessRoot);
+      await Promise.all([
+        seedWarmerCaches(desktopRoot),
+        seedWarmerCaches(headlessRoot),
+      ]);
+      const protector = aesGcmKeyProtector(Buffer.alloc(32, 0x42));
+      const desktop = await startDesktopEmbeddedGateway({
+        dataDir: desktopRoot,
+        paths: pathsFor(desktopRoot),
+        keyStore: new KeyStore(path.join(desktopRoot, "keys"), { protector }),
+        token: "desktop-layout-token",
+        ownerEndpointId: "desktop-device",
       });
-      expect(response.status).toBe(200);
-      const body = (await response.json()) as {
-        vaults?: Array<{ name?: string }>;
-      };
-      expect(
-        (body.vaults ?? [])
-          .map((vault) => vault.name)
-          .sort((a, b) => String(a).localeCompare(String(b)))
-      ).toStrictEqual(["Personal", "Shared"]);
-    } finally {
-      await gateway.close();
-    }
-  }, 15_000);
+      desktop.vaults.current().walShipper?.tick();
+      await desktop.close();
+
+      const headless = await serve({
+        paths: { ...pathsFor(headlessRoot), dataDir: headlessRoot },
+        keyStore: new KeyStore(path.join(headlessRoot, "keys"), { protector }),
+        token: "headless-layout-token",
+        hostDeviceEndpointId: "desktop-device",
+      });
+      headless.vaults.current().walShipper?.tick();
+      await headless.close();
+
+      expect(normalizeDynamicNames(await treeShape(desktopRoot))).toStrictEqual(
+        normalizeDynamicNames(await treeShape(headlessRoot))
+      );
+    },
+    PARITY_TIMEOUT_MS
+  );
+
+  test(
+    "actual Electron embed auto-founds Personal on a fresh data dir",
+    async () => {
+      // Issue #603: the desktop passes no founding options at all — a fresh data
+      // dir is founded by the gateway itself at construction. This is the desktop
+      // half of that contract: start the real embed, ask it for its vault list,
+      // and expect the one auto-founded vault with no ceremony in between.
+      const root = await tempDir("desktop-embedded-autofound-");
+      roots.push(root);
+      await seedWarmerCaches(root);
+      const gateway = await startDesktopEmbeddedGateway({
+        dataDir: root,
+        paths: pathsFor(root),
+        keyStore: new KeyStore(path.join(root, "keys"), {
+          protector: aesGcmKeyProtector(Buffer.alloc(32, 0x43)),
+        }),
+        token: "desktop-autofound-token",
+        ownerEndpointId: "a".repeat(64),
+      });
+      try {
+        const response = await fetch(`${gateway.url}/centraid/_vault/vaults`, {
+          headers: { Authorization: "Bearer desktop-autofound-token" },
+        });
+        expect(response.status).toBe(200);
+        const body = (await response.json()) as {
+          vaults?: Array<{ name?: string }>;
+        };
+        expect(
+          (body.vaults ?? [])
+            .map((vault) => vault.name)
+            .sort((a, b) => String(a).localeCompare(String(b)))
+        ).toStrictEqual(["Personal"]);
+
+        const bootstrap = await fetch(
+          `${gateway.url}/centraid/_vault/replica/bootstrap?window=100`,
+          { headers: { Authorization: "Bearer desktop-autofound-token" } }
+        );
+        const bootstrapBody = await bootstrap.text();
+        expect(bootstrap.status, bootstrapBody).toBe(200);
+      } finally {
+        await gateway.close();
+      }
+    },
+    FOUNDING_TIMEOUT_MS
+  );
 });

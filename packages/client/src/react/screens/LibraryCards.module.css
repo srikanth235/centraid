@@ -1,0 +1,66 @@
+/* The library card grid — shared by Starred and the automations overview.
+
+   The grid travels with the cards rather than with any one screen: two
+   surfaces that draw the same card must also space it the same way, or a
+   starred tile stops looking like the tile it was starred from. */
+
+.appsGrid {
+  display: grid;
+  grid-template-columns: repeat(6, 1fr);
+  gap: 14px;
+}
+.appsGridSmall {
+  /* App-store-style tiles. A ~200px floor packs 4–5 across in the widened
+     shelf and reflows to 3/2 as the pane narrows — compact cards, not big
+     posters. (Gap inherited from .cd-apps-grid.) */
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+}
+/* Rows layout — the card-family restack (strip layout, foot tail, hover
+   toolbar re-pin) lives with the tile in ui/AppCard.module.css, keyed on
+   this grid's `data-layout='rows'`. This module only owns the automation
+   meta strip, which belongs to the automation card. */
+.appsGrid[data-layout="rows"] {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.appsGrid[data-layout="rows"] .appCardMeta {
+  /* Fixed-width slot so the status pill (its leftmost child) lands at the same
+     x down the column — otherwise a longer trigger ("Weekdays at 11:30 PM" vs
+     "Daily at 9:00 AM") shifts the whole cluster and the pills drift. The
+     trigger fills the remainder and truncates if a row runs long. */
+  flex: 0 0 auto;
+  width: 256px;
+  flex-wrap: nowrap;
+  justify-content: flex-start;
+  overflow: hidden;
+  order: 1;
+}
+/* The status pill (leftmost child) keeps its intrinsic width. */
+.appsGrid[data-layout="rows"] .appCardMeta > :first-child {
+  flex: 0 0 auto;
+}
+.appsGrid[data-layout="rows"] .appCardMeta .appCardTrig {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.appCardMeta {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  min-width: 0;
+}
+.appCardTrig {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font: var(--t-control);
+  color: var(--text-faint);
+  white-space: nowrap;
+}
+.appCardTrig svg {
+  display: block;
+}

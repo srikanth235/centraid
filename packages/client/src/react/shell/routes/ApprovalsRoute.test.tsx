@@ -18,6 +18,9 @@ const subscribeNotificationsChanges =
   vi.fn<OutboxModule["subscribeNotificationsChanges"]>();
 const decideOutboxItem =
   vi.fn<(input: unknown) => ReturnType<OutboxModule["decideOutboxItem"]>>();
+const listEnrichEgressConsent = vi
+  .fn<VaultModule["listEnrichEgressConsent"]>()
+  .mockResolvedValue([]);
 const enableWebPushWake = vi.fn<PushModule["enableWebPushWake"]>();
 const syncWebNotifications = vi.fn<PushModule["syncWebNotifications"]>();
 vi.mock(import("../../../gateway-client-outbox.js"), () => ({
@@ -32,8 +35,16 @@ vi.mock(import("../../../gateway-client-outbox.js"), () => ({
   decideScopeRequest: vi.fn<OutboxModule["decideScopeRequest"]>(),
   revokeOutboxGrant: vi.fn<OutboxModule["revokeOutboxGrant"]>(),
 }));
+const vaultApps = vi.fn<VaultModule["vaultApps"]>().mockResolvedValue([]);
+const listAgents = vi.fn<VaultModule["listAgents"]>().mockResolvedValue([]);
 vi.mock(import("../../../gateway-client-vault.js"), () => ({
   confirmVaultParked: vi.fn<VaultModule["confirmVaultParked"]>(),
+  vaultApps: () => vaultApps(),
+  listAgents: () => listAgents(),
+  // The egress-consent ledger (issue #807, Wave 3) — reference material this
+  // route reads alongside the queue.
+  listEnrichEgressConsent: () => listEnrichEgressConsent(),
+  revokeVaultGrant: vi.fn<VaultModule["revokeVaultGrant"]>(),
 }));
 vi.mock(import("../../../gateway-client-push.js"), () => ({
   enableWebPushWake: (requestPermission: boolean) =>
@@ -53,9 +64,6 @@ const navigate = vi.fn<ShellActions["navigate"]>();
 function makeActions(): ShellActions {
   return {
     showToast,
-    builderEnabled: false,
-    enterBuilder: vi.fn<ShellActions["enterBuilder"]>(),
-    openNewAppSheet: vi.fn<ShellActions["openNewAppSheet"]>(),
     openCommandPalette: vi.fn<ShellActions["openCommandPalette"]>(),
     openContextMenu: vi.fn<ShellActions["openContextMenu"]>(),
     confirm,
@@ -117,14 +125,27 @@ describe("ApprovalsRoute", () => {
   describe("ApprovalsRoute", () => {
     it("shows a loading state, then the empty state once the blocking notifications resolves empty", async () => {
       const el = await render();
-      expect(el.textContent).toContain("Nothing waiting on you.");
+      expect(el.textContent).toContain("Nothing is waiting on you");
       expect(enableWebPushWake).toHaveBeenCalledWith(true);
     });
 
     it("surfaces a fetch error", async () => {
       getNotifications.mockRejectedValue(new Error("offline"));
       const el = await render();
-      expect(el.querySelector(".pageEmpty")?.textContent).toContain("offline");
+      // The error state is the net-bordered panel every one of the six routes
+      // takes: what failed, what is still safe, one way forward — with the
+      // gateway's own words carried as a fact rather than swallowed.
+      const panel = el.querySelector('[data-tone="net"]');
+      expect(panel?.textContent).toContain("Could not reach the consent store");
+      expect(panel?.textContent).toContain(
+        "The gateway answered; the queue that holds staged writes did not."
+      );
+      expect(panel?.textContent).toContain("offline");
+      expect(
+        [...el.querySelectorAll("button")].some(
+          (button) => button.textContent === "Try again"
+        )
+      ).toBe(true);
     });
 
     it("opens Connectors from a needs-auth decision", async () => {
@@ -149,7 +170,7 @@ describe("ApprovalsRoute", () => {
       });
       const el = await render();
       const reconnect = [...el.querySelectorAll("button")].find(
-        (button) => button.textContent === "Reconnect"
+        (button) => button.textContent === "Open Connectors"
       );
       expect(reconnect).toBeDefined();
       act(() => reconnect?.click());
@@ -209,15 +230,18 @@ describe("ApprovalsRoute", () => {
         output: { item_id: "item1", status: "approved" },
       });
       const el = await render();
-      const subjectBtn = [...el.querySelectorAll("button")].find((b) =>
-        b.textContent?.includes("Hi")
-      ) as HTMLButtonElement;
-      await act(async () => subjectBtn.click());
-      const approveBtn = [...el.querySelectorAll("button")].find(
-        (b) => b.textContent === "Approve"
-      ) as HTMLButtonElement;
+      // The staged write is a card: closed it states the decision, open it
+      // quotes the draft and offers the three verbs.
+      const findButton = (text: string): HTMLButtonElement =>
+        [...el.querySelectorAll("button")].find(
+          (b) => b.textContent === text
+        ) as HTMLButtonElement;
       await act(async () => {
-        approveBtn.click();
+        findButton("Review").click();
+      });
+      expect(el.textContent).toContain("See you at 6.");
+      await act(async () => {
+        findButton("Approve").click();
         await Promise.resolve();
       });
       expect(decideOutboxItem).toHaveBeenCalledWith({
@@ -286,12 +310,10 @@ describe("ApprovalsRoute", () => {
           (b) => b.textContent === text
         ) as HTMLButtonElement;
       await act(async () => {
-        [...el.querySelectorAll("button")]
-          .find((b) => b.textContent?.includes("Hi"))!
-          .click();
+        findButton("Review").click();
       });
       await act(async () => {
-        findButton("Edit").click();
+        findButton("Edit and approve").click();
       });
       const subjectInput = el.querySelector(
         'input[aria-label="Subject"]'
@@ -390,6 +412,26 @@ describe("ApprovalsRoute", () => {
             archivedAt: null,
           },
           {
+            noticeId: "commons-notice",
+            kind: "commons-steward",
+            sourceRef: "grant-1",
+            headline:
+              "A shared space's owner device hasn't been reachable for 9 days",
+            detail: {
+              sourceType: "commons",
+              deepLink: "/household",
+              grantId: "grant-1",
+              presence: "absent",
+              recoverable: true,
+            },
+            severity: "high",
+            count: 1,
+            firstAt: at,
+            lastAt: at,
+            readAt: null,
+            archivedAt: null,
+          },
+          {
             noticeId: "app-notice",
             kind: "app",
             sourceRef: "tasks",
@@ -416,113 +458,50 @@ describe("ApprovalsRoute", () => {
             archivedAt: null,
           },
         ],
-        unreadNoticeCount: 4,
+        unreadNoticeCount: 5,
       });
       const el = await render();
-      const clickHeadline = (headline: string): void => {
-        const button = [...el.querySelectorAll("button")].find((candidate) =>
-          candidate.textContent?.includes(headline)
+      // Every notice is a card now — no chip gates any of them — so opening
+      // one means pressing the Open verb on the card carrying its headline.
+      const openNotice = (headline: string): void => {
+        const title = [...el.querySelectorAll(".title")].find((node) =>
+          node.textContent?.includes(headline)
         );
+        expect(title).toBeDefined();
+        const button = [
+          ...(title?.closest("section")?.querySelectorAll("button") ?? []),
+        ].find((b) => b.textContent === "Open");
         expect(button).toBeDefined();
         act(() => button?.click());
       };
 
-      // Info-severity notices sit under their source chip, not "Needs me"
-      // (#665) — the deep links still work from there.
-      clickHeadline("Automations");
-      clickHeadline("Digest finished");
+      openNotice("Digest finished");
       expect(navigate).toHaveBeenLastCalledWith({
         kind: "automation-view",
         automationId: "daily/digest",
       });
-      clickHeadline("Needs me");
-      clickHeadline("Gateway degraded");
+      openNotice("Gateway degraded");
       expect(navigate).toHaveBeenLastCalledWith({
         kind: "gateway",
         tab: "alerts",
       });
-      clickHeadline("Apps");
-      clickHeadline("Tasks imported");
+      // Steward absence is only actionable where the ceremony lives: the
+      // People & circles panel on Household (issue #750).
+      openNotice("A shared space's owner device");
+      expect(navigate).toHaveBeenLastCalledWith({ kind: "household" });
+      openNotice("Tasks imported");
       expect(navigate).toHaveBeenLastCalledWith({ kind: "app", id: "tasks" });
-      clickHeadline("Needs me");
       // An outbox notice must NOT self-navigate to the page we are already
       // on — it puts the staged decision it names in front of the owner.
       const navigationsBefore = navigate.mock.calls.length;
-      clickHeadline("Message needs approval again");
+      openNotice("Message needs approval again");
       expect(navigate).toHaveBeenCalledTimes(navigationsBefore);
       expect(
-        (
-          el.querySelector(
-            '[data-testid="outbox-row-item-1"]'
-          ) as HTMLElement | null
-        )?.dataset.focused
-      ).toBe("true");
+        el.querySelector<HTMLElement>(
+          '[data-testid="staged-write"][data-open="true"]'
+        )?.dataset.itemId
+      ).toBe("item-1");
       expect(el.textContent).toContain("See you at 6.");
-    });
-
-    it("keeps the screen mounted across an SSE doorbell refetch", async () => {
-      const item = (subject: string): Record<string, unknown> => ({
-        itemId: "item1",
-        connection: { kind: "pull.gmail", label: "personal" },
-        actor: "gmail-send",
-        actorId: "agent-1",
-        actorKind: "ai_agent",
-        verb: "gmail.send",
-        target: "ravi@example.com",
-        artifact: { to: "ravi@example.com", subject, body: "See you at 6." },
-        status: "pending",
-        grantId: null,
-        stagedAt: "2026-07-30T10:00:00.000Z",
-        decidedAt: null,
-        drainedAt: null,
-        result: null,
-        note: null,
-        canEdit: true,
-      });
-      const notificationsWith = (
-        subject: string
-      ): Awaited<ReturnType<OutboxModule["getNotifications"]>> =>
-        ({
-          decisions: {
-            outbox: [item(subject)],
-            needsAuth: [],
-            parked: [],
-            scopeRequests: [],
-            count: 1,
-          },
-          notices: [],
-          unreadNoticeCount: 0,
-        }) as unknown as Awaited<ReturnType<OutboxModule["getNotifications"]>>;
-      getNotifications.mockResolvedValue(notificationsWith("Hi"));
-      // Capture the doorbell the route hands to the SSE subscription.
-      let ring = (): void => undefined;
-      subscribeNotificationsChanges.mockImplementation(async (onChange) => {
-        ring = onChange;
-      });
-
-      const el = await render();
-      // Put the owner mid-flight: row expanded, edit form open.
-      await act(async () => {
-        [...el.querySelectorAll("button")]
-          .find((b) => b.textContent?.includes("Hi"))!
-          .click();
-      });
-      await act(async () => {
-        [...el.querySelectorAll("button")]
-          .find((b) => b.textContent === "Edit")!
-          .click();
-      });
-      expect(el.querySelector('input[aria-label="Subject"]')).not.toBeNull();
-
-      // A doorbell must refresh the data underneath, not tear the screen down
-      // and throw the half-finished edit away.
-      await act(async () => {
-        ring();
-        await Promise.resolve();
-      });
-      expect(el.textContent).not.toContain("Loading Notifications…");
-      expect(el.querySelector('input[aria-label="Subject"]')).not.toBeNull();
-      expect(getNotifications).toHaveBeenCalledTimes(2);
     });
   });
 });

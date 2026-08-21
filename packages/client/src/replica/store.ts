@@ -29,7 +29,7 @@ import type {
  *   an unavailable field throws instead of silently reading `undefined`. This is
  *   the path local live queries use.
  * - `readWire`/`searchWire` return plain, structured-clone-safe envelopes with no
- *   proxy, because on web the rows must survive a shell→iframe `postMessage` hop
+ *   proxy, because on web the rows must survive a shell→worker `postMessage` hop
  *   and be guarded on the far side. Native implementations return the same
  *   envelopes directly (no hop), keeping the coordinator identical across
  *   platforms. They stay on the interface because the coordinator itself calls

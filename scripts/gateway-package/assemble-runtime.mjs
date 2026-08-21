@@ -29,18 +29,13 @@ import path from "node:path";
 
 /** Must stay aligned with scripts/gateway-package/trace.mjs. */
 export const GATEWAY_WORKSPACE_PACKAGES = [
-  "packages/gateway",
-  "packages/app-engine",
-  "packages/agent-runtime",
-  "packages/automation",
+  "packages/server",
   "packages/backup",
   "packages/blueprints",
   "packages/design",
-  "packages/protocol",
-  "packages/time-engine",
+  "packages/core",
   "packages/tunnel",
   "packages/vault",
-  "packages/blob-format",
 ];
 
 /** Package directory names under packages/ that belong in the runtime. */
@@ -279,7 +274,7 @@ export function assembleRuntime({ root, out, packagesOnly = false }) {
         // Root depends on gateway so bun hoists production deps (esbuild, ajv, …)
         // into node_modules for Node's resolver — workspaces alone leave only .bun.
         dependencies: {
-          "@centraid/gateway": "workspace:*",
+          "@centraid/server": "workspace:*",
         },
         workspaces: GATEWAY_WORKSPACE_PACKAGES,
       },

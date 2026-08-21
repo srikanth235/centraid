@@ -3,9 +3,9 @@
   "id": "people",
   "name": "People",
   "description": "Your circle, remembered — a personal CRM projected from the canonical vault. people_profile keeps only the genuine 1:1 CRM decoration; interactions are core activities, tasks are schedule tasks, relationships are typed core links, IOUs are Tally obligations, and journal entries are knowledge notes. Lists, favorites, notes, important dates, and gift ideas reuse the vault's shared mechanisms too. Every write runs through a typed command — consent-checked and receipted. No data of its own — revoke the grant and the app goes dark.",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "iconKey": "Users",
-  "colorKey": "rose",
+  "colorKey": "violet",
   "vault": {
     "purpose": "dpv:ServiceProvision",
     "why": "Keeps light records on the people you care about and nudges you to stay in touch.",
@@ -25,6 +25,11 @@
       { "schema": "schedule", "table": "task", "verbs": "read" },
       { "schema": "tally", "table": "obligation", "verbs": "read" },
       { "schema": "social", "table": "contact_channel", "verbs": "read" },
+      { "schema": "social", "table": "circle_member", "verbs": "read" },
+      { "schema": "share", "table": "party_vault_binding", "verbs": "read" },
+      { "schema": "share", "table": "circle_grant", "verbs": "read" },
+      { "schema": "share", "table": "commons_member_state", "verbs": "read" },
+      { "schema": "share", "table": "commons_invitation", "verbs": "read" },
       { "schema": "social", "table": "save_contact_channel", "verbs": "act" },
       {
         "schema": "social",
@@ -77,7 +82,7 @@
           "display_name": { "type": "string", "minLength": 1 },
           "role": { "type": "string" },
           "avatar_color": { "type": "string" },
-          "cadence_days": { "type": "integer", "minimum": 1 },
+          "cadence_days": { "type": "integer", "minimum": 0 },
           "list_id": { "type": "string", "minLength": 1 }
         },
         "required": ["display_name", "cadence_days"],
@@ -127,7 +132,7 @@
         "type": "object",
         "properties": {
           "party_id": { "type": "string", "minLength": 1 },
-          "cadence_days": { "type": "integer", "minimum": 1 }
+          "cadence_days": { "type": "integer", "minimum": 0 }
         },
         "required": ["party_id", "cadence_days"],
         "additionalProperties": false
@@ -711,7 +716,7 @@
   "queries": [
     {
       "name": "people",
-      "description": "The people window as a bounded recent view: people.profile rows (each a 1:1 enrichment of a core.party), newest first, decorated with name, list, favorite star and active reminder dates, plus the lists. `truncated` means older people exist beyond the window.",
+      "description": "The people window as a bounded recent view: people.profile rows (each a 1:1 enrichment of a core.party), newest first, decorated with name, list, favorite star, active reminder dates and whether they are linked to a vault of their own (`linked`, `vault_count`), plus the lists. `links_available` is false when the sharing reads are denied — `linked` is then null and no Linked/Unlinked chip is honest to draw. `truncated` means older people exist beyond the window.",
       "input": {
         "type": "object",
         "properties": {
@@ -726,13 +731,14 @@
           "lists": { "type": "array" },
           "truncated": { "type": "boolean" },
           "window": { "type": "integer" },
+          "links_available": { "type": "boolean" },
           "vaultDenied": { "type": "object" }
         }
       }
     },
     {
       "name": "person",
-      "description": "One person's full profile: name, role, cadence, last-contacted, how-you-met, list, favorite, contact identifiers, relationships, important dates, notes, tasks, gift ideas, open debts and interaction history.",
+      "description": "One person's full profile: name, role, cadence, last-contacted, how-you-met, list, favorite, contact identifiers, relationships, important dates, notes, tasks, gift ideas, open debts and interaction history — plus their sharing standing: the vault(s) they are linked to (`vaults`), the invitations still awaiting their answer (`pending_invites`), and what you have shared with them (`shared_with_them`). All three are null when the sharing reads are denied, which means unknown, not none.",
       "input": {
         "type": "object",
         "properties": { "party_id": { "type": "string", "minLength": 1 } },
@@ -749,7 +755,7 @@
     },
     {
       "name": "dashboard",
-      "description": "The keep-in-touch summary: who is overdue to reconnect with, upcoming reminders (nearest first), recent logged touches, and the headline counts (all / reconnect / upcoming / favorites).",
+      "description": "The keep-in-touch summary: who is overdue to reconnect with (people with no cadence never are), upcoming reminders (nearest first), recent logged touches, and the headline counts (all / reconnect / upcoming / favorites, plus linked / to_link — null when the sharing reads are denied).",
       "input": {
         "type": "object",
         "properties": {},
@@ -837,17 +843,6 @@
   ],
   "knobs": [
     {
-      "key": "appFont",
-      "label": "Font",
-      "type": "segmented",
-      "default": "sans",
-      "options": [
-        { "value": "sans", "label": "Sans" },
-        { "value": "serif", "label": "Serif" },
-        { "value": "mono", "label": "Mono" }
-      ]
-    },
-    {
       "key": "appWidth",
       "label": "Width",
       "type": "segmented",
@@ -881,5 +876,11 @@
         { "value": "list", "label": "List" }
       ]
     }
-  ]
+  ],
+  "seats": {
+    "byteBearing": false,
+    "originActs": [],
+    "disabledOn": [],
+    "northStar": "google-contacts"
+  }
 }

@@ -35,13 +35,13 @@ export interface AssistantController {
   pendingConsent: PendingProviderConsent | undefined;
   attachments: AssistantAttachment[];
   attaching: boolean;
-  send: (text: string) => void;
+  send: (text: string, pageContext?: string) => void;
   stop: () => void;
   approveConsent: () => void;
   declineConsent: () => void;
   attach: () => void;
   removeAttachment: (hash: string) => void;
-  selectRunner: (runnerKind: string) => void;
+  selectHarness: (harnessKind: string) => void;
   selectModel: (model: string) => void;
   selectEffort: (effort: string) => void;
 }
@@ -68,55 +68,65 @@ export function nextProviderConsent(
   return approved.includes(provider) ? approved : [...approved, provider];
 }
 
+export function assistantMessageWithPageContext(
+  text: string,
+  pageContext: string | undefined
+): string {
+  return pageContext ? `Current page: ${pageContext}\n\n${text}` : text;
+}
+
 let counter = 0;
 function nextKey(): string {
   counter += 1;
   return `b${counter}`;
 }
 
-function withRunner(
+function withHarness(
   config: AssistantConfig,
-  runnerKind: string
+  harnessKind: string
 ): AssistantConfig {
-  const runner = config.runners.find((entry) => entry.kind === runnerKind);
-  if (!runner) return config;
+  const harness = config.harnesses.find((entry) => entry.kind === harnessKind);
+  if (!harness) return config;
   return {
     ...config,
-    runnerKind,
-    models: runner.models,
-    selectedModel: runner.selectedModel,
-    efforts: runner.efforts,
-    selectedEffort: runner.selectedEffort,
-    supportsAttachments: runner.supportsAttachments,
-    supportsContext: runner.supportsContext,
+    harnessKind,
+    models: harness.models,
+    selectedModel: harness.selectedModel,
+    efforts: harness.efforts,
+    selectedEffort: harness.selectedEffort,
+    supportsAttachments: harness.supportsAttachments,
+    supportsContext: harness.supportsContext,
   };
 }
 
-/** Apply a freshly probed runner choice without mutating the prior selection on failure. */
-export function preflightedRunnerSelection(
+/** Apply a freshly probed harness choice without mutating the prior selection on failure. */
+export function preflightedHarnessSelection(
   current: AssistantConfig,
   fresh: AssistantConfig,
-  runnerKind: string
+  harnessKind: string
 ): { config: AssistantConfig; error?: string } {
-  const target = fresh.runners.find((runner) => runner.kind === runnerKind);
+  const target = fresh.harnesses.find(
+    (harness) => harness.kind === harnessKind
+  );
   if (!target?.sessionReady) {
     return {
       config: current,
       error:
-        target?.hint ?? `${runnerKind} did not complete its session preflight.`,
+        target?.hint ??
+        `${harnessKind} did not complete its session preflight.`,
     };
   }
-  return { config: withRunner(fresh, runnerKind) };
+  return { config: withHarness(fresh, harnessKind) };
 }
 
 /** Convert a fallible prefs write into an explicit UI result. */
 export async function persistAssistantSelection(
-  runnerKind: string,
+  harnessKind: string,
   kind: "model" | "effort",
   value: string
 ): Promise<{ ok: true } | { ok: false; error: string }> {
   try {
-    await saveAssistantSelection(runnerKind, kind, value);
+    await saveAssistantSelection(harnessKind, kind, value);
     return { ok: true };
   } catch (error) {
     return {
@@ -153,8 +163,8 @@ export function useAssistant(): AssistantController {
         conversationId.current = conversation.conversationId;
         setBubbles(conversation.bubbles);
         setConfig(
-          conversation.runnerKind
-            ? withRunner(loadedConfig, conversation.runnerKind)
+          conversation.harnessKind
+            ? withHarness(loadedConfig, conversation.harnessKind)
             : loadedConfig
         );
         setPhase("ready");
@@ -193,7 +203,7 @@ export function useAssistant(): AssistantController {
             ...(config?.selectedEffort
               ? { effort: config.selectedEffort }
               : {}),
-            ...(config?.runnerKind ? { runnerKind: config.runnerKind } : {}),
+            ...(config?.harnessKind ? { harnessKind: config.harnessKind } : {}),
             ...(turn.attachments.length
               ? { attachments: turn.attachments }
               : {}),
@@ -278,7 +288,7 @@ export function useAssistant(): AssistantController {
   );
 
   const send = useCallback(
-    (text: string): void => {
+    (text: string, pageContext?: string): void => {
       const trimmed = text.trim();
       // `sending` is React state — it only flips a render later, so two taps in
       // the same frame both got past it. The ref closes synchronously.
@@ -287,7 +297,7 @@ export function useAssistant(): AssistantController {
       inFlight.current = true;
       const assistantKey = nextKey();
       const turn: PendingTurn = {
-        text: trimmed,
+        text: assistantMessageWithPageContext(trimmed, pageContext),
         assistantKey,
         idempotencyKey: `mobile-${Date.now()}-${nextKey()}`,
         attachments,
@@ -352,23 +362,23 @@ export function useAssistant(): AssistantController {
   const selectModel = useCallback(
     (model: string): void => {
       if (!config) return;
-      const runnerKind = config.runnerKind;
+      const harnessKind = config.harnessKind;
       setSelectionError(undefined);
-      void persistAssistantSelection(runnerKind, "model", model).then(
+      void persistAssistantSelection(harnessKind, "model", model).then(
         (result) => {
           if (!result.ok) {
             setSelectionError(result.error);
             return;
           }
           setConfig((current) =>
-            current?.runnerKind === runnerKind
+            current?.harnessKind === harnessKind
               ? {
                   ...current,
                   selectedModel: model,
-                  runners: current.runners.map((runner) =>
-                    runner.kind === runnerKind
-                      ? { ...runner, selectedModel: model }
-                      : runner
+                  harnesses: current.harnesses.map((harness) =>
+                    harness.kind === harnessKind
+                      ? { ...harness, selectedModel: model }
+                      : harness
                   ),
                 }
               : current
@@ -382,23 +392,23 @@ export function useAssistant(): AssistantController {
   const selectEffort = useCallback(
     (effort: string): void => {
       if (!config) return;
-      const runnerKind = config.runnerKind;
+      const harnessKind = config.harnessKind;
       setSelectionError(undefined);
-      void persistAssistantSelection(runnerKind, "effort", effort).then(
+      void persistAssistantSelection(harnessKind, "effort", effort).then(
         (result) => {
           if (!result.ok) {
             setSelectionError(result.error);
             return;
           }
           setConfig((current) =>
-            current?.runnerKind === runnerKind
+            current?.harnessKind === harnessKind
               ? {
                   ...current,
                   selectedEffort: effort,
-                  runners: current.runners.map((runner) =>
-                    runner.kind === runnerKind
-                      ? { ...runner, selectedEffort: effort }
-                      : runner
+                  harnesses: current.harnesses.map((harness) =>
+                    harness.kind === harnessKind
+                      ? { ...harness, selectedEffort: effort }
+                      : harness
                   ),
                 }
               : current
@@ -409,17 +419,17 @@ export function useAssistant(): AssistantController {
     [config]
   );
 
-  const selectRunner = useCallback(
-    (runnerKind: string): void => {
+  const selectHarness = useCallback(
+    (harnessKind: string): void => {
       if (!config) return;
       setSelectionError(undefined);
       void loadAssistantConfig({ refresh: true })
         .then((fresh) => {
           if (!mounted.current) return;
-          const selection = preflightedRunnerSelection(
+          const selection = preflightedHarnessSelection(
             config,
             fresh,
-            runnerKind
+            harnessKind
           );
           if (selection.error) {
             setSelectionError(selection.error);
@@ -481,7 +491,7 @@ export function useAssistant(): AssistantController {
     declineConsent,
     attach,
     removeAttachment,
-    selectRunner,
+    selectHarness,
     selectModel,
     selectEffort,
   };

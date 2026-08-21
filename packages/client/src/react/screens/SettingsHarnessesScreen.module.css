@@ -1,0 +1,185 @@
+/* Settings → Agents (binding layer v11).
+
+   Harnesses and Lanes are pick rows under a section head — hairlines between
+   them and nothing around them. The bordered `routeRow` table this screen used
+   to draw put an edge between a head and the rows it counts, which is the one
+   thing a section head already does. `SettingsPickRow.module.css` owns the row
+   itself; what is left here is this screen's own machinery: the selects, the
+   identity tile, the used-by chips and the failover ladder. */
+
+.rows {
+  display: flex;
+  flex-direction: column;
+  margin-block-end: var(--sp-5);
+}
+
+/* Every select on this screen — a harness's model, a lane's level, a config
+   pin. Width first, ellipsis only after: the basis is a legible model name,
+   growth fills a stacked row, and the cap stops one long option id from
+   claiming the row. */
+.selectField {
+  flex: 1 1 160px;
+  max-inline-size: 260px;
+  min-inline-size: 0;
+}
+
+/* Graceful ellipsis is the last resort, after the sizing above has given the
+   control every pixel it can have. */
+.selectField select {
+  text-overflow: ellipsis;
+}
+
+/* The select shell/chevron comes from the shared `styles/select.module.css`.
+   This is the one genuine delta, passed as an extra class per CSS-CONVENTIONS
+   rule 1: an inheriting lane reads its value from the default lane, so mute it
+   and let the explicitly-set lanes be what the eye lands on. */
+.selectInherited[data-inherited="true"] {
+  color: var(--text-faint);
+}
+
+/* A pick with nothing to open is not a pick. A model with no thinking budget
+   states that in place of the control: dashed edge, no chevron, no pointer —
+   an inert affordance is stated as text, never styled as a button. */
+.inertPick {
+  align-items: center;
+  border: 1px dashed var(--line-strong);
+  border-radius: var(--r-lg);
+  color: var(--text-faint);
+  display: inline-flex;
+  font-size: var(--t-control-size);
+  min-block-size: var(--h-control);
+  padding-inline: var(--sp-3);
+  white-space: nowrap;
+}
+
+/* A stated fact standing where a control is not one — the default lane's
+   resolved model. Raw size, not `font: var(--t-control)`: the --t-* tokens are
+   `font` shorthands and --t-control carries weight 500, too heavy for a hint. */
+.routeHint {
+  color: var(--text-faint);
+  font-size: var(--t-control-size);
+  line-height: 1.45;
+}
+
+/* ── The harness's own mark ────────────────────────────────────────────────
+   A rounded square tinted by the harness's accent, holding the vendored
+   `currentColor` glyph. The glyph inherits its tint from `HarnessGlyph`'s
+   inline `color`; here we only tint the tile's fill and ring. */
+.glyphTile {
+  align-items: center;
+  background: color-mix(
+    in oklab,
+    var(--row-accent, var(--accent)) 12%,
+    transparent
+  );
+  block-size: 30px;
+  border-radius: var(--r-md);
+  box-shadow: 0 0 0 1px
+    color-mix(in oklab, var(--row-accent, var(--accent)) 30%, transparent);
+  display: flex;
+  flex: none;
+  inline-size: 30px;
+  justify-content: center;
+}
+.glyphTile svg {
+  block-size: 18px;
+  inline-size: 18px;
+}
+/* Muted when the harness is unavailable: off the accent onto neutral ink. The
+   recession is on this leaf rather than an opacity on the row, which would
+   fade the live selects with it and silently invalidate their contrast. */
+.glyphTile[data-unavail="true"] {
+  background: color-mix(in oklab, var(--text) 6%, transparent);
+  box-shadow: 0 0 0 1px color-mix(in oklab, var(--text) 12%, transparent);
+}
+
+/* ── Used-by chips ─────────────────────────────────────────────────────────
+   Under one global harness "Active" was the useful fact; once every lane
+   routes independently, the useful fact is which lanes land here — it answers
+   what breaks if this harness goes away. */
+.usedBy {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-hair);
+  margin-block-start: 2px;
+}
+.usedByChip {
+  background: color-mix(
+    in oklab,
+    var(--row-accent, var(--accent)) 14%,
+    transparent
+  );
+  border-radius: var(--r-sm);
+  color: var(--row-accent, var(--accent));
+  font-family: var(--font-sans);
+  font-size: var(--t-control-size);
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  padding: 2px 6px;
+  text-transform: uppercase;
+}
+.usedByChip[data-default="true"] {
+  background: color-mix(in oklab, var(--text) 10%, transparent);
+  color: var(--text-soft);
+}
+.usedByChip[data-warn="true"] {
+  background: color-mix(in oklab, var(--c-amber) 16%, transparent);
+  color: var(--c-amber-text);
+}
+.usedByNone {
+  color: var(--text-ghost);
+  font-family: var(--font-sans);
+  font-size: var(--t-control-size);
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+/* ── The failover ladder ───────────────────────────────────────────────────
+   Disclosed by the Automations lane's own verb, so it sits inside that row's
+   block rather than hanging off every lane's second line. */
+.ladderRow {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-2);
+}
+
+.ladderMember {
+  align-items: center;
+  border: 1px solid var(--line);
+  /* `--r-pill` is a BLUEPRINT-contract token; the shell's radius scale stops
+     at `--r-lg` and composes the pill inline (radii.ts). */
+  border-radius: var(--r-pill);
+  color: var(--text-soft);
+  display: inline-flex;
+  font: var(--t-control);
+  gap: 3px;
+  padding-block: 3px;
+  padding-inline: var(--sp-2) 5px;
+}
+
+.ladderMember button {
+  appearance: none;
+  background: transparent;
+  border: 0;
+  color: var(--text-faint);
+  cursor: pointer;
+  padding: 1px 3px;
+}
+
+.ladderMember button:disabled {
+  cursor: default;
+  opacity: var(--o-disabled);
+}
+
+.ladderAdd {
+  background: var(--bg-elev);
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+  color: var(--text-soft);
+  font: var(--t-control);
+  padding-block: var(--sp-hair);
+  padding-inline: var(--sp-2) var(--sp-5);
+}

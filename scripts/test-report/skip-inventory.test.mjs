@@ -1,9 +1,15 @@
+import { mkdirSync, writeFileSync } from "node:fs";
+import path from "node:path";
+
 import { describe, expect, test } from "vitest";
+
+import { tempDirSync } from "@centraid/test-kit/temp-dir";
 
 import {
   SCAN_EXCLUDE,
   SCAN_INCLUDE,
   SKIP_PATTERNS,
+  discoverSkipSites,
   reconcileInventory,
   scanSkipSites,
   validateSkipInventory,
@@ -75,6 +81,54 @@ describe("scanSkipSites", () => {
     expect(SKIP_PATTERNS.every((detector) => detector.pattern.source)).toBe(
       true
     );
+  });
+});
+
+describe("discoverSkipSites", () => {
+  /**
+   * Write one file (creating parents) under a scratch root.
+   * @param {string} root Scratch root.
+   * @param {string} file Repo-relative path.
+   * @param {string} source File contents.
+   */
+  function writeFixture(root, file, source) {
+    const target = path.join(root, file);
+    mkdirSync(path.dirname(target), { recursive: true });
+    writeFileSync(target, source);
+  }
+
+  test("scans script tests in NESTED directories, not just the top level", async () => {
+    // Regression (#782): the globs were single-segment (`scripts/*.test.mjs`),
+    // so a skip one directory down was invisible to the budget — the exact
+    // silence this gate exists to prevent.
+    const root = tempDirSync("skip-inventory-");
+    writeFixture(root, "scripts/top.test.mjs", "test.skip('top', () => {});");
+    writeFixture(
+      root,
+      "scripts/gateway-package/nested.test.mjs",
+      "test('x', (t) => {\n  t.skip('dist missing');\n});"
+    );
+    writeFixture(
+      root,
+      "apps/mobile/scripts/nested.test.mjs",
+      "it.todo('mobile script');"
+    );
+    const sites = await discoverSkipSites({ root });
+    expect(sites.map((found) => found.key).sort()).toEqual([
+      "apps/mobile/scripts/nested.test.mjs#1",
+      "scripts/gateway-package/nested.test.mjs#1",
+      "scripts/top.test.mjs#1",
+    ]);
+  });
+
+  test("still exempts the detectors' own fixtures under scripts/test-report", async () => {
+    const root = tempDirSync("skip-inventory-");
+    writeFixture(
+      root,
+      "scripts/test-report/detector.test.mjs",
+      "test.skip('quoted fixture', () => {});"
+    );
+    expect(await discoverSkipSites({ root })).toEqual([]);
   });
 });
 

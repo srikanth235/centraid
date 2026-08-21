@@ -1,4 +1,4 @@
-// governance: allow-repo-hygiene file-size-limit (#567) one Automation Q&A route suite shares the mocked bridge and persistence fixture across runner, model, effort, provider-consent, and reload cases
+// governance: allow-repo-hygiene file-size-limit (#567) one Automation Q&A route suite shares the mocked bridge and persistence fixture across harness, model, effort, provider-consent, and reload cases
 import { act } from "react";
 import { createRoot } from "react-dom/client";
 import type { Root } from "react-dom/client";
@@ -13,7 +13,7 @@ import type * as TypeImport_1ek7brk from "./automationLiveMessages.js";
 import type * as TypeImport_17pturf from "./automationsData.js";
 import type * as TypeImport_14phijm from "./automationThreadData.js";
 import type * as TypeImport_18nw00v from "./automationTurnMessages.js";
-import type * as TypeImport_ym9bw8 from "./settingsProvidersData.js";
+import type * as TypeImport_ym9bw8 from "./settingsHarnessesData.js";
 
 const captured = vi.hoisted(() => ({
   props: null as AutomationThreadScreenProps | null,
@@ -27,6 +27,8 @@ const api = vi.hoisted(() => ({
   auth: vi.fn<typeof TypeImport_1gl5zx7.auth>(),
   compileAutomation: vi.fn<typeof TypeImport_1gl5zx7.compileAutomation>(),
   deleteAutomation: vi.fn<typeof TypeImport_1gl5zx7.deleteAutomation>(),
+  invokeAutomationAndAwait:
+    vi.fn<typeof TypeImport_1gl5zx7.invokeAutomationAndAwait>(),
   listAutomationTurns: vi.fn<typeof TypeImport_1gl5zx7.listAutomationTurns>(),
   readAutomationTurnExpanded:
     vi.fn<typeof TypeImport_1gl5zx7.readAutomationTurnExpanded>(),
@@ -36,6 +38,7 @@ const api = vi.hoisted(() => ({
     vi.fn<typeof TypeImport_1gl5zx7.rotateAutomationWebhookSecret>(),
   runAutomationNow: vi.fn<typeof TypeImport_1gl5zx7.runAutomationNow>(),
   setAutomationEnabled: vi.fn<typeof TypeImport_1gl5zx7.setAutomationEnabled>(),
+  updateAutomation: vi.fn<typeof TypeImport_1gl5zx7.updateAutomation>(),
   streamAutomationConversationTurn:
     vi.fn<typeof TypeImport_1gl5zx7.streamAutomationConversationTurn>(),
   streamAutomationTurn: vi.fn<typeof TypeImport_1gl5zx7.streamAutomationTurn>(),
@@ -53,7 +56,7 @@ const helpers = vi.hoisted(() => ({
   finishLiveItem: vi.fn<typeof TypeImport_1ek7brk.finishAutomationLiveItem>(),
   finishLiveTrace: vi.fn<typeof TypeImport_1ek7brk.finishAutomationLiveTrace>(),
   loadThread: vi.fn<typeof TypeImport_14phijm.loadAutomationThreadData>(),
-  loadProviders: vi.fn<typeof TypeImport_ym9bw8.loadProviders>(),
+  loadHarnesses: vi.fn<typeof TypeImport_ym9bw8.loadHarnesses>(),
   openWebhookReveal: vi.fn<typeof TypeImport_1f3slmz.openWebhookReveal>(),
   reduceItem: vi.fn<typeof TypeImport_1ek7brk.reduceAutomationItemEvent>(),
   reduceTurn: vi.fn<typeof TypeImport_1ek7brk.reduceAutomationTurnEvent>(),
@@ -107,16 +110,16 @@ vi.mock(import("../webhookReveal.js") as Promise<unknown>, () => ({
   openWebhookReveal: helpers.openWebhookReveal,
 }));
 vi.mock(
-  import("./settingsProvidersData.js") as Promise<unknown>,
+  import("./settingsHarnessesData.js") as Promise<unknown>,
   async (importOriginal) => ({
     ...(await importOriginal<typeof TypeImport_ym9bw8>()),
-    loadProviders: helpers.loadProviders,
+    loadHarnesses: helpers.loadHarnesses,
   })
 );
 
 const {
   automationPicker,
-  latestAdapterKind,
+  latestHarnessKind,
   default: AutomationViewRoute,
 } = await import("./AutomationViewRoute.js");
 
@@ -140,7 +143,7 @@ function automationRow(): CentraidAutomationRow {
       triggers,
       requires: {},
       history: { keep: { count: 10 } },
-      generated: { by: "agent", at: "2026-07-25T00:00:00.000Z" },
+      generated: { by: "centraid-builder", at: "2026-07-25T00:00:00.000Z" },
     },
   };
 }
@@ -194,6 +197,13 @@ describe("AutomationViewRoute suite", () => {
       .mockReset()
       .mockResolvedValue({ compileTurnId: "compile-1" });
     api.deleteAutomation.mockReset().mockResolvedValue({ ok: true });
+    api.invokeAutomationAndAwait.mockReset().mockResolvedValue({
+      turnId: "recognition-turn",
+      result: {
+        turnId: "recognition-turn",
+        outcome: { ok: true },
+      },
+    });
     api.listAutomationTurns.mockReset().mockResolvedValue([
       { ...turn, totalInputTokens: 12, totalOutputTokens: 8 },
       {
@@ -314,7 +324,7 @@ describe("AutomationViewRoute suite", () => {
         plan: { state: "ready", label: "Plan ready", detail: null },
       },
     });
-    helpers.loadProviders.mockReset().mockResolvedValue({
+    helpers.loadHarnesses.mockReset().mockResolvedValue({
       selectedKind: "codex",
       anyLoading: false,
       savedModelByKind: {},
@@ -322,8 +332,8 @@ describe("AutomationViewRoute suite", () => {
       defaultConfigPinsByKind: {},
       subsystemConfigPinsByKind: {},
       diagnosticsJson: "{}",
-      subsystemRunnerByKey: { automations: "codex" },
-      subsystemRunnerLadders: {},
+      subsystemHarnessByKey: { automations: "codex" },
+      subsystemHarnessLadders: {},
       cards: [
         {
           kind: "codex",
@@ -385,8 +395,8 @@ describe("AutomationViewRoute suite", () => {
           copilot: { automations: { thought_level: "medium" } },
         },
         diagnosticsJson: "{}",
-        subsystemRunnerByKey: { automations: "codex" },
-        subsystemRunnerLadders: {},
+        subsystemHarnessByKey: { automations: "codex" },
+        subsystemHarnessLadders: {},
         cards: [
           {
             kind: "codex",
@@ -427,10 +437,10 @@ describe("AutomationViewRoute suite", () => {
             ],
           },
         ],
-      } satisfies TypeImport_1kred2y.AgentsStatusDTO;
+      } satisfies TypeImport_1kred2y.HarnessesStatusDTO;
       expect(
         automationPicker(status, "codex", {
-          runner: "codex",
+          harness: "codex",
           model: "gpt-a",
           thoughtLevel: "high",
         })
@@ -442,25 +452,25 @@ describe("AutomationViewRoute suite", () => {
       });
       expect(
         automationPicker(status, "copilot", {
-          runner: "codex",
+          harness: "codex",
           model: "gpt-a",
           thoughtLevel: "high",
         })
       ).toMatchObject({
-        selectedRunnerKind: "copilot",
+        selectedHarnessKind: "copilot",
         selectedModelId: "copilot-default",
         selectedEffortId: "medium",
       });
       expect(
         automationPicker(status, "copilot", {
-          runner: "codex",
+          harness: "codex",
           model: "gpt-a",
           thoughtLevel: "high",
         })
       ).not.toMatchObject({ modelLocked: true, effortLocked: true });
     });
 
-    it("resolves an unregistered manifest runner to a reported fallback and keeps its pins", () => {
+    it("resolves an unregistered manifest harness to a reported fallback and keeps its pins", () => {
       const status = {
         selectedKind: "codex",
         anyLoading: false,
@@ -469,8 +479,8 @@ describe("AutomationViewRoute suite", () => {
         defaultConfigPinsByKind: {},
         subsystemConfigPinsByKind: {},
         diagnosticsJson: "{}",
-        subsystemRunnerByKey: { automations: "codex" },
-        subsystemRunnerLadders: {},
+        subsystemHarnessByKey: { automations: "codex" },
+        subsystemHarnessLadders: {},
         cards: [
           {
             kind: "codex",
@@ -492,15 +502,15 @@ describe("AutomationViewRoute suite", () => {
             ],
           },
         ],
-      } satisfies TypeImport_1kred2y.AgentsStatusDTO;
+      } satisfies TypeImport_1kred2y.HarnessesStatusDTO;
       expect(
-        automationPicker(status, "future-runner", {
-          runner: "future-runner",
+        automationPicker(status, "future-harness", {
+          harness: "future-harness",
           model: "gpt-a",
           thoughtLevel: "high",
         })
       ).toMatchObject({
-        selectedRunnerKind: "codex",
+        selectedHarnessKind: "codex",
         selectedModelId: "gpt-a",
         selectedEffortId: "high",
         modelLocked: true,
@@ -579,38 +589,78 @@ describe("AutomationViewRoute suite", () => {
       expect(actions.navigate).toHaveBeenCalledWith({ kind: "automations" });
     });
 
-    it("restores the persisted conversation runner ahead of subsystem defaults", async () => {
+    it("runs a recognition delegate step only through the awaited payload path", async () => {
+      const base = await helpers.loadThread({
+        automationId: "daily/daily",
+        gatewayOrigin: "http://127.0.0.1:5173",
+      });
+      const recognition = automationRow();
+      recognition.manifest.requires.model = "provider/member-selected-model";
+      recognition.manifest.enrich = {
+        domain: "photos",
+        capability: "ocr",
+        lane: "gateway",
+        delegateStep: {
+          selected: "deterministic",
+          promptRev: "ocr-v1",
+          latency: "Delegate steps take seconds.",
+          consequence: "Billed and re-derives eligible photographs.",
+        },
+      };
+      helpers.loadThread.mockResolvedValue({
+        ...base!,
+        row: recognition,
+      });
+      const bridge = await mount();
+      await bridge.loadData();
+
+      api.updateAutomation.mockResolvedValue({ row: recognition });
+      await expect(bridge.onSetRecognitionStep?.("delegate")).resolves.toBe(
+        true
+      );
+      await expect(bridge.onRunNow()).resolves.toBe("recognition-turn");
+      expect(api.updateAutomation).toHaveBeenCalledWith({
+        automationId: "daily/daily",
+        recognitionStep: "delegate",
+      });
+      expect(api.invokeAutomationAndAwait).toHaveBeenCalledWith({
+        automationId: "daily/daily",
+      });
+      expect(api.runAutomationNow).not.toHaveBeenCalled();
+    });
+
+    it("restores the persisted conversation harness ahead of subsystem defaults", async () => {
       api.listAutomationTurns.mockResolvedValueOnce([
-        { ...turn, adapterKind: "copilot" },
+        { ...turn, harnessKind: "copilot" },
       ]);
       const bridge = await mount();
       await expect(bridge.loadData()).resolves.toMatchObject({
-        runnerConfig: { selectedRunnerKind: "copilot" },
+        harnessConfig: { selectedHarnessKind: "copilot" },
       });
     });
 
-    it("binds the runner to the latest run that recorded an adapter, not list order", () => {
+    it("binds the harness to the latest observed run, not list order", () => {
       const runs = [
         {
           ...turn,
           turnId: "newest",
           seq: 3,
           startedAt: 300,
-          adapterKind: "copilot",
+          harnessKind: "copilot",
         },
         {
           ...turn,
           turnId: "older",
           seq: 2,
           startedAt: 200,
-          adapterKind: "codex",
+          harnessKind: "codex",
         },
-        { ...turn, turnId: "no-adapter", seq: 4, startedAt: 400 },
+        { ...turn, turnId: "no-harness", seq: 4, startedAt: 400 },
       ];
-      expect(latestAdapterKind(runs)).toBe("copilot");
+      expect(latestHarnessKind(runs)).toBe("copilot");
       // Same answer whichever order the feed arrives in.
-      expect(latestAdapterKind(runs.toReversed())).toBe("copilot");
-      expect(latestAdapterKind([{ ...turn }])).toBeUndefined();
+      expect(latestHarnessKind(runs.toReversed())).toBe("copilot");
+      expect(latestHarnessKind([{ ...turn }])).toBeUndefined();
     });
 
     it("resends an ask with every provider approved so far, and stops on a decline", async () => {

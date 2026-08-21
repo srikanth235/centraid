@@ -154,9 +154,9 @@ export function reconnectFailureMessage(
 ): string | undefined {
   switch (outcome.kind) {
     case "declined":
-      return "You declined the consent screen. Start Reconnect again when ready.";
+      return "You declined the consent screen — start Reconnect again.";
     case "provider-error":
-      return "The provider could not finish authorizing. Start Reconnect again.";
+      return "The provider could not finish authorizing — start Reconnect again.";
     case "assist-handoff":
     case "closed":
       return undefined;

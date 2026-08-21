@@ -86,6 +86,20 @@ describe(normalizeProfile, () => {
     expect(bad?.avatarColor).toBe(defaultAvatarColor(endpointId));
   });
 
+  it("defaults legacy local profiles to durable replica storage", () => {
+    const local = {
+      id: "local",
+      kind: "local" as const,
+      label: "Local",
+      createdAt: "2026-01-01T00:00:00.000Z",
+    };
+    expect(normalizeProfile("local", local)?.rememberDevice).toBe(true);
+    expect(
+      normalizeProfile("local", { ...local, rememberDevice: false })
+        ?.rememberDevice
+    ).toBe(false);
+  });
+
   it("rejects id mismatch, bad kind, empty label, missing createdAt", () => {
     expect(normalizeProfile("other", base)).toBeUndefined();
     expect(

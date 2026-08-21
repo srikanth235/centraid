@@ -1,122 +1,34 @@
+// Frame geometry for the Automations place (#765). The kit blocks bring their
+// own sheets; what is left here is the page's margins, its head row, the one
+// line that reports a failed action, and the clearance the standing health
+// line needs at the foot.
+//
+// Colourless by the kit's convention: ink resolves at the call site from
+// `useTheme()`, so one sheet serves both schemes.
+
 import { StyleSheet } from "react-native";
 
-import { family, radii, spacing, t } from "../../kit/theme";
-import type { ThemeColors } from "../../kit/theme";
+import { pageMargin, spacing, t } from "../../kit/theme";
 
-// StyleSheet keys stay alphabetized (repo convention). Colour comes from the
-// resolved design theme, so `makeStyles(colors)` is memoized
-// per palette by the screen — no hardcoded hex beyond `#fff` on the teal pill,
-// which mirrors the accent-glyph contrast used across the mobile apps.
-export const makeStyles = (colors: ThemeColors) =>
-  StyleSheet.create({
-    addBtn: {
-      alignItems: "center",
-      borderColor: colors.lineStrong,
-      borderRadius: radii.md,
-      borderWidth: 1,
-      justifyContent: "center",
-      paddingHorizontal: 13,
-      paddingVertical: 8,
-    },
-    addBtnText: {
-      color: colors.accent,
-      fontFamily: family.sansMedium,
-      fontSize: 12,
-    },
-    card: {
-      backgroundColor: colors.bgElev,
-      borderColor: colors.line,
-      borderRadius: radii.md,
-      borderWidth: 1,
-      gap: spacing[2],
-      padding: spacing[4],
-    },
-    cardActions: { flexDirection: "row", marginTop: spacing[2] },
-    cardHead: { alignItems: "center", flexDirection: "row", gap: spacing[3] },
-    cardName: { ...t("bodyStrong"), color: colors.text, flex: 1 },
-    description: { ...t("small"), color: colors.textSoft, lineHeight: 19 },
-    dim: { opacity: 0.55 },
-    emptyCopy: { ...t("body"), color: colors.textSoft, textAlign: "center" },
-    emptyHint: { ...t("small"), color: colors.textFaint, textAlign: "center" },
-    emptyTitle: { ...t("title"), color: colors.text, textAlign: "center" },
-    emptyWrap: {
-      alignItems: "center",
-      gap: spacing[3],
-      paddingTop: 72,
-      paddingHorizontal: spacing[4],
-    },
-    gallery: { gap: spacing[3], marginTop: spacing[6] },
-    galleryHead: { gap: 3 },
-    gallerySubtitle: { ...t("small"), color: colors.textSoft },
-    galleryTitle: { ...t("title"), color: colors.text },
-    // Leading back key + title/status column, centered as one header row.
-    header: {
-      alignItems: "center",
-      flexDirection: "row",
-      gap: spacing[3],
-      paddingBottom: spacing[3],
-      paddingHorizontal: 18,
-      paddingTop: spacing[2],
-    },
-    headerText: { flex: 1, minWidth: 0 },
-    list: { gap: spacing[3], paddingHorizontal: 18, paddingTop: spacing[2] },
-    runBtn: {
-      alignItems: "center",
-      borderRadius: radii.md,
-      borderWidth: 1,
-      flexDirection: "row",
-      gap: spacing[2],
-      paddingHorizontal: 14,
-      paddingVertical: 9,
-    },
-    runText: {
-      ...t("small"),
-      color: colors.accent,
-      fontFamily: family.sansMedium,
-    },
-    safe: { backgroundColor: colors.bg, flex: 1 },
-    scheduleRow: { alignItems: "center", flexDirection: "row", gap: 6 },
-    scheduleText: {
-      color: colors.textFaint,
-      fontFamily: family.monoMedium,
-      fontSize: 11,
-    },
-    subtitle: { ...t("small"), color: colors.textSoft, marginTop: 3 },
-    templateCard: {
-      alignItems: "flex-start",
-      backgroundColor: colors.bgElev,
-      borderColor: colors.line,
-      borderRadius: radii.md,
-      borderWidth: 1,
-      flexDirection: "row",
-      gap: spacing[3],
-      padding: spacing[4],
-    },
-    templateCopy: { flex: 1, gap: 5, minWidth: 0 },
-    templateDesc: { ...t("small"), color: colors.textSoft, lineHeight: 18 },
-    templateIcon: {
-      alignItems: "center",
-      backgroundColor: colors.bgSunken,
-      borderRadius: radii.md,
-      height: 34,
-      justifyContent: "center",
-      width: 34,
-    },
-    templateName: { ...t("bodyStrong"), color: colors.text },
-    templateTrigger: {
-      color: colors.textFaint,
-      fontFamily: family.monoMedium,
-      fontSize: 10,
-      textTransform: "uppercase",
-    },
-    title: { color: colors.text, fontFamily: family.serif, fontSize: 28 },
-    togglePill: {
-      alignItems: "center",
-      borderRadius: 999,
-      justifyContent: "center",
-      minWidth: 52,
-      paddingHorizontal: 12,
-      paddingVertical: 6,
-    },
-    toggleText: { fontFamily: family.sansBold, fontSize: 11 },
-  });
+export const styles = StyleSheet.create({
+  // The failed-action line sits under the head, above the blocks, because it
+  // is about the tap that just happened — not about the page's health, which
+  // is the standing line's job at the foot.
+  actionError: { ...t("mono"), paddingBottom: spacing[2] },
+  body: { gap: spacing[2], paddingBottom: spacing[6] },
+  // The leading "back to your apps" key beside the page's own bar. The
+  // floating variant would sit exactly where the standing health line is.
+  head: {
+    alignItems: "center",
+    flexDirection: "row",
+    gap: spacing[3],
+    paddingHorizontal: pageMargin,
+  },
+  headBar: { flex: 1, minWidth: 0 },
+  page: { flex: 1, paddingHorizontal: pageMargin },
+  // A row's expansion holds one quiet control, pushed to the trailing edge so
+  // it reads as belonging to the row above it rather than starting a new one.
+  pause: { alignItems: "flex-end" },
+  safe: { flex: 1 },
+  scroll: { flex: 1 },
+});

@@ -16,8 +16,8 @@ import {
   exportMarkdownDirectory,
   exportTransactionsCsv,
   exportVcards,
-  verifyPortableVault,
-} from "./portable-export.js";
+} from "./portable-adapters.js";
+import { verifyPortableVault } from "./portable-export.js";
 import type { Credential } from "./types.js";
 
 let db: VaultDb;

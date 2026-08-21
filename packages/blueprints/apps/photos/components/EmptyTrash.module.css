@@ -1,0 +1,74 @@
+/* Empty trash (v4 handoff §4.5, proto:4800-4803). Tokens only; logical
+   properties only; nothing below 11px.
+
+   The destructive control is OUTLINED `--net`, never filled (§18) — the same
+   grammar AlbumBar and DuplicateReview already use for a destructive action,
+   so the one irreversible act in the app does not look like a new species of
+   control. The fallback keeps the rule from being dropped wholesale on a
+   surface that has not emitted `--net` yet. */
+
+.head {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+  max-inline-size: 40rem;
+  padding-block-end: var(--sp-3);
+}
+
+.note {
+  margin: 0;
+  font: var(--t-small);
+  color: var(--text-soft);
+}
+
+/* The confirm replaces the control in place — a member reading it is reading
+   about the very thing they just pressed, not about a dialog that arrived. */
+/* A `fieldset`, not a `div[role=group]` — the semantic tag the a11y rule asks
+   for, so its own default border and inline margins are cleared here. */
+.confirm {
+  margin: 0;
+  min-inline-size: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+  padding: var(--sp-3);
+  border: 1px solid var(--net, var(--danger));
+  border-radius: var(--r-lg);
+}
+
+.question {
+  margin: 0;
+  font: var(--t-body-strong);
+  color: var(--text);
+}
+
+.detail {
+  margin: 0;
+  font: var(--t-small);
+  color: var(--text-soft);
+}
+
+.row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--sp-2);
+}
+
+.destructive:not(:disabled) {
+  color: var(--net, var(--danger));
+  border-color: var(--net, var(--danger));
+}
+
+/* The refusal, stated inline in `--net` mono — never a tooltip (proto 4789).
+   Numerics/mono declare their own direction so RTL does not reorder a mixed
+   digit-and-word run (§2.2). */
+.reason {
+  margin: 0;
+  font: var(--t-mono);
+  font-variant-numeric: var(--t-mono-numeric);
+  direction: var(--t-mono-direction);
+  unicode-bidi: var(--t-mono-bidi);
+  line-height: 1.5;
+  color: var(--net, var(--danger));
+}

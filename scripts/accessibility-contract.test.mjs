@@ -22,36 +22,64 @@ async function filesUnder(relative) {
 }
 
 test("shell announcements and destructive confirms keep their accessibility contract", async () => {
-  const [toast, undo, confirm] = await Promise.all([
-    source("packages/client/src/react/shell/toast.ts"),
-    source("packages/client/src/react/shell/undoToast.ts"),
+  // #707 Phase 3 retired the shell's `toast.ts`/`undoToast.ts` (a message
+  // that "appears somewhere else, covers something, and leaves before it can
+  // be re-read") in favour of `StatusLine.tsx`: one persistent `<output>`
+  // element that never leaves the DOM. `<output>` carries an IMPLICIT
+  // `role="status"` (no `setAttribute` call to grep for), so the pin moves
+  // from a runtime call to the element choice + the explicit `aria-live`.
+  const [statusLine, confirm] = await Promise.all([
+    source("packages/client/src/react/shell/StatusLine.tsx"),
     source("packages/client/src/react/shell/confirm.ts"),
   ]);
-  for (const announcer of [toast, undo]) {
-    assert.match(announcer, /setAttribute\("role", "status"\)/u);
-    assert.match(announcer, /setAttribute\("aria-live", "polite"\)/u);
-  }
+  assert.match(statusLine, /<output\b/u);
+  assert.match(statusLine, /aria-live="polite"/u);
   assert.match(confirm, /createElement\("dialog"\)/u);
   assert.match(confirm, /aria-modal/u);
   assert.match(confirm, /e\.key === "Enter" && !opts\.danger/u);
 });
 
-test("blueprint dialogs, keyboard focus, and Photos focus restore stay wired", async () => {
-  const [tallyModal, photos, tasksCss, tallyCss, lockerCss] = await Promise.all(
-    [
-      source("packages/blueprints/apps/tally/components/Shared.tsx"),
-      source("packages/blueprints/apps/photos/lightbox.tsx"),
-      source("packages/blueprints/apps/tasks/Chrome.module.css"),
-      source("packages/blueprints/apps/tally/Chrome.module.css"),
-      source("packages/blueprints/apps/locker/Chrome.module.css"),
-    ]
+test("the element layer's status line (toast's replacement) keeps its accessibility contract", async () => {
+  // #707 Phase 3: the floating `.kit-toast` stack is retired in favour of
+  // ONE persistent status line, updated in place — this pins the same
+  // role/aria-live contract the retired toast carried, on its replacement, so
+  // the CONTRACT strength never lapses across the rename. #799 moved the line
+  // off a `<kit-status-line>` custom element onto plain DOM built by
+  // feedback.ts; the live region is now the persistent host itself rather
+  // than a child the element re-created on every render.
+  const statusLine = await source("packages/design/src/elements/feedback.ts");
+  assert.match(statusLine, /setAttribute\("role", "status"\)/u);
+  assert.match(statusLine, /setAttribute\("aria-live", "polite"\)/u);
+  assert.doesNotMatch(
+    await source("packages/design/src/elements/index.ts"),
+    /kit-toast/u,
+    "the element barrel still names the retired kit-toast component"
   );
-  assert.match(tallyModal, /<dialog/u);
-  assert.match(tallyModal, /showModal/u);
-  assert.match(tallyModal, /prior\?\.focus/u);
+});
+
+test("blueprint dialogs, keyboard focus, and Photos focus restore stay wired", async () => {
+  // Tally's shared `<dialog>` wrapper was the second subject here — the one
+  // that proved a blueprint modal restores focus to its opener on close — and
+  // Tasks and Tally owned two of the focus-ring sheets, until all three web
+  // interfaces were removed pending a ground-up redesign. Nothing is softened
+  // to a conditional read: a check that skips itself when its subject is
+  // missing passes for the wrong reason. What remains is asserted on the
+  // subjects that are actually there — the shared grant sheet for the modal,
+  // Photos' lightbox for focus restore — and each rebuilt app owes this test
+  // its dialog and its focus ring back.
+  const [grantSheet, photos, lockerCss, peopleCss, photosCss] =
+    await Promise.all([
+      source("packages/blueprints/apps/_shared/GrantSheet.tsx"),
+      source("packages/blueprints/apps/photos/lightbox.tsx"),
+      source("packages/blueprints/apps/locker/Chrome.module.css"),
+      source("packages/blueprints/apps/people/Chrome.module.css"),
+      source("packages/blueprints/apps/photos/Chrome.module.css"),
+    ]);
+  assert.match(grantSheet, /<dialog/u);
+  assert.match(grantSheet, /showModal/u);
   assert.match(photos, /priorFocus\?\.focus/u);
   assert.match(photos, /button\[aria-label="Close"\]/u);
-  for (const css of [tasksCss, tallyCss, lockerCss])
+  for (const css of [lockerCss, peopleCss, photosCss])
     assert.match(css, /:focus-visible/u);
 });
 
@@ -78,9 +106,13 @@ test("every mobile Pressable screen names an accessibility contract and keeps Dy
 });
 
 test("long native surfaces remain virtualized and photo cells keep bounded image caches", async () => {
+  // Docs' native drive was the fourth surface here until it was removed
+  // pending the v11 design handoff (apps/mobile/src/apps/docs/DocsHome.tsx is
+  // now a wall), and Agenda's native cover left the same way pending its own
+  // ground-up redesign. Put each back on this list the moment its rebuilt
+  // screen renders a list of unbounded length — a virtualization gate is only
+  // meaningful over a surface that can actually grow.
   const files = [
-    "apps/mobile/src/apps/docs/DocsHome.tsx",
-    "apps/mobile/src/apps/agenda/AgendaHome.tsx",
     "apps/mobile/src/apps/photos/FaceReview.tsx",
     "apps/mobile/src/apps/assistant/Assistant.tsx",
   ];
@@ -99,16 +131,20 @@ test("long native surfaces remain virtualized and photo cells keep bounded image
   // Deleting the policy fails (1); dropping the spread at a call site fails (2).
   // The per-tier *values* (device-addressed bytes stay out of the disk cache,
   // gateway thumbnails keep it) are pinned by behaviour in
-  // apps/mobile/src/apps/photos/grid-image.test.ts, which can assert on the
-  // returned object rather than on source text.
-  const gridImage = await source("apps/mobile/src/apps/photos/grid-image.ts");
+  // apps/mobile/src/kit/media/grid-image.test.ts, which can assert on the
+  // returned object rather than on source text. (Moved under kit/media for the
+  // Home springboard shared media path in #708.)
+  const gridImage = await source("apps/mobile/src/kit/media/grid-image.ts");
   assert.match(
     gridImage,
     /cachePolicy: .*"memory-disk"/u,
     "grid cells lost their bounded image cache tier"
   );
   const grids = [
-    "apps/mobile/src/apps/photos/PhotoTimeline.tsx",
+    // The timeline's image cell lives in PhotoTile since the Photos v4
+    // rewrite — PhotoTimeline renders rows of PhotoTile, so the decode/cache
+    // contract is asserted where the <Image> actually is.
+    "apps/mobile/src/apps/photos/PhotoTile.tsx",
     "apps/mobile/src/apps/photos/PhotosLibrary.tsx",
   ];
   const gridSources = await Promise.all(grids.map((file) => source(file)));

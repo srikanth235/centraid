@@ -2,8 +2,8 @@
 /**
  * Renderer-side typings for the IPC bridge exposed by `preload.ts` under
  * `window.CentraidApi`. The shapes here mirror the public types of
- * `@centraid/agent-harness` — kept independent so the renderer doesn't pull
- * the harness as a build-time dependency.
+ * the desktop host bridge — kept independent so the renderer doesn't pull
+ * host-only runtime code as a build-time dependency.
  */
 
 export interface CentraidAppInfo {
@@ -22,8 +22,6 @@ export interface CentraidAppInfo {
    * id-prefix convention as the automation signal.
    */
   kind?: "app" | "automation";
-  /** Whether the app root has an `index.html` (preview-ready). */
-  hasIndex?: boolean;
 }
 
 export interface CentraidPublishResult {
@@ -109,18 +107,6 @@ export interface CentraidSettings {
    * (onboarding will offer). Explicit false = declined; true = opted in.
    */
   offerGatewayService?: boolean;
-  /**
-   * DEV FLAG (issue #434, Phase 3) — reveal the in-app builder and every
-   * surface that reaches it: the Home composer, "Build new", the ⌘K "Build a
-   * new app…" row, draft apps + their menus, "Edit with Centraid", and the
-   * `builder` / `automation-builder` routes. The builder is hidden from the
-   * first release — apps are installed from Discover, not authored here — but
-   * the machinery stays fully wired (the builder is also the headless
-   * automations compiler), so this only gates UI reachability. There is no
-   * settings-screen toggle for v1: hand-edit the settings JSON (set
-   * `"builderEnabled": true`) and relaunch. Absent → disabled.
-   */
-  builderEnabled?: boolean;
 }
 
 /** A single published release shown in the "What's new" modal. */
@@ -291,7 +277,6 @@ export type CentraidRedeemGatewayPairingResult =
         vaultId: string;
         enrollmentId?: string;
         vaultName?: string;
-        role?: "admin" | "write" | "read";
       }>;
     }
   | {
@@ -375,18 +360,18 @@ export interface CentraidConnectivityReport {
 }
 
 /**
- * Which coding-agent CLIs are runnable on the GATEWAY host. Probed
- * gateway-side (`<bin> --version`) and read over `GET /centraid/_agents/status`
+ * Which coding harness CLIs are runnable on the GATEWAY host. Probed
+ * gateway-side (`<bin> --version`) and read over `GET /centraid/_harnesses/status`
  * (see `renderer/gateway-client-conversation.ts`). Centraid is agnostic to how each
- * agent authenticates — this reflects CLI presence only. A remote gateway
+ * harness authenticates — this reflects CLI presence only. A remote gateway
  * reports its own host's CLIs, not the desktop's.
  */
-export interface CentraidAgentStatusEntry {
+export interface CentraidHarnessStatusEntry {
   /**
-   * The runner kind (`codex`, `claude-code`, `gemini`, `qwen`, `acp`). An OPEN
+   * The harness kind (`codex`, `claude-code`, `gemini`, `qwen`, `acp`). An OPEN
    * string, deliberately: a newer gateway may register kinds this build has
    * never heard of, and they must still parse and render (docs/protocol.md
-   * C1a). Compare against `AGENT_RUNNER_KINDS` only to decide whether extra
+   * C1a). Compare against `HARNESS_KINDS` only to decide whether extra
    * client-side polish (an accent colour) applies — never to filter the list.
    */
   kind: string;
@@ -400,15 +385,15 @@ export interface CentraidAgentStatusEntry {
   minVersion: string;
   /** Install/setup hint — present only when the CLI is NOT available. */
   hint?: string;
-  /** Models this runner can serve, from the gateway catalog (issue #188). */
-  models: CentraidRunnerModel[];
+  /** Models this harness can serve, from the gateway catalog (issue #188). */
+  models: CentraidHarnessModel[];
   /** Load state of `models` — loading vs ready vs empty. */
   modelsStatus: CentraidSurfaceStatus;
-  /** The model this runner defaults to, when its catalog names one. */
+  /** The model this harness defaults to, when its catalog names one. */
   defaultModel?: string;
   /**
    * Live ACP capability strip (vault HTTP MCP, session resume/load, model
-   * pin, auth). Present after Settings Refresh probes the agent; absent
+   * pin, auth). Present after Settings Refresh probes the harness; absent
    * until then so a cold status poll stays cheap.
    */
   capabilities?: {
@@ -437,10 +422,10 @@ export interface CentraidAgentStatusEntry {
     probedAt?: number;
     reason?: string;
   };
-  /** Persisted circuit-breaker state for this runner across workspace contexts. */
+  /** Persisted circuit-breaker state for this harness across workspace contexts. */
   health?: Array<{
     workspaceContext: string;
-    runnerKind: string;
+    harnessKind: string;
     failureClass: string;
     consecutiveFailures: number;
     state: "closed" | "open" | "half-open";
@@ -450,9 +435,9 @@ export interface CentraidAgentStatusEntry {
   }>;
 }
 
-export interface CentraidAgentsStatus {
-  /** One entry per runner kind the gateway registers. */
-  agents: CentraidAgentStatusEntry[];
+export interface CentraidHarnessesStatus {
+  /** One entry per harness kind the gateway registers. */
+  harnesses: CentraidHarnessStatusEntry[];
 }
 
 // The renderer-side chat event union is the gateway's native `TurnStreamEvent`
@@ -468,10 +453,10 @@ export interface CentraidConversationSummary {
   /** App the chat was opened from; `null` for chats started from the shell. */
   originAppId: string | null;
   title: string;
-  /** Runner kind that owns `adapterSessionId`. */
-  adapterKind: string | null;
-  /** Opaque per-runner resume handle. */
-  adapterSessionId: string | null;
+  /** Harness kind that owns `harnessSessionId`. */
+  harnessKind: string | null;
+  /** Opaque per-harness resume handle. */
+  harnessSessionId: string | null;
   /** Number of completed turns. */
   turnCount: number;
   /** Pinned threads sort first in the sidebar (issue #420). */
@@ -481,7 +466,7 @@ export interface CentraidConversationSummary {
   createdAt: number;
   updatedAt: number;
   messageCount: number;
-  /** Count of runner/session handoffs rebuilt from canonical ledger history. */
+  /** Count of harness/session handoffs rebuilt from canonical ledger history. */
   hydrationCount: number;
   lastHydratedAt?: number;
 }
@@ -674,8 +659,7 @@ export interface CentraidCloneTemplateResult {
   webhooks: CentraidMintedWebhook[];
 }
 
-// The in-process builder agent's persisted-message + event types
-// (CentraidContentBlock / CentraidAgentMessage / CentraidAgentEvent) retired
+// The in-process builder protocol's persisted-message + event types retired
 // with the unified chat (issue #141, Phase 3): the builder + the app-view
 // data chat now stream the gateway's native `TurnStreamEvent` directly (see
 // `renderer/gateway-client-conversation.ts`).
@@ -707,44 +691,39 @@ interface CentraidApi {
   /** Host capabilities used where browser security differs from Electron. */
   getHostCapabilities?: () => Promise<{
     platform: "desktop" | "web";
-    appSessions: boolean;
     compute?: {
       previews: boolean;
       poster: boolean;
       pdfText: boolean;
       ocr: boolean;
       embedding: boolean;
+      // Permanently false (issue #724 W6): desktop's on-device file-ASR
+      // adapter is deleted — transcription belongs to its self-contained
+      // recognition automation, never to a device compute lease. The key stays
+      // in this wire shape (`DeviceComputeCapabilities` in
+      // `gateway-client-devices.ts` mirrors it) rather than being dropped.
       transcript: boolean;
       edgeSeal: boolean;
       backgroundTransfer: boolean;
     };
   }>;
-  /** Desktop-only device-local file ASR; present only on a host with an adapter seam. */
-  transcribeMedia?: (input: {
-    bytes: ArrayBuffer;
-    mediaType: string;
-    filename?: string;
-  }) => Promise<string>;
   getSettings: () => Promise<CentraidSettings>;
   saveSettings: (patch: Partial<CentraidSettings>) => Promise<CentraidSettings>;
   /** Desktop protocol courier. Values are delivered in-memory and never logged. */
   onDeepLink?: (cb: (url: string) => void) => () => void;
 
-  // App list/create/files/write/delete/update-meta + publish moved to the
-  // renderer's direct HTTP client (renderer/gateway-client.ts) under the
-  // thin-client pivot. The preview iframe points at the gateway draft URL
-  // (Phase 4: renderer-side `draftPreviewUrl`), so only the local-only
-  // reveal-in-Finder stays on IPC.
+  // App list/delete/update-meta moved to the renderer's direct HTTP client
+  // (renderer/gateway-client.ts) under the thin-client pivot, so only the
+  // local-only reveal-in-Finder stays on IPC.
   openAppFolder: (input: { id: string }) => Promise<{ ok: true }>;
 
-  // The in-process AGENT_* builder retired with the unified chat (issue
-  // #141, Phase 3): the builder streams `/centraid/<id>/_turn` SSE directly
-  // (renderer/gateway-client-conversation.ts), so there are no startAgent /
-  // promptAgent / stopAgent / onAgentEvent IPC methods.
+  // The in-process authoring IPC surface retired with the unified conversation
+  // (issue #141, Phase 3): the renderer streams `/centraid/<id>/_turn` SSE
+  // directly (renderer/gateway-client-conversation.ts), so there are no
+  // main-side turn lifecycle IPC methods.
 
-  // publish moved to the renderer's direct HTTP client. appLiveUrl /
-  // appLogs / deregisterApp / listVersions / activateVersion moved there
-  // too (pure git-store reads + the editing-session publish, no main-side
+  // appLogs / deregisterApp / listVersions / activateVersion moved to the
+  // renderer's direct HTTP client too (pure git-store reads, no main-side
   // state). The appSchema / appTableRows / appQuery trio died with the
   // per-app data.sqlite (issue #286 phase 2); per-app knob values now
   // ride appSettings / appSettingWrite over the app's settings.json.
@@ -814,7 +793,7 @@ interface CentraidApi {
   /**
    * Switch the active gateway. The renderer should treat the response
    * as the new authoritative settings and drop gateway-scoped state
-   * (app list, agent session, iframe).
+   * (app list, harness session, iframe).
    */
   setActiveGateway: (input: { id: string }) => Promise<CentraidSettings>;
   /**
@@ -1086,15 +1065,15 @@ interface CentraidApi {
   // (issue #141, Phase 3): the panel streams `/centraid/<appId>/_turn` SSE
   // itself and reads/writes history over `/_centraid-conversations` — no IPC.
 
-  // Coding-agent detection moved to the gateway (`GET /centraid/_agents/status`,
+  // Harness detection moved to the gateway (`GET /centraid/_harnesses/status`,
   // read via `renderer/gateway-client-conversation.ts`): the gateway is colocated with
-  // the runner, so it probes its own host. No IPC, no desktop-side probing.
+  // the harness, so it probes its own host. No IPC, no desktop-side probing.
 
   // getUserId / getUserPrefs / saveUserPrefs moved to the renderer's direct
   // HTTP client (renderer/gateway-client.ts) under the thin-client pivot —
   // pure `/_centraid-user` reads/writes. The main-side preflight-cache drop
   // that rode `saveUserPrefs` is no longer needed (the cache keys on the
-  // runner prefs that matter, and the runner-status read force-invalidates).
+  // harness prefs that matter, and the harness-status read force-invalidates).
 
   // Automations (issue #98). Every automation lives inside an app
   // folder under `appsDir`; these read/write that app tree and the
@@ -1116,7 +1095,7 @@ export interface CentraidInsightsKpis {
   hydrationTokens: number;
   /** Known spend floor when unpriced/unreported runs exist. */
   totalCostUsd: number;
-  agentReportedCostUsd: number;
+  harnessReportedCostUsd: number;
   estimatedCostUsd: number;
   forecastCostUsd: number;
   generations: number;
@@ -1147,8 +1126,8 @@ export interface CentraidInsightsSourceRow {
   automationName?: string;
 }
 
-export interface CentraidInsightsRunnerRow {
-  provider: string;
+export interface CentraidInsightsHarnessRow {
+  harness: string;
   runs: number;
   tokens: number;
   costUsd: number;
@@ -1182,7 +1161,7 @@ export interface CentraidInsightsActivityRow {
   tokens: number;
   hydrationTokens: number;
   costUsd: number;
-  provider?: string;
+  harness?: string;
   model?: string;
   effort?: string;
 }
@@ -1216,7 +1195,7 @@ export interface CentraidInsightsSummary {
   kpis: CentraidInsightsKpis;
   daily: CentraidInsightsDailyPoint[];
   bySource: CentraidInsightsSourceRow[];
-  byRunner: CentraidInsightsRunnerRow[];
+  byHarness: CentraidInsightsHarnessRow[];
   byModel: CentraidInsightsModelRow[];
   byEffort: CentraidInsightsEffortRow[];
   recent: CentraidInsightsActivityRow[];
@@ -1233,8 +1212,10 @@ export interface CentraidAutomationTurnRecord {
   /** The automation's last-known display name, recorded on its conversation —
    *  survives the automation being deleted (falls back to `automationId`). */
   automationName?: string;
-  /** Active runner binding on the stable automation conversation. */
-  adapterKind?: string;
+  /** Active harness binding on the stable automation conversation. */
+  harnessKind?: string;
+  /** Built-in activity that is grouped away from app automation history. */
+  systemLane?: "recognition";
   triggerKind:
     | "scheduled"
     | "manual"
@@ -1274,7 +1255,7 @@ export interface CentraidAutomationItem {
   ordinal: number;
   callId?: string;
   batchId?: number;
-  kind: "message_in" | "step" | "tool" | "agent";
+  kind: "message_in" | "step" | "tool" | "delegate";
   role?: "user" | "assistant";
   text?: string;
   /** Tool target. Absent for `kind: 'step'` / `message_in`. */
@@ -1291,12 +1272,12 @@ export interface CentraidAutomationItem {
   outputTokens?: number;
   cacheReadTokens?: number;
   cacheWriteTokens?: number;
-  /** `step` / `agent` — the model + provider that served the call. */
+  /** `step` / `delegate` — the model + provider that served the call. */
   model?: string;
-  provider?: string;
+  harness?: string;
   /** Frozen at write time; NULL = no price known. */
   costUsd?: number;
-  costSource?: "agent" | "estimated";
+  costSource?: "harness" | "estimated";
   appId?: string;
   childTurnId?: string;
 }
@@ -1323,9 +1304,20 @@ export interface CentraidAutomationManifest {
   >;
   requires: {
     mcps?: readonly string[];
-    runner?: string;
+    harness?: string;
     model?: string;
     thoughtLevel?: string;
+  };
+  enrich?: {
+    domain: string;
+    capability: string;
+    lane: "device" | "gateway";
+    delegateStep?: {
+      selected: "deterministic" | "delegate";
+      promptRev: string;
+      latency: string;
+      consequence: string;
+    };
   };
   /** App ids this automation is associated with. */
   apps?: readonly string[];
@@ -1360,6 +1352,8 @@ export interface CentraidAutomationRow {
   ownerApp: string;
   /** Globally-unique handle — `<ownerApp>/<id>`. Pass this as `automationId`. */
   ref: string;
+  /** Built-in recipe grouped under Automations → Recognition. */
+  systemLane?: "recognition";
   manifest: CentraidAutomationManifest;
 }
 
@@ -1372,9 +1366,24 @@ export interface CentraidAutomationTurnResult {
   turnId: string;
 }
 
+/** Awaited response from the ordinary automation fire spine. */
+export interface CentraidAutomationInvokeResult {
+  turnId: string;
+  result: {
+    turnId: string;
+    outcome?: {
+      ok: boolean;
+      skipped?: boolean;
+      output?: unknown;
+      error?: string;
+      summary?: string;
+    };
+  };
+}
+
 /**
  * A webhook the builder minted while provisioning a pending trigger
- * the agent authored. The `secret` is the plaintext shared secret —
+ * the harness authored. The `secret` is the plaintext shared secret —
  * surfaced to the user once and never persisted (`automation.json`
  * keeps only its SHA-256 hash).
  */
@@ -1392,7 +1401,7 @@ export interface CentraidMintedWebhook {
 }
 
 /** One model a runtime can serve. */
-export interface CentraidRunnerModel {
+export interface CentraidHarnessModel {
   id: string;
   name?: string;
   default?: boolean;
@@ -1407,16 +1416,16 @@ export interface CentraidRunnerModel {
  */
 export type CentraidSurfaceStatus = "loading" | "ready" | "empty";
 
-// The per-agent host-tool listing (`CentraidHostTool`) retired with the
+// The per-harness host-tool listing (`CentraidHostTool`) retired with the
 // Settings → Agents tools drawer — Connections is where the user reasons about
-// what an agent can reach. Host tools are still enumerated gateway-side; they
+// what a harness can reach. Host tools are still enumerated gateway-side; they
 // just feed the builder's grounding block now, never a client surface.
 
-/** Preflight snapshot returned by `getRunnerStatus`. */
-export interface CentraidRunnerStatus {
+/** Preflight snapshot returned by `getHarnessStatus`. */
+export interface CentraidHarnessStatus {
   /**
-   * The configured runner kind, or `'none'` when none is. Open string for the
-   * same reason as `CentraidAgentStatusEntry.kind` — a newer gateway can name
+   * The configured harness kind, or `'none'` when none is. Open string for the
+   * same reason as `CentraidHarnessStatusEntry.kind` — a newer gateway can name
    * a kind this build doesn't know, and the status must still parse.
    */
   kind: string;
@@ -1426,8 +1435,8 @@ export interface CentraidRunnerStatus {
   versionAtLeast?: boolean;
   reason?: string;
   hint?: string;
-  /** Models the active runner can serve, from the gateway catalog. */
-  models?: CentraidRunnerModel[];
+  /** Models the active harness can serve, from the gateway catalog. */
+  models?: CentraidHarnessModel[];
   /** Load state of `models` — lets the composer picker show loading vs empty. */
   modelsStatus?: CentraidSurfaceStatus;
 }
@@ -1456,9 +1465,7 @@ export type CentraidResourceKnobKey =
   | "workerMaxConcurrent"
   | "workerMaxOldGenerationMb"
   | "workerPoolSize"
-  | "replicationConcurrency"
-  | "staticBrotliQuality"
-  | "staticGzipQuality";
+  | "replicationConcurrency";
 
 /** Structured resource contract on health metrics (issue #528 Phase A). */
 export interface CentraidResourceProfile {
@@ -1474,8 +1481,6 @@ export interface CentraidResourceProfile {
     workerMaxOldGenerationMb: number;
     workerPoolSize: number;
     replicationConcurrency: number;
-    staticBrotliQuality: number;
-    staticGzipQuality: number;
     sqliteSynchronous: "FULL" | "NORMAL";
     vaultSweepIntervalMs: number;
     outboxIdleIntervalMs: number;
@@ -1505,8 +1510,8 @@ export interface CentraidBackgroundPause {
 /**
  * Measured resource actuals — "what the gateway host actually used" — on
  * health metrics (issue #528 Phase C). Proxies only (CPU time, bytes,
- * activity); no wattage. `agentRuns.cpuSeconds` is `null` in v1 because agent
- * runs are not separately CPU-accounted yet.
+ * activity); no wattage. `harnessRuns.cpuSeconds` is `null` in v1 because
+ * harness runs are not separately CPU-accounted yet.
  */
 export interface CentraidResourceUsage {
   /** Epoch ms when accounting started (gateway boot). */
@@ -1523,7 +1528,7 @@ export interface CentraidResourceUsage {
     replication: { passes: number; bytesReplicated: number; busyMs: number };
     backup: { drains: number; bytesUploaded: number; busyMs: number };
     sweeps: { passes: number; busyMs: number };
-    agentRuns: { runs: number; busyMs: number; cpuSeconds: number | null };
+    harnessRuns: { runs: number; busyMs: number; cpuSeconds: number | null };
   };
   /** Background timer fires in the last hour, or `null` when not tracked. */
   backgroundTimerFiresLastHour: number | null;
@@ -1613,8 +1618,8 @@ declare global {
     id: string;
     originAppId: string | null;
     title: string;
-    adapterKind: string | null;
-    adapterSessionId: string | null;
+    harnessKind: string | null;
+    harnessSessionId: string | null;
     turnCount: number;
     pinned: boolean;
     archived: boolean;
@@ -1715,9 +1720,20 @@ declare global {
     >;
     requires: {
       mcps?: readonly string[];
-      runner?: string;
+      harness?: string;
       model?: string;
       thoughtLevel?: string;
+    };
+    enrich?: {
+      domain: string;
+      capability: string;
+      lane: "device" | "gateway";
+      delegateStep?: {
+        selected: "deterministic" | "delegate";
+        promptRev: string;
+        latency: string;
+        consequence: string;
+      };
     };
     apps?: readonly string[];
     costEstimate?: { model: string; tokensPerFire: number };
@@ -1745,10 +1761,24 @@ declare global {
     enabled: boolean;
     ownerApp: string;
     ref: string;
+    systemLane?: "recognition";
     manifest: CentraidAutomationManifest;
   }
   interface CentraidAutomationTurnResult {
     turnId: string;
+  }
+  interface CentraidAutomationInvokeResult {
+    turnId: string;
+    result: {
+      turnId: string;
+      outcome?: {
+        ok: boolean;
+        skipped?: boolean;
+        output?: unknown;
+        error?: string;
+        summary?: string;
+      };
+    };
   }
   interface CentraidMintedWebhook {
     automationId: string;
@@ -1763,7 +1793,8 @@ declare global {
     seq: number;
     automationId?: string;
     automationName?: string;
-    adapterKind?: string;
+    harnessKind?: string;
+    systemLane?: "recognition";
     triggerKind:
       | "scheduled"
       | "manual"
@@ -1798,7 +1829,7 @@ declare global {
     ordinal: number;
     callId?: string;
     batchId?: number;
-    kind: "message_in" | "step" | "tool" | "agent";
+    kind: "message_in" | "step" | "tool" | "delegate";
     role?: "user" | "assistant";
     text?: string;
     name?: string;
@@ -1815,9 +1846,9 @@ declare global {
     cacheReadTokens?: number;
     cacheWriteTokens?: number;
     model?: string;
-    provider?: string;
+    harness?: string;
     costUsd?: number;
-    costSource?: "agent" | "estimated";
+    costSource?: "harness" | "estimated";
     appId?: string;
     childTurnId?: string;
   }
@@ -1826,7 +1857,7 @@ declare global {
     totalTokens: number;
     hydrationTokens: number;
     totalCostUsd: number;
-    agentReportedCostUsd: number;
+    harnessReportedCostUsd: number;
     estimatedCostUsd: number;
     forecastCostUsd: number;
     generations: number;
@@ -1852,8 +1883,8 @@ declare global {
     costUsd: number;
     automationName?: string;
   }
-  interface CentraidInsightsRunnerRow {
-    provider: string;
+  interface CentraidInsightsHarnessRow {
+    harness: string;
     runs: number;
     tokens: number;
     costUsd: number;
@@ -1881,7 +1912,7 @@ declare global {
     tokens: number;
     hydrationTokens: number;
     costUsd: number;
-    provider?: string;
+    harness?: string;
     model?: string;
     effort?: string;
   }
@@ -1911,7 +1942,7 @@ declare global {
     kpis: CentraidInsightsKpis;
     daily: CentraidInsightsDailyPoint[];
     bySource: CentraidInsightsSourceRow[];
-    byRunner: CentraidInsightsRunnerRow[];
+    byHarness: CentraidInsightsHarnessRow[];
     byModel: CentraidInsightsModelRow[];
     byEffort: CentraidInsightsEffortRow[];
     recent: CentraidInsightsActivityRow[];

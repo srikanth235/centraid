@@ -13,7 +13,8 @@
     "cellOwners",
     "dimensions",
     "surfaces",
-    "flows"
+    "flows",
+    "appEngines"
   ],
   "properties": {
     "version": { "type": "integer", "minimum": 1 },
@@ -171,6 +172,77 @@
             "type": ["integer", "null"],
             "minimum": 0,
             "description": "The contract floor for this law. null opts a rig out of the floor and makes the cell it backs uncomputable as solid."
+          },
+          "approvedMinimumTestsDeviation": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Issue-anchored explanation for an intentional floor change or flow-ID rename."
+          },
+          "replacesMinimumTestsFlow": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Exact predecessor ID for a one-to-one flow rename; valid only with approvedMinimumTestsDeviation and an unchanged-or-higher minimumTests floor."
+          }
+        }
+      }
+    },
+    "appEngines": {
+      "type": "object",
+      "required": ["seatDoctrine", "engines", "apps"],
+      "additionalProperties": false,
+      "properties": {
+        "seatDoctrine": { "type": "string", "minLength": 1 },
+        "engines": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "object",
+            "required": ["id", "label", "flow"],
+            "additionalProperties": false,
+            "properties": {
+              "id": { "type": "string", "minLength": 1 },
+              "label": { "type": "string", "minLength": 1 },
+              "flow": { "type": "string", "minLength": 1 }
+            }
+          }
+        },
+        "apps": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "object",
+            "required": ["id", "engines"],
+            "additionalProperties": false,
+            "properties": {
+              "id": { "type": "string", "minLength": 1 },
+              "engines": {
+                "type": "object",
+                "minProperties": 1,
+                "additionalProperties": {
+                  "oneOf": [
+                    {
+                      "type": "object",
+                      "required": ["status", "flow"],
+                      "additionalProperties": false,
+                      "properties": {
+                        "status": { "const": "pass" },
+                        "flow": { "type": "string", "minLength": 1 }
+                      }
+                    },
+                    {
+                      "type": "object",
+                      "required": ["status", "reason", "citation"],
+                      "additionalProperties": false,
+                      "properties": {
+                        "status": { "const": "skip" },
+                        "reason": { "type": "string", "minLength": 1 },
+                        "citation": { "type": "string", "minLength": 1 }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
           }
         }
       }

@@ -149,6 +149,7 @@ export function makeProps(
     onOpenCompiler: vi.fn(),
     onOpenRun: vi.fn(),
     onRotateWebhook: vi.fn().mockResolvedValue(true),
+    onSetRecognitionStep: vi.fn().mockResolvedValue(true),
     onRunNow: vi.fn().mockResolvedValue("r-new"),
     onAskAboutRuns: vi.fn().mockResolvedValue("r-message"),
     onToggleEnabled: vi.fn().mockResolvedValue(true),

@@ -1,19 +1,84 @@
-import React, { memo, useCallback, useMemo } from "react";
-import {
-  FlatList,
-  Pressable,
-  ScrollView,
-  StyleSheet,
-  View,
-} from "react-native";
-import type { ListRenderItemInfo } from "react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
+// FACE REVIEW, NATIVE (issue #711, v4 handoff 4305-4318 / §8) — brought in
+// governance: allow-repo-hygiene file-size-limit The #712 face-review handoff remains one cohesive stateful screen; #716 only adds its testability contract.
+// line with the same handoff EnrichmentConsent.tsx already answers to, and
+// with the web twin (@centraid/blueprints FaceReview.tsx).
+//
+// WHAT THIS REPLACES, AND WHY EACH PIECE WAS A REAL DEFECT, NOT A STYLING GAP
+// (issue #711 review):
+//
+//   1. Title read "People review" — the handoff's own name for this screen
+//      is "Face review" (proto:4306, §16 `faces.title`).
+//   2. No face crop, no source photograph — just a `--skel` circle with a
+//      generic user glyph, because the old query never asked for bytes. The
+//      photograph and the crop are the evidence the member is being asked to
+//      judge (4307); a member confirming a face they cannot see is not
+//      meaningfully consenting. Fixed by widening the read to the LOCAL
+//      TIMELINE (`usePhotoTimeline`, the same source every other Photos
+//      screen already paints from) rather than the faces query — see
+//      `sourceAssetFor` below.
+//   3. The three escape rows (Someone else / Unknown person / Skip) did not
+//      exist — only a bare confirm/reject icon pair.
+//   4. CONFIRM RENDERED ONLY WHEN `party_id` WAS ALREADY SET, so an unmatched
+//      face — the PRIMARY case a face detector produces — was reject-only:
+//      no way forward at all beyond deleting it. Fixed: every proposal has
+//      "Not this person", "Someone else", "Unknown person" and "Skip"
+//      regardless of whether the enricher proposed a name.
+//   5. Confidence read `{pct}% confidence`, the enricher's raw similarity
+//      score. README.md:285 is explicit: confidence is expressed in
+//      MATCHES, not a percentage. Fixed by `face-review-queue.ts`'s
+//      `matchCountFor`.
+//   6. No progress line (v4 3966/4316's three-part note).
+//   7. AN INVENTED "CONFIRMED PEOPLE" horizontal carousel duplicating the
+//      real People destination (`PhotosPeopleView.tsx`, its own band
+//      destination per v4 §3.1) and using "{count} photos" — the handoff's
+//      vocabulary is "photographs" throughout. Removed outright, not
+//      relabelled: Face review is proposal triage, not a browsable roster
+//      (see PhotosPeopleView.tsx's own header for that same distinction).
+//   8. A FlatList over every unconfirmed region at once — batched, contrary
+//      to v4 3967 "One face at a time". Restructured into a single-entry
+//      queue (`face-review-queue.ts`'s `buildQueue`), one proposal on screen
+//      at a time.
+//
+// EVERY CONTROL IS A REAL WRITE NOW (issue #712), which was not true before —
+// this header used to end by explaining which button was an apology:
+//   * Confirm / Not this person / Someone else → `answer-face` with
+//     `confirm` or `reject`. "Someone else" is a picker over people ALREADY
+//     confirmed elsewhere in this vault; minting a BRAND NEW person has no
+//     action-plane command in app.json, so picking an existing one is the
+//     honest subset of "name this face yourself" this client can do.
+//   * Unknown person / Keep unnamed → `answer-face` with `dismiss`. It used
+//     to set a note reading "isn't wired up yet"; there was genuinely no
+//     vault command that meant "reviewed, deliberately left unnamed", so
+//     every stranger the member declined to name came back on the next
+//     replica pull. `media.answer_face_proposal` has one, and a dismissed
+//     face stays dismissed.
+//   * Skip: local only — nothing is written, so "it stays in the queue"
+//     (4315) is literally true, and it is now the ONLY control of which that
+//     is true.
+//
+// The cursor/progress arithmetic is `@centraid/blueprints`'
+// `apps/photos/triage-session` — the same pure model the web twin and the
+// duplicate review consume, so "1 of 54" cannot mean two different things
+// on two screens; `session` below explains the per-render build.
+import { Image } from "expo-image";
+import React, { useEffect, useMemo, useState } from "react";
+import { FlatList, Pressable, RefreshControl, View } from "react-native";
 
-import type { ReplicaRow } from "@centraid/client/replica/native";
+import { faceCropStyle } from "@centraid/blueprints/apps/_shared/face-crop";
+import {
+  triageCurrent,
+  triageProgress,
+  triageSkip,
+} from "@centraid/blueprints/apps/_shared/triage-session";
+import { photosFaceMatchedOn } from "@centraid/blueprints/apps/photos/shared-copy";
 
 import Icon from "../../kit/components/Icon";
 import { Text } from "../../kit/components/NativeText";
+import TopSafeArea from "../../kit/components/TopSafeArea";
 import { useReplicaQuery } from "../../kit/hooks/useReplicaQuery";
+import { gridImageProps } from "../../kit/media/grid-image";
+import { imageSource } from "../../kit/media/media-source";
+import { useImageFallback } from "../../kit/media/use-image-fallback";
 import { useReplica } from "../../kit/replica/ReplicaProvider";
 import ReplicaStatusBar from "../../kit/replica/ReplicaStatusBar";
 import { useReplicaRefresh } from "../../kit/replica/useReplicaRefresh";
@@ -21,334 +86,552 @@ import {
   surfaceWriteFailure,
   surfaceWriteOutcome,
 } from "../../kit/replica/write-outcome";
-import { family, useTheme } from "../../kit/theme";
-import { optimisticValues } from "../../lib/replica/optimistic";
+import { borders, useTheme } from "../../kit/theme";
 import type { PhotosScreenProps } from "../../navigation";
+import {
+  ANSWER_FAILURE,
+  CROP_PX,
+  formatFirstSeen,
+  safeParseBBox,
+} from "./face-review-model";
+import { buildQueue } from "./face-review-queue";
+import type { AssetRow, FaceRegionRow } from "./face-review-queue";
+import { styles } from "./FaceReview.styles";
+import { usePhotoTimeline } from "./timeline-source";
 
 export default function FaceReview({
   navigation,
 }: PhotosScreenProps<"FaceReview">): React.JSX.Element {
   const { colors } = useTheme();
-  const { session } = useReplica();
+  const { session: replicaSession } = useReplica();
   const { refreshing, refreshNow } = useReplicaRefresh();
-  const faces = useReplicaQuery(
+  const timeline = usePhotoTimeline();
+
+  const facesQuery = useReplicaQuery(
     "photos",
     useMemo(() => ({ entity: "media.face_region" }), [])
   );
-  const parties = useReplicaQuery(
+  const partiesQuery = useReplicaQuery(
     "photos",
     useMemo(() => ({ entity: "core.party" }), [])
   );
+  // Metadata only (captured_at/width/height) — the same "no bytes over the
+  // replica" contract the old query kept. The PHOTOGRAPH itself is looked up
+  // from the local timeline below, exactly like every other Photos screen.
+  const assetsQuery = useReplicaQuery(
+    "photos",
+    useMemo(() => ({ entity: "media.asset" }), [])
+  );
+
   const names = useMemo(
     () =>
       new Map(
-        parties.rows.map((row) => [
+        partiesQuery.rows.map((row) => [
           String(row.party_id),
-          String(row.display_name ?? "Unknown person"),
+          String(row.display_name ?? "Unnamed"),
         ])
       ),
-    [parties.rows]
+    [partiesQuery.rows]
   );
-  const proposals = useMemo(
-    () => faces.rows.filter((row) => !row.confirmed_by_party_id),
-    [faces.rows]
-  );
-  const confirmedPeople = useMemo(
+  const people = useMemo(
     () =>
-      parties.rows
-        .map((party) => ({
-          party,
-          count: faces.rows.filter(
-            (face) =>
-              face.confirmed_by_party_id &&
-              String(face.party_id) === String(party.party_id)
-          ).length,
-        }))
-        .filter(({ count }) => count > 0),
-    [faces.rows, parties.rows]
+      partiesQuery.rows.map((row) => ({
+        partyId: String(row.party_id),
+        name: String(row.display_name ?? "Unnamed"),
+      })),
+    [partiesQuery.rows]
   );
-  const act = useCallback(
-    async (
-      action: "confirm-face" | "reject-face",
-      regionId: string,
-      partyId?: string
-    ): Promise<void> => {
-      const region = faces.rows.find(
-        (row) => String(row.region_id) === regionId
+  const queue = useMemo(
+    () =>
+      buildQueue(
+        facesQuery.rows as unknown as FaceRegionRow[],
+        assetsQuery.rows as unknown as AssetRow[]
+      ),
+    [facesQuery.rows, assetsQuery.rows]
+  );
+  const confirmedTotal = useMemo(
+    () =>
+      facesQuery.rows.filter((row) => row.review_state === "confirmed").length,
+    [facesQuery.rows]
+  );
+
+  const [cursor, setCursor] = useState(0);
+  const [busy, setBusy] = useState(false);
+  const [note, setNote] = useState<string | null>(null);
+  const [pickerOpen, setPickerOpen] = useState(false);
+  // Frozen at first non-empty load — the numerator counts UP as the member
+  // works (4306 "1 of 54 unmatched"), instead of the denominator sliding
+  // around as other proposals land mid-session (same choice as the web twin).
+  const [sessionStartTotal, setSessionStartTotal] = useState<number | null>(
+    null
+  );
+  const [actedCount, setActedCount] = useState(0);
+  useEffect(() => {
+    if (sessionStartTotal == null && queue.length > 0)
+      queueMicrotask(() =>
+        setSessionStartTotal((previous) => previous ?? queue.length)
       );
-      if (!region) return;
-      if (!session) return;
-      try {
-        const result = await session.write("photos", {
-          action,
-          input: {
-            region_id: regionId,
-            ...(partyId ? { party_id: partyId } : {}),
-          },
-          optimistic:
-            action === "reject-face"
-              ? [
-                  {
-                    op: "delete",
-                    entity: "media.face_region",
-                    rowId: regionId,
-                  },
-                ]
-              : [
-                  {
-                    op: "upsert",
-                    entity: "media.face_region",
-                    rowId: regionId,
-                    values: optimisticValues(region, {
-                      party_id: partyId ?? null,
-                      confirmed_by_party_id: partyId ?? null,
-                    }),
-                  },
-                ],
-        });
-        surfaceWriteOutcome(result);
-      } catch (error) {
-        surfaceWriteFailure(error, "Face review not saved");
-      }
-    },
-    [faces.rows, session]
+  }, [sessionStartTotal, queue.length]);
+
+  // The shared triage model, BUILT PER RENDER rather than held in state — and
+  // that is the one thing this screen does differently from the web twin. The
+  // web surface loads a queue page and owns it; here the queue is DERIVED from
+  // live replica rows that re-resolve on every pull, so a session kept in
+  // state would need an effect to refill it on each new array identity, and
+  // that effect would set state that produces the next render. Deriving it
+  // instead keeps the data flow one-way, and the arithmetic the member reads
+  // (current, position, total, skip) still comes from one place for all three
+  // surfaces.
+  const session = useMemo(
+    () => ({
+      queue,
+      cursor: queue.length === 0 ? 0 : cursor % queue.length,
+      total: sessionStartTotal ?? queue.length,
+      counts: { answered: actedCount },
+    }),
+    [queue, cursor, sessionStartTotal, actedCount]
   );
-  // One callback shared by every row rather than a per-row arrow, so the
-  // memoized row only re-renders when its own face changes.
-  const confirmFace = useCallback(
-    (regionId: string, partyId: string): void => {
-      void act("confirm-face", regionId, partyId);
-    },
-    [act]
+  const current = triageCurrent(session);
+  const region = current
+    ? facesQuery.rows.find((r) => String(r.region_id) === current.regionId)
+    : undefined;
+  const sourceAsset = current
+    ? timeline.assets.find((a) => a.assetId === current.assetId)
+    : undefined;
+  const bbox = safeParseBBox(region?.bbox_json);
+  const crop =
+    sourceAsset && bbox
+      ? faceCropStyle(bbox, sourceAsset.width, sourceAsset.height, CROP_PX)
+      : null;
+  // The evidence on this card is the whole point of the card — a face the
+  // member is asked to name, over a photograph they are asked to recognise.
+  // Both come from the same asset, which is asked for as a derivative and may
+  // not have one yet, so both ride the one retry ladder rather than rendering
+  // as two empty boxes. Called unconditionally: it is a hook, and `current`
+  // changes as the queue advances.
+  const media = useImageFallback(
+    sourceAsset?.uri ?? "",
+    sourceAsset?.originalUri,
+    sourceAsset?.assetId ?? "none"
   );
-  const rejectFace = useCallback(
-    (regionId: string): void => {
-      void act("reject-face", regionId);
-    },
-    [act]
-  );
-  const renderProposal = useCallback(
-    ({
-      item,
-    }: ListRenderItemInfo<
-      ReplicaRow & { __rowId: string }
-    >): React.JSX.Element => (
-      <FaceProposalRow
-        row={item}
-        name={item.party_id ? names.get(String(item.party_id)) : undefined}
-        colors={colors}
-        onConfirm={confirmFace}
-        onReject={rejectFace}
-      />
-    ),
-    [colors, confirmFace, names, rejectFace]
-  );
+
+  /**
+   * The ONE write behind every answer on this screen (issue #712) — the same
+   * `answer-face` action, and the same three answers, the web twin fires.
+   *
+   * The OPTIMISTIC row is an upsert for all three: a rejection no longer
+   * deletes anything, so the local row must land in the same answered state
+   * the vault is about to write, or the queue would rebuild with the face
+   * still in it for the moment before the pull catches up. Rejected and
+   * dismissed regions carry no party — the vault's own CHECK says so.
+   */
+  async function answer(
+    kind: "confirm" | "reject" | "dismiss",
+    partyId?: string
+  ): Promise<boolean> {
+    if (!current || !replicaSession) return false;
+    const confirmed = kind === "confirm";
+    setBusy(true);
+    try {
+      const result = await replicaSession.write("photos", {
+        action: "answer-face",
+        input: {
+          region_id: current.regionId,
+          answer: kind,
+          ...(confirmed && partyId ? { party_id: partyId } : {}),
+        },
+      });
+      surfaceWriteOutcome(result);
+      return true;
+    } catch (error) {
+      surfaceWriteFailure(error, ANSWER_FAILURE[kind]);
+      return false;
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function confirm(partyId: string, name: string): Promise<void> {
+    setNote(null);
+    if (await answer("confirm", partyId)) {
+      setNote(`Confirmed as ${name}.`);
+      setActedCount((n) => n + 1);
+      setPickerOpen(false);
+      setCursor(0);
+    }
+  }
+
+  async function reject(): Promise<void> {
+    setNote(null);
+    if (await answer("reject")) {
+      setActedCount((n) => n + 1);
+      setCursor(0);
+    }
+  }
+
+  /** "Unknown person → Keep unnamed": reviewed, kept, deliberately unnamed —
+   *  and, unlike Skip, it does not come back on the next pull. */
+  async function dismiss(): Promise<void> {
+    setNote(null);
+    if (await answer("dismiss")) {
+      setNote("Kept, and left unnamed.");
+      setActedCount((n) => n + 1);
+      setCursor(0);
+    }
+  }
+
+  function skip(): void {
+    if (queue.length === 0) return;
+    setNote(null);
+    setCursor(triageSkip(session).cursor);
+  }
+
+  const { position, total } = triageProgress(session);
+  const proposedName = current?.partyId
+    ? (names.get(current.partyId) ?? null)
+    : null;
+
   return (
-    <SafeAreaView
-      style={[styles.safe, { backgroundColor: colors.bg }]}
-      edges={["top"]}
-    >
+    <TopSafeArea style={[styles.safe, { backgroundColor: colors.bg }]}>
       <View style={styles.header}>
         <Pressable
           accessibilityLabel="Back to Photos"
           accessibilityRole="button"
           onPress={() => navigation.goBack()}
+          style={styles.headerBtn}
         >
           <Icon name="chevron-left" size={26} color={colors.text} />
         </Pressable>
-        <Text style={[styles.title, { color: colors.text }]}>
-          People review
+        <Text style={[styles.title, { color: colors.text }]} numberOfLines={1}>
+          Face review
         </Text>
         <Text style={[styles.count, { color: colors.textSoft }]}>
-          {proposals.length}
+          {current ? `${position} of ${total}` : ""}
         </Text>
       </View>
       <ReplicaStatusBar />
       <FlatList
-        data={proposals}
-        keyExtractor={faceKey}
-        contentContainerStyle={styles.list}
-        refreshing={refreshing}
-        onRefresh={refreshNow}
-        ListHeaderComponent={
-          <View>
-            <Text style={[styles.section, { color: colors.textSoft }]}>
-              CONFIRMED PEOPLE
-            </Text>
-            {confirmedPeople.length ? (
-              <ScrollView
-                horizontal
-                showsHorizontalScrollIndicator={false}
-                contentContainerStyle={styles.people}
-              >
-                {confirmedPeople.map(({ party, count }) => (
-                  <View
-                    key={String(party.party_id)}
-                    style={[
-                      styles.personCard,
-                      { backgroundColor: colors.bgSunken },
-                    ]}
-                  >
-                    <View
+        data={current ? [current.regionId] : []}
+        keyExtractor={(regionId) => regionId}
+        contentContainerStyle={styles.content}
+        refreshControl={
+          <RefreshControl refreshing={refreshing} onRefresh={refreshNow} />
+        }
+        renderItem={() =>
+          current ? (
+            <>
+              <View style={styles.tiles}>
+                {/* The face crop — no server-cropped variant exists, so the
+                  same source photograph is scaled/positioned so the bbox
+                  fills the box (face-crop.ts). */}
+                <View
+                  style={[
+                    styles.tile,
+                    {
+                      width: CROP_PX,
+                      height: CROP_PX,
+                      backgroundColor: colors.skel,
+                    },
+                  ]}
+                >
+                  {sourceAsset && crop ? (
+                    <Image
+                      source={imageSource(media.source)}
+                      {...gridImageProps(media.source)}
+                      recyclingKey={media.recyclingKey}
+                      onLoad={media.handleLoad}
+                      onError={media.handleError}
+                      contentFit="fill"
                       style={[
-                        styles.personAvatar,
-                        { backgroundColor: colors.bgElev },
+                        styles.cropImg,
+                        {
+                          width: crop.width,
+                          height: crop.height,
+                          left: crop.left,
+                          top: crop.top,
+                        },
                       ]}
-                    >
-                      <Icon name="user" size={22} color={colors.accent} />
-                    </View>
+                    />
+                  ) : sourceAsset ? (
+                    <Image
+                      source={imageSource(media.source)}
+                      {...gridImageProps(media.source)}
+                      recyclingKey={media.recyclingKey}
+                      onLoad={media.handleLoad}
+                      onError={media.handleError}
+                      style={styles.tileImg}
+                    />
+                  ) : null}
+                </View>
+                {/* The source photograph, aspect 1.5 per 4307. */}
+                <View
+                  style={[
+                    styles.tile,
+                    {
+                      width: CROP_PX * 1.5,
+                      height: CROP_PX,
+                      backgroundColor: colors.skel,
+                    },
+                  ]}
+                >
+                  {sourceAsset ? (
+                    <Image
+                      source={imageSource(media.source)}
+                      {...gridImageProps(media.source)}
+                      recyclingKey={media.recyclingKey}
+                      onLoad={media.handleLoad}
+                      onError={media.handleError}
+                      style={styles.tileImg}
+                    />
+                  ) : null}
+                  <Text
+                    numberOfLines={1}
+                    style={[styles.tileNote, { color: colors.onStage }]}
+                  >
+                    the photograph it came from
+                  </Text>
+                </View>
+              </View>
+
+              <View
+                style={[
+                  styles.panel,
+                  { backgroundColor: colors.bgElev, borderColor: colors.line },
+                ]}
+              >
+                <Text style={[styles.eyebrow, { color: colors.textSoft }]}>
+                  Is this someone you know?
+                </Text>
+                <Text style={[styles.panelTitle, { color: colors.text }]}>
+                  {proposedName
+                    ? `Proposed: ${proposedName}`
+                    : "No proposed match"}
+                </Text>
+                <Text style={[styles.body, { color: colors.textSoft }]}>
+                  {proposedName ? photosFaceMatchedOn(current.matchCount) : ""}
+                  Nothing is written until you confirm, and a rejection is
+                  remembered so the same face is not proposed twice.
+                </Text>
+                <View>
+                  <View
+                    style={[styles.fact, { borderBottomColor: colors.line }]}
+                  >
                     <Text
-                      numberOfLines={1}
-                      style={[styles.personName, { color: colors.text }]}
+                      style={[styles.factLabel, { color: colors.textSoft }]}
                     >
-                      {String(
-                        party.display_name ?? party.name ?? "Unknown person"
-                      )}
+                      confidence
                     </Text>
-                    <Text style={[styles.meta, { color: colors.textSoft }]}>
-                      {count} photos
+                    <Text style={[styles.factValue, { color: colors.text }]}>
+                      {current.matchCount} matching face
+                      {current.matchCount === 1 ? "" : "s"}
                     </Text>
                   </View>
-                ))}
-              </ScrollView>
-            ) : (
-              <Text style={[styles.emptyPeople, { color: colors.textSoft }]}>
-                Confirmed people will appear here.
-              </Text>
-            )}
-            <Text style={[styles.section, { color: colors.textSoft }]}>
-              FACE PROPOSALS
-            </Text>
-          </View>
+                  <View
+                    style={[styles.fact, { borderBottomColor: colors.line }]}
+                  >
+                    <Text
+                      style={[styles.factLabel, { color: colors.textSoft }]}
+                    >
+                      first seen
+                    </Text>
+                    <Text style={[styles.factValue, { color: colors.text }]}>
+                      {formatFirstSeen(current.firstSeenAt) ?? "unknown"}
+                    </Text>
+                  </View>
+                  <View
+                    style={[styles.fact, { borderBottomColor: colors.line }]}
+                  >
+                    <Text
+                      style={[styles.factLabel, { color: colors.textSoft }]}
+                    >
+                      where it ran
+                    </Text>
+                    <Text style={[styles.factValue, { color: colors.text }]}>
+                      on this device
+                    </Text>
+                  </View>
+                </View>
+                <View style={styles.actions}>
+                  {proposedName && current.partyId ? (
+                    <Pressable
+                      accessibilityLabel={`Confirm as ${proposedName}`}
+                      accessibilityRole="button"
+                      accessibilityState={{ disabled: busy }}
+                      disabled={busy}
+                      onPress={() =>
+                        void confirm(current.partyId!, proposedName)
+                      }
+                      style={[
+                        styles.action,
+                        styles.filled,
+                        {
+                          backgroundColor: busy
+                            ? colors.bgSunken
+                            : colors.accentFill,
+                        },
+                      ]}
+                    >
+                      <Text
+                        style={[
+                          styles.actionText,
+                          {
+                            color: busy ? colors.textDisabled : colors.textInv,
+                          },
+                        ]}
+                      >
+                        Confirm as {proposedName}
+                      </Text>
+                    </Pressable>
+                  ) : null}
+                  <Pressable
+                    accessibilityLabel="Not this person"
+                    accessibilityRole="button"
+                    accessibilityState={{ disabled: busy }}
+                    disabled={busy}
+                    onPress={() => void reject()}
+                    style={[styles.action, { borderColor: colors.line }]}
+                  >
+                    <Text style={[styles.actionText, { color: colors.text }]}>
+                      Not this person
+                    </Text>
+                  </Pressable>
+                </View>
+                {note ? (
+                  <Text style={[styles.wroteNote, { color: colors.textSoft }]}>
+                    {note}
+                  </Text>
+                ) : null}
+              </View>
+
+              <View style={[styles.rows, { borderColor: colors.line }]}>
+                <View
+                  style={[
+                    styles.row,
+                    {
+                      borderBottomColor: colors.line,
+                      borderBottomWidth: borders.hairline,
+                    },
+                  ]}
+                >
+                  <View style={styles.rowText}>
+                    <Text style={[styles.rowLabel, { color: colors.text }]}>
+                      Someone else
+                    </Text>
+                    <Text style={[styles.rowSub, { color: colors.textFaint }]}>
+                      name this face yourself
+                    </Text>
+                  </View>
+                  <Pressable
+                    accessibilityLabel="Name this face"
+                    accessibilityHint={
+                      busy
+                        ? "Face review is updating."
+                        : people.length === 0
+                          ? "No named people are available."
+                          : undefined
+                    }
+                    accessibilityRole="button"
+                    accessibilityState={{
+                      disabled: busy || people.length === 0,
+                    }}
+                    disabled={busy || people.length === 0}
+                    onPress={() => setPickerOpen((v) => !v)}
+                  >
+                    <Text
+                      style={[styles.rowLabel, { color: colors.accentText }]}
+                    >
+                      Name →
+                    </Text>
+                  </Pressable>
+                </View>
+                {pickerOpen ? (
+                  <View style={styles.picker}>
+                    {people
+                      .filter((p) => p.partyId !== current.partyId)
+                      .map((p) => (
+                        <Pressable
+                          key={p.partyId}
+                          accessibilityRole="button"
+                          disabled={busy}
+                          onPress={() => void confirm(p.partyId, p.name)}
+                          style={[styles.action, { borderColor: colors.line }]}
+                        >
+                          <Text
+                            style={[styles.actionText, { color: colors.text }]}
+                          >
+                            {p.name}
+                          </Text>
+                        </Pressable>
+                      ))}
+                  </View>
+                ) : null}
+                <View
+                  style={[
+                    styles.row,
+                    {
+                      borderBottomColor: colors.line,
+                      borderBottomWidth: borders.hairline,
+                    },
+                  ]}
+                >
+                  <View style={styles.rowText}>
+                    <Text style={[styles.rowLabel, { color: colors.text }]}>
+                      Unknown person
+                    </Text>
+                    <Text style={[styles.rowSub, { color: colors.textFaint }]}>
+                      keep the face, do not name it
+                    </Text>
+                  </View>
+                  <Pressable
+                    accessibilityLabel="Keep unnamed"
+                    accessibilityRole="button"
+                    accessibilityState={{ disabled: busy }}
+                    disabled={busy}
+                    onPress={() => void dismiss()}
+                  >
+                    <Text
+                      style={[styles.rowLabel, { color: colors.accentText }]}
+                    >
+                      Keep unnamed
+                    </Text>
+                  </Pressable>
+                </View>
+                <View style={styles.row}>
+                  <View style={styles.rowText}>
+                    <Text style={[styles.rowLabel, { color: colors.text }]}>
+                      Skip
+                    </Text>
+                    <Text style={[styles.rowSub, { color: colors.textFaint }]}>
+                      decide later; it stays in the queue
+                    </Text>
+                  </View>
+                  <Pressable
+                    accessibilityLabel="Skip this face"
+                    accessibilityRole="button"
+                    onPress={skip}
+                  >
+                    <Text
+                      style={[styles.rowLabel, { color: colors.accentText }]}
+                    >
+                      Skip
+                    </Text>
+                  </Pressable>
+                </View>
+              </View>
+            </>
+          ) : null
         }
         ListEmptyComponent={
-          <Text style={[styles.empty, { color: colors.textSoft }]}>
-            No face proposals need review.
+          <Text style={[styles.body, { color: colors.textSoft }]}>
+            No faces need review right now.
           </Text>
         }
-        // No getItemLayout: the header carousel's height depends on whether any
-        // people are confirmed yet, so item offsets are not knowable up front.
-        // A proposal row is 70pt tall (styles.row minHeight, both texts short),
-        // so ~9 rows fill the ~650pt left under the header chrome and the
-        // CONFIRMED PEOPLE strip; ±2 viewports of retained cells absorbs a
-        // flick through a large unreviewed backlog without holding it all.
-        initialNumToRender={9}
-        maxToRenderPerBatch={9}
-        windowSize={5}
-        renderItem={renderProposal}
+        ListFooterComponent={
+          <Text style={[styles.note, { color: colors.textFaint }]}>
+            confirmed {confirmedTotal} · {queue.length} to go
+          </Text>
+        }
       />
-    </SafeAreaView>
+    </TopSafeArea>
   );
 }
-
-// `__rowId` is the replica's own row identity, unique per face region.
-const faceKey = (row: ReplicaRow & { __rowId: string }): string => row.__rowId;
-
-const FaceProposalRow = memo(
-  ({
-    row,
-    name,
-    colors,
-    onConfirm,
-    onReject,
-  }: {
-    row: ReplicaRow & { __rowId: string };
-    name: string | undefined;
-    colors: ReturnType<typeof useTheme>["colors"];
-    onConfirm: (regionId: string, partyId: string) => void;
-    onReject: (regionId: string) => void;
-  }): React.JSX.Element => {
-    const partyId = row.party_id ? String(row.party_id) : undefined;
-    const regionId = String(row.region_id);
-    return (
-      <View style={[styles.row, { borderBottomColor: colors.line }]}>
-        <View style={[styles.avatar, { backgroundColor: colors.bgSunken }]}>
-          <Icon name="user" size={20} color={colors.accent} />
-        </View>
-        <View style={styles.copy}>
-          <Text style={[styles.name, { color: colors.text }]}>
-            {partyId ? name : "Unmatched face"}
-          </Text>
-          <Text style={[styles.meta, { color: colors.textSoft }]}>
-            {Math.round(Number(row.confidence ?? 0) * 100)}% confidence
-          </Text>
-        </View>
-        {partyId ? (
-          <Pressable
-            accessibilityLabel={`Confirm ${name ?? "person"} for this face`}
-            accessibilityRole="button"
-            onPress={() => onConfirm(regionId, partyId)}
-          >
-            <Icon name="check" size={21} color="#2f9d6a" />
-          </Pressable>
-        ) : null}
-        <Pressable
-          accessibilityLabel="Reject this face proposal"
-          accessibilityRole="button"
-          onPress={() => onReject(regionId)}
-        >
-          <Icon name="x" size={21} color={colors.danger} />
-        </Pressable>
-      </View>
-    );
-  }
-);
-FaceProposalRow.displayName = "FaceProposalRow";
-
-const styles = StyleSheet.create({
-  avatar: {
-    alignItems: "center",
-    borderRadius: 21,
-    height: 42,
-    justifyContent: "center",
-    width: 42,
-  },
-  copy: { flex: 1, marginLeft: 12 },
-  count: { fontFamily: family.monoMedium, fontSize: 11 },
-  empty: {
-    fontFamily: family.sansRegular,
-    fontSize: 14,
-    padding: 40,
-    textAlign: "center",
-  },
-  emptyPeople: {
-    fontFamily: family.sansRegular,
-    fontSize: 13,
-    paddingVertical: 14,
-  },
-  header: {
-    alignItems: "center",
-    flexDirection: "row",
-    justifyContent: "space-between",
-    minHeight: 50,
-    paddingHorizontal: 14,
-  },
-  list: { paddingHorizontal: 18 },
-  meta: { fontFamily: family.sansRegular, fontSize: 11, marginTop: 4 },
-  name: { fontFamily: family.sansMedium, fontSize: 14 },
-  people: { gap: 10, paddingVertical: 8 },
-  personAvatar: {
-    alignItems: "center",
-    borderRadius: 24,
-    height: 48,
-    justifyContent: "center",
-    width: 48,
-  },
-  personCard: { borderRadius: 14, padding: 12, width: 128 },
-  personName: { fontFamily: family.sansMedium, fontSize: 12, marginTop: 8 },
-  row: {
-    alignItems: "center",
-    borderBottomWidth: 1,
-    flexDirection: "row",
-    gap: 14,
-    minHeight: 70,
-  },
-  safe: { flex: 1 },
-  section: {
-    fontFamily: family.monoBold,
-    fontSize: 10,
-    letterSpacing: 1,
-    marginTop: 18,
-  },
-  title: { fontFamily: family.sansBold, fontSize: 18 },
-});

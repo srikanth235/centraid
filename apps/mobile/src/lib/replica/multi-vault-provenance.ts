@@ -30,7 +30,10 @@ export interface StoredReplicaRow {
 
 export function storedSchema(
   entity: string,
-  row: StoredReplicaRow
+  row: Pick<
+    StoredReplicaRow,
+    "primary_key" | "columns_json" | "has_unavailable_fields"
+  >
 ): ReplicaEntitySchema {
   return {
     entity,
@@ -48,27 +51,41 @@ export function storedSchema(
   };
 }
 
-export function replicaEnvelope(
-  scope: MountedReplicaScope,
+/** Decode one stored row without adding a mounted-scope identity prefix. */
+export function storedReplicaEnvelope(
   row: StoredReplicaRow,
   extra: ReplicaRow = {}
 ): ReplicaRowEnvelope {
   return {
-    rowId: `${scope.vaultId}:${row.row_id}`,
+    rowId: row.row_id,
     values: {
       ...(JSON.parse(row.payload_json) as ReplicaRow),
       ...extra,
-      [REPLICA_SCOPE_ID]: scope.vaultId,
-      [REPLICA_SCOPE_LABEL]: scope.label,
-      [REPLICA_SCOPE_IDS]: [scope.vaultId],
-      [REPLICA_SCOPE_LABELS]: [scope.label],
-      [REPLICA_WRITABLE_SCOPE_IDS]:
-        scope.role === "read" ? [] : [scope.vaultId],
-      [REPLICA_CAN_WRITE]: scope.role !== "read",
     },
     oversizedFields: parseStringArray(row.oversized_json),
     hasUnavailableFields: row.has_unavailable_fields === 1,
     ...(row.server_version > 0 ? { rowVersion: row.server_version } : {}),
+  };
+}
+
+/** Add mounted-vault provenance after canonical rows and that vault's outbox
+ * have been composed in their native (unprefixed) identity domain. */
+export function replicaScopeEnvelope(
+  scope: MountedReplicaScope,
+  row: ReplicaRowEnvelope
+): ReplicaRowEnvelope {
+  return {
+    ...row,
+    rowId: `${scope.vaultId}:${row.rowId}`,
+    values: {
+      ...row.values,
+      [REPLICA_SCOPE_ID]: scope.vaultId,
+      [REPLICA_SCOPE_LABEL]: scope.label,
+      [REPLICA_SCOPE_IDS]: [scope.vaultId],
+      [REPLICA_SCOPE_LABELS]: [scope.label],
+      [REPLICA_WRITABLE_SCOPE_IDS]: scope.canWrite ? [scope.vaultId] : [],
+      [REPLICA_CAN_WRITE]: scope.canWrite,
+    },
   };
 }
 

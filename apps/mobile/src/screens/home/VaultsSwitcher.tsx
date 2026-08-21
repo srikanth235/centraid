@@ -29,7 +29,7 @@ import {
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
-import { icons as ICON_SET } from "@centraid/design";
+import { icons as ICON_SET, identityInk } from "@centraid/design";
 import type { IconName } from "@centraid/design";
 
 import Grabber from "../../kit/components/Grabber";
@@ -284,7 +284,7 @@ export default function VaultsSwitcher({
               <ActiveCard colors={colors} styles={styles} vault={active} />
             ) : (
               <Text style={styles.empty}>
-                No vault selected yet. Pair a desktop to connect one.
+                No vault yet — pair a desktop to connect one.
               </Text>
             )}
 
@@ -339,12 +339,7 @@ export default function VaultsSwitcher({
               ]}
             >
               <View style={styles.pairIcon}>
-                <Icon
-                  name="Bolt"
-                  size={18}
-                  color={colors.accent}
-                  strokeWidth={1.75}
-                />
+                <Icon name="Bolt" size={18} color={colors.accent} />
               </View>
               <View style={styles.rowMeta}>
                 <Text style={styles.pairTitle}>Pair another desktop</Text>
@@ -352,12 +347,7 @@ export default function VaultsSwitcher({
                   Scan a “Connect phone” code to add a gateway
                 </Text>
               </View>
-              <Icon
-                name="ChevronRight"
-                size={16}
-                color={colors.textGhost}
-                strokeWidth={1.75}
-              />
+              <Icon name="ChevronRight" size={16} color={colors.textGhost} />
             </Pressable>
           </ScrollView>
         </Animated.View>
@@ -389,8 +379,7 @@ function ActiveCard({
         <Icon
           name={iconOf(vault.icon)}
           size={24}
-          color={colors.textInv}
-          strokeWidth={1.75}
+          color={identityInk(tint, colors.text, colors.textInv)}
         />
       </View>
       <View style={styles.rowMeta}>
@@ -402,7 +391,14 @@ function ActiveCard({
         </Text>
       </View>
       <View style={[styles.activePill, { backgroundColor: tint }]}>
-        <Text style={styles.activePillText}>ACTIVE</Text>
+        <Text
+          style={[
+            styles.activePillText,
+            { color: identityInk(tint, colors.text, colors.textInv) },
+          ]}
+        >
+          ACTIVE
+        </Text>
       </View>
     </View>
   );
@@ -438,8 +434,7 @@ function VaultLinkRow({
           <Icon
             name={iconOf(vault.icon)}
             size={16}
-            color={colors.textInv}
-            strokeWidth={1.75}
+            color={identityInk(tint, colors.text, colors.textInv)}
           />
         </View>
         <View style={styles.rowMeta}>
@@ -460,12 +455,7 @@ function VaultLinkRow({
         onPress={onForget}
         style={({ pressed }) => [styles.forget, pressed && styles.pressed]}
       >
-        <Icon
-          name="Trash"
-          size={17}
-          color={colors.textFaint}
-          strokeWidth={1.75}
-        />
+        <Icon name="Trash" size={17} color={colors.textFaint} />
       </Pressable>
     </View>
   );
@@ -499,12 +489,7 @@ function AddRow({
       ]}
     >
       <View style={[styles.dot, styles.dotHollow, { borderColor: tint }]}>
-        <Icon
-          name={iconOf(vault.icon)}
-          size={16}
-          color={tint}
-          strokeWidth={1.75}
-        />
+        <Icon name={iconOf(vault.icon)} size={16} color={tint} />
       </View>
       <View style={styles.rowMeta}>
         <Text style={styles.rowName} numberOfLines={1}>
@@ -514,7 +499,7 @@ function AddRow({
           Not on this phone yet
         </Text>
       </View>
-      <Icon name="Plus" size={18} color={colors.accent} strokeWidth={2} />
+      <Icon name="Plus" size={18} color={colors.accent} />
     </Pressable>
   );
 }
@@ -537,23 +522,25 @@ const makeStyles = (colors: ThemeColors) =>
       marginBottom: 20,
       padding: 16,
     },
-    activeName: { ...t("title"), color: colors.text, fontFamily: family.serif },
+    activeName: {
+      ...t("title"),
+      color: colors.text,
+    },
     activePill: {
-      borderRadius: 8,
+      borderRadius: radii.md,
       paddingHorizontal: 8,
       paddingVertical: 3,
     },
     activePillText: {
-      color: "#fff",
-      fontFamily: family.monoBold,
-      fontSize: 9,
+      fontFamily: family.sansMedium,
+      fontSize: t("mono").fontSize,
       letterSpacing: 1,
     },
     activeSub: { ...t("small"), color: colors.textFaint, marginTop: 3 },
     addRow: { marginBottom: 8 },
     dot: {
       alignItems: "center",
-      borderRadius: 12,
+      borderRadius: radii.lg,
       height: 40,
       justifyContent: "center",
       width: 40,
@@ -561,7 +548,7 @@ const makeStyles = (colors: ThemeColors) =>
     dotHollow: { backgroundColor: "transparent", borderWidth: 1.5 },
     emblem: {
       alignItems: "center",
-      borderRadius: 15,
+      borderRadius: radii.lg,
       height: 52,
       justifyContent: "center",
       width: 52,
@@ -574,8 +561,8 @@ const makeStyles = (colors: ThemeColors) =>
     },
     eyebrow: {
       color: colors.textFaint,
-      fontFamily: family.monoMedium,
-      fontSize: 11,
+      fontFamily: family.sansMedium,
+      fontSize: t("control").fontSize,
       letterSpacing: 1,
       marginTop: 2,
       paddingHorizontal: 20,
@@ -590,7 +577,7 @@ const makeStyles = (colors: ThemeColors) =>
       alignItems: "center",
       backgroundColor: colors.bg,
       borderColor: colors.line,
-      borderRadius: 12,
+      borderRadius: radii.lg,
       borderWidth: 1,
       height: 40,
       justifyContent: "center",
@@ -630,25 +617,23 @@ const makeStyles = (colors: ThemeColors) =>
     scrollBody: { paddingHorizontal: 20, paddingTop: 18 },
     sectionLabel: {
       color: colors.textFaint,
-      fontFamily: family.monoMedium,
-      fontSize: 11,
+      fontFamily: family.sansMedium,
+      fontSize: t("control").fontSize,
       letterSpacing: 0.9,
       marginBottom: 4,
       marginTop: 10,
     },
     sheet: {
       backgroundColor: colors.bgElev,
-      borderTopLeftRadius: 26,
-      borderTopRightRadius: 26,
+      borderTopLeftRadius: radii.lg,
+      borderTopRightRadius: radii.lg,
       maxHeight: "86%",
       paddingTop: 6,
     },
-    scrim: { backgroundColor: "rgba(0,0,0,.42)", ...StyleSheet.absoluteFill },
+    scrim: { backgroundColor: colors.scrim, ...StyleSheet.absoluteFill },
     title: {
+      ...t("display"),
       color: colors.text,
-      fontFamily: family.serif,
-      fontSize: 28,
-      letterSpacing: -0.4,
       marginTop: 2,
       paddingHorizontal: 20,
     },

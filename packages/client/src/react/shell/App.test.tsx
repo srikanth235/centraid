@@ -12,6 +12,7 @@ import {
 } from "vitest";
 
 import type * as TypeImport_1mc1xey from "./App.js";
+import { publishVitals, resetVitals } from "./routeVitals.js";
 
 type GatewayClient = typeof import("../../gateway-client.js");
 
@@ -22,7 +23,13 @@ const apiMocks = vi.hoisted(() => ({
 
 vi.mock(import("../../gateway-client.js") as Promise<unknown>, () => ({
   getUserPrefs: () => Promise.resolve({}),
-  // The sidebar identity row + every scope picker read the member's scope
+  // The shell root reads the capability map once at boot (C1). These suites
+  // exercise a gateway with the experimental features ON, so the launcher and
+  // the automation routes are the ones they already assert on; the gated-off
+  // shell has its own suite in App.capabilities.test.tsx.
+  readGatewayCapabilities: () =>
+    Promise.resolve({ automations: true, connectors: true }),
+  // The sidebar identity row + every scope picker read the owner's scope
   // registry (#599). `undefined` is the "gateway has no scopes plane" answer,
   // which falls through to listVaults.
   listAppScopes: apiMocks.listAppScopes,
@@ -31,13 +38,14 @@ vi.mock(import("../../gateway-client.js") as Promise<unknown>, () => ({
   listApps: () =>
     Promise.resolve([{ id: "todos", name: "Todos", kind: "app" }]),
   listAutomations: () => Promise.resolve([]),
+  listAutomationTurnsByLane: () => Promise.resolve([]),
   listAutomationTurns: () => Promise.resolve([]),
   getInsightsSummary: () =>
     Promise.resolve({
       kpis: {
         totalTokens: 0,
         totalCostUsd: 0,
-        agentReportedCostUsd: 0,
+        harnessReportedCostUsd: 0,
         estimatedCostUsd: 0,
         forecastCostUsd: 0,
         generations: 0,
@@ -50,7 +58,7 @@ vi.mock(import("../../gateway-client.js") as Promise<unknown>, () => ({
       },
       daily: [],
       bySource: [],
-      byRunner: [],
+      byHarness: [],
       byModel: [],
       byEffort: [],
       recent: [],
@@ -80,7 +88,15 @@ const store = vi.hoisted(() => new Map<string, unknown>());
 vi.mock(import("./store.js") as Promise<unknown>, () => ({
   Store: {
     get: <T,>(k: string, d: T): T => (store.has(k) ? (store.get(k) as T) : d),
-    set: (k: string, v: unknown) => store.set(k, v),
+    set: (k: string, v: unknown) => {
+      store.set(k, v);
+    },
+    remove: (k: string) => {
+      store.delete(k);
+    },
+    removeByPrefix: (prefix: string) => {
+      for (const k of store.keys()) if (k.startsWith(prefix)) store.delete(k);
+    },
   },
 }));
 
@@ -99,14 +115,12 @@ function seedShellGlobals(): void {
   };
   // gateway-client-core registers onGatewayChanged at module load — CentraidApi
   // must exist before the first App graph import.
-  // `getSettings` feeds useBuilderEnabled (#434) — default omits builderEnabled,
-  // so the builder stays hidden unless a test overrides it before mounting.
   (globalThis as unknown as { CentraidApi: unknown }).CentraidApi = {
     onGatewayChanged: () => {},
     onVaultChanged: () => {},
     getSettings: () => Promise.resolve({}),
   };
-  // Home's buildHomeAppItems asks the tokens bridge for each tile's finish.
+  // Starred's app cards ask the tokens bridge for each tile's finish.
   (globalThis as unknown as { CentraidTokens: unknown }).CentraidTokens = {
     tileFinish: () => ({
       background: "#111",
@@ -129,6 +143,7 @@ describe("App suite", () => {
     apiMocks.listAppScopes.mockReset().mockResolvedValue(undefined);
     apiMocks.listVaults.mockReset().mockResolvedValue([]);
     store.clear();
+    resetVitals();
     store.set("home.userApps", [
       { id: "todos", name: "Todos", iconKey: "Todo", color: "#123" },
     ]);
@@ -156,56 +171,162 @@ describe("App suite", () => {
   }
 
   describe("App root", () => {
-    it("renders the chrome frame with primary nav, opening on Home", async () => {
+    it("renders the frame with the stem launcher, opening on Home", async () => {
       const el = await mount();
       expect(el.querySelector(".window")).not.toBeNull();
-      expect(el.textContent).toContain("Todos");
-      expect(el.textContent).toContain("Automations");
-      expect(el.textContent).toContain("Connectors");
-      // Discover left the rail for the ⌘K palette (#667).
-      expect(el.textContent).not.toContain("Discover");
-      expect(el.textContent).not.toMatch(/Apps ·/u);
-      expect(el.textContent).not.toContain("Starred");
-      const activeHome = el.querySelector('[data-active="true"]');
+      // Home's body is the springboard and nothing else (issue #708). The bar
+      // names the SCREEN and carries no redundant global action — the vault is
+      // at the head of the stem, true on every route, so Home does not say it a
+      // second time.
+      const bar = el.querySelector(".appBar")!;
+      expect(bar.textContent).toContain("Home");
+      expect(bar.textContent).not.toContain("Search everything");
+      expect(bar.textContent).not.toContain("All apps");
+      // The stem holds the vault head, Search, the PINNED destinations, and a
+      // foot of All apps + the account row (Settings and What's new live in
+      // its menu, as they did before #707).
+      const stem = el.querySelector(".stem")!;
+      expect(stem.textContent).toContain("Search");
+      expect(stem.textContent).toContain("All apps");
+      expect(stem.textContent).toContain("Home");
+      expect(stem.textContent).toContain("Notifications");
+      expect(stem.textContent).toContain("Activity");
+      expect(stem.textContent).toContain("Vault");
+      expect(stem.textContent).not.toContain("Automations");
+      expect(stem.textContent).not.toContain("Connectors");
+      expect(stem.textContent).not.toContain("Copies");
+      expect(stem.textContent).not.toContain("System");
+      // Assistant is a pinned APP, not a place the frame goes (#707), so it
+      // has no standing row here.
+      expect(stem.textContent).not.toContain("Assistant");
+      // Unpinned destinations are still not on the stem — they live in All
+      // apps and in the ⌘K palette, which is what lets the stem stay short.
+      expect(stem.textContent).not.toContain("Starred");
+      const activeHome = stem.querySelector('[data-active="true"]');
       expect(activeHome?.textContent).toContain("Home");
     });
 
-    it("navigates to Analytics via the sidebar and highlights it", async () => {
+    it("reaches an unpinned destination through the All-apps sheet", async () => {
       const el = await mount();
-      // Labelled "Analytics" since #667; the route + highlight key are still
-      // `insights`, which is exactly the separation the rename relies on.
-      const insightsBtn = [...el.querySelectorAll(".sbItem")].find(
-        (b) => b.textContent?.trim() === "Analytics"
-      ) as HTMLButtonElement;
       await act(async () => {
-        insightsBtn.click();
+        el.querySelectorAll<HTMLButtonElement>(".stemAllApps").forEach((b) =>
+          b.click()
+        );
       });
-      const active = el.querySelector('[data-active="true"]');
-      expect(active?.textContent).toContain("Analytics");
-      // Analytics route mounts its own dashboard (a main-scroll body) once loaded.
+      const sheet = document.querySelector('[aria-label="All apps"]')!;
+      expect(sheet).not.toBeNull();
+      // Every destination is listed, pinned or not.
+      expect(sheet.textContent).toContain("Connectors");
+      expect(sheet.textContent).toContain("Starred");
+      const starred = [
+        ...sheet.querySelectorAll<HTMLButtonElement>(".sheetRowOpen"),
+      ].find((b) => b.textContent?.trim() === "Starred")!;
+      await act(async () => {
+        starred.click();
+      });
+      // Analytics route mounts its own dashboard (a main-scroll body). The
+      // stem shows no highlight, which is the honest reading: an UNPINNED
+      // destination is not on the launcher, and pretending otherwise would
+      // make the stem's contents depend on where you happen to be.
+      expect(el.querySelector('.stem [data-active="true"]')).toBeNull();
       await act(async () => {
         await Promise.resolve();
       });
       expect(el.querySelector(".mainScroll")).not.toBeNull();
     });
 
-    it("navigates to Automations via the sidebar (above Pages)", async () => {
+    it("navigates to a pinned destination from the stem and highlights it", async () => {
+      store.set("launcher.pins", { automations: true });
       const el = await mount();
-      const autoBtn = [...el.querySelectorAll(".sbItem")].find((b) =>
-        b.textContent?.includes("Automations")
-      ) as HTMLButtonElement;
+      const autoBtn = [
+        ...el.querySelectorAll<HTMLButtonElement>(".stem .launchItem"),
+      ].find((b) => b.textContent?.includes("Automations"))!;
       await act(async () => {
         autoBtn.click();
       });
-      const active = el.querySelector('[data-active="true"]');
+      const active = el.querySelector('.stem [data-active="true"]');
       expect(active?.textContent).toContain("Automations");
+    });
+
+    it("names an operational route in the bar, and lets its loader fill the count line (#765)", async () => {
+      store.set("launcher.pins", { automations: true });
+      const el = await mount();
+      const autoBtn = [
+        ...el.querySelectorAll<HTMLButtonElement>(".stem .launchItem"),
+      ].find((b) => b.textContent?.includes("Automations"))!;
+      await act(async () => {
+        autoBtn.click();
+      });
+      const bar = el.querySelector(".appBar")!;
+      // The title is STATIC, so it is right on the first frame rather than
+      // after the route's query resolves.
+      expect(bar.textContent).toContain("Automations");
+      // Automations is migrated (#765): its screen reads on mount and publishes
+      // its own state, so by this point the bar is showing what that read said
+      // rather than the pre-publish fallback (which `opsBar.test.ts` covers).
+      // The stub gateway has no automations endpoint, so the read fails —
+      // error withdraws the commit and keeps the quiet verb, which is the whole
+      // "what failed, what is still safe" shape.
+      expect(bar.textContent).not.toContain("New automation");
+      expect(bar.textContent).toContain("Templates");
+      // No successful read to date, so the error state carries no count line
+      // rather than a blank row of identity waiting to be filled in.
+      expect(el.querySelector(".opsCount")).toBeNull();
+
+      await act(async () => {
+        publishVitals("automations", {
+          count: "6 automations · 1 failing · 1 paused",
+          state: "ready",
+        });
+      });
+      expect(el.querySelector(".opsCount")?.textContent).toBe(
+        "6 automations · 1 failing · 1 paused"
+      );
+      // A read page offers both verbs: the one filled commit and its quiet peer.
+      expect(el.querySelector(".appBar")?.textContent).toContain(
+        "New automation"
+      );
+      expect(el.querySelector(".appBar")?.textContent).toContain("Templates");
+
+      // Loading withdraws BOTH verbs: a bar offering to act on a page it has
+      // not read yet is offering to act on nothing.
+      await act(async () => {
+        publishVitals("automations", { state: "loading" });
+      });
+      expect(el.querySelector(".appBar")?.textContent).not.toContain(
+        "New automation"
+      );
+      expect(el.querySelector(".appBar")?.textContent).not.toContain(
+        "Templates"
+      );
+      expect(el.querySelector(".opsCount")?.textContent).toBe(
+        "Reading from the gateway"
+      );
+    });
+
+    it("pins an unpinned destination onto the stem, and persists it", async () => {
+      const el = await mount();
+      await act(async () => {
+        el.querySelector<HTMLButtonElement>(".stemAllApps")?.click();
+      });
+      const pin = document.querySelector<HTMLButtonElement>(
+        '[aria-label="Pin Starred to the launcher"]'
+      )!;
+      expect(pin.getAttribute("aria-checked")).toBe("false");
+      await act(async () => {
+        pin.click();
+      });
+      expect(el.querySelector(".stem")?.textContent).toContain("Starred");
+      // Pins are user data, so they survive the session.
+      expect(store.get("launcher.pins")).toMatchObject({ starred: true });
     });
 
     it("hides every builder entry point by default (#434 builder off)", async () => {
       const el = await mount();
-      // No "Build new" in the sidebar and no composer hero on Home.
-      expect(el.textContent).not.toContain("Build new");
-      expect(el.querySelector(".composerInput")).toBeNull();
+      // No builder pencil in the app bar. Home itself has no builder entry
+      // point to hide any more — it is the springboard and nothing else
+      // (issue #708), so the pencil and the palette row are the whole surface.
+      expect(el.querySelector('[aria-label="New app"]')).toBeNull();
       // The ⌘K palette lists the app but no "Build a new app…" create row.
       await act(async () => {
         document.dispatchEvent(
@@ -230,7 +351,7 @@ describe("App suite", () => {
       expect(el.querySelector('[aria-label="Command palette"]')).not.toBeNull();
     });
 
-    it("keeps an actionable offline banner visible across the shell", async () => {
+    it("reports offline on the one status line, with the reason inline", async () => {
       (
         globalThis as unknown as {
           CentraidApi: Record<string, unknown>;
@@ -242,54 +363,65 @@ describe("App suite", () => {
         await Promise.resolve();
         await Promise.resolve();
       });
-      const banner = el.querySelector("output");
-      expect(banner?.textContent).toContain("Offline");
-      expect(banner?.textContent).toContain("Check gateway");
+      // No toast, no floating pill: one persistent line at the foot of the
+      // frame, in the bordered offline state, saying why commits are disabled.
+      const line = el.querySelector<HTMLElement>(".statusLine")!;
+      expect(line.dataset.offline).toBe("true");
+      expect(line.textContent).toContain("Offline");
+      expect(line.textContent).toContain("commits are disabled");
+      expect(line.textContent).toContain("Check gateway");
     });
 
-    it("reveals builder entry points when builderEnabled is set (#434 builder on)", async () => {
-      (
-        globalThis as unknown as { CentraidApi: { getSettings: unknown } }
-      ).CentraidApi.getSettings = () =>
-        Promise.resolve({ builderEnabled: true });
+    it("offers no app-building entry point anywhere (#799)", async () => {
+      // The served-app plane and the builder that produced apps for it are
+      // gone: neither the app bar nor the palette may still advertise one.
       const el = await mount();
-      // useBuilderEnabled resolves getSettings() a tick after first paint.
-      await act(async () => {
-        await Promise.resolve();
-        await Promise.resolve();
-      });
-      expect(el.textContent).toContain("Build new");
-      expect(el.querySelector(".composerInput")).not.toBeNull();
+      expect(el.querySelector('[aria-label="New app"]')).toBeNull();
       await act(async () => {
         document.dispatchEvent(
           new KeyboardEvent("keydown", { key: "k", metaKey: true })
         );
       });
       const dialog = el.querySelector('[aria-label="Command palette"]');
-      expect(dialog?.textContent).toContain("Build a new app…");
+      expect(dialog?.textContent).not.toContain("Build a new app…");
     });
 
-    it("binds the sidebar toggle to the appearance pref", async () => {
+    it("hides the stem on request, and never on its own", async () => {
+      // The stem can be reclaimed (⌘B or the bar's leading control) but it
+      // never becomes a drawer: no scrim, and navigating does not dismiss it.
+      // Those are the affordances #707 removed, and they stay removed.
       const el = await mount();
-      expect(el.querySelector<HTMLElement>(".window")?.dataset.sidebar).toBe(
-        "open"
-      );
-      const toggle = el.querySelector(
-        '.tlSide [aria-label="Hide sidebar"]'
-      ) as HTMLButtonElement;
+      expect(el.querySelector(".stem")).not.toBeNull();
+      const win = el.querySelector<HTMLElement>(".window")!;
+      expect(win.dataset.stem).toBeUndefined();
+      const toggle = el.querySelector<HTMLButtonElement>(
+        '[aria-label="Hide sidebar"]'
+      )!;
+      await act(async () => toggle.click());
+      expect(win.dataset.stem).toBe("hidden");
+      expect(el.querySelector('[aria-label="Show sidebar"]')).not.toBeNull();
+      expect(el.querySelector(".scrim")).toBeNull();
+      // Navigating with the stem hidden leaves it hidden — the preference is
+      // the owner's, not the router's.
       await act(async () => {
-        toggle.click();
+        el.querySelector<HTMLButtonElement>('[aria-label="Back"]')?.click();
       });
-      expect(el.querySelector<HTMLElement>(".window")?.dataset.sidebar).toBe(
-        "closed"
-      );
-      expect(store.get("appearance.v2")).toMatchObject({ sidebarOpen: false });
+      expect(win.dataset.stem).toBe("hidden");
+      expect(store.get("shell.stemOpen")).toBe(false);
     });
 
-    it("switches the active vault through the sidebar switcher", async () => {
+    it("switches the active vault through the app bar's title", async () => {
       apiMocks.listVaults.mockResolvedValue([
-        { vaultId: "shared", name: "Shared", ownerPartyId: "owner" },
-        { vaultId: "personal", name: "Personal", ownerPartyId: "owner" },
+        {
+          vaultId: "shared",
+          name: "Shared",
+          ownerPartyId: "owner",
+        },
+        {
+          vaultId: "personal",
+          name: "Personal",
+          ownerPartyId: "owner",
+        },
       ]);
       const setActiveVault =
         vi.fn<(input: { vaultId: string }) => Promise<void>>();
@@ -310,7 +442,7 @@ describe("App suite", () => {
       // The whole identity row is the switcher (#608) — its label names the
       // vault and gateway it is switching, so match on the action.
       const switcher = el.querySelector<HTMLButtonElement>(
-        'button[aria-label$="Switch vault or gateway."]'
+        'button[aria-label$="Switch vault."]'
       )!;
       await act(async () => switcher.click());
       const personal = document.querySelector<HTMLButtonElement>(
@@ -324,7 +456,11 @@ describe("App suite", () => {
     // Issue #665 — the switcher is VAULTS ONLY, flattened across gateways.
     it("lists the vaults of every registered gateway in one list, and picking one on another gateway switches both", async () => {
       apiMocks.listVaults.mockResolvedValue([
-        { vaultId: "shared", name: "Shared", ownerPartyId: "owner" },
+        {
+          vaultId: "shared",
+          name: "Shared",
+          ownerPartyId: "owner",
+        },
       ]);
       const order: string[] = [];
       const setActiveVault = vi.fn<
@@ -367,7 +503,7 @@ describe("App suite", () => {
         await Promise.resolve();
       });
       const switcher = el.querySelector<HTMLButtonElement>(
-        'button[aria-label$="Switch vault or gateway."]'
+        'button[aria-label$="Switch vault."]'
       )!;
       await act(async () => switcher.click());
       // Let both probes land and patch the open popover in place.
@@ -388,26 +524,6 @@ describe("App suite", () => {
       expect(studio.textContent).toContain("Office");
       await act(async () => studio.click());
       expect(order).toStrictEqual(["gateway:office", "vault:studio"]);
-    });
-  });
-
-  describe("BuilderRouteRedirect (#434)", () => {
-    it("replaces a stale builder route with Home on mount", async () => {
-      const { BuilderRouteRedirect } = await import("./App.js");
-      const replace =
-        vi.fn<Parameters<typeof BuilderRouteRedirect>[0]["nav"]["replace"]>();
-      const nav = { replace } as unknown as Parameters<
-        typeof BuilderRouteRedirect
-      >[0]["nav"];
-      const el = document.createElement("div");
-      document.body.append(el);
-      const r = createRoot(el);
-      await act(async () => {
-        r.render(<BuilderRouteRedirect nav={nav} />);
-      });
-      expect(replace).toHaveBeenCalledWith({ kind: "home" });
-      act(() => r.unmount());
-      el.remove();
     });
   });
 });

@@ -21,9 +21,6 @@ const AU_LABEL: Record<AuStatusKind, string> = {
   success: "Success",
 };
 
-const isDraftApp = (a: AppMetaResolvedType): a is DraftAppMeta =>
-  (a as DraftAppMeta).__draft === true;
-
 const recent = (iso?: string): boolean => {
   if (!iso) return false;
   const t = new Date(iso).getTime();
@@ -42,24 +39,16 @@ export function buildHomeAppItems(
   deps: HomeDeps
 ): HomeAppItemDTO[] {
   return apps.map((a) => {
-    const draft = isDraftApp(a);
-    const ua = draft ? undefined : deps.userApps.find((x) => x.id === a.id);
-    const tone = draft ? "draft" : recent(ua?.createdAt) ? "new" : null;
-    const finish = window.CentraidTokens.tileFinish(a.color, deps.tileVariant);
+    const ua = deps.userApps.find((x) => x.id === a.id);
     return {
       desc: a.desc || "",
-      draft,
+      colorKey: a.colorKey,
       iconKey: a.iconKey,
       id: a.id,
       name: a.name,
       starred: deps.isStarred(a.id),
-      stamp: draft ? "saved" : relativeTime(ua?.updatedAt),
-      tile: {
-        background: finish.background,
-        boxShadow: finish.boxShadow,
-        glyphColor: finish.glyphColor,
-      },
-      tone,
+      stamp: relativeTime(ua?.updatedAt),
+      tone: recent(ua?.createdAt) ? "new" : null,
     };
   });
 }
@@ -109,34 +98,3 @@ function lastRunByRef(
     if (!lastByRef.has(e.automationId)) lastByRef.set(e.automationId, e);
   return lastByRef;
 }
-
-/** Count automations whose most recent run failed (the "needs attention" badge). */
-export function attentionCount(
-  rows: readonly CentraidAutomationRow[],
-  entries: readonly AutomationFeedEntry[]
-): number {
-  const lastByRef = lastRunByRef(entries);
-  let attention = 0;
-  for (const r of rows) {
-    const last = lastByRef.get(r.ref);
-    if (last && !last.run.ok) attention += 1;
-  }
-  return attention;
-}
-
-/** The hero eyebrow date, e.g. "TUESDAY · 19 MAY". */
-export function heroDateLabel(): string {
-  const d = new Date();
-  const weekday = d
-    .toLocaleDateString("en-US", { weekday: "long" })
-    .toUpperCase();
-  const month = d.toLocaleDateString("en-US", { month: "short" }).toUpperCase();
-  return `${weekday} · ${d.getDate()} ${month}`;
-}
-
-export const HERO_SUGGESTIONS = [
-  "Habit tracker",
-  "Weekly review",
-  "Inbox digest",
-  "Invoice filer",
-];

@@ -21,37 +21,49 @@ try {
   process.exit(1);
 }
 
-const kb = (n) => `${(n / 1024).toFixed(1)} KB`;
+// `encoded` only exists in reports written after #799 retired the served-app
+// plane; print a dash rather than `NaN KB` when summarizing an older artifact.
+const kb = (n) => (typeof n === "number" ? `${(n / 1024).toFixed(1)} KB` : "—");
 
 console.log(`\nPWA fast-path waterfall — captured ${report.capturedAt}`);
 console.log(
   `harness: ${report.harness.apiUrl}  app: ${report.harness.appId}\n`
 );
 
+// `transfer` is wire bytes; `encoded` is the DECODED weight of the same bodies
+// whether they came off the wire or out of the service-worker cache (Cache
+// Storage holds decoded bodies, so it is raw size, never a wire figure).
+// An app open on a warm shell transfers 0 and still loads real weight, so the
+// two columns are both shown rather than collapsed (the app-open warm/cold
+// ratio is over `encoded` — see apps/web/tests/e2e/perf-budgets.ts).
 const rows = [
-  ["phase", "requests", "transfer", "warm/cold"],
+  ["phase", "requests", "transfer", "encoded", "warm/cold"],
   [
     "shell cold",
     report.shell.cold.requestCount,
     kb(report.shell.cold.transferBytes),
+    "",
     "",
   ],
   [
     "shell warm",
     report.shell.warm.requestCount,
     kb(report.shell.warm.transferBytes),
+    "",
     String(report.shell.warmToColdByteRatio),
   ],
   [
     "app cold",
     report.appOpen.cold.requestCount,
     kb(report.appOpen.cold.grandTotalTransferBytes),
+    kb(report.appOpen.cold.encodedBodyBytes),
     "",
   ],
   [
     "app warm",
     report.appOpen.warm.requestCount,
     kb(report.appOpen.warm.grandTotalTransferBytes),
+    kb(report.appOpen.warm.encodedBodyBytes),
     String(report.appOpen.warmToColdByteRatio),
   ],
 ];

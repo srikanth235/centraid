@@ -4,19 +4,19 @@
    shared.module.css. `.card`'s `[data-selected]` attribute hook stays a real
    attribute (glue passes it as a string) — the module localizes only the class. */
 
+/* A sheet laid ON the page, not a plane floating above it: the raised tone
+   plus a hairline IS the elevation. `--shadow-*` belongs to a dialog, a sheet
+   and a popover and to nothing else, so hover deepens the hairline instead. */
 .card {
   position: relative;
   border: 1px solid var(--line);
-  border-radius: 13px;
+  border-radius: var(--r-lg);
   overflow: hidden;
   background: var(--bg-elev);
-  transition:
-    border-color 0.12s,
-    box-shadow 0.12s;
+  transition: border-color var(--dur-1) var(--ease);
 }
 .card:hover {
   border-color: var(--line-strong);
-  box-shadow: var(--shadow-md);
 }
 .card[data-selected="true"] {
   border-color: var(--line-strong);
@@ -33,31 +33,45 @@
   position: relative;
   /* Above the .cardOpen overlay, so the preview click still reaches it. */
   z-index: 1;
+  /* A <button> SHRINK-WRAPS whatever is inside it — form controls size to
+     fit-content whatever `display` they are given — so the thumb was only ever
+     as wide as its contents. That went unnoticed while the fallback was a wide
+     tinted word; a 30px kind glyph made it obvious, by parking the mark at the
+     card's leading edge instead of the middle of the thumb. */
+  inline-size: 100%;
   height: 104px;
   display: flex;
   align-items: center;
   justify-content: center;
   overflow: hidden;
 }
-.thumb img {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
+/* The kind mark. `--c-teal-text` is the app's own hue at the rung solved for
+   text on a surface — the SAME colour the list row's mark takes, because the
+   handoff draws every kind in the app hue rather than a colour per kind. No
+   `opacity`: if the mark needs to recede, the rung is the place to say so. */
+.thumbGlyph {
+  display: flex;
+  color: var(--c-teal-text);
 }
-/* No `opacity` here. This label is `color: var(--kind-*)`, a rung solved to a
-   measured floor against the tint behind it; a 0.9 fade is an unmeasured 0.6
-   off that ratio, applied after the fact and invisible to the token layer. If
-   the label needs to recede, the rung is the place to say so. */
-.thumbLabel {
-  font-family: var(--font-mono);
-  font-weight: 600;
-  font-size: 15px;
-  letter-spacing: 0.06em;
+/* The document's own opening words, set in the app's declared READING
+   register — the surface where a reader meets the document should show the
+   document. Clamped, never clipped: the thumb is a fixed-height container. */
+.thumbExcerpt {
+  align-self: stretch;
+  padding: var(--sp-3);
+  font: var(--t-small);
+  color: var(--text-soft);
+  text-align: start;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 5;
+  line-clamp: 5;
+  overflow-wrap: anywhere;
 }
+
 .thumbLines {
   position: absolute;
-  left: 12px;
-  right: 12px;
+  inset-inline: 12px;
   bottom: 12px;
   display: flex;
   flex-direction: column;
@@ -65,7 +79,9 @@
 }
 .thumbLines > i {
   height: 4px;
-  border-radius: 2px;
+  /* Decorative mock content inside the thumbnail, not a UI chip — content/
+     media stays square. */
+  border-radius: var(--r-xs);
   display: block;
 }
 .cardSelect {
@@ -73,23 +89,31 @@
   /* Above the .cardOpen overlay. */
   z-index: 1;
   top: 9px;
-  left: 9px;
+  inset-inline-start: 9px;
   width: 22px;
   height: 22px;
   display: flex;
   align-items: center;
   justify-content: center;
   border: 1.5px solid var(--line-strong);
-  border-radius: 6px;
-  background: color-mix(in oklab, var(--bg-elev) 78%, transparent);
-  backdrop-filter: blur(4px);
+  border-radius: var(--r-md);
+  /* Opaque paper, not glass — the lens metaphor retired with the flip. */
+  background: var(--bg-elev);
   padding: 0;
   opacity: 0;
-  transition: opacity 0.12s;
+  transition: opacity var(--dur-1) var(--ease);
 }
 .card:hover .cardSelect,
+.card:focus-within .cardSelect,
 .card[data-selected="true"] .cardSelect {
   opacity: 1;
+}
+/* A phone has no hover: gating multi-select on `:hover` alone leaves the
+   grid with no way to select anything at all on a compact width. */
+@media (hover: none) {
+  .cardSelect {
+    opacity: 1;
+  }
 }
 .cardSelect[aria-pressed="true"] {
   background: var(--accent-deep);
@@ -99,17 +123,26 @@
 .cardBody {
   padding: var(--sp-3) var(--sp-3) var(--sp-3);
 }
+/* Two clamped lines, never a hard clip — a document title is the one string
+   on a card a reader must be able to finish reading. */
 .cardTitle {
-  font: var(--t-body-strong);
-  font-size: 13.5px;
-  line-height: 1.3;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  font: var(--t-small-strong);
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  overflow-wrap: anywhere;
 }
+/* Size · date, then the row's one state slot. A FLEX ROW with a gap, because
+   the slot is a separate fact and not a continuation of the sentence: run
+   inline with no separator it read as "1.5 KB · Aug 18cannot be shown". */
 .cardMeta {
-  font-family: var(--font-mono);
-  font-size: 10.5px;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--sp-2);
+  font: var(--t-mono);
+  font-variant-numeric: var(--t-mono-numeric);
   color: var(--text-faint);
   margin-top: var(--sp-1);
 }

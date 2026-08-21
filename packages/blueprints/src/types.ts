@@ -37,14 +37,29 @@ export interface AppKnobsManifest {
 }
 
 /**
+ * The seat profile block (docs/blueprint-seats.md, decisions S1/S2/S5),
+ * bundled from a template's `app.json#seats` the same way `appKnobs` is
+ * bundled from `app.json#knobs` — see `scripts/build-manifest.mjs`. Mirrors
+ * `@centraid/server/engine`'s `ManifestSeatsBlock`; duplicated here (rather
+ * than imported) because blueprints must never depend on app-engine at the
+ * package-manifest layer.
+ */
+export interface AppSeats {
+  byteBearing: boolean;
+  originActs: string[];
+  disabledOn: string[];
+  northStar: string;
+}
+
+/**
  * Metadata for a single template entry. Mirrors @centraid/design'
  * `AppMeta` plus a `version` field (so the gallery can detect updates) and
- * a `files` list (so the remote fetcher knows what to download).
+ * a `files` list (so the clone path knows what to read).
  *
  * Two kinds share this shape:
- *   - `kind: 'app'` (default) — a full UI app like `agenda` / `notes` /
- *     `vitals`. Carries `index.html`, `app.css`, and an `app.json`
- *     manifest with optional `knobs[]`.
+ *   - `kind: 'app'` (default) — a full UI app like `agenda` / `notes`.
+ *     Carries its React modules plus an `app.json` manifest with optional
+ *     `knobs[]`.
  *   - `kind: 'automation'` — an app folder (`app.json#kind = "automation"`)
  *     with no UI assets; just `app.json` + `automations/<id>/{automation.json,handler.js}`.
  *     These live under the package's `automations/` directory; UI apps live
@@ -71,8 +86,8 @@ export interface TemplateMeta {
   version: string;
   /**
    * Files that make up the template, relative to its directory. Populated
-   * by the build script (`scripts/build-manifest.mjs`) — the remote fetcher
-   * downloads each entry from `<remoteUrl>/<id>/<file>`.
+   * by the build script (`scripts/build-manifest.mjs`) — `readTemplateFiles`
+   * reads each entry when a clone is staged.
    */
   files: string[];
   /**
@@ -82,6 +97,13 @@ export interface TemplateMeta {
    * desktop popover renders only the rows declared here.
    */
   appKnobs?: AppKnob[];
+  /**
+   * Seat profile (docs/blueprint-seats.md). Bundled from `app.json#seats`
+   * the same way `appKnobs` is bundled from `app.json#knobs`. Every
+   * bundled UI app declares one; automation templates (no UI, no seat)
+   * omit it.
+   */
+  seats?: AppSeats;
   /**
    * 'app' (default) or 'automation'. Declared explicitly in `index.json`
    * for automation templates; omitted entries default to 'app'.

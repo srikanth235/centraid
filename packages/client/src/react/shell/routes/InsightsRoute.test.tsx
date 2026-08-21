@@ -6,6 +6,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { row as automationRow } from "../../../gateway-client-contract-fixtures.js";
 import type * as TypeImport_1gl5zx7 from "../../../gateway-client.js";
 import type { ShellActions } from "../actions.js";
+import { readVitals, resetVitals } from "../routeVitals.js";
+import { readRouteHealth } from "../statusChannel.js";
 import type * as TypeImport_f807xh from "./InsightsRoute.js";
 
 type InsightsSummary = Awaited<
@@ -19,29 +21,45 @@ const getInsightsSummary =
   vi.fn<typeof TypeImport_1gl5zx7.getInsightsSummary>();
 const listAutomations = vi.fn<typeof TypeImport_1gl5zx7.listAutomations>();
 const getGatewayHealth = vi.fn<typeof TypeImport_1gl5zx7.getGatewayHealth>();
+const getUserPrefs = vi.fn<typeof TypeImport_1gl5zx7.getUserPrefs>();
+const saveUserPrefs = vi.fn<typeof TypeImport_1gl5zx7.saveUserPrefs>();
 const navigate = vi.fn<ShellActions["navigate"]>();
 vi.mock(import("../../../gateway-client.js") as Promise<unknown>, () => ({
+  getGatewayHealth: () => getGatewayHealth(),
   getInsightsSummary: (input?: { windowDays?: number }) =>
     getInsightsSummary(input),
+  getUserPrefs: () => getUserPrefs(),
   listAutomations: () => listAutomations(),
-  getGatewayHealth: () => getGatewayHealth(),
+  saveUserPrefs: (patch: Record<string, unknown>) => saveUserPrefs(patch),
 }));
 vi.mock(import("../actions.js") as Promise<unknown>, () => ({
   useShellActions: () => ({ navigate }),
 }));
 
 let InsightsRoute: typeof TypeImport_f807xh.default;
+let insightsCsv: typeof TypeImport_f807xh.insightsCsv;
+let uptimeLine: typeof TypeImport_f807xh.uptimeLine;
 let root: Root | null = null;
 let host: HTMLElement | null = null;
+
 describe("InsightsRoute suite", () => {
   beforeEach(async () => {
-    ({ default: InsightsRoute } = await import("./InsightsRoute.js"));
+    ({
+      default: InsightsRoute,
+      insightsCsv,
+      uptimeLine,
+    } = await import("./InsightsRoute.js"));
     getInsightsSummary.mockReset();
     listAutomations.mockReset();
     getGatewayHealth.mockReset();
+    getUserPrefs.mockReset();
+    saveUserPrefs.mockReset();
     navigate.mockReset();
+    resetVitals();
     listAutomations.mockResolvedValue([]);
     getGatewayHealth.mockResolvedValue(health());
+    getUserPrefs.mockResolvedValue({});
+    saveUserPrefs.mockResolvedValue({});
   });
 
   async function render(): Promise<HTMLElement> {
@@ -62,24 +80,9 @@ describe("InsightsRoute suite", () => {
   });
 
   const summary: InsightsSummary = {
-    windowDays: 30,
-    generatedAt: 0,
-    kpis: {
-      totalTokens: 128_000,
-      hydrationTokens: 0,
-      totalCostUsd: 3.4,
-      agentReportedCostUsd: 2,
-      estimatedCostUsd: 1.4,
-      forecastCostUsd: 5.1,
-      generations: 42,
-      retries: 3,
-      failedRuns: 0,
-      failedCostUsd: 0,
-      appsTouched: 7,
-      unpricedRuns: 0,
-      unreportedRuns: 0,
-    },
-    daily: [{ date: "2026-06-08", tokens: 1000, costUsd: 0.1, runs: 2 }],
+    byEffort: [],
+    byHarness: [],
+    byModel: [],
     bySource: [] as Array<{
       key: string;
       label: string;
@@ -89,25 +92,40 @@ describe("InsightsRoute suite", () => {
       costUsd: number;
       automationName?: string;
     }>,
-    byRunner: [],
-    byModel: [],
-    byEffort: [],
+    daily: [{ costUsd: 0.1, date: "2026-06-08", runs: 2, tokens: 1000 }],
+    generatedAt: Date.UTC(2026, 5, 10),
+    kpis: {
+      appsTouched: 7,
+      estimatedCostUsd: 1.4,
+      failedCostUsd: 0,
+      failedRuns: 3,
+      forecastCostUsd: 5.1,
+      generations: 42,
+      harnessReportedCostUsd: 2,
+      hydrationTokens: 0,
+      retries: 3,
+      totalCostUsd: 3.4,
+      totalTokens: 128_000,
+      unpricedRuns: 0,
+      unreportedRuns: 0,
+    },
     recent: [],
+    windowDays: 30,
   };
 
   function health(metrics?: GatewayHealth["metrics"]): GatewayHealth {
     return {
-      status: "ok",
-      startedAt: "2026-07-28T00:00:00.000Z",
-      uptimeMs: 1,
       components: [],
       recentEvents: [],
+      startedAt: "2026-07-28T00:00:00.000Z",
+      status: "ok",
+      uptimeMs: 21 * 86_400_000,
       ...(metrics ? { metrics } : {}),
     };
   }
 
   describe("InsightsRoute", () => {
-    it("shows a loading line, then the dashboard once the summary resolves", async () => {
+    it("holds the row geometry with a skeleton, then shows the page", async () => {
       let resolveSummary!: (value: InsightsSummary) => void;
       getInsightsSummary.mockReturnValue(
         new Promise((resolve) => {
@@ -115,147 +133,226 @@ describe("InsightsRoute suite", () => {
         })
       );
       const el = await render();
-      expect(el.textContent).toContain("Loading insights…");
+      // A skeleton, never a spinner, and never a bare "Loading…" line.
+      expect(el.querySelector("output")).not.toBeNull();
+      expect(readVitals("insights")?.state).toBe("loading");
       await act(async () => {
         resolveSummary(summary);
       });
-      expect(el.querySelector(".cd-au-loading")).toBeNull();
-      expect(el.querySelector(".mainScroll")).not.toBeNull();
-      expect(el.textContent).toContain("$3.40");
+      expect(el.querySelector("output")).toBeNull();
+      expect(el.querySelector(".page")).not.toBeNull();
     });
 
-    it("renders an error line when the fetch rejects", async () => {
+    it("says what failed, what is safe, and one way forward", async () => {
       getInsightsSummary.mockRejectedValue(new Error("offline"));
       const el = await render();
-      expect(el.querySelector(".pageEmpty")?.textContent).toContain("offline");
+      const panel = el.querySelector(".panel") as HTMLElement | null;
+      expect(panel?.dataset.tone).toBe("net");
+      expect(el.textContent).toContain("The run log is unavailable");
+      expect(el.textContent).toContain(
+        "The rollup rebuilds every ten minutes; this rebuild has not finished."
+      );
+      // No rebuild trigger exists to offer, so the verb is the honest one.
+      expect(el.textContent).toContain("Retry");
+      expect(el.textContent).not.toContain("Rebuild now");
+      expect(readVitals("insights")?.state).toBe("error");
+    });
+
+    it("re-reads the rollup when the reader asks again", async () => {
+      getInsightsSummary.mockRejectedValueOnce(new Error("offline"));
+      getInsightsSummary.mockResolvedValue(summary);
+      const el = await render();
+      const retry = el.querySelector(".panel button") as HTMLButtonElement;
+      await act(async () => retry.click());
+      expect(getInsightsSummary).toHaveBeenCalledTimes(2);
+      expect(el.querySelector(".page")).not.toBeNull();
+    });
+
+    it("publishes the count line and the health sentence together", async () => {
+      getInsightsSummary.mockResolvedValue(summary);
+      await render();
+      expect(readVitals("insights")).toStrictEqual({
+        count: "42 runs in 30 days · 3 failed",
+        state: "ready",
+      });
+      expect(readRouteHealth()?.text).toBe(
+        "93% of runs succeeded · The vault host has been up for 21 days."
+      );
+    });
+
+    it("reports empty when nothing ran in the window", async () => {
+      getInsightsSummary.mockResolvedValue({
+        ...summary,
+        kpis: { ...summary.kpis, failedRuns: 0, generations: 0 },
+      });
+      const el = await render();
+      expect(readVitals("insights")?.state).toBe("empty");
+      expect(el.textContent).toContain("Nothing has run yet");
+    });
+
+    it("restores the member's window and saves the one they pick", async () => {
+      getUserPrefs.mockResolvedValue({ "insights.windowDays": 90 });
+      getInsightsSummary.mockResolvedValue(summary);
+      const el = await render();
+      expect(getInsightsSummary).toHaveBeenLastCalledWith({ windowDays: 90 });
+      const chips = [...el.querySelectorAll(".chip")] as HTMLButtonElement[];
+      await act(async () => chips[0]!.click());
+      expect(saveUserPrefs).toHaveBeenCalledWith({ "insights.windowDays": 7 });
+      expect(getInsightsSummary).toHaveBeenLastCalledWith({ windowDays: 7 });
+    });
+
+    it("requests the default 30-day window when nothing is saved", async () => {
+      getInsightsSummary.mockResolvedValue(summary);
+      await render();
+      expect(getInsightsSummary).toHaveBeenCalledWith({ windowDays: 30 });
     });
 
     it("resolves automation display names for by-source + recent rows", async () => {
       listAutomations.mockResolvedValue([
         {
           ...automationRow(),
-          ref: "system-health-check/system-health-check",
           name: "System health check",
+          ref: "system-health-check/system-health-check",
         },
       ]);
       getInsightsSummary.mockResolvedValue({
         ...summary,
         bySource: [
           {
+            costUsd: 0,
             key: "system-health-check/system-health-check",
-            label: "Automation",
             kind: "automation",
+            label: "Automation",
             runs: 1,
             tokens: 0,
-            costUsd: 0,
           },
         ],
         recent: [
           {
-            runId: "r1",
+            automationRef: "system-health-check/system-health-check",
+            costUsd: 0,
+            hydrationTokens: 0,
             kind: "automation",
             label: "ok",
-            automationRef: "system-health-check/system-health-check",
             ok: true,
-            startedAt: 1750000000000,
+            runId: "r1",
+            startedAt: 1_750_000_000_000,
             tokens: 0,
-            hydrationTokens: 0,
-            costUsd: 0,
           },
         ],
       });
       const el = await render();
-      const hits = el.textContent?.match(/System health check/gu) ?? [];
-      expect(hits.length).toBeGreaterThanOrEqual(2);
+      expect(el.textContent).toContain("System health check");
     });
 
     it("falls back to the run-recorded automation name for a deleted automation", async () => {
       listAutomations.mockResolvedValue([]);
       getInsightsSummary.mockResolvedValue({
         ...summary,
-        bySource: [
-          {
-            key: "gone-app/gone-auto",
-            label: "Automation",
-            kind: "automation",
-            runs: 1,
-            tokens: 0,
-            costUsd: 0,
-            automationName: "Gone Automation",
-          },
-        ],
         recent: [
           {
-            runId: "r1",
+            automationName: "Gone Automation",
+            automationRef: "gone-app/gone-auto",
+            costUsd: 0,
+            hydrationTokens: 0,
             kind: "automation",
             label: "ok",
-            automationRef: "gone-app/gone-auto",
-            automationName: "Gone Automation",
             ok: true,
-            startedAt: 1750000000000,
+            runId: "r1",
+            startedAt: 1_750_000_000_000,
             tokens: 0,
-            hydrationTokens: 0,
-            costUsd: 0,
           },
         ],
       });
       const el = await render();
-      const hits = el.textContent?.match(/Gone Automation/gu) ?? [];
-      expect(hits.length).toBeGreaterThanOrEqual(2);
+      expect(el.textContent).toContain("Gone Automation");
       expect(el.textContent).not.toContain("gone-app/gone-auto");
     });
 
-    it("requests the default 30-day window", async () => {
-      getInsightsSummary.mockResolvedValue(summary);
-      await render();
-      expect(getInsightsSummary).toHaveBeenCalledWith({ windowDays: 30 });
+    it("deep-links a run from its row", async () => {
+      getInsightsSummary.mockResolvedValue({
+        ...summary,
+        recent: [
+          {
+            automationRef: "app/x",
+            costUsd: 0,
+            hydrationTokens: 0,
+            kind: "automation",
+            label: "A run",
+            ok: true,
+            runId: "r9",
+            startedAt: 1_750_000_000_000,
+            tokens: 0,
+          },
+        ],
+      });
+      const el = await render();
+      const open = el.querySelector(".row button") as HTMLButtonElement;
+      await act(async () => open.click());
+      expect(navigate).toHaveBeenCalledWith({
+        automationId: "app/x",
+        kind: "run-view",
+        runId: "r9",
+      });
     });
 
-    it("renders the resource receipt when health carries resourceUsage", async () => {
+    it("carries the gateway's measured numbers when health serves them", async () => {
       getInsightsSummary.mockResolvedValue(summary);
       getGatewayHealth.mockResolvedValue(
         health({
-          rssBytes: 0,
           outboxPending: 0,
-          uptimeMs: 1,
           resourceUsage: {
-            sinceMs: Date.now() - 3_600_000,
+            backgroundTimerFiresLastHour: 12,
             process: {
               cpuSecondsTotal: 12,
               currentRssBytes: 268_435_456,
               peakRssBytes: 268_435_456,
             },
+            sinceMs: Date.now() - 3_600_000,
             subsystems: {
-              workerPool: { tasks: 4, busyMs: 1000 },
-              replication: { passes: 1, bytesReplicated: 1024, busyMs: 100 },
-              backup: { drains: 0, bytesUploaded: 0, busyMs: 0 },
-              sweeps: { passes: 2, busyMs: 50 },
-              agentRuns: { runs: 3, busyMs: 9000, cpuSeconds: null },
+              backup: { bytesUploaded: 0, busyMs: 0, drains: 0 },
+              harnessRuns: { busyMs: 9000, cpuSeconds: null, runs: 3 },
+              replication: { busyMs: 100, bytesReplicated: 1024, passes: 1 },
+              sweeps: { busyMs: 50, passes: 2 },
+              workerPool: { busyMs: 1000, tasks: 4 },
             },
-            backgroundTimerFiresLastHour: 12,
           },
+          rssBytes: 0,
+          uptimeMs: 1,
         })
       );
       const el = await render();
-      expect(el.textContent).toContain("Resource receipt");
+      expect(el.textContent).toContain("cpu time");
       expect(el.textContent).toContain("not limited by Conserve");
     });
 
-    it("shows the receipt unavailable line when health lacks resourceUsage", async () => {
-      getInsightsSummary.mockResolvedValue(summary);
-      getGatewayHealth.mockResolvedValue(
-        health({ rssBytes: 0, outboxPending: 0, uptimeMs: 1 })
-      );
-      const el = await render();
-      expect(el.textContent).toContain("Not available from this gateway");
-    });
-
-    it("keeps Insights working when health fetch rejects", async () => {
+    it("keeps Analytics working when the health fetch rejects", async () => {
       getInsightsSummary.mockResolvedValue(summary);
       getGatewayHealth.mockRejectedValue(new Error("offline"));
       const el = await render();
-      expect(el.textContent).toContain("$3.40");
-      expect(el.textContent).toContain("Not available from this gateway");
+      expect(el.querySelector(".page")).not.toBeNull();
+      expect(el.textContent).toContain("Not available from this vault host");
+      expect(readRouteHealth()?.text).toContain(
+        "did not report how long it has been up"
+      );
+    });
+  });
+
+  describe("InsightsRoute helpers", () => {
+    it("exports the numbers the chart is drawn from", () => {
+      expect(insightsCsv(summary)).toBe(
+        "date,runs,tokens,cost_usd\n2026-06-08,2,1000,0.1000"
+      );
+    });
+
+    it("says uptime at the coarsest unit that is still true", () => {
+      expect(uptimeLine(21 * 86_400_000)).toBe(
+        "The vault host has been up for 21 days."
+      );
+      expect(uptimeLine(3_600_000)).toBe(
+        "The vault host has been up for 1 hour."
+      );
+      expect(uptimeLine(undefined)).toContain("did not report");
     });
   });
 });

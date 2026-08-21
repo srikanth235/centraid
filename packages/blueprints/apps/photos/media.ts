@@ -1,14 +1,15 @@
-import { safeMediaUrl } from "../_shared/untrusted.ts";
+import { scopeAttr } from "../_shared/scope-kit.ts";
+import { safeMediaUrl, VAULT_BLOB_PATH } from "../_shared/untrusted.ts";
 // Tile media: the once-per-mount fill (thumb image or placeholder) plus the
 // mount guard that makes it safe to call from a React callback ref on every
 // render. JSX-free by design — shared by every component that renders a tile
 // (Timeline.tsx, Picker.tsx, Duplicates.tsx).
 import { isAudioAsset, isVideoAsset } from "./format.ts";
 import {
+  BLOB_PENDING_ATTR,
   observeNextScreen,
   stopNextScreenObservation,
 } from "./media-observer.ts";
-import { scopeAttr } from "./scopes.ts";
 import type { Asset } from "./types.ts";
 
 export function isRenderableUri(uri: unknown): boolean {
@@ -52,13 +53,26 @@ export function gridSrc(asset: Asset): string | null | undefined {
       Math.max(asset.width, asset.height) <= THUMB_EDGE;
     return safeMediaUrl(knownSmall ? asset.content_uri : asset.thumb_uri);
   }
-  // A non-blob `data:` URI already travelled inline with the row — render it
-  // directly (no network). Any other bare URI would be a full remote original,
-  // so it stays a placeholder.
-  if (
-    typeof asset.content_uri === "string" &&
-    asset.content_uri.startsWith("data:")
-  ) {
+  // No thumb recorded. Two sources are still paintable, and refusing them is
+  // what made a freshly imported library render as a wall of grey boxes
+  // (issue #708): `thumb_uri` is only set once the gateway's preview backstop
+  // has written the derivative row, so EVERY photo is thumb-less for a while
+  // after import — and a library that has never been opened is thumb-less
+  // entirely.
+  //
+  //  * a `data:` URI travelled inline with the row, so it costs no network;
+  //  * a vault blob path is the ORIGINAL, which is what the shell's own Home
+  //    mosaic paints in exactly this state (`photoThumbs` in
+  //    client/src/react/shell/routes/homeTileContent.ts).
+  //
+  // Anything else — a bare remote URL — stays a placeholder, because that
+  // would be a full-size original fetched off-device.
+  //
+  // The `<img>` error retry below cannot cover this case: it only runs for a
+  // tile that got an `<img>` at all, and returning null here means no `<img>`
+  // is ever built.
+  const inline = typeof asset.content_uri === "string" ? asset.content_uri : "";
+  if (inline.startsWith("data:") || inline.startsWith(VAULT_BLOB_PATH)) {
     return safeMediaUrl(asset.content_uri);
   }
   return null;
@@ -68,7 +82,11 @@ export function durationLabel(
   seconds: number | null | undefined
 ): string | null {
   const value = Number(seconds);
-  if (!Number.isFinite(value) || value < 0) return null;
+  // A still photo whose `duration_s` column is 0 (or an empty string, which
+  // `Number()` also makes 0) is not a zero-second clip — it has no timeline at
+  // all, and stamping "0:00" on it reads as a broken video. Only a POSITIVE
+  // duration is a duration.
+  if (!Number.isFinite(value) || value <= 0) return null;
   const total = Math.round(value);
   const hours = Math.floor(total / 3600);
   const minutes = Math.floor((total % 3600) / 60);
@@ -83,6 +101,14 @@ function renderPlaceholder(tile: HTMLElement, asset: Asset): void {
   const shimmer = document.createElement("span");
   shimmer.className = "ph-tile-ph";
   shimmer.setAttribute("aria-hidden", "true");
+  // The ground an absence paints (v4 §2.2). `--bg-elev`/`--bg-sunken` read as
+  // a CARD, and an absence is not a card — `--skel` is the role the design
+  // system added for exactly this. Set here rather than on `.ph-tile-ph` so
+  // the three non-React callers of this function (the picker, the duplicates
+  // shelf, the trash tile) agree with the Tile's own skeleton without a
+  // second stylesheet having to be loaded for them. The fallback keeps an
+  // older host that injects only the contract painting something.
+  shimmer.style.background = "var(--skel, var(--bg-sunken))";
   tile.appendChild(shimmer);
   if (isVideoAsset(asset)) {
     const badge = document.createElement("span");
@@ -104,6 +130,10 @@ function renderPlaceholder(tile: HTMLElement, asset: Asset): void {
 }
 
 function renderDuration(tile: HTMLElement, asset: Asset): void {
+  // Only timed media has a duration to show. A PNG still carrying a stray
+  // `duration_s` is a data artefact, not a clip, and the chip made two seeded
+  // photos look like broken videos (#708).
+  if (!isVideoAsset(asset) && !isAudioAsset(asset)) return;
   const label = durationLabel(asset.duration_s);
   if (!label) return;
   const badge = document.createElement("span");
@@ -116,7 +146,21 @@ function renderDuration(tile: HTMLElement, asset: Asset): void {
 // picker and the duplicates shelf. Imperative on purpose: `mountMedia` guards
 // it to run once per mounted element, exactly like the old code's one-time
 // build.
-export function fillTileMedia(tile: HTMLElement, asset: Asset): void {
+/**
+ * What a tile reports back about its bytes (v4 §14). Deliberately a callback
+ * and not a return value: `pending → bytes` and `pending → failed` happen
+ * after the retry ladder below has run, long after this function returns, and
+ * the state slot has to be able to say so. Typed loosely (a string union
+ * declared in tile-state.ts) so this module keeps its no-JSX, no-app-state
+ * shape and tile-state.ts stays the one owner of the vocabulary.
+ */
+export type MediaReport = (state: "bytes" | "gateway" | "failed") => void;
+
+export function fillTileMedia(
+  tile: HTMLElement,
+  asset: Asset,
+  report?: MediaReport
+): void {
   // WHICH scope owns these bytes (issue #599). The shell's blob authorizer
   // reads `data-scope` off the element carrying a `/centraid/_vault/blobs/…`
   // reference or its nearest ancestor, and fetches the bytes in that scope.
@@ -128,8 +172,13 @@ export function fillTileMedia(tile: HTMLElement, asset: Asset): void {
   if (scope) tile.dataset.scope = scope;
   const src = gridSrc(asset);
   if (src == null) {
+    // NOT a failure: there is simply nothing on this device to paint, which is
+    // the offline / offloaded case (§14). The tile says `on the gateway` and
+    // keeps its shape and its colour — a grey mosaic with no explanation is a
+    // bug.
     renderPlaceholder(tile, asset);
     renderDuration(tile, asset);
+    report?.("gateway");
     return;
   }
   const img = document.createElement("img");
@@ -144,20 +193,61 @@ export function fillTileMedia(tile: HTMLElement, asset: Asset): void {
     img.width = asset.width;
     img.height = asset.height;
   }
-  // A thumb 404 (variant never produced) must NOT fall back to the original —
-  // swap in a placeholder instead of pulling multi-MB bytes into the grid.
-  img.addEventListener(
-    "error",
-    () => {
+  // ONE retry against the original before the tile gives up (#708).
+  //
+  // Two real failures land here and both used to paint a permanent grey box:
+  //
+  //  1. The derivative does not exist YET. `?variant=thumb` answers
+  //     `no-variant` → 404 for every photo between import and the gateway's
+  //     preview backstop running, which on a fresh library is EVERY photo. The
+  //     shell's own Home mosaic already fell back for exactly this reason —
+  //     `photoThumbs` in client/src/react/shell/routes/homeTileContent.ts.
+  //  2. The authorized `blob:` object URL was revoked out from under an
+  //     in-flight decode (ERR_FILE_NOT_FOUND). Re-assigning the RELATIVE
+  //     `/centraid/_vault/blobs/…` path re-enters the inline authorizer's
+  //     MutationObserver and mints a fresh one.
+  //
+  // The cost argument the old comment made still holds for the steady state —
+  // which is why this is one retry on a source we already committed to
+  // painting, not a policy of preferring originals. A tile that cannot paint
+  // is worth more bytes than a tile that paints nothing.
+  const original = safeMediaUrl(asset.content_uri);
+  img.addEventListener("error", () => {
+    // NOT a verdict on the asset: the element is still pointed at a raw
+    // `/centraid/_vault/blobs/…` path AND the shell's blob authorizer says it
+    // is mid-flight on exactly that reference. Off the gateway origin that
+    // path answers with the SPA shell's `index.html`, so this `error` is the
+    // un-authorized load failing, not the photo. Tearing the tile down here is
+    // what made the whole web grid grey. Wait instead: the authorizer either
+    // swaps in an authed `blob:` URL (a fresh load, no error) or clears the
+    // stamp and re-fires this event, and the fallback below runs then.
+    if (
+      img.getAttribute(BLOB_PENDING_ATTR) === "1" &&
+      (img.getAttribute("src") ?? "").startsWith(VAULT_BLOB_PATH)
+    ) {
+      return;
+    }
+    if (
+      original &&
+      img.dataset.originalFallback !== "1" &&
+      img.src !== original
+    ) {
+      img.dataset.originalFallback = "1";
       stopNextScreenObservation(img);
-      img.remove();
-      tile.querySelector(".ph-tile-video-badge")?.remove();
-      tile.querySelector(".ph-tile-duration")?.remove();
-      renderPlaceholder(tile, asset);
-      renderDuration(tile, asset);
-    },
-    { once: true }
-  );
+      img.src = original;
+      return;
+    }
+    stopNextScreenObservation(img);
+    img.remove();
+    tile.querySelector(".ph-tile-video-badge")?.remove();
+    tile.querySelector(".ph-tile-duration")?.remove();
+    renderPlaceholder(tile, asset);
+    renderDuration(tile, asset);
+    // The retry ladder is exhausted: this IS the terminal failure §14 names.
+    // The tile keeps its geometry and says `could not decode`.
+    report?.("failed");
+  });
+  img.addEventListener("load", () => report?.("bytes"));
   tile.appendChild(img);
   if (isVideoAsset(asset)) {
     const badge = document.createElement("span");
@@ -179,7 +269,11 @@ export function fillTileMedia(tile: HTMLElement, asset: Asset): void {
 // with a stable `key={asset.asset_id}` on the tile is what keeps the
 // underlying `<img>` node — and therefore its already loaded bytes — alive
 // across refreshes.
-export function mountMedia(el: HTMLElement | null, asset: Asset): void {
+export function mountMedia(
+  el: HTMLElement | null,
+  asset: Asset,
+  report?: MediaReport
+): void {
   // Keyed by SCOPE + asset id (issue #599). Asset ids are minted per scope and
   // collide across scopes exactly like content ids do, so an id-only guard
   // would treat a Family photo as "already painted" because the member's own
@@ -188,5 +282,5 @@ export function mountMedia(el: HTMLElement | null, asset: Asset): void {
   const key = `${asset.scope_id ?? ""}:${asset.asset_id}`;
   if (!el || el.dataset.mediaFor === key) return;
   el.dataset.mediaFor = key;
-  fillTileMedia(el, asset);
+  fillTileMedia(el, asset, report);
 }

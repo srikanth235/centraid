@@ -20,7 +20,7 @@ jobs:
       - uses: ./.github/actions/setup
       - run: bunx playwright install --with-deps chromium
         working-directory: apps/extension
-      - run: bun run turbo run build --filter=@centraid/gateway --filter=@centraid/tunnel --filter=@centraid/extension
+      - run: bun run turbo run build --filter=@centraid/server --filter=@centraid/tunnel --filter=@centraid/extension
       - run: xvfb-run --auto-servernum node tests/agent-e2e-pairing/flows/extension-companion.mjs
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         if: failure()

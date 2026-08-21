@@ -16,6 +16,8 @@ import {
 import { createReplicaCoordinator } from "./coordinator-web.js";
 import type { ReplicaWebCoordinatorOptions } from "./coordinator-web.js";
 import { ReplicaProtocolError } from "./errors.js";
+import { pendingIntentIdFromInput } from "./intents.js";
+import type { PendingIntentReplacement } from "./intents.js";
 import {
   fetchReplicaBootstrap,
   fetchReplicaChanges,
@@ -39,6 +41,7 @@ import { DEFAULT_REPLICA_PURPOSE } from "./types.js";
 import type {
   EnqueueIntentInput,
   IntentOutcome,
+  OptimisticMutation,
   ReplicaBootstrapHeader,
   ReplicaChangeBatch,
   ReplicaCursor,
@@ -119,6 +122,9 @@ export interface ShellReplicaCoordinator {
     request: ReplicaSearchRequest
   ) => Promise<ReplicaSearchWireResult>;
   enqueue: (input: EnqueueIntentInput) => Promise<ReplicaIntent>;
+  captureBaseVersions?: (
+    mutations: readonly OptimisticMutation[]
+  ) => Promise<ReplicaBaseVersion[]>;
   claimNextIntent: () => Promise<ReplicaIntent | undefined>;
   markIntentTransportFailed: (
     intentId: string,
@@ -130,9 +136,26 @@ export interface ShellReplicaCoordinator {
   ) => Promise<ReplicaIntent | undefined>;
   recoverSending: () => Promise<ReplicaIntent[]>;
   pendingIntents: () => Promise<ReplicaIntent[]>;
+  discardIntent: (intentId: string) => Promise<boolean>;
+  retryIntent: (intentId: string) => Promise<ReplicaIntent | undefined>;
+  reviseIntent?: (
+    intentId: string,
+    revision: ReplicaValue,
+    expectedActions?: readonly string[]
+  ) => Promise<ReplicaIntent | undefined>;
+  reviseIntentForProjection?: (
+    appId: string,
+    action: string,
+    revision: ReplicaValue,
+    optimistic: readonly OptimisticMutation[],
+    refreshedBaseVersions?: ReplicaBaseVersion[]
+  ) => Promise<PendingIntentReplacement | undefined>;
   subscribeInvalidations: (
     listener: (invalidations: readonly ReplicaInvalidation[]) => void
   ) => () => void;
+  /** Imperative catch-up to the gateway head; see `ReplicaCoordinator.syncNow`.
+   *  Optional so bootstrap-only coordinators stay valid implementations. */
+  syncNow?: () => Promise<void>;
   close: () => Promise<void>;
   purge: () => Promise<void>;
 }
@@ -148,6 +171,8 @@ export interface ReplicaShellSessionOptions {
   /** Test seam for the authoritative global durable-scope inventory. */
   inventory?: ReplicaIdentityInventory;
   onAuthorizationRevoked?: (session: ReplicaShellSession) => void;
+  /** Visibility-safe sweep fallback for transports without an SSE feed. */
+  pollIntervalMs?: number;
 }
 
 export interface OpenReplicaShellSessionOptions extends ReplicaShellSessionOptions {
@@ -171,11 +196,15 @@ export class ReplicaShellSession {
   readonly #onAuthorizationRevoked:
     | ((session: ReplicaShellSession) => void)
     | undefined;
+  readonly #pollIntervalMs: number | undefined;
+  #pollTimer: ReturnType<typeof setInterval> | undefined;
   #catalog: ReplicaShape[] = [];
   #bootstrapPromise: Promise<void> | undefined;
   #bootstrapAbort: AbortController | undefined;
   #bootstrapRetryTimer: ReturnType<typeof setTimeout> | undefined;
   #bootstrapRetryAttempt = 0;
+  /** A rebootstrap demanded while one was already walking; runs once it ends. */
+  #rebootstrapQueued = false;
   #drainPromise: Promise<void> | undefined;
   #drainRequested = false;
   #retryTimer: ReturnType<typeof setTimeout> | undefined;
@@ -205,6 +234,7 @@ export class ReplicaShellSession {
     this.#rememberStorage = options.rememberStorage === true;
     this.#inventory = options.inventory;
     this.#onAuthorizationRevoked = options.onAuthorizationRevoked;
+    this.#pollIntervalMs = options.pollIntervalMs;
   }
 
   async start(status: ReplicaStatus): Promise<this> {
@@ -224,6 +254,13 @@ export class ReplicaShellSession {
       else this.#catalog = await this.coordinator.catalog();
     }
     void this.flushIntents();
+    if (this.#pollIntervalMs) {
+      this.#pollTimer = setInterval(
+        () => void this.sync().catch(() => undefined),
+        this.#pollIntervalMs
+      );
+      (this.#pollTimer as unknown as { unref?: () => void }).unref?.();
+    }
     return this;
   }
 
@@ -262,12 +299,49 @@ export class ReplicaShellSession {
     this.assertOpen();
     if (!input.action)
       throw new ReplicaProtocolError("Replica action is required");
-    const { optimistic, dependencies } = prepareReplicaWrite(
+    const retainedIntent = pendingIntentIdFromInput(
       appId,
-      input.optimistic,
-      this.#catalog,
-      this.resolveShapeId.bind(this)
+      input.action,
+      input.input
     );
+    if (retainedIntent) {
+      const revised = await this.revisePendingWrite(
+        retainedIntent.intentId,
+        input.input,
+        retainedIntent.expectedActions
+      );
+      if (revised) return revised;
+      throw new ReplicaProtocolError(
+        "The pending row is no longer available to edit"
+      );
+    }
+    // A first-open offline session has no catalog yet. The action intent is
+    // still durable and replayable; only its local projection must wait for
+    // bootstrap to reveal the shape contract.
+    const { optimistic, dependencies } =
+      this.#catalog.length === 0
+        ? { optimistic: [], dependencies: [] }
+        : prepareReplicaWrite(
+            appId,
+            input.optimistic,
+            this.#catalog,
+            this.resolveShapeId.bind(this),
+            false
+          );
+    const baseVersions =
+      input.baseVersions ??
+      (this.#hasCursor
+        ? await this.coordinator.captureBaseVersions?.(optimistic)
+        : undefined) ??
+      [];
+    const matched = await this.coordinator.reviseIntentForProjection?.(
+      appId,
+      input.action,
+      input.input,
+      optimistic,
+      baseVersions
+    );
+    if (matched) return this.replacementAdmission(matched.replacement);
     this.beginAdmissionRegistration();
     try {
       const intent = await this.coordinator.enqueue({
@@ -277,7 +351,7 @@ export class ReplicaShellSession {
         input: input.input,
         optimistic,
         dependencies,
-        ...(input.baseVersions ? { baseVersions: input.baseVersions } : {}),
+        ...(baseVersions.length > 0 ? { baseVersions } : {}),
       });
       this.assertOpen();
       const existingAdmission = admissionResult(intent);
@@ -302,6 +376,55 @@ export class ReplicaShellSession {
     } finally {
       this.finishAdmissionRegistration();
     }
+  }
+
+  discardPendingWrite(intentId: string): Promise<boolean> {
+    this.assertOpen();
+    return this.coordinator.discardIntent(intentId);
+  }
+
+  async revisePendingWrite(
+    intentId: string,
+    revision: ReplicaValue,
+    expectedActions?: readonly string[]
+  ): Promise<ShellReplicaWriteResult | undefined> {
+    this.assertOpen();
+    const replacement = await this.coordinator.reviseIntent?.(
+      intentId,
+      revision,
+      expectedActions
+    );
+    if (!replacement) return undefined;
+    return this.replacementAdmission(replacement);
+  }
+
+  async retryPendingWrite(
+    intentId: string
+  ): Promise<ShellReplicaWriteResult | undefined> {
+    this.assertOpen();
+    const replacement = await this.coordinator.retryIntent(intentId);
+    if (!replacement) return undefined;
+    if (!this.#isOnline())
+      return {
+        intentId: replacement.intentId,
+        status: "queued",
+        reason: "waiting for a connection",
+      };
+    void this.flushIntents();
+    return { intentId: replacement.intentId, status: "in-flight" };
+  }
+
+  private replacementAdmission(
+    replacement: ReplicaIntent
+  ): ShellReplicaWriteResult {
+    if (!this.#isOnline())
+      return {
+        intentId: replacement.intentId,
+        status: "queued",
+        reason: "waiting for a connection",
+      };
+    void this.flushIntents();
+    return { intentId: replacement.intentId, status: "in-flight" };
   }
 
   subscribe(
@@ -339,6 +462,26 @@ export class ReplicaShellSession {
       );
       if (relevant.length > 0) listener(structuredClone(relevant));
     });
+  }
+
+  /**
+   * Pull whatever the gateway holds beyond the local cursor, right now.
+   *
+   * The change feed is push-driven, so a caller that has just finished a
+   * gateway-side write (Home's sample seed) otherwise races the SSE nudge:
+   * its re-read lands before the replica has the rows and paints the pre-write
+   * state. Awaiting this makes "the write resolved" imply "the replica has the
+   * rows". A session still waiting on its first fill catches up by
+   * bootstrapping instead — the walk owns the first fill and already ends at
+   * the head.
+   */
+  async sync(): Promise<void> {
+    this.assertOpen();
+    if (!this.#hasCursor) {
+      await this.bootstrapWhenReachable();
+      return;
+    }
+    await this.coordinator.syncNow?.();
   }
 
   async flushIntents(): Promise<void> {
@@ -425,7 +568,16 @@ export class ReplicaShellSession {
 
   requireBootstrap(): void {
     this.#hasCursor = false;
-    if (!this.#closed) void this.bootstrapWhenReachable();
+    if (this.#closed) return;
+    // A demand raised while a bootstrap is already walking is about the state
+    // that walk started from, so the walk does not satisfy it — and
+    // `bootstrapWhenReachable` would hand back the in-flight promise and drop
+    // it on the floor. Queue exactly one follow-up instead.
+    if (this.#bootstrapPromise) {
+      this.#rebootstrapQueued = true;
+      return;
+    }
+    void this.bootstrapWhenReachable();
   }
 
   private async bootstrapWhenReachable(): Promise<void> {
@@ -433,6 +585,9 @@ export class ReplicaShellSession {
       return this.#bootstrapPromise;
     this.#bootstrapPromise = this.bootstrap().finally(() => {
       this.#bootstrapPromise = undefined;
+      if (!this.#rebootstrapQueued) return;
+      this.#rebootstrapQueued = false;
+      if (!this.#closed) void this.bootstrapWhenReachable();
     });
     return this.#bootstrapPromise;
   }
@@ -476,12 +631,25 @@ export class ReplicaShellSession {
       const resolved: IntentOutcome[] = [];
       await runWindowedBootstrap({
         gatewayAuth: this.gatewayAuth,
+        // Wrapped, not referenced. `runWindowedBootstrap` invokes these as
+        // `target.bootstrapBegin(...)`, so a bare method reference arrives with
+        // `this` bound to this object literal instead of the coordinator — and
+        // the first thing `bootstrapBegin` does is call a private method on
+        // itself. Detaching them threw `this.resetFeedGeneration is not a
+        // function` the moment anything drove a windowed bootstrap.
         target: {
-          bootstrapBegin: this.coordinator.bootstrapBegin!,
-          bootstrapPage: this.coordinator.bootstrapPage!,
-          bootstrapPreview: this.coordinator.bootstrapPreview,
-          bootstrapCommit: this.coordinator.bootstrapCommit!,
-          applyChanges: this.coordinator.applyChanges!,
+          bootstrapBegin: (header) => this.coordinator.bootstrapBegin!(header),
+          bootstrapPage: (rows) => this.coordinator.bootstrapPage!(rows),
+          bootstrapPreview: this.coordinator.bootstrapPreview
+            ? (rows) => this.coordinator.bootstrapPreview!(rows)
+            : undefined,
+          // Every argument, forwarded. `outcomes` carries the intent outcomes
+          // `reconcileOutcomes` just reconciled against the page-1 cursor;
+          // dropping it left every write that was in flight across a bootstrap
+          // unresolved, with nothing to say so.
+          bootstrapCommit: (cursor, header, outcomes) =>
+            this.coordinator.bootstrapCommit!(cursor, header, outcomes),
+          applyChanges: (changes) => this.coordinator.applyChanges!(changes),
         },
         fetcher: this.#fetcher,
         signal: abort.signal,
@@ -719,6 +887,8 @@ export class ReplicaShellSession {
 
   private detach(): void {
     this.#eventTarget.removeEventListener("online", this.onOnline);
+    if (this.#pollTimer) clearInterval(this.#pollTimer);
+    this.#pollTimer = undefined;
     if (this.#retryTimer) clearTimeout(this.#retryTimer);
     this.#retryTimer = undefined;
     if (this.#bootstrapRetryTimer) clearTimeout(this.#bootstrapRetryTimer);
@@ -781,11 +951,12 @@ export async function openReplicaShellSession(
       // focused, so the non-focused scopes would silently stop seeing changes.
       changeFeed: {
         subscribe: (listener) => subscribeVaultChanges(listener, gatewayAuth),
-        setShapeIds: async (shapeIds) => {
+        setShapeIds: async (shapeIds: readonly string[]) => {
           persistedShapeIds = [...shapeIds];
           await setVaultChangeShapeIds(persistedShapeIds, gatewayAuth);
         },
-        resume: (cursor) => resumeVaultChanges(cursor, gatewayAuth),
+        resume: (cursor: ReplicaCursor) =>
+          resumeVaultChanges(cursor, gatewayAuth),
       },
       pullChanges: async (cursor, signal) => {
         try {
@@ -988,6 +1159,10 @@ export async function purgeReplicaShellSession(): Promise<void> {
 /** Eager local half of revoking the device that owns this renderer. */
 export async function purgeCurrentReplicaDevice(): Promise<void> {
   purgeBrowserReplicaCaches();
+  // The pointer to the vault this device addressed goes with the access it
+  // pointed at — and the session's in-memory copy with it.
+  forgetAllAddressedVaults();
+  addressedFallback = undefined;
   // Revoking THIS device revokes every scope it holds, so the sweep fans across
   // all mounted identities — not just the focused one (issue #599).
   const identities = new Map<string, ReplicaIdentity>(
@@ -1066,6 +1241,11 @@ async function handleGatewayChanged(
   if (detail.removedGatewayId) purgeGatewayIds.add(detail.removedGatewayId);
   if (detail.purgeReplicaGatewayId)
     purgeGatewayIds.add(detail.purgeReplicaGatewayId);
+  // A removed or purged gateway's remembered vault pointer is now a pointer at
+  // a scope this device does not hold — drop it before anything can re-open it.
+  for (const gatewayId of purgeGatewayIds) forgetAddressedVault(gatewayId);
+  if (addressedFallback && purgeGatewayIds.has(addressedFallback.key))
+    addressedFallback = undefined;
   // Every mounted scope of a removed gateway is terminal; scopes on a gateway
   // that merely lost focus close warm and keep their remembered storage.
   await applyScopeTeardownsInOrder([...sessions.values()], async (entry) => {
@@ -1167,9 +1347,12 @@ function purgeBrowserReplicaCaches(): void {
  */
 export async function addressedGatewayAuth(): Promise<GatewayAuth> {
   const gatewayAuth = await auth();
-  if (gatewayAuth.vaultId) return gatewayAuth;
   const key =
     gatewayAuth.gatewayId?.trim() || normalizedGatewayUrl(gatewayAuth.baseUrl);
+  if (gatewayAuth.vaultId) {
+    rememberAddressedVault(key, gatewayAuth.vaultId);
+    return gatewayAuth;
+  }
   let pending = addressedFallback?.key === key ? addressedFallback : undefined;
   if (!pending) {
     const promise = vaultStatus()
@@ -1184,13 +1367,91 @@ export async function addressedGatewayAuth(): Promise<GatewayAuth> {
       // next call re-ask rather than pinning "unknown" for the session.
       if (vaultId === undefined && addressedFallback?.promise === promise) {
         addressedFallback = undefined;
-      }
+      } else if (vaultId) rememberAddressedVault(key, vaultId);
     });
   }
+  // The last id this gateway told us, answered WITHOUT waiting for the network
+  // ask above. An unpaired same-origin install leaves `vaultId` unset (only the
+  // pairing path writes it into the connection), so every replica read went
+  // through `_vault/status` — and with the gateway down that read does not fail
+  // fast, it fails after the Iroh dial gives up. Home would then throw "An
+  // addressed vault is required" and paint the day-one empty state over a fully
+  // synced replica. This is not the guess the doc comment above rejects: it is
+  // the gateway's OWN previous answer for this exact gateway key, and the ask
+  // is still in flight to correct the record for the next launch.
+  const remembered = rememberedAddressedVault(key);
+  if (remembered) return { ...gatewayAuth, vaultId: remembered };
   const vaultId = await pending.promise;
   // Still nothing to address (no vault plane) — `replicaIdentityForGatewayAuth`
   // raises the protocol error, which is the honest answer here.
   return vaultId ? { ...gatewayAuth, vaultId } : gatewayAuth;
+}
+
+// ── the last-known addressed vault, per gateway ─────────────────────────────
+//
+// One localStorage key, `{ [gatewayKey]: vaultId }`. It is a POINTER, not
+// content: knowing which vault this browser opens is already implied by the
+// replica's own OPFS store, so persisting it adds no exposure — and it is
+// cleared on exactly the paths that make it wrong (the device purge and any
+// gateway removal/purge), so a browser can never keep opening a scope it no
+// longer holds.
+const ADDRESSED_VAULT_KEY = "centraid.v1.replica.addressedVault";
+
+function addressedVaultStorage(): Storage | undefined {
+  try {
+    return typeof localStorage === "undefined" ? undefined : localStorage;
+  } catch {
+    return undefined;
+  }
+}
+
+function readAddressedVaults(): Record<string, string> {
+  try {
+    const raw = addressedVaultStorage()?.getItem(ADDRESSED_VAULT_KEY);
+    if (!raw) return {};
+    const parsed: unknown = JSON.parse(raw);
+    return parsed && typeof parsed === "object"
+      ? (parsed as Record<string, string>)
+      : {};
+  } catch {
+    return {};
+  }
+}
+
+function writeAddressedVaults(map: Record<string, string>): void {
+  try {
+    const storage = addressedVaultStorage();
+    if (!storage) return;
+    if (Object.keys(map).length === 0) storage.removeItem(ADDRESSED_VAULT_KEY);
+    else storage.setItem(ADDRESSED_VAULT_KEY, JSON.stringify(map));
+  } catch {
+    /* A storage denial only costs the fast path — the network ask still runs. */
+  }
+}
+
+function rememberedAddressedVault(gatewayKey: string): string | undefined {
+  const value = readAddressedVaults()[gatewayKey];
+  return typeof value === "string" && value.length > 0 ? value : undefined;
+}
+
+function rememberAddressedVault(gatewayKey: string, vaultId: string): void {
+  const map = readAddressedVaults();
+  if (map[gatewayKey] === vaultId) return;
+  map[gatewayKey] = vaultId;
+  writeAddressedVaults(map);
+}
+
+/** Forget one gateway's pointer — a removed or purged gateway. */
+function forgetAddressedVault(gatewayKey: string): void {
+  const map = readAddressedVaults();
+  if (!(gatewayKey in map)) return;
+  delete map[gatewayKey];
+  writeAddressedVaults(map);
+}
+
+/** Forget every pointer — this device lost its access altogether. */
+function forgetAllAddressedVaults(): void {
+  writeAddressedVaults({});
 }
 
 export function replicaIdentityForGatewayAuth(

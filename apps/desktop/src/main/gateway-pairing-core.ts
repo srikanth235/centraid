@@ -2,12 +2,12 @@
  * Pure core for gateway pairing-ticket redemption (issue #376, desktop half).
  *
  * The wire format is minted by `centraid-gateway pair --vault <name>`
- * (packages/gateway/src/serve/pairing-store.ts's `encodePairingTicket`):
+ * (packages/server/src/serve/pairing-store.ts's `encodePairingTicket`):
  * base64url JSON `{v:1, kind:'centraid-gw-pair', gw, t, s, vaultName, exp}`.
  * `decodePairingTicket` below is a LOCKSTEP mirror of that shape — the same
  * convention `apps/mobile/src/lib/phone-link.ts`'s `parsePairQr` uses for the
  * phone-pairing QR — rather than an import of gateway internals: desktop
- * main doesn't take `@centraid/gateway` as a dependency for a one-shot
+ * main doesn't take `@centraid/server` as a dependency for a one-shot
  * decode, and the two copies are cheap to keep in sync (the payload is
  * frozen wire format, not an evolving API).
  *
@@ -78,7 +78,6 @@ export interface PairedVault {
   vaultId: string;
   enrollmentId?: string;
   vaultName?: string;
-  role?: "admin" | "write" | "read";
 }
 
 export type RedeemGatewayPairingResult =

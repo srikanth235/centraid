@@ -1,53 +1,23 @@
-import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
+import { afterEach, describe, expect, test, vi } from "vitest";
 
+import {
+  GATEWAY_MIN_PROTOCOL_VERSION,
+  GATEWAY_PROTOCOL_VERSION,
+} from "@centraid/core/protocol";
+
+import { requireMobileOfflineGateway } from "./mobile-gateway-compatibility";
 import { MobileGatewayCompatibilityError } from "./mobile-gateway-compatibility-core";
-
-const storage = vi.hoisted(() => new Map<string, string>());
-const expoFetch = vi.hoisted(() =>
-  vi.fn<(typeof import("expo/fetch"))["fetch"]>()
-);
-type ExpoFetchResponse = Awaited<
-  ReturnType<(typeof import("expo/fetch"))["fetch"]>
->;
-
-function expoResponse(response: Response): ExpoFetchResponse {
-  return response as unknown as ExpoFetchResponse;
-}
-
-vi.mock(
-  import("@react-native-async-storage/async-storage") as Promise<unknown>,
-  () => ({
-    default: {
-      getItem: vi.fn<(key: string) => Promise<string | null>>(
-        async (key) => storage.get(key) ?? null
-      ),
-      removeItem: vi.fn<(key: string) => Promise<void>>(async (key) => {
-        storage.delete(key);
-      }),
-      setItem: vi.fn<(key: string, value: string) => Promise<void>>(
-        async (key, value) => {
-          storage.set(key, value);
-        }
-      ),
-    },
-  })
-);
 
 vi.mock(import("../gateway") as Promise<unknown>, () => ({
   authHeader: () => ({ Authorization: "Bearer test-mobile" }),
 }));
 
-vi.mock(import("expo/fetch"), () => ({
-  fetch: expoFetch,
-}));
-
-const { requireMobileOfflineGateway } =
-  await import("./mobile-gateway-compatibility");
-
+// Stated against the shared constants: a literal floor here would assert that
+// a current gateway needs updating the next time the floor moves.
 const supportedInfo = {
   version: "0.1.0",
-  protocolVersion: 2,
-  minSupportedProtocol: 2,
+  protocolVersion: GATEWAY_PROTOCOL_VERSION,
+  minSupportedProtocol: GATEWAY_MIN_PROTOCOL_VERSION,
   capabilities: {
     webSessions: true,
     devicePairing: true,
@@ -61,99 +31,123 @@ const supportedInfo = {
 };
 
 describe("mobile gateway compatibility handshake", () => {
-  beforeEach(() => {
-    storage.clear();
-    expoFetch.mockReset();
-  });
-
   afterEach(() => {
     vi.unstubAllGlobals();
   });
 
-  test("judges the live info response, caches support, and admits an offline restart", async () => {
-    expoFetch.mockImplementation(async () =>
-      expoResponse(Response.json(supportedInfo))
+  test("judges the live info response and admits a supported gateway", async () => {
+    const fetchInfo = vi.fn<() => Promise<Response>>(async () =>
+      Response.json(supportedInfo)
     );
+    vi.stubGlobal("fetch", fetchInfo);
 
+    // The admitted gateway advertises no experimental flag, so both read off
+    // — and the SAME call reports them, which is the point: a gated surface
+    // never gets to fetch `/info` a second time for itself.
     await expect(
       requireMobileOfflineGateway({
         baseUrl: "http://127.0.0.1:18789",
-        gatewayId: "gateway/one",
         online: true,
       })
-    ).resolves.toBeUndefined();
-    expect(expoFetch).toHaveBeenCalledWith(
-      "http://127.0.0.1:18789/centraid/_gateway/info",
+    ).resolves.toStrictEqual({ automations: false, connectors: false });
+    expect(fetchInfo).toHaveBeenCalledWith(
+      new URL("http://127.0.0.1:18789/centraid/_gateway/info"),
       { headers: { Authorization: "Bearer test-mobile" } }
     );
+  });
 
-    expoFetch.mockImplementation(async () => {
-      throw new Error("offline");
-    });
+  test("reports the experimental features an opted-in gateway advertises", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn<() => Promise<Response>>(async () =>
+        Response.json({
+          ...supportedInfo,
+          capabilities: {
+            ...supportedInfo.capabilities,
+            automations: true,
+            connectors: false,
+          },
+        })
+      )
+    );
     await expect(
       requireMobileOfflineGateway({
         baseUrl: "http://127.0.0.1:18789",
-        gatewayId: "gateway/one",
+        online: true,
+      })
+    ).resolves.toStrictEqual({ automations: true, connectors: false });
+  });
+
+  // THE ONE THIS FILE EXISTS TO HOLD. The predecessor cached an online
+  // verdict (keyed, worse, by an ephemeral tunnel port) and walled every
+  // offline start whose cache came up empty behind "Reconnect once" — local
+  // reads gated on the network, observed on a device whose replica held the
+  // member's whole vault. An unanswered question is not a judgment: offline
+  // fails open, and the wall is re-raised the moment a gateway answers.
+  test("an offline start is admitted — absence of an answer is not a judgment", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn<() => Promise<Response>>(async () => {
+        throw new Error("must not be called offline");
+      })
+    );
+    await expect(
+      requireMobileOfflineGateway({
+        baseUrl: "http://127.0.0.1:18789",
         online: false,
       })
+      // …and `undefined`, not "both off": a gateway that never answered has
+      // not switched anything off, so no surface may be hidden on its behalf.
     ).resolves.toBeUndefined();
   });
 
   test.each([
     {
       name: "missing info route means the gateway is old",
-      response: expoResponse(new Response("missing", { status: 404 })),
+      response: new Response("missing", { status: 404 }),
       disposition: "update-gateway",
     },
     {
       name: "a newer protocol window means the store app is old",
-      response: expoResponse(
-        Response.json({
-          ...supportedInfo,
-          protocolVersion: 3,
-          minSupportedProtocol: 3,
-        })
-      ),
+      response: Response.json({
+        ...supportedInfo,
+        protocolVersion: GATEWAY_PROTOCOL_VERSION + 1,
+        minSupportedProtocol: GATEWAY_PROTOCOL_VERSION + 1,
+      }),
       disposition: "update-app",
     },
-    {
-      name: "a transient server failure asks for a reconnect",
-      response: expoResponse(new Response("failed", { status: 503 })),
-      disposition: "reconnect",
-    },
-  ] as const)(
-    "$name",
-    async ({ response, disposition }) => {
-      expoFetch.mockImplementation(async () => response);
+  ] as const)("$name", async ({ response, disposition }) => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn<() => Promise<Response>>(async () => response)
+    );
 
-      const result = requireMobileOfflineGateway({
-        baseUrl: "http://127.0.0.1:18789",
-        gatewayId: "gateway-two",
-        online: true,
-      });
-      await expect(result).rejects.toBeInstanceOf(
-        MobileGatewayCompatibilityError
-      );
-      await expect(result).rejects.toMatchObject({ disposition });
-      expect(storage.size).toBe(0);
-    },
-    45_000
-  );
+    const result = requireMobileOfflineGateway({
+      baseUrl: "http://127.0.0.1:18789",
+      online: true,
+    });
+    await expect(result).rejects.toBeInstanceOf(
+      MobileGatewayCompatibilityError
+    );
+    await expect(result).rejects.toMatchObject({ disposition });
+  });
 
-  test("an uncached offline start still probes the last-known base before reconnect", async () => {
-    expoFetch.mockImplementation(async () =>
-      expoResponse(Response.json(supportedInfo))
+  test("a transient server failure is the offline case wearing a status code", async () => {
+    // 503 proves the gateway is unwell, not that it is incompatible — the
+    // only status that IS a judgment by itself is 404 (the info route does
+    // not exist on gateways that old). Anything else fails open, same as no
+    // answer at all.
+    vi.stubGlobal(
+      "fetch",
+      vi.fn<() => Promise<Response>>(
+        async () => new Response("failed", { status: 503 })
+      )
     );
     await expect(
       requireMobileOfflineGateway({
         baseUrl: "http://127.0.0.1:18789",
-        gatewayId: "unknown-gateway",
-        online: false,
+        online: true,
       })
     ).resolves.toBeUndefined();
-    expect(expoFetch).toHaveBeenCalledWith(
-      "http://127.0.0.1:18789/centraid/_gateway/info",
-      { headers: { Authorization: "Bearer test-mobile" } }
-    );
-  }, 45_000);
+  });
 });

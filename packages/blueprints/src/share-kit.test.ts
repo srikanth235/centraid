@@ -1,0 +1,403 @@
+// The ceremony-free Commons destination model (issue #731): a roster of
+// people, never another vault owned by the same person.
+import path from "node:path";
+import { pathToFileURL } from "node:url";
+
+import { afterEach, describe, expect, it } from "vitest";
+
+interface Scope {
+  id: string;
+  label: string;
+  canWrite: boolean;
+  personal?: boolean;
+}
+interface LinkRow {
+  linkId: string;
+  vaultId: string;
+  partyId: string;
+  approved: boolean;
+  label?: string | null;
+}
+interface ShareDestination {
+  id: string;
+  label: string;
+  partyId?: string;
+  vaultId?: string;
+}
+
+const moduleUrl = pathToFileURL(
+  path.resolve(import.meta.dirname, "../apps/_shared/share-kit.ts")
+).href;
+const shareKit = (await import(moduleUrl)) as {
+  linkedDestinations: (
+    links: readonly LinkRow[],
+    scopes: readonly Scope[]
+  ) => ShareDestination[];
+  peopleDestinations: (
+    people: readonly { partyId: string; label: string; vaultId?: string }[],
+    scopes: readonly Scope[]
+  ) => ShareDestination[];
+  selectedShareMembers: (
+    destinations: readonly ShareDestination[],
+    selections: Readonly<Record<string, "read" | "read+write">>
+  ) => Array<{
+    partyId?: string;
+    vaultId?: string;
+    capability: "read" | "read+write";
+  }>;
+  selectionsForCircle: (
+    destinations: readonly ShareDestination[],
+    circle: {
+      circleId: string;
+      label: string;
+      members: Array<{
+        partyId?: string;
+        capability: "read" | "read+write";
+      }>;
+    }
+  ) => Record<string, "read" | "read+write">;
+  loadShareCircles: () => Promise<Array<{ circleId: string; label: string }>>;
+  loadShareDestinations: (
+    currentScopeId: string | null | undefined,
+    scopes: readonly Scope[]
+  ) => Promise<ShareDestination[]>;
+  shareBlockedReason: (
+    destinations: readonly ShareDestination[]
+  ) => string | null;
+  isPendingPartyId: (partyId: string) => boolean;
+  quickAddedDestination: (partyId: string, label: string) => ShareDestination;
+  withQuickAddedPerson: (
+    destinations: readonly ShareDestination[],
+    added: ShareDestination
+  ) => ShareDestination[];
+  nearNameMatches: (
+    destinations: readonly ShareDestination[],
+    name: string
+  ) => ShareDestination[];
+};
+
+const OWN: Scope = {
+  id: "own",
+  label: "Library",
+  canWrite: true,
+  personal: true,
+};
+const FAMILY: Scope = {
+  id: "fam",
+  label: "Family",
+  canWrite: true,
+  personal: false,
+};
+describe("linkedDestinations — approved links not already mounted", () => {
+  it("names the OTHER side of the link by the label the link carries (#750)", () => {
+    const links: LinkRow[] = [
+      {
+        linkId: "l1",
+        vaultId: "peer-1",
+        partyId: "party-peer",
+        approved: true,
+        label: "Asha's photos",
+      },
+    ];
+    expect(shareKit.linkedDestinations(links, [OWN])).toStrictEqual([
+      {
+        id: "peer-1",
+        label: "Asha's photos",
+        partyId: "party-peer",
+        vaultId: "peer-1",
+      },
+    ]);
+  });
+
+  it("never dresses a vault id up as a name when no label is known", () => {
+    const links: LinkRow[] = [
+      {
+        linkId: "l1",
+        vaultId: "vlt_0123456789abcdef",
+        partyId: "party-peer",
+        approved: true,
+        label: null,
+      },
+    ];
+    const [listed] = shareKit.linkedDestinations(links, [OWN]);
+    expect(listed?.label).toBe("Linked vault");
+    expect(listed?.label).not.toContain("vlt_");
+  });
+
+  it("excludes a link whose vault is already mounted — never listed twice", () => {
+    const links: LinkRow[] = [
+      { linkId: "l1", vaultId: "fam", partyId: "party-family", approved: true },
+    ];
+    expect(shareKit.linkedDestinations(links, [OWN, FAMILY])).toStrictEqual([]);
+  });
+
+  it("excludes an unapproved or revoked link", () => {
+    const links: LinkRow[] = [
+      {
+        linkId: "l1",
+        vaultId: "peer-1",
+        partyId: "party-peer",
+        approved: false,
+      },
+    ];
+    expect(shareKit.linkedDestinations(links, [OWN])).toStrictEqual([]);
+  });
+});
+
+describe("peopleDestinations — joined and invited identities", () => {
+  it("keeps a party with no vault as an honest invited destination", () => {
+    expect(
+      shareKit.peopleDestinations(
+        [
+          { partyId: "asha", label: "Asha" },
+          { partyId: "ben", label: "Ben", vaultId: "peer-ben" },
+        ],
+        [OWN]
+      )
+    ).toStrictEqual([
+      { id: "party:asha", label: "Asha", partyId: "asha" },
+      {
+        id: "peer-ben",
+        label: "Ben",
+        partyId: "ben",
+        vaultId: "peer-ben",
+      },
+    ]);
+  });
+
+  it("deliberately reuses one named circle's exact per-person capabilities", () => {
+    expect(
+      shareKit.selectionsForCircle(
+        [
+          { id: "party:asha", label: "Asha", partyId: "asha" },
+          { id: "ben-vault", label: "Ben", partyId: "ben" },
+          { id: "unrelated", label: "Cara", partyId: "cara" },
+        ],
+        {
+          circleId: "trip",
+          label: "Goa trip",
+          members: [
+            { partyId: "asha", capability: "read" },
+            { partyId: "ben", capability: "read+write" },
+          ],
+        }
+      )
+    ).toStrictEqual({
+      "party:asha": "read",
+      "ben-vault": "read+write",
+    });
+  });
+
+  it("builds one multi-member array with an independent capability per person", () => {
+    expect(
+      shareKit.selectedShareMembers(
+        [
+          { id: "party:asha", label: "Asha", partyId: "asha" },
+          {
+            id: "ben-vault",
+            label: "Ben",
+            partyId: "ben",
+            vaultId: "ben-vault",
+          },
+          { id: "cara-vault", label: "Cara", vaultId: "cara-vault" },
+        ],
+        {
+          "party:asha": "read",
+          "ben-vault": "read+write",
+        }
+      )
+    ).toStrictEqual([
+      { partyId: "asha", capability: "read" },
+      {
+        partyId: "ben",
+        vaultId: "ben-vault",
+        capability: "read+write",
+      },
+    ]);
+  });
+
+  it("drops a selected person whose identity is still a pending overlay id", () => {
+    expect(
+      shareKit.selectedShareMembers(
+        [
+          {
+            id: "party:pending:intent-1:0",
+            label: "Cara",
+            partyId: "pending:intent-1:0",
+          },
+          { id: "party:asha", label: "Asha", partyId: "asha" },
+        ],
+        {
+          "party:pending:intent-1:0": "read",
+          "party:asha": "read",
+        }
+      )
+    ).toStrictEqual([{ partyId: "asha", capability: "read" }]);
+  });
+});
+
+describe("quick-add laws — minting a person from the sheet itself", () => {
+  it("synthesizes the id exactly as peopleDestinations does for a vault-less person", () => {
+    expect(shareKit.quickAddedDestination("asha", "Asha")).toStrictEqual({
+      id: "party:asha",
+      label: "Asha",
+      partyId: "asha",
+    });
+    expect(
+      shareKit.peopleDestinations([{ partyId: "asha", label: "Asha" }], [])[0]
+        ?.id
+    ).toBe(shareKit.quickAddedDestination("asha", "Asha").id);
+  });
+
+  it("appends the added person to the listed destinations", () => {
+    expect(
+      shareKit.withQuickAddedPerson(
+        [{ id: "party:ben", label: "Ben", partyId: "ben" }],
+        shareKit.quickAddedDestination("asha", "Asha")
+      )
+    ).toStrictEqual([
+      { id: "party:ben", label: "Ben", partyId: "ben" },
+      { id: "party:asha", label: "Asha", partyId: "asha" },
+    ]);
+  });
+
+  it("never lists the same party twice, even under a different label", () => {
+    const listed: ShareDestination[] = [
+      {
+        id: "asha-vault",
+        label: "Asha",
+        partyId: "asha",
+        vaultId: "asha-vault",
+      },
+    ];
+    expect(
+      shareKit.withQuickAddedPerson(
+        listed,
+        shareKit.quickAddedDestination("asha", "Asha Rao")
+      )
+    ).toStrictEqual(listed);
+  });
+
+  it("does not treat two vault-less destinations as the same party", () => {
+    expect(
+      shareKit.withQuickAddedPerson(
+        [{ id: "own", label: "Library" }],
+        shareKit.quickAddedDestination("asha", "Asha")
+      )
+    ).toHaveLength(2);
+  });
+});
+
+describe("nearNameMatches — did you mean someone already listed?", () => {
+  const listed: ShareDestination[] = [
+    { id: "party:asha", label: "Asha Rao", partyId: "asha" },
+    { id: "party:ben", label: "Ben", partyId: "ben" },
+  ];
+
+  it("matches on case and surrounding whitespace alike", () => {
+    expect(shareKit.nearNameMatches(listed, "  ben ")).toStrictEqual([
+      listed[1],
+    ]);
+    expect(shareKit.nearNameMatches(listed, "BEN")).toStrictEqual([listed[1]]);
+  });
+
+  it("matches when either name contains the other", () => {
+    expect(shareKit.nearNameMatches(listed, "Asha")).toStrictEqual([listed[0]]);
+    expect(
+      shareKit.nearNameMatches(
+        [{ id: "party:ben", label: "Ben", partyId: "ben" }],
+        "Ben Rao"
+      )
+    ).toHaveLength(1);
+  });
+
+  it("asks nothing about an empty name", () => {
+    expect(shareKit.nearNameMatches(listed, "   ")).toStrictEqual([]);
+  });
+
+  it("finds nobody when no listed name is close", () => {
+    expect(shareKit.nearNameMatches(listed, "Cara")).toStrictEqual([]);
+  });
+});
+
+describe("isPendingPartyId", () => {
+  it("names the offline overlay's placeholder id and nothing else", () => {
+    expect(shareKit.isPendingPartyId("pending:intent-1:0")).toBe(true);
+    expect(shareKit.isPendingPartyId("asha")).toBe(false);
+  });
+});
+
+describe("shareBlockedReason", () => {
+  it("states the honest zero-destination reason", () => {
+    expect(shareKit.shareBlockedReason([])).toBe(
+      "There is nobody to share with yet — add someone by name below."
+    );
+  });
+
+  it("never blocks on two or more destinations — the sheet lists all of them", () => {
+    expect(
+      shareKit.shareBlockedReason([
+        { id: "a", label: "A" },
+        { id: "b", label: "B" },
+      ])
+    ).toBeNull();
+  });
+});
+
+describe("loadShareDestinations — live window.centraid.links()", () => {
+  afterEach(() => {
+    delete (globalThis as { window?: unknown }).window;
+  });
+
+  it("loads linked people without listing another vault owned by me", async () => {
+    (globalThis as { window?: unknown }).window = {
+      centraid: {
+        links: () =>
+          Promise.resolve([
+            {
+              linkId: "l1",
+              vaultId: "peer-1",
+              partyId: "party-peer",
+              approved: true,
+            },
+          ]),
+      },
+    };
+    const listed = await shareKit.loadShareDestinations("own", [OWN, FAMILY]);
+    expect(listed.map((d: ShareDestination) => d.id)).toStrictEqual(["peer-1"]);
+  });
+
+  it("answers no people when the host has no People or link plane", async () => {
+    (globalThis as { window?: unknown }).window = { centraid: {} };
+    const listed = await shareKit.loadShareDestinations("own", [OWN, FAMILY]);
+    expect(listed).toStrictEqual([]);
+  });
+
+  it("prefers People targets so an invitation does not need a vault", async () => {
+    (globalThis as { window?: unknown }).window = {
+      centraid: {
+        shareTargets: () =>
+          Promise.resolve([{ partyId: "asha", label: "Asha" }]),
+      },
+    };
+    await expect(
+      shareKit.loadShareDestinations("own", [OWN, FAMILY])
+    ).resolves.toStrictEqual([
+      { id: "party:asha", label: "Asha", partyId: "asha" },
+    ]);
+  });
+
+  it("loads deliberate named circles from the host without inventing one", async () => {
+    (globalThis as { window?: unknown }).window = {
+      centraid: {
+        shareCircles: () =>
+          Promise.resolve([
+            { circleId: "trip", label: "Goa trip", members: [] },
+          ]),
+      },
+    };
+    await expect(shareKit.loadShareCircles()).resolves.toMatchObject([
+      { circleId: "trip", label: "Goa trip" },
+    ]);
+  });
+});

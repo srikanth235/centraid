@@ -12,7 +12,11 @@ import path from "node:path";
 import { describe, expect, test } from "vitest";
 
 type Kind = "action" | "query";
-type ExceptionKind = "agent-only" | "extension-only" | "platform-fallback";
+type ExceptionKind =
+  | "agent-only"
+  | "extension-only"
+  | "platform-fallback"
+  | "awaiting-handoff";
 
 interface ManifestHandler {
   name: string;
@@ -36,6 +40,36 @@ const MOBILE_APPS_ROOT = path.join(REPO_ROOT, "apps/mobile/src/apps");
 
 const WEBVIEW_APPS = new Set(["notes"]);
 
+/**
+ * Apps whose UI on a given surface has been REMOVED pending a ground-up
+ * redesign, and which therefore dispatch nothing there.
+ *
+ * This is the one exception in this file that is not about a capability - it is
+ * about a surface. The other three say "this handler is reached another way";
+ * this one says "there is no screen here at all yet". Recording it per app
+ * rather than per handler is deliberate: enumerating ~35 People handlers as
+ * individually-excused would read as thirty-five decisions when it is one, and
+ * the day the rebuild lands the fix is to delete an app id, not to audit a
+ * list.
+ *
+ * What was NOT removed, and so is not excused: the manifests, `./actions/*`,
+ * `./queries/*` and the vault scopes. The assistant still invokes every one of
+ * these handlers. The gate is suspended over the UI that is gone, not over the
+ * contract that stayed.
+ *
+ * Removing an app id here is the last step of its rebuild. The justification
+ * test below fails on an id that is not a real manifest, so an entry cannot
+ * outlive the app it names.
+ */
+const AWAITING_HANDOFF: Readonly<Record<"web" | "mobile", readonly string[]>> =
+  {
+    web: ["agenda", "notes", "tally", "tasks"],
+    mobile: ["agenda", "notes", "tally", "tasks"],
+  };
+
+const AWAITING_HANDOFF_RATIONALE =
+  "The surface was removed whole pending a ground-up redesign; the manifest, actions, queries and vault scopes are untouched and the assistant still reaches every handler.";
+
 const WEB_EXCEPTIONS: Readonly<Record<string, ReachabilityException>> = {
   "locker.query.autofill-candidates": {
     kind: "extension-only",
@@ -47,39 +81,139 @@ const WEB_EXCEPTIONS: Readonly<Record<string, ReachabilityException>> = {
     rationale:
       "The browser extension calls this per-origin reveal endpoint after user selection.",
   },
+  "docs.action.edit": {
+    kind: "agent-only",
+    rationale:
+      "The WEB drive holds, versions and files a document; it does not open one to type into (docs/design-divergences.md). The v12 phone build is different by design — the handoff's Part 2 draws an editor there, and the mobile scan finds this write itself.",
+  },
   "locker.query.watchtower": {
     kind: "agent-only",
     rationale:
       "The Locker UI receives the sealed Watchtower aggregate through items; the standalone query remains available to the assistant.",
   },
+  // People, rebuilt to the Binding Layer v12 handoff (#821). The handoff draws
+  // the roster, the person, Touch, Search, Trash, Log, Edit and Merge — and
+  // EXCLUDES seven record sections outright. The queries still return that data
+  // and the writes still land, so these are not dark handlers: they are the
+  // vault contract outliving a screen the handoff chose not to draw. The
+  // register is docs/design-divergences.md § "People — v12 parity state and
+  // sanctioned withholdings"; the handoff bans placeholders, so nothing here
+  // gets a stub UI to satisfy this gate.
+  "people.action.create-list": {
+    kind: "agent-only",
+    rationale:
+      "Lists are one of the seven sections the v12 handoff excludes from the UI; the assistant still files a person into a list the member names.",
+  },
+  "people.action.rename-list": {
+    kind: "agent-only",
+    rationale:
+      "Same excluded lists section: with no list surface drawn there is nothing on screen to rename, and the assistant keeps the write.",
+  },
+  "people.action.delete-list": {
+    kind: "agent-only",
+    rationale:
+      "Same excluded lists section. A delete offered without the list it deletes would be a control naming nothing.",
+  },
+  "people.action.move-person": {
+    kind: "agent-only",
+    rationale:
+      "Moving a person between lists needs the excluded lists section to move them between; the assistant performs it on the member's word.",
+  },
+  "people.action.add-journal-entry": {
+    kind: "agent-only",
+    rationale:
+      "The journal is excluded by the v12 handoff, so no screen composes an entry; the assistant writes one whenever the member dictates it.",
+  },
+  "people.query.journal": {
+    kind: "agent-only",
+    rationale:
+      "The read side of that excluded journal: entries stay retrievable by the assistant even though no People screen lists them.",
+  },
+  "people.action.add-task": {
+    kind: "agent-only",
+    rationale:
+      "Tasks about a person are excluded here because Tasks is its own app; the assistant files them without People growing a second board.",
+  },
+  "people.action.toggle-task": {
+    kind: "agent-only",
+    rationale:
+      "Same excluded tasks section: People draws no checkbox to tick, and the assistant completes the task the member names.",
+  },
+  "people.action.add-gift": {
+    kind: "agent-only",
+    rationale:
+      "Gifts are an excluded section in the v12 handoff; the assistant records a gift idea against a person with no screen to host it.",
+  },
+  "people.action.toggle-gift": {
+    kind: "agent-only",
+    rationale:
+      "Same excluded gifts section — marking one given is the assistant's, because the list it would be marked in is not drawn.",
+  },
+  "people.action.add-debt": {
+    kind: "agent-only",
+    rationale:
+      "Debts are excluded from People's UI because Tally owns shared money; the assistant keeps the person-scoped write for one-off IOUs.",
+  },
+  "people.action.settle-debt": {
+    kind: "agent-only",
+    rationale:
+      "Same excluded debts section: settling is the assistant's for the same reason the debt was never drawn beside the person.",
+  },
+  "people.action.add-relationship": {
+    kind: "agent-only",
+    rationale:
+      "Typed relationships between two people are an excluded section; the assistant records who is whose sibling without a screen for it.",
+  },
+  "people.action.undo-person": {
+    kind: "agent-only",
+    rationale:
+      "Edit history is excluded, and the app offers Undo only where a true reverse write exists (star, trash, edit, cadence) — this replays a stored revision instead, which is the assistant's.",
+  },
+  "people.query.history": {
+    kind: "agent-only",
+    rationale:
+      "The read side of that excluded edit history: the assistant can recount what changed and when, and no People screen shows a revision log.",
+  },
+  "people.action.undo-contact-channel": {
+    kind: "agent-only",
+    rationale:
+      "A channel's revision undo has no surface for the same reason: the person screen removes a channel outright and reports it, rather than drawing a history to step back through.",
+  },
 };
 
+// Native covers that DO render, and the queries their screens answer directly.
+// `docs` and `people` returned with their v12 phone rebuilds (#821). Neither
+// dispatches a NAMED query on the phone: both read consent-shaped replica
+// entities and re-state the web query emitters' joins in their own projection
+// modules (`docs-projection.ts`, `people-model.ts`), so the rows below name
+// the queries whose ANSWERS those screens draw — the read is native, the
+// contract is the same. Docs' `history` is the version chain the replica's
+// `core.link` revises edges carry (`docs-versions.ts`).
 const NATIVE_QUERY_UI: Readonly<Record<string, readonly string[]>> = {
   agenda: ["upcoming", "parties", "search"],
-  docs: ["drive", "search"],
+  docs: ["drive", "search", "history"],
+  people: ["people", "person", "dashboard", "search", "trash"],
   locker: ["auth", "items", "item"],
-  people: ["people", "person"],
-  photos: ["library", "faces", "duplicates", "enrichment-status", "search"],
+  photos: [
+    "library",
+    "faces",
+    "face-queue",
+    "duplicates",
+    "enrichment-status",
+    "search",
+    // The phone's Backup screen is a FRAME surface since #712 B2: it reads
+    // the gateway's storage/status route (which now carries the custody
+    // rollup) rather than dispatching this app query, which remains the web
+    // Storage screen's read path.
+    "storage",
+  ],
   tally: ["dashboard", "group"],
   tasks: ["board"],
 };
 
 const NATIVE_FALLBACK: Readonly<Record<string, readonly string[]>> = {
   agenda: ["action.attach", "action.detach"],
-  docs: [
-    "action.upload",
-    "action.rename",
-    "action.restore",
-    "action.tag",
-    "action.untag",
-    "action.edit",
-    "action.replace",
-    "action.restore-version",
-    "action.rename-folder",
-    "action.delete-folder",
-    "query.history",
-    "query.activity",
-  ],
+  docs: ["action.tag", "action.untag", "action.replace", "query.activity"],
   locker: [
     "action.add-item",
     "action.edit-item",
@@ -90,36 +224,6 @@ const NATIVE_FALLBACK: Readonly<Record<string, readonly string[]>> = {
     "action.unstar-item",
     "query.search",
     "query.trash",
-  ],
-  people: [
-    "action.edit-person",
-    "action.set-cadence",
-    "action.trash-person",
-    "action.restore-person",
-    "action.undo-person",
-    "action.log-interaction",
-    "action.star-person",
-    "action.unstar-person",
-    "action.move-person",
-    "action.add-note",
-    "action.add-task",
-    "action.toggle-task",
-    "action.add-important-date",
-    "action.toggle-reminder",
-    "action.add-relationship",
-    "action.add-gift",
-    "action.toggle-gift",
-    "action.add-debt",
-    "action.settle-debt",
-    "action.create-list",
-    "action.rename-list",
-    "action.delete-list",
-    "action.add-journal-entry",
-    "query.search",
-    "query.journal",
-    "query.dashboard",
-    "query.trash",
-    "query.history",
   ],
   photos: ["action.restore-album", "action.tag-asset", "action.untag-asset"],
   tally: [
@@ -152,7 +256,20 @@ const NATIVE_FALLBACK: Readonly<Record<string, readonly string[]>> = {
 const MOBILE_EXCEPTION_RATIONALE =
   "The native cover links to the always-available Assistant surface, which invokes this manifested handler with the same consent and receipt contract.";
 
-function sourceTree(root: string, skipHandlers: boolean): string {
+/**
+ * A blueprint app's source, for the "is this name called anywhere" scan.
+ *
+ * `skipFiles` exists for the suspension check below. A file that DECLARES every
+ * action by name — `pending-projection.ts` is the whole set, `app-inline.tsx`
+ * the query map — would make any app look like it dispatches everything, which
+ * is harmless for the normal scan (a false pass there is caught by the app
+ * actually having a UI) but fatal for an assertion that the UI is GONE.
+ */
+function sourceTree(
+  root: string,
+  skipHandlers: boolean,
+  skipFiles: ReadonlySet<string> = new Set()
+): string {
   if (!existsSync(root)) return "";
   return readdirSync(root, { withFileTypes: true })
     .flatMap((entry) => {
@@ -164,16 +281,24 @@ function sourceTree(root: string, skipHandlers: boolean): string {
       )
         return [];
       const target = path.join(root, entry.name);
-      if (entry.isDirectory()) return [sourceTree(target, skipHandlers)];
+      if (entry.isDirectory())
+        return [sourceTree(target, skipHandlers, skipFiles)];
       if (
         !/\.(?:js|jsx|ts|tsx)$/u.test(entry.name) ||
-        /\.test\.(?:ts|tsx)$/u.test(entry.name)
+        /\.test\.(?:ts|tsx)$/u.test(entry.name) ||
+        skipFiles.has(entry.name)
       )
         return [];
       return [readFileSync(target, "utf8")];
     })
     .join("\n");
 }
+
+/** The two files that name handlers without calling them. */
+const DECLARATION_FILES: ReadonlySet<string> = new Set([
+  "pending-projection.ts",
+  "app-inline.tsx",
+]);
 
 /** Drop line/block comments so a name only in a comment cannot pass. */
 function withoutComments(source: string): string {
@@ -215,6 +340,15 @@ function manifests(): AppManifest[] {
     });
 }
 
+function awaitingHandoff(
+  surface: "web" | "mobile",
+  appId: string
+): ReachabilityException | undefined {
+  return AWAITING_HANDOFF[surface].includes(appId)
+    ? { kind: "awaiting-handoff", rationale: AWAITING_HANDOFF_RATIONALE }
+    : undefined;
+}
+
 function mobileException(
   appId: string,
   kind: Kind,
@@ -243,17 +377,37 @@ describe("manifest handler reachability", () => {
           )
         : ""
     );
-    const mobileSource = sourceTree(
+    // The app's OWN native cover, alone. Kept separate from `mobileSource`
+    // below because a suspended surface is asserted absent over exactly what
+    // was removed — the cover — and not over the shared phone surfaces that
+    // outlived it.
+    const nativeCover = sourceTree(
       path.join(MOBILE_APPS_ROOT, manifest.id),
       false
-    ).concat(
+    );
+    const mobileSource = nativeCover.concat(
       manifest.id === "photos" || manifest.id === "tally"
         ? sourceTree(path.join(REPO_ROOT, "apps/mobile/src/lib/upload"), false)
         : ""
     );
 
-    test("every web handler is dispatched or explicitly marked", () => {
-      const missing = handlers(manifest).filter(({ kind, name }) => {
+    // ONE assertion, two questions, chosen by whether this surface is
+    // suspended. A suspended app is asserted ABSENT rather than skipped: the
+    // moment a rebuild starts dispatching again this fails, and the
+    // AWAITING_HANDOFF entry has to come out. Skipping would let a half-rebuilt
+    // surface sit here unexamined.
+    const webUnexpected = (): Array<{ kind: Kind; name: string }> => {
+      if (awaitingHandoff("web", manifest.id)) {
+        const rendered = sourceTree(
+          path.join(APPS_ROOT, manifest.id),
+          true,
+          DECLARATION_FILES
+        );
+        return handlers(manifest).filter(({ name }) =>
+          hasLiteral(rendered, name)
+        );
+      }
+      return handlers(manifest).filter(({ kind, name }) => {
         if (WEB_EXCEPTIONS[`${manifest.id}.${kind}.${name}`]) return false;
         if (hasLiteral(webSource, name)) return false;
         // The shared file-staging helper dispatches the manifest's conventional
@@ -264,11 +418,24 @@ describe("manifest handler reachability", () => {
           webSource.includes("wireAttachInput")
         );
       });
-      expect(missing).toStrictEqual([]);
+    };
+
+    test("every web handler is dispatched or explicitly marked", () => {
+      expect(webUnexpected()).toStrictEqual([]);
     });
 
-    test("every mobile handler is dispatched or explicitly marked", () => {
-      const missing = handlers(manifest).filter(({ kind, name }) => {
+    const mobileUnexpected = (): Array<{ kind: Kind; name: string }> => {
+      // Asserted over the cover alone, not `mobileSource`. Removing a cover
+      // does not remove the shared capture/upload path beside it, and Tally's
+      // `add-receipt-expense` is still dispatched from there — a capability
+      // that outlived the screen, which is a reached handler, not a leak. What
+      // this proves is the narrower claim the entry actually makes: the app's
+      // own native cover dispatches nothing.
+      if (awaitingHandoff("mobile", manifest.id))
+        return handlers(manifest).filter(({ name }) =>
+          hasLiteral(nativeCover, name)
+        );
+      return handlers(manifest).filter(({ kind, name }) => {
         if (WEBVIEW_APPS.has(manifest.id))
           return (
             !hasLiteral(webSource, name) &&
@@ -287,7 +454,10 @@ describe("manifest handler reachability", () => {
           return false;
         return !mobileException(manifest.id, kind, name);
       });
-      expect(missing).toStrictEqual([]);
+    };
+
+    test("every mobile handler is dispatched or explicitly marked", () => {
+      expect(mobileUnexpected()).toStrictEqual([]);
     });
   });
 
@@ -310,5 +480,11 @@ describe("manifest handler reachability", () => {
         expect(MOBILE_EXCEPTION_RATIONALE.length).toBeGreaterThan(20);
       }
     }
+    // A suspended surface must name a REAL app, so the entry dies with the
+    // rebuild instead of quietly excusing an app id that no longer exists.
+    const appIds = new Set(manifests().map((manifest) => manifest.id));
+    for (const ids of Object.values(AWAITING_HANDOFF))
+      for (const id of ids) expect(appIds.has(id), id).toBe(true);
+    expect(AWAITING_HANDOFF_RATIONALE.length).toBeGreaterThan(20);
   });
 });

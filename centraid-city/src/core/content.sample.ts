@@ -1,4 +1,4 @@
-// Development-only fixture. The shipped app imports ./content.ts (written by the content agent).
+// Development-only fixture. The shipped app imports ./content.ts (written by the content author).
 // Shape must match SPEC.md §"content.ts schema" exactly.
 
 import type {
@@ -18,7 +18,7 @@ export const meta = {
     "Pouring the ground plane…",
     "Opening vault.db in WAL mode…",
     "Waking the gateway front desk…",
-    "Hiring ACP runners…",
+    "Hiring ACP harnesses…",
     "Painting the consent gate violet…",
     "Rolling the WAL conveyor…",
   ],
@@ -26,7 +26,7 @@ export const meta = {
 
 export const palette = {
   requests: "#39c5ea",
-  agent: "#5b7cfa",
+  harness: "#5b7cfa",
   wal: "#f5a623",
   dirty: "#e5484d",
   consent: "#8e4ec6",
@@ -94,7 +94,7 @@ export const districts = [
         blurb: "Routes every request into the right vault scope.",
         detail:
           "The front desk terminates HTTP and SSE, authenticates the caller, and enters an AsyncLocalStorage vault scope for the (gateway, vault) pair before any handler runs.",
-        codeRef: "packages/gateway/src",
+        codeRef: "packages/server/src",
       },
       {
         id: "registry",
@@ -105,7 +105,7 @@ export const districts = [
         blurb: "Knows every vault this gateway serves.",
         detail:
           "The registry tracks vault paths, open handles and per-vault HTTP scoping.",
-        codeRef: "packages/gateway/src/vaults",
+        codeRef: "packages/server/src/vaults",
       },
     ],
   },

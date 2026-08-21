@@ -12,7 +12,6 @@ import {
   editing,
   fetchMock,
   installGatewayContractHarness,
-  state,
 } from "./gateway-client-contract-fixtures.js";
 
 installGatewayContractHarness();
@@ -65,14 +64,6 @@ describe("renderer gateway automation contracts", () => {
     await expect(client.readGatewayCapabilities()).resolves.toMatchObject({
       automationTurns: true,
     });
-    await expect(client.appLiveUrl({ id: "daily" })).resolves.toStrictEqual({
-      url: "https://gateway.test/centraid/daily/",
-    });
-    state.hostAppSessions = true;
-    await expect(client.appLiveUrl({ id: "daily" })).resolves.toStrictEqual({
-      url: "https://gateway.test/centraid/_web/session/launch-1",
-    });
-
     await client.appLogs({ id: "daily", limit: 7, sinceTs: 1, level: "info" });
     await client.appSettings({ id: "daily" });
     await client.appSettingWrite({
@@ -90,19 +81,13 @@ describe("renderer gateway automation contracts", () => {
     await client.activateVersion({ id: "daily", versionId: "v2" });
     await client.getUserId();
     await client.getUserPrefs();
-    await client.saveUserPrefs({ runner: "codex" });
+    await client.saveUserPrefs({ harness: "codex" });
     await client.getInsightsSummary({ windowDays: 7 });
     await client.getInsightsSummary();
     await client.getGatewayHealth();
     await client.pauseBackgroundWork(60_000);
     await client.pauseBackgroundWork();
     await client.resumeBackgroundWork();
-
-    // On a host with `appSessions`, the live URL is minted by the gateway —
-    // never synthesised client-side from the app origin.
-    expect(transcript().map((request) => request.path)).toContain(
-      "/centraid/_apps/daily/web-session"
-    );
   });
 
   it("covers the automation turn surface", async () => {
@@ -112,6 +97,15 @@ describe("renderer gateway automation contracts", () => {
     ).resolves.toBeNull();
     await client.readAutomation({ automationId: "daily/daily" });
     await client.runAutomationNow({ automationId: "daily/daily" });
+    await expect(
+      client.invokeAutomationAndAwait({
+        automationId: "daily/daily",
+        payload: { variant: "deterministic" },
+      })
+    ).resolves.toMatchObject({
+      turnId: "turn-awaited",
+      result: { outcome: { ok: true } },
+    });
     await client.listAutomationTurns({ automationId: "daily/daily", limit: 3 });
     await client.listAutomationTurns({});
     await client.readAutomationTurn({ turnId: "turn-1" });
@@ -152,6 +146,13 @@ describe("renderer gateway automation contracts", () => {
     expect(
       sent(
         "/centraid/_automations/turn-now",
+        (q) => q.get("ref") === "daily/daily",
+        "POST"
+      )
+    ).toBe(true);
+    expect(
+      sent(
+        "/centraid/_automations/invoke-and-await",
         (q) => q.get("ref") === "daily/daily",
         "POST"
       )
@@ -235,7 +236,7 @@ describe("renderer gateway automation contracts", () => {
       name: "Daily",
       prompt: "Run daily",
       triggers: [{ kind: "cron", expr: "0 9 * * *" }],
-      runner: "codex",
+      harness: "codex",
       model: "openai/gpt-test",
     });
     expect(created.webhook?.secret).toBe("secret-1");
@@ -252,7 +253,7 @@ describe("renderer gateway automation contracts", () => {
         label: "Work",
         connectionId: "connection-1",
       },
-      runner: null,
+      harness: null,
       model: null,
     });
     expect(updated.webhook?.secret).toBe("secret-2");

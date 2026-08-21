@@ -4,7 +4,7 @@
   grid-auto-columns: 1fr;
   padding: 3px;
   gap: 2px;
-  border-radius: 8px;
+  border-radius: var(--r-md);
   background: var(--bg-sunken);
 }
 .seg button {
@@ -12,8 +12,8 @@
   padding: 6px 8px;
   border-radius: var(--r-md);
   background: transparent;
-  font-size: var(--t-mono-size);
-  font-weight: 500;
+  font-size: var(--t-control-size);
+  font-weight: 600;
   color: var(--text-faint);
   text-transform: capitalize;
   min-width: 0;

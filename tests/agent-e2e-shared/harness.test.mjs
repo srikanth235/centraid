@@ -1,8 +1,9 @@
-import { mkdtemp, readFile, rm } from "node:fs/promises";
-import { tmpdir } from "node:os";
+import { readFile } from "node:fs/promises";
 import path from "node:path";
 
-import { afterEach, describe, expect, test, vi } from "vitest";
+import { describe, expect, test, vi } from "vitest";
+
+import { tempDir } from "@centraid/test-kit/temp-dir";
 
 import {
   defaultRunId,
@@ -11,20 +12,8 @@ import {
   writeFlowVerdict,
 } from "./harness.mjs";
 
-const scratchDirs = [];
-
-afterEach(async () => {
-  await Promise.all(
-    scratchDirs
-      .splice(0)
-      .map((dir) => rm(dir, { recursive: true, force: true }))
-  );
-});
-
-async function makeRunDir() {
-  const dir = await mkdtemp(path.join(tmpdir(), "centraid-harness-"));
-  scratchDirs.push(dir);
-  return dir;
+function makeRunDir() {
+  return tempDir("centraid-harness-");
 }
 
 describe("defaultRunId", () => {
@@ -166,6 +155,155 @@ describe("writeFlowVerdict", () => {
       expect(verdict).toContain("assertion missed");
     } finally {
       log.mockRestore();
+    }
+  });
+});
+
+describe("platform-keyed evidence (#781)", () => {
+  test("writeFlowVerdict suffixes the evidence file with MAESTRO_PLATFORM and stamps it", async () => {
+    const runDir = await makeRunDir();
+    const log = vi.spyOn(console, "log").mockImplementation(() => undefined);
+    vi.stubEnv("MAESTRO_PLATFORM", "ios");
+    try {
+      await writeFlowVerdict({
+        repoRoot: runDir,
+        slug: "home-loads",
+        runDir,
+        elapsedMs: 5,
+        error: null,
+        notes: [],
+        result: { pass: true },
+        owner: "tests/agent-e2e-mobile/flows/home-loads.mjs",
+      });
+      const evidence = JSON.parse(
+        await readFile(
+          path.join(runDir, "artifacts", "e2e", "home-loads-ios.json"),
+          "utf8"
+        )
+      );
+      // The OWNER stays the flow file (matrix mapping), only the FILENAME and
+      // the platform stamp change — that is what stops iOS and Android from
+      // last-write-winning over each other in the merged evidence tree.
+      expect(evidence).toMatchObject({
+        owner: "tests/agent-e2e-mobile/flows/home-loads.mjs",
+        name: "home-loads",
+        platform: "ios",
+        status: "passed",
+      });
+    } finally {
+      vi.unstubAllEnvs();
+      log.mockRestore();
+    }
+  });
+
+  test("writeFlowVerdict keeps the unsuffixed path when no platform is set", async () => {
+    const runDir = await makeRunDir();
+    const log = vi.spyOn(console, "log").mockImplementation(() => undefined);
+    try {
+      await writeFlowVerdict({
+        repoRoot: runDir,
+        slug: "pairing-smoke",
+        runDir,
+        elapsedMs: 3,
+        error: null,
+        notes: [],
+        result: { pass: true },
+        owner: "tests/agent-e2e-pairing/flows/pairing-smoke.mjs",
+      });
+      const evidence = JSON.parse(
+        await readFile(
+          path.join(runDir, "artifacts", "e2e", "pairing-smoke.json"),
+          "utf8"
+        )
+      );
+      expect(evidence.platform).toBeUndefined();
+    } finally {
+      log.mockRestore();
+    }
+  });
+
+  test("recordQualityResult keys the artifact and its history per platform", async () => {
+    const repoRoot = await makeRunDir();
+    vi.stubEnv("MAESTRO_PLATFORM", "ios");
+    try {
+      await recordQualityResult(repoRoot, {
+        lane: "scale",
+        owner: "tests/agent-e2e-mobile/flows/cold-start.mjs",
+        name: "cold start",
+        status: "passed",
+        measurements: [{ name: "median cold start", value: 1200, unit: "ms" }],
+      });
+      const ios = JSON.parse(
+        await readFile(
+          path.join(
+            repoRoot,
+            "artifacts",
+            "scale",
+            "tests-agent-e2e-mobile-flows-cold-start-mjs-ios.json"
+          ),
+          "utf8"
+        )
+      );
+      expect(ios.platform).toBe("ios");
+      expect(ios.history).toHaveLength(1);
+
+      vi.stubEnv("MAESTRO_PLATFORM", "android");
+      await recordQualityResult(repoRoot, {
+        lane: "scale",
+        owner: "tests/agent-e2e-mobile/flows/cold-start.mjs",
+        name: "cold start",
+        status: "passed",
+        measurements: [{ name: "median cold start", value: 3400, unit: "ms" }],
+      });
+      const android = JSON.parse(
+        await readFile(
+          path.join(
+            repoRoot,
+            "artifacts",
+            "scale",
+            "tests-agent-e2e-mobile-flows-cold-start-mjs-android.json"
+          ),
+          "utf8"
+        )
+      );
+      // Two files, one sample each: the platforms no longer overwrite each
+      // other, and neither history contains the other's sample.
+      expect(android.history).toHaveLength(1);
+      expect(android.history[0].value).toBe(3400);
+      expect(ios.history[0].value).toBe(1200);
+    } finally {
+      vi.unstubAllEnvs();
+    }
+  });
+
+  test("drift budgets read only their own platform's history", async () => {
+    const repoRoot = await makeRunDir();
+    vi.stubEnv("MAESTRO_PLATFORM", "ios");
+    try {
+      await Array.from({ length: 10 }, (_, index) => index + 1).reduce(
+        async (previous, value) => {
+          await previous;
+          await recordQualityResult(repoRoot, {
+            lane: "scale",
+            owner: "mobile-volume",
+            name: "volume",
+            status: "passed",
+            measurements: [{ name: "wall clock", value, unit: "ms" }],
+          });
+        },
+        Promise.resolve()
+      );
+      expect(
+        await qualityRegressionBudget(repoRoot, "scale", "mobile-volume")
+      ).toBe(16.5);
+      // The other platform has no samples: its budget stays "no opinion yet",
+      // not a budget computed over the sibling platform's history.
+      vi.stubEnv("MAESTRO_PLATFORM", "android");
+      expect(
+        await qualityRegressionBudget(repoRoot, "scale", "mobile-volume")
+      ).toBeNull();
+    } finally {
+      vi.unstubAllEnvs();
     }
   });
 });

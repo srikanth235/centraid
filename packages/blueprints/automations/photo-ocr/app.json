@@ -1,0 +1,10 @@
+{
+  "manifestVersion": 1,
+  "id": "photo-ocr",
+  "name": "Photo OCR",
+  "kind": "automation",
+  "description": "Makes text in photographs searchable through deterministic OCR, with an optional billed delegate step.",
+  "version": "0.1.0",
+  "actions": [],
+  "queries": []
+}

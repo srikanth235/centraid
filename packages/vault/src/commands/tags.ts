@@ -31,7 +31,7 @@ const SUBJECT_PK: Record<string, { pk: string; live?: boolean }> = {
   "knowledge.note": { pk: "note_id", live: true },
   "schedule.task": { pk: "task_id" },
   "core.document": { pk: "document_id", live: true },
-  "media.media_asset": { pk: "asset_id", live: true },
+  "media.asset": { pk: "asset_id", live: true },
 };
 
 /** A tag's display label → its notation: lowercased, collapsed whitespace, trimmed. */

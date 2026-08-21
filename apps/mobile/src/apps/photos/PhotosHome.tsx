@@ -1,20 +1,42 @@
-import { File } from "expo-file-system";
-import * as Haptics from "expo-haptics";
-import { Image } from "expo-image";
-import * as Notifications from "expo-notifications";
-// governance: allow-repo-hygiene file-size-limit cohesive Photos cover (timeline + memory hero + four-view switch + glass bottom bar + drawer/switcher wiring); decompose the views in a follow-up (#498)
-import React, { useEffect, useMemo, useRef, useState } from "react";
-import { Alert, Pressable, StyleSheet, View } from "react-native";
-import {
-  SafeAreaView,
-  useSafeAreaInsets,
-} from "react-native-safe-area-context";
+// Photos' home surface on the phone (v4 handoff §3.1, §4, §14, §15).
+// governance: allow-repo-hygiene file-size-limit The #712 screen intentionally retains its cohesive data/routing orchestration; #716 extracts only independently testable UI bodies.
+//
+// The screen is now the wiring: state, data and routing. Everything with a
+// shape of its own moved out to a file that can be read — and tested — on its
+// own terms:
+//
+//   photos-band.ts     the band's rules (five + More, the capsule, the ground)
+//   PhotosBand.tsx     the band, rendered on OPAQUE paper
+//   photos-rungs.ts    the four rungs, and pinch == stepper
+//   justify.ts         justified packing from real aspect ratios
+//   timeline-rows.ts   month/day grouping and the row list
+//   PhotoTile.tsx      the tile and its four overlay slots
+//   ScrubRail.tsx      the overlay rail and its month bubble
+//   photos-backup.ts   the serial backup run
+//   photos-vaults.ts   vault facts, keyed by id, `kind` never by name
+//   photos-library-menu.ts  the Library chip's menu model — filter, tile size
+//   photos-collections-menu.ts  the Collections chip's menu model — Show
+//                                All / Collapse All
 
-import GlassBar from "../../kit/components/GlassBar";
-import HomeKey from "../../kit/components/HomeKey";
+import * as Haptics from "expo-haptics";
+import * as Notifications from "expo-notifications";
+import React, {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
+import { Alert, Pressable, View } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
+
+import { BAND_INSET } from "../../kit/band-surface";
+import { useBandOwner } from "../../kit/band/band-owner";
+import AnchoredMenu, { useMenuAnchor } from "../../kit/components/AnchoredMenu";
 import Icon from "../../kit/components/Icon";
 import { Text } from "../../kit/components/NativeText";
-import { showToast } from "../../kit/components/Toast";
+import SelectChip from "../../kit/components/SelectChip";
+import { postStatus } from "../../kit/components/status-line";
 import { useReplicaQuery } from "../../kit/hooks/useReplicaQuery";
 import { useReplica } from "../../kit/replica/ReplicaProvider";
 import ReplicaStateCard from "../../kit/replica/ReplicaStateCard";
@@ -23,68 +45,185 @@ import {
   surfaceWriteFailure,
   surfaceWriteOutcome,
 } from "../../kit/replica/write-outcome";
-import { family, useTheme } from "../../kit/theme";
-import {
-  optimisticRowId,
-  optimisticValues,
-} from "../../lib/replica/optimistic";
+import { useTheme } from "../../kit/theme";
+import { hydrateBackupConsent } from "../../kit/transfer/transfer-consent";
+import type { BackupConsentRecord } from "../../kit/transfer/transfer-consent";
 import { refreshPinnedThumbnailPack } from "../../lib/replica/thumbnail-pack";
 import { backupDeviceMedia } from "../../lib/upload/media-producer";
 import type { PhotosScreenProps } from "../../navigation";
-import VaultsSwitcher from "../../screens/home/VaultsSwitcher";
 import { Store } from "../../storage";
-import {
-  IN_CLOUD_MESSAGE,
-  InCloudOriginalError,
-  liveVideoUri,
-  openDeviceOriginal,
-} from "./device-media";
-import type { DeviceOriginal } from "./device-media";
-import { imageSource } from "./media-source";
+import CameraRollImportOffer from "./CameraRollImportOffer";
+import { detectFacesFor } from "./people-model";
+import { photoAccessTakesOverTimeline } from "./photo-access";
+import PhotoAccessPanel, { usePhotoAccessGrant } from "./PhotoAccessPanel";
+import PhotoGrainView from "./PhotoGrainView";
+import { runBackup, useAutomaticPhotoBackup } from "./photos-backup";
+import { inCloudMessage, nothingToBackUpMessage } from "./photos-backup-copy";
+import { resolveMoreRowRoute } from "./photos-band";
+import type { BandDestinationKey, PhotosMoreRowKey } from "./photos-band";
+import { COLLECTION_SECTION_KEYS } from "./photos-collections";
+import type { CollectionSectionKey } from "./photos-collections";
+import { collectionsMenuGroups } from "./photos-collections-menu";
+import { libraryMenuGroups } from "./photos-library-menu";
+import type { LibraryFilter } from "./photos-library-menu";
+import { usePhotosRung } from "./photos-rung-store";
+import { batchTrash, vaultAssets } from "./photos-selection-writes";
+import PhotosBand from "./PhotosBand";
 import PhotosCollectionsView from "./PhotosCollectionsView";
-import PhotosDrawer from "./PhotosDrawer";
+import PhotosGridSkeleton from "./PhotosGridSkeleton";
+import { makeStyles } from "./PhotosHome.styles";
+import PhotosMoreSheet from "./PhotosMoreSheet";
+import { PhotosSearchView } from "./PhotosSearch";
 import PhotoTimeline from "./PhotoTimeline";
 import {
   pinnedThumbnailCandidates,
   pinnedThumbnailSignature,
 } from "./pinned-thumbnails";
+import { anchorForGrain } from "./timeline-grains";
+import type { GrainPeriod, TimelineGrain } from "./timeline-grains";
+import type { PhotoSection } from "./timeline-model";
 import { onThisDay } from "./timeline-model";
 import { usePhotoTimeline } from "./timeline-source";
+import TimelineGrainControl, {
+  GRAIN_CONTROL_SLOT,
+} from "./TimelineGrainControl";
 
-type PhotosView = "photos" | "collections";
+/** `favorites` over the section list, dropping any day that empties out —
+ *  the same shape iOS' own Favorites filter takes, and cheap enough to run on
+ *  every render because a member's own library rarely runs past a few
+ *  thousand rows on a phone. */
+function filterSections(
+  sections: readonly PhotoSection[],
+  filter: LibraryFilter
+): PhotoSection[] {
+  if (filter !== "favorites") return sections as PhotoSection[];
+  return sections
+    .map((section) => ({
+      ...section,
+      assets: section.assets.filter((asset) => asset.favorite),
+    }))
+    .filter((section) => section.assets.length > 0);
+}
 
-// Icon-only destinations inside the glass pill — the mini-app's OWN sections and
-// nothing else. Leaving Photos for the Centraid springboard is a separate,
-// system-tinted key detached to the LEFT of the pill (never a "home" tab in
-// here: in a super-app a house glyph is ambiguous — it reads as either this
-// app's home or the launcher's). The pill's first tab, `photos`, IS this app's
-// home (its full library); the active tab wears a raised disc. Search and
-// album creation are real routes, kept outside the section switcher.
-const PILL_ITEMS: Array<{
-  key: string;
-  icon: string;
-  label: string;
-  view: PhotosView;
-}> = [
-  { key: "photos", icon: "image", label: "Library", view: "photos" },
-  {
-    key: "collections",
-    icon: "layers",
-    label: "Collections",
-    view: "collections",
-  },
-];
+/** The selection bar's centre plate, worded exactly as iOS Photos words its
+ *  own (observed on simulator, issue #712): "Select Items" before anything is
+ *  picked, then a bold count. `count === 0` is unreachable from this screen
+ *  today — `selecting` only turns true once the first tile is preselected —
+ *  but the label still handles it honestly rather than assuming a caller
+ *  never will. */
+function selectionCountLabel(count: number): string {
+  if (count === 0) return "Select Items";
+  return `${count} ${count === 1 ? "Photo" : "Photos"} Selected`;
+}
+
+function albumEntryCount<T>(
+  rows: readonly T[],
+  albumId: string,
+  collectionId: (row: T) => unknown
+): number {
+  return rows.filter((row) => String(collectionId(row)) === albumId).length;
+}
 
 export default function PhotosHome({
   navigation,
+  route,
 }: PhotosScreenProps<"PhotosHome">): React.JSX.Element {
-  const { colors, radii, scheme } = useTheme();
+  const { colors } = useTheme();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
   const insets = useSafeAreaInsets();
   const { session, gatewayBase, vaultId, refresh } = useReplica();
   const timeline = usePhotoTimeline();
-  const [view, setView] = useState<PhotosView>("photos");
-  const [drawerOpen, setDrawerOpen] = useState(false);
-  const [vaultsOpen, setVaultsOpen] = useState(false);
+  // §13 / P13. The OS grant, read HERE rather than on a screen a member has to
+  // go and find: the timeline is the surface that goes blank when the grant is
+  // refused, so the timeline is the surface that has to say why.
+  const grant = usePhotoAccessGrant();
+  const deviceReadable = timeline.assets.filter(
+    (asset) => asset.source !== "replica"
+  ).length;
+  const accessTakeover = photoAccessTakesOverTimeline({
+    state: grant.state,
+    deviceReadableCount: deviceReadable,
+    vaultReadableCount: timeline.assets.length - deviceReadable,
+    loading: timeline.loading,
+  });
+
+  // The band on a PUSHED Photos screen (PhotosScreen) navigates here with the
+  // destination it wants rather than pushing a second copy of Home. React
+  // Navigation updates params on a mounted screen WITHOUT remounting it, so
+  // the initial state alone would silently ignore every tap after the first —
+  // the effect is what makes the band work from a pushed screen at all.
+  // COLLECTIONS IS THE LANDING, not the timeline. Opening Photos onto a wall
+  // of every photograph you own answers a question a member rarely has —
+  // "show me everything, newest first" — while the shelves that answer the
+  // questions they do have (which album, which person, which place) were a
+  // tab away and, for five of the eight, behind a sheet. iOS Photos made the
+  // same move for the same reason. Library is one tap away and is still where
+  // the band starts you if you ask for it by name.
+  const [destination, setDestination] = useState<BandDestinationKey>(
+    route.params?.destination ?? "collections"
+  );
+  const routeDestination = route.params?.destination;
+  useEffect(() => {
+    if (routeDestination)
+      queueMicrotask(() => setDestination(routeDestination));
+  }, [routeDestination]);
+  const [moreOpen, setMoreOpen] = useState(false);
+  const [viewOptionsOpen, setViewOptionsOpen] = useState(false);
+  // The header chip's own frame, measured on the press that opens the menu —
+  // the card hangs off THAT rectangle rather than off a guessed corner. See
+  // `useMenuAnchor` for why `onLayout` cannot answer this.
+  // Destructured, never held as one object: `menuAnchorRef` goes to a `ref`
+  // prop, and react-compiler rightly treats anything reachable through a
+  // ref-carrying value as a ref — reading `.anchor` off the same object during
+  // render then reads as a ref access.
+  const {
+    anchor: menuAnchorRect,
+    anchorRef: menuAnchorRef,
+    measureAnchor,
+  } = useMenuAnchor();
+  // Session-scoped, unlike the rung below: iOS resets its own Library filter
+  // between visits too, and — see `photos-library-menu.ts`'s header — this
+  // repo has no member-preference plane to persist a THIRD device-local key
+  // in beyond `bandOwner` and the rung, both of which already stretch that
+  // reality about as far as it should go.
+  const [libraryFilter, setLibraryFilter] = useState<LibraryFilter>("all");
+  // THE TEMPORAL GRAIN (issue #712 iOS parity, `timeline-grains.ts`). Session
+  // state, for the same reason the filter above is: this repo has no
+  // member-preference plane to spend a third device-local key in, and iOS
+  // itself returns to All between visits. That argument survives the rebuild
+  // of the control unchanged — what changed is that the control is now
+  // permanently visible, not what its value is scoped to.
+  const [grain, setGrain] = useState<TimelineGrain>("all");
+  // THE MEMBER'S PLACE IN THE LIBRARY, in the one vocabulary all three grains
+  // speak — a `PhotoSection.day`. Every grain writes it (a card tap, a scroll
+  // coming to rest) and every grain reads it, which is what lets a switch keep
+  // the member where they were in BOTH directions. Held here rather than
+  // inside a grain's own view because it has to outlive the view: the next
+  // grain mounts after the switch, and the value has to still be there when it
+  // does.
+  const [placeDay, setPlaceDay] = useState<string | undefined>(undefined);
+  // Collections' own fold state, LIFTED here from `PhotosCollectionsView.tsx`
+  // (issue #712): the header's trailing chip is now the ONE place Show All /
+  // Collapse All live, so it has to drive the same set the per-section
+  // chevrons on that page toggle — two owners of one fold would let a member
+  // watch the chip say "folded" while a chevron underneath still says open.
+  // Session state, not a member preference — see
+  // `photos-collections-menu.ts`'s header for the same argument about why
+  // this repo has no third device-local key to spend on it.
+  const [collapsedSections, setCollapsedSections] = useState<
+    ReadonlySet<CollectionSectionKey>
+  >(() => new Set());
+  const toggleCollectionSection = useCallback(
+    (key: CollectionSectionKey): void => {
+      setCollapsedSections((prev) => {
+        const next = new Set(prev);
+        if (next.has(key)) next.delete(key);
+        else next.add(key);
+        return next;
+      });
+    },
+    []
+  );
   const [selection, setSelection] = useState(new Set<string>());
   const [backingUp, setBackingUp] = useState(false);
   const [uploadProgress, setUploadProgress] = useState<{
@@ -92,6 +231,40 @@ export default function PhotosHome({
     total: number;
   }>();
   const [refreshing, setRefreshing] = useState(false);
+
+  // Tile size is a MEMBER preference shared by every shelf, so it lives in one
+  // store rather than in this screen. There is no server-side member-preference
+  // plane in this repo, and the shipped web shell persists `bandOwner` per
+  // device for exactly that reason — so both persist per device here, matching
+  // that reality rather than inventing a sync path.
+  // Read here for the skeleton's geometry, and WRITTEN from the header menu's
+  // View Options rows (photos-library-menu.ts) — the same store the pinch
+  // gesture on the grid moves, so the two can never disagree.
+  const [rung, setRung] = usePhotosRung();
+  // The FRAME's latch, not Photos' (issue #712 E3). The hydrate-into-state
+  // dance this replaced lived in two Photos screens under a Photos-owned key;
+  // it is one hook in `kit/band/band-owner.ts` now, on the same
+  // `shell.bandOwner.<appId>` key the web shell already used, and the member's
+  // answer is WRITTEN from frame Settings rather than only read.
+  const { bandOwner } = useBandOwner("photos");
+
+  // The automatic sweep (#711 S4) belongs HERE, not on the Backup screen: the
+  // enqueue it performs is over newly-taken camera-roll photographs, and the
+  // walk that finds them runs wherever Photos is on screen. Mounted only on the
+  // Backup screen it swept only while a member was looking at backup settings,
+  // which is the one moment the photographs are already accounted for.
+  //
+  // Consent is the gate and the only gate: `useAutomaticPhotoBackup` derives
+  // its candidates through `automaticTransferAllowed`, so an unanswered or
+  // `not-now` latch yields an empty set and nothing is ever enqueued. Hydrated
+  // exactly as `BackupHealth.tsx` hydrates it — one device-local latch, read,
+  // never written from here.
+  const [backupConsent, setBackupConsent] = useState<BackupConsentRecord>();
+  useEffect(() => {
+    void hydrateBackupConsent().then(setBackupConsent);
+  }, []);
+  useAutomaticPhotoBackup(backupConsent);
+
   const collections = useReplicaQuery(
     "photos",
     useMemo(() => ({ entity: "core.collection" }), [])
@@ -101,7 +274,117 @@ export default function PhotosHome({
     useMemo(() => ({ entity: "core.collection_entry" }), [])
   );
   const memories = useMemo(() => onThisDay(timeline.assets), [timeline.assets]);
-  const hero = memories[0];
+  // The one place the Library's filter actually acts (the header menu,
+  // issue #712): Collections, People and Search are each their own shelf
+  // already, over their own queries, so a filter meant for "what the grid of
+  // every photograph shows" has no honest meaning there.
+  const visibleSections = useMemo(
+    () => filterSections(timeline.sections, libraryFilter),
+    [timeline.sections, libraryFilter]
+  );
+  // A GRAIN SWITCH FROM THE CONTROL, in either direction. `anchorForGrain`
+  // re-expresses wherever the member is now as a day the target grain can land
+  // on — the reverse-anchoring rule in `timeline-grains.ts`. Without it,
+  // switching up a grain dumps a member who had scrolled back to 2019 at the
+  // top of the library, which is the half the drill-down-only predecessor
+  // never did.
+  const changeGrain = useCallback(
+    (next: TimelineGrain): void => {
+      setPlaceDay((current) => anchorForGrain(visibleSections, next, current));
+      setGrain(next);
+    },
+    [visibleSections]
+  );
+  // LEAVING THE LIBRARY RESETS THE GRAIN. The grain is a property of the
+  // Library grid and of nothing else; a member who goes to Collections and
+  // comes back has ended that visit, and iOS returns to All between visits for
+  // the same reason. The PLACE goes with it — a day anchored in a grid that is
+  // no longer on screen is not a place, and restoring it later would scroll a
+  // member somewhere they last were long enough ago to have forgotten.
+  // Deferred out of the effect body for the reason every other setState in
+  // this file is: a synchronous one there is the shape react-compiler rejects.
+  useEffect(() => {
+    if (destination === "library") return;
+    queueMicrotask(() => {
+      setGrain("all");
+      setPlaceDay(undefined);
+    });
+  }, [destination]);
+  // A CARD TAP: one grain narrower, positioned at that period's first day.
+  const openPeriod = useCallback((period: GrainPeriod): void => {
+    setPlaceDay(period.anchorDay);
+    // Read off the grain actually on screen rather than off a captured copy:
+    // Years opens Months, Months opens All, and nothing below All can be
+    // opened because there are no cards there to tap.
+    setGrain((current) => (current === "years" ? "months" : "all"));
+  }, []);
+  // THE ONE TRAILING CONTROL, DESTINATION-SCOPED (issue #712). iOS Photos
+  // carries exactly one options chip on its title row, and its contents
+  // change per page — never a control that stays put while the surface under
+  // it changes out from under it. Library's Sliders menu acts on a grid that
+  // only Library draws; Collections' `···` menu acts on the fold state of a
+  // stack of rails that only Collections draws. A chip that opened either
+  // menu on a destination it cannot act on would still be present, still
+  // tappable, and would still do nothing the member could see happen — a
+  // control that cannot act on what is on screen is worse than no control,
+  // because it claims capability the screen does not have. Search has no
+  // honest menu of its own (verified: the file wires no AnchoredMenu today),
+  // so the chip is simply absent there rather than opening onto an empty card.
+  // Face detection (issue #724 W5). The tier comes from the same
+  // `enrich.policy` mirror `PhotosPeopleView` reads; `detectFacesFor` asks it
+  // the GATEWAY question (can the faces sweep run at all?), which is a
+  // different question from `deviceAnswerFor`'s on-device promise.
+  const enrichPolicies = useReplicaQuery(
+    "photos",
+    useMemo(() => ({ entity: "enrich.policy" }), [])
+  );
+  const detectFacesAvailability = detectFacesFor(
+    enrichPolicies.loading
+      ? null
+      : ((enrichPolicies.rows.find((row) => row.domain === "photos")?.tier as
+          | string
+          | undefined) ?? "off")
+  );
+
+  const menuGroups = useMemo(() => {
+    if (destination === "library") {
+      return libraryMenuGroups({
+        filter: libraryFilter,
+        onFilter: setLibraryFilter,
+        onRung: setRung,
+        rung,
+        grain,
+        detectFaces: {
+          availability: detectFacesAvailability,
+          // The row leads to the CONSENT GATE, which lives in the People
+          // roster's empty state (issue #712 C2) — never straight to the
+          // enrichment write. See photos-library-menu.ts's header.
+          onDetectFaces: () => navigation.navigate("PhotosPeople"),
+        },
+      });
+    }
+    if (destination === "collections") {
+      // Show All / Collapse All set every one of the eight fixed sections at
+      // once (`COLLECTION_SECTION_KEYS`, `photos-collections.ts`) — the same
+      // full set `buildCollectionSections` always returns, so Collapse All
+      // folds the whole page even before its replica queries have answered.
+      return collectionsMenuGroups({
+        onCollapseAll: () =>
+          setCollapsedSections(new Set(COLLECTION_SECTION_KEYS)),
+        onShowAll: () => setCollapsedSections(new Set()),
+      });
+    }
+    return [];
+  }, [
+    destination,
+    detectFacesAvailability,
+    grain,
+    libraryFilter,
+    navigation,
+    rung,
+    setRung,
+  ]);
+
   const refreshLibrary = async (): Promise<void> => {
     setRefreshing(true);
     try {
@@ -114,8 +397,6 @@ export default function PhotosHome({
   // The pack refresh stats every pinned file and downloads the missing ones, so
   // it must not ride every timeline snapshot — the engine republishes on each
   // replica tick, and the candidate set is unchanged in almost all of them.
-  // `packSignature` holds the set last handed to the pack; `packRun` serializes,
-  // so a snapshot landing mid-refresh queues behind it instead of racing it.
   const packSignature = useRef<string | undefined>(undefined);
   const packRun = useRef<Promise<void> | undefined>(undefined);
   useEffect(() => {
@@ -165,93 +446,38 @@ export default function PhotosHome({
 
   const backupSelection = async (): Promise<void> => {
     if (!session || !gatewayBase) {
-      showToast({
-        message:
-          "Desktop unavailable — pair or reconnect a gateway before backup.",
-        tone: "danger",
-      });
+      postStatus(
+        "Desktop unavailable — pair or reconnect a gateway before backup."
+      );
       return;
     }
     const selected = timeline.assets.filter(
       (asset) => selection.has(asset.id) && asset.localId
     );
+    // Nothing to send is an ANSWER, not a success — see
+    // `nothingToBackUpMessage` for why this branch exists at all.
+    if (!selected.length) {
+      postStatus(nothingToBackUpMessage(selection.size));
+      return;
+    }
     setBackingUp(true);
-    // Assets whose originals never came down from iCloud. Never dropped on the
-    // floor: they stay selected and are named in an alert once the run ends.
-    const inCloud = new Set<string>();
     try {
-      // Device reads and paired Live Photo writes stay serial: the run is
-      // deliberately bounded for mobile memory and preserves capture order.
-      const backupNext = async (index: number): Promise<void> => {
-        const asset = selected[index];
-        if (asset === undefined) return;
-        let original: DeviceOriginal;
-        try {
-          original = await openDeviceOriginal(asset.localId!);
-        } catch (error) {
-          if (!(error instanceof InCloudOriginalError)) throw error;
-          inCloud.add(asset.id);
-          return backupNext(index + 1);
-        }
-        // A Live Photo's paired MOV is a distinct durable upload; the canonical
-        // HEIC remains the visible asset until the vault grows a compound-media
-        // edge. Resolved first because the still's capture group depends on it.
-        const companion = await liveVideoUri(original.asset);
-        await backupDeviceMedia(session, gatewayBase, {
-          localUri: original.uri,
-          ...(vaultId ? { targetVaultId: vaultId } : {}),
-          filename: asset.filename,
-          mediaType: asset.kind === "video" ? "video/mp4" : "image/jpeg",
-          plaintextSize: new File(original.uri).size,
-          kind: asset.kind,
-          capturedAt: asset.capturedAt,
-          // The capture's true UTC offset isn't in MediaLibrary metadata, so we
-          // record none rather than fabricating the device's current offset —
-          // sectioning falls back to the viewing device's local day (matching
-          // BackupHealth, which also passes no offset).
-          captureGroupId: companion ? `live:${asset.localId}` : undefined,
-          width: asset.width,
-          height: asset.height,
-          durationS: asset.durationS,
-          onProgress: setUploadProgress,
-        });
-        if (companion) {
-          const companionFile = new File(companion);
-          await backupDeviceMedia(session, gatewayBase, {
-            localUri: companion,
+      const outcome = await runBackup(selected, {
+        onProgress: setUploadProgress,
+        upload: (input) =>
+          backupDeviceMedia(session, gatewayBase, {
+            ...input,
             ...(vaultId ? { targetVaultId: vaultId } : {}),
-            // The Next API hands back an extracted file, not a paired asset, so
-            // the companion's name comes from that file and its dimensions and
-            // duration are simply not on offer.
-            filename: companionFile.name,
-            mediaType: "video/quicktime",
-            plaintextSize: companionFile.size,
-            kind: "video",
-            capturedAt: asset.capturedAt,
-            captureGroupId: `live:${asset.localId}`,
-            onProgress: setUploadProgress,
-          });
-        }
-        return backupNext(index + 1);
-      };
-      await backupNext(0);
-      // Anything still in iCloud stays selected so a retry is one tap.
-      setSelection(inCloud);
-      if (inCloud.size) {
-        showToast({
-          message: `${inCloud.size} selected item${inCloud.size === 1 ? " is" : "s are"} ${IN_CLOUD_MESSAGE}; still selected for retry.`,
-          tone: "danger",
-        });
-      } else {
+          }),
+      });
+      setSelection(outcome.inCloud);
+      if (outcome.paused) postStatus(outcome.paused);
+      else if (outcome.inCloud.size)
+        postStatus(inCloudMessage(outcome.inCloud.size));
+      else
         void Haptics.notificationAsync(
           Haptics.NotificationFeedbackType.Success
         );
-      }
-    } catch (error) {
-      showToast({
-        message: `Backup paused: ${error instanceof Error ? error.message : String(error)}`,
-        tone: "danger",
-      });
     } finally {
       setBackingUp(false);
       setUploadProgress(undefined);
@@ -273,54 +499,29 @@ export default function PhotosHome({
             const assets = timeline.assets.filter(
               (item) => selection.has(item.id) && item.assetId
             );
-            const addNext = async (index: number): Promise<void> => {
-              const asset = assets[index];
-              if (asset === undefined) return;
-              const albumId = String(album.collection_id);
-              const entryId = optimisticRowId("album-entry");
-              const position =
-                entries.rows.filter(
-                  (row) => String(row.collection_id) === albumId
-                ).length + index;
-              const result = await session.write("photos", {
-                action: "add-to-album",
-                input: {
-                  album_id: albumId,
-                  asset_id: asset.assetId!,
-                },
-                optimistic: [
-                  {
-                    op: "upsert",
-                    entity: "core.collection_entry",
-                    rowId: entryId,
-                    values: {
-                      entry_id: entryId,
-                      collection_id: albumId,
-                      target_type: "media.media_asset",
-                      target_id: asset.assetId!,
-                      position,
-                      added_at: new Date().toISOString(),
-                    },
-                  },
-                  ...(album.cover_content_id == null && asset.contentId
-                    ? [
-                        {
-                          op: "upsert" as const,
-                          entity: "core.collection",
-                          rowId: albumId,
-                          values: optimisticValues(album, {
-                            cover_content_id: asset.contentId,
-                          }),
-                        },
-                      ]
-                    : []),
-                ],
-              });
-              surfaceWriteOutcome(result);
-              return addNext(index + 1);
-            };
             try {
-              await addNext(0);
+              // Serial by contract: each entry's `position` is derived from
+              // the rows the previous write just landed, and the ledger keeps
+              // the member's selection order. Parallel writes would race both.
+              for (const [index, asset] of assets.entries()) {
+                const albumId = String(album.collection_id);
+                const position =
+                  albumEntryCount(
+                    entries.rows,
+                    albumId,
+                    (row) => row.collection_id
+                  ) + index;
+                // oxlint-disable-next-line no-await-in-loop
+                const result = await session.write("photos", {
+                  action: "add-to-album",
+                  input: {
+                    album_id: albumId,
+                    asset_id: asset.assetId!,
+                    position,
+                  },
+                });
+                surfaceWriteOutcome(result);
+              }
               setSelection(new Set());
             } catch (error) {
               surfaceWriteFailure(error, "Photos not added");
@@ -331,70 +532,239 @@ export default function PhotosHome({
     ]);
   };
 
-  const yearsAgo = hero
-    ? new Date().getFullYear() - new Date(hero.capturedAt).getFullYear()
-    : 0;
-  const selecting = selection.size > 0;
+  // TRASH, ON THE RIGHT (issue #712 — iOS parity). `batchTrash` already
+  // exists as the shared selection write (`photos-selection-writes.ts`,
+  // exercised today from AlbumDetail's and the Duplicates shelf's own
+  // selection bars) — the Library grid gets the same write rather than a
+  // second implementation, which is what earns Trash the right-hand chip
+  // instead of a second Backup. The confirmation copy matches AlbumDetail's
+  // trash target word for word: the device original surviving this action is
+  // the one fact a member cannot infer from "Trash" alone.
+  const trashSelection = (): void => {
+    if (!session) return;
+    const targets = vaultAssets(timeline.assets, selection);
+    Alert.alert(
+      `Move ${selection.size} to trash?`,
+      "The device original is never deleted by this action.",
+      [
+        { text: "Cancel" },
+        {
+          text: "Trash",
+          style: "destructive",
+          onPress: () => {
+            void batchTrash(session, targets, surfaceWriteOutcome)
+              .then(() => setSelection(new Set()))
+              .catch((error: unknown) =>
+                surfaceWriteFailure(error, "Photos not trashed")
+              );
+          },
+        },
+      ]
+    );
+  };
+
+  // SCOPED TO THE LIBRARY GRID (issue #712). `selection` is state PhotosHome
+  // owns, but it is only ever MUTATED by the timeline's own
+  // `onSelectionChange` — `PhotoTimeline`, rendered on the "library"
+  // destination alone; Collections, People and Search never touch it. Gating
+  // on `destination` too, rather than on `selection.size` alone, keeps the
+  // header and the selection bar honest for the one render where a member has
+  // switched destinations with a residual selection still in state and the
+  // effect below has not yet cleared it.
+  const selecting = selection.size > 0 && destination === "library";
+
+  const onDestination = (key: BandDestinationKey): void => {
+    if (key === "more") {
+      setMoreOpen(true);
+      return;
+    }
+    // The residual-selection case (issue #712): a member selects on Library,
+    // then taps another band destination WITHOUT pressing ✕ first. Nothing
+    // else in this screen clears `selection` on a destination change — it
+    // otherwise only empties when a target's own write or Done fires — so
+    // without this line a selection would sit in state, invisible while
+    // `selecting`'s own `destination === "library"` guard hides it elsewhere,
+    // and then reappear with its stale tiles still checked the moment
+    // Library is current again. Cleared HERE, synchronously with the
+    // destination change that leaves it stale, rather than from an effect —
+    // an effect that calls `setSelection` off its own dependency is exactly
+    // the cascading-render shape `react-compiler` flags.
+    if (key !== "library") setSelection(new Set());
+    // Same reasoning, one control over (issue #712): the trailing chip's own
+    // menu is destination-scoped, so a card left open across a destination
+    // change would either hang off a chip that just vanished (People,
+    // Search) or silently swap its rows for the new destination's answer
+    // under a card the member never asked to reopen. Closed HERE for the
+    // same synchronous reason `selection` is cleared above rather than from
+    // an effect.
+    setViewOptionsOpen(false);
+    // Search is a DESTINATION, not a push (proto:4953-4954). `appBandOn`
+    // excludes only the viewer, zoom, video, slideshow and the editor — Search
+    // is none of those, so the band must stay up with Search current and the
+    // frame's Home capsule still reachable. Pushing `PhotosSearch` gave it a
+    // back chevron and no band at all, which is the rule this line now keeps.
+    setDestination(key);
+  };
+
+  const onMoreRow = (key: PhotosMoreRowKey): void => {
+    setMoreOpen(false);
+    // Still routed through `resolveMoreRowRoute` rather than inlined, even
+    // now that the sheet carries one row: the router is what makes an unwired
+    // row fail to typecheck instead of silently landing on Library, and the
+    // day a second row is added is exactly the day that guard earns its keep.
+    //
+    // The one row is CROSS-STACK (B2): Backup health is a frame screen, so
+    // this leaves the Photos cover for the Settings cover rather than pushing
+    // a Photos route that does not exist.
+    const nextRoute = resolveMoreRowRoute(key);
+    navigation.navigate(nextRoute.screen, nextRoute.params);
+  };
 
   return (
-    <SafeAreaView
-      style={[styles.safe, { backgroundColor: colors.bg }]}
-      edges={["top"]}
+    // THE PAGE, the same one the frame and every other app draws. This used to
+    // name `colors.toneMat` — Photos' declared surface tone — which grounded
+    // the page and nothing else: every card below it kept drawing the SHELL's
+    // `bgElev`, so a `#F9F8F6` card sat on an `#F0EFED` page, lighter than the
+    // page it was laid on. The tone axis is gone (see `PAGE` in
+    // `packages/design/src/themes/shared.ts`); one page is what makes that
+    // unrepresentable rather than merely fixed.
+    // Explicit inset, not SafeAreaView-with-edges: inside the fullScreenModal
+    // cover this stack presents, the edges variant intermittently resolves a
+    // zero top inset while `useSafeAreaInsets()` stays correct (the viewer
+    // relies on the same hook for the same reason).
+    <View
+      style={[
+        styles.safe,
+        { backgroundColor: colors.bg, paddingTop: insets.top },
+      ]}
     >
       {selecting ? (
+        // iOS PARITY (issue #712, observed on simulator). Entering Select
+        // keeps the header's own page title — this is still Photos, not a new
+        // surface — and moves everything else to the RIGHT: the leftover
+        // action plus a round ✕ chip that exits. The count and the two verbs
+        // iOS puts at the thumb (Add to album, Trash) move to the bar at the
+        // foot instead (see the band-swap render site below) — a header row
+        // is not where a member's thumb rests, and iOS does not put them
+        // there either. Backup has no iOS analogue and nowhere on the bar's
+        // three plates to sit once Add to album and Trash take the outer two,
+        // so it stays up here as the one action that did not fit the bar.
         <View style={styles.header}>
-          <Pressable onPress={() => setSelection(new Set())}>
-            <Icon name="x" size={23} color={colors.text} />
-          </Pressable>
-          <Text style={[styles.selectionTitle, { color: colors.text }]}>
-            {selection.size} selected
+          <Text style={styles.title} numberOfLines={1}>
+            Photos
           </Text>
           <View style={styles.headerActions}>
-            <Pressable onPress={addToAlbum}>
-              <Icon name="folder-plus" size={21} color={colors.accent} />
-            </Pressable>
             <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Back up to the gateway"
+              accessibilityState={{ disabled: backingUp }}
               disabled={backingUp}
               onPress={() => void backupSelection()}
+              style={styles.headerBtn}
             >
-              <Icon name="upload-cloud" size={22} color={colors.accent} />
+              <Icon
+                name="upload-cloud"
+                size={22}
+                color={backingUp ? colors.textDisabled : colors.text}
+              />
+            </Pressable>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Done"
+              onPress={() => setSelection(new Set())}
+              style={styles.headerBtn}
+            >
+              <Icon name="x" size={23} color={colors.text} />
             </Pressable>
           </View>
         </View>
       ) : (
-        <View style={styles.searchRow}>
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel="Menu"
-            onPress={() => setDrawerOpen(true)}
-            style={styles.menuBtn}
-          >
-            <Icon name="menu" size={23} color={colors.textSoft} />
-          </Pressable>
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel="Search photos and moments"
-            onPress={() => navigation.navigate("PhotosSearch")}
-            style={[styles.searchPill, { backgroundColor: colors.bgSunken }]}
-          >
-            <Icon name="search" size={17} color={colors.textFaint} />
-            <Text
-              style={[styles.searchPlaceholder, { color: colors.textFaint }]}
-            >
-              Search photos &amp; moments
-            </Text>
-          </Pressable>
-          <Pressable
-            accessibilityLabel="Search photos and moments"
-            onPress={() => navigation.navigate("PhotosSearch")}
-            style={styles.sparkleBtn}
-          >
-            <Icon name="star" size={22} color={colors.accent} />
-          </Pressable>
+        // No ☰. The claimed band is the ONE navigation on the phone (§F/§3.1):
+        // a drawer behind a menu button would be a second way to the same five
+        // destinations, and the frame's own destinations (identity, vault
+        // switching, Settings) belong to the frame — reached through the band's
+        // Home capsule, never mirrored inside the app.
+        <View style={styles.header}>
+          <Text style={styles.title} numberOfLines={1}>
+            Photos
+          </Text>
+          <View style={styles.headerActions}>
+            {/* The chip iOS' own Library header carries — Sort (omitted, see
+                photos-library-menu.ts), Filter and View Options (tile size)
+                live behind it now instead of a permanent toolbar row or a
+                buried More-sheet stepper. It opens an ANCHORED MENU, not a
+                bottom sheet: the chip stays where it is and the card hangs off
+                it, so the grid underneath never moves out from under the
+                member who pressed it. On Collections the SAME slot carries
+                iOS' own `···` (Show All / Collapse All) instead — see the
+                `menuGroups` comment above for why one destination never gets
+                the other's menu, and why People/Search get neither. */}
+            {destination === "library" || destination === "collections" ? (
+              <Pressable
+                ref={menuAnchorRef}
+                accessibilityRole="button"
+                accessibilityLabel={
+                  destination === "library"
+                    ? "View options"
+                    : "Collections options"
+                }
+                onPress={() => {
+                  // Measured on the press, never cached: a rotation or a
+                  // dynamic-type change between two openings would leave a
+                  // stale rectangle and hang the card off nothing.
+                  measureAnchor();
+                  setViewOptionsOpen(true);
+                }}
+                style={styles.headerBtn}
+              >
+                <Icon
+                  name={
+                    destination === "library" ? "Sliders" : "more-horizontal"
+                  }
+                  size={22}
+                  color={colors.text}
+                />
+              </Pressable>
+            ) : null}
+            {/* SCOPED TO THE LIBRARY GRID, same as `selecting` below (issue
+                #712). Select's own entry point used to render on every
+                destination — pressing it on Collections silently populated
+                `selection` with a tile the member could never see checked,
+                because `selecting`'s own `destination === "library"` guard
+                already hid the bar it would have opened. That is the exact
+                inert-control shape this pass removes the Sliders chip for
+                elsewhere, so Select gets the same scoping rather than a
+                second control that appears to do nothing. */}
+            {destination === "library" ? (
+              <SelectChip
+                disabled={timeline.assets.length === 0}
+                onPress={() => {
+                  const first = timeline.assets[0];
+                  if (first) setSelection(new Set([first.id]));
+                }}
+              />
+            ) : null}
+          </View>
         </View>
       )}
+
       <ReplicaStatusBar />
+
+      {/* THE FIRST-RUN OFFER (issue #724 A2) — the staged-import alternative
+          to the silent automatic sweep above. A self-contained banner: it
+          reads nothing from this screen's own state and returns null once
+          there is nothing local-only left to offer, so it costs this file
+          one import and one conditional render rather than a state slice of
+          its own. */}
+      {accessTakeover ? null : (
+        <CameraRollImportOffer
+          assets={timeline.assets}
+          gatewayBase={gatewayBase}
+        />
+      )}
+
       {backingUp && uploadProgress ? (
+        // Determinate, with exact counts. Never a spinner (§18).
         <View
           accessibilityLabel={`Uploading ${uploadProgress.completed} of ${uploadProgress.total}`}
           accessibilityRole="progressbar"
@@ -405,22 +775,27 @@ export default function PhotosHome({
           }}
           style={styles.uploadProgress}
         >
-          <Text style={[styles.uploadProgressText, { color: colors.textSoft }]}>
+          <Text style={styles.uploadProgressText}>
             Uploading {uploadProgress.completed} of {uploadProgress.total}
           </Text>
-          <View style={[styles.uploadTrack, { backgroundColor: colors.line }]}>
+          <View style={styles.uploadTrack}>
             <View
               style={[
                 styles.uploadFill,
                 {
-                  backgroundColor: colors.accent,
-                  width: `${Math.round((uploadProgress.completed / Math.max(uploadProgress.total, 1)) * 100)}%`,
+                  backgroundColor: colors.text,
+                  width: `${Math.round(
+                    (uploadProgress.completed /
+                      Math.max(uploadProgress.total, 1)) *
+                      100
+                  )}%`,
                 },
               ]}
             />
           </View>
         </View>
       ) : null}
+
       <ReplicaStateCard
         connection={collections.connection}
         error={collections.error ?? timeline.error}
@@ -430,374 +805,220 @@ export default function PhotosHome({
       />
 
       <View style={styles.body}>
-        {view === "photos" ? (
+        {destination === "collections" ? (
+          <PhotosCollectionsView
+            navigation={navigation}
+            collapsed={collapsedSections}
+            onToggleSection={toggleCollectionSection}
+          />
+        ) : destination === "search" ? (
+          <PhotosSearchView navigation={navigation} />
+        ) : accessTakeover && grant.state ? (
+          // THE TAKEOVER (§13, P13). The grid's own slot carries the refusal
+          // grammar — what was tried, why it was refused, what to do — instead
+          // of an empty grid with no sentence and no way back. The band below
+          // is untouched: the way out of Photos is never what a refusal takes
+          // away. No toolbar either: a tile-size stepper over no tiles is a
+          // control for a thing that is not there.
+          <PhotoAccessPanel
+            state={grant.state}
+            canAskAgain={grant.canAskAgain}
+            // Only the limited state prints it, and only once the walk has
+            // finished: a count read mid-walk is true for a second and wrong
+            // after.
+            readableCount={timeline.loading ? null : deviceReadable}
+            onRequest={() => grant.request()}
+          />
+        ) : (
           <>
-            {hero && !selecting ? (
-              <Pressable
-                style={[styles.heroWrap, { borderRadius: radii.xl }]}
-                onPress={() =>
-                  navigation.navigate("PhotoLightbox", { assetId: hero.id })
-                }
-              >
-                <Image
-                  source={imageSource(hero.uri)}
-                  cachePolicy="memory-disk"
-                  contentFit="cover"
-                  recyclingKey={hero.id}
-                  style={styles.heroImage}
-                />
-                <View
-                  style={[styles.heroShade, { backgroundColor: colors.scrim }]}
-                />
-                <View
-                  style={[
-                    styles.memoryPill,
-                    { backgroundColor: colors.scrim, borderRadius: radii.pill },
-                  ]}
-                >
-                  <Icon name="star" size={12} color={colors.textInv} />
-                  <Text
-                    style={[styles.memoryPillText, { color: colors.textInv }]}
-                  >
-                    Memory
-                  </Text>
-                </View>
-                <View style={styles.heroCopy}>
-                  <Text style={[styles.heroEyebrow, { color: colors.textInv }]}>
-                    ON THIS DAY
-                  </Text>
-                  <Text style={[styles.heroTitle, { color: colors.textInv }]}>
-                    {yearsAgo > 0
-                      ? `${yearsAgo} year${yearsAgo === 1 ? "" : "s"} ago`
-                      : "Today"}
-                    {memories.length > 1 ? ` · ${memories.length} moments` : ""}
-                  </Text>
-                </View>
-              </Pressable>
-            ) : null}
-
-            {!selecting && timeline.assets.length ? (
-              <View style={styles.timelineHeading}>
-                <View>
-                  <Text style={[styles.timelineTitle, { color: colors.text }]}>
-                    Timeline
-                  </Text>
-                  <Text
-                    style={[styles.timelineMeta, { color: colors.textSoft }]}
-                  >
-                    {timeline.assets.length} items · pinch to change density
-                  </Text>
-                </View>
-                <View style={styles.protectedStatus}>
-                  <Icon name="shield" size={13} color={colors.accent} />
-                  <Text
-                    style={[styles.protectedText, { color: colors.accent }]}
-                  >
-                    Private
-                  </Text>
-                </View>
-              </View>
-            ) : null}
-
+            {/* No toolbar row. The tile-size stepper it existed to hold now
+                lives in the header chip's anchored menu (photos-library-menu.ts,
+                drawn by kit/components/AnchoredMenu.tsx) — the grid takes the
+                same preference by pinch (§4.2), and 44 permanent points above
+                the first photograph is a high rent for a control a member
+                touches a handful of times. The rung itself is still read
+                here, and still governs the skeleton, so the geometry that
+                lands is the geometry that was showing. */}
             {timeline.loading ? (
-              <View style={styles.center}>
-                <Text style={[styles.body2, { color: colors.textSoft }]}>
-                  Opening your library…
-                </Text>
-              </View>
+              // The grid IS the loading state (§14, proto:3993-4033): packed
+              // placeholder tiles at the exact geometry the real rows will
+              // take, so nothing reflows when the bytes land. Never a message
+              // the grid then replaces, and never a spinner (§18).
+              <PhotosGridSkeleton rung={rung} />
             ) : timeline.sections.length === 0 ? (
               <View style={styles.center}>
-                <Icon name="image" size={40} color={colors.accent} />
-                <Text style={[styles.emptyTitle, { color: colors.text }]}>
+                <Text style={styles.emptyTitle}>
                   {collections.connection === "offline"
-                    ? "No cached vault photos"
+                    ? "No cached vault photographs"
                     : "Your library starts here"}
                 </Text>
-                <Text style={[styles.body2, { color: colors.textSoft }]}>
+                <Text style={styles.bodyText}>
                   {collections.connection === "offline"
-                    ? "Camera-roll photos remain available. Reconnect to check the vault."
-                    : "Camera-roll photos appear instantly; long-press any item to back it up."}
+                    ? "Camera-roll photographs remain available — reconnect to check the vault."
+                    : "Camera-roll photographs appear instantly; hold any one to back it up."}
                 </Text>
               </View>
-            ) : (
+            ) : visibleSections.length === 0 ? (
+              // The FILTER emptied the grid, not the library — a different
+              // fact from the one above, so it gets its own sentence rather
+              // than reusing "Your library starts here" over a library that
+              // plainly is not empty.
+              <View style={styles.center}>
+                <Text style={styles.emptyTitle}>No favorites yet</Text>
+                <Text style={styles.bodyText}>
+                  Photographs you mark as a favorite appear here.
+                </Text>
+              </View>
+            ) : grain === "all" ? (
               <PhotoTimeline
-                sections={timeline.sections}
+                sections={visibleSections}
                 selection={selection}
                 refreshing={refreshing}
+                scrollToDay={placeDay}
+                onVisibleDay={setPlaceDay}
+                // The grain control floats permanently over this grid's foot,
+                // so the grid owes it the room — but only while the control is
+                // actually there (the same condition it mounts under below).
+                footerInset={selecting ? 0 : GRAIN_CONTROL_SLOT}
                 onRefresh={() => void refreshLibrary()}
                 onSelectionChange={setSelection}
                 onOpen={(asset) =>
                   navigation.navigate("PhotoLightbox", { assetId: asset.id })
                 }
               />
+            ) : (
+              // A SUMMARY GRAIN. The same sections the grid above would draw,
+              // grouped into periods — never a different query, so the three
+              // grains cannot disagree about what the library holds.
+              <PhotoGrainView
+                sections={visibleSections}
+                grain={grain}
+                focusDay={placeDay}
+                refreshing={refreshing}
+                onRefresh={() => void refreshLibrary()}
+                onOpenPeriod={openPeriod}
+              />
             )}
           </>
-        ) : (
-          <PhotosCollectionsView navigation={navigation} />
         )}
+        {/* THE GRAIN CONTROL (issue #712 iOS parity). PERMANENT while the
+            Library is the destination — see `TimelineGrainControl.tsx` on the
+            discoverability defect its scroll-armed predecessor caused. Inside
+            the grid's own slot rather than beside the band, because it belongs
+            to the Library surface: it moves between grains of THAT list, and
+            it must go when the list does.
+
+            The three conditions are the only ones it may be absent under, and
+            none of them is a timer. Not the Library: there is no grid to
+            re-grain. Mid-selection: the selection bar has already taken the
+            foot, and two floating controls stacked there would be two answers
+            to "what does the bottom of this screen do". An empty grid: three
+            grains of nothing is three doors onto the same blank page. */}
+        {destination === "library" && !selecting && visibleSections.length ? (
+          <TimelineGrainControl grain={grain} onGrain={changeGrain} />
+        ) : null}
       </View>
 
-      {selecting ? null : (
+      {/* Exactly ONE thing at the foot: the band, or — while a selection is
+          live on the Library grid (issue #712 iOS parity) — the selection
+          bar that takes its place. Never both, and never the bar anywhere
+          Search, Collections or People are current: `selecting` above is
+          already scoped to `destination === "library"`, so this ternary
+          cannot show the bar over a shelf that has no selection to act on.
+
+          THE BAR'S OWN ANATOMY, not a new one: three plates in the SAME
+          transparent row the band itself draws (`PhotosBand.tsx`'s header
+          comment — opaque `bgElev`/`lineStrong` plates, `BAND_RADIUS`
+          corners, `BAND_INSET` off the stage, never glass or blur). Left and
+          right are round-ish chips at the capsule's own 52pt; the centre is a
+          `flex:1` plate carrying the bold count, mirroring how the band's own
+          capsule and tab-group plates share the row. It replaces the band
+          rather than sitting inside `styles.header` (where the count and
+          every action used to live) because the band's own foot is where a
+          member's thumb already is mid-selection — iOS puts Select's own
+          verbs there for the same reason, not in the navigation bar. */}
+      {selecting ? (
         <View
           style={[
-            styles.bottomWrap,
-            { paddingBottom: Math.max(insets.bottom, 8) },
+            styles.selectionBarRow,
+            { paddingBottom: BAND_INSET + insets.bottom },
           ]}
-          pointerEvents="box-none"
         >
-          <View style={styles.barRow}>
-            {/* Detached, teal, LEFT — leave Photos for the Centraid springboard.
-                The shared grid key (never a house): "back to your apps", not a tab
-                in the pill, so the two navigation axes — move within vs. leave —
-                never share a control. */}
-            <HomeKey variant="bar" onPress={() => navigation.goBack()} />
+          {/* Left chip — Add to album. The nearest verb this grid has to
+              iOS' own Share position: the phone has no OS share sheet to
+              hand a multi-select OUT of the grid to, and inventing one here
+              would be the exact defect `NO_DOWNLOAD_REASON`
+              (`photos-selection-writes.ts`) exists to name honestly rather
+              than paper over. Add to album is the write this grid already
+              performs over a selection, so it takes the position instead of
+              a dead Share glyph. */}
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Add to album"
+            onPress={addToAlbum}
+            style={styles.selectionChip}
+          >
+            <Icon name="folder-plus" size={20} color={colors.text} />
+          </Pressable>
 
-            <GlassBar radius={32} style={styles.pill}>
-              <View style={styles.pillRow}>
-                {PILL_ITEMS.map((item) => {
-                  const active = view === item.view;
-                  return (
-                    <Pressable
-                      key={item.key}
-                      style={styles.pillItem}
-                      onPress={() => setView(item.view)}
-                      accessibilityRole="button"
-                      accessibilityState={{ selected: active }}
-                      accessibilityLabel={item.label}
-                    >
-                      <View
-                        style={[
-                          styles.segment,
-                          active && {
-                            backgroundColor:
-                              scheme === "dark"
-                                ? colors.bgHover
-                                : colors.bgElev,
-                          },
-                        ]}
-                      >
-                        <Icon
-                          name={item.icon}
-                          size={22}
-                          color={active ? colors.accent : colors.textFaint}
-                        />
-                      </View>
-                    </Pressable>
-                  );
-                })}
-              </View>
-            </GlassBar>
-
-            {/* Detached primary action — a high-contrast disc, distinct from the
-                glass pill, echoing the reference's stand-alone "+". */}
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel="Create album"
-              onPress={() => navigation.navigate("PhotosLibrary")}
-              style={({ pressed }) => [
-                styles.fab,
-                {
-                  backgroundColor: colors.accentFill,
-                  borderRadius: radii.pill,
-                },
-                pressed && styles.fabPressed,
-              ]}
-            >
-              <Icon name="plus" size={26} color={colors.textInv} />
-            </Pressable>
+          {/* Centre plate — the count, and only the count (§ above): "Select
+              Items" is unreachable today since `selecting` requires at least
+              one tile, but the label still knows the word for zero rather
+              than assuming a future caller of `setSelection` never passes an
+              empty set while `destination` is "library". */}
+          <View style={styles.selectionCountPlate}>
+            <Text style={styles.selectionCountText} numberOfLines={1}>
+              {selectionCountLabel(selection.size)}
+            </Text>
           </View>
+
+          {/* Right chip — Trash. `batchTrash` already exists as the shared
+              selection write, exercised today from AlbumDetail's and the
+              Duplicates shelf's own bars, so the Library grid takes the SAME
+              write rather than a second implementation — which is what earns
+              Trash the position iOS gives it here instead of a second Backup
+              chip. */}
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Move to trash"
+            onPress={trashSelection}
+            style={styles.selectionChip}
+          >
+            <Icon name="trash-2" size={20} color={colors.danger} />
+          </Pressable>
         </View>
+      ) : (
+        <PhotosBand
+          owner={bandOwner}
+          current={destination}
+          onSelect={onDestination}
+          // `popTo`, not `navigate` and not `goBack`. React Navigation 7's
+          // `navigate` no longer returns to a route already in the stack — it
+          // PUSHES a second copy (StackRouter's NAVIGATE only reuses a route
+          // when the action carries `pop`, which is what `popTo` sets). A
+          // screen pushed above a `fullScreenModal` is presented modally by
+          // UIKit, so Home arrived as an inset card sheet over Photos instead
+          // of Photos dismissing. `goBack` is wrong too: Photos can be
+          // entered by deep link (deep-links.ts), where there is nothing to
+          // go back TO — and §3.1 makes the way home the one thing an app may
+          // never take away. `popTo` covers both: it pops to Home when Home
+          // is beneath, and REPLACES the cover with Home when it is not.
+          onHome={() => navigation.popTo("Home")}
+        />
       )}
 
-      <PhotosDrawer
-        visible={drawerOpen}
-        onClose={() => setDrawerOpen(false)}
-        onHome={() => {
-          setDrawerOpen(false);
-          navigation.goBack();
-        }}
-        onSwitchVault={() => {
-          setDrawerOpen(false);
-          setVaultsOpen(true);
-        }}
-        onSettings={() => {
-          setDrawerOpen(false);
-          navigation.navigate("Settings", { screen: "Settings" });
-        }}
+      <PhotosMoreSheet
+        visible={moreOpen}
+        onClose={() => setMoreOpen(false)}
+        onSelect={onMoreRow}
       />
 
-      <VaultsSwitcher
-        open={vaultsOpen}
-        onClose={() => setVaultsOpen(false)}
-        onPairDesktop={() => {
-          setVaultsOpen(false);
-          navigation.navigate("Settings", { screen: "Settings" });
-        }}
+      <AnchoredMenu
+        visible={viewOptionsOpen}
+        anchor={menuAnchorRect}
+        groups={menuGroups}
+        onClose={() => setViewOptionsOpen(false)}
       />
-    </SafeAreaView>
+    </View>
   );
 }
-
-const styles = StyleSheet.create({
-  // The glass pill + detached FAB share one row: the pill takes the remaining
-  // width (flex), the FAB is a fixed disc to its right with a gap between.
-  barRow: { alignItems: "center", flexDirection: "row", gap: 12 },
-  body: { flex: 1 },
-  body2: {
-    fontFamily: family.sansRegular,
-    fontSize: 14,
-    lineHeight: 20,
-    marginTop: 12,
-    maxWidth: 290,
-    textAlign: "center",
-  },
-  // Floating bar, inset from the screen edges and anchored above the home
-  // indicator — the timeline reserves paddingBottom for it. `stretch` lets the
-  // inner row span the full inset width so the pill can flex beside the FAB.
-  bottomWrap: {
-    alignItems: "stretch",
-    bottom: 0,
-    left: 0,
-    paddingHorizontal: 16,
-    position: "absolute",
-    right: 0,
-  },
-  center: {
-    alignItems: "center",
-    flex: 1,
-    justifyContent: "center",
-    paddingHorizontal: 28,
-  },
-  emptyTitle: { fontFamily: family.sansBold, fontSize: 21, marginTop: 18 },
-  header: {
-    alignItems: "center",
-    flexDirection: "row",
-    justifyContent: "space-between",
-    minHeight: 48,
-    paddingHorizontal: 18,
-  },
-  headerActions: { flexDirection: "row", gap: 22 },
-  heroCopy: { bottom: 15, left: 16, position: "absolute", right: 16 },
-  heroEyebrow: {
-    fontFamily: family.monoMedium,
-    fontSize: 11,
-    letterSpacing: 1,
-    opacity: 0.9,
-  },
-  heroImage: { ...StyleSheet.absoluteFill },
-  heroShade: {
-    ...StyleSheet.absoluteFill,
-  },
-  heroTitle: {
-    fontFamily: family.sansBold,
-    fontSize: 21,
-    letterSpacing: -0.4,
-    marginTop: 6,
-  },
-  heroWrap: {
-    height: 176,
-    marginBottom: 4,
-    marginHorizontal: 16,
-    marginTop: 8,
-    overflow: "hidden",
-  },
-  memoryPill: {
-    alignItems: "center",
-    flexDirection: "row",
-    gap: 6,
-    paddingHorizontal: 10,
-    paddingVertical: 5,
-    position: "absolute",
-    right: 12,
-    top: 11,
-  },
-  memoryPillText: {
-    fontFamily: family.sansMedium,
-    fontSize: 12,
-  },
-  menuBtn: {
-    alignItems: "flex-start",
-    height: 44,
-    justifyContent: "center",
-    width: 24,
-  },
-  // Every item — the Home segment and the three app tabs — shares this 60pt
-  // height and centres its icon+label, so all four baselines line up across the
-  // pill instead of the Home segment floating at a different offset.
-  // Detached primary-action disc, sized like the reference's "+" button.
-  fab: {
-    alignItems: "center",
-    elevation: 8,
-    height: 56,
-    justifyContent: "center",
-    shadowOffset: { height: 6, width: 0 },
-    shadowOpacity: 0.3,
-    shadowRadius: 12,
-    width: 56,
-  },
-  fabPressed: { opacity: 0.85 },
-  // Active-item selection: a concentric "segment" that echoes the enclosure — a
-  // rounded rect filling the item's cell, inset evenly (via pillItem padding) so it
-  // reads as a smaller copy of the pill nested inside it (iOS segmented-control
-  // idiom), not a circle fighting the stadium. Radius 29 = half the 58pt inset
-  // height, so its rounded ends carry the same full curve as the enclosure.
-  segment: {
-    alignItems: "center",
-    borderRadius: 29,
-    flex: 1,
-    justifyContent: "center",
-  },
-  pill: { flex: 1 },
-  // pillItem is the tap target + the even inset around the segment (3pt top/bottom
-  // keeps the segment hugging the enclosure with only a hairline gap; 4pt sides give
-  // the gap between segments). Stretch (not center) so the segment fills the height.
-  pillItem: { flex: 1, paddingHorizontal: 4, paddingVertical: 3 },
-  pillRow: {
-    alignItems: "stretch",
-    flexDirection: "row",
-    height: 64,
-    paddingHorizontal: 6,
-  },
-  protectedStatus: { alignItems: "center", flexDirection: "row", gap: 5 },
-  protectedText: { fontFamily: family.sansMedium, fontSize: 11 },
-  safe: { flex: 1 },
-  searchPill: {
-    alignItems: "center",
-    borderRadius: 22,
-    flex: 1,
-    flexDirection: "row",
-    gap: 9,
-    height: 44,
-    paddingHorizontal: 16,
-  },
-  searchPlaceholder: { fontFamily: family.sansRegular, fontSize: 15 },
-  searchRow: {
-    alignItems: "center",
-    flexDirection: "row",
-    gap: 10,
-    paddingBottom: 10,
-    paddingHorizontal: 16,
-    paddingTop: 6,
-  },
-  selectionTitle: { fontFamily: family.sansBold, fontSize: 15 },
-  uploadFill: { borderRadius: 999, height: "100%" },
-  uploadProgress: { gap: 5, paddingHorizontal: 18, paddingVertical: 8 },
-  uploadProgressText: { fontFamily: family.monoRegular, fontSize: 11 },
-  uploadTrack: { borderRadius: 999, height: 5, overflow: "hidden" },
-  sparkleBtn: {
-    alignItems: "center",
-    height: 44,
-    justifyContent: "center",
-    width: 32,
-  },
-  timelineHeading: {
-    alignItems: "center",
-    flexDirection: "row",
-    justifyContent: "space-between",
-    paddingBottom: 7,
-    paddingHorizontal: 18,
-    paddingTop: 10,
-  },
-  timelineMeta: { fontFamily: family.sansRegular, fontSize: 11, marginTop: 2 },
-  timelineTitle: { fontFamily: family.sansBold, fontSize: 17 },
-});

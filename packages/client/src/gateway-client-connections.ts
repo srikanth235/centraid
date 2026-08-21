@@ -1,6 +1,6 @@
 /*
  * Renderer-side client for the broker-owned OAuth / BYO-client connections
- * surface (issue #304's gateway routes, `packages/gateway/src/routes/
+ * surface (issue #304's gateway routes, `packages/server/src/routes/
  * connections-routes.ts`). Split out of `gateway-client.ts` so the new
  * Settings → Connections screen doesn't grow the barrel file further; the
  * barrel re-exports this module so call sites still import from
@@ -30,7 +30,7 @@ import {
   ROUTES,
   vaultConnectionAuthorizePath,
   vaultConnectionPath,
-} from "@centraid/protocol";
+} from "@centraid/core/protocol";
 
 import {
   GatewayClientError,
@@ -165,7 +165,7 @@ export interface ConnectionProviderCapabilities {
 }
 
 /** A provider's wizard content — mirrors `ProviderPreset` in
- *  `packages/gateway/src/routes/connection-providers.ts` (already camelCase
+ *  `packages/server/src/routes/connection-providers.ts` (already camelCase
  *  on the wire, since the gateway serializes the TS interface directly). */
 export interface ConnectionProviderPreset {
   id: string;
@@ -360,7 +360,7 @@ async function readRemoveOutcome(
   if (res.status === 401 || res.status === 403) {
     throw new GatewayClientError(
       "auth_required",
-      `${op}: gateway rejected request (HTTP ${res.status}). Check your gateway token in Settings.`
+      `${op}: gateway rejected the request (HTTP ${res.status}) — check your token in Settings.`
     );
   }
   if (res.status === 404) {

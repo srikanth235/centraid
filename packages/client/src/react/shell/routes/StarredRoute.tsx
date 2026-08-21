@@ -5,8 +5,8 @@ import type { HomeMenuAnchor } from "../../screen-contracts.js";
 import StarredScreen from "../../screens/StarredScreen.js";
 import { useShellActions } from "../actions.js";
 import { openMenu } from "../contextMenu.js";
+import type { ShellMenuAnchor } from "../contextMenu.js";
 import PageScroll from "../PageScroll.js";
-import type { ShellMenuAnchor } from "../Sidebar.js";
 import { PageEmpty } from "../status.js";
 import { useAsyncData } from "../useAsyncData.js";
 import { collectAutomationRuns } from "./automationsData.js";
@@ -15,7 +15,6 @@ import { buildHomeAppItems, buildHomeAutoItems } from "./homeData.js";
 
 export interface StarredRouteProps {
   userApps: readonly UserAppMeta[];
-  drafts: readonly DraftAppMeta[];
   tileVariant: AppearancePrefs["tileVariant"];
   isStarred: (id: string) => boolean;
   toggleStar: (id: string) => void;
@@ -27,8 +26,8 @@ export interface StarredRouteProps {
 // rename/delete/share stay on Home, the library of record). Unstarring drops
 // the card immediately because star state lives in the App root.
 export default function StarredRoute(props: StarredRouteProps): JSX.Element {
-  const { navigate, enterBuilder } = useShellActions();
-  const { userApps, drafts, tileVariant, isStarred, toggleStar } = props;
+  const { navigate } = useShellActions();
+  const { userApps, tileVariant, isStarred, toggleStar } = props;
 
   // One call: `collectAutomationRuns` returns the rows it already fetched, so
   // pairing it with `listAutomations()` only bought the same list twice.
@@ -39,10 +38,9 @@ export default function StarredRoute(props: StarredRouteProps): JSX.Element {
     }))
   );
 
-  const apps: AppMetaResolvedType[] = [...userApps, ...drafts];
   const rows = feed.status === "ready" ? feed.data.rows : [];
   const entries = feed.status === "ready" ? feed.data.entries : [];
-  const appItems = buildHomeAppItems(apps, {
+  const appItems = buildHomeAppItems(userApps, {
     userApps,
     isStarred,
     tileVariant,
@@ -57,18 +55,13 @@ export default function StarredRoute(props: StarredRouteProps): JSX.Element {
       : { kind: "rect", rect: a.rect as unknown as DOMRect };
 
   const appMenu = (id: string, anchor: HomeMenuAnchor): void => {
-    const app = apps.find((a) => a.id === id);
-    if (!app) return;
-    const draft = (app as DraftAppMeta).__draft === true;
+    if (!userApps.some((a) => a.id === id)) return;
     const items = [
-      draft
-        ? { id: "update", label: "Continue editing", icon: "Sparkle" }
-        : { id: "open", label: "Open", icon: "Eye" },
+      { id: "open", label: "Open", icon: "Eye" },
       { id: "star", label: "Unstar", icon: "Star" },
     ];
     openMenu(items, toAnchor(anchor), (pick) => {
       if (pick === "open") navigate({ kind: "app", id });
-      else if (pick === "update") enterBuilder({ appContext: app });
       else if (pick === "star") toggleStar(id);
     });
   };
@@ -94,16 +87,12 @@ export default function StarredRoute(props: StarredRouteProps): JSX.Element {
       subtitle="Apps you star show up here for quick access."
     >
       {appItems.length + automationItems.length === 0 ? (
-        <PageEmpty message="Nothing starred yet. Hover an app tile and tap the star." />
+        <PageEmpty message="Nothing starred yet — star an app tile to fill this." />
       ) : (
         <StarredScreen
           appItems={appItems}
           automationItems={automationItems}
           onOpenApp={(id) => navigate({ kind: "app", id })}
-          onEnterDraft={(id) => {
-            const a = apps.find((x) => x.id === id);
-            if (a) enterBuilder({ appContext: a });
-          }}
           onAppContext={appMenu}
           onOpenAutomation={(ref) =>
             navigate({ kind: "automation-view", automationId: ref })

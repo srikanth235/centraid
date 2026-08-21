@@ -1,5 +1,5 @@
 import { act, useEffect, useState } from "react";
-import type { JSX } from "react";
+import type { JSX, ReactNode } from "react";
 import { createRoot } from "react-dom/client";
 import type { Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -44,8 +44,17 @@ vi.mock(import("../../../gateway-client-core.js") as Promise<unknown>, () => ({
   readJson: vi.fn<typeof TypeImport_nod2nz.readJson>(),
 }));
 vi.mock(import("../ShellFrame.js") as Promise<unknown>, () => ({
-  default: ({ children }: { children: React.ReactNode }) => (
-    <div data-testid="shell-frame">{children}</div>
+  default: ({
+    children,
+    titlebarRight,
+  }: {
+    children: ReactNode;
+    titlebarRight?: ReactNode;
+  }) => (
+    <div data-testid="shell-frame">
+      <div data-testid="shell-actions">{titlebarRight}</div>
+      {children}
+    </div>
   ),
 }));
 vi.mock(import("./AppSettingsController.js") as Promise<unknown>, () => ({
@@ -65,10 +74,7 @@ vi.mock(import("./appSettingsData.js") as Promise<unknown>, () => ({
 vi.mock(import("../actions.js") as Promise<unknown>, () => ({
   useShellActions: () => ({
     confirm: vi.fn<ShellActions["confirm"]>(async () => true),
-    enterBuilder: vi.fn<ShellActions["enterBuilder"]>(),
-    openNewAppSheet: vi.fn<ShellActions["openNewAppSheet"]>(),
     showToast: vi.fn<ShellActions["showToast"]>(),
-    builderEnabled: false,
   }),
 }));
 vi.mock(import("../iconSvg.js") as Promise<unknown>, () => ({
@@ -105,19 +111,29 @@ vi.mock(
 );
 // The scope set is resolved over HTTP (issue #599); this route's suite is about
 // mounting, so it gets one ready scope rather than a gateway round-trip.
-vi.mock(import("./useAppScopes.js") as Promise<unknown>, () => ({
-  useAppScopes: () => ({
+vi.mock(import("./useAppScopes.js") as Promise<unknown>, () => {
+  const ready = {
     status: "ready",
-    data: [
-      {
-        scope: { id: "vault-own", label: "Library", canWrite: true },
-        identity: { gatewayId: "gw", vaultId: "vault-own" },
-      },
-    ],
-  }),
-  scopeSetKey: (scopes: { identity: { vaultId: string } }[]) =>
-    scopes.map((entry) => entry.identity.vaultId).join(","),
-}));
+    data: {
+      scopes: [
+        {
+          scope: {
+            id: "vault-own",
+            label: "Library",
+            personal: true,
+            canWrite: true,
+          },
+          identity: { gatewayId: "gw", vaultId: "vault-own" },
+        },
+      ],
+    },
+  };
+  return {
+    useAppScopes: () => ready,
+    scopeSetKey: (scopes: { identity: { vaultId: string } }[]) =>
+      scopes.map((entry) => entry.identity.vaultId).join(","),
+  };
+});
 
 const app = {
   id: "tasks",
@@ -132,25 +148,27 @@ const nav: ShellNav = {
   forward: vi.fn<ShellNav["forward"]>(),
   canGoBack: false,
   canGoForward: false,
+  stemOpen: true,
+  toggleStem: vi.fn<ShellNav["toggleStem"]>(),
   route: { kind: "app", id: "tasks" },
 };
-const prefs = { sidebarOpen: true, theme: "dark", bgL: 5 } as never;
+const prefs = { sidebarOpen: true, theme: "dark" } as never;
 
 // A distinct appId per test — InlineAppRoute keys its module-level descriptor
 // cache on (appId, attempt), so reusing an id would serve a prior test's chunk.
 function routeEl(
   loader: () => Promise<{ default: InlineAppModule }>,
-  appId: string
+  appId: string,
+  routeApp: AppMetaResolvedType = app
 ): JSX.Element {
   return (
     <InlineAppRoute
-      app={app}
+      app={routeApp}
       appId={appId}
       loader={loader}
       nav={nav}
-      renderSidebar={() => null}
+      renderStem={() => null}
       prefs={prefs}
-      onToggleSidebar={() => {}}
     />
   );
 }
@@ -204,6 +222,7 @@ describe("InlineAppRoute suite", () => {
   function makeApp(RootImpl: InlineAppModule["Root"]): InlineAppModule {
     return {
       appId: "tasks",
+      pendingProjection: { appId: "tasks", actions: {} },
       changeTables: ["schedule.task"],
       queries: {
         board: {
@@ -246,10 +265,49 @@ describe("InlineAppRoute suite", () => {
       expect(
         host!.querySelector('[data-testid="tasks-root"]')?.textContent
       ).toBe("Buy milk");
+      // THE FRAME CONTRIBUTES NOTHING TO THE BAR (InlineAppRoute.tsx). The
+      // settings gear used to sit ahead of the app's own actions; every bundled
+      // app now draws its bar to a design handoff and none of those handoffs
+      // has a frame control in it. What the gear opened is unreachable until a
+      // door is designed - recorded there, and pinned here.
+      expect(host!.querySelector('[aria-label="App settings"]')).toBeNull();
       // Offline first paint: no gateway tool route touched.
       expect(doFetch).not.toHaveBeenCalled();
       // window.centraid is installed for the app.
       expect((window as { centraid?: unknown }).centraid).toBeDefined();
+      // Pointer typography must land on the inline app scope, including the
+      // pointer media block — never on the document root where it can bleed
+      // into shell chrome or leave the app on its touch scale.
+      const tokenStyle = document.querySelector(
+        "style[data-centraid-inline-tokens]"
+      );
+      expect(tokenStyle?.textContent).toMatch(
+        /@media \(pointer: fine\) \{\s+\.centraid-inline-scope \{/u
+      );
+    });
+
+    // Photos was the FIRST app to refuse the generic sheet, back when the gear
+    // was still contributed for everyone else. It is now the rule rather than
+    // the exception, and this case survives as the second app proving it - one
+    // that draws its own bar and never had a frame control at all.
+    it("does not expose the generic app-settings sheet for Photos", async () => {
+      const photos = { ...app, id: "photos", name: "Photos" };
+      function Root({ rootRef }: InlineAppProps): JSX.Element {
+        return (
+          <div ref={rootRef} data-testid="photos-root">
+            photos
+          </div>
+        );
+      }
+      await mount(
+        routeEl(
+          async () => ({ default: makeApp(Root) }),
+          "photos-no-app-settings",
+          photos
+        )
+      );
+      expect(host!.querySelector('[data-testid="photos-root"]')).toBeTruthy();
+      expect(host!.querySelector('[aria-label="App settings"]')).toBeNull();
     });
 
     it("tears down window.centraid on unmount", async () => {
@@ -263,6 +321,92 @@ describe("InlineAppRoute suite", () => {
       act(() => root?.unmount());
       root = null;
       expect((window as { centraid?: unknown }).centraid).toBeUndefined();
+    });
+
+    it("keeps window.centraid installed across a shell re-render", async () => {
+      function Root({ rootRef }: InlineAppProps): JSX.Element {
+        return <div ref={rootRef}>ok</div>;
+      }
+      const loader = async () => ({ default: makeApp(Root) });
+      await mount(routeEl(loader, "tasks-shell-rerender"));
+      const installed = (window as { centraid?: unknown }).centraid;
+
+      await act(async () => {
+        root!.render(routeEl(loader, "tasks-shell-rerender"));
+      });
+      await flush();
+
+      expect((window as { centraid?: unknown }).centraid).toBe(installed);
+    });
+
+    // The blank-photo-grid bug: `rootRef` was an inline arrow, so every shell
+    // re-render changed the ref's identity, React detached and reattached the
+    // SAME element, and the mount callback's teardown revoked every live blob:
+    // object URL out from under the mounted <img>s (ERR_FILE_NOT_FOUND).
+    it("keeps a mounted image's blob: URL alive across a shell re-render, and revokes it on unmount", async () => {
+      const createObjectURL = (
+        URL as unknown as { createObjectURL?: (b: Blob) => string }
+      ).createObjectURL;
+      const revokeObjectURL = (
+        URL as unknown as { revokeObjectURL?: (u: string) => void }
+      ).revokeObjectURL;
+      const revoked: string[] = [];
+      let seq = 0;
+      // jsdom implements neither; supply both for the duration of this test.
+      (
+        URL as unknown as { createObjectURL: (b: Blob) => string }
+      ).createObjectURL = () => `blob:mock/${++seq}`;
+      (
+        URL as unknown as { revokeObjectURL: (u: string) => void }
+      ).revokeObjectURL = (u) => {
+        revoked.push(u);
+      };
+      doFetch.mockImplementation(
+        async () =>
+          ({
+            ok: true,
+            status: 200,
+            headers: new Headers(),
+            blob: async () => new Blob(["bytes"], { type: "image/jpeg" }),
+          }) as unknown as Response
+      );
+      const Root = ({ rootRef }: InlineAppProps): JSX.Element => (
+        <div ref={rootRef} data-testid="tasks-root">
+          <img data-testid="tile" src="/centraid/_vault/blobs/photo-1" alt="" />
+        </div>
+      );
+      try {
+        const loader = async (): Promise<{ default: InlineAppModule }> => ({
+          default: makeApp(Root),
+        });
+        await mount(routeEl(loader, "tasks-blob-render"));
+        await flush();
+        const tile = host!.querySelector<HTMLImageElement>(
+          '[data-testid="tile"]'
+        )!;
+        const authed = tile.getAttribute("src");
+        expect(authed).toMatch(/^blob:mock\//u);
+
+        await act(async () => {
+          root!.render(routeEl(loader, "tasks-blob-render"));
+        });
+        await flush();
+
+        expect(revoked).toStrictEqual([]);
+        expect(tile.getAttribute("src")).toBe(authed);
+
+        // A REAL unmount still revokes — the fix must not trade the bug for a leak.
+        act(() => root?.unmount());
+        root = null;
+        expect(revoked).toStrictEqual([authed]);
+      } finally {
+        (
+          URL as unknown as { createObjectURL?: (b: Blob) => string }
+        ).createObjectURL = createObjectURL;
+        (
+          URL as unknown as { revokeObjectURL?: (u: string) => void }
+        ).revokeObjectURL = revokeObjectURL;
+      }
     });
 
     it("catches a failed chunk load and Retry re-imports + remounts", async () => {
@@ -299,6 +443,41 @@ describe("InlineAppRoute suite", () => {
       ).toBe("recovered");
       // The retry re-imported the descriptor (fresh chunk load path).
       expect(loader.mock.calls.length).toBeGreaterThanOrEqual(2);
+    });
+
+    it("refuses to mount Locker on the viewer seat (docs/blueprint-seats.md S5)", async () => {
+      // `seat()` (host-platform.ts) reads `window.CentraidIroh` as the
+      // synchronous first-paint web-host marker — installing it here is the
+      // same signal the real web shell installs before this bundle loads.
+      (window as unknown as { CentraidIroh?: unknown }).CentraidIroh = {};
+      const loader = vi.fn<() => Promise<{ default: InlineAppModule }>>(
+        async () => ({ default: makeApp(() => <div>should not mount</div>) })
+      );
+      try {
+        await mount(routeEl(loader, "locker"));
+        const refusal = host!.querySelector(
+          '[data-testid="inline-app-seat-refusal"]'
+        );
+        expect(refusal).toBeTruthy();
+        expect(refusal?.textContent ?? "").toMatch(/paired device/iu);
+        // The wall means "does not mount" — the app's lazy chunk is never
+        // even fetched, not merely hidden after mounting.
+        expect(loader).not.toHaveBeenCalled();
+      } finally {
+        delete (window as unknown as { CentraidIroh?: unknown }).CentraidIroh;
+      }
+    });
+
+    it("mounts Locker normally on the custodian seat (no viewer marker)", async () => {
+      delete (window as unknown as { CentraidIroh?: unknown }).CentraidIroh;
+      function Root({ rootRef }: InlineAppProps): JSX.Element {
+        return <div ref={rootRef} data-testid="locker-root" />;
+      }
+      await mount(routeEl(async () => ({ default: makeApp(Root) }), "locker"));
+      expect(
+        host!.querySelector('[data-testid="inline-app-seat-refusal"]')
+      ).toBeNull();
+      expect(host!.querySelector('[data-testid="locker-root"]')).toBeTruthy();
     });
   });
 });

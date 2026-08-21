@@ -20,6 +20,11 @@
       { "schema": "sync", "verbs": "read+act" }
     ]
   },
+  "enrich": {
+    "domain": "docs",
+    "capability": "doc-filing",
+    "lane": "gateway"
+  },
   "history": {
     "keep": {
       "count": 100

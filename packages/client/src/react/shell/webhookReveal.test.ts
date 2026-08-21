@@ -28,7 +28,7 @@ describe("webhookReveal", () => {
       const card = document.querySelector(".card")!;
       expect(card.textContent).toContain(WEBHOOK.url);
       expect(card.textContent).toContain(WEBHOOK.secret);
-      expect(card.textContent).toContain("won't see it again");
+      expect(card.textContent).toContain("Shown once");
       (
         [...card.querySelectorAll("button")].find(
           (b) => b.textContent === "Done"

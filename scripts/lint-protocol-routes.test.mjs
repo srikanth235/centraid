@@ -6,6 +6,7 @@
 // ("Vitest failed to find the current suite") under `node --test`, which is the
 // runner this lane uses. Same pattern as scripts/gateway-package/*.test.mjs.
 import assert from "node:assert/strict";
+// oxlint-disable-next-line no-restricted-imports -- (#781) node --test lane: the kit's tempDir() registers a vitest afterAll at import time and throws here; removal is registered at creation via t.after below.
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -32,14 +33,14 @@ test("a hard-coded route literal is reported", (t) => {
     [`${SCOPE}/client.ts`]: 'fetch("/centraid/_gateway/info");\n',
   });
   assert.deepEqual(findRouteLiterals(root, [SCOPE]), [
-    `${SCOPE}/client.ts: hard-coded /centraid/_gateway/info (import ROUTES from @centraid/protocol)`,
+    `${SCOPE}/client.ts: hard-coded /centraid/_gateway/info (import ROUTES from @centraid/core/protocol)`,
   ]);
 });
 
 test("importing ROUTES instead of the literal passes", (t) => {
   const root = fixture(t, {
     [`${SCOPE}/client.ts`]:
-      'import { ROUTES } from "@centraid/protocol";\nfetch(ROUTES.gatewayInfo);\n',
+      'import { ROUTES } from "@centraid/core/protocol";\nfetch(ROUTES.gatewayInfo);\n',
   });
   assert.deepEqual(findRouteLiterals(root, [SCOPE]), []);
 });
@@ -49,7 +50,7 @@ test("a route literal carrying a query string is reported", (t) => {
     [`${SCOPE}/pair.ts`]: "fetch(`/centraid/_gateway/pair?code=1`);\n",
   });
   assert.deepEqual(findRouteLiterals(root, [SCOPE]), [
-    `${SCOPE}/pair.ts: hard-coded /centraid/_gateway/pair (import ROUTES from @centraid/protocol)`,
+    `${SCOPE}/pair.ts: hard-coded /centraid/_gateway/pair (import ROUTES from @centraid/core/protocol)`,
   ]);
 });
 
@@ -58,7 +59,7 @@ test("a route literal in a nested directory is reported", (t) => {
     [`${SCOPE}/deep/nested/blobs.ts`]: "const p = '/centraid/_vault/blobs';\n",
   });
   assert.deepEqual(findRouteLiterals(root, [SCOPE]), [
-    `${SCOPE}/deep/nested/blobs.ts: hard-coded /centraid/_vault/blobs (import ROUTES from @centraid/protocol)`,
+    `${SCOPE}/deep/nested/blobs.ts: hard-coded /centraid/_vault/blobs (import ROUTES from @centraid/core/protocol)`,
   ]);
 });
 

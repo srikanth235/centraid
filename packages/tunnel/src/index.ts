@@ -44,11 +44,18 @@ export type {
 export {
   DEVICE_IDENTITY_HEADER,
   DEVICE_PROOF_HEADER,
+  isPeerPlaneTarget,
   parsePairQrPayload,
   PAIR_ALPN,
+  PEER_ENDPOINT_HEADER,
+  PEER_LINK_ALPN,
+  PEER_PLANE_PREFIX,
+  PEER_PROOF_HEADER,
   TUNNEL_ALPN,
   TUNNEL_FORWARDED_HEADER,
 } from "./protocol.js";
+export { createTokenBucket, PEER_PLANE_BUDGET } from "./peer-budget.js";
+export type { TokenBucket, TokenBucketOptions } from "./peer-budget.js";
 export type {
   HeaderMap,
   PairQrPayload,

@@ -1,5 +1,5 @@
 // Client-side mirror of the gateway's BUDGET_PRESETS
-// (packages/gateway/src/serve/hardware-profile.ts). The gateway resolves only
+// (packages/server/src/serve/hardware-profile.ts). The gateway resolves only
 // the ACTIVE mode against the host and reports it on health
 // (`resourceProfile.resolved`); to let an owner SEE what each mode grants
 // before committing, the Compare dialog needs every preset's baseline. These
@@ -20,8 +20,6 @@ export interface ResourcePreset {
   workerMaxOldGenerationMb: number;
   workerPoolSize: number;
   replicationConcurrency: number;
-  staticBrotliQuality: number;
-  staticGzipQuality: number;
   sqliteSynchronous: "FULL" | "NORMAL";
   vaultSweepIntervalMs: number;
   outboxIdleIntervalMs: number;
@@ -37,8 +35,6 @@ export const RESOURCE_PRESETS: Record<PresetMode, ResourcePreset> = {
     workerMaxOldGenerationMb: 128,
     workerPoolSize: 0,
     replicationConcurrency: 1,
-    staticBrotliQuality: 5,
-    staticGzipQuality: 6,
     sqliteSynchronous: "NORMAL",
     vaultSweepIntervalMs: 2 * HOUR,
     outboxIdleIntervalMs: 2 * MIN,
@@ -49,8 +45,6 @@ export const RESOURCE_PRESETS: Record<PresetMode, ResourcePreset> = {
     workerMaxOldGenerationMb: 256,
     workerPoolSize: 2,
     replicationConcurrency: 3,
-    staticBrotliQuality: 10,
-    staticGzipQuality: 9,
     sqliteSynchronous: "FULL",
     vaultSweepIntervalMs: HOUR,
     outboxIdleIntervalMs: MIN,
@@ -61,8 +55,6 @@ export const RESOURCE_PRESETS: Record<PresetMode, ResourcePreset> = {
     workerMaxOldGenerationMb: 384,
     workerPoolSize: 4,
     replicationConcurrency: 4,
-    staticBrotliQuality: 10,
-    staticGzipQuality: 9,
     sqliteSynchronous: "FULL",
     vaultSweepIntervalMs: HOUR,
     outboxIdleIntervalMs: MIN,
@@ -169,15 +161,9 @@ export function resourceCompareRows(): CompareRow[] {
       values: byPreset((p) => formatInterval(p.outboxIdleIntervalMs)),
     },
     {
-      key: "compression",
-      label: "Compression",
-      hint: "Static-asset compression effort — higher is smaller on the wire but costs more CPU.",
-      values: byPreset((p) => `brotli q${p.staticBrotliQuality}`),
-    },
-    {
       key: "durability",
       label: "Data durability",
-      hint: "SQLite fsync durability. Relaxed trades a little crash-safety for less disk churn.",
+      hint: "Relaxed trades a little crash-safety for less disk churn.",
       values: byPreset((p) =>
         p.sqliteSynchronous === "NORMAL" ? "Relaxed" : "Full"
       ),

@@ -5,7 +5,7 @@
   "description": "A Things-style task manager as a projection of the personal vault: canonical tasks from schedule.task, nothing stored here. Adding, completing and editing all run through the schedule domain's typed task commands — consent-checked, contract-checked and receipted. Revoke the grant and the app goes dark while the tasks, history and receipts remain the owner's.",
   "version": "0.3.1",
   "iconKey": "Check",
-  "colorKey": "teal",
+  "colorKey": "ochre",
   "vault": {
     "purpose": "dpv:ServiceProvision",
     "why": "Shows and manages your canonical task list.",
@@ -586,26 +586,6 @@
   ],
   "knobs": [
     {
-      "key": "appFont",
-      "label": "Font",
-      "type": "segmented",
-      "default": "sans",
-      "options": [
-        {
-          "value": "sans",
-          "label": "Sans"
-        },
-        {
-          "value": "serif",
-          "label": "Serif"
-        },
-        {
-          "value": "mono",
-          "label": "Mono"
-        }
-      ]
-    },
-    {
       "key": "appWidth",
       "label": "Width",
       "type": "segmented",
@@ -673,5 +653,11 @@
         }
       ]
     }
-  ]
+  ],
+  "seats": {
+    "byteBearing": false,
+    "originActs": [],
+    "disabledOn": [],
+    "northStar": "todoist"
+  }
 }

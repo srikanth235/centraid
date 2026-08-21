@@ -1,9 +1,24 @@
-// The projection closure for share-by-placement (issue #599 decision 11).
+// The share closure CONTRACT (issue #599 decision 11, split in #726).
 //
-// Sharing projects a MINIMAL closure of rows into the audience vault — the
-// item, whatever it structurally cannot exist without, and nothing else:
+// A share is two halves that never share a database handle:
 //
-//   media.media_asset  →  the asset row + its core_content_item + every
+//   readShareClosure(origin, …)  →  WireClosure  →  projectShareClosure(audience, …)
+//     read-only, origin vault       JSON only        one BEGIN IMMEDIATE, audience only
+//
+// `WireClosure` is what crosses between them. It is plain JSON — no Buffers,
+// no handles, no functions — so the same value can be produced in one process
+// and consumed in another; P3 puts a tunnel in the middle without either half
+// changing. Every table it carries is TEXT/INTEGER/REAL/NULL only, which is
+// why a row can be typed as `WireRow`.
+//
+// STRUCTURAL ONLY. The closure carries rows as they are, and the only edits
+// the projection makes are the ones the audience's schema forces: ids that
+// collide, and cross-vault foreign keys.
+//
+// Sharing projects a MINIMAL closure — the item, whatever it structurally
+// cannot exist without, and nothing else:
+//
+//   media.asset  →  the asset row + its core_content_item + every
 //                         core_content_derivative of that content item
 //   core.content_item  →  the content item + its derivatives
 //   core.document      →  the document wrapper + current content + derivatives
@@ -16,11 +31,14 @@
 //     means nothing in the audience vault (and with `PRAGMA foreign_keys=ON`
 //     it would not even insert). Dragging the party/place/device graph across
 //     the boundary would also leak the owner's ontology into an audience that
-//     was only ever meant to see one photo. Who placed it is recorded once, on
-//     `core_share_origin.shared_by_member` — a member id, not a data row.
+//     was only ever meant to see one photo. Who/where it was attributed to is
+//     recorded once, on `core_share_origin.shared_by` — an owner id or a
+//     `peer:<vaultId>` string, not a data row.
 //
 //  2. **No tags, links, collections, annotations or enrichment.** Those are
-//     the owner's curation of their own library, not part of the item.
+//     the owner's curation of their own library, not part of the item. What
+//     the audience derives for itself it derives through its OWN ingest door
+//     (projection-ingest.ts), under its own ontology and its own consent.
 //
 // Derivatives ARE in the closure: they are what a merged grid actually paints
 // (thumb/preview/poster) and what its placeholders come from (thumbhash), and
@@ -32,41 +50,44 @@
 // it back. `core_share_origin` keeps the lineage so a future re-share/re-sync
 // stays possible without one existing now.
 
-import type { DatabaseSync } from "node:sqlite";
-
-import { isBlobUri } from "../blob/store.js";
-import { VaultShareError } from "../errors.js";
-import { uuidv7 } from "../ids.js";
-import {
-  projectCollection,
-  projectLockerItem,
-  projectTallyGroup,
-  readCollectionClosure,
-  readTallyGroupClosure,
-} from "./household.js";
-
 /** Item kinds that can be placed into an audience vault at v0. */
 export type ShareableItemType =
   | "core.collection"
   | "core.content_item"
   | "core.document"
+  | "docs.folder"
   | "locker.item"
   | "tally.group"
-  | "media.media_asset";
+  | "media.asset";
 
 const SHAREABLE_ITEM_TYPES: readonly ShareableItemType[] = [
   "core.collection",
   "core.content_item",
   "core.document",
+  "docs.folder",
   "locker.item",
   "tally.group",
-  "media.media_asset",
+  "media.asset",
 ];
 
 /** True for a logical entity name this module knows how to project. */
 export function isShareableItemType(value: string): value is ShareableItemType {
   return (SHAREABLE_ITEM_TYPES as readonly string[]).includes(value);
 }
+
+/**
+ * The wire format's only version. There is no ladder and no COMPAT shim
+ * (pre-1.0 hard floor): a closure that does not say `1` is refused, because a
+ * half-understood closure would be projected as silent data loss. Version 2
+ * adds the actual Docs folder container and its filing tags.
+ */
+export const CLOSURE_FORMAT_VERSION = 2;
+
+/** What a shareable table's column may hold. No BLOB columns cross. */
+export type WireValue = string | number | null;
+
+/** A row carried whole, column-for-column, from a table with no fixed shape. */
+export type WireRow = Record<string, WireValue>;
 
 export interface ContentItemRow {
   content_id: string;
@@ -81,8 +102,14 @@ export interface ContentItemRow {
   created_at: string;
 }
 
+/**
+ * Carries `content_id` because derivatives are pooled across every item in the
+ * closure — two photographs that share bytes share one content item and one
+ * set of derivatives, which is only expressible if each row names its parent.
+ */
 export interface DerivativeRow {
   derivative_id: string;
+  content_id: string;
   variant: string;
   sha256: string | null;
   media_type: string;
@@ -118,227 +145,96 @@ export interface DocumentRow {
   purge_at: string | null;
 }
 
-/** Everything read out of the origin vault for one share, resolved up front. */
-export interface ShareClosure {
-  itemType: ShareableItemType;
-  /** The top-level row's id in the ORIGIN vault. */
-  itemId: string;
-  contentItem: ContentItemRow | null;
-  derivatives: DerivativeRow[];
-  mediaAsset: MediaAssetRow | null;
-  document: DocumentRow | null;
-  collection: CollectionClosure | null;
-  lockerItem: Record<string, unknown> | null;
-  tallyGroup: TallyGroupClosure | null;
-  /** Content addresses the audience vault's CAS must hold for this closure. */
-  shas: string[];
-}
-
-export interface CollectionClosure {
-  row: Record<string, unknown>;
-  entries: Array<{
-    row: Record<string, unknown>;
-    closure: ShareClosure;
-  }>;
-}
-
-export interface TallyGroupClosure {
-  group: Record<string, unknown>;
-  circle: Record<string, unknown>;
-  members: Array<Record<string, unknown>>;
-  parties: Array<Record<string, unknown>>;
-  expenses: Array<Record<string, unknown>>;
-  splits: Array<Record<string, unknown>>;
-  settlements: Array<Record<string, unknown>>;
-  recurring: Array<Record<string, unknown>>;
-  exceptions: Array<Record<string, unknown>>;
-  /** Receipt rows plus their OCR content items and per-line allocations. */
-  receipts: Array<Record<string, unknown>>;
-  lineItems: Array<Record<string, unknown>>;
-  lineAllocations: Array<Record<string, unknown>>;
-  receiptContentItems: ContentItemRow[];
-  receiptDerivatives: Array<{
-    contentId: string;
-    rows: DerivativeRow[];
-  }>;
-}
-
-const CONTENT_ITEM_COLUMNS = `content_id, media_type, content_uri, sha256, byte_size, title,
-       language, deleted_at, purge_at, created_at`;
-
-const DERIVATIVE_COLUMNS = `derivative_id, variant, sha256, media_type, byte_size,
-       text_content, created_at`;
-
-const MEDIA_ASSET_COLUMNS = `asset_id, content_id, kind, captured_at, tz_offset_min,
-       capture_group_id, width, height, duration_s, exif_json, favorite,
-       archived_at, deleted_at, purge_at`;
-
-export function readContentItem(
-  db: DatabaseSync,
-  contentId: string
-): ContentItemRow {
-  const row = db
-    .prepare(
-      `SELECT ${CONTENT_ITEM_COLUMNS} FROM core_content_item WHERE content_id = ?`
-    )
-    .get(contentId) as ContentItemRow | undefined;
-  if (!row)
-    throw new VaultShareError(
-      `core.content_item ${contentId} is not in the origin vault`
-    );
-  return row;
-}
-
-export function readDerivatives(
-  db: DatabaseSync,
-  contentId: string
-): DerivativeRow[] {
-  return db
-    .prepare(
-      `SELECT ${DERIVATIVE_COLUMNS} FROM core_content_derivative
-        WHERE content_id = ? ORDER BY variant`
-    )
-    .all(contentId) as unknown as DerivativeRow[];
-}
-
-/** Content addresses a closure needs resident in the audience CAS. */
-function shasOf(
-  contentItem: ContentItemRow,
-  derivatives: DerivativeRow[]
-): string[] {
-  const shas = new Set<string>();
-  // An inline body (`data:` uri) is carried in the row itself, so only a
-  // blob-backed item rents a CAS entry — the same rule `liveBlobShas` applies.
-  if (isBlobUri(contentItem.content_uri)) shas.add(contentItem.sha256);
-  for (const derivative of derivatives) {
-    // Binary variants live in the CAS; semantic ones are inline text.
-    if (derivative.sha256 !== null) shas.add(derivative.sha256);
-  }
-  return [...shas];
-}
-
-/** Resolve everything one share needs from the origin vault. Read-only. */
-export function readShareClosure(
-  origin: DatabaseSync,
-  itemType: ShareableItemType,
-  itemId: string
-): ShareClosure {
-  if (itemType === "core.content_item") {
-    const contentItem = readContentItem(origin, itemId);
-    const derivatives = readDerivatives(origin, contentItem.content_id);
-    return {
-      itemType,
-      itemId,
-      contentItem,
-      derivatives,
-      mediaAsset: null,
-      document: null,
-      collection: null,
-      lockerItem: null,
-      tallyGroup: null,
-      shas: shasOf(contentItem, derivatives),
-    };
-  }
-  if (itemType === "core.document") {
-    const document = origin
-      .prepare(
-        `SELECT document_id, title, current_content_id, created_at, updated_at,
-                deleted_at, purge_at
-           FROM core_document WHERE document_id = ?`
-      )
-      .get(itemId) as DocumentRow | undefined;
-    if (!document)
-      throw new VaultShareError(
-        `core.document ${itemId} is not in the origin vault`
-      );
-    const contentItem = readContentItem(origin, document.current_content_id);
-    const derivatives = readDerivatives(origin, contentItem.content_id);
-    return {
-      itemType,
-      itemId,
-      contentItem,
-      derivatives,
-      mediaAsset: null,
-      document,
-      collection: null,
-      lockerItem: null,
-      tallyGroup: null,
-      shas: shasOf(contentItem, derivatives),
-    };
-  }
-  if (itemType === "core.collection") {
-    return readCollectionClosure(origin, itemId, readShareClosure);
-  }
-  if (itemType === "locker.item") {
-    const lockerItem = origin
-      .prepare("SELECT * FROM locker_item WHERE item_id = ?")
-      .get(itemId) as Record<string, unknown> | undefined;
-    if (!lockerItem)
-      throw new VaultShareError(
-        `locker.item ${itemId} is not in the origin vault`
-      );
-    return {
-      itemType,
-      itemId,
-      contentItem: null,
-      derivatives: [],
-      mediaAsset: null,
-      document: null,
-      collection: null,
-      lockerItem,
-      tallyGroup: null,
-      shas: [],
-    };
-  }
-  if (itemType === "tally.group") {
-    return readTallyGroupClosure(origin, itemId);
-  }
-  const asset = origin
-    .prepare(
-      `SELECT ${MEDIA_ASSET_COLUMNS} FROM media_media_asset WHERE asset_id = ?`
-    )
-    .get(itemId) as MediaAssetRow | undefined;
-  if (!asset)
-    throw new VaultShareError(
-      `media.media_asset ${itemId} is not in the origin vault`
-    );
-  const contentItem = readContentItem(origin, asset.content_id);
-  const derivatives = readDerivatives(origin, contentItem.content_id);
-  return {
-    itemType,
-    itemId,
-    contentItem,
-    derivatives,
-    mediaAsset: asset,
-    document: null,
-    collection: null,
-    lockerItem: null,
-    tallyGroup: null,
-    shas: shasOf(contentItem, derivatives),
-  };
+/** A collection and its entries; every entry's TARGET is a row in `WireRows`. */
+export interface WireCollection {
+  row: WireRow;
+  entries: WireRow[];
 }
 
 /**
- * Projected rows REUSE the origin's uuidv7 (ids are globally unique, which
- * makes provenance trivial to read). The only escape is a genuine collision —
- * the audience already holds a different row under that id — where a fresh id
- * is minted rather than corrupting either row.
+ * A Docs folder is its actual SKOS container, not a cosmetic collection.
+ * `folders` contains the requested concept followed by its descendants;
+ * `tags` files every carried document into one of those concepts.
  */
-export function freeId(
-  db: DatabaseSync,
-  table: string,
-  column: string,
-  preferred: string
-): string {
-  const taken = db
-    .prepare(`SELECT 1 AS present FROM "${table}" WHERE "${column}" = ?`)
-    .get(preferred);
-  return taken ? uuidv7() : preferred;
+export interface WireDocsFolder {
+  scheme: WireRow;
+  folders: WireRow[];
+  tags: WireRow[];
 }
 
-/** The outcome of projecting one closure into an audience vault. */
-export interface ProjectionResult {
-  /** The top-level row's id in the AUDIENCE vault. */
+/** A Tally group's whole ledger. Receipt bytes ride the shared content pool. */
+export interface WireTallyGroup {
+  group: WireRow;
+  circle: WireRow;
+  members: WireRow[];
+  parties: WireRow[];
+  expenses: WireRow[];
+  splits: WireRow[];
+  settlements: WireRow[];
+  recurring: WireRow[];
+  exceptions: WireRow[];
+  receipts: WireRow[];
+  lineItems: WireRow[];
+  lineAllocations: WireRow[];
+}
+
+/**
+ * Row tables, deduped across every item in the closure. A set of photographs
+ * that share content (the same bytes re-imported, an album whose cover is also
+ * an entry) carries each content item and each derivative exactly ONCE.
+ */
+export interface WireRows {
+  contentItems: ContentItemRow[];
+  derivatives: DerivativeRow[];
+  mediaAssets: MediaAssetRow[];
+  documents: DocumentRow[];
+  docsFolders: WireDocsFolder[];
+  collections: WireCollection[];
+  /**
+   * Locker rows arrive still sealed under the ORIGIN vault's DEK, so they can
+   * only be projected by a caller holding BOTH keys — the local composition.
+   * A locker item is not placeable from any UI (blueprints excludes it), and
+   * it cannot cross a tunnel until re-sealing stops needing the origin key.
+   */
+  lockerItems: WireRow[];
+  tallyGroups: WireTallyGroup[];
+}
+
+/** One content address the audience vault's CAS must hold. */
+export interface BlobManifestEntry {
+  sha256: string;
+  /**
+   * Which rung of the content these bytes are: `"original"`, or the
+   * derivative variant carrying them (`thumb`, `preview`, `poster`, …). A
+   * transport can move the cheap rungs first without re-reading the origin.
+   */
+  rung: string;
+  /** Byte length as the origin's row records it. */
+  size: number;
+}
+
+/** One item the closure was asked for, named in ORIGIN ids. */
+export interface WireItem {
+  itemType: ShareableItemType;
+  itemId: string;
+}
+
+/** Everything one share of a SET of items reads out of the origin vault. */
+export interface WireClosure {
+  formatVersion: typeof CLOSURE_FORMAT_VERSION;
+  /** Gateway id of the origin vault, recorded as provenance in the audience. */
+  originVaultId: string;
+  items: WireItem[];
+  rows: WireRows;
+  blobs: BlobManifestEntry[];
+}
+
+/** What one item's projection became in the audience vault. */
+export interface ProjectedItem {
+  itemType: ShareableItemType;
+  /** The item's row id in the ORIGIN vault. */
+  originItemId: string;
+  /** The projection's row id in the AUDIENCE vault. */
   itemId: string;
   /** True when the audience vault already held this item (idempotent re-share). */
   deduped: boolean;
@@ -350,218 +246,8 @@ export interface ProjectionResult {
   contentId?: string;
 }
 
-function projectContentItem(
-  audience: DatabaseSync,
-  row: ContentItemRow
-): string {
-  // `core_content_item.sha256` is UNIQUE, so re-sharing the same bytes — even
-  // by a different member — dedupes onto the existing row by construction.
-  const existing = audience
-    .prepare("SELECT content_id FROM core_content_item WHERE sha256 = ?")
-    .get(row.sha256) as { content_id: string } | undefined;
-  if (existing) return existing.content_id;
-  const contentId = freeId(
-    audience,
-    "core_content_item",
-    "content_id",
-    row.content_id
-  );
-  audience
-    .prepare(
-      `INSERT INTO core_content_item
-         (content_id, media_type, content_uri, sha256, byte_size, title, language,
-          creator_party_id, origin_device_id, deleted_at, purge_at, created_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, NULL, NULL, ?, ?, ?)`
-    )
-    .run(
-      contentId,
-      row.media_type,
-      row.content_uri,
-      row.sha256,
-      row.byte_size,
-      row.title,
-      row.language,
-      row.deleted_at,
-      row.purge_at,
-      row.created_at
-    );
-  return contentId;
-}
-
-function projectDerivatives(
-  audience: DatabaseSync,
-  contentId: string,
-  rows: DerivativeRow[]
-): void {
-  const held = audience.prepare(
-    "SELECT 1 AS present FROM core_content_derivative WHERE content_id = ? AND variant = ?"
-  );
-  const insert = audience.prepare(
-    `INSERT INTO core_content_derivative
-       (derivative_id, content_id, variant, sha256, media_type, byte_size, text_content, created_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
-  );
-  for (const row of rows) {
-    // `UNIQUE (content_id, variant)` is the slot — one thumb per content item.
-    if (held.get(contentId, row.variant)) continue;
-    insert.run(
-      freeId(
-        audience,
-        "core_content_derivative",
-        "derivative_id",
-        row.derivative_id
-      ),
-      contentId,
-      row.variant,
-      row.sha256,
-      row.media_type,
-      row.byte_size,
-      row.text_content,
-      row.created_at
-    );
-  }
-}
-
-function projectMediaAsset(
-  audience: DatabaseSync,
-  contentId: string,
-  row: MediaAssetRow
-): ProjectionResult {
-  // `media_media_asset.content_id` is UNIQUE: one asset per content item, so
-  // the dedup falls out of the schema exactly like the content item's sha.
-  const existing = audience
-    .prepare("SELECT asset_id FROM media_media_asset WHERE content_id = ?")
-    .get(contentId) as { asset_id: string } | undefined;
-  if (existing) return { itemId: existing.asset_id, deduped: true, contentId };
-  const assetId = freeId(
-    audience,
-    "media_media_asset",
-    "asset_id",
-    row.asset_id
-  );
-  audience
-    .prepare(
-      `INSERT INTO media_media_asset
-         (asset_id, content_id, kind, captured_at, tz_offset_min, capture_group_id,
-          place_id, camera_device_id, width, height, duration_s, exif_json,
-          favorite, archived_at, deleted_at, purge_at)
-       VALUES (?, ?, ?, ?, ?, ?, NULL, NULL, ?, ?, ?, ?, ?, ?, ?, ?)`
-    )
-    .run(
-      assetId,
-      contentId,
-      row.kind,
-      row.captured_at,
-      row.tz_offset_min,
-      row.capture_group_id,
-      row.width,
-      row.height,
-      row.duration_s,
-      row.exif_json,
-      row.favorite,
-      row.archived_at,
-      row.deleted_at,
-      row.purge_at
-    );
-  return { itemId: assetId, deduped: false, contentId };
-}
-
-function projectDocument(
-  audience: DatabaseSync,
-  contentId: string,
-  row: DocumentRow
-): ProjectionResult {
-  const byOriginId = audience
-    .prepare("SELECT document_id FROM core_document WHERE document_id = ?")
-    .get(row.document_id) as { document_id: string } | undefined;
-  if (byOriginId) return { itemId: byOriginId.document_id, deduped: true };
-  const byContent = audience
-    .prepare(
-      `SELECT document_id FROM core_document
-        WHERE current_content_id = ? AND title = ? LIMIT 1`
-    )
-    .get(contentId, row.title) as { document_id: string } | undefined;
-  if (byContent) return { itemId: byContent.document_id, deduped: true };
-  const documentId = freeId(
-    audience,
-    "core_document",
-    "document_id",
-    row.document_id
-  );
-  audience
-    .prepare(
-      `INSERT INTO core_document
-         (document_id, title, current_content_id, created_at, updated_at,
-          deleted_at, purge_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?)`
-    )
-    .run(
-      documentId,
-      row.title,
-      contentId,
-      row.created_at,
-      row.updated_at,
-      row.deleted_at,
-      row.purge_at
-    );
-  return { itemId: documentId, deduped: false };
-}
-
-/**
- * Write the closure into the audience vault. The caller owns the transaction —
- * this is the body of the ONE single-DB transaction a share performs, and the
- * origin vault is never written.
- */
-export function projectShareClosure(
-  audience: DatabaseSync,
-  closure: ShareClosure,
-  keys?: { origin: Buffer; audience: Buffer }
-): ProjectionResult {
-  if (closure.lockerItem !== null) {
-    if (!keys)
-      throw new VaultShareError(
-        "sharing a Locker item requires both vault encryption keys"
-      );
-    return projectLockerItem(
-      audience,
-      closure.lockerItem,
-      keys.origin,
-      keys.audience,
-      freeId
-    );
-  }
-  if (closure.tallyGroup !== null) {
-    return projectTallyGroup(audience, closure.tallyGroup, freeId);
-  }
-  if (closure.collection !== null) {
-    return projectCollection(
-      audience,
-      closure.collection,
-      keys,
-      projectShareClosure,
-      freeId
-    );
-  }
-  if (closure.contentItem === null) {
-    throw new VaultShareError(`incomplete ${closure.itemType} share closure`);
-  }
-  const heldContent = audience
-    .prepare("SELECT content_id FROM core_content_item WHERE sha256 = ?")
-    .get(closure.contentItem.sha256) as { content_id: string } | undefined;
-  const contentId = projectContentItem(audience, closure.contentItem);
-  projectDerivatives(audience, contentId, closure.derivatives);
-  if (closure.document !== null) {
-    return {
-      ...projectDocument(audience, contentId, closure.document),
-      contentId,
-    };
-  }
-  if (closure.mediaAsset === null) {
-    return {
-      itemId: contentId,
-      deduped: heldContent !== undefined,
-      contentId,
-    };
-  }
-  return projectMediaAsset(audience, contentId, closure.mediaAsset);
+/** The outcome of projecting one closure into an audience vault. */
+export interface ProjectResult {
+  /** One entry per `WireClosure.items`, in the same order. */
+  items: ProjectedItem[];
 }

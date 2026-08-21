@@ -1,17 +1,15 @@
 import React, { memo, useCallback, useEffect, useMemo, useState } from "react";
 import { FlatList, RefreshControl, StyleSheet, View } from "react-native";
 import type { ListRenderItemInfo } from "react-native";
-import {
-  SafeAreaView,
-  useSafeAreaInsets,
-} from "react-native-safe-area-context";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import Button from "../../kit/components/Button";
 import HomeKey from "../../kit/components/HomeKey";
 import Icon from "../../kit/components/Icon";
 import { Text } from "../../kit/components/NativeText";
-import { showToast } from "../../kit/components/Toast";
-import { family, radii, spacing, t, useTheme } from "../../kit/theme";
+import { postStatus } from "../../kit/components/status-line";
+import TopSafeArea from "../../kit/components/TopSafeArea";
+import { radii, spacing, t, useTheme } from "../../kit/theme";
 import type { ThemeColors } from "../../kit/theme";
 import { listAutomationTurns, runAutomation } from "../../lib/automations";
 import type { AutomationTurnRow } from "../../lib/automations";
@@ -57,10 +55,9 @@ export default function AutomationThread(props: {
     void runAutomation(props.automationRef)
       .then(load)
       .catch((error: unknown) =>
-        showToast({
-          message: `Could not run: ${error instanceof Error ? error.message : "Please try again."}`,
-          tone: "danger",
-        })
+        postStatus(
+          `Could not run: ${error instanceof Error ? error.message : "Please try again."}`
+        )
       )
       .finally(() => setRunning(false));
   };
@@ -78,7 +75,7 @@ export default function AutomationThread(props: {
   );
 
   return (
-    <SafeAreaView style={styles.safe} edges={["top"]}>
+    <TopSafeArea style={styles.safe} edges={["top"]}>
       <View style={styles.header}>
         <HomeKey variant="leave" onPress={props.onLeave} />
         <View style={styles.headerCopy}>
@@ -118,7 +115,7 @@ export default function AutomationThread(props: {
         // mis-place cells for no gain on a bounded list.
         renderItem={renderTurn}
       />
-    </SafeAreaView>
+    </TopSafeArea>
   );
 }
 
@@ -146,9 +143,27 @@ const TurnCard = memo(
         </Text>
       </View>
       <Text style={styles.turnMeta}>
-        {new Date(turn.startedAt).toLocaleString()}
-        {turn.stepCount === undefined ? "" : ` · ${turn.stepCount} steps`}
-        {turn.toolCount === undefined ? "" : ` · ${turn.toolCount} tools`}
+        <Text style={[styles.turnMeta, t("mono")]}>
+          {new Date(turn.startedAt).toLocaleString()}
+        </Text>
+        {turn.stepCount === undefined ? null : (
+          <>
+            {" · "}
+            <Text style={[styles.turnMeta, t("mono")]}>
+              {turn.stepCount}
+            </Text>{" "}
+            steps
+          </>
+        )}
+        {turn.toolCount === undefined ? null : (
+          <>
+            {" · "}
+            <Text style={[styles.turnMeta, t("mono")]}>
+              {turn.toolCount}
+            </Text>{" "}
+            tools
+          </>
+        )}
       </Text>
       {turn.error ? <Text style={styles.turnError}>{turn.error}</Text> : null}
     </View>
@@ -186,10 +201,8 @@ const makeStyles = (colors: ThemeColors) =>
     safe: { backgroundColor: colors.bg, flex: 1 },
     subtitle: { ...t("small"), color: colors.textFaint, marginTop: 2 },
     title: {
+      ...t("display"),
       color: colors.text,
-      fontFamily: family.serif,
-      fontSize: 26,
-      letterSpacing: -0.3,
     },
     turn: {
       backgroundColor: colors.bgElev,

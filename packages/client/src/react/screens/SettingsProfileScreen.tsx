@@ -4,15 +4,24 @@ import type { CSSProperties, JSX } from "react";
 import { IDENTITY_COLORS, identityInitials } from "@centraid/design";
 
 import type { SelfProfile } from "../shell/routes/profileData.js";
-import { cx } from "../ui/cx.js";
+import SectionBlock from "../ui/SectionBlock.js";
 
 import a11y from "../styles/a11y.module.css";
-import controlsCss from "../styles/controls.module.css";
 import drawerGroupCss from "../styles/drawerGroup.module.css";
 import styles from "./SettingsProfileScreen.module.css";
 
 /*
- * Settings → Profile: the person, not the device.
+ * Settings → You, profile group: the person, not the device.
+ *
+ * Shares its page with the theme group, and saves the same way it does: no
+ * Save button. The colour is a discrete pick, so it writes on the pick. The
+ * name is free text, so it writes when the field is DONE — blur or Enter, the
+ * same commit point the cron field on this page uses — never per keystroke,
+ * which would publish half-typed names to the household roster.
+ *
+ * An empty name is not a save. Clearing the field and leaving restores the
+ * name you had: the roster has no "unnamed" state to write, and a blur is not
+ * how anyone asks to erase their own name.
  *
  * The name is written to the household ROSTER, which is what makes it visible
  * to anyone else in the installation. Onboarding collects it once, when the
@@ -46,18 +55,23 @@ export default function SettingsProfileScreen({
   const [baseline, setBaseline] = useState(profile);
 
   const trimmed = name.trim();
-  const dirty =
-    trimmed !== baseline.name || avatarColor !== baseline.avatarColor;
-  const ready = trimmed.length > 0 && dirty && !saving;
 
-  const save = (): void => {
-    if (!ready) return;
+  // One write for both fields — the roster call carries name AND colour, so a
+  // colour pick made while the name field is mid-edit must still send the name
+  // that is actually saved, not the half-typed one on screen.
+  const commit = (next: { name: string; avatarColor: string }): void => {
+    if (
+      next.name === baseline.name &&
+      next.avatarColor === baseline.avatarColor
+    ) {
+      return;
+    }
     setSaving(true);
     setStatus(null);
     setFailed(false);
-    void onSave({ avatarColor, name: trimmed })
+    void onSave(next)
       .then(() => {
-        setBaseline({ ...baseline, avatarColor, name: trimmed });
+        setBaseline({ ...baseline, ...next });
         setStatus("Saved");
         setFailed(false);
       })
@@ -70,11 +84,27 @@ export default function SettingsProfileScreen({
       .finally(() => setSaving(false));
   };
 
+  /** Blur or Enter: the point at which a typed name is finished. */
+  const commitName = (): void => {
+    if (trimmed.length === 0) {
+      setName(baseline.name);
+      setStatus(null);
+      setFailed(false);
+      return;
+    }
+    setName(trimmed);
+    commit({ avatarColor, name: trimmed });
+  };
+
   return (
     <div
       className={drawerGroupCss.group}
       style={{ "--profile-accent": avatarColor } as CSSProperties}
     >
+      {/* WHAT THE HOUSEHOLD SEES is the head, because that is the difference
+          between this group and the device group below it: these two fields
+          leave this browser, and the theme does not. */}
+      <SectionBlock label="You" meta="what the household sees" />
       <div className={drawerGroupCss.groupBody}>
         <div className={styles.identity}>
           <span className={styles.avatarWrap}>
@@ -90,15 +120,17 @@ export default function SettingsProfileScreen({
             >
               {trimmed || "Unnamed"}
             </span>
+            {/* What the roster CURRENTLY holds, not what the field holds: a
+                draft commits on blur, so the two differ while it is being
+                typed and that difference is the thing worth stating. */}
             <span className={styles.identityWhere}>
-              This is how you appear to everyone in this household — on the
-              roster, and beside anything you or your devices wrote.
+              Household sees “{baseline.name}”
             </span>
           </span>
         </div>
 
         <label className={styles.field}>
-          <span className={styles.fieldLabel}>Display name</span>
+          <span className={styles.fieldLabel}>Name</span>
           <input
             className={styles.input}
             type="text"
@@ -108,15 +140,18 @@ export default function SettingsProfileScreen({
             autoComplete="name"
             spellCheck={false}
             aria-label="Display name"
-            placeholder="What should we call you?"
+            placeholder="Your name"
             onChange={(event) => {
               setName(event.target.value);
               setStatus(null);
             }}
+            onBlur={commitName}
             onKeyDown={(event) => {
               if (event.key === "Enter") {
                 event.preventDefault();
-                save();
+                // Blur rather than commit directly: Enter and clicking away
+                // are the same act, so they take the same path exactly once.
+                event.currentTarget.blur();
               }
             }}
           />
@@ -124,7 +159,7 @@ export default function SettingsProfileScreen({
 
         <div className={styles.field}>
           <span className={styles.fieldLabel} id="cd-profile-color">
-            Color
+            Your colour
           </span>
           <div
             className={styles.swatches}
@@ -148,7 +183,12 @@ export default function SettingsProfileScreen({
                   checked={color === avatarColor}
                   onChange={() => {
                     setAvatarColor(color);
-                    setStatus(null);
+                    // A pick is finished the moment it is made — there is no
+                    // half-chosen colour to protect anyone from.
+                    commit({
+                      avatarColor: color,
+                      name: trimmed || baseline.name,
+                    });
                   }}
                 />
               </label>
@@ -156,22 +196,17 @@ export default function SettingsProfileScreen({
           </div>
         </div>
 
+        {/* Status only — the write already happened. Kept mounted through the
+            in-flight moment so a save that fails says so where the button used
+            to be, rather than failing silently. */}
         <div className={styles.actions}>
-          <button
-            type="button"
-            className={cx(controlsCss.chip, controlsCss.soft)}
-            disabled={!ready}
-            onClick={save}
-          >
-            {saving ? "Saving…" : "Save changes"}
-          </button>
-          {status ? (
+          {saving || status ? (
             <span
               className={styles.status}
               data-tone={failed ? "error" : "ok"}
               role={failed ? "alert" : "status"}
             >
-              {status}
+              {saving ? "Saving…" : status}
             </span>
           ) : null}
         </div>

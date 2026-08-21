@@ -5,7 +5,7 @@
  * inline data: URI. Identical bytes collapse onto one asset, and
  * re-uploading a deleted photo restores it. Risk low.
  *
- * @type {import('@centraid/app-engine').ActionHandler}
+ * @type {import('@centraid/server/engine').ActionHandler}
  */
 export default async function upload({ body, ctx }: HandlerArgs) {
   const input = (body ?? {}) as Record<string, unknown>;
@@ -20,6 +20,24 @@ export default async function upload({ body, ctx }: HandlerArgs) {
         ...(input.captured_at == null
           ? {}
           : { captured_at: String(input.captured_at) }),
+        // Capture-local UTC offset (issue #419) and Live Photo pairing
+        // (issue #721/#724 A2) both ride the same schema field this action
+        // already declares — they were validated here and then silently
+        // dropped before reaching media.add_asset (#724 audit). Forwarded now
+        // like every other optional field on this action.
+        ...(input.tz_offset_min == null
+          ? {}
+          : { tz_offset_min: Number(input.tz_offset_min) }),
+        ...(input.capture_group_id == null
+          ? {}
+          : { capture_group_id: String(input.capture_group_id) }),
+        // Edit lineage (issue #711): the editor saves a crop as a new asset
+        // and names the one it came from. Only forwarded when the caller
+        // actually knows a source — an ordinary upload has none, and an empty
+        // string is not a lineage.
+        ...(input.source_asset_id == null
+          ? {}
+          : { source_asset_id: String(input.source_asset_id) }),
         ...(input.title == null ? {} : { title: String(input.title) }),
         ...(input.width == null ? {} : { width: Number(input.width) }),
         ...(input.height == null ? {} : { height: Number(input.height) }),
@@ -29,6 +47,9 @@ export default async function upload({ body, ctx }: HandlerArgs) {
         // Perceptual hash (issue #299 Tier 0) — computed client-side from
         // the same canvas that grew the thumb; near-dups become plain SQL.
         ...(input.phash == null ? {} : { phash: String(input.phash) }),
+        ...(input.thumbhash == null
+          ? {}
+          : { thumbhash: String(input.thumbhash) }),
       },
       purpose: "dpv:ServiceProvision",
     });

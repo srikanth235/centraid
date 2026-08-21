@@ -1,0 +1,147 @@
+/* Records table (v9 §9).
+
+   The two fixed columns and the header inset are the only geometry here that
+   the spacing scale does not name outright, so each is composed FROM the scale
+   rather than typed as a literal: the inset is the leading glyph (16) plus the
+   row gap (12), which is exactly why the header label starts where the row's
+   text does and not where its padding does. */
+
+.table {
+  --doc-inset: calc(var(--sp-4) + var(--sp-3));
+  --doc-col-kind: calc(var(--sp-6) * 2 + var(--sp-5));
+  --doc-col-written: calc(var(--sp-6) * 3 + var(--sp-4));
+
+  background: var(--bg-elev);
+  border: 1px solid var(--line);
+  border-radius: var(--r-lg);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.head {
+  align-items: center;
+  background: var(--bg-sunken);
+  block-size: var(--sp-6);
+  border-block-end: 1px solid var(--line-strong);
+  display: flex;
+  gap: var(--sp-3);
+  padding-inline: var(--sp-3);
+}
+
+.headCell {
+  color: var(--text-faint);
+  font: var(--t-eyebrow);
+  letter-spacing: var(--t-eyebrow-tracking);
+  text-transform: var(--t-eyebrow-transform);
+}
+
+.headCell.record {
+  padding-inline-start: var(--doc-inset);
+}
+
+.row {
+  align-items: center;
+  display: flex;
+  gap: var(--sp-3);
+  min-block-size: var(--h-row);
+  padding-inline: var(--sp-3);
+}
+
+.row + .row {
+  border-block-start: 1px solid var(--line);
+}
+
+.glyph {
+  color: var(--text-faint);
+  display: inline-flex;
+  flex: none;
+}
+
+.cell.record {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-inline-size: 0;
+}
+
+.title {
+  color: var(--text);
+  font: var(--t-body);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Hidden until the header is: on the compact form factor the two fixed
+   columns fold into this one line. */
+.snip {
+  color: var(--text-faint);
+  direction: var(--t-mono-direction);
+  display: none;
+  font: var(--t-mono);
+  font-variant-numeric: var(--t-mono-numeric);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  unicode-bidi: var(--t-mono-bidi);
+  white-space: nowrap;
+}
+
+.kind,
+.written {
+  flex: none;
+}
+
+.cell.kind,
+.cell.written {
+  color: var(--text-faint);
+  direction: var(--t-mono-direction);
+  font: var(--t-mono);
+  font-variant-numeric: var(--t-mono-numeric);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  unicode-bidi: var(--t-mono-bidi);
+  white-space: nowrap;
+}
+
+.kind {
+  inline-size: var(--doc-col-kind);
+}
+
+.written {
+  inline-size: var(--doc-col-written);
+}
+
+/* The row's overflow control AND the header's spacer are the same width, so
+   the fixed columns line up whether or not a row has a menu. */
+.menuSlot {
+  flex: none;
+  inline-size: var(--target-min);
+}
+
+.caption {
+  border-block-start: 1px solid var(--line);
+  color: var(--text-faint);
+  direction: var(--t-mono-direction);
+  font: var(--t-mono);
+  font-variant-numeric: var(--t-mono-numeric);
+  margin: 0;
+  padding: var(--sp-2) var(--sp-3);
+  unicode-bidi: var(--t-mono-bidi);
+}
+
+/* Compact: the header is gone, the fixed columns with it, and the row grows a
+   rung to carry two lines. */
+.table[data-compact="true"] .row {
+  min-block-size: calc(var(--h-row) + var(--sp-2));
+  padding-block: var(--sp-2);
+}
+
+.table[data-compact="true"] .snip {
+  display: block;
+}
+
+.table[data-compact="true"] .cell.kind,
+.table[data-compact="true"] .cell.written {
+  display: none;
+}

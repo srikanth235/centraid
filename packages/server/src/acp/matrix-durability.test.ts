@@ -1,0 +1,35 @@
+/**
+ * Matrix cell agent-runtime.durability (#535 coverable-today).
+ * Preflight cache must be clearable and semver parse must be stable.
+ */
+import { describe, expect, test } from "vitest";
+
+import {
+  compareSemver,
+  invalidatePreflightCache,
+  minVersionString,
+  parseSemver,
+} from "./preflight.ts";
+import { getHarness } from "./registry.ts";
+
+describe("matrix-durability", () => {
+  test("invalidatePreflightCache is safe to call repeatedly (no throw)", () => {
+    invalidatePreflightCache();
+    invalidatePreflightCache();
+    expect(true).toBe(true);
+  });
+
+  test("parseSemver round-trips minVersionString for registered kinds", () => {
+    const kind = "gemini" as const;
+    const harness = getHarness(kind);
+    const text = minVersionString(kind);
+    const parsed = parseSemver(text);
+    expect(parsed).toStrictEqual(harness.minVersion);
+    expect(compareSemver(parsed!, harness.minVersion)).toBe(0);
+  });
+
+  test("parseSemver rejects garbage so callers cannot treat bad versions as ok", () => {
+    expect(parseSemver("not-a-version")).toBeUndefined();
+    expect(parseSemver("")).toBeUndefined();
+  });
+});

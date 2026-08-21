@@ -1,76 +1,29 @@
 .wrap {
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  /* The tight step: a section head sits directly over its own block and draws
+     the hairline between them. */
+  gap: var(--sp-2);
+  min-inline-size: 0;
 }
 
+/* The query and the two verbs that act on the PANE below. The stream's own
+   status, its line count and the export verb are the section head's now. */
 .toolbar {
-  display: flex;
   align-items: center;
-  gap: 8px;
+  display: flex;
   flex-wrap: wrap;
-}
-
-/* Live/reconnecting status — same three-state dot read as the
-   Connections rows, at toolbar scale. */
-.statusDot {
-  width: 9px;
-  height: 9px;
-  border-radius: 50%;
-  flex: none;
-  background: var(--log-status, var(--text-faint));
-  box-shadow: 0 0 0 3px
-    color-mix(in oklab, var(--log-status, var(--text-faint)) 16%, transparent);
-}
-.statusDot[data-status="live"] {
-  --log-status: var(--success);
-}
-.statusDot[data-status="connecting"],
-.statusDot[data-status="reconnecting"] {
-  --log-status: var(--c-amber);
-}
-.statusLabel {
-  font-family: var(--font-mono);
-  font-size: 9.5px;
-  font-weight: 600;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  color: var(--log-status, var(--text-faint));
-}
-.statusLabel[data-status="live"] {
-  --log-status: var(--success);
-}
-/* The dot above keeps the FILL; this label is 9.5px mono type, so its copy of
-   `--log-status` takes the ink rung. */
-.statusLabel[data-status="connecting"],
-.statusLabel[data-status="reconnecting"] {
-  --log-status: var(--c-amber-text);
-}
-.countLabel {
-  font-family: var(--font-mono);
-  font-size: var(--t-control-size);
-  color: var(--text-faint);
-  margin-right: auto;
-}
-
-.filters {
-  display: inline-flex;
-  gap: 6px;
-}
-.chipActive {
-  background: color-mix(in oklab, var(--text) 10%, transparent);
-  color: var(--text);
-  border-color: transparent;
+  gap: var(--sp-2);
 }
 
 .search {
   width: 180px;
   padding: 5px 10px;
-  border-radius: 999px;
+  border-radius: var(--r-pill);
   border: 0.5px solid var(--line);
   background: transparent;
   color: var(--text);
-  font-size: var(--t-mono-size);
+  font-size: var(--t-control-size);
   outline: none;
 }
 .search:focus {
@@ -81,7 +34,7 @@
 }
 
 .exportStatus {
-  font-family: var(--font-mono);
+  font-family: var(--font-sans);
   font-size: var(--t-control-size);
   overflow-wrap: anywhere;
 }
@@ -95,7 +48,7 @@
 .logPanel {
   position: relative;
   border: 1px solid var(--line);
-  border-radius: 12px;
+  border-radius: var(--r-lg);
   background: var(--bg-elev);
   overflow: hidden;
 }
@@ -113,8 +66,8 @@
   align-items: baseline;
   gap: 10px;
   padding: 2px 14px;
-  font-family: var(--font-mono);
-  font-size: 11.5px;
+  font-family: var(--font-sans);
+  font-size: var(--t-control-size);
   line-height: 1.55;
 }
 .line[data-level="error"] {
@@ -130,7 +83,7 @@
 .lineLevel {
   flex: none;
   width: 44px;
-  font-size: 9.5px;
+  font-size: var(--t-control-size);
   font-weight: 600;
   letter-spacing: 0.06em;
   text-transform: uppercase;
@@ -143,6 +96,7 @@
   color: var(--danger);
 }
 .lineMsg {
+  font-family: var(--font-code);
   flex: 1;
   min-width: 0;
   color: var(--text-soft);
@@ -156,7 +110,7 @@
 .empty {
   padding: 28px 16px;
   text-align: center;
-  font-size: 12.5px;
+  font-size: var(--t-small-size);
   color: var(--text-faint);
 }
 
@@ -165,11 +119,11 @@
   right: 14px;
   bottom: 12px;
   padding: 6px 12px;
-  border-radius: 999px;
+  border-radius: var(--r-pill);
   border: 0.5px solid var(--line);
   background: var(--bg-elev);
   color: var(--text);
-  font-size: var(--t-mono-size);
+  font-size: var(--t-control-size);
   cursor: pointer;
   box-shadow: 0 4px 14px var(--scrim);
 }
@@ -188,7 +142,7 @@
   border-bottom: 0.5px solid var(--line);
   background: color-mix(in srgb, var(--bg-elev) 60%, transparent);
   color: var(--text-faint);
-  font-size: 11.5px;
+  font-size: var(--t-control-size);
   text-align: center;
   cursor: pointer;
 }

@@ -41,9 +41,14 @@ export function pinnedThumbnailSignature(
     // id has not been backed up yet — neither can produce a candidate.
     if (contentId === undefined || asset.source === "device") continue;
     count += 1;
-    if (asset.capturedAt > newest) newest = asset.capturedAt;
+    // An undated row still belongs in the signature — it is a real row whose
+    // thumbnail can be pinned — so it folds in the empty string rather than
+    // `undefined`, which would stringify identically for every row and let two
+    // different libraries hash alike.
+    const capturedAt = asset.capturedAt ?? "";
+    if (capturedAt > newest) newest = capturedAt;
     hash = foldString(hash, contentId);
-    hash = foldString(hash, asset.capturedAt);
+    hash = foldString(hash, capturedAt);
     hash = foldString(hash, asset.kind);
     hash = foldString(hash, asset.favorite ? "1" : "0");
     for (const scopeId of asset.scopeIds ?? [])
@@ -67,7 +72,10 @@ export function pinnedThumbnailCandidates(
       uri: `${gatewayBase}/centraid/_gateway/blobs/${encodeURIComponent(
         scopeId
       )}/${encodeURIComponent(contentId)}?variant=${variant}`,
-      capturedAt: asset.capturedAt,
+      // The pack ranks candidates by recency; an undated row sorts as the
+      // oldest thing there is rather than being dropped, since its bytes are
+      // as worth pinning as any other's.
+      capturedAt: asset.capturedAt ?? "",
       favorite: asset.favorite,
     }));
   });

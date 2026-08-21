@@ -2,17 +2,18 @@
  * Composer autocomplete helpers (issue #420, Wave 3) — the pure, framework-free
  * core of the shell assistant composer's @-mentions + slash-commands.
  *
- * Why shell-local React (not a shared kit sibling): the kit's
- * `attachMentionPopover` (kit.ts) pokes an *uncontrolled* DOM textarea via a
- * body-appended layer, hard-codes a cookie-auth `fetch('/centraid/_vault/picker')`
- * with no injectable search hook, and styles itself with global kit.css classes.
- * The shell composer is a *controlled* React textarea authed by a bearer token
- * through `searchVaultEntities`, styled with CSS modules. Per the Wave-0 audit,
- * a React reimplementation over the same endpoints is the right call — the only
- * genuinely shareable bits are these tiny pure functions (token detection + the
- * `@[label](ref:type/id)` splice), duplicated here rather than paying for a
- * new tri-allowlist kit sibling + a kit.ts refactor. The emitted ref string
- * exactly matches what the shared renderer parses (gfm.js's ref regex).
+ * Why shell-local React rather than a shared control: the imperative
+ * @-mention popover this once had to coexist with poked an *uncontrolled* DOM
+ * textarea through a body-appended layer, hard-coded a cookie-auth
+ * `fetch('/centraid/_vault/picker')` with no injectable search hook, and styled
+ * itself with global kit.css classes. The shell composer is a *controlled*
+ * React textarea authed by a bearer token through `searchVaultEntities`, styled
+ * with CSS modules. Per the Wave-0 audit, a React reimplementation over the
+ * same endpoints was the right call, and #799 retired the imperative one
+ * outright with the served plane; the genuinely shareable bits are these tiny
+ * pure functions (token detection + the `@[label](ref:type/id)` splice). The
+ * emitted ref string exactly matches what the shared renderer parses
+ * (assistant-rich's ref regex).
  */
 
 /** A detected token under the caret: the `@`/`/` position and the text after it. */

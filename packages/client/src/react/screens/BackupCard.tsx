@@ -1,25 +1,31 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { JSX } from "react";
 
+import type { CentraidGatewayDevice } from "../../gateway-client-devices.js";
 import type { GatewayHomeDiscoveryDTO } from "../../gateway-client.js";
 import type { UsageInput } from "../../storage-metrics.js";
 import { formatDuration } from "../shell/routes/gatewayData.js";
 import { startVisibilityTicker } from "../shell/routes/visibility-ticker.js";
 import { cx } from "../ui/cx.js";
 import Icon from "../ui/Icon.js";
+import SectionBlock from "../ui/SectionBlock.js";
+import BackupCopyCards from "./BackupCopyCards.js";
+import BackupDeviceList from "./BackupDeviceList.js";
 import BackupHealthMetrics, { ClockLine } from "./BackupHealthMetrics.js";
 import BackupInventoryPanel from "./BackupInventoryPanel.js";
 import type {
   BackupReconciliationDTO,
   ProviderPolicyStatusDTO,
 } from "./BackupInventoryPanel.js";
-import { computeStorageMetrics } from "./backupMetrics.js";
+import BackupLossSummary from "./BackupLossSummary.js";
+import { computeStorageMetrics, deriveLossSummary } from "./backupMetrics.js";
 import BackupPolicyPanel from "./BackupPolicyPanel.js";
 import type {
   BackupDestinationDTO,
   BackupPolicyDTO,
   BackupPolicyPatchDTO,
 } from "./BackupPolicyPanel.js";
+import BackupSummaryRows from "./BackupSummaryRows.js";
 import RecoveryKitGate from "./RecoveryKitGate.js";
 
 import controlsCss from "../styles/controls.module.css";
@@ -98,6 +104,17 @@ export interface BackupCardProps {
   }) => Promise<{ confirmedAt: number }>;
   /** Optional setup destination for hosts that expose backup configuration. */
   onOpenSettings?: () => void;
+  /** The paired-device roster (issue #708 A2's device list) — absent only
+   *  when a caller has no device plane to offer (older embed). */
+  loadDevices?: () => Promise<CentraidGatewayDevice[]>;
+  /**
+   * Restore from an offsite copy. Absent today on every host — restore is
+   * still a gateway-side/CLI recovery act (docs/recovery/backup-restore.md),
+   * not a wired client action — so the control renders disabled with that
+   * reason rather than being hidden (issue #708 A2: never buried).
+   */
+  onRestore?: () => void;
+  readOnly?: boolean;
 }
 
 /** Regular refresh cadence — matches useGatewayHealth's poll order of
@@ -197,6 +214,9 @@ export default function BackupCard({
   onExportRecoveryKit,
   onConfirmRecoveryKit,
   onOpenSettings,
+  loadDevices,
+  onRestore,
+  readOnly,
 }: BackupCardProps): JSX.Element {
   const [status, setStatus] = useState<BackupStatusDTO | null>(null);
   const [usage, setUsage] = useState<UsageInput | null>(null);
@@ -301,155 +321,226 @@ export default function BackupCard({
     (status?.configured ?? false) ||
     (status?.vaults.some((v) => v.lastBackupAt) ?? false);
   const clocks = metrics?.freshness.clocks;
+  // The headline the whole screen leads with (issue #708 A2) — computed from
+  // the SAME `metrics` every other readout on this surface reads, so it can
+  // never disagree with the five-metric health block below it.
+  const lossSummary =
+    status && metrics ? deriveLossSummary(status, metrics) : null;
+
+  // WHEN IT LAST RAN IS THE META, because that is the question the section
+  // answers at a glance; the provider is who holds it, which only matters once
+  // the answer to "when" is not "never". The newest of the vault clocks, so a
+  // gateway holding several vaults reports the freshest copy rather than an
+  // arbitrary first one.
+  const lastRunAt = (status?.vaults ?? [])
+    .map((vault) => (vault.lastBackupAt ? Date.parse(vault.lastBackupAt) : NaN))
+    .filter((at) => Number.isFinite(at))
+    .reduce<number | null>(
+      (best, at) => (best === null || at > best ? at : best),
+      null
+    );
+  const headMeta = ((): string => {
+    if (status === null) return "reading";
+    if (lastRunAt !== null)
+      return `last run ${formatDuration(Math.max(0, now - lastRunAt))} ago`;
+    return status.provider ? `${status.provider} · never run` : "no copies yet";
+  })();
 
   return (
-    <section className={cx(gwStyles.panel, styles.card)}>
-      <div className={gwStyles.panelHead}>
-        <h2>Backups</h2>
-        <div className={styles.headMeta}>
-          {status?.provider ? (
-            <div className={styles.providerLine}>
-              <Icon name="Key" size={13} />
-              <span>Protected by {status.provider}</span>
+    <>
+      {/* The section head sits ABOVE the container, over its own hairline
+          (binding layer v11): a head inside the border reads as a caption on
+          the card rather than as the name of this stretch of the page. When it
+          last ran is a fact, so it is stated in the meta; Manage is a verb
+          about this section, so it is the head's quiet action. */}
+      <SectionBlock
+        label="Backups"
+        meta={headMeta}
+        {...(onOpenSettings && !readOnly
+          ? {
+              action: {
+                hint: "Backup settings",
+                label: "Manage",
+                onClick: onOpenSettings,
+              },
+            }
+          : {})}
+      />
+      {/* THE FOUR ANSWERS FIRST, then the diagnosis. When it last ran, how
+          often it runs, whether the copies can be opened, and who has one —
+          stated as rows before any panel, so a gateway with no backups reads as
+          four facts rather than as one sentence and a lot of border. */}
+      {status ? (
+        // `onRunNow` follows the same rule as the diagnostics disclosure
+        // below: a run verb needs a destination to run to. Withheld until one
+        // is configured, so the row states the fact ("No backup has ever run")
+        // without offering a button that can only come back with an error.
+        <BackupSummaryRows
+          status={status}
+          now={now}
+          lastRunAt={lastRunAt}
+          running={anyRunning}
+          {...(readOnly || !status.configured
+            ? {}
+            : { onRunNow: () => void runNow() })}
+          {...(onOpenSettings && !readOnly ? { onOpenSettings } : {})}
+        />
+      ) : null}
+      <section className={cx(gwStyles.panel, styles.card)}>
+        <div className={styles.body}>
+          {loadError ? (
+            <div className={styles.loadError}>
+              Couldn’t reach the gateway: {loadError}
             </div>
-          ) : null}
-          {onOpenSettings ? (
-            <button
-              type="button"
-              className={cx(buttonCss.btn, buttonCss.sm, controlsCss.soft)}
-              onClick={onOpenSettings}
-            >
-              <Icon name="Settings" size={13} />
-              <span>Manage</span>
-            </button>
-          ) : null}
+          ) : !status || !metrics ? (
+            <div className={gwStyles.panelEmpty}>Checking backup status…</div>
+          ) : hasBackups ? (
+            <>
+              {lossSummary ? <BackupLossSummary summary={lossSummary} /> : null}
+
+              <BackupHealthMetrics metrics={metrics} now={now} />
+
+              {loadDevices ? (
+                <BackupDeviceList now={now} loadDevices={loadDevices} />
+              ) : null}
+
+              <BackupCopyCards
+                status={status}
+                metrics={metrics}
+                readOnly={readOnly}
+                {...(!readOnly && onRestore ? { onRestore } : {})}
+              />
+
+              {readOnly ? null : (
+                <RecoveryKitGate
+                  configured={status.configured}
+                  recoveryKit={status.recoveryKit ?? { confirmedAt: null }}
+                  onConfirm={onConfirmRecoveryKit}
+                  onExport={onExportRecoveryKit}
+                />
+              )}
+
+              {/* NOTHING TO DIAGNOSE UNTIL THERE IS A DESTINATION. Verify and
+                  Back up now both act on a configured backup; offered before
+                  one exists they can only fail, and a disclosure holding two
+                  buttons that are guaranteed to error is worse than no
+                  disclosure. The explainer above already says what to do. */}
+              {readOnly || !status.configured ? null : (
+                <details
+                  className={styles.diagnostics}
+                  data-testid="backup-diagnostics"
+                >
+                  <summary>Diagnostics</summary>
+                  <div className={styles.diagnosticsBody}>
+                    <div className={styles.actions}>
+                      {onVerifyNow ? (
+                        <button
+                          type="button"
+                          className={cx(
+                            buttonCss.btn,
+                            buttonCss.sm,
+                            controlsCss.soft
+                          )}
+                          disabled={anyRunning || verifying}
+                          onClick={() => void verifyNow()}
+                        >
+                          <Icon name="CheckCircle" size={13} />
+                          <span>{verifying ? "Verifying…" : "Verify now"}</span>
+                        </button>
+                      ) : null}
+                      <button
+                        type="button"
+                        className={cx(
+                          buttonCss.btn,
+                          buttonCss.sm,
+                          controlsCss.soft
+                        )}
+                        disabled={anyRunning || verifying}
+                        onClick={() => void runNow()}
+                      >
+                        <span
+                          className={styles.runIcon}
+                          data-spin={anyRunning || undefined}
+                        >
+                          <Icon
+                            name={anyRunning ? "Loader" : "Save"}
+                            size={13}
+                          />
+                        </span>
+                        <span>
+                          {anyRunning ? "Backing up…" : "Back up now"}
+                        </span>
+                      </button>
+                    </div>
+                    {runError ? (
+                      <div className={styles.runError}>{runError}</div>
+                    ) : null}
+
+                    {clocks ? (
+                      <div
+                        className={styles.clockGrid}
+                        data-testid="freshness-clocks"
+                      >
+                        <ClockLine
+                          label="Newest snapshot"
+                          at={clocks.lastRegisteredSnapshotAt}
+                          now={now}
+                        />
+                        <ClockLine
+                          label="Last verification"
+                          at={clocks.lastSuccessfulVerificationAt}
+                          now={now}
+                        />
+                        <ClockLine
+                          label="Newest WAL segment"
+                          at={clocks.lastAckedWalSegmentAt}
+                          now={now}
+                        />
+                        <ClockLine
+                          label="Outbox drained"
+                          at={clocks.outboxDrainedWatermarkAt}
+                          now={now}
+                        />
+                      </div>
+                    ) : null}
+
+                    {status.vaults.length > 0 ? (
+                      <div className={styles.vaultList}>
+                        {status.vaults.map((v) => (
+                          <VaultRow
+                            key={v.vaultId}
+                            vault={v}
+                            now={now}
+                            provider={status.provider}
+                            onUpdatePolicy={onUpdatePolicy}
+                            onVerifyBucket={onVerifyBucket}
+                          />
+                        ))}
+                      </div>
+                    ) : null}
+                  </div>
+                </details>
+              )}
+            </>
+          ) : (
+            <>
+              {lossSummary ? <BackupLossSummary summary={lossSummary} /> : null}
+              {/* "Not backed up offsite yet." used to sit here. The summary
+                  rows above now say it four ways, each with the consequence
+                  attached; repeating it as a bare sentence added a line and no
+                  information. */}
+              {readOnly ? null : (
+                <RecoveryKitGate
+                  configured={status.configured}
+                  recoveryKit={status.recoveryKit ?? { confirmedAt: null }}
+                  onConfirm={onConfirmRecoveryKit}
+                  onExport={onExportRecoveryKit}
+                />
+              )}
+            </>
+          )}
         </div>
-      </div>
-
-      <div className={styles.body}>
-        {loadError ? (
-          <div className={styles.loadError}>
-            Couldn’t reach the gateway: {loadError}
-          </div>
-        ) : !status || !metrics ? (
-          <div className={gwStyles.panelEmpty}>Checking backup status…</div>
-        ) : hasBackups ? (
-          <>
-            <BackupHealthMetrics metrics={metrics} now={now} />
-
-            <RecoveryKitGate
-              configured={status.configured}
-              recoveryKit={status.recoveryKit ?? { confirmedAt: null }}
-              onConfirm={onConfirmRecoveryKit}
-              onExport={onExportRecoveryKit}
-            />
-
-            <details
-              className={styles.diagnostics}
-              data-testid="backup-diagnostics"
-            >
-              <summary>Diagnostics</summary>
-              <div className={styles.diagnosticsBody}>
-                <div className={styles.actions}>
-                  {onVerifyNow ? (
-                    <button
-                      type="button"
-                      className={cx(
-                        buttonCss.btn,
-                        buttonCss.sm,
-                        controlsCss.soft
-                      )}
-                      disabled={anyRunning || verifying}
-                      onClick={() => void verifyNow()}
-                    >
-                      <Icon name="CheckCircle" size={13} />
-                      <span>{verifying ? "Verifying…" : "Verify now"}</span>
-                    </button>
-                  ) : null}
-                  <button
-                    type="button"
-                    className={cx(
-                      buttonCss.btn,
-                      buttonCss.sm,
-                      controlsCss.soft
-                    )}
-                    disabled={anyRunning || verifying}
-                    onClick={() => void runNow()}
-                  >
-                    <span
-                      className={styles.runIcon}
-                      data-spin={anyRunning || undefined}
-                    >
-                      <Icon name={anyRunning ? "Loader" : "Save"} size={13} />
-                    </span>
-                    <span>{anyRunning ? "Backing up…" : "Back up now"}</span>
-                  </button>
-                </div>
-                {runError ? (
-                  <div className={styles.runError}>{runError}</div>
-                ) : null}
-
-                {clocks ? (
-                  <div
-                    className={styles.clockGrid}
-                    data-testid="freshness-clocks"
-                  >
-                    <ClockLine
-                      label="Newest snapshot"
-                      at={clocks.lastRegisteredSnapshotAt}
-                      now={now}
-                    />
-                    <ClockLine
-                      label="Last verification"
-                      at={clocks.lastSuccessfulVerificationAt}
-                      now={now}
-                    />
-                    <ClockLine
-                      label="Newest WAL segment"
-                      at={clocks.lastAckedWalSegmentAt}
-                      now={now}
-                    />
-                    <ClockLine
-                      label="Outbox drained"
-                      at={clocks.outboxDrainedWatermarkAt}
-                      now={now}
-                    />
-                  </div>
-                ) : null}
-
-                {status.vaults.length > 0 ? (
-                  <div className={styles.vaultList}>
-                    {status.vaults.map((v) => (
-                      <VaultRow
-                        key={v.vaultId}
-                        vault={v}
-                        now={now}
-                        provider={status.provider}
-                        onUpdatePolicy={onUpdatePolicy}
-                        onVerifyBucket={onVerifyBucket}
-                      />
-                    ))}
-                  </div>
-                ) : null}
-              </div>
-            </details>
-          </>
-        ) : (
-          <>
-            <p className={styles.notConfigured}>
-              Your data isn’t backed up offsite yet. Until backup custody is
-              configured on this gateway, databases, code, and attachments live
-              only on this machine.
-            </p>
-            <RecoveryKitGate
-              configured={status.configured}
-              recoveryKit={status.recoveryKit ?? { confirmedAt: null }}
-              onConfirm={onConfirmRecoveryKit}
-              onExport={onExportRecoveryKit}
-            />
-          </>
-        )}
-      </div>
-    </section>
+      </section>
+    </>
   );
 }

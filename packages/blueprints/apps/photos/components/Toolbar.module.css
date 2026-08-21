@@ -1,48 +1,126 @@
-/* The main pane's toolbar row. Authored camelCase (old `ph-` prefix dropped).
-   The pill button rides the shared `.kit-btn` base as a compound so it keeps
-   the specificity that beat kit.css's later-loaded `.kit-btn`. */
+/* The Photos toolbar row (v4 handoff §3): kind filter, vault filter, tile-size
+   stepper. Nothing else — the title, the count, Select and Import moved to the
+   frame's app bar, and their rules moved out with them.
+
+   The row is never drawn empty (the component returns null when it carries
+   nothing), so these rules only ever describe a row with something in it.
+   Logical properties only, so the row and the stepper mirror under RTL. */
 
 .toolbar {
   display: flex;
   align-items: center;
   gap: var(--sp-3);
-  padding: 14px 20px 10px;
+  padding: var(--sp-2) var(--content-margin);
   flex-wrap: wrap;
   flex-shrink: 0;
 }
-.backBtn {
-  flex-shrink: 0;
-}
-.toolbarTitle {
-  min-width: 0;
-}
-.toolbarH1 {
-  font: var(--t-title);
-  letter-spacing: -0.01em;
-}
-.toolbarSub {
-  font: var(--t-small);
-  color: var(--text-soft);
-  margin-top: 1px;
-}
-/* The scope chips (issue #599) sit under the subtitle, inside the title block,
-   so they read as "what this view is showing" rather than as another action.
-   Layout only — the chips themselves are kit.css's `.kit-chip`. */
-.toolbarScopes {
-  margin-top: 6px;
-}
-.toolbarActions {
-  margin-left: auto;
+
+.field {
   display: flex;
   align-items: center;
-  gap: var(--sp-2);
-  flex-wrap: wrap;
 }
-:global(.kit-btn).pillBtn {
-  border-radius: var(--r-pill);
+/* A FULL-HEIGHT OUTLINED MENU, not a chip. The kind filter is one of the two
+   standing controls in this row, and the design draws it at the control height
+   every other menu in the product uses (34px, `--h-control`), in UI-strong on
+   the control hairline. At Micro on 4px of padding it read as a tag someone had
+   applied rather than as a control you can open — and it sat visibly shorter
+   than the stepper beside it, so the row had two baselines. */
+/* The class is DOUBLED to outrank `kit-input`, which the element also carries
+   and which loads after this module — at equal specificity the kit won, and the
+   control came out 44px tall on raised paper, a row rather than a control. Same
+   idiom as `.appRoot.appRoot` in Chrome.module.css. */
+/* NOT `block-size: var(--h-control)`. The design draws this control at 34px,
+   but `:root .kit-input` floors every input at `--target-min` (44px), and that
+   floor is a tap target, not a style — a `block-size` here would be overridden
+   by the min and read as a rule that does nothing. The control therefore stands
+   44px tall on purpose; everything else about it is the design's. If 34px is
+   ever wanted here it is a kit decision about `--target-min`, not a per-app
+   override, because shrinking one app's input below the floor is exactly what
+   the floor exists to stop. */
+.select.select {
+  padding-block: 0;
+  padding-inline: var(--sp-4);
+  font: var(--t-small-strong);
+  color: var(--text-soft);
+  background: transparent;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--r-md);
 }
-:global(.kit-btn).pillBtn[data-active="true"] {
+.select.select:hover {
+  border-color: var(--line-sel);
+  color: var(--text);
+}
+
+/* The vault filter and the tile-size control are groups for the accessibility
+   tree, not boxes — a <fieldset> draws a border and padding by UA default. */
+.vaults,
+.stepper {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-1);
+  margin: 0;
+  padding: 0;
+  border: none;
+  min-inline-size: 0;
+}
+
+/* A recessive state takes its own token on the leaf; never a container
+   opacity (§18). */
+.vaultChip[data-on="false"] {
+  color: var(--text-faint);
+}
+.vaultChip[data-on="true"] {
   border-color: var(--line-sel);
   color: var(--accent-text);
   background: var(--accent-soft);
+}
+
+/* THE SEGMENTED TRACK (issue #765). Four rungs, XS–L, in one sunken track
+   with the held one raised out of it — the system's segmented shape: track =
+   `--bg-sunken`, selected item = the raised surface, and no fill anywhere.
+   The − / + stepper this replaced made a member press twice to cross the range
+   and never showed them where the range stopped; four named rungs are few
+   enough that each can be its own target.
+
+   `gap: 0` on purpose: the segments share one track, so a gap between them
+   would read as four separate controls rather than one property. */
+.stepper {
+  margin-inline-start: auto;
+  gap: 0;
+  padding: 2px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+  background: var(--bg-sunken);
+}
+
+/* One segment. The rung name is a numeric-register readout: mono, tabular, and
+   above the 11px floor. A recessive state takes its own token on the leaf,
+   never a container opacity (§18). */
+.rung {
+  min-inline-size: 4ch;
+  min-block-size: var(--h-control);
+  padding-inline: var(--sp-2);
+  border: 1px solid transparent;
+  border-radius: var(--r-sm);
+  background: transparent;
+  font: var(--t-mono);
+  font-variant-numeric: tabular-nums;
+  color: var(--text-faint);
+  text-align: center;
+  cursor: pointer;
+}
+.rung:hover {
+  color: var(--text);
+}
+.rung:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
+}
+/* The held rung is RAISED out of the track — the one thing the track is for.
+   It is a surface and a hairline, not a fill: the ink simply steps back up to
+   `--text`, and this view's one filled control stays the app bar's commit. */
+.rung[aria-pressed="true"] {
+  background: var(--bg-elev);
+  border-color: var(--line-sel);
+  color: var(--text);
 }

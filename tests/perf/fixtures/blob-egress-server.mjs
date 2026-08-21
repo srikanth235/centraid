@@ -1,7 +1,7 @@
 import http from "node:http";
 
-import { makeBlobRouteHandler } from "../../../packages/gateway/dist/routes/blob-routes.js";
-import { openVaultPlane } from "../../../packages/gateway/dist/serve/vault-plane.js";
+import { makeBlobRouteHandler } from "../../../packages/server/dist/routes/blob-routes.js";
+import { openVaultPlane } from "../../../packages/server/dist/serve/vault-plane.js";
 
 const directory = process.argv[2];
 const contentId = process.argv[3];

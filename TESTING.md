@@ -43,6 +43,7 @@ If you are reviewing agent-authored test work, spend your attention here and let
 | Tier | Marker / location | Owns | Schedule |
 | --- | --- | --- | --- |
 | Unit / logic | `*.test.ts[x]` | one module's observable behaviour | per PR |
+| React Native component | RNTL tests under `apps/mobile/src/**/*.test.tsx` | native roles/state, responder events, and component composition that jsdom cannot falsify | per PR |
 | Integration | `*.integration.test.ts` | real SQLite, sockets, processes, or cross-component behaviour | per PR |
 | Contract | `*.contract.test.ts` | named product law that refactors must preserve | per PR |
 | Boot-the-artifact smoke | `scripts/gateway-package/smoke.mjs` (+ `--base-url` for containers) + path-filtered `gateway-package` workflow | "builds but doesn't start" (host binary **and** Docker image with `/data` volume) | **PR path-filtered** (gateway/protocol/Dockerfile/scripts) + manual `bun run gateway:package:smoke` |
@@ -52,11 +53,11 @@ If you are reviewing agent-authored test work, spend your attention here and let
 | Pairing journey | `tests/agent-e2e-pairing/flows/*.mjs` | daemon/CLI/device and relay ceremony | nightly + exploratory |
 | Performance | `tests/perf/*.perf.test.ts` | hot-path budgets | nightly |
 | Scale | `tests/scale/*.scale.test.ts` | correctness and duration at volume | nightly |
-| Mutation | StrykerJS on 15 seeded engine packages | mutation-score floors | nightly (full) + per-PR diff-scoped |
+| Mutation | StrykerJS on 16 seeded engine packages | mutation-score floors | nightly (full) + per-PR diff-scoped |
 
 ### Opt-in live adapter smoke
 
-`bun run --cwd packages/agent-runtime test:live-adapters` launches the configured external ACP adapters and is intentionally outside CI: it needs local CLI installs and credentials. Run it monthly and before releases or ACP adapter changes; ordinary PR validation uses the deterministic adapter tests instead.
+`bun run --cwd packages/server test:live-harnesses` launches the configured external ACP harnesses and is intentionally outside CI: it needs local CLI installs and credentials. Run it monthly and before releases or ACP adapter changes; ordinary PR validation uses the deterministic adapter tests instead.
 
 ### PR vs nightly (L1 / E2)
 
@@ -64,9 +65,10 @@ Decided in [#468](https://github.com/srikanth235/centraid/issues/468); cite [doc
 
 | Lane | Runs |
 | --- | --- |
-| **Every PR** | Unit, integration, contract; matrix validation + **floors ratchet** via `check:pr`; **affected-package vitest** (`turbo run test --filter='[origin/main]'` — changed packages only, not the full dependent graph); **boot-the-artifact smoke** when the `client` filter triggers (includes `packages/gateway` + `packages/app-engine` paths — #496 E7); **path-filtered client e2e** (the `client-e2e` lane of `ci.yml` since #557) |
-| **Path filters (client e2e)** | **Web** e2e when `apps/web`, `packages/client`, or service-worker files change; **desktop** e2e when `apps/desktop` changes; **boot-smoke** also when gateway/app-engine change. Shard to keep wall-clock roughly under ten minutes. |
-| **Nightly** | Full cross-client suites, perf budgets, mobile (**six isolated iOS suites in parallel + Android functional journeys**), pairing journeys, scale, **mutation (Stryker)** |
+| **Every PR** | Unit, integration, contract; matrix validation + **floors ratchet** via `check:pr`; **affected-package vitest** (`turbo run test --filter='[origin/main]'` — changed packages only, not the full dependent graph); **boot-the-artifact smoke** when the `client` filter triggers (includes `packages/server` paths — #496 E7); **path-filtered client e2e** (the `client-e2e` lane of `ci.yml` since #557) |
+| **Path filters (client e2e)** | **Web** e2e when `apps/web`, `packages/client`, or service-worker files change; **desktop** e2e when `apps/desktop` changes; **boot-smoke** also when `packages/server` changes. Shard to keep wall-clock roughly under ten minutes. |
+| **Nightly** | Full cross-client suites, perf budgets, mobile (**iOS + Android home-loads**), pairing journeys, scale, **mutation (Stryker)** |
+| **Weekly / release opt-in** | Real-weight enrichment goldens: pinned runtime + weights, capability handshake, OCR text, embedding cosine tolerance, face count/geometry, and licence pins. This lane is scheduled, manually dispatchable, and required after model/preprocessing changes; it never joins PR CI. |
 
 **Promotion rule:** if a nightly-only area burns us **twice**, move it to PR-time.
 
@@ -84,7 +86,7 @@ Soft SLA (auto-issue, not a hard age gate):
 
 ### Floors ratchet (#496 E4, extended #532)
 
-`tests/coverage-floors.json` values, matrix flow `minimumTests`, and `tests/mutation-floors.json` scores **move only upward**. Perf budget files (`apps/web/tests/e2e/perf-budgets.ts`, `packages/gateway/benchmarks/low-end-budgets.json`) are **tighten-only**: ceilings may drop freely; widening a ceiling or lowering a `min*` floor fails. CI and `bun run test:ratchet` / `check:pr` fail on any decrease/widen unless:
+`tests/coverage-floors.json` values, matrix flow `minimumTests`, and `tests/mutation-floors.json` scores **move only upward**. Perf budget files (`apps/web/tests/e2e/perf-budgets.ts`, `packages/server/benchmarks/low-end-budgets.json`) are **tighten-only**: ceilings may drop freely; widening a ceiling or lowering a `min*` floor fails. CI and `bun run test:ratchet` / `check:pr` fail on any decrease/widen unless:
 
 - top-level `approvedDeviation` on `coverage-floors.json` or `mutation-floors.json`,
 - per-flow `approvedMinimumTestsDeviation` on the lowered flow, or
@@ -101,6 +103,48 @@ The ceiling is computed from, in order: the owner exists and declares tests (a z
 ### Skip budget (#656 Layer 2)
 
 Every `test.skip` / `describe.skipIf` / env gate is inventoried in [`tests/skips.json`](tests/skips.json) with an **open** issue and a reason. An uninventoried skip fails `check:pr`. The total is a **down-only** budget under `bun run test:ratchet`: removing a skip demands you tighten the budget, and adding one is a visible, reviewed edit. Keys are `<path>#<ordinal>`, so line drift is a warning rather than churn.
+
+### Deterministically-environment-red inventory (#781)
+
+The quarantine owns nondeterministic failures and the skip budget owns declared skips, which left a third class homeless: a test that fails **every** time in a known environment — the wal-shipper `[G4]` chmod fault injection that root ignores, fixed as an instance in #782. Quarantining such a test would exclude it from the required checks everywhere, deleting live coverage on every environment where it is green to silence the one where it is red; leaving it naked makes a lane untrustworthy for whoever runs in the red environment.
+
+The mechanism is a hybrid. The test **must carry an env guard** — `skipIf(predicate)` or a runtime `t.skip` — so it is honest at runtime everywhere (the guard also lands it in the skip budget), and the guard must be inventoried in [`tests/env-red.json`](tests/env-red.json) with the guarded test's title, the human-readable environment predicate, the guard mechanism (`skipIf`, `runtime-skip`, `reduced-assertion`, or `hard-fail`), an **open** tracking issue, and an `expiresAt` date or a `revisitTrigger` sentence. `bun run test:env-red` (in `check:push` and the CI `gates` job) discovers the population by scanning the same globs as the skip inventory for environment-predicate comparisons (`process.platform`, `process.arch`, `process.getuid`/`geteuid`) and fails on an uninventoried guard, a stale entry, a vanished test title, a declared guard the file does not contain, a closed or missing issue, an expired entry, and any drift from the **down-only** `_budget` — the only way to shrink the file is the #782 move: rewrite the test so the environment stops mattering (there, a path-shape fault no uid can bypass replaced a permission bit root ignores). Keys are `<path>#<ordinal>`; `--write` refreshes lines and stubs new sites undocumented so it cannot launder a new hole.
+
+What no static scan can find is the _unguarded_ instance — G4's chmod named no platform or uid. The contract is therefore about the response: the moment a deterministic environment red is diagnosed, it is either rewritten environment-independent or guarded, and a guard cannot land uninventoried.
+
+### Named live/hardware lanes (#790)
+
+An opt-in environment gate is not itself a defect: it is honest only when its required rig and invocation are named. The current inventory splits into these two states:
+
+| Lane | Current rig |
+| --- | --- |
+| Clawgnition backup interop | `interop-weekly.yml` sets `CLAWGNITION_INTEROP=1` but does not provision `CLAWGNITION_REPO` or its `.dev.vars`, so the suite collection-skips on a clean runner; no effective rig |
+| 10 GiB restore | `restore-year3` in `.github/workflows/e2e.yml` runs `CENTRAID_SCALE_RESTORE_GIB=10 node node_modules/vitest/vitest.mjs run --config vitest.scale.config.ts tests/scale/restore-10gib.scale.test.ts` on an isolated 90-minute Linux job |
+| vault-write fsync count | Linux PR installs `strace`, sets `CENTRAID_BENCH_REQUIRE_FSYNC=1`, and runs `bun run test:perf:pr`; nightly installs `strace` and runs `bun run test:perf`. Missing `strace` in Linux CI is a hard failure |
+| launchd install/uninstall | No named mutable macOS user-session rig; local opt-in only |
+| native QUIC relay | The Linux `verify` job builds the workspace then runs `bun run --cwd packages/tunnel test:native` (the package command sets `CENTRAID_RUN_NATIVE_TUNNEL=1`) |
+| real disk-full filesystem | No privileged APFS image or Linux loop-device rig; local Darwin opt-in only |
+| byte-plane-over-HTTP | The Linux `verify` job runs `bun run --cwd packages/tunnel test:data-plane`, including both TypeScript and built-Rust HTTP contracts |
+| live automation failover | No runner provisioned with the real harness binaries; local opt-in only |
+| mobile strict perf evidence | No uncontended native SQLite evidence runner sets `CENTRAID_PERF_EVIDENCE=1` |
+| reflink allocation | No named APFS/btrfs/xfs runner; ordinary ext4 CI proves only the byte-identical fallback |
+| desktop launch perf evidence | Nightly `desktop-e2e` runs `bun run test:e2e` in `apps/desktop` and publishes `nightly-evidence-desktop`; `quality-performance-scale` restores it and runs `bun run test:perf` |
+| PWA waterfall perf evidence | Nightly `web-e2e` runs `bun run e2e` in `apps/web` and publishes `nightly-evidence-web`; `quality-performance-scale` restores it and runs `bun run test:perf` |
+| native tunnel load perf evidence | `quality-performance-scale` runs `bun run build` to produce the host module, then `bun run test:perf`; the inverse absent-module assertion owns environments without a built native |
+
+The missing rigs remain explicit #790 blockers. Do not delete or narrow their `tests/skips.json` / `tests/env-red.json` entries merely to close the tracker; an entry shrinks only when the named rig actually runs the law or a current decision retires the claim.
+
+### Assertion-hygiene ratchet (#781)
+
+Two matcher families are weak enough to erode a suite from the inside, and neither is wrong in isolation, so no lint rule can ban them: `toBeTruthy()` / `toBeFalsy()` accept `1`, `'x'`, `[]`, `{}` where the house style asserts an exact `toBe(true)`, and a bare `toHaveBeenCalled()` proves a call happened without proving it was the right one. [`tests/hygiene-budgets.json`](tests/hygiene-budgets.json) makes their totals **down-only** budgets under `bun run test:hygiene-ratchet`, the same shape as the skip budget: a slice may not add sites without a reviewed edit, and slack is a hard failure so the ceiling cannot drift upward by neglect. `--write` reconciles budgets with `Math.min(previous, measured)`, so the escape hatch can only lower a number, never launder a regression.
+
+### Fixed-sleep ratchet (#781)
+
+A fixed sleep — `await new Promise((r) => setTimeout(r, 50))`, a `setTimeout as sleep` alias, a local `delay(20)` helper — bets that the awaited work finishes inside the literal, and pays for that bet in flake on a loaded runner and in wall clock everywhere else. [`tests/sleep-inventory.json`](tests/sleep-inventory.json) inventories every site by file with a **down-only** `_budget` under `bun run test:sleep-inventory`, the same shape as the skip budget: an uninventoried sleep or a file that grew fails with the remedy (`useFakeClock()` + `clock.advance()`, an event-driven wait such as `vi.waitFor` or a deferred the test resolves, or an outcome poll), and a total under budget fails until the ceiling is ratcheted down (`--write` reconciles and can only lower it).
+
+Three shapes are deliberately **not** counted: 0ms yields (`flushMacrotasks()` and friends wait on the queue, not the clock), non-literal delays (`setTimeout(r, timeoutMs)` is configurable, not hard-coded), and rejecting deadlines (`setTimeout(() => reject(new Error(…)), 10_000)` — a watchdog is the upper bound on an event-driven wait, which is the remedy, not the defect). `scripts/test-report/**` is excluded as the detector's own fixtures; `packages/test-kit/**` is excluded because the kit's seam tests schedule literal timers under `useFakeClock()` to prove the fake clock runs them.
+
+Negated bare `.not.toHaveBeenCalled()` is **exempt** — asserting a call did _not_ happen is complete on its own, and there is nothing stronger to demand. `.not.toHaveBeenCalledWith(...)` and `.not.toHaveBeenCalledTimes(...)` do count, because those carry an argument or arity the positive form should also carry.
 
 ### Law registry (#656 Layer 4)
 
@@ -134,18 +178,110 @@ The kit path is enforced, not merely recommended. In test files, oxlint bans raw
 ```
 HIGH  vault/backup/replica contracts, handler isolation, web offline/PWA,
       pairing when nightly green, engine coverage floors, ENOSPC fault-inject,
-      agent chat journey (fake-acp integration)
+      harness conversation journey (fake ACP integration)
 MED   desktop Playwright, mobile Maestro iOS + Android home-loads, perf/scale
       (generous), tunnel native when module present, multi-writer double-write
-SOFT  desktop copilot UI e2e (blocked on #470), builder publish (punted v0),
-      mobile on-device perf/scale (honest skip), nightly red → human action
+SOFT  mobile on-device perf/scale (honest skip), nightly red → human action
 ```
 
 Parent backlog: [#496](https://github.com/srikanth235/centraid/issues/496).
 
 `TESTING.md` wins over any suite README that contradicts this split (**L3**).
 
-Playwright alone owns desktop and web regression journeys. The mobile journey layer is the committed agent-driven flows under [`tests/agent-e2e-mobile/`](tests/agent-e2e-mobile); their device-driving substrate is **Maestro**, spawned by the harness ([`lib/harness.mjs`](tests/agent-e2e-mobile/lib/harness.mjs) `runMaestroChunk` runs `maestro --udid … test <flow.yaml>` per step) against an installed development app on a booted iOS Simulator or Android emulator. The `mobile-e2e-ios` matrix in [`e2e.yml`](.github/workflows/e2e.yml) builds the iOS app once, publishes the cache-safe bundle, and runs each flow on an isolated macOS simulator; Android runs its functional subset in `mobile-e2e-android`. There is no second native suite and no Detox suite. Desktop agent-driven flows were retired after their unique restart/persistence assertions moved to Electron Playwright.
+Playwright alone owns desktop and web regression journeys. The mobile journey layer is the committed agent-driven flows under [`tests/agent-e2e-mobile/`](tests/agent-e2e-mobile); their device-driving substrate is **Maestro**, spawned by the harness ([`lib/harness.mjs`](tests/agent-e2e-mobile/lib/harness.mjs) `runMaestroChunk` runs `maestro --udid … test <flow.yaml>` per step) against an installed development app on a booted iOS Simulator or Android emulator. The `mobile-e2e` job in [`e2e.yml`](.github/workflows/e2e.yml) installs a pinned Maestro CLI and runs those flows nightly. There is no second native suite and no Detox suite. Desktop agent-driven flows were retired after their unique restart/persistence assertions moved to Electron Playwright.
+
+React Native component tests use `@testing-library/react-native` 13 on the **same Vitest runner**. They are reserved for claims that need the RN accessibility/responder tree; pure transforms stay unit tests and recognizer/device integration stays Maestro. A component test over roughly 200ms must state what cheaper layer cannot falsify and should be consolidated with adjacent scenarios rather than spawning another cold renderer file.
+
+Accessibility ownership follows the same cheapest-falsifying-layer rule. The web Playwright lane scans the cold connection screen, the connected Home shell, and a shipped first-party app renderer with axe WCAG A/AA. Desktop deliberately reuses that owner: both desktop's Vite entry and the web host execute `packages/client/src/react/boot.tsx`, so a second Electron axe pass would scan the same DOM with the same rule engine; Electron-specific focus and keyboard journeys remain desktop Playwright claims. Mobile role, accessible-name, and state/trait semantics are RNTL claims consolidated in `apps/mobile/src/apps/photos/PhotosHome.test.tsx`; Maestro keeps device/runtime integration and does not stand in for roles or traits its text selectors cannot observe. `scripts/accessibility-contract.test.mjs` remains a fast source-level tripwire, not a matrix evidence owner.
+
+### App admission contract
+
+When an app graduates beyond sample data, its current design record and matrix entries must name:
+
+- the app, north star, seat class (`record-only` or `byte-bearing`), and graduation issue;
+- a `*-model.ts` beside each view for pure product arithmetic;
+- one cheapest falsifying layer per scenario: `U`, `C`, or `E` (`U + E` only when the assertions differ);
+- a handler contract for every vault-facing action, including refusal, receipt/postcondition, and partial-batch behavior;
+- structurally impossible engine/app combinations as `skip` in `tests/matrix.json#appEngines`, with a seat-doctrine citation;
+- one north-star journey and tighten-only budget per byte-bearing app/platform, or the shared replica journey for record-only apps;
+- the seeded `@centraid/test-kit/year3-vault` profile, destructive-flow reseed order, app path filter, and a measured app coverage floor.
+
+The smallest reusable record is:
+
+| Claim                                 | Layer | Evidence                  |
+| ------------------------------------- | ----- | ------------------------- |
+| Pure product arithmetic               | `U`   | `<feature>-model.test.ts` |
+| Native role/state/responder semantics | `C`   | `<Feature>.test.tsx`      |
+| Device/runtime integration            | `E`   | `<app>-<journey>.mjs`     |
+
+Every vault action records its happy-path postcondition, refusal/partial-failure behavior, and owning contract file. Every structural exclusion records why the engine is impossible and cites `docs/blueprint-seats.md#engine-contracts`. The shared profile is paid for once per platform; a byte-bearing app's journey owns its budget and PR filter.
+
+The reusable table shape is [docs/app-scenario-layer-template.md](docs/app-scenario-layer-template.md); per-app instances live in `docs/apps/` (Docs: [docs/apps/docs-scenarios.md](docs/apps/docs-scenarios.md)).
+
+### Photos native renderer contract (#716)
+
+Photos uses `@testing-library/react-native` on Vitest, not Jest, Detox, or Appium. The consolidated `PhotosHome.test.tsx` holds the RNTL scenario cases in one file: the cold-renderer startup cost is paid once per file and accepted because it falsifies RN roles, responder wiring, accessibility labels, and host geometry that jsdom cannot represent (the renderer comparison and measurements are recorded in [#716](https://github.com/srikanth235/centraid/issues/716)). Pure models remain ordinary tests.
+
+Production application components and JS helpers stay real. Mocks are limited to native host/device seams: AsyncStorage, Expo device services, replica/data providers, `expo-image`, `react-native-svg`, and media URI resolution. A future direct `op-sqlite`, FlashList measurement, or RNGH dependency receives an import-typed seam mock; it must not replace the component or its pure model. Recognizer precedence, native modal layering, pinch/pan/swipe, keyboard alignment, and denied OS permissions remain Maestro claims.
+
+`apps/mobile/src/apps/photos/photos-fixtures.ts` is the deterministic in-process corpus shared by pure and component tests. The device seed separately provides 19 byte-bearing assets across months and years, one video, the Tahoe album/place, and named people. The five structural journeys and their under-eight-minute aggregate budget are listed in the Photos table below; `photos-budget.md` owns the tighten-only response. Offline write/reconnect replay is a separate host-network reliability journey, not a sixth Photos UI flow — the web owner is `apps/web/tests/e2e/offline-reconnect.spec.ts` (an offline write survives a reload and settles exactly once on reconnect); the device-native airplane-mode variant remains open under [#781](https://github.com/srikanth235/centraid/issues/781) (originally #717).
+
+### Photos scenario × layer contract (#716)
+
+`U` is a pure/unit test, `C` is the RNTL/Vitest component file, and `E` is one named Maestro journey. A row owns one cheapest falsifying layer; `U + E` is intentional only where the claims differ (model arithmetic versus device gesture/runtime integration).
+
+This table is the reference instance of the app admission contract above. It records the pure-model-beside-the-view, handler-contract, structural-exclusion, north-star-journey, shared-profile, and per-app budget conventions.
+
+| Photos scenario | U | C | E | Owner / evidence |
+| --- | --- | --- | --- | --- |
+| drawer activity, hide timer, pinned summary grains | — | ✅ | ✅ | `PhotosHome.test.tsx`; `photos-library.mjs` owns recognizer-vs-sibling hit testing |
+| scrub offset → month bubble | ✅ | ✅ | — | timeline-row/model units + native responder geometry |
+| empty/loading skeleton geometry | ✅ | ✅ | — | skeleton row packing + rendered progress/grid geometry |
+| Select word, role, disabled state | — | ✅ | ✅ | `PhotosSelectChip` semantics; select-write journey |
+| search resting/no-hits and grouped album result | ✅ | ✅ | ✅ | search grouping units; no-hits component; `photos-search.mjs` |
+| viewer mode chrome and filmstrip current item | ✅ | ✅ | ✅ | viewer models; top chrome/filmstrip component; `photos-viewer.mjs` |
+| Collections shelves, empty/collapsed bodies, and menu commands | ✅ | ✅ | ✅ | collection model; shelf component; Photos device entry/drill-down |
+| permission-refused behavior (empty-device takeover / seeded-vault continuity) | ✅ | ✅ | ✅ | access predicate/copy proves both branches; panel component and `photos-permissions.mjs` own the empty-vault takeover on a denied device grant |
+| selection trash + restore write | ✅ | — | ✅ | write batch units; `photos-select-write.mjs` |
+
+The five Photos device journeys use one gateway and paired profile and target **under eight minutes together per platform**. The denied-permission flow runs first against an explicitly purged vault; the next flow seeds the deterministic scenario for the remaining journeys through normal replica sync. The operational response to a budget breach lives beside them in [`photos-budget.md`](tests/agent-e2e-mobile/flows/photos-budget.md). Mobile offline write/reconnect replay belongs to a separate reliability journey because it requires host network control rather than a sixth Photos UI path. The contract is owned at its cheapest honest tier by `apps/web/tests/e2e/offline-reconnect.spec.ts`, over the same durable-outbox and intent-identity rails the phone uses; the device-native airplane-mode variant remains tracked by [#781](https://github.com/srikanth235/centraid/issues/781) (originally #717).
+
+## Five testing layers for the app axis (#725)
+
+Eight apps do not imply eight copies of their shared machinery. The strategy mirrors the product architecture: **engines are tested once; apps are tested as deltas**.
+
+### Layer 1 — engine law
+
+Placement, custody, consent, triage, search, and enrichment each have one canonical matrix flow and named `[law:…]` ownership. Pure surfaces use property or contract tests and qualifying packages carry mutation seeds. An app joins an engine by passing its cell in `tests/matrix.json#appEngines`; it does not restate that engine's behavior in an app-local suite. Every pass cell points to the canonical conformance gate. Every structural non-applicability is a `skip` with a reason and the [seat-doctrine contract](docs/blueprint-seats.md#engine-contracts) citation, never a gap disguised as health.
+
+The recognition boundary law is especially strict: blueprint apps enqueue consent-scoped `enrich_request` rows and read vault projections, while bundled recognition automations alone own local model execution. The conformance gate scans web, native, and automation source for direct provider SDKs, obsolete service clients/endpoints, and generic `ctx.infer` / `ctx.enrich` calls.
+
+### Layer 2 — app delta
+
+A graduating app completes the [app admission contract](#app-admission-contract). Each claim names its cheapest falsifying layer: `U` for a pure model beside the view, `C` for React Native component semantics, or `E` for one named platform journey. `U + E` is allowed only when the two layers prove different claims. Vault-facing actions also have handler contracts. Structural exclusions follow the seat doctrine and are recorded as matrix skips rather than tests of impossible UI.
+
+Byte-bearing apps own one north-star journey per platform and one tighten-only budget file beside their flows. Record-only apps share one representative replica write/read/offline journey until an app gains a genuinely app-specific native integration. Journeys in one platform run reuse a seeded `@centraid/test-kit/year3-vault` profile; a destructive/exclusive-state journey runs first and explicitly reseeds. PR workflows path-filter app journeys by the changed app directory. The suite wall-clock ratchet remains the global backpressure.
+
+### Layer 3 — ML evidence ladder
+
+Each tier makes a different claim. A higher tier does not retroactively turn judgement into a deterministic gate.
+
+| Tier | What runs | What it proves |
+| --- | --- | --- |
+| **PR** | Injected handler-model fixtures plus pure tokenizer, CTC, NMS, PDF/OCR, DB postprocess, and geometry units | Handler contracts, typed vault content/invoke flow, consent gating, honest local-asset unavailability, image/PDF OCR behavior, and deterministic preprocessing/postprocessing without weights or native ML dependencies in the root install. |
+| **Nightly** | Handler failure injection, scale rigs, and provenance/backfill selection properties | Volume correctness, drain invariants, failure isolation, and model-upgrade-as-backfill behavior. |
+| **Weekly / release opt-in live** | `bun run --cwd packages/model-runtime setup`, then `bun run test:enrich:live` over pinned real weights and committed goldens | Actual tensor layouts and preprocessing: exact model pins, image/PDF OCR text with confidence/box tolerance, embedding cosine tolerance, face count/geometry tolerance, and lock/licence pin integrity. Run after model or preprocessing changes and before releases. |
+| **Never a CI gate** | OCR recall, cluster purity, search relevance, and other model-quality judgements | Dogfood evidence, not product law. Findings belong to the D2 ritual in [`docs/photos/dogfood.md`](docs/photos/dogfood.md), not a pass/fail assertion. |
+
+The weekly artifact has its own **eight-day freshness window** in the health report. An absent artifact renders grey/missing, never green; an artifact older than eight days renders stale. Scheduled failure or cancellation opens/updates the lane's tracking issue under the same response terms as the nightly SLA.
+
+### Layer 4 — cost discipline
+
+Per-app journey budgets are tighten-only and sit beside the flows they own, so an overrun has an addressable app owner. Pairing/import/seeding is paid once per platform through the shared profile. Exclusive-state flows run first and restore the deterministic seed for the remaining apps. PR-time path filtering runs an app's journey only when its app surface changes. A single mobile job remains the default until the global wall-clock budget demonstrates that sharding is warranted.
+
+### Layer 5 — honest floors per app
+
+A graduating app leaves the blended coverage floor and receives its own ratcheted scope. Photos is the first: `packages/blueprints/apps/photos/**` has a measured floor, while the remaining `_shared` and seven non-graduated app trees retain a separate blended scope. The blend shrinks as later graduation issues land; a well-tested app cannot subsidize another app forever. Any down-only reseed caused by splitting a denominator is an explicit approved deviation tied to the graduation issue.
 
 Property-style checks follow the normal `*.test.ts` convention and say `property` in the suite name. `.spec.ts` is Playwright-only.
 
@@ -155,36 +291,42 @@ Timeouts come in two tiers. Node projects — the `node:sqlite` ones, which boot
 
 The deeply gated engine is vault, client replica, gateway, app-engine, automation, backup, blueprints (including its co-located app sources), design (tokens + the kit runtime), agent-runtime, plus pure libraries tunnel, protocol, and cli. Renderer screens and mobile UI are covered by extracted logic plus journeys, not by a whole-surface line percentage. `packages/client/src/replica/**` is gated independently from `packages/client/src/react/**` for that reason.
 
-Floors live in [`tests/coverage-floors.json`](tests/coverage-floors.json) and are consumed directly by the root Vitest config. Floors are a conservative integer margin below the latest measured `bun run coverage` run (2026-07-29):
+Floors live in [`tests/coverage-floors.json`](tests/coverage-floors.json) and are consumed directly by the root Vitest config — that file, not this table, is the enforced contract. Floors are a conservative integer margin below the measured `bun run coverage` run that seeded them; most were seeded by the 2026-08-08 run (1,065 files / 11,719 tests **as of that run** — the suite has grown since, so treat the counts as the measurement's provenance, not a current census). A row whose floor was re-seeded by a later issue carries that issue's measurement instead, and says so.
 
 | Scope | Measured lines / branches | Floor lines / branches |
 | --- | --- | --- |
 | repo-wide (`lines`) | 63.05 / — | **62** / — |
-| `packages/vault/src/**` | 88.57 / 75.24 | **88** / **74** |
+| `packages/vault/src/**` | 87.7 / 73.9 (#638) | **87** / **73** |
 | `packages/backup/src/**` | 90.03 / 77.63 | **90** / **74** |
+| `packages/core/src/blob/**` | — / — | **98** / **96** |
 | `packages/blueprints/src/**` | 90.68 / 78.27 | **90** / **75** |
-| `packages/blueprints/apps/**` | 17.81 / 12.34 | **17** / **12** |
-| `packages/design/kit/**` | 49.56 / 37.27 | **49** / **37** |
-| `packages/design/src/**` | 99.03 / 71.42 | **98** / **70** |
-| `packages/app-engine/src/**` | 85.45 / 74.44 | **84** / **73** |
-| `packages/gateway/src/**` | 79.98 / 66.37 | **80** / **65** |
-| `packages/time-engine/src/**` | 84.5 / 67.0 | **82** / **65** |
+| `packages/blueprints/apps/photos/**` | 46.82 / 42.81 | **44** / **40** |
+| `_shared` + non-graduated blueprint apps | 22.53 / 16.92 | **20** / **14** |
+| `packages/model-runtime/src/**` | 68.01 / 51.44 | **66** / **49** |
+| `packages/design/src/**` | 95.1 / — (#709) | **94** / **70** |
+| `packages/server/src/engine/**` | 85.45 / 74.44 | **84** / **73** |
+| former gateway dirs under `packages/server/src/` | 79.9 / 66.37 (#638) | **79** / **65** |
+| `packages/core/src/time/**` | 84.5 / 67.0 | **82** / **65** |
+| `packages/client/src/*.{ts,tsx}` | — / — | **78** / **65** |
 | `packages/client/src/replica/**` | 76.82 / 63.37 | **75** / **62** |
 | `packages/client/src/react/**` | 67.58 / 56.31 | **65** / **54** |
-| `packages/automation/src/**` | 84.36 / 77.52 | **82** / **75** |
+| `packages/server/src/automation/**` | 84.36 / 77.52 | **82** / **75** |
 | `packages/tunnel/src/**` | 72.06 / 52.24 | **70** / **51** |
-| `packages/agent-runtime/src/**` | 86.4 / 76.29 | **84** / **75** |
+| `packages/server/src/acp/**` | 86.4 / 76.29 | **84** / **75** |
 | `packages/cli/src/**` | 84.50 / 82.85 | **83** / **81** |
-| `packages/protocol/src/**` | 100.00 / 98.59 | **98** / **96** |
+| `packages/core/src/protocol/**` | 100.00 / 98.59 | **98** / **96** |
+| `apps/desktop/src/main/*-core.ts` | — / — | **96** / **89** |
 | `apps/oauth-worker/src/**` | 90.65 / 84.23 | **88** / **82** |
 
-The #630 denominator expansion is an approved measurement deviation: the old 71% aggregate excluded 11,639 executable lines under `packages/blueprints/apps` and `packages/design/kit`. Their initial floors record the first honest baseline; real handler contracts and platform journeys own correctness while the line/branch floors ratchet upward from here.
+Three rows read `—` rather than a number because the measurement that seeded them is not recorded in `tests/coverage-floors.json`; the floor is still enforced, and the next `bun run coverage` that touches those scopes is what fills the column in. `packages/vault` and the former-gateway scopes under `packages/server/src` carry the [#638](https://github.com/srikanth235/centraid/issues/638) re-seed (the #630 vault expansion diluted the older 88/80 seeds) and `packages/design/src` the [#709](https://github.com/srikanth235/centraid/issues/709) re-seed measured on CI verify run 30901194404; those provenance notes live in the JSON's `approvedDeviation`.
+
+The #630 denominator expansion is an approved measurement deviation: the old 71% aggregate excluded 11,639 executable lines under `packages/blueprints/apps` and `packages/design/kit`. Issue #725 graduates Photos to its own scope; the remaining blend covers `_shared` and the seven apps without graduation tables yet. The split is measured on the complete 2026-08-08 run, with the down-only change from the old 17/12 blend documented in `tests/coverage-floors.json`. Real handler contracts and platform journeys own correctness while the line/branch floors ratchet upward from here. The `packages/model-runtime` scope covers recognition model/build sources; its live model lane is intentionally separate from PR coverage.
 
 `bun run test` prints the active floors after package tests so the local loop never hides the CI contract; `bun run coverage` measures and enforces them. Floors move only upward (`bun run test:ratchet`).
 
-### agent-runtime coverage strategy
+### ACP coverage strategy
 
-`packages/agent-runtime` keeps a **high branch floor (~85%)**. The line floor sat at the 27%-era seed long after measured coverage cleared it; the 2026-07-31 audit (#656) found sustained 86.4% lines, so the floor now follows the standard ratchet policy (two points under sustained level ⇒ **84**) — the "dedicated coverage campaign" the old note demanded had already happened.
+`packages/server/src/acp` keeps a **high branch floor (~85%)**. The line floor sat at the 27%-era seed long after measured coverage cleared it; the 2026-07-31 audit (#656) found sustained 86.4% lines, so the floor now follows the standard ratchet policy (two points under sustained level ⇒ **84**) — the "dedicated coverage campaign" the old note demanded had already happened.
 
 Do **not** lower any engine floor in this table without an explicit issue + receipt. Prefer new pure modules (like `safe-stdin-write`) with unit tests over expanding spawn-heavy turn drivers for coverage alone.
 
@@ -193,13 +335,14 @@ Do **not** lower any engine floor in this table without an explicit issue + rece
 These suites encode product law and are cataloged by name. The matrix validator also records their current minimum test count so a contract cannot silently shrink in CI.
 
 1. Vault consent gateway and journalled writes — `packages/vault/src/gateway/gateway.contract.test.ts`
-2. Backup/restore round-trip and fencing — `packages/gateway/src/backup/backup-service.contract.test.ts`
+2. Backup/restore round-trip and fencing — `packages/server/src/backup/backup-service.contract.test.ts`
 3. Blob custody / CAS state machine — `packages/vault/src/blob/custody-proven.contract.test.ts`
 4. Replica convergence, intent identity, and multi-writer admission — `packages/client/src/replica/intents.contract.test.ts` and `packages/client/src/replica/multi-writer.contract.test.ts`
-5. Handler validation and worker isolation — `packages/app-engine/src/handlers/handler-runner.contract.test.ts`
-6. Control/app/device session boundaries — `packages/gateway/src/serve/web-app-sessions.contract.test.ts`
-7. Scheduler no-backfill semantics — `packages/automation/src/fire/scheduler-ledger.contract.test.ts`
-8. Conversation digest → archive → custody-gated prune — `packages/app-engine/src/conversation/archive/archive.contract.test.ts`
+5. Handler validation and worker isolation — `packages/server/src/engine/handlers/handler-runner.contract.test.ts`
+6. Control/device session boundaries — `packages/server/src/serve/web-control-sessions.contract.test.ts`
+7. Scheduler no-backfill semantics — `packages/server/src/automation/fire/scheduler-ledger.contract.test.ts`
+8. Conversation digest → archive → custody-gated prune — `packages/server/src/engine/conversation/archive/archive.contract.test.ts`
+9. Pending-write projection, seat parity, settlement, and exclusions — `scripts/lint-engine-conformance.test.mjs`, `packages/blueprints/apps/_shared/pending-overlay.test.ts`, and `packages/client/src/replica/intents.contract.test.ts`
 
 Generated-state properties cover blob custody and replica intent idempotency. The replica admission contract owns the multi-tab/same-id writer race.
 
@@ -212,18 +355,19 @@ Generated-state properties cover blob custody and replica intent idempotency. Th
 - `seededRandom()` for deterministic draws;
 - `bootstrappedVault()`, plus bootstrapped `createTestVault()` and listener-free `buildTestGateway()`;
 - node and jsdom+JSX+CSS-module Vitest presets;
+- the recording automation-handler rails shared by recognition and published connector/enricher source suites;
 - deterministic parties, photos, conversations, turns, and blob custody volume fixtures;
 - perf/scale JSON result emission.
 
 Do not add another local helper when the shared package already owns the seam — for `mkdtemp`, fake timers, and `Math.random` this is enforced by lint, not left to review (see [Test-kit seams](#test-kit-seams-656-layer-4)).
 
-Deterministic automation fires need no mock: their handlers run in-process against the parent-side `ctx.vault` / `ctx.fetch` / `ctx.state` rails, and only `ctx.agent` reaches a provider. In tests that provider turn is faked through the ACP fake-agent fixture (`packages/agent-runtime/src/backends/acp/fake-acp-agent.mjs`), the same seam chat turns use — there is no automation-specific mock LLM (the `@centraid/mock-llm` package was removed with the `ctx.tool` rail).
+Deterministic automation fires need no mock: their handlers run in-process against the parent-side `ctx.vault` / `ctx.fetch` / `ctx.state` rails, and only `ctx.delegate` reaches a provider. In tests that provider turn is faked through the ACP fake-harness fixture (`packages/server/src/acp/backends/acp/fake-acp-harness.mjs`), the same seam conversation turns use — there is no automation-specific mock LLM (the `@centraid/mock-llm` package was removed with the `ctx.tool` rail).
 
 ## Lane schedule and commands
 
 | Command / workflow | Contents |
 | --- | --- |
-| `bun run check:pr` | **Before every push:** format + oxlint + turbo lint + typecheck + lint:types + knip + lint:css + test:matrix + **test:ratchet** + **test:ratchet:unit** + **test:affected**. Superset of CI `static` (which omits `test:affected`; full vitest is on `verify`). Vitest alone is not a substitute. |
+| `bun run check:pr` | **Before every push:** `bun install --frozen-lockfile`, then `check:push` — the ~40-gate deterministic chain driven by [`scripts/ci/run-gates.mjs`](scripts/ci/run-gates.mjs), whose argument list in `package.json` is the authoritative enumeration — plus `typecheck`, `lint:types`, `lint:workflow-pins`, and `check:diff-coverage`. Do not restate the gate list here; read the script's arguments. Vitest alone is not a substitute. |
 | `bun run check:full` | `check:pr` plus affected dependents, unified coverage, affected mutation/perf, and desktop/web e2e. Required before requesting merge when shared infrastructure changed. |
 | `bun run test` | package unit + integration + contract tests; prints floors |
 | `bun run test:affected` | vitest for packages changed since `origin/main` (`turbo --filter='[origin/main]'` — changed packages only; dependents stay on full CI `verify`) |
@@ -231,7 +375,7 @@ Deterministic automation fires need no mock: their handlers run in-process again
 | `bun run test:ratchet` | coverage floors + `minimumTests` + mutation floors up-only, and perf budgets tighten-only, vs `origin/main` |
 | `bun run test:ratchet:unit` | Unit tests for the ratchet / diff-coverage pure functions (`scripts/test-report/vitest.config.ts`) |
 | `bun run test:diff-coverage` | changed instrumentable lines vs merge base must be ≥ **80%** covered (`coverage-final.json`); CI `verify` after `coverage` |
-| `bun run test:mutation` | StrykerJS on all eight property-defended seeds (nightly); writes `artifacts/mutation/scores.json` |
+| `bun run test:mutation` | StrykerJS on all sixteen property-defended seeds (nightly); writes `artifacts/mutation/scores.json` |
 | `bun run test:mutation:pr` | Per-PR: Stryker on **affected** seeds only + enforce mutation floors |
 | `bun run test:perf:pr` | Per-PR: gateway low-end budget gate (also verify CI step) |
 | `bun run coverage` | unified per-PR suite, v8 report, floor enforcement, Vitest JSON (`ci.yml` **verify** job) |
@@ -239,8 +383,10 @@ Deterministic automation fires need no mock: their handlers run in-process again
 | `bun run test:perf` | hot-path budget tests; nightly only |
 | `bun run test:scale` | deterministic volume tests; nightly only |
 | `bun run test:report` | build `dist/test-report/index.html` (+ `summary.json` / `summary.md`) from available evidence |
-| `.github/workflows/ci.yml` | parallel **static** + **verify**, required **check** aggregator (ruleset-required); **publish-report** on main only (Pages); Bun/Turbo/Cargo caches |
-| `.github/workflows/e2e.yml` | desktop, web, mobile (parallel iOS suites + Android functional journeys), pairing, perf, scale, **mutation**, full report → **publish-nightly-report** on main only; red scheduled nightly → auto-issue |
+| `.github/workflows/ci.yml` | parallel **static** + **gates** + **verify**, required **check** aggregator (ruleset-required); **publish-report** on main only (Pages); Bun/Turbo/Cargo caches |
+| `.github/workflows/e2e.yml` | desktop, web, mobile (iOS + Android home-loads), pairing, perf, scale, **mutation**, full report → **publish-nightly-report** on main only; red scheduled nightly → auto-issue |
+
+A gate that runs only in `check:push` is a gate nobody can be required to pass: it is skippable by pushing without it, and a broken `main` cannot be attributed. CI's `gates` job exists to close that hole — it carries the deterministic design/governance gates (reachability, the design-token/mobile-design/logical-insets/hairline/aria-label/container-opacity/type-floor/motion-rule linters, `lint:design-md`, engine-conformance, law-registry, quality-knobs, schema-export, `check:ui-receipt`, `test:quarantine`) and feeds the required `check` aggregator; `test:qualities` rides `verify` because it needs `bun run build` first. **`design:gallery`** now has its own path-gated CI job (`design-gallery` in `ci.yml`) that installs the pinned Playwright browser; since [#799](https://github.com/srikanth235/centraid/issues/799) it builds `apps/web` and photographs the shell’s own `#ui-preview` gallery with the product’s self-hosted faces, and the baselines are Linux-captured, so whether darwin `check:push` agrees with them is the open question the job’s comment records (#781). **`check:mobile-native-state`** is deliberately absent from `gates`: CI's `mobile-smoke` runs the identical `apps/mobile ci:native-state` command on a strictly wider path filter (root dependency drift triggers it where the local check's `apps/mobile/**` filter would not — #587 E22), so the delegation is complete, not a hole. `check:pr` remains a superset of CI in one further respect: it runs `test:affected`, where CI runs the full vitest suite on `verify` instead.
 
 ### Test-health report (main + nightly)
 
@@ -273,7 +419,7 @@ A green mobile unit lane proves correctness of the code paths it executes; it do
 
 Dependabot continues to propose production major-version updates. Patch and minor updates stay grouped for noise control; each major arrives in its own PR so the test suite can identify precisely which upgrade works and which one breaks a compatibility contract. A failing gate is evidence about that proposed upgrade, not a policy that majors are forbidden.
 
-The same job verifies the committed iOS Pod lock against resolved Expo and React Native, including `React-Core`, `React-Core-prebuilt`, `ReactNativeDependencies`, and Hermes; rejects machine/worktree-shaped native paths; and compares both platforms with `apps/mobile/native-fingerprints.json`. A native dependency, SDK, config-plugin, or generated-project change therefore requires an explicit fingerprint rebaseline after reviewing the native diff. The fingerprint hashes the Iroh tag and separate framework/Swift checksums in `CentraidTunnel.podspec`, not its git-ignored reconstructed framework and Swift binding; running CocoaPods must not change the same checkout's native input identity. It likewise hashes the app's maps configuration and the `react-native-maps` package, but not the package's `RNMapsDefines.h` marker that CocoaPods rewrites from those inputs.
+The same job verifies the committed iOS Pod lock against resolved Expo and React Native, including `React-Core`, `React-Core-prebuilt`, `ReactNativeDependencies`, and Hermes; rejects machine/worktree-shaped native paths; and compares both platforms with `apps/mobile/native-fingerprints.json`. A native dependency, SDK, config-plugin, or generated-project change therefore requires an explicit fingerprint rebaseline after reviewing the native diff. The fingerprint hashes the Iroh tag and separate framework/Swift checksums in `CentraidTunnel.podspec`, not its git-ignored reconstructed framework and Swift binding; running CocoaPods must not change the same checkout's native input identity. The app bundles no maps SDK, so no map-package path is excluded; the native map stack arrives with its first real imports under [#816](https://github.com/srikanth235/centraid/issues/816) and will need its own fingerprint rebaseline then.
 
 The nightly iOS lane runs on `macos-26` and selects Xcode ≥26.4 before the build. Expo SDK 57's `expo-modules-jsi` declares `swift-tools-version: 6.2` and documents Xcode 26.4+ (Swift 6.3); `macos-15`'s default Xcode 16.4 satisfies React Native's 16.1 floor but fails the JSI xcframework step with exit 65 and an empty "Could not resolve package dependencies" footer (run 30417451436). `apps/mobile/scripts/check-xcode-minimum.mjs` takes the max of React Native's helper minimum and that ExpoModulesJSI floor so a future image roll that drops below 26.4 fails as an `infra-mismatch` before the cold build.
 
@@ -319,7 +465,7 @@ The convention above is now mechanically enforced where it can be: as of #573 th
 
 - **It is spliced, not extended.** The preset delivers every rule through a single `overrides` entry, and an extended preset's overrides outrank the consumer's — so `extends: [vitest]` would leave no way to scope it. Its override is therefore spread into `overrides` in `oxlint.config.ts` verbatim (same rules, same `**/*.{test,spec}.*` glob); only the ordering is ours. This is what makes the two scoping decisions below expressible at all. Partial adoption is otherwise impossible: you cannot turn one of its rules off from the top-level `rules` block the way the core/react opinions are pinned.
 - **Playwright e2e is out of scope.** The preset's glob also matches `apps/*/tests/e2e/**.spec.ts`, which are Playwright, not vitest. Left in scope, `prefer-importing-vitest-globals` autofixes a `from 'vitest'` import on top of the `@playwright/test` one and the files stop parsing. A later override turns the `vitest/*` rules off there. This is about which runner owns the file, not about opting out of a rule.
-- **`prefer-to-be-truthy` / `prefer-to-be-falsy` are off.** They are the only two rules in the preset that contradict the convention above — `expect(x).toBe(true)` asserts `x` is exactly `true`, `toBeTruthy()` also passes for `1`, `'x'`, `[]`, `{}`. Autofixing them over this suite rewrote 1,117 `toBe(true)` and 720 `toBe(false)` into strictly weaker assertions, so they stay off and `toBe(true)` / `toBe(false)` remain the house style.
+- **`prefer-to-be-truthy` / `prefer-to-be-falsy` are off.** They are the only two rules in the preset that contradict the convention above — `expect(x).toBe(true)` asserts `x` is exactly `true`, `toBeTruthy()` also passes for `1`, `'x'`, `[]`, `{}`. Autofixing them over this suite rewrote 1,117 `toBe(true)` and 720 `toBe(false)` into strictly weaker assertions, so they stay off and `toBe(true)` / `toBe(false)` remain the house style. What the lint cannot do, the count gate does: the standing total of `toBeTruthy` / `toBeFalsy` sites is a down-only budget under the [assertion-hygiene ratchet](#assertion-hygiene-ratchet-781), so the convention is enforced by direction of travel rather than by an autofix that would have weakened 1,837 assertions to buy it.
 - **`prefer-strict-equal` rewrites were hand-reviewed.** The autofix converted 2,436 `toEqual` call sites to `toStrictEqual`, which additionally compares prototypes, `undefined`-valued keys, and array sparseness. Every test the rewrite broke was fixed by tightening the assertion, never by reverting the matcher.
 - **Null-prototype rows.** `node:sqlite` returns rows as null-prototype objects, so `expect(stmt.get()).toStrictEqual({ … })` fails against an object literal even when every column matches. The house fix is to spread the actual — `expect({ ...stmt.get() }).toStrictEqual({ … })` — which compares the column data (the contract) without asserting the driver's choice of prototype, and keeps strictness over keys and values. Do not reach for `toEqual` here.
 - **`prefer-called-with` autofixes are unsound.** It rewrites `expect(fn).toHaveBeenCalled()` to `expect(fn).toHaveBeenCalledWith()`, which asserts the mock was called with _zero_ arguments. Comply by naming the real arguments, which is what the rule is actually asking for — and what the convention above wants anyway.
@@ -334,26 +480,26 @@ The convention above is now mechanically enforced where it can be: as of #573 th
 
 ### Diff coverage (#532)
 
-After `bun run coverage`, CI `verify` runs `bun run test:diff-coverage`. It intersects `git diff origin/main` added lines (instrumentable `packages/*` / `apps/*` sources plus the co-located blueprint app/kit runtimes) with Istanbul/v8 `coverage/coverage-final.json`. Threshold is **80%** of changed instrumentable lines. Failures name uncovered hunks. Waive with a non-empty `approvedDeviation` in `tests/diff-coverage-deviation.json` (constitutional exception — temporary).
+After `bun run coverage`, CI `verify` runs `bun run test:diff-coverage`. It intersects `git diff origin/main` added lines (instrumentable `packages/*` / `apps/*` / `tools/*` sources plus the co-located blueprint app/kit runtimes) with Istanbul/v8 `coverage/coverage-final.json`. Threshold is **80%** of changed instrumentable lines. Failures name uncovered hunks. Waive with a non-empty `approvedDeviation` in `tests/diff-coverage-deviation.json` (constitutional exception — temporary).
 
 ### Mutation testing (#532)
 
-Nightly StrykerJS (`@stryker-mutator/vitest-runner`) on property-defended core packages:
+Nightly StrykerJS (`@stryker-mutator/vitest-runner`) on 16 property-defended core packages, including the recognition handlers' tokenizer/CTC/NMS pure-math seed. The canonical seed list is [`scripts/mutation/seeds.mjs`](scripts/mutation/seeds.mjs); examples of its engine scopes include:
 
 - `packages/vault` (custody)
 - `packages/client/src/replica` (intents + payload-hash)
-- `packages/automation` (scheduler ledger)
+- `packages/server/src/automation` (scheduler ledger)
 - `packages/backup` (AES-GCM seal + WAL address keys)
-- `packages/blob-format` (CBSF directory codec)
-- `packages/protocol` (handshake judge)
+- `packages/core/src/blob` (CBSF directory codec)
+- `packages/core/src/protocol` (handshake judge)
 - `packages/tunnel` (wire frame / pair QR / sanitize)
-- `packages/app-engine` (pricing cost formula)
+- `packages/server/src/engine` (pricing cost formula)
 
-Package-local Stryker configs (`stryker.config.mjs` + `vitest.mutation.config.ts`) mutate the property-defended modules; root pointers live under `tests/mutation/`. `bun run test:mutation` writes `artifacts/mutation/scores.json` for the test-health report. Floors live in `tests/mutation-floors.json` and ratchet up-only (measured 2026-07-23/24 — see file comment).
+Package-local Stryker configs (`stryker.config.mjs` + `vitest.mutation.config.ts`) mutate the property-defended modules. [`scripts/mutation/seeds.mjs`](scripts/mutation/seeds.mjs) is canonical for where each seed's config lives: the runner resolves `seed.cwd` + `seed.config` and spawns Stryker there. The eight root pointers under `tests/mutation/` predate that seed list, cover only half the sixteen seeds, and are read by nothing — do not add a ninth expecting it to run. `bun run test:mutation` writes `artifacts/mutation/scores.json` for the test-health report. Floors live in `tests/mutation-floors.json` and ratchet up-only (measured 2026-07-23/24 — see file comment).
 
-**Per-PR mutation** (`bun run test:mutation:pr` / CI job `mutation-pr`): runs Stryker only for seeds whose `watch` paths intersect `git diff origin/main...HEAD` (or all seeds when mutation infra / floors change), then **enforces** floors on measured packages. Unrelated PRs skip Stryker in ~1s. Nightly still runs the full eight-package lane.
+**Per-PR mutation** (`bun run test:mutation:pr` / CI job `mutation-pr`): runs Stryker only for seeds whose `watch` paths intersect `git diff origin/main...HEAD` (or all seeds when mutation infra / floors change), then **enforces** floors on measured packages. Unrelated PRs skip Stryker in ~1s. Nightly runs the full 16-seed lane.
 
-**Per-PR perf** (`bun run test:perf:pr` / verify step): gateway low-end budget gate (`packages/gateway` `perf:low-end`, fsync-required on Linux). Perf budget _numbers_ also tighten-only via `test:ratchet`. Full `test:perf` / Playwright waterfall remains nightly.
+**Per-PR perf** (`bun run test:perf:pr` / verify step): gateway low-end budget gate (`packages/server` `perf:low-end`, fsync-required on Linux). Perf budget _numbers_ also tighten-only via `test:ratchet`. Full `test:perf` / Playwright waterfall remains nightly.
 
 ### Property contracts (fast-check, #532)
 
@@ -363,9 +509,10 @@ Package-local Stryker configs (`stryker.config.mjs` + `vitest.mutation.config.ts
 | --- | --- | --: |
 | `blob-custody-properties` | vault custody-properties | **12** |
 | `vault-json-schema-properties` | vault json-schema-properties | **7** |
+| `commons-convergence-properties` | vault commons-convergence-properties | **3** |
 | `replica-intent-properties` | client intent-idempotency-properties | **10** |
 | `replica-payload-hash-properties` | client payload-hash-properties | **7** |
-| `scheduler-no-backfill` | automation scheduler-ledger.contract | **23** |
+| `scheduler-no-backfill` | automation scheduler-ledger.contract | **19** |
 | `backup-crypto-properties` | backup crypto-properties | **8** |
 | `backup-wal-address-properties` | backup wal-address-properties | **7** |
 | `blob-format-cbsf-properties` | blob-format cbsf-properties | **6** |
@@ -375,11 +522,10 @@ Package-local Stryker configs (`stryker.config.mjs` + `vitest.mutation.config.ts
 
 ### Coverage-scope reachability (#532)
 
-Governance directive `coverage-scope-reachability` fails when a `packages/*` or `apps/*` tree, or either co-located blueprint `apps` / `kit` runtime, has non-test executable source but no coverage floor, matrix owner, or intentional allowlist entry — so a new product surface cannot land invisible to every floor.
+Governance directive `coverage-scope-reachability` fails when a `packages/*`, `apps/*`, or `tools/*` source tree, or any executable tree co-located outside `src/` inside a package or app (discovered from the tree, not enumerated — #781), has non-test executable source but no coverage floor, matrix owner, or intentional allowlist entry — and a floored non-src tree must also appear in the root `coverageInclude`, so a floor that measures nothing is itself a violation — so a new product surface cannot land invisible to every floor.
 
 ## Deliberately deferred
 
-- A second React Native component-test toolchain.
 - Per-PR UI / scale / full Playwright perf waterfall (nightly only).
 - Chasing 100% or testing trivial getters.
 - Mutating whole large modules (WAL seal/replay, tunnel stream I/O, keyring I/O, React shells) — pure property-defended mutate sets only.

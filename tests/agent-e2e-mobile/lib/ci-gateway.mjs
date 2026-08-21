@@ -8,11 +8,11 @@ import { mkdir } from "node:fs/promises";
 import http from "node:http";
 import path from "node:path";
 
-import { makeDaemonDevicePlane } from "../../../packages/gateway/dist/cli/endpoint-host.js";
-import { daemonLayoutFor } from "../../../packages/gateway/dist/cli/paths.js";
-import { buildGateway } from "../../../packages/gateway/dist/serve/build-gateway.js";
-import { GatewayDatabase } from "../../../packages/gateway/dist/serve/gateway-db.js";
-import { kitlessHostIdentity } from "../../../packages/gateway/dist/serve/host-identity.js";
+import { makeDaemonDevicePlane } from "../../../packages/server/dist/cli/endpoint-host.js";
+import { daemonLayoutFor } from "../../../packages/server/dist/cli/paths.js";
+import { buildGateway } from "../../../packages/server/dist/serve/build-gateway.js";
+import { GatewayDatabase } from "../../../packages/server/dist/serve/gateway-db.js";
+import { kitlessHostIdentity } from "../../../packages/server/dist/serve/host-identity.js";
 import { KeyStore } from "../../../packages/vault/dist/index.js";
 
 const dataDir = path.resolve(process.argv[2] ?? "artifacts/mobile-ci-gateway");
@@ -45,6 +45,9 @@ const devicePlane = makeDaemonDevicePlane({
 
 const gateway = await buildGateway({
   paths: layout,
+  // The nightly journeys drive automations and connectors, which ship gated
+  // OFF by default (v0 early feedback) — this CI host opts both in.
+  experimental: { automations: true, connectors: true },
   gatewayDatabase: database,
   deviceAccess: devicePlane.deviceAccess,
   isHostCustody: devicePlane.isHostCustody,

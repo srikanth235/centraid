@@ -1,689 +1,700 @@
-/* Window chrome — the `.window` grid (sidebar column + main column), the
-   split titlebar (tlSide / tlMain), toolbar icon buttons w/ tooltip + ⌘-kbd
-   chip, and the sidebar item family. ShellFrame.tsx and Sidebar.tsx are
-   densely cross-combinated (e.g. collapsing the sidebar hides tlSide and
-   reveals the main-pane traffic-light spacer), so the whole family lives in
-   this ONE module — both components import it, keeping every combinator
-   inside a single scope. Screens never reach into these classes; they get
-   chrome affordances via the exported TbBtn component and ShellFrame slots. */
+/* Window chrome — the Binding Layer frame (issue #707).
+
+   One module for the whole chrome family, because the family is densely
+   cross-combinated and every combinator has to stay in one scope:
+
+     .window      the frame grid — stem column + main column
+     .stem        invariant 1: the `--w-stem` launcher band (bottom on compact)
+     .appBar      the per-app bar: title + meta (numeric) + nav
+     .main        content
+     .statusLine  invariant 5: the ONE persistent feedback line
+     .sheet*      the All-apps sheet (desktop dialog / compact bottom sheet)
+
+   EVERY positional property here is LOGICAL — `inset-inline`, `padding-inline`,
+   `border-inline-start`, `margin-inline-start`, `text-align: start`. The stem's
+   promise is "always the same distance from the READING edge", not "from the
+   left", so the whole frame mirrors under RTL with no second rule. A physical
+   direction property in this file is a bug.
+
+   Motion is `--dur-1`/`--dur-2` with `--ease`/`--ease-entry` and nothing else:
+   no scale-on-hover, no bounce. `prefers-reduced-motion` is honoured in ONE
+   global rule from the token layer, so no component here declares its own.
+
+   Screens never reach into these classes; they get chrome affordances via the
+   exported `TbBtn` component and `ShellFrame`'s slots. */
 
 .window {
   position: relative;
   flex: 1;
-  /* Without min-height: 0 the flex parent (#root) lets the window grow to
-     its content's min-content height when the main column's content is tall
-     — defeating the inner main-scroll overflow. */
+  /* Without min-height: 0 the flex parent (#root) lets the window grow to its
+     content's min-content height, defeating the inner scroll regions. */
   min-height: 0;
   background: var(--bg);
-  overflow: visible;
   display: grid;
-  grid-template-columns: var(--sidebar-w, 260px) 1fr;
-  /* Codex-style chrome: no dedicated 44px top row. Each pane absorbs its
-     own chrome into its first flex child (tlSide is the first child of
-     .sidebar, tlMain is the first child of .main). */
+  grid-template-columns: var(--w-stem) minmax(0, 1fr);
   grid-template-rows: minmax(0, 1fr);
-  grid-template-areas: "side main";
-  transition: grid-template-columns 240ms cubic-bezier(0.2, 0.7, 0.3, 1);
+  grid-template-areas: "stem main";
 }
-.window[data-sidebar="closed"] {
-  --sidebar-w: 0px;
+/* Hidden stem: the column collapses to nothing and the main column takes the
+   whole frame. `visibility: hidden` rather than `display: none` on the band
+   itself keeps its subtree measurable, so the vault switcher's anchor survives
+   a collapse and ⌘⇧G still lands somewhere sane. */
+.window[data-stem="hidden"]:not([data-compact="true"]) {
+  grid-template-columns: 0 minmax(0, 1fr);
 }
-
-/* Title-bar halves. Each lives INSIDE its pane (sidebar / main) as that
-   pane's first row. The whole strip is draggable; interactive bits opt
-   back out. */
-.tlSide,
-.tlMain {
-  -webkit-app-region: drag;
-  user-select: none;
-  overflow: visible;
-}
-.tlSide {
-  flex: 0 0 44px;
-  display: flex;
-  align-items: center;
-  padding: 0 14px;
-  gap: 10px;
-  position: relative;
-  z-index: 3;
-}
-.tlMain {
-  flex: 0 0 44px;
-  display: flex;
-  align-items: center;
-  padding: 0 14px;
-  gap: 4px;
-  min-width: 0;
-  position: relative;
-  z-index: 4;
-  border-bottom: 0.5px solid var(--line-strong);
-}
-/* Grid layout — used by the Builder so the chrome row's two cells line up
-   with the columns of the builder body below it. Col 1 spans the chat-pane
-   width (matches its minmax), col 2 spans the right-pane (1fr). The cells
-   own their own horizontal padding instead of tlMain, so col 1's right
-   edge meets col 2's left edge with no padding gutter. */
-.tlMain[data-layout="grid"] {
-  display: grid;
-  grid-template-columns: minmax(360px, 420px) 1fr;
-  padding: 0;
-  gap: 0;
-  /* Same easing as the builder body so the chrome cells animate in
-     lockstep with the panes below when the chat-pane collapses. */
-  transition: grid-template-columns 240ms cubic-bezier(0.2, 0.7, 0.3, 1);
-}
-.tlNav {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  padding: 0 14px;
-  min-width: 0;
-}
-/* Chat-pane toggle pinned to the right edge of the nav cell — sits at
-   the chat-pane / canvas boundary, mirroring the affordance pattern of
-   the workspace-sidebar toggle (which lives at the left edge of the
-   sidebar). One toggle per panel, each at its panel's edge. */
-.tlNav .chatToggleWrap {
-  margin-left: auto;
-}
-.tlContext {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding-right: 14px;
-  min-width: 0;
-}
-
-/* Reserve space for the real macOS traffic lights (Electron paints them
-   at x=16, y=16 because titleBarStyle is "hiddenInset"). The spacer is
-   wider than the native control cluster so the first toolbar icon has the
-   same calm breathing room as Codex's chrome. */
-.tlSide .spacer {
-  width: 64px;
-  height: 1px;
-  flex: 0 0 auto;
-  display: inline-block;
-}
-/* When the sidebar collapses, keep tlSide taking its 44px slot — using
-   `visibility: hidden` instead of `display: none` so the sidebar inner
-   ("New app", "Search", etc.) doesn't slide up into the tlSide slot
-   during the 240ms width animation. The parent sidebar is 0 wide +
-   overflow:hidden once collapsed, so tlSide isn't visible regardless. */
-.window[data-sidebar="closed"] .tlSide {
+.window[data-stem="hidden"] .stem {
   visibility: hidden;
-}
-.window[data-sidebar="closed"] .tlMain .spacer {
-  display: inline-block;
-}
-.tlMain .spacer {
-  display: none;
-  width: 64px;
-  height: 1px;
-  flex: 0 0 auto;
-}
-.tlMain button,
-.tlSide button,
-.tlMain .tbBtnWrap,
-.tlSide .tbBtnWrap,
-/* App-name contenteditable inside the builder chrome must accept
-   clicks (otherwise the surrounding tlMain drag region eats them). */
-.tlMain [contenteditable] {
-  -webkit-app-region: no-drag;
+  overflow: hidden;
 }
 
-/* Toolbar icon button + tooltip + ⌘-kbd chip.
-   Buttons are 26×26 to match the design's chrome scale. With
-   align-items:center on the 44px titlebar and the macOS traffic-light
-   cluster also centring at y=22, icons and traffic-lights sit on the
-   same horizontal line. */
-.tbBtnWrap {
-  position: relative;
-  display: inline-flex;
+/* Compact: the same stem element becomes the bottom band, so the IA can never
+   drift between the two form factors — there is one component, one item model,
+   and one stylesheet. */
+.window[data-compact="true"] {
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-rows: minmax(0, 1fr) auto;
+  grid-template-areas:
+    "main"
+    "stem";
 }
-.tlSide .tbBtnWrap,
-.tlMain .tbBtnWrap {
-  transform: translateY(2px);
+
+/* ── Invariant 1 · the stem ─────────────────────────────────────────────── */
+
+.stem {
+  grid-area: stem;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  padding-block: var(--sp-3);
+  padding-inline: var(--sp-3);
+  /* The seam between the stem and the app. The stem is never themed by an
+     app, so this hairline is the only thing it declares about the surface
+     beside it. */
+  border-inline-end: 1px solid var(--line);
+  /* THE WALL, not the page — the frame and the app are different surfaces.
+     This is the principle the handoff already states on the phone, where the
+     band's Home capsule keeps the frame's own colour "never the app's mat"
+     (`bandCapsuleStyle`). The desktop stem is the same object: navigation
+     belongs to the frame, and it should not be painted in whatever surface
+     the app is working on.
+
+     `--bg-app` is the surface the frame FLOATS on, so using it here reads the
+     stem as the wall showing beside the page rather than as a tinted panel —
+     which is why this does not break invariant 3's "the shell owns no
+     colour": the wall is a rung of the one neutral ramp, not a hue.
+
+     It also keeps the paper metaphor intact in a way a page-relative tint
+     could not. The rule is that raised paper is darker than THE PAGE in
+     light; the stem is not the page, so `--bg-elev` inside it (`.stemNew`,
+     the active launcher row) sits BETWEEN the wall and the page and reads as
+     a sheet lifted off the wall — the same relationship the frame itself has
+     to the wall. Both themes hold that order: #F0EFED < #FDFDFC < #F5F4F2 in
+     light, #060606 < #0E0E0E < #171716 in dark.
+
+     Text on this rung is not a guess: contrast.test.ts already measures every
+     text role against `--bg-app` in both themes, because the ink ramp was
+     solved against #F0EFED rather than against the page. */
+  background: var(--bg-app);
 }
-.tbBtn {
-  width: 26px;
-  height: 26px;
-  border-radius: var(--r-md);
-  border: none;
-  background: transparent;
-  color: var(--text-soft);
-  cursor: pointer;
-  display: inline-flex;
+/* macOS draws the traffic lights at (16, 16) of the client area — see the
+   `data-window-controls` note in ShellFrame.tsx. 44px clears the 16px inset
+   plus the 20px buttons with the rhythm's own step left over. */
+.window[data-window-controls="inset"] .stem:not([data-compact="true"]) {
+  padding-block-start: 44px;
+}
+/* A phone expects the bottom bar to FLOAT (Photos v4, CHANGELOG G): inset by
+   the 12 rung, `--r-lg`, a hairline, and OPAQUE paper. No blur, no
+   translucency, no shadow — surfaces here are paper, not elevation, and a
+   translucent bar over a photograph would make label contrast, the active bar
+   and the focus ring depend on what the member photographed. Content ends
+   ABOVE it (the frame grid gives the band its own row), so nothing runs under
+   it and no scrim is needed to keep it readable. */
+.stem[data-compact="true"],
+.appBand {
+  flex-direction: row;
+  align-items: stretch;
+  padding-block: 0 var(--sp-2);
+  padding-inline: var(--sp-1);
+  /* The shorthand REPLACES the desktop stem's trailing hairline — a floating
+     band is bounded on four sides or on none. A control border, so it is the
+     control hairline. */
+  border: 1px solid var(--line-strong);
+  border-radius: var(--r-lg);
+  margin-inline: 12px;
+  margin-block-end: 12px;
+  /* RAISED PAPER, not the page. The band floats above the content, and a
+     floating surface painted in the page colour has to prove it is a surface
+     with its border alone — over a photograph that border is the only thing
+     separating a tab label from whatever was photographed behind it. `--bg-elev`
+     is the system's raised sheet (darker than the page in light, lighter in
+     dark), and it is opaque: no blur, no translucency, no shadow. */
+  background: var(--bg-elev);
+}
+
+.stemMark {
+  display: flex;
   align-items: center;
   justify-content: center;
-  transition:
-    background 140ms,
-    color 140ms,
-    opacity 140ms;
-}
-.tbBtn svg {
-  display: block;
-}
-.tbBtn:hover {
-  background: color-mix(in srgb, var(--text) 8%, transparent);
-  color: var(--text);
-}
-.tbBtn[disabled],
-.tbBtn[aria-disabled="true"] {
-  opacity: 0.35;
-  cursor: default;
-  pointer-events: none;
-}
-/* Active toggle state — e.g. the builder titlebar's History button when
-   the chat pane is showing version history. */
-.tbBtn[data-active="true"] {
-  background: color-mix(in srgb, var(--accent) 14%, transparent);
+  flex: none;
+  /* The mark is INK. The shell spends no hue. */
   color: var(--accent);
 }
-/* Popover anchor state — `data-open` is set while an anchored panel is
-   mounted so the button stays visually "pressed". */
-.tbBtn[data-open="true"] {
-  background: color-mix(in srgb, var(--text) 8%, transparent);
-  color: var(--text);
+/* The mark standing alone — before the scopes resolve, and in the tests. It
+   carries the head's own bottom margin only when there is no head around it. */
+.stem > .stemMark {
+  margin-block: var(--sp-2) var(--sp-4);
+  padding-inline: var(--sp-2);
+  justify-content: flex-start;
 }
-.tooltip {
-  position: absolute;
-  top: calc(100% + 6px);
-  left: 50%;
-  transform: translateX(-50%);
-  display: inline-flex;
+
+/* ── The head: which vault, on which gateway ─────────────────────────────────
+   A fact that is true on EVERY route, so it lives in the band that is present
+   on every route rather than in one screen's app bar. It is a control, not a
+   caption: the whole row opens the switcher. */
+.stemIdentity {
+  -webkit-app-region: no-drag;
+  flex: none;
+  display: flex;
   align-items: center;
-  gap: 6px;
-  padding: 4px 8px;
-  background: color-mix(in srgb, var(--bg-elev) 92%, transparent);
-  color: var(--text);
-  border: 0.5px solid var(--line);
+  gap: var(--sp-2);
+  inline-size: 100%;
+  min-block-size: var(--h-row);
+  margin-block-end: var(--sp-4);
+  padding-inline: var(--sp-2);
+  text-align: start;
+  background: transparent;
+  border: 0;
   border-radius: var(--r-md);
-  font-size: 11.5px;
-  font-weight: 500;
+  cursor: pointer;
+  color: var(--text-soft);
+  transition: background var(--dur-1) var(--ease);
+}
+.stemIdentity:hover,
+.stemIdentity[data-open="true"] {
+  background: var(--bg-hover);
+}
+.stemIdentity:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
+}
+/* The VAULT's mark, tinted in the vault's own hue at the shared chip share
+   (13% light / 20% dark, from the design package). The one place in the band
+   that carries identity — the launcher's chips carry the APPS'. */
+.stemAvatarChip {
+  flex: none;
+  /* 30px — the largest chip in the band, and larger than the 26px launcher
+     chips under it. The vault outranks every destination it contains, and at
+     24px the head read as one more row in the list. Kept in step with
+     `AVATAR_SIZE` in Stem.tsx, which derives the 26% corner from the same
+     number. */
+  inline-size: 30px;
+  block-size: 30px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--chip-radius, var(--r-md));
+  background: color-mix(
+    in oklab,
+    var(--chip-hue, var(--text-soft)) var(--chip-tint, 13%),
+    var(--bg)
+  );
+  color: var(--chip-hue, var(--text-soft));
+}
+
+.stemIdentityText {
+  flex: 1;
+  min-inline-size: 0;
+  display: flex;
+  flex-direction: column;
+}
+.stemVault,
+.stemGateway {
+  max-inline-size: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
   white-space: nowrap;
-  pointer-events: none;
-  opacity: 0;
-  transition: opacity 120ms 80ms;
-  z-index: 50;
-  box-shadow: var(--shadow-md);
 }
-.tbBtnWrap:hover .tooltip {
-  opacity: 1;
+.stemVault {
+  font: var(--t-small-strong);
+  color: var(--text);
 }
-/* Titlebar nav cluster sits flush against the traffic-lights / left edge,
-   so centering a tooltip on a button there overflows left and gets
-   clipped. Anchor those tooltips to the button's left edge instead so
-   they grow rightward into the wide-open titlebar space. Covers both
-   the grid layout (.tlNav) and the flat layout (direct children of
-   .tlMain — the Home titlebar uses the latter). */
-.tlNav .tbBtnWrap .tooltip,
-.tlMain > .tbBtnWrap .tooltip {
-  left: 0;
-  transform: none;
+.stemGateway {
+  font: var(--t-mono);
+  font-variant-numeric: var(--t-mono-numeric);
+  direction: var(--t-mono-direction);
+  unicode-bidi: var(--t-mono-bidi);
+  color: var(--text-faint);
 }
-.tooltip .kbd {
-  display: inline-block;
-  padding: 1px 5px;
-  margin-left: 2px;
-  background: color-mix(in srgb, var(--text) 10%, transparent);
-  border-radius: var(--r-sm);
-  font-family: var(--font-mono);
-  font-size: 10px;
+
+/* The Search control is ALWAYS rendered, on every host. An installed PWA
+   cannot claim ⌘K — the browser has it — so the control is the guarantee and
+   the hint is the extra. */
+/* The one ACTION in a band of places, so it leads and it is the only thing up
+   here wearing a fill. Raised paper rather than commit ink: starting a turn
+   writes nothing, and the filled-ink primary means "this commits" everywhere
+   else in the product — spending it here would make the loudest control in the
+   frame the one with the least consequence. Same height and radius as Search
+   directly below it, so the two read as one stack rather than two systems. */
+.stemNew {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  inline-size: 100%;
+  block-size: var(--h-control);
+  margin-block-end: var(--sp-2);
+  padding-inline: var(--sp-3);
+  background: var(--bg-elev);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--r-md);
+  color: var(--text);
+  cursor: pointer;
+  transition:
+    background var(--dur-1) var(--ease),
+    border-color var(--dur-1) var(--ease);
+}
+.stemNew:hover {
+  background: var(--bg-hover);
+  border-color: var(--line-sel);
+}
+.stemNew:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
+}
+.stemNewLabel {
+  font: var(--t-small-strong);
+}
+
+.stemSearch {
+  flex: none;
+  display: flex;
+  align-items: center;
+  /* The spacer element does the distribution, not `space-between` — see the
+     comment beside it in Stem.tsx. With `space-between` the label drifted to
+     the centre of the control on every host that hides the ⌘K hint. */
+  gap: var(--sp-2);
+  inline-size: 100%;
+  block-size: var(--h-control);
+  margin-block-end: var(--sp-4);
+  padding-inline: var(--sp-3);
+  background: transparent;
+  /* A control border, so it takes the CONTROL hairline (`--line-strong`), not
+     the separator one. `--line` is for seams between regions. */
+  border: 1px solid var(--line-strong);
+  border-radius: var(--r-md);
+  cursor: pointer;
+  transition: border-color var(--dur-1) var(--ease);
+}
+.stemSearch:hover {
+  border-color: var(--line-sel);
+}
+.stemSearch:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
+}
+/* The magnifier rides one ink rung BELOW its own label, the placeholder
+   relationship every search field in the product draws: the mark says what the
+   control is, the label says what it reaches, and the mark is the quieter of
+   the two. It brightens with the label on hover so the control lights as one
+   thing rather than in two pieces. */
+.stemSearch > svg {
+  flex: none;
+  color: var(--text-faint);
+  transition: color var(--dur-1) var(--ease);
+}
+.stemSearch:hover > svg {
   color: var(--text-soft);
 }
-
-/* Sidebar column */
-.sidebar {
-  grid-area: side;
-  overflow: hidden;
-  position: relative;
-  background: var(--bg-chrome);
-  backdrop-filter: var(--glass-sheen, none);
-  -webkit-backdrop-filter: var(--glass-sheen, none);
-  border-right: var(--line);
-  display: flex;
-  flex-direction: column;
-}
-.sidebarInner {
-  width: var(--sidebar-content-w, 260px);
-  display: flex;
-  flex-direction: column;
-  /* tlSide sits above us in the .sidebar flex column, so claim the
-     remaining space via flex: 1. The column itself never scrolls — its
-     middle zone does (see .sbScroll), which is what keeps the account row
-     pinned to the bottom edge. */
+.stemSearchSpacer {
   flex: 1;
-  min-height: 0;
-  padding: 6px 8px 8px;
-  overflow: hidden;
+  min-inline-size: 0;
 }
-.window[data-sidebar="closed"] .sidebar {
-  border-right: none;
+/* UI, like the launcher rows below it — this is a labelled control in a 240px
+   band, not a caption under a chip. */
+.stemSearchGlyph {
+  flex: none;
+  font: var(--t-small);
+  color: var(--text-soft);
+  transition: color var(--dur-1) var(--ease);
+}
+.stemSearch:hover .stemSearchGlyph {
+  color: var(--text);
+}
+.stemSearchKbd {
+  font: var(--t-mono);
+  font-variant-numeric: var(--t-mono-numeric);
+  color: var(--text-faint);
 }
 
-/* The sidebar's three zones (issue #667). Head and foot are fixed; the
-   middle scrolls, so Recents grows into whatever height the nav groups
-   didn't take and the account row never drifts off-screen. */
-.sbColumn {
+.launchList {
   display: flex;
   flex-direction: column;
-  height: 100%;
   min-height: 0;
+  overflow-y: auto;
+  /* The desktop stem scrolls instead of capping, so a member who pins ten
+     destinations keeps all ten. */
+  scrollbar-width: none;
+  /* Holds the seam off the last row once the list is long enough that the
+     foot's auto margin has collapsed to nothing. */
+  padding-block-end: var(--sp-3);
 }
-.sbScroll {
+.launchList::-webkit-scrollbar {
+  inline-size: 0;
+}
+.stem[data-compact="true"] .launchList {
+  flex-direction: row;
+  flex: 1;
+  align-items: center;
+  justify-content: space-between;
+  overflow: visible;
+  padding-block-end: 0;
+}
+
+/* The seam under Home. `--line` is the separator hairline — the same token the
+   foot and the ledger draw their seams with — and never `--line-strong`, which
+   is the CONTROL border: a rule between two regions is not the edge of a
+   control. It is inset from the band's padding by one rung so it sits under the
+   row's pill rather than running the full width of the column, which is what
+   made it read as the top of a new panel instead of a break in one list. */
+.launchSeam {
+  flex: none;
+  block-size: 1px;
+  margin-block: var(--sp-2);
+  margin-inline: var(--sp-3);
+  background: var(--line);
+}
+
+.launchItem {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--sp-1);
+  inline-size: 100%;
+  /* 44px floor, always: below it a tab stops being a tap target, which is why
+     the compact band is capped at five plus More rather than shrinking. */
+  min-block-size: var(--h-row);
+  padding-block: var(--sp-2) 9px;
+  background: transparent;
+  border: 0;
+  cursor: pointer;
+  transition: background var(--dur-1) var(--ease);
+}
+.stem[data-compact="true"] .launchItem {
+  flex: 0 1 auto;
+  min-inline-size: var(--h-row);
+  inline-size: auto;
+  padding-block: 7px 3px;
+  padding-inline: 6px;
+}
+.launchItem:hover {
+  background: var(--bg-hover);
+}
+.launchItem:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
+  border-radius: var(--r-md);
+}
+/* Desktop: a ROW — chip then label, reading order, one 44px target per line.
+   The stacked chip-over-caption form is the compact band's, and stays there. */
+.stem:not([data-compact="true"]) .launchItem {
+  flex-direction: row;
+  align-items: center;
+  justify-content: flex-start;
+  gap: var(--sp-3);
+  padding-block: var(--sp-1);
+  padding-inline: var(--sp-2);
+  border-radius: var(--r-md);
+  text-align: start;
+}
+.stem:not([data-compact="true"]) .launchItem[data-active="true"] {
+  background: var(--bg-elev);
+}
+/* With a ledger below it the launcher is fixed content, not the scroll region
+   — it is short, and the list under it is the part that grows. */
+.stem:not([data-compact="true"]):has(.stemLedger) .launchList {
+  flex: 0 0 auto;
+  overflow: visible;
+}
+
+/* NO GROUND AND NO HUE. A launcher chip is a bare glyph: every destination in
+   this band is a place in the frame, and invariant 3 reserves both the tinted
+   chip container and the eight identity hues for APPS. A tinted square under a
+   frame destination reads as an app that is not one, and — because the tint is
+   the hue at 13% — it also spends a hue the wheel needs to keep meaning
+   something. `--chip-radius` is still written per item by Stem.tsx so the
+   focus ring and any future ground land on the 26%-of-size corner.
+
+   The container is otherwise CONSTANT, selected or not, following the iOS
+   convention: only the glyph's rung moves. Selection is the label weight plus
+   the 2px bar. */
+.launchChip {
+  inline-size: 30px;
+  block-size: 30px;
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--chip-radius, var(--r-md));
+  background: transparent;
+  color: var(--text-faint);
+}
+/* The desktop stem's chip is one rung down from the band's (26 vs 30, the
+   brief's size table): it stands beside a full-size label rather than carrying
+   the tab by itself. */
+.stem:not([data-compact="true"]) .launchChip {
+  inline-size: 26px;
+  block-size: 26px;
+}
+.launchItem[data-active="true"] .launchChip {
+  color: var(--text);
+}
+.launchMoreChip {
+  inline-size: 30px;
+  block-size: 30px;
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+  color: var(--text-soft);
+}
+/* A navigation label is never tertiary text: `--text-soft` is its floor.
+
+   MICRO IS THE BAND'S REGISTER, NOT THE STEM'S. 11px is what a caption stacked
+   under a 30px chip in a 57px-wide tab can be; a desktop row has a whole 240px
+   band to spend and takes UI (13px), which is the register every other row in
+   the product reads at. Selection moves the WEIGHT only — 400 to 500 at one
+   size — so the row never changes height or reflows its neighbours. */
+.launchLabel {
+  font: var(--t-control);
+  font-weight: 400;
+  color: var(--text-soft);
+  max-inline-size: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  transition: color var(--dur-1) var(--ease);
+}
+.stem:not([data-compact="true"]) .launchLabel {
+  font: var(--t-small);
+}
+.launchItem[data-active="true"] .launchLabel {
+  font-weight: 600;
+  color: var(--text);
+}
+.stem:not([data-compact="true"]) .launchItem[data-active="true"] .launchLabel {
+  font: var(--t-small-strong);
+}
+.launchBar {
+  inline-size: 16px;
+  block-size: 2px;
+  border-radius: var(--r-pill);
+  margin-block-start: 1px;
+  background: transparent;
+}
+/* INK, not a hue — the destination is a place in the frame and the frame owns
+   no colour. The hue-carrying version of this bar belongs to an app mark. */
+.launchItem[data-active="true"] .launchBar {
+  background: var(--text);
+}
+/* On the row form the selection bar stands the other way up, against the
+   reading edge — the same 2px, rotated with the layout. It runs the height of
+   the chip beside it (22px) rather than a length of its own, and takes the
+   sub-pixel corner the design draws rather than a pill: a 2px pill is a
+   lozenge, and at this size the rounding is all there is to see. */
+.stem:not([data-compact="true"]) .launchBar {
+  position: absolute;
+  inset-inline-start: 0;
+  inset-block-start: 50%;
+  translate: 0 -50%;
+  inline-size: 2px;
+  block-size: 22px;
+  border-radius: var(--r-pill);
+  margin-block-start: 0;
+}
+
+/* A route's own list under the launcher (the assistant's conversations). It
+   takes the leftover height and scrolls, so the launcher above it never gets
+   pushed off; the hairline is the same seam the bar and the band draw. */
+.stemLedger {
   flex: 1 1 auto;
   min-height: 0;
   overflow-y: auto;
-  /* Hide the scrollbar until the pointer is over the column: a permanent
-     track on a 260px rail reads as clutter next to 13px rows. */
-  scrollbar-width: thin;
-  scrollbar-color: transparent transparent;
-  transition: scrollbar-color 160ms;
+  scrollbar-width: none;
+  margin-block-start: var(--sp-3);
+  padding-block-start: var(--sp-2);
+  border-block-start: 1px solid var(--line);
 }
-.sbColumn:hover .sbScroll {
-  scrollbar-color: color-mix(in srgb, var(--text) 22%, transparent) transparent;
-}
-.sbScroll::-webkit-scrollbar {
-  width: 6px;
-}
-.sbScroll::-webkit-scrollbar-thumb {
-  border-radius: 999px;
-  background: transparent;
-}
-.sbColumn:hover .sbScroll::-webkit-scrollbar-thumb {
-  background: color-mix(in srgb, var(--text) 20%, transparent);
-}
-/* The leading group carries no section label, so it needs its own top
-   breathing room to sit off the identity head. */
-.sbGroup:first-child {
-  margin-top: 4px;
-}
-.sbFoot {
-  flex: 0 0 auto;
-  display: flex;
-  flex-direction: column;
-  /* Pad for the iOS home indicator when the drawer runs to the screen edge;
-     resolves to 0 everywhere else. */
-  padding-bottom: env(safe-area-inset-bottom, 0px);
+.stemLedger::-webkit-scrollbar {
+  inline-size: 0;
 }
 
-/* Gateway alarm — the ONLY thing the gateway shows in the sidebar, and only
-   when it is down. Danger-tinted so it reads as an alarm rather than a nav
-   row, and it is the way into the Gateway page while the daemon is out. */
-.sbAlarm {
-  display: flex;
-  align-items: center;
-  gap: 9px;
-  width: 100%;
-  margin-block: 4px;
-  padding: 7px 9px;
-  border: 0.5px solid color-mix(in srgb, var(--danger) 40%, transparent);
-  border-radius: 8px;
-  /* The wash stays at or under the 12% `--danger` is solved against, so the
-     rest and hover states both keep the label's measured ratio. */
-  background: color-mix(in srgb, var(--danger) 8%, transparent);
-  color: var(--danger);
-  font-size: 12.5px;
-  font-weight: 600;
-  text-align: left;
-  cursor: pointer;
-  transition: background 120ms;
-}
-.sbAlarm:hover {
-  background: color-mix(in srgb, var(--danger) 12%, transparent);
-}
-.sbAlarm[disabled] {
-  cursor: default;
-}
-
-/* Sidebar items */
-.sbItem {
-  display: flex;
-  align-items: center;
-  gap: 9px;
-  width: 100%;
-  padding: 6px 9px;
-  margin-block: 1.5px;
-  border: none;
-  background: transparent;
-  border-radius: var(--r-md);
-  color: var(--text-soft);
-  font-size: var(--t-small-size);
-  font-weight: 500;
-  cursor: pointer;
-  text-align: left;
-  transition:
-    background 100ms,
-    color 100ms;
-}
-.sbItem:hover {
-  background: color-mix(in srgb, var(--text) 7%, transparent);
-  color: var(--text);
-}
-.sbItem[aria-current="true"],
-.sbItem[data-active="true"] {
-  background: color-mix(in srgb, var(--accent) 14%, transparent);
-  color: var(--accent);
-}
-.sbItem[data-disabled="true"] {
-  opacity: 0.45;
-  cursor: default;
-  pointer-events: none;
-}
-.sbItem .sbLabel {
-  flex: 1 1 auto;
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.sbItem .sbMeta,
-.sbAccount .sbMeta {
-  flex: 0 0 auto;
-  color: var(--text-ghost);
-  font-family: var(--font-mono);
-  font-size: var(--t-control-size);
-}
-
-.notificationsUnreadDot {
-  width: 6px;
-  height: 6px;
-  margin-left: 6px;
-  border-radius: 999px;
-  background: var(--accent);
+/* ── The foot ────────────────────────────────────────────────────────────────
+   All apps is the way into every unpinned destination, standing rather than
+   hidden behind a gesture (on compact it is the band's "More" instead), and
+   Settings is where you change the frame rather than a place inside it. Both
+   are quiet: the foot is the least-visited end of the band. */
+.stemFoot {
   flex: none;
-}
-
-/* The sidebar foot: who you are, with Settings and Log out behind it. Sits a
-   little heavier than a nav item — it is a person, not a destination — and
-   gets a hairline separator so it reads as the end of the column. */
-.sbAccount {
-  display: flex;
-  align-items: center;
-  gap: 9px;
-  width: 100%;
-  margin-top: 6px;
-  padding: 8px 9px;
-  border: 0;
-  border-top: 0.5px solid var(--line);
-  border-radius: 0 0 var(--r-md) var(--r-md);
-  background: transparent;
-  color: var(--text);
-  font: inherit;
-  text-align: left;
-  cursor: pointer;
-  transition: background 100ms;
-}
-.sbAccount:hover,
-.sbAccount[aria-expanded="true"] {
-  background: color-mix(in srgb, var(--text) 7%, transparent);
-}
-.sbAccount:focus-visible {
-  outline: none;
-  background: color-mix(in srgb, var(--text) 7%, transparent);
-  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 55%, transparent);
-}
-.sbAccountAvatar {
-  flex: 0 0 auto;
-  display: grid;
-  place-items: center;
-  width: 22px;
-  height: 22px;
-  border-radius: 999px;
-  color: var(--text-inv);
-  font-size: 9.5px;
-  font-weight: 600;
-  letter-spacing: 0.02em;
-}
-.sbAccountName {
-  flex: 1 1 auto;
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  font-size: var(--t-small-size);
-  font-weight: 600;
-}
-.sbSection {
-  margin-top: 14px;
-  margin-bottom: 4px;
-  padding: 0 10px;
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  font-family: var(--font-sans);
-  font-size: var(--t-control-size);
-  font-weight: 500;
-  color: var(--text-ghost);
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
-}
-.sbSection .sbSectionActions {
-  margin-left: auto;
-  display: flex;
-  gap: 2px;
-  opacity: 0;
-  transition: opacity 100ms;
-}
-.sbSection:hover .sbSectionActions {
-  opacity: 1;
-}
-.sbSectionBtn {
-  width: 18px;
-  height: 18px;
-  border-radius: var(--r-sm);
-  border: none;
-  background: transparent;
-  color: var(--text-faint);
-  cursor: pointer;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-}
-.sbSectionBtn:hover {
-  background: color-mix(in srgb, var(--text) 8%, transparent);
-  color: var(--text);
-}
-
-/* Conversation grouping (issue #420): a lightweight sub-label under the Chats
-   header for the "Pinned"/"Recent" split, and the collapsible "Archived"
-   toggle at the bottom of the list. */
-.sbSubLabel {
-  margin: 6px 0 2px;
-  padding: 0 12px;
-  font-family: var(--font-sans);
-  font-size: 10px;
-  font-weight: 500;
-  color: var(--text-ghost);
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
-}
-.sbArchivedToggle {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  width: 100%;
-  margin-top: 6px;
-  padding: 5px 12px;
-  border: none;
-  background: transparent;
-  color: var(--text-ghost);
-  cursor: pointer;
-  text-align: left;
-  font-family: var(--font-sans);
-  font-size: var(--t-control-size);
-  font-weight: 500;
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
-}
-.sbSeeAll {
-  display: flex;
-  align-items: center;
-  width: 100%;
-  margin: 2px 0 4px;
-  padding: 6px 10px 6px 32px;
-  border: 0;
-  border-radius: 8px;
-  background: transparent;
-  color: var(--text-faint);
-  font: inherit;
-  font-size: 12.5px;
-  font-weight: 600;
-  cursor: pointer;
-  text-align: left;
-}
-.sbSeeAll:hover {
-  color: var(--text);
-  background: color-mix(in srgb, var(--text) 5%, transparent);
-}
-.sbArchivedToggle:hover {
-  color: var(--text-soft);
-}
-
-/* Relaunch-to-update pill — pinned above Settings when the main process
-   sees a newer build on disk. A raised card (vs the flat sbItem rows) so
-   the one action that restarts the app reads as distinct from navigation. */
-.sbUpdate {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  width: 100%;
-  margin-block: 6px 4px;
-  padding: 10px 12px;
-  border: 1px solid var(--line);
-  border-radius: var(--r-xl);
-  background: var(--bg-elev);
-  color: var(--text);
-  cursor: pointer;
-  text-align: left;
-  box-shadow: 0 1px 2px color-mix(in srgb, var(--text) 6%, transparent);
-  transition:
-    background 100ms,
-    box-shadow 100ms;
-}
-.sbUpdate:hover {
-  background: color-mix(in srgb, var(--text) 4%, var(--bg-elev));
-  box-shadow: 0 2px 6px color-mix(in srgb, var(--text) 10%, transparent);
-}
-.sbUpdate > svg:last-child {
-  flex: 0 0 auto;
-  color: var(--text-faint);
-}
-.sbUpdateBody {
-  flex: 1 1 auto;
-  min-width: 0;
   display: flex;
   flex-direction: column;
-  gap: 1px;
+  /* PINNED to the bottom of the band, not stacked under the launcher. `auto`
+     rather than a fixed margin because the launcher sizes to its content: with
+     five pins the foot used to float in the middle of an empty column, and the
+     member's own name is the one row that has to be in the same place in every
+     window regardless of how many destinations are pinned. When the list is
+     long enough to fill the band the auto margin resolves to 0 and the list's
+     own end padding keeps the seam off the last row. */
+  margin-block-start: auto;
+  padding-block-start: var(--sp-2);
+  border-block-start: 1px solid var(--line);
 }
-.sbUpdateTitle {
-  font-size: var(--t-small-size);
-  font-weight: 600;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+/* Two classes, one rule: they are the same control, and each needs a selector
+   of its own so a click on one is never a click on both. */
+.stemAllApps,
+.stemAccount {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  inline-size: 100%;
+  min-block-size: var(--h-row);
+  padding-inline: var(--sp-2);
+  text-align: start;
+  background: transparent;
+  border: 0;
+  border-radius: var(--r-md);
+  cursor: pointer;
+  color: var(--text-soft);
+  transition: color var(--dur-1) var(--ease);
 }
-.sbUpdateVersion {
-  font-size: var(--t-control-size);
-  font-family: var(--font-mono);
-  color: var(--text-ghost);
+.stemAllApps:hover,
+.stemAccount:hover {
+  color: var(--text);
+  background: var(--bg-hover);
 }
-
-/* Small icon tile rendered inline in sidebar app rows. Matches the
-   home-grid tile look in miniature so the sidebar tells the user
-   which apps they own at a glance. */
-.sbAppIcon {
-  width: 18px;
-  height: 18px;
-  border-radius: 5px;
-  flex: 0 0 auto;
-  display: inline-grid;
-  place-items: center;
-  color: var(--text-inv);
-  box-shadow: inset 0 0 0 0.5px var(--scrim);
+.stemAllApps:focus-visible,
+.stemAccount:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
 }
-.sbAppIcon svg {
-  width: 11px;
-  height: 11px;
-}
-
-/* Accent-tinted sidebar row — the "Build new" entry point. */
-.sbItem[data-accent="true"] {
-  color: var(--accent);
-}
-.sbItem[data-accent="true"]:hover {
-  color: var(--accent);
-  background: color-mix(in srgb, var(--accent) 12%, transparent);
-}
-
-/* App row — the row itself is a slim button, so the wrap is the
-   positioning context and the hover-revealed `•••` action sits flush
-   with the row's right edge, vertically centred to the row's baseline. */
-.sbAppRow {
-  position: relative;
-  display: block;
-}
-.rowMore {
-  position: absolute;
-  top: 50%;
-  right: 6px;
-  transform: translateY(-50%);
-  width: 22px;
-  height: 22px;
-  display: inline-flex;
+/* Identity, so it carries a hue where the rest of the shell carries none —
+   the avatar is the one place a PERSON is the subject, and `identityColor`
+   derives it from the name rather than the shell picking. */
+.stemAvatar {
+  flex: none;
+  inline-size: var(--h-segmented);
+  block-size: var(--h-segmented);
+  display: flex;
   align-items: center;
   justify-content: center;
-  /* Buttons inherit a non-zero line-height from `font: inherit`, which
-     adds half-leading above and below the inline content box. Even with
-     flex centering, that half-leading visually biases the icon upward
-     in narrow buttons. Zeroing line-height (and padding/border) here
-     guarantees the SVG's bounding box is the only thing flex centers
-     against. */
-  line-height: 0;
-  padding: 0;
-  border: 0;
-  background: transparent;
-  /* Muted resting tone — sidebar rows already carry a status dot at the
-     same edge, so the action reads as a supporting glyph until hover. */
-  color: var(--text-ghost);
-  border-radius: var(--r-sm);
-  cursor: pointer;
-  opacity: 0;
-  z-index: 3;
-  transition:
-    opacity 140ms ease,
-    background 120ms,
-    color 120ms;
+  border-radius: var(--r-pill);
+  font: var(--t-control);
+  color: var(--text-inv);
 }
-.rowMore svg {
-  display: block;
-}
-.sbAppRow:hover .rowMore,
-.sbAppRow:focus-within .rowMore,
-.rowMore:focus-visible,
-.rowMore[data-open="true"] {
-  opacity: 1;
-}
-.rowMore:hover {
-  background: color-mix(in oklab, var(--text) 12%, transparent);
-  color: var(--text);
-}
-.rowMore:active {
-  background: color-mix(in oklab, var(--text) 18%, transparent);
-}
-/* When the action is open, the row's own hover state would compete with
-   the `•••` background; nudge the row back to its resting tone so focus
-   reads as "this menu owns the moment". */
-.sbAppRow:has(.rowMore[data-open="true"]) .sbItem {
-  background: color-mix(in srgb, var(--text) 9%, transparent);
-  color: var(--text);
+/* The shortcut, in the numeric register like every other machine string. */
+.stemAccountMeta {
+  flex: none;
+  font: var(--t-mono);
+  font-variant-numeric: var(--t-mono-numeric);
+  direction: var(--t-mono-direction);
+  unicode-bidi: var(--t-mono-bidi);
+  color: var(--text-faint);
 }
 
-/* Main area — shares the wall surface with the titlebar (inside .main)
-   so the chrome and the content below visually flow as one surface. The
-   only structural separator is the vertical sidebar/main divider.
-   `--bg-wall` is a gradient in dark mode and a flat near-white in light
-   mode (see packages/design themes). */
+/* A navigation label is never tertiary text, in the foot as in the launcher —
+   and it reads at the same UI register as the launcher rows above it. The foot
+   is quieter by POSITION and colour, not by being set smaller. */
+.stemFootLabel {
+  flex: 1;
+  font: var(--t-small);
+  max-inline-size: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* ── The claimed band + the frame's capsule ─────────────────────────────────
+   Invariant 1 as amended (Photos v4, CHANGELOG F). A first-party route may
+   claim the phone's band; the frame's own band then does not render at all, so
+   there is never a second one to hide. The frame is represented by a capsule
+   OUTSIDE the app's tab group — the group boundary is what says it is not a
+   sixth tab — and the capsule keeps the frame's page colour, its own border and
+   its own target, whatever the app is themed as. */
+.appBand {
+  grid-area: stem;
+  display: flex;
+  gap: var(--sp-1);
+  /* A claimed band is a grid item. Let it shrink with the compact frame so
+     its capsule stays inside the viewport instead of its tab labels choosing
+     a min-content width and shifting the whole row off the leading edge. */
+  min-inline-size: 0;
+  min-height: 0;
+}
+/* Photos' selection action bar takes the compact foot while selection is
+   active, matching the Expo surface. Keep the claimed band contribution
+   mounted so the host stem cannot take its place; withdrawing this grid item
+   collapses the band row and leaves one bottom surface. Normal browsing
+   restores the Photos band, including its leading Home capsule. */
+:global(body.has-selection) .appBand {
+  display: none;
+}
+.appBandGroup {
+  display: flex;
+  flex: 1;
+  align-items: stretch;
+  min-inline-size: 0;
+}
+.appBandGroup .launchItem {
+  flex: 1;
+  min-inline-size: 0;
+  inline-size: auto;
+  padding-block: 7px 3px;
+}
+/* The active tab is carried by the label weight plus a 2px INK bar — the shell
+   spends no hue, and an app's own colour on the frame's band would be the app
+   theming a frame control. */
+.appBandGroup .launchItem[data-active="true"] .launchBar {
+  background: var(--accent);
+}
+/* The capsule is a FRAME control: host paper, its own border, never themed by
+   the app beside it, and never under 44px. 52px is the brief's target; the
+   floor is the guarantee. */
+.bandCapsule {
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  align-self: center;
+  inline-size: var(--band-capsule, 52px);
+  block-size: var(--band-capsule, 52px);
+  min-inline-size: 44px;
+  min-block-size: 44px;
+  /* The seam. A capsule that shared the tabs' ground would read as a tab. */
+  border: 1px solid var(--line);
+  border-radius: var(--r-lg);
+  background: var(--bg-elev);
+  cursor: pointer;
+  transition: background var(--dur-1) var(--ease);
+}
+.bandCapsule:hover {
+  background: var(--bg-hover);
+}
+.bandCapsule:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
+}
+.bandCapsuleMark {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  /* The mark is INK. The shell spends no hue. */
+  color: var(--accent);
+}
+
+/* ── The main column ────────────────────────────────────────────────────── */
+
 .main {
   grid-area: main;
   position: relative;
@@ -691,146 +702,488 @@
   display: flex;
   flex-direction: column;
   min-height: 0;
-  background: var(--bg-wall);
+  background: var(--bg);
+  box-sizing: border-box;
+  transition: padding-inline-end var(--dur-2) var(--ease-entry);
 }
 
-.connectionBanner {
+/* The pointer companion belongs to the frame. Its absolute rail occupies the
+   reserved trailing column while the app bar, page, and status line retain
+   their ordinary layout in the remaining stage. */
+.main[data-assistant="open"]:not([data-compact="true"]) {
+  padding-inline-end: 392px;
+}
+
+/* The per-app bar. It carries the app's identity and the app's own actions —
+   it is the one place in the frame an app speaks — plus history, which is
+   frame business. */
+.appBar {
+  -webkit-app-region: drag;
+  user-select: none;
+  /* The seam between the frame's own furniture and the app's content — the
+     same hairline the stem draws down its trailing edge, so the bar and the
+     band bound the content with one rule rather than two treatments. It is
+     unconditional: a seam that appeared only on the routes that happen to
+     have a title would read as a rendering difference, not a boundary. */
+  border-block-end: 1px solid var(--line);
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: var(--sp-1);
+  min-inline-size: 0;
+  padding-inline: var(--sp-4);
+  padding-block: var(--sp-2);
+  position: relative;
+  z-index: 4;
+  overflow: visible;
+}
+/* The bar as a page header (the brief's app bar). Bottom-aligned, because the
+   title's baseline and the actions' baseline are the line the eye reads across;
+   centring a 31px display title against a 34px control puts neither on it. The
+   larger block padding is the rhythm's `xl`/`l` pair, which is what separates a
+   header from the strip of window furniture the bar is on every other route. */
+.appBar[data-identity="true"] {
+  align-items: flex-end;
+  gap: var(--sp-4);
+  padding-block: var(--sp-5) var(--sp-4);
+}
+.appBar[data-identity="true"] .tbBtnWrap {
+  /* The history arrows keep the title's baseline company instead of floating
+     at the top of a bar that is now three times their height. */
+  margin-block-end: 3px;
+}
+
+/* Grid layout — the Builder lines the bar's two cells up with the columns of
+   the body below it. The cells own their own inline padding so col 1's
+   trailing edge meets col 2's leading edge with no gutter. */
+.appBar[data-layout="grid"] {
+  display: grid;
+  grid-template-columns: minmax(360px, 420px) 1fr;
+  padding-inline: 0;
+  gap: 0;
+}
+.tlNav {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-1);
+  padding-inline: var(--sp-4);
+  min-inline-size: 0;
+}
+/* One toggle per panel, at that panel's edge. */
+.tlNav .chatToggleWrap {
+  margin-inline-start: auto;
+}
+.tlContext {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  padding-inline-end: var(--sp-4);
+  min-inline-size: 0;
+}
+.flex {
+  flex: 1;
+}
+
+.appIdentity {
+  min-inline-size: 0;
+  margin-inline-start: var(--sp-3);
+  text-align: start;
+}
+/* Two registers, one class.
+   A bare screen name takes the title role, matching the handoff's app bar and
+   the native Home title row. A full identity lockup (title over a meta line)
+   promotes to the display face below; that is the signature block, not the
+   compact name-only bar. */
+.appTitle {
+  margin: 0;
+  font: var(--t-title);
+  color: var(--text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.appBar[data-identity="true"] .appTitle {
+  font: var(--t-display);
+  letter-spacing: var(--t-display-tracking);
+}
+/* The title as a control. It keeps the title role rather than shrinking to a
+   generic control label; the chevron is the affordance. */
+.appTitleBtn {
+  -webkit-app-region: no-drag;
+  display: flex;
+  align-items: baseline;
+  gap: var(--sp-2);
+  max-inline-size: 100%;
+  padding: 0;
+  background: transparent;
+  border: 0;
+  cursor: pointer;
+  color: var(--text-soft);
+  transition: color var(--dur-1) var(--ease);
+}
+.appTitleBtn:hover,
+.appTitleBtn[data-open="true"] {
+  color: var(--text);
+}
+.appTitleBtn:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
+  border-radius: var(--r-md);
+}
+.appTitleText {
+  color: var(--text);
+  min-inline-size: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* The app lockup (Photos v4, §3): mark chip, title, count, on ONE line. It is
+   the app's identity, not a page header, so it does not take the header's
+   display face or its taller block padding — the title is the 20/26 rung and
+   the count sits beside it rather than under it. */
+.appBar[data-lockup="app"] .appTitle {
+  font: var(--t-title);
+}
+.appLockup {
+  display: flex;
+  align-items: baseline;
+  gap: var(--sp-2);
+  min-inline-size: 0;
+  /* THE BACKSTOP. `min-inline-size: 0` lets this box get narrower than its
+     contents, which is what we want — but on its own it only means the CONTENTS
+     keep their size and paint outside the box. The count is `flex: none`, so in
+     a 45px lockup it drew its full 97px straight over the two icon buttons that
+     follow: "19 photographs" with a gear and a grid glyph on top of the words.
+     Clipping here is never what should actually happen — the rules below shed
+     the count first — but a box that can shrink must also be a box that
+     contains, or a future addition to this lockup reintroduces the same
+     overlap. */
+  overflow: hidden;
+}
+/* A count is a numeric, so it is mono and tabular — the app passes the number,
+   the frame owns the register. */
+.appCount {
+  flex: none;
+  font: var(--t-mono);
+  font-variant-numeric: var(--t-mono-numeric);
+  color: var(--text-soft);
+}
+
+/* The six operational routes' COUNT LINE (#765): "3 decisions waiting · 2
+   standing grants". It rides in the meta slot, so it already has the numeric
+   register from `.appMeta`; what it adds is the bidi isolation a run of counts
+   and clock times needs under RTL, and a nowrap so a long count sheds its tail
+   rather than pushing the bar into a second line. */
+.opsCount {
+  display: block;
+  direction: var(--t-mono-direction);
+  unicode-bidi: var(--t-mono-bidi);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+/* An operational route is not an APP: it has no mark and no hue, so the bar
+   would otherwise fall through to the header's display face the moment a count
+   line appears under the title. These six are places in the frame, and they
+   name themselves at the app-lockup's title rung — the same rung Photos and
+   Docs take — rather than at the 32px signature, which belongs to a surface
+   that owns its whole window. */
+.appIdentity:has(.opsCount) .appTitle {
+  font: var(--t-title);
+  letter-spacing: var(--t-title-tracking);
+}
+
+/* Numerics are mono and tabular in every app, without exception. */
+.appMeta {
+  margin-block-start: 5px;
+  font: var(--t-mono);
+  font-variant-numeric: var(--t-mono-numeric);
+  color: var(--text-soft);
+}
+
+/* With the stem hidden, the macOS traffic lights land on the app bar instead —
+   the strip has to be reserved by whichever column is at the leading edge, and
+   collapsing the stem hands that job back here. 80px clears the 16px inset plus
+   the three 20px buttons; the bar's own 16px padding is inside that number, so
+   this replaces it rather than adding to it. */
+.window[data-window-controls="inset"][data-stem="hidden"] .appBar {
+  padding-inline-start: 80px;
+}
+
+/* The bar itself is a drag region, so everything inside it that is a target
+   has to opt back out. */
+.appBar button,
+.appBar .tbBtnWrap,
+/* The app-name contenteditable inside the builder bar must accept clicks
+   (otherwise the surrounding drag region eats them). */
+.appBar [contenteditable] {
+  -webkit-app-region: no-drag;
+}
+
+/* ── Toolbar icon button + tooltip + ⌘-kbd chip ─────────────────────────── */
+
+.tbBtnWrap {
+  position: relative;
+  display: inline-flex;
+}
+.tbBtn {
+  /* The segmented rung, shared with Button's `chrome` size — one height for
+     every control an app bar can carry, so the bar does not change height
+     between a route that only navigates and a route that also acts. */
+  inline-size: var(--h-segmented);
+  block-size: var(--h-segmented);
+  border-radius: var(--r-md);
+  border: none;
+  background: transparent;
+  color: var(--text-soft);
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition:
+    background var(--dur-1) var(--ease),
+    color var(--dur-1) var(--ease);
+}
+.tbBtn svg {
+  display: block;
+}
+.tbBtn:hover {
+  background: var(--bg-hover);
+  color: var(--text);
+}
+.tbBtn:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
+}
+/* A disabled control recolours its own leaf. Container `opacity` composites
+   every descendant and silently invalidates token-level contrast. */
+.tbBtn[disabled],
+.tbBtn[aria-disabled="true"] {
+  color: var(--text-disabled);
+  cursor: default;
+  pointer-events: none;
+}
+.tbBtn[data-active="true"],
+.tbBtn[data-open="true"] {
+  background: var(--bg-press);
+  color: var(--text);
+}
+.tooltip {
+  position: absolute;
+  inset-block-start: calc(100% + 6px);
+  inset-inline-start: 50%;
+  transform: translateX(-50%);
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding-inline: var(--sp-2);
+  padding-block: var(--sp-1);
+  background: var(--bg-hud);
+  color: var(--text);
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+  box-shadow: var(--shadow-sm);
+  font: var(--t-control);
+  white-space: nowrap;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity var(--dur-1) var(--ease);
+  z-index: 60;
+}
+.tbBtnWrap:hover .tooltip,
+.tbBtnWrap:focus-within .tooltip {
+  opacity: 1;
+}
+.kbd {
+  font: var(--t-mono);
+  font-variant-numeric: var(--t-mono-numeric);
+  color: var(--text-faint);
+}
+
+/* ── Invariant 5 · the status line ──────────────────────────────────────── */
+
+/* One persistent line at the bottom of the frame, in the numeric register,
+   with a small neutral dot. It updates IN PLACE: there is no toast, no
+   spinner, no badge count and no red dot anywhere in this shell, so this line
+   is the whole feedback channel. Mirrors the design package's StatusLine
+   recipe token-for-token. */
+.statusLine {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  min-block-size: var(--h-control);
+  padding-inline: var(--sp-4);
+  border-block-start: 1px solid var(--line);
+  background: var(--bg);
+  font: var(--t-mono);
+  font-variant-numeric: var(--t-mono-numeric);
+  color: var(--text-soft);
+  transition: color var(--dur-1) var(--ease);
+}
+/* Offline is a BORDERED banner state. `--net` means "leaves the device" and
+   the system allows it as a border or a 2px rule, never as a fill — nothing
+   alarming is ever a large coloured surface. */
+.statusLine[data-offline="true"] {
+  border-block-start: 2px solid var(--net);
+  color: var(--text);
+}
+.statusDot {
+  inline-size: 5px;
+  block-size: 5px;
+  flex: none;
+  border-radius: var(--r-pill);
+  background: var(--text-faint);
+}
+.statusLine[data-offline="true"] .statusDot {
+  background: var(--net);
+}
+.statusText {
+  min-inline-size: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+/* How long ago the last heartbeat landed. A quieter ink than the sentence it
+   qualifies, and in the numeric register — it is a reading, not a word. */
+.statusStamp {
+  color: var(--text-faint);
+  direction: var(--t-mono-direction);
+  flex: none;
+  font-variant-numeric: var(--t-mono-numeric);
+  unicode-bidi: var(--t-mono-bidi);
+  white-space: nowrap;
+}
+/* Determinate, always: a local-first product knows the size of its own work,
+   and a spinner is the one thing it can never honestly say. */
+.statusBar {
+  flex: none;
+  inline-size: 120px;
+  block-size: 3px;
+  border-radius: var(--r-pill);
+  background: var(--bg-elev);
+  position: relative;
+  overflow: hidden;
+}
+.statusBar::before {
+  content: "";
+  position: absolute;
+  inset-block: 0;
+  inset-inline-start: 0;
+  inline-size: calc(var(--status-progress, 0) * 100%);
+  background: var(--text);
+  border-radius: inherit;
+  transition: inline-size var(--dur-1) var(--ease);
+}
+.statusCounts {
+  flex: none;
+  color: var(--text-faint);
+}
+/* An action on the line is a bounded control, not bare text. */
+.statusAction {
+  margin-inline-start: auto;
+  flex: none;
+  block-size: var(--h-segmented);
+  padding-inline: var(--sp-3);
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+  background: transparent;
+  color: var(--text);
+  font: var(--t-control);
+  cursor: pointer;
+  transition:
+    background var(--dur-1) var(--ease),
+    border-color var(--dur-1) var(--ease);
+}
+.statusAction:hover {
+  background: var(--bg-hover);
+}
+.statusAction:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
+}
+.statusLine[data-offline="true"] .statusAction {
+  border-color: var(--net);
+}
+/* The ROUTE's own verb on the health line (#765) is one word inside a sentence,
+   not a control beside it: "1 automation is failing · Weekly digest has failed
+   its last 3 runs, since 4 August. Open the failure". A bounded button there
+   would read as a second, competing affordance on a line whose whole job is to
+   be quiet. So it takes an underline instead of a border, in the same
+   annotation rung as the sentence it ends. The page's tone colours the RULE and
+   never the ink — `--net` is a border or a rule, never a fill, and `--seam` is
+   the pending register. */
+.statusAction[data-inline="true"] {
+  block-size: auto;
+  /* It ends the sentence rather than sitting at the trailing edge of the
+     window, so it drops the auto margin the bounded control carries. */
+  margin-inline-start: 0;
+  padding-inline: 0;
+  border: 0;
+  color: var(--text);
+  font: var(--t-mono);
+  font-variant-numeric: var(--t-mono-numeric);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+.statusAction[data-inline="true"]:hover {
+  background: transparent;
+  color: var(--text);
+}
+.statusAction[data-inline="true"][data-tone="net"] {
+  text-decoration-color: var(--net);
+}
+.statusAction[data-inline="true"][data-tone="seam"] {
+  text-decoration-color: var(--seam);
+}
+
+/* ── Tier 2 · the All-apps sheet ────────────────────────────────────────── */
+
+.sheetOverlay {
   position: fixed;
-  z-index: 190;
-  top: 44px;
-  left: var(--sidebar-w, 260px);
-  right: 0;
-  min-height: 34px;
+  inset: 0;
+  z-index: 200;
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 12px;
-  padding: 7px 14px;
-  background: color-mix(in srgb, var(--danger) 14%, var(--bg-elev));
-  border-bottom: 0.5px solid color-mix(in srgb, var(--danger) 40%, var(--line));
-  color: var(--text);
-  font-size: var(--t-mono-size);
+  padding: var(--sp-6);
 }
-.connectionBanner button {
-  border: none;
-  border-radius: 999px;
-  padding: 4px 10px;
-  background: var(--danger);
-  color: var(--bg);
+.sheetOverlay[data-compact="true"] {
+  align-items: flex-end;
+  padding: 0;
+}
+.sheetScrim {
+  position: absolute;
+  inset: 0;
+  border: 0;
+  padding: 0;
+  background: var(--scrim);
   cursor: pointer;
-  font: inherit;
-  font-weight: 600;
 }
-.window[data-sidebar="closed"] .connectionBanner {
-  left: 0;
+.sheetPanel {
+  position: relative;
+  inline-size: 520px;
+  max-inline-size: 100%;
+  max-block-size: 620px;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  background: var(--bg-elev);
+  border: 1px solid var(--line);
+  border-radius: var(--r-lg);
+  box-shadow: var(--shadow-lg);
+  animation: sheetIn var(--dur-2) var(--ease-entry);
 }
-/* ── Compact form factor ──────────────────────────────────────────────────
-   Below this width the sidebar stops being a column the layout makes room
-   for and becomes an overlay drawer: the main pane keeps the full viewport,
-   the rail slides in over it, and a scrim takes the dismiss tap. The DESKTOP
-   contract is unchanged above the breakpoint — this is one media block, not
-   a second component, so the IA can never drift between the two.
-
-   720px matches the compact form-factor signal in docs/platform-gating.md.
-   It is a layout threshold only — never a trust or capability boundary. */
-@media (max-width: 720px) {
-  .window {
-    grid-template-columns: minmax(0, 1fr);
-    grid-template-areas: "main";
-  }
-  .sidebar {
-    position: fixed;
-    top: 0;
-    left: 0;
-    bottom: 0;
-    z-index: 200;
-    width: min(300px, 86vw);
-    /* The drawer floats over page content, so it cannot borrow the wall's
-       translucency the way a docked rail can. */
-    background: var(--bg-elev);
-    box-shadow: var(--shadow-md);
-    transform: translateX(-101%);
-    transition: transform 240ms cubic-bezier(0.2, 0.7, 0.3, 1);
-    /* The rail is a dialog here: keep it out of the tab order while closed. */
-    visibility: hidden;
-  }
-  .window[data-sidebar="open"] .sidebar {
-    transform: none;
-    visibility: visible;
-  }
-  /* The docked rail's divider is the seam between two panes; the drawer's
-     own shadow does that job, and the border would read as a stray hairline
-     against whatever it overlays. */
-  .window[data-sidebar="open"] .sidebar,
-  .window[data-sidebar="closed"] .sidebar {
-    border-right: none;
-  }
-  .sidebarInner {
-    --sidebar-content-w: 100%;
-  }
-  /* No macOS traffic lights on a touch host — reclaim both reservations. */
-  .tlSide .spacer,
-  .window[data-sidebar="closed"] .tlMain .spacer {
-    display: none;
-  }
-  /* tlSide is hidden-not-removed on desktop so the rail doesn't jump during
-     the width animation. The drawer animates on transform instead, so the
-     row simply comes back when it's open. */
-  .window[data-sidebar="open"] .tlSide {
-    visibility: visible;
-  }
-  .scrim {
-    position: fixed;
-    inset: 0;
-    z-index: 199;
-    border: 0;
-    padding: 0;
-    background: color-mix(in srgb, var(--text) 34%, transparent);
-    backdrop-filter: blur(1px);
-    -webkit-backdrop-filter: blur(1px);
-    opacity: 1;
-    animation: scrimIn 200ms ease;
-    cursor: pointer;
-  }
-  /* Touch targets. 13px rows at 6px padding are a pointer-era size; on a
-     phone every row in this column has to clear ~44px. */
-  .sbItem,
-  .sbAlarm {
-    padding: 11px 10px;
-    font-size: 14px;
-  }
-  .sbAccount {
-    padding: 12px 10px;
-  }
-  .sbSeeAll {
-    padding: 11px 10px 11px 34px;
-  }
-  .sbArchivedToggle {
-    padding: 10px 12px;
-  }
-  /* The ••• is hover-revealed, and there is no hover on touch. */
-  .rowMore {
-    opacity: 1;
-    width: 32px;
-    height: 32px;
-    color: var(--text-ghost);
-  }
-  .connectionBanner {
-    left: 0;
-  }
+.sheetOverlay[data-compact="true"] .sheetPanel {
+  inline-size: 100%;
+  max-block-size: 86%;
+  border-start-start-radius: var(--r-lg);
+  border-start-end-radius: var(--r-lg);
+  border-end-start-radius: 0;
+  border-end-end-radius: 0;
 }
-
-/* The scrim is compact-only; outside the media query it must not exist at
-   all, or a stray render would blanket the desktop window. */
-.scrim {
-  display: none;
-}
-@media (max-width: 720px) {
-  .scrim {
-    display: block;
-  }
-}
-@keyframes scrimIn {
+@keyframes sheetIn {
   from {
     opacity: 0;
   }
@@ -838,30 +1191,265 @@
     opacity: 1;
   }
 }
-
-/* Coarse pointers get the touch sizing regardless of width — a tablet in
-   landscape is wider than the breakpoint but still has no hover. */
-@media (pointer: coarse) {
-  .sbItem,
-  .sbAlarm {
-    padding: 10px 10px;
-  }
-  .rowMore {
-    opacity: 1;
-  }
+.sheetHead {
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-3);
+  padding-inline: var(--sp-5);
+  padding-block: var(--sp-5) var(--sp-3);
+}
+.sheetTitle {
+  font: var(--t-body-strong);
+  color: var(--text);
+}
+.sheetClose {
+  inline-size: var(--h-control);
+  block-size: var(--h-control);
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 0;
+  border-radius: var(--r-md);
+  background: transparent;
+  color: var(--text-soft);
+  cursor: pointer;
+  transition:
+    background var(--dur-1) var(--ease),
+    color var(--dur-1) var(--ease);
+}
+.sheetClose:hover {
+  background: var(--bg-hover);
+  color: var(--text);
+}
+.sheetClose:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
+}
+.sheetField {
+  flex: none;
+  padding-inline: var(--sp-5);
+  padding-block-end: var(--sp-3);
+}
+.sheetField input {
+  inline-size: 100%;
+  block-size: var(--h-control);
+  padding-inline: var(--sp-3);
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+  background: transparent;
+  color: var(--text);
+  font: var(--t-small);
+}
+.sheetField input:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
+}
+.sheetList {
+  flex: 1;
+  min-block-size: 0;
+  overflow-y: auto;
+  padding-inline: var(--sp-5);
+  padding-block-end: var(--sp-5);
+}
+.sheetEmpty {
+  margin: 0;
+  padding-block: var(--sp-6);
+  font: var(--t-small);
+  color: var(--text-soft);
+}
+.sheetRow {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  min-block-size: var(--h-row);
+  border-block-start: 1px solid var(--line);
+}
+.sheetRowOpen {
+  flex: 1;
+  min-inline-size: 0;
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  min-block-size: var(--h-row);
+  padding: 0;
+  background: transparent;
+  border: 0;
+  cursor: pointer;
+  text-align: start;
+  border-radius: var(--r-md);
+}
+.sheetRowOpen:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
+}
+/* Untinted, like the launcher's: this sheet lists FRAME destinations, and the
+   tinted chip container is an app mark. See `.launchChip`. */
+.sheetRowChip {
+  inline-size: 28px;
+  block-size: 28px;
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--chip-radius, var(--r-md));
+  background: transparent;
+  color: var(--text-faint);
+}
+/* Unpinned reads as a LIGHTER name, never a dimmed one — the recessive state
+   is a colour token on the leaf, because container opacity composites every
+   descendant and invalidates the contrast the token was solved for. */
+.sheetRowName {
+  min-inline-size: 0;
+  font: var(--t-small);
+  color: var(--text-soft);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  transition: color var(--dur-1) var(--ease);
+}
+.sheetRowOpen[data-pinned="true"] .sheetRowName {
+  font: var(--t-small-strong);
+  color: var(--text);
+}
+.sheetRowFixed {
+  flex: none;
+  font: var(--t-mono);
+  font-variant-numeric: var(--t-mono-numeric);
+  color: var(--text-faint);
+}
+.sheetSwitch {
+  flex: none;
+  inline-size: 38px;
+  block-size: 22px;
+  padding: 2px;
+  display: flex;
+  align-items: center;
+  border: 1px solid var(--line);
+  border-radius: var(--r-pill);
+  background: transparent;
+  cursor: pointer;
+  transition:
+    background var(--dur-1) var(--ease),
+    border-color var(--dur-1) var(--ease);
+}
+.sheetSwitch[aria-checked="true"] {
+  background: var(--accent);
+  border-color: var(--accent);
+}
+.sheetSwitch:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
+}
+.sheetSwitchKnob {
+  inline-size: 16px;
+  block-size: 16px;
+  border-radius: var(--r-pill);
+  background: var(--text-soft);
+  transition:
+    background var(--dur-1) var(--ease),
+    margin-inline-start var(--dur-1) var(--ease);
+}
+.sheetSwitch[aria-checked="true"] .sheetSwitchKnob {
+  margin-inline-start: 16px;
+  background: var(--on-accent);
+}
+.sheetFoot {
+  flex: none;
+  margin: 0;
+  padding-inline: var(--sp-5);
+  padding-block: var(--sp-3);
+  border-block-start: 1px solid var(--line);
+  font: var(--t-mono);
+  font-variant-numeric: var(--t-mono-numeric);
+  color: var(--text-faint);
 }
 
-.syncIndicator {
-  position: fixed;
-  z-index: 80;
-  right: 14px;
-  bottom: 12px;
-  padding: 4px 9px;
-  border: 0.5px solid var(--line);
-  border-radius: 999px;
-  background: color-mix(in srgb, var(--bg-elev) 88%, transparent);
-  color: var(--text-faint);
-  box-shadow: var(--shadow-sm);
-  font-size: 10px;
-  pointer-events: none;
+/* ── Compact form factor ─────────────────────────────────────────────────
+   720px matches the compact form-factor signal in docs/platform-gating.md and
+   the `COMPACT_MAX_WIDTH` constant in useCompactLayout.ts. It is a LAYOUT
+   threshold only — never a trust or capability boundary. The stem's own
+   compact behaviour is driven by `[data-compact]` above (React owns the
+   signal); this block carries the parts CSS has to answer on its own. */
+@media (max-width: 720px) {
+  /* HOW MUCH OF THE LOWER EDGE THE BAND OWNS, published so that anything
+     floating over the frame can clear it. Declared on `:root` rather than on
+     `.window` because the capture launcher renders OUTSIDE the window subtree
+     — custom properties inherit down the DOM, and a variable set on a box the
+     launcher is not inside reaches it not at all. That is why the launcher
+     carried its own `bottom: 82px` guess and sat 18px on top of the band.
+
+     The number is this band's own box, and it lives in this file because this
+     file is what draws it: 80px of tab row + the 8px `padding-block-end` and
+     12px `margin-block-end` on `.stem[data-compact="true"]`. Change either of
+     those and change this. */
+  :global(:root) {
+    --compact-band-inset: 100px;
+  }
+
+  .appBar {
+    padding-inline: var(--sp-4);
+  }
+
+  .appBar .tbBtn {
+    min-inline-size: var(--target-min);
+    min-block-size: var(--target-min);
+  }
+  .appBar[data-identity="true"] .appTitle {
+    /* Only the full identity block uses the display rung on compact screens. */
+    font-size: var(--t-display-size);
+  }
+
+  /* THE COUNT IS THE FIRST THING OUT. A phone bar is already spending its whole
+     width on back, forward, the app's own two icon actions and its two buttons;
+     what is left for the lockup is less than the app's NAME. Something has to
+     go, and the count is the one item here that is stated again a few pixels
+     below — the timeline's own header reads "AUGUST 2026 · 11 photographs ·
+     1 video" — so dropping it costs the member nothing and buys the title the
+     room to be read. The app's name is the one thing in this bar that cannot be
+     recovered from anywhere else on the screen. */
+  .appCount {
+    display: none;
+  }
+
+  /* THE APP'S NAME TAKES ITS OWN ROW, which is what the v4 handoff draws for
+     the compact form factor: the mobile Photos screen is a title line reading
+     "Photos" with Select and Import beside it, over a second line of controls —
+     not one row carrying all of it.
+
+     Dropping the count alone was not enough, and the arithmetic says why. This
+     bar spends 28 + 28 on the history arrows, 28 + 26 on the app's own two icon
+     actions, and 72 + 75 on Select and Import; with 28px of gaps and 32px of
+     page margin that is 317 of a 375px phone, leaving 57px for the lockup — and
+     the mark chip is 26 of those. "Photos" was being asked to render in 11px.
+     No amount of shrinking fixes a row that is over-subscribed; the row has to
+     become two.
+
+     `order: -1` rather than reordering the markup: the DOM order is the reading
+     and tab order that the desktop bar wants (history, then identity, then
+     actions), and it stays correct on the second line here. Nothing is removed
+     — every control the wide bar carries is still on this bar, one row down. */
+  .appBar {
+    flex-wrap: wrap;
+    row-gap: var(--sp-2);
+  }
+
+  .appIdentity {
+    order: -1;
+    flex: 1 1 100%;
+    margin-inline-start: 0;
+  }
+  .statusLine {
+    padding-inline: var(--sp-4);
+  }
+  .sheetOverlay {
+    align-items: flex-end;
+    padding: 0;
+  }
+  .sheetPanel {
+    inline-size: 100%;
+    max-block-size: 86%;
+  }
 }

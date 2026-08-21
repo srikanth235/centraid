@@ -11,7 +11,7 @@
   flex-direction: column;
   gap: 6px;
   padding: 8px;
-  border-radius: 8px;
+  border-radius: var(--r-md);
   border: 0.5px solid var(--line);
   background: transparent;
   cursor: pointer;

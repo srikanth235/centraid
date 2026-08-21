@@ -29,7 +29,7 @@ export function rejectScopedDirectory(
     return `"${directory}" is not an absolute path — share a full path like /Users/you/project.`;
   }
   if (existing.includes(directory))
-    return `"${directory}" is already shared with this agent.`;
+    return `"${directory}" is already shared with this harness.`;
   if (existing.length >= MAX_SCOPED_DIRECTORIES) {
     return `At most ${MAX_SCOPED_DIRECTORIES} folders can be shared with one conversation.`;
   }

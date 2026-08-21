@@ -2,7 +2,7 @@
    browser blueprint under jsdom while the package's TypeScript config is
    intentionally Node-only. */
 // @ts-nocheck
-import { cpSync, mkdirSync, rmSync, symlinkSync } from "node:fs";
+import { cpSync, mkdirSync, rmSync } from "node:fs";
 // @vitest-environment jsdom
 import path from "node:path";
 import { pathToFileURL } from "node:url";
@@ -27,13 +27,6 @@ describe("locker-online-only", () => {
     for (const file of ["logic.ts", "format.ts", "totp.ts", "types.ts"]) {
       cpSync(
         path.resolve(PKG, "apps/locker", file),
-        path.resolve(SCRATCH, file)
-      );
-    }
-    for (const file of ["kit.ts", "elements.js"]) {
-      // The kit layer lives in the design package (#672).
-      symlinkSync(
-        path.resolve(PKG, "../design/kit", file),
         path.resolve(SCRATCH, file)
       );
     }

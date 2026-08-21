@@ -1,16 +1,15 @@
 version: '2'
 packs:
 - id: governance-kit/audit
-  version: 0.8.1
+  version: 0.10.0
   source: gh
-  ref: gh:duaility/governance-kit/packs/audit@audit/v0.8.1
-  sha: 14e7af7140d79587e1103ae2befba73479abfefd
+  ref: gh:duaility/governance-kit/packs/audit@audit/v0.10.0
+  sha: 4eb3dd9300e4892bac758306130f1a76337ee83a
   subpath: packs/audit
-  min_governance_kit: 0.12.0
-  installed_at: '2026-07-02T04:58:03Z'
+  min_governance_kit: 0.13.0
+  installed_at: '2026-08-08T12:56:03Z'
   directives:
-  - agent-steering-accounting
-  - agent-token-accounting
+  - agent-session-identity
   - commit-issue-receipt-match
   - doc-integrity
   - issue-templates
@@ -18,58 +17,54 @@ packs:
   - receipt-per-issue
   - toolchain-config-protection
   digest:
-    agent-steering-accounting: 2fdfb828d7eeaafc98aa0e066c1ded5d7027aa9b27bc4595849694dc11ed92c0
-    agent-token-accounting: df76861640054949a65caab6379f3ec0fad6ffee6324b782ce8a8f12391320fa
-    commit-issue-receipt-match: e7206c5289e7b970b043e1d93c97c7b503a1aac286a40780b7219ac4f4e52f69
-    doc-integrity: 692497a5555f1c6ce07172cda164c24f1157ff1c386cd45d748a42939108fad1
-    issue-templates: ba3e7c6de380ff2f12a922be349dda4d04014f0da6f349e4d26037a2fc576abe
-    issues-tracked: 70d7fb36352cfe69bd5a932862cd4c98ec3697a01981e18c96bb9236b476e72c
-    receipt-per-issue: 1e8fcad6bb7a7df614c89061a58b877f02a14d9bb6bb4f24095c901514755691
-    toolchain-config-protection: b0ed3d7f5d4bd2358de40f124c428e343df34a98864d8a15a9c56489943a862c
+    agent-session-identity: c32b32cd1f3f7b6875980ab9d30d4cd975b46c3f0746c4588f47bb62db3551b0
+    commit-issue-receipt-match: 20f0236fa38c42ff6858d5a26df79f995677056308b2222dd06010b79531103a
+    doc-integrity: 946c68a3fc7f5c1b93132876844b456121063eecba1f6291b7986d96d062f1df
+    issue-templates: 36bdfc64fc9503b11d7445a7c91a0e80b468ee1566d45ba647760caa45fdc16b
+    issues-tracked: 32ef002236945c4d630da1781af815afeda5f23949157bca63d90e3c03b9c1d9
+    receipt-per-issue: 834a490115e4f3b0f35776e2e1ae52a9947ed6ff1e2330a164080db98f91cbad
+    toolchain-config-protection: 942b43fd337277ae2c9dc815eef6afbd4f0199efad8e7342b3c1ed1937bbe1c4
 - id: governance-kit/commits
-  version: 0.2.2
+  version: 0.4.0
   source: gh
-  ref: gh:duaility/governance-kit/packs/commits@commits/v0.2.2
-  sha: 6b9212de78389e2448c48308093e4ba2cf13bc0b
+  ref: gh:duaility/governance-kit/packs/commits@commits/v0.4.0
+  sha: 6fecfca565153a0fc9f2e00d139fb08506aeb8f1
   subpath: packs/commits
   min_governance_kit: 0.6.0
-  installed_at: '2026-07-01T13:27:50Z'
+  installed_at: '2026-08-08T12:56:51Z'
   directives:
   - commit-message-format
   - no-orphan-todos
   - no-unjustified-suppressions
   digest:
-    commit-message-format: 0a65219182af1886ce5cada20b74d144e7a7adb8deb482a4c456a7370b765cd7
-    no-orphan-todos: 98811a21272439261011fc294d83d777a4c8f2e95d98fe631eca258141722f61
-    no-unjustified-suppressions: 7bb0a021e4ade6bf51ef409a117e86bd1325bc525d10f2b31a1667cb186736c1
+    commit-message-format: 33a3cef9bfc5c74cc56975a39a2fcd5270c8757776f7cf7aef0bde44681c838e
+    no-orphan-todos: a02ab229d3f673c1fd8b8776aa17e6c0be144591c072e5ab7b02e9da56eeedbd
+    no-unjustified-suppressions: c241473878e6fba721829af48b39373f6fe1d8266e3c1150c95f1a65815ff163
 - id: governance-kit/foundation
-  version: 0.5.1
+  version: 0.7.0
   source: gh
-  ref: gh:duaility/governance-kit/packs/foundation@foundation/v0.5.1
-  sha: 7ac06ef861e6ac5ddf580fca35e1c32f9780a2fb
+  ref: gh:duaility/governance-kit/packs/foundation@foundation/v0.7.0
+  sha: aa410d765d21f21a5b39c29a0d0e7ed186ab72bc
   subpath: packs/foundation
   min_governance_kit: 0.6.0
-  installed_at: '2026-07-01T13:27:00Z'
+  installed_at: '2026-08-08T12:57:22Z'
   directives:
   - internal-doc-links
   - managed-tree-integrity
   - repo-hygiene
   - required-docs
   digest:
-    internal-doc-links: 1c8cc0ba358eea3190664ceb05c96c4f608c4171029a4ed374480541750be1f5
-    managed-tree-integrity: 9f516add12805fea75f4b1f8ee83b42eb38f66f65522d6b7d5fd663bef1b9dd5
-    repo-hygiene: bcc6d10bef0a216d1698d6406ef87559268639132632cbd68ca544a0bd843a44
-    required-docs: 97d5963e146c39cae9243e4c63cf9cee092497800b81abd3e2c071fc74052833
+    internal-doc-links: 51b7c08249e0e78c14b60a3e567c2c63136a45aa2788a77499ff157cf0b90397
+    managed-tree-integrity: 1a63396bf4ec68a31c2676af7a9c9f918e3e7e4ee57ad68b658a0a425a1272a7
+    repo-hygiene: c0d230a60f2659811ad94a5ca3a597e917af29ea84648ee66ba78634f8ba01f8
+    required-docs: a9fd804dd17b2e83ef1b2aa4b18328e7e97c6b4964f273a136507aaa3bdd8dc3
 - id: srikanth235/centraid
   version: '0.1'
   source: local
   directives:
-  - query-handlers-read-only
-  - handler-uses-ctx-primitives
+  - handler-contract
   - no-hardcoded-model-ids
-  - actions-declare-table-writes
   - gateway-engine-mode-agnostic
-  - data-runtime-sqlite-separation
   - format-check
   - coverage-scope-reachability
   - lint-check

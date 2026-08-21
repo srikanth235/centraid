@@ -34,6 +34,10 @@ const SKIP_DIRS = new Set([
   "coverage",
   "artifacts",
   ".claude",
+  // Blueprint app-boot tests mirror source tests into this scratch tree while
+  // other check:push gates run concurrently. Those copies are build products,
+  // not additional law owners.
+  ".app-boot",
 ]);
 
 const TEST_FILE_RE = /\.(?:test|spec)\.(?:ts|tsx|mts|mjs|js|jsx)$/u;

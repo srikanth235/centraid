@@ -4,3 +4,55 @@ recommended: true
 summary: "Commits that change toolchain config (lint, format, type-check, CI, git hooks) must carry a `governance: allow-toolchain-config <reason>` body line."
 surface: change-set
 hook: commit-msg
+triggers: [commit-msg, schedule]
+config:
+  - name: PATTERNS
+    type: list
+    doc: Toolchain and CI paths that require an auditable commit-body waiver when changed.
+    default:
+      - .github/workflows/
+      - .githooks/
+      - .eslintrc
+      - .eslintrc.*
+      - eslint.config.*
+      - biome.json
+      - biome.jsonc
+      - .prettierrc
+      - .prettierrc.*
+      - prettier.config.*
+      - tsconfig.json
+      - tsconfig.*.json
+      - ruff.toml
+      - .ruff.toml
+      - pyproject.toml
+      - setup.cfg
+      - .flake8
+      - tox.ini
+      - .golangci.yml
+      - .golangci.yaml
+      - clippy.toml
+      - .clippy.toml
+      - rustfmt.toml
+      - .rustfmt.toml
+      - .pre-commit-config.yaml
+      - lefthook.yml
+      - lefthook.yaml
+      - .editorconfig
+      - Makefile
+    tunable: true
+  - name: SCHEDULE_CMD
+    type: scalar
+    doc: Consumer-selected CLI command used for scheduled adjudication.
+    default: claude -p --output-format text --model opus
+    tunable: true
+  - name: SCHEDULE_CRON
+    type: scalar
+    doc: Consumer-selected cron cadence; empty disables scheduled enrollment.
+    default: ""
+    tunable: true
+judge:
+  inputs: [range-diff]
+  checks:
+    - "A waiver's reason genuinely explains what the toolchain-config change does and why, distinguishing a tightened rule from a loosened one gaming a failing check."
+    - "A change that relaxes a lint/type-check/CI rule to make an existing failure disappear is called out as such in the waiver, not described as an unrelated cleanup."
+    - "The change to toolchain config is proportionate to its stated reason — a whole rule category is not disabled to fix one narrow failure."

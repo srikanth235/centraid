@@ -1,377 +1,331 @@
-import { useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import type { JSX } from "react";
 
-import type { AppearancePrefs } from "../../../app-shell-context.js";
+import type { LocalUsageReportDTO } from "../../../gateway-client-local-storage.js";
 import {
-  deleteApp,
-  deleteAutomation,
   getDailyBrief,
-  renameInstalledApp,
-  runAutomationNow,
-  updateAppMeta,
+  getGatewayBackupStatus,
+  listGatewayDevices,
 } from "../../../gateway-client.js";
-import type { HomeMenuAnchor } from "../../screen-contracts.js";
-import HomeScreen from "../../screens/HomeScreen.js";
+import { seat } from "../../host-platform.js";
+import HomeHealthRibbon from "../../screens/HomeHealthRibbon.js";
+import HomeSpringboard from "../../screens/HomeSpringboard.js";
 import { useShellActions } from "../actions.js";
-import { openMenu } from "../contextMenu.js";
+import { ambientSignalFor } from "../ambientStatus.js";
 import PageScroll from "../PageScroll.js";
-import { openPrompt } from "../prompt.js";
 import { useCachedQuery } from "../queryCache.js";
-import type { ShellMenuAnchor } from "../Sidebar.js";
-import { PageSkeleton } from "../status.js";
-import type {
-  ShellAppsController,
-  ShellAppsSnapshot,
-} from "../useShellApps.js";
-import AppInfoModal from "./AppInfoModal.js";
-import { collectAutomationRuns } from "./automationsData.js";
-import type { AutomationFeedEntry } from "./automationsData.js";
+import { useGatewayStatus } from "../useGatewayRuntime.js";
+import { HOME_CONFLICTS, homeOutOfRoom } from "./homeConditions.js";
 import {
-  attentionCount,
-  buildHomeAppItems,
-  buildHomeAutoItems,
-  heroDateLabel,
-  HERO_SUGGESTIONS,
-} from "./homeData.js";
-import { loadAppTemplates } from "./templatesData.js";
+  clearHomeSample,
+  loadHomeSample,
+  NO_SAMPLE,
+  seedHomeSample,
+  syncHomeSampleReplica,
+} from "./homeSample.js";
+import type { HomeSampleProgress } from "./homeSample.js";
+import { buildHomeTiles } from "./homeTiles.js";
+import type { HomeTileContent } from "./homeTiles.js";
+import { startVisibilityTicker } from "./visibility-ticker.js";
 
+/** The whole of Home's input: which apps this vault has. Everything a tile
+ *  shows is CONTENT, so the route reads it rather than taking it as a prop. */
 export interface HomeRouteProps {
   userApps: readonly UserAppMeta[];
-  drafts: readonly DraftAppMeta[];
-  tileVariant: AppearancePrefs["tileVariant"];
-  isStarred: (id: string) => boolean;
-  toggleStar: (id: string) => void;
-  /** Optimistic edit + commit + reconcile over the shell's app lists (#659). */
-  mutateApps: ShellAppsController["mutateApps"];
+  /** The installed-app registry must settle before Home can call anything empty. */
+  appsLoading: boolean;
+  /** First entry after onboarding should get a useful, disclosed starting point. */
+  autoSeedSample?: boolean;
+  /** Consumes the one-shot first-entry trigger at the shell root. */
+  onAutoSeedStarted?: () => void;
 }
 
-// React-owned Home — the landing screen. Replaces the vanilla renderHomeAsync
-// (app.ts). The app + draft list comes from the App root (props); automations +
-// their run feed load here. Derives the card DTOs (homeData) and owns the app +
-// automation context menus (the ported openMenu overlay) + all the card
-// callbacks via ShellActions. Rename/Share are the two actions still stubbed
-// (Share = the 116-line sheet; Rename reaches into card DOM in vanilla — both
-// deferred, see notes).
+// Home (issue #708). Home is the springboard and nothing else: the app bar
+// carries the title, the meta and the two actions, and the body is the content
+// grid. The composer hero and the All/Apps/Automations library shelf that used
+// to sit under it are gone — Home shows you your own content, and the shelf's
+// job ("which things do I own") belongs to the All apps sheet and to Starred.
+//
+// The route's remaining work is the two reads the springboard eats: the daily
+// brief and the per-app tile content.
 export default function HomeRoute(props: HomeRouteProps): JSX.Element {
-  const { navigate, enterBuilder, showToast, confirm, builderEnabled } =
-    useShellActions();
-  const { userApps, drafts, tileVariant, isStarred, toggleStar, mutateApps } =
-    props;
-  // The app whose "App info" sheet is open (its live grants + Uninstall).
-  const [infoApp, setInfoApp] = useState<AppMetaResolvedType | null>(null);
-
-  // Cached across visits (issue #659): Home is the app's front door and the
-  // most re-entered route in the shell, so its automation feed paints from the
-  // last known answer and revalidates behind it.
-  const feed = useCachedQuery("home:feed", async () => {
-    // `collectAutomationRuns` returns the automation rows it already fetched.
-    // Asking for `listAutomations()` alongside it pulled the same list twice on
-    // every Home visit — two round trips for one answer.
-    const [runs, appTemplates, dailyBrief] = await Promise.all([
-      collectAutomationRuns().catch(() => ({
-        rows: [] as CentraidAutomationRow[],
-        entries: [] as AutomationFeedEntry[],
-      })),
-      // Bundled app-template ids are RESERVED (issue #434) and an installed
-      // bundled app keeps its blueprint id — so an app whose id is in this set
-      // is a bundled install (serves in place), which gets Uninstall + App
-      // info; anything else is a code-store app (legacy clone) that keeps
-      // Delete. Best-effort: an empty set degrades every app to code-store.
-      loadAppTemplates().catch(() => []),
-      getDailyBrief().catch(() => undefined),
-    ]);
-    return {
-      rows: runs.rows,
-      entries: runs.entries,
-      bundledIds: new Set(appTemplates.map((t) => t.id)),
-      dailyBrief,
-    };
-  });
-
-  const bundledIds: ReadonlySet<string> =
-    feed.state.status === "ready"
-      ? feed.state.data.bundledIds
-      : new Set<string>();
-
-  const apps: AppMetaResolvedType[] = [...userApps, ...drafts];
-  const findApp = (id: string): AppMetaResolvedType | undefined =>
-    apps.find((a) => a.id === id);
-  /** The gateway app id (a bundled install keeps its own id). */
-  const gatewayAppId = (app: AppMetaResolvedType): string =>
-    (app as UserAppMeta).centraidAppId ?? app.id;
-
-  // The Home screen emits the contract's HomeMenuAnchor (loose optionals); the
-  // context-menu overlay takes the shell's discriminated ShellMenuAnchor.
-  const toAnchor = (a: HomeMenuAnchor): ShellMenuAnchor =>
-    a.kind === "point"
-      ? { kind: "point", x: a.x ?? 0, y: a.y ?? 0 }
-      : { kind: "rect", rect: a.rect as unknown as DOMRect };
-
-  const appContextMenu = (id: string, anchor: HomeMenuAnchor): void => {
-    const app = findApp(id);
-    if (!app) return;
-    const draft = (app as DraftAppMeta).__draft === true;
-    // A bundled install serves in place (issue #434): it's an Uninstall (data
-    // stays) + App info app, not a Delete (wipe files) one. Anything else
-    // non-draft is a code-store app (legacy clone) that keeps Delete.
-    const bundled = !draft && bundledIds.has(app.id);
-    const star = {
-      id: "star",
-      label: isStarred(app.id) ? "Unstar" : "Star",
-      icon: "Star",
-    };
-    // "Edit with Centraid" / "Continue editing" (and the whole draft menu) are
-    // builder entry points (issue #434, Phase 3) — omitted when the builder is
-    // hidden. Drafts never render in that case, so the draft branch is
-    // effectively dead then; it stays guarded for symmetry. Share (stubbed) and
-    // Reveal in Finder are dropped from the installed-app menu.
-    const items = draft
-      ? [
-          ...(builderEnabled
-            ? [{ id: "update", label: "Continue editing", icon: "Sparkle" }]
-            : []),
-          { id: "rename", label: "Rename", icon: "Pencil" },
-          star,
-          "sep" as const,
-          { id: "delete", label: "Delete draft", icon: "Trash", danger: true },
-        ]
-      : bundled
-        ? [
-            { id: "open", label: "Open", icon: "Eye" },
-            { id: "info", label: "App info", icon: "Key" },
-            { id: "rename", label: "Rename", icon: "Pencil" },
-            star,
-            "sep" as const,
-            {
-              id: "uninstall",
-              label: "Uninstall",
-              icon: "Trash",
-              danger: true,
-            },
-          ]
-        : [
-            { id: "open", label: "Open", icon: "Eye" },
-            ...(builderEnabled
-              ? [{ id: "update", label: "Edit with Centraid", icon: "Sparkle" }]
-              : []),
-            { id: "rename", label: "Rename", icon: "Pencil" },
-            star,
-            "sep" as const,
-            { id: "delete", label: "Delete", icon: "Trash", danger: true },
-          ];
-    openMenu(items, toAnchor(anchor), (pick) => {
-      if (pick === "open") navigate({ kind: "app", id: app.id });
-      else if (pick === "update") enterBuilder({ appContext: app });
-      else if (pick === "info") setInfoApp(app);
-      else if (pick === "star") toggleStar(app.id);
-      else if (pick === "rename") void renameAppFlow(app, bundled);
-      else if (pick === "uninstall") void uninstallAppFlow(app);
-      else if (pick === "delete") void deleteAppFlow(app);
-    });
-  };
-
-  /** Drop one app from both lists — the local half of a delete/uninstall. */
-  const withoutApp = (id: string) => (snapshot: ShellAppsSnapshot) => ({
-    userApps: snapshot.userApps.filter((a) => a.id !== id),
-    drafts: snapshot.drafts.filter((a) => a.id !== id),
-  });
-
-  /** Retitle one app in both lists — the local half of a rename. */
-  const renamedApp =
-    (id: string, name: string) => (snapshot: ShellAppsSnapshot) => ({
-      userApps: snapshot.userApps.map((a) =>
-        a.id === id ? { ...a, name } : a
-      ),
-      drafts: snapshot.drafts.map((a) => (a.id === id ? { ...a, name } : a)),
-    });
-
-  const deleteAppFlow = async (app: AppMetaResolvedType): Promise<void> => {
-    const draft = (app as DraftAppMeta).__draft === true;
-    const ok = await confirm({
-      confirmLabel: "Delete",
-      danger: true,
-      title: draft ? "Delete draft?" : "Delete app?",
-      message: draft
-        ? `Delete the draft "${app.name}"? Its app files will be removed from disk.`
-        : `Delete "${app.name}"? This removes it from the gateway and wipes its local app files. Data published to the gateway cannot be recovered.`,
-    });
-    if (!ok) return;
-    // The tile leaves on confirm, not a round trip later; a refusal puts it
-    // back and says why (issue #659).
-    try {
-      await mutateApps(withoutApp(app.id), () => deleteApp({ id: app.id }));
-      showToast(`Deleted ${draft ? "draft " : ""}"${app.name}"`);
-    } catch (error) {
-      showToast(
-        `Could not delete: ${error instanceof Error ? error.message : String(error)}`
-      );
-    }
-  };
-
-  // Uninstall a bundled app (issue #434): revokes its access; the user's data
-  // rows are retained (uninstall is not a purge — that's a later explicit act).
-  // Uses the same `deleteApp` wire, which for a bundled id deregisters + revokes
-  // without a git delete (there's no code in the store).
-  const uninstallAppFlow = async (app: AppMetaResolvedType): Promise<void> => {
-    const ok = await confirm({
-      confirmLabel: "Uninstall",
-      danger: true,
-      title: `Uninstall ${app.name}?`,
-      message: `Removes "${app.name}" and revokes its access. Your data stays in your vault.`,
-    });
-    if (!ok) return;
-    try {
-      await mutateApps(withoutApp(app.id), () => deleteApp({ id: app.id }));
-      showToast(`Uninstalled "${app.name}"`);
-    } catch (error) {
-      showToast(
-        `Could not uninstall: ${error instanceof Error ? error.message : String(error)}`
-      );
-    }
-  };
-
-  const renameAppFlow = async (
-    app: AppMetaResolvedType,
-    bundled: boolean
-  ): Promise<void> => {
-    const next = await openPrompt({
-      title: "Rename app",
-      initial: app.name,
-      placeholder: "App name",
-      confirmLabel: "Rename",
-    });
-    if (!next) return; // cancelled, empty, or unchanged
-    try {
-      // A bundled app's code is read-only — rename sets a per-vault label with
-      // NO editing session (renameInstalledApp); code-store apps rewrite
-      // app.json via updateAppMeta.
-      await mutateApps(renamedApp(app.id, next), () =>
-        bundled
-          ? renameInstalledApp({ id: gatewayAppId(app), name: next })
-          : updateAppMeta({ id: app.id, name: next })
-      );
-      showToast(`Renamed to "${next}"`);
-    } catch (error) {
-      showToast(
-        `Could not rename: ${error instanceof Error ? error.message : String(error)}`
-      );
-    }
-  };
-
-  const automationMenu = (ref: string, anchor: HomeMenuAnchor): void => {
-    const rows = feed.state.status === "ready" ? feed.state.data.rows : [];
-    const row = rows.find((r) => r.ref === ref);
-    if (!row) return;
-    const items = [
-      { id: "open", label: "Open", icon: "Eye" },
-      { id: "run", label: "Run now", icon: "Play" },
-      { id: "edit", label: "Edit", icon: "Pencil" },
-      { id: "star", label: isStarred(ref) ? "Unstar" : "Star", icon: "Star" },
-      "sep" as const,
-      { id: "delete", label: "Delete", icon: "Trash", danger: true },
-    ];
-    openMenu(items, toAnchor(anchor), (pick) => {
-      if (pick === "open")
-        navigate({ kind: "automation-view", automationId: row.ref });
-      else if (pick === "run")
-        void runAutomationNow({ automationId: row.ref })
-          .then(({ turnId }) =>
-            navigate({ kind: "run-view", automationId: row.ref, runId: turnId })
-          )
-          .catch((error: unknown) =>
-            showToast(
-              `Run failed: ${error instanceof Error ? error.message : String(error)}`
-            )
-          );
-      else if (pick === "edit")
-        navigate({ kind: "automation-editor", automationId: row.ref });
-      else if (pick === "star") toggleStar(row.ref);
-      else if (pick === "delete")
-        void confirm({
-          confirmLabel: "Delete",
-          danger: true,
-          title: "Delete automation?",
-          message: `Delete "${row.name}"? This removes it from the gateway and deletes its run history. This can't be undone.`,
-        }).then((ok) => {
-          if (!ok) return;
-          void deleteAutomation({ automationId: row.ref })
-            .then(() => showToast(`Deleted "${row.name}"`))
-            .catch((error: unknown) =>
-              showToast(
-                `Could not delete: ${error instanceof Error ? error.message : String(error)}`
-              )
-            );
-        });
-    });
-  };
-
-  // The apps are already in memory — the shell root owns them and they survive
-  // navigation. Blanking the whole of Home because the AUTOMATION feed is still
-  // in flight threw away content we could already draw (issue #659). Only a
-  // genuinely empty Home waits, and it waits behind a skeleton, not a word.
-  if (feed.state.status === "loading" && apps.length === 0) {
-    return (
-      <PageScroll flush>
-        <PageSkeleton rows={3} label="Loading Home…" />
-      </PageScroll>
-    );
-  }
-  const rows = feed.state.status === "ready" ? feed.state.data.rows : [];
-  const entries = feed.state.status === "ready" ? feed.state.data.entries : [];
-  const appItems = buildHomeAppItems(apps, {
+  const { navigate } = useShellActions();
+  const {
+    appsLoading,
     userApps,
-    isStarred,
-    tileVariant,
+    autoSeedSample = false,
+    onAutoSeedStarted,
+  } = props;
+  const [ambientNow, setAmbientNow] = useState(() => Date.now());
+  useEffect(
+    () => startVisibilityTicker(() => setAmbientNow(Date.now()), 60_000),
+    []
+  );
+  const gatewayStatus = useGatewayStatus();
+  const ambientQuery = useCachedQuery("home:ambient-signal", async () => {
+    const readAt = Date.now();
+    const [backup, devices] = await Promise.all([
+      getGatewayBackupStatus().catch(() => undefined),
+      listGatewayDevices().catch(() => undefined),
+    ]);
+    const lastBackupAt = backup?.vaults
+      .map((vault) => vault.lastBackupAt)
+      .filter((value): value is string => value !== undefined)
+      .map((value) => Date.parse(value))
+      .filter(Number.isFinite)
+      .sort((a, b) => b - a)[0];
+    return {
+      deviceCount: devices?.length,
+      lastBackupAt,
+      lastKnownAt: readAt,
+    };
   });
-  const automationItems = buildHomeAutoItems(rows, entries, isStarred);
+
+  // Cached across visits (issue #659) AND across boots (#708). Home is the
+  // app's front door and the most re-entered route in the shell, so it paints
+  // from the last known answer and revalidates behind it.
+  //
+  // `persist` is what makes the second sentence true. The in-memory cache dies
+  // with the JS context, so a reload — or the OS evicting an installed PWA —
+  // put Home back to skeletons even though the member had just been looking at
+  // it. Both keys hold vault CONTENT (event titles, a note's first line), so
+  // this is a deliberate decision to write that to unencrypted browser storage
+  // on the member's own device, in exchange for the front door opening
+  // instantly. It is purged whenever the shell re-scopes, so it cannot outlive
+  // the vault it describes.
+  const briefQuery = useCachedQuery(
+    "home:brief",
+    async () => getDailyBrief().catch(() => undefined),
+    { persist: true }
+  );
+
+  // Two queries, not one, because the second READS the first: the gateway's
+  // daily brief is what the agenda, tasks and tally tiles are made of, so the
+  // tile content can only be derived once the brief has settled. Splitting
+  // them also keeps the eight replica reads and the disk-budget probe off the
+  // brief's critical path.
+  //
+  // Everything here is imported lazily for the reason `blob-auth.ts`
+  // documents — the authed gateway client touches `window.CentraidApi` at
+  // module load, so an eager import drags the whole transport into Home's
+  // chunk.
+  const brief =
+    briefQuery.state.status === "ready" ? briefQuery.state.data : undefined;
+  // NULL until the brief has settled (issue #708). `useCachedQuery` treats the
+  // KEY as the loader's identity — an inline closure that captures a different
+  // `brief` is deliberately NOT a change — so running this while the brief was
+  // still in flight cached a `tileContent` built from `brief === undefined` and
+  // never recomputed it. That is the whole bug behind "I seeded the vault and
+  // Home still says nothing is here": agenda, tasks and the tally figure are
+  // MADE of the brief, so they were permanently absent from the cached answer
+  // while the seeded rows sat on the gateway. Gating the key costs one settle
+  // (the brief hydrates from its own persisted copy on the first render, so in
+  // practice this is the same frame) and makes the dependency real.
+  const springboardFeed = useCachedQuery(
+    briefQuery.state.status === "loading" ? null : "home:springboard",
+    async () => {
+      const [tileContent, localUsage] = await Promise.all([
+        import("./homeTileContent.js")
+          .then(async (mod) =>
+            mod.loadHomeTileContent({
+              brief,
+              reader: await mod.homeTileReader(),
+            })
+          )
+          .catch((): HomeTileContent => ({})),
+        // Never a refresh — that forces a walk of the whole blob CAS, which is
+        // an explicit owner action, not something Home does on every visit.
+        import("../../../gateway-client-local-storage.js")
+          .then((mod) => mod.getLocalStorageUsage())
+          .catch((): LocalUsageReportDTO | undefined => undefined),
+      ]);
+      return { localUsage, tileContent };
+    },
+    {
+      persist: true,
+      // The mosaic's thumbnails are `URL.createObjectURL` handles (see
+      // `authorizeBlobUrl`), bound to the document that minted them. Persisted,
+      // they would come back as four broken images on exactly the boot this is
+      // meant to make instant — so the stored copy keeps the COUNT and lets the
+      // tile re-authorize its own pictures. Everything else survives verbatim.
+      toPersisted: (data) => ({
+        ...data,
+        tileContent: data.tileContent.photos
+          ? {
+              ...data.tileContent,
+              photos: { ...data.tileContent.photos, thumbs: [] },
+            }
+          : data.tileContent,
+      }),
+    }
+  );
+  const homeReadsSettled = springboardFeed.state.status === "ready";
+
+  // The sample plane (#708). Cheap, cached, and fail-soft to "no offer" — a
+  // gateway that cannot answer should cost the member an offer, never the
+  // whole front door.
+  const sampleQuery = useCachedQuery("home:sample", loadHomeSample);
+  const sample =
+    sampleQuery.state.status === "ready" ? sampleQuery.state.data : NO_SAMPLE;
+  const [clearing, setClearing] = useState(false);
+  // The fill's position, or null when none is running. State rather than a
+  // boolean because the wait is TEN SECONDS long — seven generators, of which
+  // photos alone is ten uploads — and the only honest way to hold somebody
+  // through that is to say which one is running and how many are left.
+  const [filling, setFilling] = useState<HomeSampleProgress | null>(null);
+  // True for the render right after a seed lands: the grid arrives staggered
+  // once, as the payoff for pressing, and never again on a routine revisit.
+  const [justFilled, setJustFilled] = useState(false);
+  const autoSeedStarted = useRef(false);
+  const autoSeedPending = autoSeedSample;
+
+  const refreshAfterSample = useCallback(async () => {
+    // Replica FIRST, refresh SECOND — the order is the fix for "I pressed the
+    // button and nothing filled in". The tiles read the local replica, and the
+    // seed's rows only reach it when the change feed's nudge lands, which
+    // races the refresh below; pulling explicitly makes the refreshed queries
+    // see the seeded (or purged) rows instead of the pre-press state.
+    // `syncHomeSampleReplica` is fail-soft by contract, so a sync that cannot
+    // run still lets the refresh repaint whatever IS local.
+    await syncHomeSampleReplica();
+    // Both reads, because a seed writes rows the springboard reads AND changes
+    // the demo plane's own row count.
+    await Promise.all([
+      briefQuery.refresh(),
+      springboardFeed.refresh(),
+      sampleQuery.refresh(),
+    ]);
+  }, [briefQuery, springboardFeed, sampleQuery]);
+
+  const onSeed = useCallback(() => {
+    const total = sample.seedable.length;
+    // Set before the run so the control is never briefly pressable twice, and
+    // so an empty `seedable` — which emits no progress at all — still shows a
+    // block rather than a live button over a promise that is already settling.
+    setFilling({ appId: sample.seedable[0], done: 0, total });
+    void seedHomeSample(sample.seedable, (progress) => setFilling(progress))
+      // The catch-up is a STEP, and it is named as one: the generators have all
+      // returned, so the counts are full, but the rows are on the gateway and
+      // the tiles read the local replica — `refreshAfterSample` pulls it before
+      // it refetches. Leaving the last app's sentence up across that pull is
+      // how "the bar filled and then nothing happened" gets built.
+      .then(() => setFilling({ done: total, total }))
+      .then(refreshAfterSample)
+      .then(() => setJustFilled(true))
+      .finally(() => setFilling(null));
+  }, [sample.seedable, refreshAfterSample]);
+
+  // First-time users should see a useful Home without having to decide what a
+  // sample week is. Wait for the sample plane and initial Home reads to settle,
+  // disclose the same removable offer in its working state, then run the
+  // existing seed path. Starting after the first replica read avoids making
+  // bootstrap and the first demo writes contend for the local store.
+  // The ref protects the one-shot promise even if development Strict Mode
+  // replays an effect before the state update commits.
+  useEffect(() => {
+    if (
+      !autoSeedSample ||
+      autoSeedStarted.current ||
+      sampleQuery.state.status !== "ready" ||
+      !homeReadsSettled
+    ) {
+      return;
+    }
+    autoSeedStarted.current = true;
+    onAutoSeedStarted?.();
+    if (sample.rows > 0 || sample.seedable.length === 0) return;
+    void Promise.resolve().then(onSeed);
+  }, [
+    autoSeedSample,
+    onAutoSeedStarted,
+    onSeed,
+    sample.rows,
+    sample.seedable,
+    sampleQuery.state.status,
+    homeReadsSettled,
+  ]);
+
+  const onClear = useCallback(() => {
+    setClearing(true);
+    setJustFilled(false);
+    void clearHomeSample()
+      .catch(() => undefined)
+      .then(refreshAfterSample)
+      .finally(() => setClearing(false));
+  }, [refreshAfterSample]);
+
+  /** The gateway app id (a bundled install keeps its own id). */
+  const gatewayAppId = (app: UserAppMeta): string =>
+    app.centraidAppId ?? app.id;
+
+  // The springboard's tiles are the FIRST-PARTY apps this vault actually has.
+  // Since #708 that is all eight: the gateway installs every bundled app at
+  // vault mount, so Home opens on the full grid rather than on whatever the
+  // member had got round to acquiring from a catalogue.
+  const ready =
+    springboardFeed.state.status === "ready"
+      ? springboardFeed.state.data
+      : undefined;
+  const settled = ready !== undefined;
+  const tiles = buildHomeTiles({
+    content: ready?.tileContent ?? {},
+    installedIds: userApps.map((app) => gatewayAppId(app)),
+  });
+  const outOfRoom = homeOutOfRoom(ready?.localUsage, () =>
+    navigate({ kind: "storage" })
+  );
+  const ambientFacts =
+    ambientQuery.state.status === "ready" ? ambientQuery.state.data : undefined;
+  const ambientSignal = ambientSignalFor({
+    gatewayStatus,
+    now: ambientNow,
+    seat: seat(),
+    ...(ambientFacts?.deviceCount === undefined
+      ? {}
+      : { deviceCount: ambientFacts.deviceCount }),
+    ...(ambientFacts?.lastBackupAt === undefined
+      ? {}
+      : { lastBackupAt: ambientFacts.lastBackupAt }),
+    ...(ambientFacts?.lastKnownAt === undefined
+      ? {}
+      : { lastKnownAt: ambientFacts.lastKnownAt }),
+  });
 
   return (
-    <PageScroll flush>
-      <HomeScreen
-        builderEnabled={builderEnabled}
-        suggestions={[...HERO_SUGGESTIONS]}
-        dateLabel={heroDateLabel()}
-        appItems={appItems}
-        automationItems={automationItems}
-        dailyBrief={
-          feed.state.status === "ready" ? feed.state.data.dailyBrief : undefined
-        }
-        counts={{
-          all: apps.length + rows.length,
-          apps: apps.length,
-          automations: rows.length,
-        }}
-        attention={attentionCount(rows, entries)}
-        onBuild={(prompt) => enterBuilder({ initialPrompt: prompt })}
-        onOpenApp={(id) => navigate({ kind: "app", id })}
-        onEnterDraft={(id) => {
-          const a = findApp(id);
-          if (a) enterBuilder({ appContext: a });
-        }}
-        onAppContext={appContextMenu}
-        onOpenAutomation={(ref) =>
-          navigate({ kind: "automation-view", automationId: ref })
-        }
-        onAutomationMenu={automationMenu}
-        onBrowseTemplates={() => navigate({ kind: "discover" })}
-      />
-      {infoApp ? (
-        <AppInfoModal
-          app={infoApp}
-          appId={gatewayAppId(infoApp)}
-          onClose={() => setInfoApp(null)}
-          onUninstall={() => {
-            const target = infoApp;
-            setInfoApp(null);
-            void uninstallAppFlow(target);
+    // NOT `flush` (issue #708). `flush` drops the page gutter for a screen whose
+    // content owns its own spacing — true of the day-one card, which carries
+    // `--sp-6` of its own, and false of everything else Home draws. So the
+    // moment one tile had content the grid and the start band ran edge to edge
+    // and the band's heading clipped against the frame: Home looked right on
+    // first paint and wrong on every return, which is exactly when a member
+    // notices. The springboard is an ordinary page body and takes the ordinary
+    // gutter (compact-aware since `mainScroll` learned the 720px step).
+    <>
+      <HomeHealthRibbon signal={ambientSignal} onOpen={navigate} />
+      <PageScroll>
+        <HomeSpringboard
+          conflicts={HOME_CONFLICTS}
+          // Only a SETTLED read can say a tile is empty. While the reads are in
+          // flight the springboard shows static skeletons, which is a different
+          // sentence: "still looking", not "there is nothing" — so `loading`
+          // gates the whole graded treatment rather than one branch of it.
+          loading={appsLoading || !settled}
+          justFilled={justFilled}
+          onConnect={() => navigate({ kind: "connectors" })}
+          onOpen={(id: string) => navigate({ kind: "app", id })}
+          sample={{
+            canSeed: sample.seedable.length > 0,
+            clearing,
+            filling,
+            loaded: sample.rows > 0,
+            onClear,
+            onSeed,
+            autoSeedPending,
           }}
-          onAutomate={(entity) => {
-            setInfoApp(null);
-            navigate({ kind: "automation-editor", watchEntity: entity });
-          }}
-          showToast={showToast}
+          tiles={tiles}
+          {...(outOfRoom ? { outOfRoom } : {})}
         />
-      ) : null}
-    </PageScroll>
+      </PageScroll>
+    </>
   );
 }

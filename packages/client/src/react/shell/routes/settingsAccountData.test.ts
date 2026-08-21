@@ -8,37 +8,20 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import type * as GatewayClient from "../../../gateway-client.js";
 
 const listVaults = vi.fn<typeof GatewayClient.listVaults>();
-const vaultStatus = vi.fn<typeof GatewayClient.vaultStatus>();
-const vaultImportsList = vi.fn<typeof GatewayClient.vaultImportsList>();
-const vaultConnections = vi.fn<typeof GatewayClient.vaultConnections>();
-const vaultImportDiscard = vi.fn<typeof GatewayClient.vaultImportDiscard>();
 
 vi.mock(import("../../../gateway-client.js"), () => ({
   listVaults: () => listVaults(),
-  vaultStatus: () => vaultStatus(),
-  vaultImportsList: () => vaultImportsList(),
-  vaultConnections: () => vaultConnections(),
-  vaultImportDiscard: (id: string) => vaultImportDiscard(id),
-  vaultImportPublish: vi.fn<typeof GatewayClient.vaultImportPublish>(),
-  vaultImportRows: vi.fn<typeof GatewayClient.vaultImportRows>(),
-  vaultImportStage: vi.fn<typeof GatewayClient.vaultImportStage>(),
-  vaultPortableExport: vi.fn<typeof GatewayClient.vaultPortableExport>(),
-  vaultConnectionSetStatus:
-    vi.fn<typeof GatewayClient.vaultConnectionSetStatus>(),
 }));
 
 import {
-  importCallbacks,
   loadActiveVaultData,
+  loadSettingsStamp,
   phoneCallbacks,
 } from "./settingsAccountData.js";
 
 describe("settingsAccountData", () => {
   beforeEach(() => {
     listVaults.mockReset();
-    vaultStatus.mockReset();
-    vaultImportsList.mockReset();
-    vaultConnections.mockReset();
     window.CentraidApi = {
       getGatewayAuth: vi
         .fn<() => Promise<{ vaultId: string }>>()
@@ -56,6 +39,27 @@ describe("settingsAccountData", () => {
       getPhoneLinkStatus: vi.fn<typeof window.CentraidApi.getPhoneLinkStatus>(),
       revokePhoneDevice: vi.fn<typeof window.CentraidApi.revokePhoneDevice>(),
     } as unknown as typeof window.CentraidApi;
+  });
+
+  describe(loadSettingsStamp, () => {
+    it("states the running build and the gateway it is talking to", async () => {
+      window.CentraidApi.getChangelog = () =>
+        Promise.resolve({ currentVersion: "v0.6.0", releases: [] });
+      window.CentraidApi.getGatewayAuth = () =>
+        Promise.resolve({ baseUrl: "http://home-gateway.local:4319" });
+      await expect(loadSettingsStamp()).resolves.toBe(
+        "Centraid 0.6.0 · home-gateway.local:4319"
+      );
+    });
+
+    it("omits what this build cannot answer for rather than inventing it", async () => {
+      // The stamp replaced a hard-coded `v0.5.2`, which was a number the build
+      // could not vouch for. A host with no changelog bridge states the host.
+      window.CentraidApi.getChangelog = undefined;
+      window.CentraidApi.getGatewayAuth = () =>
+        Promise.reject(new Error("no gateway"));
+      await expect(loadSettingsStamp()).resolves.toBe("Centraid");
+    });
   });
 
   describe(loadActiveVaultData, () => {
@@ -156,7 +160,7 @@ describe("settingsAccountData", () => {
     });
   });
 
-  describe("phoneCallbacks / importCallbacks", () => {
+  describe(phoneCallbacks, () => {
     it("phone loadStatus maps devices; revoke folds missing result to false", async () => {
       const toast = vi.fn<Parameters<typeof phoneCallbacks>[0]>();
       const phone = phoneCallbacks(toast);
@@ -190,14 +194,6 @@ describe("settingsAccountData", () => {
         window.CentraidApi.revokePhoneDevice as ReturnType<typeof vi.fn>
       ).mockRejectedValue(new Error("x"));
       await expect(phone.revoke("d1")).resolves.toBe(false);
-    });
-
-    it("import loadData returns null without vault status", async () => {
-      const imp = importCallbacks(
-        vi.fn<Parameters<typeof importCallbacks>[0]>()
-      );
-      vaultStatus.mockRejectedValue(new Error("down"));
-      await expect(imp.loadData()).resolves.toBeNull();
     });
   });
 });

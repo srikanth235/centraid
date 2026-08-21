@@ -1,17 +1,20 @@
-import React, { useEffect, useMemo, useState } from "react";
-import {
-  Alert,
-  Modal,
-  Pressable,
-  StyleSheet,
-  Switch,
-  View,
-} from "react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
+// One album (Photos v4 handoff §14, §18).
+//
+// An album REFERS to a photograph where it lives; it never moves or copies
+// anything. That is why "Remove" here is an outlined control and not a filled
+// red one: it removes a reference, and the photograph stays in the library.
+//
+// The grid is the same justified timeline every other shelf uses — an album is
+// a shelf, not a different way of looking at photographs.
 
-import AudiencePlacementSheet from "../../kit/components/AudiencePlacementSheet";
+import React, { useEffect, useMemo, useState } from "react";
+import { Alert, Modal, Pressable, Switch, View } from "react-native";
+
+import { SAVED_TO_MY_VAULT } from "@centraid/blueprints/apps/_shared/shared-copy";
+
 import Icon from "../../kit/components/Icon";
 import { Text, TextInput } from "../../kit/components/NativeText";
+import { postStatus } from "../../kit/components/status-line";
 import { useReplicaQuery } from "../../kit/hooks/useReplicaQuery";
 import { useReplica } from "../../kit/replica/ReplicaProvider";
 import ReplicaStatusBar from "../../kit/replica/ReplicaStatusBar";
@@ -20,13 +23,30 @@ import {
   surfaceWriteFailure,
   surfaceWriteOutcome,
 } from "../../kit/replica/write-outcome";
-import { family, useTheme } from "../../kit/theme";
-import { optimisticValues } from "../../lib/replica/optimistic";
+import GrantSheet from "../../kit/share/GrantSheet";
+import { useTheme } from "../../kit/theme";
+import type { NativeWriteResult } from "../../lib/replica/native-session";
+import {
+  listCommonsResidents,
+  retainCommonsItem,
+} from "../../lib/replica/placement-transport";
 import type { PhotosScreenProps } from "../../navigation";
 import { Store } from "../../storage";
+import { makeStyles } from "./AlbumDetail.styles";
+import { usePhotoGrantEntry } from "./photo-grants";
+import {
+  NO_DOWNLOAD_REASON,
+  batchAddToAlbum,
+  batchFavorite,
+  batchTrash,
+  vaultAssets,
+} from "./photos-selection-writes";
+import PhotosScreen from "./PhotosScreen";
 import PhotoTimeline from "./PhotoTimeline";
 import { sectionPhotoAssets } from "./timeline-model";
 import { usePhotoTimeline } from "./timeline-source";
+import { usePhotoSelectionShare } from "./use-photo-selection-share";
+import { READ_ONLY_VAULT_REASON } from "./viewer-model";
 
 const KEEP_ORIGINALS_KEY = "photos.keepOriginalAlbums";
 
@@ -35,6 +55,7 @@ export default function AlbumDetail({
   navigation,
 }: PhotosScreenProps<"AlbumDetail">): React.JSX.Element {
   const { colors, radii } = useTheme();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
   const replica = useReplica();
   const { session } = replica;
   const { refreshing, refreshNow } = useReplicaRefresh();
@@ -49,7 +70,7 @@ export default function AlbumDetail({
   );
   const [selection, setSelection] = useState(new Set<string>());
   const [renameOpen, setRenameOpen] = useState(false);
-  const [shareOpen, setShareOpen] = useState(false);
+  const [residentAlbumId, setResidentAlbumId] = useState<string>();
   const [name, setName] = useState("");
   const [keepOriginals, setKeepOriginals] = useState(false);
   // Which album's "keep originals" pin has finished hydrating. Derived rather
@@ -59,6 +80,48 @@ export default function AlbumDetail({
   const album = collections.rows.find(
     (row) => row.collection_id === route.params.albumId
   );
+  const albumVaultId = String(
+    album?.__centraidScopeId ?? replica.vaultId ?? ""
+  );
+  const commonsAlbum = residentAlbumId === route.params.albumId;
+  useEffect(() => {
+    let active = true;
+    if (!replica.gatewayBase || !albumVaultId) return;
+    void listCommonsResidents(replica.gatewayBase, albumVaultId)
+      .then((items) => {
+        if (active)
+          setResidentAlbumId(
+            items.some(
+              (item) =>
+                item.itemType === "core.collection" &&
+                item.itemId === route.params.albumId
+            )
+              ? route.params.albumId
+              : undefined
+          );
+      })
+      .catch(() => {
+        if (active) setResidentAlbumId(undefined);
+      });
+    return () => {
+      active = false;
+    };
+  }, [albumVaultId, replica.gatewayBase, route.params.albumId]);
+
+  const saveAlbumToMyVault = async (): Promise<void> => {
+    if (!replica.gatewayBase || !albumVaultId || !commonsAlbum) return;
+    try {
+      await retainCommonsItem(replica.gatewayBase, {
+        actorVaultId: albumVaultId,
+        itemType: "core.collection",
+        itemId: route.params.albumId,
+      });
+      setResidentAlbumId(undefined);
+      postStatus(SAVED_TO_MY_VAULT);
+    } catch (error) {
+      surfaceWriteFailure(error, "Album not saved to your vault");
+    }
+  };
   const ids = new Set(
     entries.rows
       .filter((row) => row.collection_id === route.params.albumId)
@@ -75,6 +138,19 @@ export default function AlbumDetail({
     });
   }, [route.params.albumId]);
   const pinsReady = pinsHydratedFor === route.params.albumId;
+  // CAN THIS MEMBER CHANGE THIS ALBUM? Rename, Delete, Share, Make cover and
+  // Remove all used to render unconditionally and then `return` on a missing
+  // session — a silent no-op, which §1 forbids outright: a control that looks
+  // available and does nothing teaches a member that the app is broken, and
+  // they have no way to learn otherwise. Two different truths block the write
+  // and a member can act on the difference, so each states its own sentence.
+  const scopeWritable = album ? album.__centraidCanWrite !== false : true;
+  const writeBlockedReason = session
+    ? scopeWritable
+      ? null
+      : READ_ONLY_VAULT_REASON
+    : "Not connected to a gateway, so this album cannot be changed here.";
+  const canChangeAlbum = writeBlockedReason === null;
   const toggleKeepOriginals = (next: boolean): void => {
     if (!pinsReady) return;
     const current = Store.get<string[]>(KEEP_ORIGINALS_KEY, []);
@@ -87,6 +163,10 @@ export default function AlbumDetail({
     setKeepOriginals(next);
   };
   const remove = async (): Promise<void> => {
+    // Belt and braces, exactly as the viewer's bar does it: the control is
+    // already disabled AND its press handler returns early — this guard is
+    // what stops any other caller from reaching the write.
+    if (!canChangeAlbum) return;
     const selectedAssets = assets.filter((item) => selection.has(item.id));
     const removeNext = async (index: number): Promise<void> => {
       const asset = selectedAssets[index];
@@ -99,18 +179,11 @@ export default function AlbumDetail({
       if (!session) return;
       const result = await session.write("photos", {
         action: "remove-from-album",
-        input: { album_id: route.params.albumId, asset_id: asset.assetId! },
-        ...(entry
-          ? {
-              optimistic: [
-                {
-                  op: "delete" as const,
-                  entity: "core.collection_entry",
-                  rowId: String(entry.entry_id),
-                },
-              ],
-            }
-          : {}),
+        input: {
+          album_id: route.params.albumId,
+          asset_id: asset.assetId!,
+          ...(entry ? { entry_id: String(entry.entry_id) } : {}),
+        },
       });
       surfaceWriteOutcome(result);
       return removeNext(index + 1);
@@ -123,29 +196,21 @@ export default function AlbumDetail({
     }
   };
   const setCover = async (): Promise<void> => {
+    if (!canChangeAlbum) return;
     const selected = assets.find((item) => selection.has(item.id));
     if (!selected?.assetId || !selected.contentId || !album || !session) return;
     try {
       const result = await session.write("photos", {
         action: "set-album-cover",
         input: { album_id: route.params.albumId, asset_id: selected.assetId },
-        optimistic: [
-          {
-            op: "upsert",
-            entity: "core.collection",
-            rowId: route.params.albumId,
-            values: optimisticValues(album, {
-              cover_content_id: selected.contentId,
-            }),
-          },
-        ],
       });
       if (surfaceWriteOutcome(result)) setSelection(new Set());
     } catch (error) {
       surfaceWriteFailure(error, "Album cover not changed");
     }
   };
-  const deleteAlbum = (): void =>
+  const deleteAlbum = (): void => {
+    if (!canChangeAlbum) return;
     Alert.alert("Delete album?", "Photos stay in the library.", [
       { text: "Keep" },
       {
@@ -157,13 +222,6 @@ export default function AlbumDetail({
             .write("photos", {
               action: "delete-album",
               input: { album_id: route.params.albumId },
-              optimistic: [
-                {
-                  op: "delete",
-                  entity: "core.collection",
-                  rowId: route.params.albumId,
-                },
-              ],
             })
             .then((result) => {
               if (surfaceWriteOutcome(result)) navigation.goBack();
@@ -174,20 +232,13 @@ export default function AlbumDetail({
         },
       },
     ]);
+  };
   const rename = async (): Promise<void> => {
-    if (!name.trim() || !album || !session) return;
+    if (!canChangeAlbum || !name.trim() || !album || !session) return;
     try {
       const result = await session.write("photos", {
         action: "rename-album",
         input: { album_id: route.params.albumId, title: name.trim() },
-        optimistic: [
-          {
-            op: "upsert",
-            entity: "core.collection",
-            rowId: route.params.albumId,
-            values: optimisticValues(album, { name: name.trim() }),
-          },
-        ],
       });
       if (surfaceWriteOutcome(result)) {
         setRenameOpen(false);
@@ -197,78 +248,285 @@ export default function AlbumDetail({
       surfaceWriteFailure(error, "Album not renamed");
     }
   };
+  const selectedVaultAssets = vaultAssets(assets, selection);
+  // One handler for the third selection target, shared by every Photos shelf
+  // (`use-photo-selection-share.ts`) so the grant sheet's moment and the
+  // refusal grammar cannot drift between them.
+  // The ALBUM's own grant (`core.collection`) — a different subject from the
+  // selection's, so a different entry. Membership does the rest: a photograph
+  // added to a shared album reaches the same audience with no second gesture.
+  const albumShare = usePhotoGrantEntry(postStatus);
+  const share = usePhotoSelectionShare(
+    () => selectedVaultAssets,
+    () => setSelection(new Set())
+  );
+  /** Add to ANOTHER album. The phone has no room for an inline popover, so
+   *  the album list is the platform's own list-of-choices (§6's phone note
+   *  reaches the same answer on the web with a sheet). */
+  const addToAnotherAlbum = (): void => {
+    const others = collections.rows.filter(
+      (row) => String(row.collection_id) !== route.params.albumId
+    );
+    if (!others.length) {
+      postStatus("No other album to add these to yet.");
+      return;
+    }
+    Alert.alert("Add to album", `${selection.size} selected`, [
+      ...others.slice(0, 6).map((other) => ({
+        text: String(other.name ?? "Album"),
+        onPress: () => {
+          const albumId = String(other.collection_id);
+          const position = entries.rows.filter(
+            (row) => String(row.collection_id) === albumId
+          ).length;
+          runSelection(
+            () =>
+              batchAddToAlbum(
+                session!,
+                selectedVaultAssets,
+                albumId,
+                position,
+                emit
+              ),
+            "Photos not added"
+          )();
+        },
+      })),
+      { text: "Cancel", style: "cancel" as const },
+    ]);
+  };
+  const emit = (result: NativeWriteResult): void => {
+    surfaceWriteOutcome(result);
+  };
+  const runSelection = (
+    run: () => Promise<void>,
+    failure: string
+  ): (() => void) => {
+    return () => {
+      void run()
+        .then(() => setSelection(new Set()))
+        .catch((error: unknown) => surfaceWriteFailure(error, failure));
+    };
+  };
+  // The five, wired to the writes this screen already performs. `Download`
+  // has no phone surface behind it yet, so it renders disabled with the
+  // sentence that says so rather than doing nothing.
+  const selectionBar = {
+    count: selection.size,
+    shelf: "normal" as const,
+    copyLabel: share.copyLabel,
+    readOnlyReason: writeBlockedReason,
+    favorite: canChangeAlbum
+      ? {
+          run: runSelection(
+            () => batchFavorite(session!, selectedVaultAssets, emit),
+            "Photos not favorited"
+          ),
+        }
+      : { unavailableReason: writeBlockedReason! },
+    addToAlbum: canChangeAlbum
+      ? { run: () => addToAnotherAlbum() }
+      : { unavailableReason: writeBlockedReason! },
+    // Share is one standing grant over one photograph, through the one kit.
+    share: share.handler,
+    download: { unavailableReason: NO_DOWNLOAD_REASON },
+    trash: canChangeAlbum
+      ? {
+          run: () =>
+            Alert.alert(
+              `Move ${selection.size} to trash?`,
+              "The device original is never deleted by this action.",
+              [
+                { text: "Cancel" },
+                {
+                  text: "Trash",
+                  style: "destructive" as const,
+                  onPress: runSelection(
+                    () => batchTrash(session!, selectedVaultAssets, emit),
+                    "Photos not trashed"
+                  ),
+                },
+              ]
+            ),
+        }
+      : { unavailableReason: writeBlockedReason! },
+  };
   return (
-    <SafeAreaView
-      style={[styles.safe, { backgroundColor: colors.bg }]}
-      edges={["top"]}
-    >
+    <PhotosScreen current="collections" selection={selectionBar}>
       <View style={styles.header}>
-        <Pressable onPress={() => navigation.goBack()}>
-          <Icon name="chevron-left" size={26} color={colors.text} />
+        <Pressable
+          accessibilityLabel="Back to Photos"
+          accessibilityRole="button"
+          onPress={() => navigation.goBack()}
+          style={styles.headerBtn}
+        >
+          <Icon name="chevron-left" size={24} color={colors.text} />
         </Pressable>
         <View style={styles.copy}>
-          <Text style={[styles.title, { color: colors.text }]}>
+          <Text style={styles.title} numberOfLines={1}>
             {String(album?.name ?? "Album")}
           </Text>
-          <Text style={[styles.meta, { color: colors.textSoft }]}>
-            {assets.length} items
+          <Text style={styles.meta}>
+            {assets.length} {assets.length === 1 ? "photograph" : "photographs"}
           </Text>
         </View>
         {selection.size ? (
           <View style={styles.selectionActions}>
             {selection.size === 1 ? (
-              <Pressable onPress={() => void setCover()}>
-                <Text style={[styles.coverAction, { color: colors.accent }]}>
+              <Pressable
+                accessibilityLabel="Make this photograph the album cover"
+                accessibilityRole="button"
+                accessibilityState={{ disabled: !canChangeAlbum }}
+                accessibilityHint={writeBlockedReason ?? undefined}
+                disabled={!canChangeAlbum}
+                onPress={() => {
+                  if (!canChangeAlbum) return;
+                  void setCover();
+                }}
+                style={styles.outlineBtn}
+              >
+                <Text
+                  style={[
+                    styles.outlineBtnText,
+                    !canChangeAlbum && { color: colors.textDisabled },
+                  ]}
+                >
                   Make cover
                 </Text>
               </Pressable>
             ) : null}
-            <Pressable onPress={() => void remove()}>
-              <Text style={[styles.remove, { color: colors.danger }]}>
+            {/* Destructive, so OUTLINED: a filled red control would be the
+                loudest thing on a page of photographs, for an action that only
+                removes a reference. */}
+            <Pressable
+              accessibilityLabel={`Remove ${selection.size} from this album`}
+              accessibilityRole="button"
+              accessibilityState={{ disabled: !canChangeAlbum }}
+              accessibilityHint={writeBlockedReason ?? undefined}
+              disabled={!canChangeAlbum}
+              onPress={() => {
+                if (!canChangeAlbum) return;
+                void remove();
+              }}
+              style={[
+                styles.outlineBtn,
+                canChangeAlbum ? styles.destructive : styles.disabledOutline,
+              ]}
+            >
+              <Text
+                style={[
+                  styles.outlineBtnText,
+                  canChangeAlbum
+                    ? styles.destructiveText
+                    : { color: colors.textDisabled },
+                ]}
+              >
                 Remove
               </Text>
             </Pressable>
           </View>
         ) : (
+          // Rename and Delete both WRITE. Each stays visible when the
+          // member may not write — hiding either answers "why can I not
+          // do this?" with silence — and each is disabled, inert, and
+          // explained by the one line under this row.
           <View style={styles.actions}>
+            {/* THE WAY INTO THE PICKER (§10). Until this control existed the
+                picker had no entry point on the phone at all: an album could
+                only grow by selecting photographs somewhere else and adding
+                them from there, which is the reverse of how a member curates
+                an album. Same disabled-with-the-reason treatment as every
+                other write on this row. */}
             <Pressable
-              accessibilityLabel="Share album with household"
+              accessibilityLabel="Add photographs to this album"
               accessibilityRole="button"
-              onPress={() => setShareOpen(true)}
+              accessibilityState={{ disabled: !canChangeAlbum }}
+              accessibilityHint={writeBlockedReason ?? undefined}
+              disabled={!canChangeAlbum}
+              onPress={() => {
+                if (!canChangeAlbum) return;
+                navigation.navigate("PhotoPicker", {
+                  albumId: route.params.albumId,
+                });
+              }}
+              style={styles.headerBtn}
             >
-              <Icon name="users" size={20} color={colors.accent} />
+              <Icon
+                name="plus"
+                size={20}
+                color={canChangeAlbum ? colors.text : colors.textDisabled}
+              />
+            </Pressable>
+            {commonsAlbum ? (
+              <Pressable
+                accessibilityLabel="Save to my vault"
+                accessibilityRole="button"
+                onPress={() => void saveAlbumToMyVault()}
+                style={styles.headerBtn}
+              >
+                <Icon name="copy" size={20} color={colors.text} />
+              </Pressable>
+            ) : null}
+            <Pressable
+              accessibilityLabel="Share album"
+              accessibilityRole="button"
+              onPress={() => albumShare.request()}
+              style={styles.headerBtn}
+            >
+              <Icon name="share" size={20} color={colors.text} />
             </Pressable>
             <Pressable
               accessibilityLabel="Rename album"
               accessibilityRole="button"
+              accessibilityState={{ disabled: !canChangeAlbum }}
+              accessibilityHint={writeBlockedReason ?? undefined}
+              disabled={!canChangeAlbum}
               onPress={() => {
+                if (!canChangeAlbum) return;
                 setName(String(album?.name ?? ""));
                 setRenameOpen(true);
               }}
+              style={styles.headerBtn}
             >
-              <Icon name="edit-2" size={19} color={colors.accent} />
+              <Icon
+                name="edit-2"
+                size={19}
+                color={canChangeAlbum ? colors.text : colors.textDisabled}
+              />
             </Pressable>
             <Pressable
               accessibilityLabel="Delete album"
               accessibilityRole="button"
+              accessibilityState={{ disabled: !canChangeAlbum }}
+              accessibilityHint={writeBlockedReason ?? undefined}
+              disabled={!canChangeAlbum}
               onPress={deleteAlbum}
+              style={styles.headerBtn}
             >
-              <Icon name="trash-2" size={20} color={colors.danger} />
+              <Icon
+                name="trash-2"
+                size={20}
+                color={canChangeAlbum ? colors.danger : colors.textDisabled}
+              />
             </Pressable>
           </View>
         )}
       </View>
       <ReplicaStatusBar />
-      <View style={[styles.keepRow, { borderBottomColor: colors.line }]}>
-        <View style={styles.copy}>
-          <Text style={[styles.keepTitle, { color: colors.text }]}>
-            Keep originals on device
-          </Text>
-          <Text style={[styles.meta, { color: colors.textSoft }]}>
-            Excluded from Free up space
-          </Text>
+      {/* The refusal, STATED — in `--net` mono, on the surface, once for the
+          whole row of controls above. Never a tooltip, never a hint alone. */}
+      {writeBlockedReason ? (
+        <Text style={[styles.blockedReason, { color: colors.net }]}>
+          {writeBlockedReason}
+        </Text>
+      ) : null}
+      <View style={styles.keepRow}>
+        <View style={styles.keepCopy}>
+          <Text style={styles.keepTitle}>Keep originals on device</Text>
+          <Text style={styles.meta}>Excluded from Free up vault</Text>
         </View>
         <Switch
+          accessibilityLabel="Keep this album's originals on device"
           disabled={!pinsReady}
           value={keepOriginals}
           onValueChange={toggleKeepOriginals}
@@ -287,8 +545,9 @@ export default function AlbumDetail({
         />
       ) : (
         <View style={styles.empty}>
-          <Text style={[styles.meta, { color: colors.textSoft }]}>
-            This album is empty.
+          <Text style={styles.emptyTitle}>Nothing in this album yet.</Text>
+          <Text style={styles.emptyBody}>
+            An album refers to a photograph where it lives.
           </Text>
         </View>
       )}
@@ -299,91 +558,52 @@ export default function AlbumDetail({
         onRequestClose={() => setRenameOpen(false)}
       >
         <Pressable
+          accessibilityLabel="Close rename album dialog"
+          accessibilityRole="button"
           style={styles.backdrop}
           onPress={() => setRenameOpen(false)}
         />
-        <View style={[styles.dialog, { backgroundColor: colors.bgElev }]}>
-          <Text style={[styles.dialogTitle, { color: colors.text }]}>
-            Rename album
-          </Text>
+        <View style={styles.dialog}>
+          <Text style={styles.dialogTitle}>Rename album</Text>
           <TextInput
+            accessibilityLabel="Album name"
             autoFocus
             value={name}
             onChangeText={setName}
-            style={[
-              styles.input,
-              { borderColor: colors.lineStrong, color: colors.text },
-            ]}
+            style={styles.input}
           />
+          {/* The dialog's ONE filled element — the thing it exists to do. */}
           <Pressable
+            accessibilityLabel="Save album name"
+            accessibilityRole="button"
             onPress={() => void rename()}
             style={[
               styles.save,
               { backgroundColor: colors.accentFill, borderRadius: radii.md },
             ]}
           >
-            <Text style={[styles.saveText, { color: colors.textInv }]}>
-              Save
-            </Text>
+            <Text style={styles.saveText}>Save</Text>
           </Pressable>
         </View>
       </Modal>
-      <AudiencePlacementSheet
-        visible={shareOpen}
-        itemType="core.collection"
-        itemId={route.params.albumId}
-        sourceVaultId={String(
-          album?.__centraidScopeId ?? replica.vaultId ?? ""
-        )}
-        noun="Album"
-        onClose={() => setShareOpen(false)}
+      <GrantSheet
+        visible={share.visible}
+        onClose={() => share.dismiss()}
+        {...share.sheetProps}
       />
-    </SafeAreaView>
+      <GrantSheet
+        visible={albumShare.visible}
+        onClose={() => albumShare.dismiss()}
+        audiences={albumShare.audiences}
+        subject={{
+          subjectType: "core.collection",
+          subjectId: route.params.albumId,
+          ...(String(album?.name ?? "").trim()
+            ? { label: String(album?.name).trim() }
+            : {}),
+        }}
+        onStatus={postStatus}
+      />
+    </PhotosScreen>
   );
 }
-
-const styles = StyleSheet.create({
-  actions: { flexDirection: "row", gap: 18 },
-  backdrop: { backgroundColor: "rgba(0,0,0,.4)", flex: 1 },
-  copy: { flex: 1, marginLeft: 10 },
-  coverAction: { fontFamily: family.sansBold, fontSize: 13 },
-  empty: { alignItems: "center", flex: 1, justifyContent: "center" },
-  dialog: {
-    borderRadius: 16,
-    left: 28,
-    padding: 20,
-    position: "absolute",
-    right: 28,
-    top: "34%",
-  },
-  dialogTitle: { fontFamily: family.sansBold, fontSize: 19 },
-  header: {
-    alignItems: "center",
-    flexDirection: "row",
-    minHeight: 56,
-    paddingHorizontal: 14,
-  },
-  meta: { fontFamily: family.sansRegular, fontSize: 11, marginTop: 3 },
-  input: {
-    borderRadius: 10,
-    borderWidth: 1,
-    fontFamily: family.sansRegular,
-    fontSize: 15,
-    marginTop: 16,
-    padding: 12,
-  },
-  keepRow: {
-    alignItems: "center",
-    borderBottomWidth: 1,
-    flexDirection: "row",
-    marginHorizontal: 16,
-    paddingVertical: 10,
-  },
-  keepTitle: { fontFamily: family.sansMedium, fontSize: 13 },
-  remove: { fontFamily: family.sansBold, fontSize: 13 },
-  selectionActions: { alignItems: "center", flexDirection: "row", gap: 14 },
-  safe: { flex: 1 },
-  save: { alignItems: "center", marginTop: 12, padding: 12 },
-  saveText: { fontFamily: family.sansBold, fontSize: 13 },
-  title: { fontFamily: family.sansBold, fontSize: 18 },
-});

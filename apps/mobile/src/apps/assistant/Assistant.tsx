@@ -16,17 +16,15 @@ import {
   View,
 } from "react-native";
 import type { ListRenderItemInfo } from "react-native";
-import {
-  SafeAreaView,
-  useSafeAreaInsets,
-} from "react-native-safe-area-context";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import Icon from "../../kit/components/Icon";
 import { Text, TextInput } from "../../kit/components/NativeText";
 import OptionSheet from "../../kit/components/OptionSheet";
 import type { SheetOption } from "../../kit/components/OptionSheet";
+import TopSafeArea from "../../kit/components/TopSafeArea";
 import { useTheme } from "../../kit/theme";
-import type { AssistantScreenProps } from "../../navigation";
+import type { AssistantFullScreenProps } from "../../navigation";
 import { makeStyles } from "./Assistant.styles";
 import { useAssistant } from "./useAssistant";
 import type { Bubble } from "./useAssistant";
@@ -38,7 +36,7 @@ import type { Bubble } from "./useAssistant";
 // src/lib/assistant.ts for the expo/fetch upgrade path).
 export default function AssistantScreen({
   navigation,
-}: AssistantScreenProps): React.JSX.Element {
+}: AssistantFullScreenProps): React.JSX.Element {
   const { colors } = useTheme();
   const styles = useMemo(() => makeStyles(colors), [colors]);
   const insets = useSafeAreaInsets();
@@ -59,7 +57,7 @@ export default function AssistantScreen({
     declineConsent,
     attach,
     removeAttachment,
-    selectRunner,
+    selectHarness,
     selectModel,
     selectEffort,
   } = useAssistant();
@@ -105,7 +103,7 @@ export default function AssistantScreen({
   const submit = (): void => {
     const text = draft.trim();
     if ((!text && attachments.length === 0) || sending) return;
-    send(text || "Please review the attached file.");
+    send(text || "Review the attached file.");
     setDraft("");
   };
 
@@ -117,9 +115,9 @@ export default function AssistantScreen({
   const composerPad = keyboardUp ? 8 : insets.bottom + 8;
   // Which picker is open, if any. Selection presents the platform's own
   // single-choice list (#567 D12) — the user picks the agent they want instead
-  // of cycling through the dead ones. `selectRunner` still preflights and
-  // reverts, so a chosen-but-unready runner surfaces as a selection error.
-  const [picker, setPicker] = useState<"runner" | "model" | "effort" | null>(
+  // of cycling through the dead ones. `selectHarness` still preflights and
+  // reverts, so a chosen-but-unready harness surfaces as a selection error.
+  const [picker, setPicker] = useState<"harness" | "model" | "effort" | null>(
     null
   );
   const pickerSpec: {
@@ -130,17 +128,17 @@ export default function AssistantScreen({
   } | null =
     !config || picker === null
       ? null
-      : picker === "runner"
+      : picker === "harness"
         ? {
             title: "Agent",
-            options: config.runners.map((runner) => ({
-              id: runner.kind,
-              label: runner.label,
-              ...(runner.hint ? { detail: runner.hint } : {}),
-              ...(runner.sessionReady ? {} : { disabled: true }),
+            options: config.harnesses.map((harness) => ({
+              id: harness.kind,
+              label: harness.label,
+              ...(harness.hint ? { detail: harness.hint } : {}),
+              ...(harness.sessionReady ? {} : { disabled: true }),
             })),
-            ...(config.runnerKind ? { selectedId: config.runnerKind } : {}),
-            onSelect: selectRunner,
+            ...(config.harnessKind ? { selectedId: config.harnessKind } : {}),
+            onSelect: selectHarness,
           }
         : picker === "model"
           ? {
@@ -171,7 +169,7 @@ export default function AssistantScreen({
       : 0;
 
   return (
-    <SafeAreaView style={styles.safe} edges={["top"]}>
+    <TopSafeArea style={styles.safe} edges={["top"]}>
       <View style={styles.header}>
         <Pressable
           accessibilityRole="button"
@@ -192,8 +190,7 @@ export default function AssistantScreen({
           <Icon name="cpu" size={30} color={colors.accent} />
           <Text style={styles.emptyTitle}>Not connected</Text>
           <Text style={styles.emptyBody}>
-            Connect your desktop to chat with your assistant. Pair it in
-            Settings.
+            Pair your desktop in Settings to chat with your assistant.
           </Text>
         </View>
       ) : (
@@ -225,8 +222,7 @@ export default function AssistantScreen({
                       {loadError ? "Couldn't load history" : "Say hello"}
                     </Text>
                     <Text style={styles.emptyBody}>
-                      {loadError ??
-                        "Ask your assistant anything about your vault to get started."}
+                      {loadError ?? "Ask anything about your vault."}
                     </Text>
                   </>
                 )}
@@ -247,16 +243,16 @@ export default function AssistantScreen({
               />
               <Pressable
                 accessibilityRole="button"
-                accessibilityLabel="Change assistant runner"
-                onPress={() => setPicker("runner")}
-                disabled={!config?.runners.length || sending}
+                accessibilityLabel="Change assistant agent"
+                onPress={() => setPicker("harness")}
+                disabled={!config?.harnesses.length || sending}
                 style={styles.statusChip}
               >
                 <Text numberOfLines={1} style={styles.statusText}>
-                  {config?.runners.find(
-                    (runner) => runner.kind === config.runnerKind
+                  {config?.harnesses.find(
+                    (harness) => harness.kind === config.harnessKind
                   )?.label ??
-                    config?.runnerKind ??
+                    config?.harnessKind ??
                     "Agent"}
                 </Text>
               </Pressable>
@@ -391,7 +387,7 @@ export default function AssistantScreen({
           onClose={() => setPicker(null)}
         />
       ) : null}
-    </SafeAreaView>
+    </TopSafeArea>
   );
 }
 

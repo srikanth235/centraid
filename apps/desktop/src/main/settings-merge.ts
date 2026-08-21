@@ -7,8 +7,8 @@
  *   - a value in the patch       → set it
  *
  * Chat-model selection no longer lives here — it moved to the gateway prefs
- * store (`model.<runnerKind>.<slot>` keys via `GET/PUT /_centraid-user/prefs`,
- * see `settingsProvidersData.ts`), so every client sharing a gateway sees the
+ * store (`model.<harnessKind>.<slot>` keys via `GET/PUT /_centraid-user/prefs`,
+ * see `settingsHarnessesData.ts`), so every client sharing a gateway sees the
  * same picks instead of each desktop install keeping its own.
  */
 
@@ -18,9 +18,6 @@ import type { PersistedSettings } from "./settings.js";
 /** The persistable subset of a settings patch. */
 export interface PersistedSettingsPatch {
   activeGatewayId?: string;
-  /** Developer-only builder gate. Preserve when omitted. */
-  builderEnabled?: boolean;
-  remoteTemplatesUrl?: string;
   /**
    * Client-owned active vault per gateway (issue #289). Set as a whole map
    * (preserve when `undefined`). The dedicated `setActiveVaultId` path
@@ -67,16 +64,6 @@ export function mergePersistedSettings(
     patch.activeVaultByGateway ?? current.activeVaultByGateway;
   return {
     activeGatewayId: patch.activeGatewayId?.trim() || current.activeGatewayId,
-    ...(patch.builderEnabled === undefined
-      ? current.builderEnabled === undefined
-        ? {}
-        : { builderEnabled: current.builderEnabled }
-      : { builderEnabled: patch.builderEnabled }),
-    ...preserveOrSet(
-      "remoteTemplatesUrl",
-      patch.remoteTemplatesUrl,
-      current.remoteTemplatesUrl
-    ),
     ...(activeVaultByGateway !== undefined &&
     Object.keys(activeVaultByGateway).length
       ? { activeVaultByGateway }

@@ -1,0 +1,166 @@
+/* Explanation panel (v9 §8–9). The measure caps are in `ch` on purpose: a
+   reading width is a count of characters, not a count of pixels, so it is the
+   one geometry the spacing scale does not own. */
+
+.panel {
+  background: var(--bg-elev);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--r-lg);
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-3);
+  max-inline-size: 62ch;
+  padding: var(--sp-4);
+}
+
+/* `net` is a BORDER, never a fill — the one chromatic ink in the system says
+   "this leaves the device" by drawing an edge. */
+.panel[data-tone="net"] {
+  border-color: var(--net);
+}
+
+/* `seam` is pending or expiring — mid-flight rather than wrong. It is an edge
+   for the same reason `net` is: a filled panel tone does not exist here. The
+   mobile kit has carried this tone since the v9 pass; the shell could not
+   express it until the two kits shared one `PanelTone`. */
+.panel[data-tone="seam"] {
+  border-color: var(--seam);
+}
+
+.panel[data-wide="true"] {
+  max-inline-size: none;
+}
+
+.eyebrow {
+  color: var(--text-faint);
+  font: var(--t-eyebrow);
+  letter-spacing: var(--t-eyebrow-tracking);
+  text-transform: var(--t-eyebrow-transform);
+  margin: 0;
+}
+
+.panel[data-tone="net"] .eyebrow {
+  color: var(--net);
+}
+
+.title {
+  color: var(--text);
+  font: var(--t-title);
+  margin: 0;
+}
+
+.body {
+  color: var(--text-soft);
+  font: var(--t-body);
+  margin: 0;
+  text-wrap: pretty;
+}
+
+/* A quotation is somebody else's words: a rule on the reading edge, never a
+   tinted plate. */
+.body[data-quote="true"] {
+  border-inline-start: 1px solid var(--line);
+  padding-inline-start: var(--sp-3);
+}
+
+/* The promoted figure (#775). The display rung is the whole mechanism: the
+   same string at the fact rung is one 13px value among thirty, and a member
+   asking "did this month cost $2 or $200" has to read to find out. The label
+   above it and the qualifier under it are the two lines that stop a big number
+   being a claim it cannot support. */
+
+.figure {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-1);
+}
+
+.figureLabel {
+  color: var(--text-faint);
+  font: var(--t-eyebrow);
+  letter-spacing: var(--t-eyebrow-tracking);
+  text-transform: var(--t-eyebrow-transform);
+  margin: 0;
+}
+
+/* Numeric register at the display rung: a headline figure is still a number,
+   so it keeps tabular figures and its own direction. */
+.figureValue {
+  color: var(--text);
+  direction: var(--t-mono-direction);
+  font: var(--t-display);
+  font-variant-numeric: var(--t-mono-numeric);
+  margin: 0;
+  unicode-bidi: var(--t-mono-bidi);
+}
+
+.figure[data-net="true"] .figureValue {
+  color: var(--net);
+}
+
+.figureQualifier {
+  color: var(--text-soft);
+  font: var(--t-small);
+  margin: 0;
+  text-wrap: pretty;
+}
+
+.facts {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+  margin: 0;
+}
+
+.fact {
+  display: flex;
+  gap: var(--sp-3);
+}
+
+/* The fixed key column — the phone narrows it rather than wrapping the key,
+   which is what `--w-key-col` carries. */
+.factKey {
+  color: var(--text-faint);
+  flex: none;
+  font: var(--t-eyebrow);
+  letter-spacing: var(--t-eyebrow-tracking);
+  text-transform: var(--t-eyebrow-transform);
+  inline-size: var(--w-key-col);
+}
+
+.factValue {
+  color: var(--text);
+  flex: 1;
+  font: var(--t-annot-label);
+  margin: 0;
+  min-inline-size: 0;
+  text-wrap: pretty;
+}
+
+.factValue[data-mono="true"] {
+  direction: var(--t-mono-direction);
+  font: var(--t-mono);
+  font-variant-numeric: var(--t-mono-numeric);
+  unicode-bidi: var(--t-mono-bidi);
+}
+
+.factValue[data-net="true"] {
+  color: var(--net);
+}
+
+/* A caveat that belongs to one fact: its own line under the value, in the
+   quietest ink and OUT of the numeric register — a caveat is a sentence. */
+.factNote {
+  color: var(--text-faint);
+  display: block;
+  font: var(--t-small);
+  font-variant-numeric: normal;
+  padding-block-start: var(--sp-1);
+  text-wrap: pretty;
+}
+
+.actions {
+  display: flex;
+  gap: var(--sp-2);
+  padding-block-start: var(--sp-1);
+}

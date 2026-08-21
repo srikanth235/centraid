@@ -11,8 +11,9 @@ import path from "node:path";
 
 import { describe, expect, it } from "vitest";
 
-import { validateAppManifest } from "@centraid/app-engine";
-import type { AppManifest } from "@centraid/app-engine";
+import { apps as designApps } from "@centraid/design";
+import { validateAppManifest } from "@centraid/server/engine";
+import type { AppManifest } from "@centraid/server/engine";
 
 const PACKAGE_ROOT = path.resolve(import.meta.dirname, "..");
 const quotedSource = (value: string) =>
@@ -260,6 +261,40 @@ describe("bundled blueprint manifests", () => {
       ).toBe(false);
     }
   );
+
+  // The identity hue is one contract with two readers: the shell/mobile
+  // launcher reads `apps` from @centraid/design, every other surface (the
+  // blueprint app's own chrome, the product-grammar gallery) reads the
+  // manifest. When #707 reassigned the wheel by content character, the
+  // registry moved and the manifests did not — so the same app wore two
+  // different hues depending on which surface you were looking at. Nothing
+  // caught it, because neither side is wrong on its own.
+  it("every manifest's identity hue matches the design registry", () => {
+    const registry = Object.fromEntries(
+      designApps.map((app) => [app.id, app.colorKey])
+    );
+    // Read the raw JSON, not `readManifest`: the runtime validator narrows to
+    // the fields the dispatcher needs and drops presentation ones like
+    // `colorKey`, which is exactly the field under test here.
+    const onDisk = Object.fromEntries(
+      templateDirs("apps").map((id) => [
+        id,
+        (
+          JSON.parse(
+            readFileSync(
+              path.join(PACKAGE_ROOT, "apps", id, "app.json"),
+              "utf8"
+            )
+          ) as { colorKey?: string }
+        ).colorKey ?? null,
+      ])
+    );
+    expect(onDisk).toStrictEqual(
+      Object.fromEntries(
+        templateDirs("apps").map((id) => [id, registry[id] ?? null])
+      )
+    );
+  });
 
   it("the gallery index and the template dirs agree", () => {
     const index = JSON.parse(

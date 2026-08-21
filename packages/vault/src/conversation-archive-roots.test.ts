@@ -12,7 +12,7 @@ import { conversationArchiveShas } from "./conversation-archive-roots.js";
 import { openVaultDb } from "./db.js";
 
 // Minimal slice of the app-engine-owned band the roots reader touches. Inlined
-// (not imported from @centraid/app-engine) because the vault package must never
+// (not imported from @centraid/server/engine) because the vault package must never
 // depend on app-engine — the reader reaches the table by SQL precisely so the
 // layering stays one-way.
 function ensureLedger(journal: DatabaseSync): void {

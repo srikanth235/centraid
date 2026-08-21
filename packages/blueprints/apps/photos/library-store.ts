@@ -17,10 +17,23 @@
 //     as units (src/photos-library-store.test.ts) rather than as a mounted app.
 //
 // The merge itself — ordering, cross-scope dedupe, the shared safe horizon —
-// lives in merge.ts and is deliberately not re-derived here.
-import { mergeScopePages } from "./merge.ts";
-import type { MergeAsset, MergeResult } from "./merge.ts";
-import type { Album, Asset, LibraryData, Place } from "./types.ts";
+// lives in apps/_shared/scope-merge.ts (issue #726 D11) and is deliberately
+// not re-derived here.
+import { mergeScopePages } from "../_shared/scope-merge.ts";
+import type { MergeResult, ScopePage } from "../_shared/scope-merge.ts";
+import {
+  photoDedupeIdentity,
+  photosScopeDeclaration,
+} from "./scope-declaration.ts";
+import type { MergeableAsset } from "./scope-declaration.ts";
+import type {
+  Album,
+  Asset,
+  LibraryData,
+  MemoryMemberRow,
+  MemoryRow,
+  Place,
+} from "./types.ts";
 
 /** What one scope answered, or why it couldn't. Errors are data, never throws. */
 export type ScopeReadResult =
@@ -33,6 +46,8 @@ export interface ScopeLibrary {
   albums: Album[];
   places: Place[];
   trash: Asset[];
+  memories: MemoryRow[];
+  memoryMembers: MemoryMemberRow[];
   /** The oldest `taken_at` reached so far — the next `before` cursor. */
   tail: string | null;
   /** Older assets exist beyond what this scope has paged in. */
@@ -76,6 +91,8 @@ const emptyLibrary = (): ScopeLibrary => ({
   albums: [],
   places: [],
   trash: [],
+  memories: [],
+  memoryMembers: [],
   tail: null,
   truncated: false,
   denied: null,
@@ -89,6 +106,8 @@ function libraryFrom(data: LibraryData): ScopeLibrary {
     albums: data.albums ?? [],
     places: data.places ?? [],
     trash: data.trash ?? [],
+    memories: data.memories ?? [],
+    memoryMembers: data.memoryMembers ?? [],
     tail: data.tail ?? null,
     truncated: Boolean(data.truncated),
     denied: data.vaultDenied ?? null,
@@ -115,6 +134,9 @@ function appendPage(prev: ScopeLibrary, data: LibraryData): ScopeLibrary {
     albums: next.albums.length > 0 ? next.albums : prev.albums,
     places: next.places.length > 0 ? next.places : prev.places,
     trash: next.trash.length > 0 ? next.trash : prev.trash,
+    memories: next.memories.length > 0 ? next.memories : prev.memories,
+    memoryMembers:
+      next.memoryMembers.length > 0 ? next.memoryMembers : prev.memoryMembers,
     // A page that came back empty says "nothing older", not "I forgot my tail".
     tail: next.tail ?? prev.tail,
   };
@@ -130,7 +152,7 @@ export interface LibraryStore {
   /** Route one change-feed burst to the smallest refetch that answers it. */
   handleChange: (detail: LibraryChangeDetail | undefined) => void;
   /** The merged timeline across scopes (memoized until the next read lands). */
-  merged: () => MergeResult;
+  merged: () => MergeResult<MergeableAsset>;
   /** One scope's accumulated library, empty when it has never answered. */
   scope: (scopeId: string) => ScopeLibrary;
   /** The member's own scope's library — albums, places and trash come from here. */
@@ -152,7 +174,7 @@ export function createLibraryStore(deps: LibraryStoreDeps): LibraryStore {
   // later one's answer, and disposal bumps every generation at once.
   const generation = new Map<string, number>();
   let disposed = false;
-  let mergedCache: MergeResult | null = null;
+  let mergedCache: MergeResult<MergeableAsset> | null = null;
 
   const bump = (scopeId: string): number => {
     const next = (generation.get(scopeId) ?? 0) + 1;
@@ -214,23 +236,31 @@ export function createLibraryStore(deps: LibraryStoreDeps): LibraryStore {
     if (applied) settle();
   }
 
-  const merged = (): MergeResult => {
+  const merged = (): MergeResult<MergeableAsset> => {
     if (mergedCache) return mergedCache;
-    const pages = deps.scopeIds().map((scopeId) => {
-      const library = scopeOf(scopeId);
-      return {
-        scopeId,
-        // `Asset` and `MergeAsset` describe the SAME query row from two sides:
-        // the merge names the three columns it orders and dedupes on and takes
-        // the rest as `unknown`, while `Asset` names the columns the UI paints.
-        // Neither is a subtype of the other, so the bridge is a cast — with the
-        // asset rows themselves untouched in either direction.
-        assets: library.assets as unknown as readonly MergeAsset[],
-        tail: library.tail,
-        truncated: library.truncated,
-      };
+    const pages: ScopePage<MergeableAsset>[] = deps
+      .scopeIds()
+      .map((scopeId) => {
+        const library = scopeOf(scopeId);
+        return {
+          scopeId,
+          // `Asset` and `MergeableAsset` describe the SAME query row from two
+          // sides: the merge names the columns it orders and dedupes on and
+          // takes the rest as `unknown`, while `Asset` names the columns the
+          // UI paints. Neither is a subtype of the other, so the bridge is a
+          // cast — with the asset rows themselves untouched in either
+          // direction.
+          rows: library.assets as unknown as readonly MergeableAsset[],
+          tail: library.tail,
+          truncated: library.truncated,
+        };
+      });
+    mergedCache = mergeScopePages(pages, {
+      ownScopeId: deps.ownScopeId(),
+      sortKey: photosScopeDeclaration.mergeKey,
+      direction: "desc",
+      dedupeIdentity: photoDedupeIdentity,
     });
-    mergedCache = mergeScopePages(pages, { ownScopeId: deps.ownScopeId() });
     return mergedCache;
   };
 

@@ -19,7 +19,7 @@
 .root[data-embedded="true"] {
   padding: 0;
   border: 0;
-  border-radius: 0;
+  border-radius: var(--r-xs);
   background: transparent;
   box-shadow: none;
 }
@@ -32,7 +32,7 @@
   outline: 0;
   background: transparent;
   color: var(--text);
-  font: 13.5px/1.5 var(--font-sans);
+  font: var(--t-body);
 }
 
 .input::placeholder {
@@ -40,7 +40,7 @@
 }
 
 .input:disabled {
-  opacity: 0.55;
+  color: var(--text-disabled);
 }
 
 .send {
@@ -50,14 +50,14 @@
   place-items: center;
   flex: none;
   border: 0;
-  border-radius: 999px;
+  border-radius: var(--r-pill);
   background: var(--accent);
   color: var(--text-inv);
   cursor: pointer;
 }
 
 .send:disabled {
-  opacity: 0.4;
+  opacity: var(--o-disabled);
   cursor: default;
 }
 
@@ -72,6 +72,6 @@
 
 .hint {
   color: var(--text-ghost);
-  font-size: 11.5px;
+  font-size: var(--t-control-size);
   line-height: 1.45;
 }

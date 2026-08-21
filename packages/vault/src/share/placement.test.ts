@@ -18,7 +18,11 @@ import {
   household,
   seedPhoto,
 } from "./placement-fixture.js";
-import { moveOutOfVault, readShareOrigin, shareToVault } from "./placement.js";
+import {
+  moveOutOfVault,
+  readShareOrigin,
+  shareItemsToVault,
+} from "./placement.js";
 
 describe("placement suite", () => {
   afterEach(closeOpenVaults);
@@ -31,17 +35,17 @@ describe("placement suite", () => {
     const photo = seedPhoto(origin, originBoot, "a");
     const originBefore = plainSqliteRow(
       origin.vault
-        .prepare("SELECT * FROM media_media_asset WHERE asset_id = ?")
+        .prepare("SELECT * FROM media_asset WHERE asset_id = ?")
         .get(photo.assetId)
     );
 
-    const result = shareToVault({
+    const result = shareItemsToVault({
       origin,
       originVaultId: "vault-priya",
       audience,
-      itemType: "media.media_asset",
-      itemId: photo.assetId,
-      sharedByMember: "member-priya",
+      itemType: "media.asset",
+      itemIds: [photo.assetId],
+      sharedBy: "member-priya",
       now: () => 1_700_000_000_000,
     });
 
@@ -51,10 +55,10 @@ describe("placement suite", () => {
       .prepare(
         `SELECT a.asset_id, a.kind, a.favorite, a.width, a.place_id, a.camera_device_id,
               c.title, c.sha256, c.creator_party_id, c.origin_device_id
-         FROM media_media_asset a JOIN core_content_item c ON c.content_id = a.content_id
+         FROM media_asset a JOIN core_content_item c ON c.content_id = a.content_id
         WHERE a.asset_id = ?`
       )
-      .get(result.itemId) as Record<string, unknown>;
+      .get(result.items[0]!.itemId) as Record<string, unknown>;
     expect(projected.kind).toBe("photo");
     expect(projected.title).toBe("Photo a");
     expect(projected.sha256).toBe(photo.sha256);
@@ -83,13 +87,13 @@ describe("placement suite", () => {
 
     // Provenance: where it came from, and who placed it.
     expect(
-      readShareOrigin(audience.vault, "media.media_asset", result.itemId)
+      readShareOrigin(audience.vault, "media.asset", result.items[0]!.itemId)
     ).toStrictEqual({
-      itemType: "media.media_asset",
-      itemId: result.itemId,
+      itemType: "media.asset",
+      itemId: result.items[0]!.itemId,
       originVaultId: "vault-priya",
       originItemId: photo.assetId,
-      sharedByMember: "member-priya",
+      sharedBy: "member-priya",
       sharedAt: 1_700_000_000_000,
     });
 
@@ -97,7 +101,7 @@ describe("placement suite", () => {
     expect(
       plainSqliteRow(
         origin.vault
-          .prepare("SELECT * FROM media_media_asset WHERE asset_id = ?")
+          .prepare("SELECT * FROM media_asset WHERE asset_id = ?")
           .get(photo.assetId)
       )
     ).toStrictEqual(originBefore);
@@ -117,16 +121,16 @@ describe("placement suite", () => {
     const { origin, originBoot, audience } = household();
     const photo = seedPhoto(origin, originBoot, "b");
 
-    const result = shareToVault({
+    const result = shareItemsToVault({
       origin,
       originVaultId: "vault-priya",
       audience,
-      itemType: "media.media_asset",
-      itemId: photo.assetId,
-      sharedByMember: "member-priya",
+      itemType: "media.asset",
+      itemIds: [photo.assetId],
+      sharedBy: "member-priya",
     });
 
-    expect(result.itemId).toBe(photo.assetId);
+    expect(result.items[0]!.itemId).toBe(photo.assetId);
     expect(
       plainSqliteRow(
         audience.vault
@@ -146,13 +150,13 @@ describe("placement suite", () => {
     const originStat = statSync(casPath(origin, photo.sha256));
     expect(originStat.nlink).toBe(1);
 
-    const result = shareToVault({
+    const result = shareItemsToVault({
       origin,
       originVaultId: "vault-priya",
       audience,
-      itemType: "media.media_asset",
-      itemId: photo.assetId,
-      sharedByMember: "member-priya",
+      itemType: "media.asset",
+      itemIds: [photo.assetId],
+      sharedBy: "member-priya",
     });
 
     expect(result.blobs.map((b) => b.mode)).toStrictEqual(["linked", "linked"]);
@@ -174,13 +178,13 @@ describe("placement suite", () => {
     // Force the EXDEV/EPERM classification without needing a second mount.
     audience.blobs.local.linkFromSync = () => "unsupported";
 
-    const result = shareToVault({
+    const result = shareItemsToVault({
       origin,
       originVaultId: "vault-priya",
       audience,
-      itemType: "media.media_asset",
-      itemId: photo.assetId,
-      sharedByMember: "member-priya",
+      itemType: "media.asset",
+      itemIds: [photo.assetId],
+      sharedBy: "member-priya",
     });
 
     expect(result.blobs.map((b) => b.mode)).toStrictEqual(["copied", "copied"]);
@@ -219,13 +223,13 @@ describe("placement suite", () => {
     const { origin, originBoot, audience } = household();
     const photo = seedPhoto(origin, originBoot, "e");
     const share = (member: string, at: number) =>
-      shareToVault({
+      shareItemsToVault({
         origin,
         originVaultId: "vault-priya",
         audience,
-        itemType: "media.media_asset",
-        itemId: photo.assetId,
-        sharedByMember: member,
+        itemType: "media.asset",
+        itemIds: [photo.assetId],
+        sharedBy: member,
         now: () => at,
       });
 
@@ -233,16 +237,14 @@ describe("placement suite", () => {
     const again = share("member-priya", 2_000);
     const bySid = share("member-sid", 3_000);
 
-    expect(again.itemId).toBe(first.itemId);
-    expect(bySid.itemId).toBe(first.itemId);
-    expect(again.deduped).toBe(true);
-    expect(bySid.deduped).toBe(true);
+    expect(again.items[0]!.itemId).toBe(first.items[0]!.itemId);
+    expect(bySid.items[0]!.itemId).toBe(first.items[0]!.itemId);
+    expect(again.items[0]!.deduped).toBe(true);
+    expect(bySid.items[0]!.deduped).toBe(true);
     // One row, no duplicate, no error — the sha256 UNIQUE constraint does it.
     expect(
       plainSqliteRow(
-        audience.vault
-          .prepare("SELECT COUNT(*) AS n FROM media_media_asset")
-          .get()
+        audience.vault.prepare("SELECT COUNT(*) AS n FROM media_asset").get()
       )
     ).toStrictEqual({
       n: 1,
@@ -268,10 +270,10 @@ describe("placement suite", () => {
     // The FIRST placement is the record — a later sharer does not rewrite it.
     const provenance = readShareOrigin(
       audience.vault,
-      "media.media_asset",
-      first.itemId
+      "media.asset",
+      first.items[0]!.itemId
     )!;
-    expect(provenance.sharedByMember).toBe("member-priya");
+    expect(provenance.sharedBy).toBe("member-priya");
     expect(provenance.sharedAt).toBe(1_000);
     // Re-sharing never re-places bytes it already has.
     expect(bySid.blobs.map((b) => b.mode)).toStrictEqual([
@@ -294,13 +296,13 @@ describe("placement suite", () => {
       )
       .run(documentId, content.contentId, now, now);
 
-    const placed = shareToVault({
+    const placed = shareItemsToVault({
       origin,
       originVaultId: "vault-priya",
       audience,
       itemType: "core.document",
-      itemId: documentId,
-      sharedByMember: "member-priya",
+      itemIds: [documentId],
+      sharedBy: "member-priya",
     });
     expect(
       plainSqliteRow(
@@ -312,7 +314,7 @@ describe("placement suite", () => {
                  ON c.content_id = d.current_content_id
               WHERE d.document_id = ?`
           )
-          .get(placed.itemId)
+          .get(placed.items[0]!.itemId)
       )
     ).toStrictEqual({
       document_id: documentId,

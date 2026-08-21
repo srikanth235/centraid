@@ -4,7 +4,11 @@ import type * as TypeImport_1gl5zx7 from "../../../gateway-client.js";
 import { addVault, removeVault, saveVault } from "./vaultModals.js";
 
 const updateVault = vi.fn<typeof TypeImport_1gl5zx7.updateVault>((_input) =>
-  Promise.resolve({ vaultId: "v1", name: "Work", ownerPartyId: "party-1" })
+  Promise.resolve({
+    vaultId: "v1",
+    name: "Work",
+    ownerPartyId: "party-1",
+  })
 );
 // `vi.mock` is hoisted above the imports by vitest, so the gateway stub lands
 // before vaultModals.js pulls gateway-client-core's load-time side-effect.

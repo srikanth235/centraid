@@ -34,8 +34,8 @@
     "test": "vitest run",
     "test:data-plane": "cargo test --locked --manifest-path data-plane/Cargo.toml && bun run test:data-plane:contract",
     "test:data-plane:contract": "bun run test:data-plane:contract:typescript && bun run test:data-plane:contract:rust",
-    "test:data-plane:contract:rust": "cargo build --locked --manifest-path data-plane/Cargo.toml && cd ../.. && CENTRAID_RUN_BYTE_PLANE_CONTRACT=1 CENTRAID_BYTE_PLANE_IMPLEMENTATION=rust CENTRAID_BYTE_PLANE_BIN=packages/tunnel/data-plane/target/debug/centraid-data-plane ./node_modules/.bin/vitest run packages/gateway/src/lifecycle/byte-plane-over-http.test.ts --maxWorkers=1",
-    "test:data-plane:contract:typescript": "cd ../.. && CENTRAID_RUN_BYTE_PLANE_CONTRACT=1 CENTRAID_BYTE_PLANE_IMPLEMENTATION=typescript ./node_modules/.bin/vitest run packages/gateway/src/lifecycle/byte-plane-over-http.test.ts --maxWorkers=1",
+    "test:data-plane:contract:rust": "cargo build --locked --manifest-path data-plane/Cargo.toml && cd ../.. && CENTRAID_RUN_BYTE_PLANE_CONTRACT=1 CENTRAID_BYTE_PLANE_IMPLEMENTATION=rust CENTRAID_BYTE_PLANE_BIN=packages/tunnel/data-plane/target/debug/centraid-data-plane ./node_modules/.bin/vitest run packages/server/src/lifecycle/byte-plane-over-http.test.ts --maxWorkers=1",
+    "test:data-plane:contract:typescript": "cd ../.. && CENTRAID_RUN_BYTE_PLANE_CONTRACT=1 CENTRAID_BYTE_PLANE_IMPLEMENTATION=typescript ./node_modules/.bin/vitest run packages/server/src/lifecycle/byte-plane-over-http.test.ts --maxWorkers=1",
     "test:native": "CENTRAID_RUN_NATIVE_TUNNEL=1 vitest run src/native-relay.test.ts",
     "typecheck": "tsc -p tsconfig.test.json --noEmit"
   },
@@ -43,6 +43,7 @@
     "@number0/iroh": "1.1.0"
   },
   "devDependencies": {
+    "@centraid/core": "workspace:*",
     "@centraid/test-kit": "workspace:*",
     "@types/node": "^26.1.2",
     "typescript": "catalog:"

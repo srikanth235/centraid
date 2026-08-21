@@ -94,7 +94,7 @@ export async function processShareIntent(
     if (files.length === 0) {
       ports.alert(
         "Can’t save this to Centraid",
-        "This file ingest path only accepts photos, videos, audio, and documents. Text and links must open Quick capture for review."
+        "Only photos, videos, audio and documents — text and links use Quick capture."
       );
       return;
     }

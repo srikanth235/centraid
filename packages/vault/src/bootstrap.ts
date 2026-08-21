@@ -144,16 +144,23 @@ export function bootstrapVault(
       vaultId,
       ownerPartyId,
       displayName,
-      options.baseCurrency ?? "INR",
+      // No caller passes baseCurrency today, so this default IS the currency
+      // every real vault displays; every reader (tally, brief, ingest, mobile)
+      // already falls back to USD when the row is missing.
+      options.baseCurrency ?? "USD",
       now
     );
   // The enrichment-policy mirror (issue #352 phase 3/4, host.ts
-  // readEnrichSettings/updateEnrichSettings): `local` is the default on both
-  // domains, same as the settings-bag default this table shadows.
+  // readEnrichSettings/updateEnrichSettings): `gateway` is the default on
+  // both domains (issue #712 C5 rename), same as the settings-bag default
+  // this table shadows — the member's own devices and gateway may do
+  // deterministic and device-lease work and whatever the gateway is
+  // already wired to; a THIRD-PARTY PROVIDER seeing bytes is still gated
+  // separately, per call (#567) and per capability (decision S9).
   for (const domain of ["photos", "docs"] as const) {
     db.vault
       .prepare(
-        `INSERT INTO enrich_policy (domain, tier, updated_at) VALUES (?, 'local', ?)`
+        `INSERT INTO enrich_policy (domain, tier, updated_at) VALUES (?, 'gateway', ?)`
       )
       .run(domain, now);
   }
@@ -264,7 +271,7 @@ export function enrollAgent(
   const agentId = uuidv7();
   db.vault
     .prepare(
-      `INSERT INTO agent_agent (agent_id, party_id, host_key, model_ref, version, enrolled_at, status)
+      `INSERT INTO consent_agent (agent_id, party_id, enrollment_key, model_ref, version, enrolled_at, status)
        VALUES (?, ?, ?, ?, ?, ?, 'active')`
     )
     .run(

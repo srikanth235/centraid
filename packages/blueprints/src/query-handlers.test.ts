@@ -16,7 +16,7 @@ import {
   describeRecurrence,
   expandRecurrence,
   shiftTemporal,
-} from "@centraid/time-engine";
+} from "@centraid/core/time";
 
 type VaultReadTestSeam = (input: {
   entity?: string;
@@ -481,7 +481,7 @@ describe("replica-local search projections (issue #406)", () => {
     const ctx = ctxOf({
       __search__: [content],
       "core.content_item": [content],
-      "media.media_asset": [asset],
+      "media.asset": [asset],
     });
     const result = await search({
       input: { term: "moon camp" },

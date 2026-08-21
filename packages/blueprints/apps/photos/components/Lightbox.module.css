@@ -1,10 +1,20 @@
-/* The redesigned lightbox's React-owned classes. Authored camelCase (old
-   `ph-lb-`/`ph-lightbox` prefixes dropped). The fixed `.lightbox` container
-   (z-index 60) stays global (static index.html element / React root). The
-   filmstrip's placeholder shimmer moved here with its frame; it references the
-   global `@keyframes ph-shimmer` (kept in app.css alongside `.ph-tile-ph`) by
-   name, and the `is-placeholder`/`zoomable`/`zoomed` markers are `:global`
-   (shared vocabulary set imperatively / as static strings). */
+/* THE STAGE (v4 handoff §7.1, §2.2). The viewer, the slideshow and the editor
+   all stand on it, and this file is where it is defined.
+
+   `--stage` / `--on-stage` / `--stage-line` are SHARED ROLES now, not literals
+   this app invented: the same near-black in both themes, because a media
+   ground does not follow the theme, plus the one hairline that is visible on
+   it (`--line` is not). The old `hsl(0 0% 4%)` literal and its
+   token-purity-allowlist seam are gone with them.
+
+   FOCUS MUST SURVIVE HERE (§18). The contract's `--focus-ring` opens its inner
+   gap on `--bg` — paper — which is invisible against the stage, so every
+   focusable thing on this surface takes the stage's own ring below: the same
+   `--focus-ring-color` token, gapped on `--stage`. The colour never comes from
+   `currentColor`, which would vanish the moment a control inverted.
+
+   LOGICAL PROPERTIES ONLY (§18). Prev/next, the info rail's seam and the
+   filmstrip all mirror under RTL without a second rule. */
 
 .lightbox {
   position: fixed;
@@ -12,226 +22,613 @@
   z-index: 60;
   display: flex;
   flex-direction: column;
-  /* A theater stage, not a themed surface — same fixed dark backdrop as the
-     slideshow (z-index 65) it opens into, in both themes. */
-  background: hsl(var(--app-hue) 25% 4%);
-  color: var(--text-inv);
+  background: var(--stage);
+  color: var(--on-stage);
 }
+
+/* One rule, every control on the stage. */
+.lightbox :focus-visible {
+  outline: none;
+  box-shadow:
+    0 0 0 2px var(--stage),
+    0 0 0 4px var(--focus-ring-color);
+}
+
+/* ---------------------------------------------------------------- top bar */
+
 .topbar {
   display: flex;
   align-items: center;
-  gap: var(--sp-2);
-  padding: var(--sp-3) var(--sp-4);
-  flex-shrink: 0;
+  gap: var(--sp-3);
+  /* 56px desktop / 52px phone (§7.1) — the block size IS the bar. */
+  block-size: 56px;
+  padding-inline: var(--sp-4);
+  flex: none;
+  border-block-end: 1px solid var(--stage-line);
 }
-.iconBtn {
-  width: 38px;
-  height: 38px;
+
+/* The close button, and the phone's More: 34px icon buttons (§7.1). */
+.close {
+  inline-size: 34px;
+  block-size: 34px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  padding: 0;
+  border: 1px solid var(--stage-line);
+  border-radius: var(--r-md);
+  background: transparent;
+  color: var(--on-stage);
+}
+.close:hover {
+  border-color: var(--on-stage);
+}
+
+.heading {
+  flex: 1;
+  min-inline-size: 0;
+}
+.title {
+  font: var(--t-small-strong);
+  /* A fixed-height container line-clamps; it never clips (§18). */
+  display: -webkit-box;
+  -webkit-line-clamp: 1;
+  line-clamp: 1;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.captureLine {
+  font: var(--t-mono);
+  font-variant-numeric: var(--t-mono-numeric);
+  direction: var(--t-mono-direction);
+  unicode-bidi: var(--t-mono-bidi);
+  color: color-mix(in oklab, var(--on-stage) 62%, var(--stage));
+  display: -webkit-box;
+  -webkit-line-clamp: 1;
+  line-clamp: 1;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+/* THE SPACER DOES NOT FLEX (§7.1). Beside a `flex: 1` heading a growable
+   spacer splits the slack with it, and the title then truncates with empty
+   space beside it — the exact defect the handoff calls out by name. */
+.spacer {
+  flex: none;
+  inline-size: var(--sp-4);
+}
+
+/* --------------------------------------------------------------- actions */
+
+.actions {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  flex: none;
+}
+
+/* An outlined stage button. Never filled: the ONE filled ink element in the
+   viewer is nothing in this bar (§18) — the bar is all peers. */
+.action {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-2);
+  block-size: var(--h-control);
+  padding-inline: var(--sp-3);
+  border: 1px solid var(--stage-line);
+  border-radius: var(--r-md);
+  background: transparent;
+  color: var(--on-stage);
+  font: var(--t-small);
+  text-decoration: none;
+  white-space: nowrap;
+}
+.action:hover {
+  border-color: var(--on-stage);
+}
+.action[aria-pressed="true"] {
+  border-color: var(--on-stage);
+  background: color-mix(in oklab, var(--on-stage) 12%, var(--stage));
+}
+.action:disabled,
+.action[aria-disabled="true"] {
+  /* A recessive state takes its own token on the LEAF, never a container
+     `opacity` (§18). */
+  color: var(--text-disabled);
+  border-color: color-mix(in oklab, var(--stage-line) 60%, var(--stage));
+  cursor: default;
+}
+/* Destructive is an OUTLINED --net button, never a fill (§18). */
+.destructive {
+  color: var(--net);
+  border-color: color-mix(in oklab, var(--net) 55%, var(--stage));
+}
+.destructive:hover {
+  border-color: var(--net);
+}
+.actionLabel {
+  font: var(--t-small);
+}
+
+/* The phone's bottom bar: five 56px targets where a thumb is (§7.1, §D). */
+.bottomBar {
+  display: flex;
+  flex: none;
+  justify-content: space-around;
+  align-items: center;
+  border-block-start: 1px solid var(--stage-line);
+  padding-block-end: env(safe-area-inset-bottom);
+}
+.bottomAction {
+  inline-size: 56px;
+  block-size: 56px;
   display: flex;
   align-items: center;
   justify-content: center;
   border: none;
-  border-radius: 999px;
-  background: color-mix(in oklab, var(--text-inv) 8%, transparent);
-  color: var(--text-inv);
-  flex-shrink: 0;
-  text-decoration: none;
+  background: transparent;
+  color: var(--on-stage);
 }
-.iconBtn:hover {
-  background: color-mix(in oklab, var(--text-inv) 16%, transparent);
+.bottomAction:disabled {
+  color: var(--text-disabled);
 }
-.iconBtn[data-active="true"] {
-  background: color-mix(in oklab, var(--text-inv) 22%, transparent);
-  color: var(--ph-lb-accent, var(--text-inv));
+.bottomAction[aria-pressed="true"] {
+  color: var(--on-stage);
+  background: color-mix(in oklab, var(--on-stage) 12%, var(--stage));
 }
-.heading {
-  flex: 1;
-  min-width: 0;
+
+/* The overflow the phone's More opens: the three that did not fit. */
+.moreSheet {
+  flex: none;
+  padding: var(--sp-3) var(--sp-4);
+  border-block-end: 1px solid var(--stage-line);
 }
-.title {
-  font: var(--t-body-strong);
-  font-size: 14px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+.moreSheet .actions {
+  flex-wrap: wrap;
 }
-.dateline {
-  font: var(--t-mono);
-  font-size: 10.5px;
-  color: color-mix(in oklab, var(--text-inv) 65%, transparent);
-}
+
+/* ----------------------------------------------------------------- stage */
+
 .body {
   flex: 1;
-  min-height: 0;
+  min-block-size: 0;
   display: flex;
 }
 .stagewrap {
   flex: 1;
-  min-width: 0;
+  min-inline-size: 0;
   position: relative;
   display: flex;
+  flex-direction: column;
+}
+.mediaWrap {
+  flex: 1;
+  min-block-size: 0;
+  display: flex;
   align-items: center;
   justify-content: center;
-  padding: var(--sp-2) 54px;
+  padding: var(--sp-3) 68px;
 }
-.stagewrap img,
-.stagewrap video {
-  max-width: 100%;
-  max-height: 100%;
-  object-fit: contain;
-  border-radius: 6px;
-  box-shadow: var(--shadow-lg);
-}
-.audio {
-  width: min(32rem, 90%);
-  display: grid;
-  justify-items: center;
-  gap: 1.25rem;
-  padding: 2rem;
-  border-radius: 14px;
-  background: color-mix(in oklab, var(--text-inv) 7%, transparent);
-}
-.audio > span {
-  display: grid;
-  place-items: center;
-  width: 5rem;
-  height: 5rem;
-  border-radius: 999px;
-  background: color-mix(in oklab, var(--text-inv) 10%, transparent);
-  color: color-mix(in oklab, var(--text-inv) 82%, transparent);
-  font-size: 2.25rem;
-}
-.audio audio {
-  width: 100%;
-}
-.stagewrap img:global(.zoomable) {
-  cursor: zoom-in;
+/* Zoomed, the wrap CLIPS and the maxima come off — that is the whole
+   difference between the two states (§7.1). */
+.clipping {
+  overflow: hidden;
   touch-action: none;
-  transition: transform 0.15s var(--ease);
-}
-.stagewrap img:global(.zoomed) {
   cursor: grab;
+}
+.media {
+  max-inline-size: 100%;
+  max-block-size: 100%;
+  object-fit: contain;
+  display: block;
+  transition: transform var(--dur-1) var(--ease);
+}
+.zoomed {
+  max-inline-size: none;
+  max-block-size: none;
   transition: none;
 }
-.placeholder {
-  width: min(20rem, 80vw);
-  aspect-ratio: 1;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: color-mix(in oklab, var(--text-inv) 6%, transparent);
-  color: color-mix(in oklab, var(--text-inv) 70%, transparent);
+
+/* The photograph's box BEFORE the photograph, at the geometry the record
+   already knows (see ViewerStage.tsx).
+
+   NOT `--skel`, which is what the tile and the loading grid take. `--skel` is
+   a PAPER tone — it is the right ground for a placeholder sitting on the page,
+   and the wrong one here: the stage is the same near-black in both themes
+   (this file's opening note), so a paper skeleton on it is a bright rectangle
+   that flashes and then hands over to a photograph. A placeholder announcing
+   itself more loudly than the thing it stands in for is backwards.
+
+   So the ground is derived from the stage's own roles, in the same idiom this
+   stylesheet already uses for its raised states — recessive, and legible as
+   "the frame is here, the picture is coming". Static: `--skel`'s no-shimmer
+   rule is about the whole loading register, not about one token. */
+.skeleton {
+  max-inline-size: 100%;
+  max-block-size: 100%;
+  background: color-mix(in oklab, var(--on-stage) 12%, var(--stage));
   border-radius: var(--r-sm);
-  padding: 1rem;
-  word-break: break-all;
 }
+
+/* The image while it still has no pixels. It stays MOUNTED and it stays
+   LOADING — the shell's blob authorizer only ever finds elements that are in
+   the tree — but it must paint nothing at all: a failed `<img>` renders the
+   broken glyph as replaced content, which no `color` can silence. Taken out of
+   flow so the skeleton above holds the stage's geometry alone. */
+.loading {
+  position: absolute;
+  inline-size: 1px;
+  block-size: 1px;
+  opacity: 0;
+  pointer-events: none;
+}
+.audio {
+  inline-size: min(32rem, 90%);
+  padding: var(--sp-6);
+  border: 1px solid var(--stage-line);
+  border-radius: var(--r-lg);
+}
+.audio audio {
+  inline-size: 100%;
+}
+/* No paintable source. The box is still the right box — a stage holds its
+   geometry from record to bytes to failure (§14). */
+.absent {
+  max-inline-size: 100%;
+  max-block-size: 100%;
+  inline-size: min(24rem, 80%);
+  background: var(--skel);
+  border-radius: var(--r-sm);
+  display: flex;
+  align-items: flex-end;
+  padding: var(--sp-2);
+}
+.absentLine {
+  font: var(--t-mono);
+  font-variant-numeric: var(--t-mono-numeric);
+  color: var(--text-soft);
+}
+
+/* Prev / next: 44px circles inset 12px, hairline border, MIRRORED under RTL
+   (§7.1, §18) — which is what the two logical insets below buy. */
 .nav {
   position: absolute;
-  top: 50%;
+  inset-block-start: 50%;
   transform: translateY(-50%);
-  width: 46px;
-  height: 46px;
+  inline-size: 44px;
+  block-size: 44px;
   display: flex;
   align-items: center;
   justify-content: center;
-  border: none;
-  border-radius: 999px;
-  background: color-mix(in oklab, var(--text-inv) 10%, transparent);
-  color: var(--text-inv);
+  border: 1px solid var(--stage-line);
+  border-radius: var(--r-pill);
+  background: var(--stage);
+  color: var(--on-stage);
   z-index: 2;
 }
 .nav:hover {
-  background: color-mix(in oklab, var(--text-inv) 18%, transparent);
+  border-color: var(--on-stage);
 }
 .nav:disabled {
-  opacity: 0.2;
-  pointer-events: none;
+  color: var(--text-disabled);
+  cursor: default;
 }
-.nav.prev {
-  left: 8px;
+.navPrev {
+  inset-inline-start: 12px;
 }
-.nav.next {
-  right: 8px;
+.navNext {
+  inset-inline-end: 12px;
 }
+/* The chevrons themselves mirror with the writing direction. */
+:global([dir="rtl"]) .nav :global(i) {
+  transform: scaleX(-1);
+}
+
+/* ------------------------------------------------- foot: zoom, transport */
+
+.stageFoot {
+  flex: none;
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+  padding: 0 var(--sp-4) var(--sp-3);
+}
+.zoomBar {
+  display: flex;
+  align-items: center;
+  /* The photograph is centred in .mediaWrap above. This footer is a separate
+     full-width sibling, so it must explicitly share that centre instead of
+     leaving the zoom controls at the stage's inline start. */
+  justify-content: center;
+  gap: var(--sp-2);
+}
+.zoomChip {
+  font: var(--t-control);
+  color: color-mix(in oklab, var(--on-stage) 70%, var(--stage));
+  border: 1px solid var(--stage-line);
+  border-radius: var(--r-pill);
+  padding: 2px var(--sp-2);
+}
+.zoomBtn {
+  min-inline-size: 28px;
+  block-size: 28px;
+  padding-inline: var(--sp-2);
+  border: 1px solid var(--stage-line);
+  border-radius: var(--r-sm);
+  background: transparent;
+  color: var(--on-stage);
+  font: var(--t-control);
+}
+.zoomBtn:hover {
+  border-color: var(--on-stage);
+}
+/* The exact readout (§7.1). A numeric, so it is mono and tabular, and it
+   reads in order under RTL because the role isolates itself. */
+.zoomReadout {
+  font: var(--t-mono);
+  font-variant-numeric: var(--t-mono-numeric);
+  direction: var(--t-mono-direction);
+  unicode-bidi: var(--t-mono-bidi);
+  color: color-mix(in oklab, var(--on-stage) 70%, var(--stage));
+}
+
+/* One slot, three variants (§7.1). */
+.transport {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+}
+.transportPlay {
+  inline-size: 34px;
+  block-size: 34px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--stage-line);
+  border-radius: var(--r-pill);
+  background: transparent;
+  color: var(--on-stage);
+}
+.track {
+  flex: 1;
+  min-inline-size: 0;
+  block-size: 3px;
+  appearance: none;
+  border: none;
+  background: var(--stage-line);
+  border-radius: var(--r-pill);
+  overflow: hidden;
+}
+/* `<progress>` paints through two vendor pseudo-elements, and neither
+   inherits the host's background — so the ground and the fill are both said
+   here rather than on a child element the component would have to render. */
+.track::-webkit-progress-bar {
+  background: var(--stage-line);
+}
+.track::-webkit-progress-value {
+  background: var(--on-stage);
+}
+.track::-moz-progress-bar {
+  background: var(--on-stage);
+}
+.transportClock {
+  font: var(--t-mono);
+  font-variant-numeric: var(--t-mono-numeric);
+  direction: var(--t-mono-direction);
+  unicode-bidi: var(--t-mono-bidi);
+  color: color-mix(in oklab, var(--on-stage) 70%, var(--stage));
+}
+.transportKind {
+  font: var(--t-eyebrow);
+  text-transform: var(--t-eyebrow-transform);
+  letter-spacing: var(--t-eyebrow-tracking);
+  color: color-mix(in oklab, var(--on-stage) 55%, var(--stage));
+}
+
+/* The stage's own status line (§7.1): what is true about the bytes, with ONE
+   inline text action. No toast, no spinner, no badge. */
+.stageStatus {
+  display: flex;
+  align-items: baseline;
+  gap: var(--sp-2);
+  margin: 0;
+  min-block-size: 30px;
+}
+.stageStatusText {
+  font: var(--t-mono);
+  font-variant-numeric: var(--t-mono-numeric);
+  direction: var(--t-mono-direction);
+  unicode-bidi: var(--t-mono-bidi);
+  color: color-mix(in oklab, var(--on-stage) 70%, var(--stage));
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.inlineAction {
+  border: none;
+  background: none;
+  padding: 0;
+  font: var(--t-small);
+  color: var(--on-stage);
+  text-decoration: underline;
+  flex: none;
+}
+
+/* ------------------------------------------------------------ info panel */
+
+/* 320px rail on the TRAILING edge (§7.2). Paper, not stage: this is where
+   meaning is edited, and an editable field belongs on the page ramp. */
 .info {
-  width: min(340px, 88vw);
-  flex-shrink: 0;
+  inline-size: 320px;
+  flex: none;
   background: var(--bg-elev);
   color: var(--text);
-  border-left: 1px solid var(--line);
+  border-inline-start: 1px solid var(--stage-line);
   overflow-y: auto;
-  padding: 18px;
+  padding: var(--sp-5);
 }
-@media (max-width: 859.98px) {
+.grabber {
+  display: none;
+}
+@media (max-width: 719.98px) {
   .body {
     position: relative;
   }
+  /* The phone's sheet: 64% height, with a grabber (§7.2, §D). ONE number,
+     named — the stage below derives its own height from it, so the sheet
+     cannot be resized without the photograph following. */
+  .lightbox {
+    --ph-sheet: 64%;
+  }
   .info {
-    position: fixed;
-    left: 0;
-    right: 0;
-    bottom: 0;
-    top: auto;
-    width: auto;
-    max-height: 72vh;
-    border-left: none;
-    border-top: 1px solid var(--line);
-    border-radius: 16px 16px 0 0;
-    box-shadow: var(--shadow-lg);
+    position: absolute;
+    inset-inline: 0;
+    inset-block-end: 0;
+    inset-block-start: auto;
+    inline-size: auto;
+    block-size: var(--ph-sheet);
+    border-inline-start: none;
+    border-block-start: 1px solid var(--line);
+    border-start-start-radius: var(--r-lg);
+    border-start-end-radius: var(--r-lg);
+  }
+  /* THE SHEET TAKES ITS SPACE FROM THE STAGE, NOT FROM THE PHOTOGRAPH (§7.2).
+     The sheet is absolute, so it removes no space by itself: left alone the
+     stage keeps the whole body, centres the image under the sheet, and hangs
+     the prev/next circles — pinned to 50% of the stage — over the panel. The
+     rail never had this, because there the panel is a flex sibling that really
+     does take its 320px.
+
+     `align-self`, NOT `flex`, is what bounds the stage here. `.body` is a ROW
+     flex container, so the block axis is its CROSS axis: `flex: none` would
+     read as "do not grow along the INLINE axis" and collapse the stage to the
+     width of the photograph inside it — the image then centres in a 387px box
+     on a 549px screen, with the slack painted as stage to its trailing side.
+     The height is set on the cross axis, and the default `stretch` is what has
+     to yield for it, which is exactly what `flex-start` says. */
+  .lightbox[data-info="open"] .stagewrap {
+    align-self: flex-start;
+    block-size: calc(100% - var(--ph-sheet));
+  }
+
+  /* AN OPEN SHEET SUSPENDS THE STAGE'S OWN CONTROLS (§7.1). The zoom foot and
+     the filmstrip steer the photograph, and neither can be worked while the
+     thing under the thumb is a metadata form — the sheet covers the reach.
+     Holding them on screen costs the photograph 98px of the only band it has
+     left in order to show two controls that are, right now, decoration. They
+     come back with the stage the moment the sheet closes.
+
+     `visibility` rather than `display: none`: the filmstrip keeps its scroll
+     position across the toggle, so reopening the stage does not snap the strip
+     back to the start and lose the member's place in the roll. */
+  .lightbox[data-info="open"] .stageFoot,
+  .lightbox[data-info="open"] .filmstrip {
+    visibility: hidden;
+    block-size: 0;
+    padding-block: 0;
+    border-block-start: none;
+    overflow: hidden;
+  }
+
+  .grabber {
+    display: block;
+    inline-size: 36px;
+    block-size: 4px;
+    border-radius: var(--r-pill);
+    background: var(--line-strong);
+    margin: 0 auto var(--sp-3);
+  }
+  .topbar {
+    block-size: 52px;
+  }
+  /* THE CIRCLES OVERLAY THE PHOTOGRAPH; THEY ARE NOT GIVEN A GUTTER. Reserving
+     60px on each side of a 549px screen spends 22% of the width so two 44px
+     controls can stand outside the image — and the image, which is the whole
+     reason for the surface, was left at 51% of the viewport it is displayed
+     in. The circles carry their own opaque `--stage` fill and hairline, so
+     they hold their edge over a photograph the way they hold it over the
+     stage; floating them back over the corners is what buys the width. The
+     inline padding that remains is the frame, not a gutter. */
+  .mediaWrap {
+    padding-inline: var(--sp-2);
   }
 }
+
+/* ------------------------------------------------------------- filmstrip */
+
+/* KEPT ON THE PHONE (§7.1, §D). The band's block size is the CURRENT frame's
+   — the handoff's 76px is the neighbours' optical row, and a strip shorter
+   than its own current frame would clip the one thing it exists to point at.
+   Neighbours 60 (40 phone), current 84 (58 phone) with a 2px ink outline. */
 .filmstrip {
-  flex-shrink: 0;
+  flex: none;
   display: flex;
+  align-items: center;
   gap: var(--sp-1);
   justify-content: center;
-  padding: var(--sp-3) var(--sp-4) var(--sp-4);
+  block-size: 84px;
+  padding-inline: var(--sp-4);
+  border-block-start: 1px solid var(--stage-line);
   overflow-x: auto;
+  overflow-y: hidden;
+  scrollbar-width: none;
 }
 .filmstrip::-webkit-scrollbar {
-  height: 0;
+  block-size: 0;
 }
 .frame {
   flex: 0 0 auto;
-  width: 56px;
-  height: 56px;
-  border-radius: 6px;
+  inline-size: 60px;
+  block-size: 60px;
+  border-radius: var(--r-sm);
   overflow: hidden;
   padding: 0;
-  background: var(--bg-sunken);
+  background: var(--skel);
   border: 2px solid transparent;
-  opacity: 0.6;
 }
 .frame[data-active="true"] {
-  border-color: var(--text-inv);
-  opacity: 1;
+  inline-size: 84px;
+  block-size: 84px;
+  border-color: var(--on-stage);
 }
 .frame img {
-  width: 100%;
-  height: 100%;
+  inline-size: 100%;
+  block-size: 100%;
   object-fit: cover;
   display: block;
   pointer-events: none;
+  /* Muted-vs-active is a leaf treatment (the image), never the button
+     container it sits inside (§18). */
+  opacity: 0.6;
 }
-.frame:global(.is-placeholder) {
-  position: relative;
-  overflow: hidden;
+.frame[data-active="true"] img {
+  opacity: 1;
 }
-.frame:global(.is-placeholder)::after {
-  content: "";
-  position: absolute;
-  inset: 0;
-  background: linear-gradient(
-    100deg,
-    var(--bg-sunken) 30%,
-    color-mix(in srgb, var(--bg-sunken) 82%, var(--text-faint)) 50%,
-    var(--bg-sunken) 70%
-  );
-  background-size: 220% 100%;
-  animation: kit-shimmer 1.4s var(--ease) infinite;
-}
-@media (prefers-reduced-motion: reduce) {
-  .frame:global(.is-placeholder)::after {
-    animation: none;
+@media (max-width: 719.98px) {
+  .filmstrip {
+    block-size: 58px;
   }
+  .frame {
+    inline-size: 40px;
+    block-size: 40px;
+  }
+  .frame[data-active="true"] {
+    inline-size: 58px;
+    block-size: 58px;
+  }
+}
+
+/* ---------------------------------------------------------------- editor */
+
+.editorHost {
+  flex: 1;
+  min-inline-size: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--sp-4);
+  overflow: auto;
 }

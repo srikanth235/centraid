@@ -39,7 +39,7 @@
       "desc": "The library you own, wherever the bytes live.",
       "colorKey": "ochre",
       "iconKey": "Camera",
-      "version": "0.2.0"
+      "version": "0.4.0"
     },
     {
       "id": "docs",
@@ -66,20 +66,6 @@
       "version": "0.1.1"
     },
     {
-      "id": "photo-captioner",
-      "name": "Photo captions",
-      "desc": "Captions and tags new photos so the library is searchable by what's in the pictures.",
-      "colorKey": "ochre",
-      "iconKey": "Sparkle",
-      "version": "0.1.0",
-      "kind": "automation",
-      "emoji": "🖼️",
-      "category": "Enrichment",
-      "triggerKind": "data",
-      "triggerLabel": "When new photos arrive",
-      "integrations": []
-    },
-    {
       "id": "doc-text-extractor",
       "name": "Document text",
       "desc": "OCRs scanned documents into searchable text and writes a one-paragraph summary for each.",
@@ -94,20 +80,6 @@
       "integrations": []
     },
     {
-      "id": "screenshot-extractor",
-      "name": "Screenshot intelligence",
-      "desc": "Turns photographed receipts and bookings into staged ledger and calendar entries you review.",
-      "colorKey": "forest",
-      "iconKey": "Sparkle",
-      "version": "0.1.0",
-      "kind": "automation",
-      "emoji": "🧾",
-      "category": "Enrichment",
-      "triggerKind": "data",
-      "triggerLabel": "When new screenshots arrive",
-      "integrations": []
-    },
-    {
       "id": "doc-filer",
       "name": "Document filing",
       "desc": "Proposes a folder and a readable title for every scan-dump document — you approve, it files.",
@@ -119,34 +91,6 @@
       "category": "Enrichment",
       "triggerKind": "data",
       "triggerLabel": "When documents become readable",
-      "integrations": []
-    },
-    {
-      "id": "face-proposer",
-      "name": "Face proposals",
-      "desc": "Spots faces in new photos and proposes regions you confirm as people — nothing is asserted without you.",
-      "colorKey": "rose",
-      "iconKey": "Sparkle",
-      "version": "0.1.0",
-      "kind": "automation",
-      "emoji": "🙂",
-      "category": "Enrichment",
-      "triggerKind": "data",
-      "triggerLabel": "When new photos arrive",
-      "integrations": []
-    },
-    {
-      "id": "trip-albums",
-      "name": "Trip albums",
-      "desc": "Clusters your photos into trip albums by time gaps — proposed as drafts, published only when you approve.",
-      "colorKey": "teal",
-      "iconKey": "Sparkle",
-      "version": "0.1.0",
-      "kind": "automation",
-      "emoji": "🧳",
-      "category": "Enrichment",
-      "triggerKind": "cron",
-      "triggerLabel": "Daily · 6:00 AM",
       "integrations": []
     },
     {
@@ -428,6 +372,90 @@
       "triggerKind": "cron",
       "triggerLabel": "Hourly · :18",
       "integrations": ["Slack"]
+    },
+    {
+      "id": "photo-ocr",
+      "name": "Photo OCR",
+      "desc": "Makes text in photographs searchable through deterministic OCR, with an optional billed delegate step.",
+      "colorKey": "amber",
+      "iconKey": "Search",
+      "version": "0.1.0",
+      "kind": "automation",
+      "emoji": "🔎",
+      "category": "Recognition",
+      "triggerKind": "data",
+      "triggerLabel": "When photographs arrive",
+      "integrations": []
+    },
+    {
+      "id": "transcript",
+      "name": "Transcription",
+      "desc": "Makes speech in audio and video searchable through the configured deterministic transcription service.",
+      "colorKey": "purple",
+      "iconKey": "Music",
+      "version": "0.1.0",
+      "kind": "automation",
+      "emoji": "🎙️",
+      "category": "Recognition",
+      "triggerKind": "data",
+      "triggerLabel": "When audio or video arrives",
+      "integrations": []
+    },
+    {
+      "id": "embed-image",
+      "name": "Image embeddings",
+      "desc": "Builds deterministic visual embeddings from bounded preview derivatives for semantic search.",
+      "colorKey": "indigo",
+      "iconKey": "Image",
+      "version": "0.1.0",
+      "kind": "automation",
+      "emoji": "🖼️",
+      "category": "Recognition",
+      "triggerKind": "data",
+      "triggerLabel": "When photographs arrive",
+      "integrations": []
+    },
+    {
+      "id": "place-names",
+      "name": "Place names",
+      "desc": "Names the nearest town for places that only have coordinates, from a settlement list bundled with Centraid and read on this device.",
+      "colorKey": "green",
+      "iconKey": "MapPin",
+      "version": "0.1.0",
+      "kind": "automation",
+      "emoji": "📍",
+      "category": "Recognition",
+      "triggerKind": "data",
+      "triggerLabel": "When a place gains coordinates",
+      "integrations": []
+    },
+    {
+      "id": "embed-text",
+      "name": "Text embeddings",
+      "desc": "Builds deterministic embeddings for extracted text and transcripts so semantic search stays model-versioned.",
+      "colorKey": "teal",
+      "iconKey": "Book",
+      "version": "0.1.0",
+      "kind": "automation",
+      "emoji": "🔤",
+      "category": "Recognition",
+      "triggerKind": "data",
+      "triggerLabel": "When extracted text arrives",
+      "integrations": []
+    },
+    {
+      "id": "faces",
+      "name": "Face recognition",
+      "desc": "Detects face regions from photograph previews and stages them in the reviewable face queue.",
+      "colorKey": "rose",
+      "iconKey": "Users",
+      "version": "0.1.0",
+      "kind": "automation",
+      "emoji": "🙂",
+      "category": "Recognition",
+      "triggerKind": "data",
+      "triggerLabel": "When photographs arrive",
+      "integrations": []
     },
     {
       "id": "dropbox-pull",

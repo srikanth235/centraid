@@ -1,8 +1,10 @@
-import { mkdtemp, mkdir, rm, utimes, writeFile } from "node:fs/promises";
+import { mkdir, utimes, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 
-import { afterEach, describe, expect, test } from "vitest";
+import { describe, expect, test } from "vitest";
+
+import { tempDir } from "@centraid/test-kit/temp-dir";
 
 import { parseFrameEvidence, readFrameEvidence } from "./frame-report.mjs";
 
@@ -24,16 +26,6 @@ import { parseFrameEvidence, readFrameEvidence } from "./frame-report.mjs";
  * One runner, per TESTING.md.
  */
 
-/** Scratch dirs created by a case, removed after it whatever the outcome. */
-const scratchDirs = [];
-
-afterEach(async () => {
-  await Promise.all(
-    scratchDirs
-      .splice(0)
-      .map((dir) => rm(dir, { recursive: true, force: true }))
-  );
-});
 const CONTRACT_LINE =
   "frames=137 expected=241 elapsed=4016ms fps=34.11 targetHz=60 dropped=43.15%";
 
@@ -128,8 +120,7 @@ describe("parseFrameEvidence", () => {
 
 describe("readFrameEvidence", () => {
   test("reads only files written since the phase began", async () => {
-    const root = await mkdtemp(path.join(tmpdir(), "frame-report-"));
-    scratchDirs.push(root);
+    const root = await tempDir("frame-report-");
     const debugDir = path.join(root, "maestro-debug", "07-fling-photos");
     await mkdir(debugDir, { recursive: true });
 

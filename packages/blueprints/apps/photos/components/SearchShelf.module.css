@@ -1,0 +1,54 @@
+/* The Search shelf's field (v4 handoff §9). A 34px field capped at 520px.
+   The four states below it (resting panel, searching line, unreachable
+   panel, no-results panel, grouped-hit rows) render through
+   `_shared/SearchScaffold.tsx` (issue #712 S1) and their styling lives in
+   that module's own CSS — see `_shared/SearchScaffold.module.css`. */
+
+.shelf {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-4);
+  padding-block-start: var(--sp-3);
+}
+
+.field {
+  max-inline-size: 520px;
+  inline-size: 100%;
+  block-size: 34px;
+}
+.input {
+  flex: 1;
+  min-inline-size: 0;
+  border: none;
+  background: none;
+  color: inherit;
+  font: var(--t-body);
+}
+.input:focus {
+  outline: none;
+}
+
+/* The honesty line under the field (§9, ~3959-3961): what this search
+   reaches, stated once regardless of state. */
+.scope {
+  margin: 0;
+  font: var(--t-small);
+  color: var(--text-faint);
+}
+
+/* The clear control (§9, ~4146-4147) — mono, underlined TEXT beside the
+   field, not an icon button. */
+.clearBtn {
+  margin: 0;
+  padding: 0;
+  border: none;
+  background: none;
+  color: var(--text-soft);
+  font: var(--t-mono);
+  text-decoration: underline;
+  text-underline-offset: 0.15em;
+  cursor: pointer;
+}
+.clearBtn:hover {
+  color: var(--text);
+}

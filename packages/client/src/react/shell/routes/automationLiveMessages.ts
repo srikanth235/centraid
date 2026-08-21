@@ -1,5 +1,4 @@
-import type { TurnStreamEvent } from "@centraid/design/kit/turn-stream.js";
-
+import type { TurnStreamEvent } from "../../../turn-stream.js";
 import type {
   AsstMsgDTO,
   AsstToolCallDTO,
@@ -22,7 +21,7 @@ interface AutomationLiveItemState {
   kind: CentraidAutomationItem["kind"];
   name?: string;
   callId?: string;
-  /** Agent item that was still open when this tool started. */
+  /** Delegate item that was still open when this tool started. */
   parentItemId?: string;
   assistantText: string;
   reasoningText: string;
@@ -70,14 +69,14 @@ function createLiveItem(
   return state;
 }
 
-function activeAgentItemId(
+function activeDelegateItemId(
   state: AutomationLiveTraceState,
   beforeOrdinal: number
 ): string | undefined {
   return [...state.items.values()]
     .filter(
       (item) =>
-        item.kind === "agent" && !item.done && item.ordinal < beforeOrdinal
+        item.kind === "delegate" && !item.done && item.ordinal < beforeOrdinal
     )
     .sort((left, right) => right.ordinal - left.ordinal)[0]?.itemId;
 }
@@ -103,15 +102,15 @@ export function createAutomationLiveTraceFromItems(
       (left, right) =>
         left.ordinal - right.ordinal || left.startedAt - right.startedAt
     );
-  let parentAgent: CentraidAutomationItem | undefined;
+  let parentDelegate: CentraidAutomationItem | undefined;
   for (const item of ordered) {
-    if (item.kind === "agent") parentAgent = item;
+    if (item.kind === "delegate") parentDelegate = item;
     const parentItemId =
       item.kind === "tool" &&
-      parentAgent &&
-      (parentAgent.endedAt === undefined ||
-        item.startedAt <= parentAgent.endedAt)
-        ? parentAgent.itemId
+      parentDelegate &&
+      (parentDelegate.endedAt === undefined ||
+        item.startedAt <= parentDelegate.endedAt)
+        ? parentDelegate.itemId
         : undefined;
     const live = createLiveItem(
       item.itemId,
@@ -243,9 +242,9 @@ export function reduceAutomationItemEvent(
       input.ordinal,
       input.event.type === "tool.start" || input.event.type === "tool.result"
         ? "tool"
-        : "agent",
+        : "delegate",
       input.event.type === "tool.start" || input.event.type === "tool.result"
-        ? activeAgentItemId(state, input.ordinal)
+        ? activeDelegateItemId(state, input.ordinal)
         : undefined
     );
   items.set(input.itemId, reduceLiveItem(prior, input.event));
@@ -273,7 +272,7 @@ export function startAutomationLiveItem(
         input.ordinal,
         input.kind,
         input.kind === "tool"
-          ? activeAgentItemId(state, input.ordinal)
+          ? activeDelegateItemId(state, input.ordinal)
           : undefined,
         input.name,
         input.callId
@@ -303,7 +302,7 @@ export function finishAutomationLiveItem(
     createLiveItem(
       input.itemId,
       input.ordinal,
-      input.callId ? "tool" : "agent",
+      input.callId ? "tool" : "delegate",
       undefined
     );
   const next: AutomationLiveItemState = { ...prior, done: true };
@@ -343,7 +342,7 @@ export function finishAutomationLiveItem(
   return { ...state, items };
 }
 
-/** Pure reducer for a direct, single-agent standard turn stream. */
+/** Pure reducer for a direct, single-delegate standard turn stream. */
 export function reduceAutomationTurnEvent(
   state: AutomationLiveTraceState,
   event: TurnStreamEvent
@@ -351,7 +350,7 @@ export function reduceAutomationTurnEvent(
   const started = startAutomationLiveItem(state, {
     itemId: "direct",
     ordinal: 0,
-    kind: "agent",
+    kind: "delegate",
   });
   return reduceAutomationItemEvent(started, {
     itemId: "direct",
@@ -368,7 +367,7 @@ export function finishAutomationLiveTrace(
   const items = new Map(state.items);
   if (items.size === 0) {
     items.set("terminal", {
-      ...createLiveItem("terminal", 0, "agent"),
+      ...createLiveItem("terminal", 0, "delegate"),
       ...(error ? { error } : { finalText: "The automation completed." }),
       done: true,
     });
@@ -456,27 +455,27 @@ export function automationLiveMessages(
     (left, right) =>
       left.ordinal - right.ordinal || left.itemId.localeCompare(right.itemId)
   );
-  let pendingAgent: AutomationLiveItemState | undefined;
+  let pendingDelegate: AutomationLiveItemState | undefined;
   let nestedTools: AsstToolCallDTO[] = [];
-  const flushAgent = (): void => {
-    if (!pendingAgent) return;
-    messages.push(...liveItemMessages(pendingAgent, nestedTools));
-    pendingAgent = undefined;
+  const flushDelegate = (): void => {
+    if (!pendingDelegate) return;
+    messages.push(...liveItemMessages(pendingDelegate, nestedTools));
+    pendingDelegate = undefined;
     nestedTools = [];
   };
   for (const item of ordered) {
-    if (item.kind === "agent") {
-      flushAgent();
-      pendingAgent = item;
+    if (item.kind === "delegate") {
+      flushDelegate();
+      pendingDelegate = item;
       continue;
     }
-    if (item.kind === "tool" && item.parentItemId === pendingAgent?.itemId) {
+    if (item.kind === "tool" && item.parentItemId === pendingDelegate?.itemId) {
       nestedTools.push(...item.tools);
       continue;
     }
-    flushAgent();
+    flushDelegate();
     messages.push(...liveItemMessages(item));
   }
-  flushAgent();
+  flushDelegate();
   return messages;
 }

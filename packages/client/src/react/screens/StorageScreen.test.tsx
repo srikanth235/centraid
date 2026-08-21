@@ -4,6 +4,7 @@ import type { Root } from "react-dom/client";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import type { LocalUsageReportDTO } from "../../gateway-client-local-storage.js";
+import type { GatewayOwner } from "../../gateway-client-owners.js";
 import StorageScreen from "./StorageScreen.js";
 import type { StorageScreenProps } from "./StorageScreen.js";
 
@@ -66,10 +67,20 @@ describe(StorageScreen, () => {
 
   it("renders only local footprint and limits, with independent partial state", async () => {
     const el = await mount();
+    // Two section heads, each ABOVE its own container (binding layer v11).
+    // "On this machine" retired with the footprint card's in-panel head: the
+    // Capacity head states the figure it used to caption.
     const headings = [...el.querySelectorAll("h2")].map(
       (heading) => heading.textContent
     );
-    expect(headings).toStrictEqual(["On this machine", "Limits"]);
+    // ONE section head. Limits is a named row list, not a section of its own:
+    // its rows say what each limit is and carry the verb that changes it, so a
+    // head above them would only repeat the fieldset's own name.
+    expect(headings).toStrictEqual(["Capacity"]);
+    expect(
+      el.querySelector('[aria-label="Limits"]'),
+      "the limits list still names itself for assistive tech"
+    ).not.toBeNull();
     expect(el.textContent).not.toContain("Backups");
   });
 
@@ -82,18 +93,112 @@ describe(StorageScreen, () => {
     expect(el.textContent).not.toContain("Listening for the gateway heartbeat");
   });
 
+  // TWO vaults, not one: a single row here is the headline figure said again
+  // under a bar that is necessarily full, so the block draws nothing below two
+  // (VaultFootprintRows). The breakdown exists for exactly this case - several
+  // vaults, one of them somebody else's.
+  it("adds the owner label beside each vault line when a roster is available (#726 P1)", async () => {
+    const withVaults: LocalUsageReportDTO = {
+      ...report(),
+      vaults: [
+        {
+          vaultId: "v-priya",
+          name: "Priya's vault",
+          bytes: 2 * GB,
+          components: [{ component: "attachments", bytes: 2 * GB, files: 3 }],
+        },
+        {
+          vaultId: "v-mine",
+          name: "My vault",
+          bytes: 1 * GB,
+          components: [{ component: "attachments", bytes: 1 * GB, files: 1 }],
+        },
+      ],
+    };
+    const owners: GatewayOwner[] = [
+      {
+        ownerId: "o-priya",
+        label: "Priya",
+        createdAt: "2026-07-25T00:00:00.000Z",
+        vaults: [{ vaultId: "v-priya", vaultName: "Priya's vault" }],
+        deviceCount: 1,
+      },
+    ];
+    const el = await mount({
+      loadLocalUsage: () => Promise.resolve(withVaults),
+      loadOwners: vi
+        .fn<NonNullable<StorageScreenProps["loadOwners"]>>()
+        .mockResolvedValue(owners),
+    });
+    const byVault = el.querySelector('[data-testid="footprint-by-vault"]');
+    // Whose it is, said ON the row rather than in a parenthesis after the name.
+    expect(byVault?.textContent).toContain("Priya's vault");
+    expect(byVault?.textContent).toContain("Priya");
+  });
+
+  it("renders the vault line unlabeled when there is no owner roster to join", async () => {
+    const withVaults: LocalUsageReportDTO = {
+      ...report(),
+      vaults: [
+        {
+          vaultId: "v-priya",
+          name: "Priya's vault",
+          bytes: 2 * GB,
+          components: [{ component: "attachments", bytes: 2 * GB, files: 3 }],
+        },
+        {
+          vaultId: "v-mine",
+          name: "My vault",
+          bytes: 1 * GB,
+          components: [{ component: "attachments", bytes: 1 * GB, files: 1 }],
+        },
+      ],
+    };
+    const el = await mount({
+      loadLocalUsage: () => Promise.resolve(withVaults),
+    });
+    const byVault = el.querySelector('[data-testid="footprint-by-vault"]');
+    expect(byVault?.textContent).toContain("Priya's vault");
+    // No roster to join, so the row falls back to "yours" rather than
+    // inventing a name for a person it cannot identify.
+    expect(byVault?.textContent).toContain("yours");
+  });
+
   it("round-trips a limit change through the gateway", async () => {
     const saveStorageLimits = vi
       .fn<StorageScreenProps["saveStorageLimits"]>()
       .mockResolvedValue(report().limits);
     const el = await mount({ saveStorageLimits });
-    const budget = el.querySelector('[data-testid="limit-control-budget"]')!;
-    const preset = [...budget.querySelectorAll("button")].find(
-      (button) => button.textContent === "30 GB"
+    // The LEDGER limit, because the disk budget is no longer offered: it was a
+    // warning figure Centraid never stopped at, so the panel only surfaces one
+    // if a stored value is stranded there, and then only to turn it off.
+    const change = [...el.querySelectorAll("button")].find(
+      (button) => button.title === "Change the ledger limit"
+    ) as HTMLButtonElement;
+    await act(async () => change.click());
+    const control = el.querySelector('[data-testid="limit-control-ledger"]')!;
+    const preset = [...control.querySelectorAll("button")].find(
+      (button) => button.textContent === "1 GB"
     ) as HTMLButtonElement;
     await act(async () => preset.click());
     expect(saveStorageLimits).toHaveBeenCalledWith({
-      totalLimitBytes: 30 * GB,
+      journalLimitBytes: GB,
     });
+  });
+
+  it("keeps live capacity facts but removes Rescan and limit mutations for a viewer", async () => {
+    const saveStorageLimits = vi.fn<StorageScreenProps["saveStorageLimits"]>();
+    const el = await mount({ readOnly: true, saveStorageLimits });
+    expect(el.textContent).toContain("3.0 GB");
+    expect(
+      el.querySelector('[data-testid="storage-limits-panel"]')
+    ).not.toBeNull();
+    // Read-only is the ABSENCE of the verb, not a second panel: one panel,
+    // one testid, and the viewer's rows simply carry no action.
+    expect(el.textContent).not.toContain("Change");
+    expect(el.textContent).not.toContain("Rescan");
+    expect(el.textContent).not.toContain("Set");
+    expect(el.querySelector("input")).toBeNull();
+    expect(saveStorageLimits).not.toHaveBeenCalled();
   });
 });

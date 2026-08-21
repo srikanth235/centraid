@@ -2,13 +2,15 @@ import { describe, expect, it } from "vitest";
 
 import type {
   CentraidGatewayDevice,
-  GatewayMember,
+  GatewayOwner,
 } from "../../gateway-client.js";
-import { groupDevicesByMember, vaultsFromGroups } from "./device-groups.js";
+import { groupDevicesByOwner } from "./device-groups.js";
 
-// `member_id` is NOT NULL on every binding (#599), so grouping is total: the
+// `owner_id` is NOT NULL on every binding (#726), so grouping is total: the
 // interesting cases are what happens when the ROSTER is missing, not what
-// happens when a device has no person — that state cannot exist.
+// happens when a device has no person — that state cannot exist. A vault has
+// exactly one owner and a device caller sees only its own owner's vaults, so
+// every device this grouping ever sees belongs to the SAME person.
 
 function device(
   over: Partial<CentraidGatewayDevice> = {}
@@ -16,46 +18,60 @@ function device(
   return {
     deviceId: "enr_1",
     endpointId: "ep_1",
-    memberId: "mem_priya",
-    memberLabel: "Priya",
+    ownerId: "o-priya",
+    ownerLabel: "Priya",
     label: "Browser",
     transport: "iroh",
     vaultId: "v1",
     vaultName: "Personal",
-    role: "write",
+    revoked: false,
     rememberDevice: true,
     ...over,
   };
 }
 
-const roster: GatewayMember[] = [
+const roster: GatewayOwner[] = [
   {
-    memberId: "mem_priya",
+    ownerId: "o-priya",
     label: "Priya",
     createdAt: "2026-07-01T00:00:00.000Z",
-    roles: [{ vaultId: "v1", vaultName: "Personal", role: "admin" }],
+    vaults: [{ vaultId: "v1", vaultName: "Personal" }],
     deviceCount: 1,
   },
 ];
 
-describe(groupDevicesByMember, () => {
-  it("reads a person’s access off their bindings when the roster is unavailable", () => {
-    const groups = groupDevicesByMember([device()], []);
+describe(groupDevicesByOwner, () => {
+  it("reads a person’s vaults off their bindings when the roster is unavailable", () => {
+    const groups = groupDevicesByOwner([device()], []);
     expect(groups).toHaveLength(1);
     expect(groups[0]?.label).toBe("Priya");
-    expect(groups[0]?.roles).toStrictEqual([
-      { vaultId: "v1", vaultName: "Personal", role: "write" },
+    expect(groups[0]?.vaults).toStrictEqual([
+      { vaultId: "v1", vaultName: "Personal" },
     ]);
   });
 
-  it("prefers the roster’s authored roles over the inherited ones", () => {
-    const groups = groupDevicesByMember([device()], roster);
-    expect(groups[0]?.roles[0]?.role).toBe("admin");
+  it("prefers the roster’s authored vaults over the inherited ones", () => {
+    const groups = groupDevicesByOwner(
+      [device()],
+      [
+        {
+          ...roster[0]!,
+          vaults: [
+            { vaultId: "v1", vaultName: "Personal" },
+            { vaultId: "v2", vaultName: "Shared" },
+          ],
+        },
+      ]
+    );
+    expect(groups[0]?.vaults).toStrictEqual([
+      { vaultId: "v1", vaultName: "Personal" },
+      { vaultId: "v2", vaultName: "Shared" },
+    ]);
   });
 
   it("splits tombstones out of the live device list", () => {
-    const groups = groupDevicesByMember(
-      [device(), device({ deviceId: "enr_2", role: "revoked" })],
+    const groups = groupDevicesByOwner(
+      [device(), device({ deviceId: "enr_2", revoked: true })],
       roster
     );
     expect(groups[0]?.devices.map((d) => d.deviceId)).toStrictEqual(["enr_1"]);
@@ -63,8 +79,8 @@ describe(groupDevicesByMember, () => {
   });
 
   it("lists a person with no devices, and sorts the caller first", () => {
-    const groups = groupDevicesByMember(
-      [device({ memberId: "mem_arun", memberLabel: "Arun", current: true })],
+    const groups = groupDevicesByOwner(
+      [device({ ownerId: "o-arun", ownerLabel: "Arun", current: true })],
       roster
     );
     expect(groups.map((group) => group.label)).toStrictEqual(["Arun", "Priya"]);
@@ -76,14 +92,13 @@ describe(groupDevicesByMember, () => {
     // The devices route returns a row per (device, vault). Two rows for one
     // browser used to render as two devices — the card counted "4 devices"
     // for two — each with a "Revoke device" button that dropped one vault.
-    const groups = groupDevicesByMember(
+    const groups = groupDevicesByOwner(
       [
         device({ deviceId: "enr_shared", vaultId: "v1", vaultName: "Shared" }),
         device({
           deviceId: "enr_personal",
           vaultId: "v2",
           vaultName: "Personal",
-          role: "admin",
         }),
       ],
       []
@@ -94,13 +109,13 @@ describe(groupDevicesByMember, () => {
       "enr_personal",
     ]);
     expect(groups[0]?.devices[0]?.vaults).toStrictEqual([
-      { vaultId: "v1", vaultName: "Shared", role: "write" },
-      { vaultId: "v2", vaultName: "Personal", role: "admin" },
+      { vaultId: "v1", vaultName: "Shared" },
+      { vaultId: "v2", vaultName: "Personal" },
     ]);
   });
 
   it("keeps two distinct endpoints apart when they share a person", () => {
-    const groups = groupDevicesByMember(
+    const groups = groupDevicesByOwner(
       [
         device(),
         device({ deviceId: "enr_2", endpointId: "ep_2", label: "Phone" }),
@@ -110,25 +125,6 @@ describe(groupDevicesByMember, () => {
     expect(groups[0]?.devices.map((d) => d.label)).toStrictEqual([
       "Browser",
       "Phone",
-    ]);
-  });
-
-  it("collects every vault the caller can see, de-duplicated", () => {
-    const groups = groupDevicesByMember(
-      [
-        device(),
-        device({
-          deviceId: "enr_2",
-          vaultId: "v2",
-          vaultName: "Photos",
-          role: "read",
-        }),
-      ],
-      []
-    );
-    expect(vaultsFromGroups(groups)).toStrictEqual([
-      { vaultId: "v1", vaultName: "Personal", role: "write" },
-      { vaultId: "v2", vaultName: "Photos", role: "read" },
     ]);
   });
 });

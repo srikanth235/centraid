@@ -2,15 +2,142 @@
 
 ## Open
 
+- **A place shared into an audience scope may be phrased against the wrong
+  Home.** #816 made "what leaves with a copy" a decided question for the OS
+  share path (`share-place.ts`: a chosen precision, GPS stripped below the
+  exact rung, and the Home-relative rung suppressed in `"shared"` context).
+  In-product sharing through an audience scope was not audited to a
+  conclusion in that umbrella, because the answer lives in `packages/vault`:
+  if a sharer's `kind: "home"` place row can reach a receiver's scope, the
+  receiver's own info panel would phrase that photograph relative to somebody
+  else's Home — a wrong statement, not merely a leak. Needs a vault-side read
+  of how place rows travel with a scope.
+
+- **`apps/mobile/src/apps/tally/PendingRestartJourney.test.tsx` cannot load**:
+  `Cannot bundle Node.js built-in "node:sqlite" imported from
+  "src/lib/replica/node-sqlite-driver.ts"`. The whole file fails to collect, so
+  its journey assertions have not run for some time — a silently absent test,
+  not a flake. Reproduced on the base tree with all working changes stashed
+  while #805 was in flight, so it predates that branch and is unrelated to it.
+  The driver imports the Node builtin directly and mobile's vitest client
+  environment refuses to externalize it; the fix is a config or driver-seam
+  change, not a copy change, so #805 left it alone.
+
+- **Two container-hermeticity defects found by an attempted in-container full
+  coverage run** (13,203 green / 3 red, all environmental): (1)
+  `packages/agent-runtime/src/backends/acp/launch.test.ts` inherits the real
+  `process.env` through `planLaunch`, so a host that exports `IS_SANDBOX`
+  (this container: `yes`) fails two assertions — the test should stub the
+  variable, not trust the host; (2)
+  `packages/gateway/src/serve/gateway-db-lock.integration.test.ts` shells out
+  to the `sqlite3` CLI, absent here — a candidate for the new
+  `tests/env-red.json` inventory (guard on CLI presence) or a rewrite against
+  `node:sqlite`.
+- **Five `photos-*.mjs` Maestro flows are unlinted.** `scripts/lint-e2e-flows.mjs`
+  `FILES` omits all five photos flows (`photos-search.mjs` even carries a
+  marker for a nonexistent rule name, `input-observed`). Adding them may
+  surface latent findings in five flows at once, so it deserves its own pass
+  rather than a drive-by (#781 wave 3 added only the new `places-seat.mjs`).
+- **`PlacesView` prints raw coordinate-shaped place names** on shelf cards
+  (`row.name` without `readableName`), while the web shelf and the phone's own
+  map refuse them — seeded places are coordinate-named, so real shelves show
+  headings like "39.0021, -120.1131". Cosmetic divergence; fix alongside the
+  next Places pass.
+- **`google-contacts-pull` renders yearless birthdays as `---09-05`** (the
+  `"--"` placeholder plus the joining `"-"`); vCard's yearless form is
+  `--09-05`. Asserted as-is with a NOTE in
+  `packages/blueprints/automations/pull-connectors.test.ts` so the fix must
+  flip a test. `google-calendar-invite-send` also uses wall-clock `new Date()`
+  (DTSTAMP) and `Math.random()` (MIME boundary) inside the published handler —
+  nondeterminism the connector lane's lint doesn't catch; its tests
+  deliberately don't assert those bytes.
+- **`apps/desktop/tests/e2e` standalone `tsc` has 13 pre-existing errors**
+  (missing `window.CentraidApi` augmentation when run outside the harness)
+  and `apps/web/tests/e2e/tsconfig.json` likewise; neither is wired to a gate,
+  so spec type rot is invisible. Wire or retire the configs.
+- **Web shell palette click race after reload**: the Search button paints
+  before its listener attaches, so early clicks are silently lost. Four web
+  e2e specs work around it with a retry poll; the product should attach before
+  paint or render disabled.
+- **People surfaces no pending-state marker** (no `kit-pending-chip` anywhere
+  in the app) and `AddPersonModal` closes only on `executed` — an offline add
+  looks like a failure while the row is in fact projected and durable.
+- **The daily rollup has no per-day failure split, so the bars carry one
+  segment.** The automations and insights surfaces draw a bar per day, and the
+  v9 bar block stacks succeeded-then-failed with a fail-first clamp
+  (`packages/design/src/blocks/bars.ts`). The rollup the gateway records does
+  not separate the two, so every bar is drawn as a single run count and the
+  legend is withheld rather than invented. When the rollup gains the split the
+  block needs no change — only the caller's second segment.
+
+- **No run durations are recorded, so both surfaces withhold the
+  median-duration fact.** The v9 facts panel for automations names a typical
+  run duration. Nothing in the run ledger stores a start/finish pair, so
+  desktop, PWA and mobile all omit the row instead of computing something that
+  would look authoritative and be wrong. Recording the pair is a gateway-side
+  change; the panels already have the slot.
+
+- **`ShelfStrip` and `MoreSheet` are near-duplicates in Photos and Docs.** The
+  shelf *model* is now shared (`packages/blueprints/apps/_shared/shelves.ts`),
+  but these two components are still written twice because their CSS modules
+  genuinely diverge (`--content-margin` vs `--sp-4`, the mono-numeric token
+  trio, Docs' `meta`/`footer` rows against Photos' bare count). The repo's
+  shared-component pattern is one component plus one shared CSS module
+  (`_shared/SearchScaffold.tsx`), so merging them changes rendered output and
+  needs `design:gallery` baselines regenerated — too much for a drive-by.
+
+- **Modals are the one control the shell hand-rolls.** Six raw `<dialog>`
+  elements with no kit component behind them: `AllAppsSheet`, `PaletteScreen`,
+  `VaultModal`, `TestConnectionModal`, `ConnectFlowModal`, `RenameGatewayModal`.
+  Three of the four modals share `vaultModalStyles.profModal`, so it is
+  half-centralised by copying a class name rather than by a component. This is
+  the largest remaining gap between the shell and the design system — the audit
+  in #765 found the shell otherwise clean (zero raw `<input>`, `<textarea>` or
+  `<table>`; mobile has zero raw `<TextInput>` and routes all 692 `<Text>`
+  through the kit's `NativeText`).
+
+- **Two raw `<button>`s carry no styling at all.** `AutomationThreadScreen` and
+  `RunViewScreen` each render `<button type="button" onClick={onBack}>` with no
+  class, against a kit with 32 `<Button>` uses. (`CaptureOverlay` was the third
+  until quick capture was retired from this seat.) Eight more raw buttons use a
+  local class and four already ride shared ones (`controlsCss.chip`,
+  `buttonCss.ghost`); the unstyled two are the unambiguous misses.
+
+- **21 mobile `<Pressable>`s act as buttons without the kit.** Many carry
+  `accessibilityRole="button"` explicitly. They cluster in `apps/agenda`,
+  `apps/tasks`, `apps/tally`, `apps/locker` and `apps/people` — the same apps as
+  the entry below, and the same root cause.
+
+- **The design gates enforce tokens, not components.** This is the structural
+  reason the three items above drift silently: a hand-rolled `<button>` or
+  `<dialog>` styled with `var(--…)` passes `lint-design-tokens`,
+  `lint-hairline`, `lint-type-floor` and every other gate green. The gates ask
+  "did you use a raw value?", never "did you use the component that exists?".
+  Closing that would need a rule that knows which elements have kit equivalents
+  — worth doing before the vocabulary grows again.
+
+- **Six blueprint apps still draw their own chrome.** `agenda`, `locker`,
+  `notes`, `people`, `tally` and `tasks` each carry a hand-rolled `Chrome.tsx`
+  (231, 105, 295, 378, 306 and 223 lines) with its own topbar, hamburger,
+  drawer scrim and theme button — a second chrome inside the frame's chrome,
+  which is exactly what Photos and Docs stopped doing in #765. They already
+  import the frame contract, so the contribution channel is there; adopting it
+  is per-app work that touches each app's interaction model and wants its own
+  issue rather than a widened design-system pass.
+
 - #496 — **Test infrastructure assurance** (enforcement, signal, coverage).
   Parent backlog for ruleset on `main`, nightly auto-issue + Pages main-only
   guard, floors/`minimumTests` ratchet, `requireAssertions`, affected vitest in
   `check:pr`, product journey owners (chat/ENOSPC/restore/multi-writer), matrix
   honesty, Android home-loads, CI latency pins, and hygiene chip-away
   (`toHaveBeenCalled` / fixed sleeps). See [TESTING.md](TESTING.md) Nightly SLA
-  + confidence map. Residual hygiene debt: ~600 `toHaveBeenCalled*` sites
-  (~116 bare `toHaveBeenCalled()` after #545 E1/E2) and remaining fixed
-  sleeps; continue per-file chip-away.
+  + confidence map. Residual hygiene debt (measured 2026-08-14 over
+  `**/*.test.{ts,tsx}`): 1,023 `toHaveBeenCalled*` sites, of which 186 are
+  bare `toHaveBeenCalled()` — and **all 186 are negated**
+  `.not.toHaveBeenCalled()`, where naming arguments would weaken the
+  assertion rather than sharpen it. Zero positive bare calls remain. The
+  chip-away therefore continues against the argument-bearing forms and the
+  remaining fixed sleeps, per file.
 - #212 — Testing strategy ([TESTING.md](TESTING.md)) follow-up: the three
   per-layer workstreams (`assert.*` → `expect`, coverage-floor ratchet, desktop
   renderer logic-extraction) landed under #214; the **desktop Playwright e2e
@@ -23,6 +150,90 @@
 
 ## Resolved
 
+- #816 — Removed `react-native-maps`. Nothing had imported it since Places
+  moved to the shared `place-map.ts` projection, and #816 rules the phone's map
+  stack to be `expo-maps` (iOS) plus `@maplibre/maplibre-react-native` (Android),
+  so the old SDK is dead code rather than a pending decision. The JS-side removal
+  landed here: the dependency is out of `apps/mobile/package.json` and the
+  lockfile, out of `knip.json`'s `ignoreDependencies`, and the
+  `RNMapsDefines.h` exclusion is retired from
+  `apps/mobile/scripts/native-fingerprint.mjs`. The native half — `pod install`
+  to regenerate `Podfile.lock`, then `ci:native-state --write` and committing
+  `Podfile.lock` with `native-fingerprints.json` — needs a macOS host, and the
+  exact recipe is recorded in the #816 receipt; `ci:native-state --status` names
+  the mismatch until it runs.
+
+- #781 — Nightly mobile evidence is now keyed flow × platform.
+  `writeFlowVerdict` writes `artifacts/e2e/<slug>-<platform>.json` and
+  `recordQualityResult` writes `artifacts/<lane>/<owner-slug>-<platform>.json`
+  when `MAESTRO_PLATFORM` is set (`tests/agent-e2e-shared/harness.mjs`), with
+  the platform stamped in the JSON and the owner unchanged, so
+  `merge-multiple` keeps both platforms and matrix mapping still resolves.
+  The report now merges per-owner evidence worst-status-wins and keys trend
+  series per platform, so a green platform cannot mask a red one; drift
+  budgets read the platform-suffixed history, so cross-platform samples can
+  no longer interleave into a false ratchet. Platform-less lanes (pairing,
+  desktop, web, the test-kit writer) keep their exact prior paths.
+- #778 (with #712 E3) — Closed the band-ownership hole from both ends, so an
+  inline app can no longer lose its shelf navigation to a verdict it cannot
+  read. On web and desktop #778 deleted the member preference outright
+  (`packages/client/src/react/shell/useBandOwner.ts` is gone): a first-party
+  app's claim is now honoured on exactly the structural condition the app
+  already knows — first-party **and** compact — in
+  `packages/client/src/react/shell/routes/inlineAppFrame.tsx`, with no
+  hand-back toggle for a member to flip, so Docs claiming unconditionally
+  while hiding its compact shelf strip is safe by construction rather than by
+  luck. On mobile the latch survives as a member preference but is no longer
+  Photos' private copy: #712 E3 moved it to the frame's own
+  `apps/mobile/src/kit/band/band-owner.ts` under the same
+  `shell.bandOwner.<appId>` key, and the claiming screens read the verdict
+  through `useBandOwner(appId)` instead of duplicating it. The originally
+  proposed fix — a field on the `InlineFrame` contract — turned out to be
+  unnecessary: removing the disagreement was cheaper than reporting it.
+
+- #782 — Fixed the environment-shaped `[G4]` failure in
+  `packages/vault/src/wal-shipper.test.ts` (`a failed segment write reports an
+  error, moves nothing, and retries the same range`). The test injected its
+  write failure with `chmodSync(dir, 0o500)`, and root ignores directory
+  permissions, so the write the assertion needed to fail succeeded instead —
+  red for every agent session in this container, green on a developer machine,
+  and pre-existing rather than a regression from any sharing work. The fault is
+  now path-shaped: a regular file sits where the group directory belongs, so
+  `mkdir` throws for every uid, root included. The shipper is unchanged, which
+  is the point — the defect was in how the test bought its failure, never in
+  the code under test.
+
+- #767 (PR #773) — The committed `tests/design-gallery/baselines/mo-advisory-dark.png`
+  baseline had drifted against the current `toNativeTheme()` lowering on main
+  (the #765 design-source change did not refresh the MO-advisory lane), so
+  `check:push`'s gallery gate was red on an untouched tree. Refreshed with the
+  documented `bun run design:gallery -- --update` flow inside PR #773; no
+  DESIGN.md contract content changed. Recorded here so a binary baseline
+  refresh inside a docs PR has a written cause instead of reading as silent
+  scope creep.
+
+- #716 — Fixed replica-intent attribution across the gateway's cached vault
+  bridge. The bridge deferred vault lookup until an app-worker callback, after
+  the originating AsyncLocalStorage scopes had unwound, so connected mobile
+  Photos writes could be rejected as belonging to the wrong device/app. Bridge
+  construction now captures an existing vault and intent scope and re-enters
+  both around deferred callbacks, while deliberately unscoped bridges retain
+  dynamic multi-vault resolution. A focused registry regression and the native
+  trash/restore journey cover both sides.
+- #711 — Closed the enrichment-tier enforcement gap. The vault's per-domain
+  `enrich_policy` (`off | local | model`) was written by Settings and read by
+  nothing on the execution path, so Photos' "what leaves the device: nothing"
+  was copy rather than behaviour — enrichment automations fired and took model
+  turns whatever the tier said. Added a manifest `enrich` block (domain,
+  capability, lane), a fail-closed gate at the single fire choke point
+  (`runFire`), and an owner-plane tier read the guarded automation's own grants
+  cannot answer for. `off` refuses the run with a logged reason, `local`
+  refuses any model-routed run and seals `ctx.agent` for the ones it allows,
+  and an unreadable policy refuses. Also scoped the on-demand queue by
+  `capability`, so a face-detection consent no longer hands the same row to
+  every enabled enricher, and fixed three enricher drains that filtered on
+  `entity_type`/`entity_id` — columns `enrich_request` does not have — and had
+  therefore never drained at all.
 - #225 — Rebuilt the desktop Playwright e2e suite for the post-#109/#137/#141
   gateway-store architecture (the old `delete-app` suite had silently broken —
   all 8 tests failed — when it kept seeding a `gatewayUrl` settings no longer

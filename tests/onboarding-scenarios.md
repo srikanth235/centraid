@@ -4,14 +4,14 @@ Manual/agent-driven test scenarios for the onboarding mechanism across all three
 
 **Drivers.** Browser tool against the web PWA, the iOS simulator tool against a mobile dev build, and Playwright/manual against the Electron desktop are **all first-class**. Android is a required parity pass, not an optional one — mobile changes ship iOS + Android together.
 
-Related automated coverage: `apps/desktop/tests/e2e/onboarding-home.spec.ts` (§1.1/§1.2/§1.4), `apps/web/tests/e2e/web-pwa.spec.ts`, `apps/mobile/src/screens/Onboarding.test.tsx`, `tests/agent-e2e-mobile/flows/`, `packages/gateway/src/serve/build-gateway.test.ts`. This doc is the superset checklist; **[auto]** marks scenarios with an automated equivalent today. First-run stays path-gated on PR and unconditional nightly under the #679 U1 decision recorded in [`TESTING.md`](../TESTING.md); a lane that did not run is partial evidence, never green.
+Related automated coverage: `apps/desktop/tests/e2e/onboarding-home.spec.ts` (§1.1/§1.2/§1.4), `apps/web/tests/e2e/web-pwa.spec.ts`, `apps/mobile/src/screens/Onboarding.test.tsx`, `tests/agent-e2e-mobile/flows/`, `packages/server/src/serve/build-gateway.test.ts`. This doc is the superset checklist; **[auto]** marks scenarios with an automated equivalent today. First-run stays path-gated on PR and unconditional nightly under the #679 U1 decision recorded in [`TESTING.md`](../TESTING.md); a lane that did not run is partial evidence, never green.
 
 ---
 
 ## Mechanism summary (what we are testing)
 
-- **Auto-founding.** A gateway with a fresh data dir _and_ zero `members` rows creates two vaults on first boot — `Shared` then `Personal` — and enrolls the host endpoint as member "You" with `admin` on both (`packages/gateway/src/serve/build-gateway.ts:1019`). **`Personal` is the default everywhere**, never `Shared`: `Personal` is founded with a durable `personal` marker in its own `core_vault.settings_json`, and `defaultVaultId()` prefers the marked vault (falling back to the oldest only when none is marked). Listing order follows the same marker (#665): `VaultRegistry.list()` puts the default vault FIRST and the remainder in creation order, so `Personal` heads every client-facing vault list (`GET /_vault/vaults` and `GET /_vault/scopes` alike) and a client that reads element 0 as "primary" agrees with `defaultVaultId()`. With no marked vault the head is the oldest, exactly as before. The marker survives the desktop fresh path renaming `Personal` to the owner's display name, which a name match would not. The **never-inhabited guard**: an erased-but-inhabited gateway (members exist, vaults gone) boots with zero vaults and reports vault health `error`; it is never re-founded.
-- **Pair tickets are the only enrollment path.** Single-use, default TTL 15 min, minted via the desktop Household → Devices panel, `POST /centraid/_gateway/devices/ticket`, or `centraid-gateway pair`. Redeemed exclusively over iroh ALPN `centraid/gw-pair/1` (the HTTP `POST /centraid/_gateway/pair` route is gone). A redeemed device gets an **enrollment row** bound to a member with per-vault roles — there is no bearer token.
+- **Auto-founding.** A gateway with a fresh data dir _and_ zero `owners` rows creates one marked `Personal` vault on first boot and enrolls the host endpoint's owner "You" (`vault_owners` — `packages/server/src/serve/build-gateway.ts`). Shared vaults are created later by an explicit owner action. Ownership (#726) replaced the member/role model: a vault has **exactly one owner**, never a role lattice. `defaultVaultId()` prefers the marked vault, and the marker survives the desktop fresh path renaming `Personal` to the owner's display name. The **never-inhabited guard**: an erased-but-inhabited gateway (owners exist, vaults gone) boots with zero vaults and reports vault health `error`; it is never re-founded.
+- **Pair tickets are the only enrollment path.** Single-use, default TTL 15 min, minted via the desktop Household → Devices panel, `POST /centraid/_gateway/devices/ticket`, or `centraid-gateway pair`. Redeemed exclusively over iroh ALPN `centraid/gw-pair/1` (the HTTP `POST /centraid/_gateway/pair` route is gone). A redeemed device gets an **enrollment row** bound to an owner across the vaults the ticket named — there is no bearer token, and no per-vault role: an enrolled device either belongs to the vault's one owner or it doesn't (#726). Minting **cannot name a new person** any more — self-pair only; inviting someone else into your own vaults is refused with `owner_vaults_only` (the _Add someone_ mint flow, which gives them a vault of their own, ships in #726 P1).
 - **Desktop first-run** branches on platform: chooser "Start fresh on this Mac" vs "Connect with a ticket". The local gateway is **latched off** (`deferLocalStart`) until `setActiveGateway({id:'local'})` lifts it — this is also what defers the macOS keychain prompt. Steps: `identity → (ticket) connect → (local) service`. There is no `complete` step; finishing writes `onboardingCompletedAt` and unmounts the gate. The fresh path then renames the auto-founded `Personal` vault to the display name (non-fatal on failure). Desktop gateway mode is **detached by default** (`centraid-gateway` daemon on port 17832, survives app quit); `CENTRAID_EMBEDDED_GATEWAY=1` forces in-process (e2e does this).
 - **Web PWA** gets no chooser — ticket is the only method. State lives under `centraid.web.v1.*`: `connection` (localStorage if "remember this device", sessionStorage otherwise), `settings` (`onboardingCompletedAt`), `iroh-device-key`, `iroh-bridge`.
 - **Mobile** runs a three-step machine `connect → profile → done` (`apps/mobile/src/screens/Onboarding.tsx:36`) rendered _outside_ the nav container, gated on `centraid.v1.profile.onboarded`. Profile comes **after** pairing (desktop/web collect it before). Pairing accepts two payload shapes and stores only the `gw` dial hint — `t`/`s` are discarded. Paired gateways expose **Vaults**, a device-local `(gatewayId, vaultId)` registry. Requires a **dev build**: `CentraidTunnel` is a local native module, so `isTunnelAvailable()` is false in Expo Go and onboarding becomes a dead end.
@@ -26,19 +26,19 @@ Related automated coverage: `apps/desktop/tests/e2e/onboarding-home.spec.ts` (§
 centraid-gateway serve --data-dir ./gw-data --host 127.0.0.1 --port 17832
 ```
 
-Auto-founds `Shared` + `Personal`. Web UI serves on **API port + 1**, falling back to an ephemeral port with a warning — read the `web app: http://127.0.0.1:<p>` startup line.
+Auto-founds one marked `Personal` vault. Web UI serves on **API port + 1**, falling back to an ephemeral port with a warning — read the `web app: http://127.0.0.1:<p>` startup line.
 
 Mint tickets:
 
 ```bash
-centraid-gateway pair --data-dir ./gw-data --vault Shared --ttl-minutes 15 --role write --json
+centraid-gateway pair --data-dir ./gw-data --vault Shared --ttl-minutes 15 --json
 ```
 
-Other flags: `--new-member <label>`, `--member <id-or-label>`, `--grant <vault>:<role>`, `--qr`. Fresh gateway state = delete the data dir. **The data dir cannot be copied/moved to a new path** — the host credential is keyed by path, so a copied dir dies with `KeyStore AES-GCM authentication failed` (verified 2026-07-29). For CI-shaped runs, `tests/agent-e2e-mobile/lib/ci-gateway.mjs` starts a tokenless loopback gateway on `127.0.0.1:18789`.
+Other flags: `--owner <id-or-label>` (existing owner selector; self-pair only — a ticket can no longer name a _new_ person, see the mechanism summary), `--qr`. Fresh gateway state = delete the data dir. **The data dir cannot be copied/moved to a new path** — the host credential is keyed by path, so a copied dir dies with `KeyStore AES-GCM authentication failed` (verified 2026-07-29). For CI-shaped runs, `tests/agent-e2e-mobile/lib/ci-gateway.mjs` starts a tokenless loopback gateway on `127.0.0.1:18789`.
 
 ### Browser (web PWA)
 
-Fresh-state reset = a new browser profile / incognito window. Clearing `centraid.web.v1.*` from local **and** session storage plus the SW iroh-bridge caches also works but is easy to get half-right. To exercise uncommitted client code: `bun run --cwd apps/web build && node packages/gateway/scripts/embed-web.mjs`, then restart serve.
+Fresh-state reset = a new browser profile / incognito window. Clearing `centraid.web.v1.*` from local **and** session storage plus the SW iroh-bridge caches also works but is easy to get half-right. To exercise uncommitted client code: `bun run --cwd apps/web build && node packages/server/scripts/embed-web.mjs`, then restart serve.
 
 ### Desktop (Electron)
 
@@ -100,8 +100,8 @@ Worktree trap: `bun install` + `bun run build` inside the worktree, private data
 
 | ID | Scenario | Steps | Expected |
 | --- | --- | --- | --- |
-| A1 | **[auto]** Fresh data dir auto-founds | Start `serve` with an empty data dir | `Shared` + `Personal` exist; **Personal** is the default ticket target (`personal` marker, not creation order); Shared is oldest so it heads `vault list`; host endpoint enrolled as "You", `admin` on both; `/info` carries no founding/status fields |
-| A2 | **[auto]** Restart of inhabited gateway is a no-op | Restart serve on the A1 dir | Same two vaults; no new vault, member, or enrollment rows |
+| A1 | **[auto]** Fresh data dir auto-founds | Start `serve` with an empty data dir | One marked **Personal** vault exists and is the default ticket target; the host endpoint's owner is enrolled as "You" (`vault_owners`); `/info` carries no founding/status fields |
+| A2 | **[auto]** Restart of inhabited gateway is a no-op | Restart serve on the A1 dir | The same one vault; no new vault, owner, or enrollment rows |
 | A3 | **[auto]** Erased-but-inhabited is NOT re-founded | Delete vault dirs, keep `gateway.db`; restart | Zero vaults mounted; vault health `error`; no re-founding; recovery is `docs/recovery/vault-erase.md` |
 | A4 | Corrupt vault does not trigger re-founding | Corrupt a vault dir so it fails to mount; restart | `isFresh()` counts failed mounts → no founding; vault appears under `failedMounts` |
 
@@ -119,8 +119,8 @@ Worktree trap: `bun install` + `bun run build` inside the worktree, private data
 | B8 | Gateway unreachable at redeem | Stop the gateway; paste a valid ticket | Fails at the `reach` stage / `unreachable` copy; retry without losing entered state; offline banner suppressed pre-onboarding |
 | B9 | Gateway down on revisit | With a remembered connection, stop the gateway, reload | App boots (no re-onboarding); offline state surfaced; recovers when the gateway returns, no re-pair |
 | B10 | Concurrent double-redeem race | Two profiles submit the same ticket simultaneously | Exactly one wins (`BEGIN IMMEDIATE`, `changes === 1`); loser gets `invalid_ticket`; one enrollment row |
-| B11 | Read-only role | Mint `--role read`; onboard | Pairs; blob trust `readonly`; Viewer affordances only (no peer-device revoke) |
-| B12 | Vault-targeted ticket | Mint `--vault Shared`; onboard | Active vault is Shared, not the Personal default (an unnamed mint lands in Personal) |
+| B11 | ~~Read-only role~~ (removed, #726) | — | Ownership is binary, not a role lattice: every enrolled device gets full trust on the vaults it lands in (`consent_device.trust: "full"`); there is no read-only ticket any more. Attenuation is device-side (`grant_profile_json`), orthogonal to pairing |
+| B12 | Vault-targeted ticket | Explicitly create a second vault named `Shared`; mint `--vault Shared`; onboard | Active vault is Shared, not the Personal default (an unnamed mint lands in Personal) |
 | B13 | Installed PWA pass | Repeat B1–B2 from the installed PWA | Same behaviour; storage survives; install banner doesn't interfere |
 
 ---
@@ -129,7 +129,7 @@ Worktree trap: `bun install` + `bun run build` inside the worktree, private data
 
 | ID | Scenario | Steps | Expected |
 | --- | --- | --- | --- |
-| C1 | **[auto]** Happy path — "Start fresh on this Mac" | Clean userData + clean gateway data dir → launch → `first-run-choice` → fresh → identity → service decline | **Before** commit: `getSettings().gatewayUrl === ""` (defer latch — no gateway spawn, no keychain prompt); after Continue: gateway starts, active vault = `Personal`, renamed to the display name; final vault list `['<name>','Shared']`; `onboardingCompletedAt` set; no `complete` step — gate unmounts straight into the app |
+| C1 | **[auto]** Happy path — "Start fresh on this Mac" | Clean userData + clean gateway data dir → launch → `first-run-choice` → fresh → identity → service decline | **Before** commit: `getSettings().gatewayUrl === ""` (defer latch — no gateway spawn, no keychain prompt); after Continue: gateway starts, active vault = `Personal`, renamed to the display name; final vault list `['<name>']`; `onboardingCompletedAt` set; no `complete` step — gate unmounts straight into the app |
 | C2 | Identity validation & controls | On identity: empty name, 60+ char paste, Enter key, colour radios | Continue disabled until trimmed name non-empty (`data-state` idle→ready); `maxLength=60` clips; Enter submits; radiogroup `Color <hex>` updates `data-selected` + `--onb-accent`. ⚠️ Initial colour is **random** — pin it for snapshot tests |
 | C3 | Fresh-path failure & inline retry | Make the local gateway fail to start (e.g. corrupt data dir perms); press Continue | Error renders in `role="alert"`; **retry = press Continue again**; error clears only on next attempt |
 | C4 | Supervisor backoff dead end | Force repeated start failures, keep pressing Continue | Backoff message ("backing off after a failed start… retrying automatically"), then after loop-break: "…use Settings → Gateway → Restart" — but **Settings is unreachable pre-onboarding**. Confirm the trap; candidate UX fix |
@@ -181,7 +181,7 @@ Worktree trap: `bun install` + `bun run build` inside the worktree, private data
 | F7 | Remove a gateway | Gateway → Components → **Connections** → Remove the remote; confirm `local` offers no Remove | Host-framed surface (the only one, #665): status rail, transport, vault names, Test connection / Rename / Remove. Remote removal falls back active to `local` (also lifts the latch) and drops its iroh key; `local` → no Remove button at all (`local_not_removable`) |
 | F7b | Disconnect a vault (vault-worded path) | Settings → **Vault** on a vault served by a remote connection → "On this device" → Disconnect | Section absent when the active vault is on `local`. Confirm names EVERY sibling vault on the same connection ("… shares its connection with \"Family\" — disconnecting removes both from this device…") and never says "gateway"; on confirm the Settings dialog closes, the host falls back to `local`, and `onGatewayChanged` bounces the shell Home |
 | F8 | Re-pair same gateway dedupes | Redeem a second ticket for an already-connected EndpointId | `findReusableProfile` reuses the profile — no duplicate connection; relayHint/rememberDevice refreshed |
-| F9 | Mint surface (Household → Devices) | Sidebar → Household → DevicesCard → `pair-panel` | TTL presets 15 min/1 h/24 h; targets self/existing/new member; validations "Give the new person a name." / "Choose at least one space this device may reach."; QR is renderer-generated SVG (`alt="One-time Centraid pairing QR code"`) — this is what mobile scans; clipboard failure copy present |
+| F9 | Mint surface (Household → Devices) | Sidebar → Household → DevicesCard → `pair-panel` | TTL presets 15 min/1 h/24 h; self-pair only (#726 P0) — the ticket always lands on the caller's own owner, reaching exactly the vaults that owner already owns; nothing to name, nothing to choose beyond TTL. QR is renderer-generated SVG (`alt="One-time Centraid pairing QR code"`) — this is what mobile scans; clipboard failure copy present. Check `DevicePairPanel.tsx` for whether the separate #726 P1 "Add someone" (mint a vault for a NEW person) surface has landed by the time you run this |
 | F10 | Embedded vs detached quit behaviour | Quit the app in each mode | Embedded: gateway closed with WAL checkpoint on quit. Detached: daemon survives quit (deliberate); relaunch re-adopts via `decideControl` (`own`) |
 | F11 | Detached adoption refusals | Start the app while a foreign/hung daemon holds the data dir | `foreign` → "a live gateway holds this data directory, but this desktop has no matching device credential…"; probe-failed → "gateway.db is locked but the daemon is not answering — refusing to start a second writer". Both must surface legibly in onboarding/startup |
 | F12 | Service mode has no uninstall | Install the OS service (C7), then look for removal in the UI | **No uninstall path exists in the desktop UI** — only the CLI. Candidate gap |
@@ -190,33 +190,35 @@ Worktree trap: `bun install` + `bun run build` inside the worktree, private data
 | F15 | Auto-update overlap | (Packaged) update arrives mid-onboarding | Update pill lives in the sidebar (not mounted during onboarding); a relaunch-to-update mid-flow drops step state → behaves like F2. Verify no forced relaunch fires |
 | F16 | Platform copy | Run the chooser on Windows/Linux | "Start fresh on this Mac" / "This Mac" / `displayLabel: "This Mac"` are hardcoded — wrong platform copy. Confirm and file |
 
-## DM. Ticket minting & authorization (gateway-side)
+## DM. Ticket minting & authorization (gateway-side, #726 ownership)
 
 | ID | Scenario | Steps | Expected |
 | --- | --- | --- | --- |
-| DM1 | Mint from the desktop panel | See F9 | Ticket decodes with `vaultName`/`exp`; QR renders |
-| DM2 | Self-pair role clamp | As a `write` member, mint a self ticket requesting `admin` | Clamped or `role_above_own` — self-pair cannot exceed roles held |
-| DM3 | Invite requires admin everywhere | As admin of A only, mint a new-member ticket granting A+B | `403 not_admin` |
-| DM4 | New-member label handling | `--new-member "Priya"` with grants; and one unnamed | Member row created **at mint time**; unnamed default `New member (<vaultName>)`; no phantom members |
-| DM5 | Mint validation errors | Bad bodies: no addressable vault, bad role, bad grants, no iroh endpoint | `vault_required` / `invalid_role` / `invalid_grants` / `409 no_iroh_endpoint` |
+| DM1 | Mint from the desktop panel | See F9 | Ticket decodes with `vaultName`/`exp`; QR renders; response carries `ownerId`/`ownerLabel`/`vaults` — no `role` field |
+| DM2 | Self-pair lands only in owned vaults | As an enrolled owner, mint a self ticket with no explicit `vaultIds` | Lands every vault that owner owns, target-first (the addressed vault, or the default `Personal`, sorts first); no way to request a vault the caller does not own — `not_found`, not `forbidden` (topology hiding) |
+| DM3 | Invite another person is refused outright | Mint with an explicit `ownerId` that resolves to a different owner than the caller, or with a `newOwnerLabel`-shaped body | `403 owner_vaults_only` — "a ticket enrolls another of your own devices; adding a person mints them a vault of their own (arriving in a later release)". Host custody is the only exception (can mint for any _existing_ owner) |
+| DM4 | Mint can no longer name a new person | Any attempt to set a label for a brand-new invitee at mint time | No field does this any more (`newMemberLabel`/`newOwnerLabel` both gone from the wire); the only way a mint creates an owner is **founding-completion** — host custody targeting an unowned vault, which lands the placeholder label "You" |
+| DM5 | Mint validation errors | Bad bodies: no addressable vault, bad `vaultIds`, unknown owner, no iroh endpoint | `vault_required` / `invalid_vault_ids` / `404 owner_not_found` / `400 vaults_required` / `409 no_iroh_endpoint` |
 | DM6 | Unbounded TTL (known gap) | `ttlMinutes: 525600` | Accepted — only `> 0` is checked. Decide if intended; candidate hardening issue |
 
-## EH. Household / second member
+## EH. Household / second owner (superseded by #726 ownership)
+
+The pre-#726 "second household member shares your vault" scenario is gone: a vault has exactly one owner, and minting a ticket for anyone but yourself is refused (`owner_vaults_only`, see **DM3**). "Adding a person" now means minting them a vault of their own — that flow ships in #726 P1 and has no scenarios here yet (do not invent them ahead of the landed mechanism).
 
 | ID | Scenario | Steps | Expected |
 | --- | --- | --- | --- |
-| EH1 | Second member joins (browser) | Admin mints `--new-member --grant Shared:write`; second fresh profile onboards | Enrolled with `write` on Shared only; cannot see Personal; roster shows both members |
-| EH2 | Existing-member second device | Mint `--member <id>`; onboard a new profile | Binds to the **existing** member (no new member row); inherits roles |
-| EH3 | Member visibility scoping | As the EH1 member, list members/devices | Sees only those sharing a vault; cannot PATCH/DELETE the admin |
+| EH1 | ~~Second member joins~~ (removed, #726) | — | Superseded by **DM3** — minting for another person now refuses outright rather than granting a role |
+| EH2 | Existing-owner second device (browser) | As an enrolled owner, mint a self-pair ticket from the browser; onboard a second fresh profile with it | Binds to the **same existing owner** (no new owner row); lands the vaults the ticket carried — same mechanism as **DM2** |
+| EH3 | Owner visibility scoping | `GET /centraid/_gateway/owners` as a device caller vs. as host custody | A device caller sees only its own owner row (one owner per vault ⇒ no roster of other people); host custody sees every owner. `PATCH`/`DELETE /owners/:id` are host-custody only |
 
 ## FR. Revocation & recovery
 
 | ID | Scenario | Steps | Expected |
 | --- | --- | --- | --- |
 | FR1 | Self-unpair from web | Remove the gateway in the web client | `purgeIrohDeviceState()` + tunnel caches cleared; revisit → ticket onboarding |
-| FR2 | Admin revokes a peer | `DELETE /devices/:enrollmentId` for EH1's device | Allowed (admin in that vault); planes severed live; the revoked client's next dial fails |
+| FR2 | Owner revokes a peer device | `DELETE /devices/:enrollmentId` for EH2's second device | Allowed — visibility (the device sits inside a vault this owner owns) is the whole authorization now, there is no separate "must be admin to revoke" check; planes severed live; the revoked client's next dial fails |
 | FR3 | Revoked device UX (known gap) | After FR2, reload the revoked client | ⚠️ No client-side revocation detection on **any** surface — expect a dial failure surfaced as `unreachable`/offline, not a "you were removed" state or auto-purge. Record actual behaviour; candidate UX issue |
-| FR4 | Last-admin-device guard | Revoke the sole admin's only device | `last_admin_confirmation_required` — typed confirmation demanded |
+| FR4 | Last-device guard | Revoke the owner's only device | `last_device_confirmation_required` — typed confirmation via `confirmLastDevice` demanded (was `confirmLastAdmin`; the guard is now "the owner's last live device", not "the last admin") |
 | FR5 | Restore-after-erase | Run `docs/recovery/vault-erase.md` on an A3 gateway, reconnect a previously-enrolled device | Vaults mount; existing enrollments still admit (enrollment lives in `gateway.db`, not the vault) |
 
 ---
@@ -304,9 +306,9 @@ Every mobile change ships both platforms; run K1–K7 on **both** before calling
 | --- | --- | --- |
 | L1 | Profile step ordering | Desktop/web collect identity **before** connect; mobile collects it **after** pairing. Decide whether this is intended; it affects what a failed pair leaves behind |
 | L2 | Same ticket, three surfaces | One ticket redeems on exactly one surface — the other two get `invalid_ticket` |
-| L3 | One member, three devices | Mint `--member <id>` tickets for web, desktop, and phone; all bind to one member and appear in one roster group |
+| L3 | One owner, three devices | Mint `--owner <id>` self-pair tickets for web, desktop, and phone | All three bind to the one existing owner (no new owner row); each appears as its own device under that owner via `GET /centraid/_gateway/devices` |
 | L4 | Revocation UX parity | All three surfaces degrade to a generic offline/unreachable state on revocation (FR3/I7) — none says "you were removed" |
-| L5 | Role enforcement parity | A `read` ticket produces Viewer affordances on every surface |
+| L5 | ~~Role enforcement parity~~ (removed, #726) | Ownership is binary — there is no `read` ticket any more (see **B11**); every surface gets full trust once enrolled |
 | L6 | Desktop QR → mobile scan (physical device only) | The Household pair-panel QR (renderer-generated SVG) scans and pairs a real phone; sim cannot test this — schedule a device pass |
 
 ---

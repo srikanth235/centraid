@@ -3,14 +3,14 @@
    (issue #325, Phase 4 CSS refactor): a SHARED CSS Module, so both importers
    get the same scoped class names. Lifted from the monolithic styles.css. */
 .label {
-  font-family: var(--font-mono);
-  font-size: 9.5px;
+  font-family: var(--font-sans);
+  font-size: var(--t-control-size);
   text-transform: uppercase;
   letter-spacing: 0.06em;
   color: var(--text-ghost);
 }
 .why {
-  font-size: 12.5px;
+  font-size: var(--t-small-size);
   color: var(--text-soft);
   line-height: 1.5;
 }
@@ -27,12 +27,12 @@
   border-radius: var(--r-md);
   border: 0.5px solid var(--line);
   background: color-mix(in srgb, var(--text) 4%, transparent);
-  font-family: var(--font-mono);
-  font-size: 10.5px;
+  font-family: var(--font-sans);
+  font-size: var(--t-control-size);
   color: var(--text-soft);
 }
 .scopeVerbs {
-  font-size: 9px;
+  font-size: var(--t-control-size);
   text-transform: uppercase;
   letter-spacing: 0.06em;
   color: var(--text-ghost);
@@ -42,8 +42,8 @@
   color: var(--accent);
 }
 .purpose {
-  font-family: var(--font-mono);
-  font-size: 10px;
+  font-family: var(--font-sans);
+  font-size: var(--t-control-size);
   color: var(--text-ghost);
 }
 .grants {
@@ -54,12 +54,12 @@
 .grantBtn {
   align-self: flex-start;
   padding: 6px 14px;
-  border-radius: 7px;
+  border-radius: var(--r-md);
   border: none;
   background: var(--accent);
   color: var(--accent-text);
   font: inherit;
-  font-size: var(--t-mono-size);
+  font-size: var(--t-control-size);
   font-weight: 600;
   cursor: pointer;
 }
@@ -67,7 +67,7 @@
   filter: brightness(1.08);
 }
 .grantBtn:disabled {
-  opacity: 0.55;
+  opacity: var(--o-disabled);
   cursor: default;
 }
 .grantRow {
@@ -80,13 +80,13 @@
   flex: 1;
 }
 .grantTitle {
-  font-size: 12.5px;
+  font-size: var(--t-small-size);
   font-weight: 600;
   color: var(--text);
 }
 .grantSub {
-  font-family: var(--font-mono);
-  font-size: 10px;
+  font-family: var(--font-sans);
+  font-size: var(--t-control-size);
   color: var(--text-ghost);
   margin-top: 2px;
   line-height: 1.5;
@@ -108,7 +108,7 @@
 .revokeBtn:disabled,
 .denyBtn:disabled,
 .approveBtn:disabled {
-  opacity: 0.55;
+  opacity: var(--o-disabled);
   cursor: default;
 }
 .parked {
@@ -117,7 +117,7 @@
 }
 .parkedCard {
   border: 0.5px solid var(--line);
-  border-radius: 8px;
+  border-radius: var(--r-md);
   padding: 8px 10px;
   display: flex;
   flex-direction: column;
@@ -130,12 +130,12 @@
   gap: 8px;
 }
 .parkedCommand {
-  font-family: var(--font-mono);
+  font-family: var(--font-sans);
   font-size: var(--t-control-size);
   color: var(--text);
 }
 .parkedWhen {
-  font-size: 10.5px;
+  font-size: var(--t-control-size);
   color: var(--text-ghost);
 }
 .parkedInput {
@@ -143,8 +143,8 @@
   padding: 6px 8px;
   border-radius: var(--r-md);
   background: color-mix(in srgb, var(--text) 5%, transparent);
-  font-family: var(--font-mono);
-  font-size: 10px;
+  font-family: var(--font-sans);
+  font-size: var(--t-control-size);
   line-height: 1.5;
   color: var(--text-soft);
   max-height: 120px;

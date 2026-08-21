@@ -3,7 +3,7 @@ import { MAX_MOUNTED_NATIVE_SCOPES } from "./offline-budgets";
 export interface CachedBackgroundScope {
   vaultId: string;
   label?: string;
-  role?: "admin" | "write" | "read";
+  canWrite?: boolean;
 }
 
 /** The focused write target always survives the four-scope background cap. */

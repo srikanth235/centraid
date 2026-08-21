@@ -34,6 +34,7 @@ ENV PATH="/root/.cargo/bin:${PATH}"
 # Workspace manifests only — invalidates install only when deps change.
 COPY package.json bun.lock turbo.json tsconfig.base.json tsconfig.electron.json tsconfig.expo.json ./
 COPY --parents packages/*/package.json apps/*/package.json ./
+COPY --parents tools/*/package.json ./
 
 RUN bun install --frozen-lockfile
 
@@ -45,7 +46,7 @@ COPY scripts/gateway-package ./scripts/gateway-package
 
 # Full dependency graph for gateway. Native tunnel is mandatory for this image.
 ENV CENTRAID_REQUIRE_NATIVE_TUNNEL=1
-RUN bunx turbo run build --filter=@centraid/gateway \
+RUN bunx turbo run build --filter=@centraid/server \
   && node -e "const fs=require('fs');const p=require('path');const dir='packages/tunnel/native';const need=\`centraid-tunnel-native.\${process.platform}-\${process.arch}.node\`;const full=p.join(dir,need);if(!fs.existsSync(full)){console.error('missing required native tunnel artifact',full,'have',fs.readdirSync(dir).filter(n=>n.endsWith('.node')));process.exit(1)};console.log('native tunnel artifact:',full);"
 # Packages + assets only — bun's .bun store is re-installed for production below.
 RUN node scripts/gateway-package/assemble-runtime.mjs --root=/src --out=/runtime --packages-only
@@ -98,4 +99,4 @@ HEALTHCHECK --interval=30s --timeout=5s --start-period=45s --retries=3 \
 
 # Bind all interfaces for container networks. Host allowlist still applies:
 # clients using Host: localhost work; other Host names need CENTRAID_ALLOWED_HOSTS.
-ENTRYPOINT ["node", "packages/gateway/dist/cli/cli.js", "serve", "--data-dir", "/data", "--host", "0.0.0.0", "--port", "8787"]
+ENTRYPOINT ["node", "packages/server/dist/cli/cli.js", "serve", "--data-dir", "/data", "--host", "0.0.0.0", "--port", "8787"]

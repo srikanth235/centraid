@@ -6,7 +6,7 @@
 /**
  * Rewrite workspace:* (and catalog: ignored) deps to concrete semver versions.
  * @param {Record<string, unknown>} packageJson Parsed package.json object.
- * @param {Record<string, string>} versionByName Map of package name → version (e.g. "@centraid/protocol" → "0.1.0").
+ * @param {Record<string, string>} versionByName Map of package name → version (e.g. "@centraid/core/protocol" → "0.1.0").
  * @returns {{ packageJson: Record<string, unknown>; rewrote: string[] }} Cloned package.json ready for registry pack.
  */
 export function rewriteWorkspaceDependencies(packageJson, versionByName) {
@@ -188,7 +188,7 @@ export function defaultInstallPrefix(home) {
  * @returns {string[]} Args after `npm install` (excluding npm itself and --prefix/-g).
  */
 export function buildNpmInstallArgs(opts) {
-  const gatewayPackage = opts.gatewayPackage ?? "@centraid/gateway";
+  const gatewayPackage = opts.gatewayPackage ?? "@centraid/server";
   if (opts.fromPackDir) {
     const files = opts.packFiles ?? [];
     if (files.length === 0) {

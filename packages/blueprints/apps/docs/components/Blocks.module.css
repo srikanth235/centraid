@@ -1,0 +1,182 @@
+/* The shared block vocabulary (components/Blocks.tsx).
+
+   One stylesheet for every non-drive screen, because they are the same four
+   shapes. The rungs — eyebrow / title / body / facts — are the app's existing
+   ladder, lifted out of the Coming due shelf's stylesheet (that shelf is
+   gone) where they were written for one screen and are now written once for
+   all of them. */
+
+.screen {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-3);
+  padding: var(--sp-4);
+}
+
+/* ---------- Panel ---------- */
+
+.panel {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+  /* The reading measure. A panel is prose with evidence under it, and prose
+     past ~62 characters stops being scannable. */
+  max-inline-size: 62ch;
+  padding: var(--sp-4);
+  border: 1px solid var(--line);
+  border-radius: var(--r-lg);
+  background: var(--bg-elev);
+}
+/* `--net` is the product's one "this reaches outside the device, or it cannot
+   be undone" hue. It is an EDGE, never a fill: a filled warning panel reads as
+   an error that has already happened. */
+.panel[data-net="true"] {
+  border-color: var(--net);
+}
+
+.eyebrow {
+  margin: 0;
+  font: var(--t-eyebrow);
+  letter-spacing: var(--t-eyebrow-tracking);
+  text-transform: var(--t-eyebrow-transform);
+  color: var(--text-faint);
+}
+.title {
+  margin: 0;
+  font: var(--t-title);
+  color: var(--text);
+}
+.body {
+  margin: 0;
+  font: var(--t-body);
+  color: var(--text-soft);
+  text-wrap: pretty;
+}
+
+.facts {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-1);
+  margin: var(--sp-2) 0 0;
+}
+.fact {
+  display: flex;
+  gap: var(--sp-3);
+  align-items: baseline;
+}
+.factKey {
+  flex: 0 0 13em;
+  font: var(--t-eyebrow);
+  letter-spacing: var(--t-eyebrow-tracking);
+  text-transform: var(--t-eyebrow-transform);
+  color: var(--text-faint);
+}
+.factValue {
+  margin: 0;
+  min-width: 0;
+  font: var(--t-small);
+  color: var(--text);
+  text-wrap: pretty;
+}
+.factValue[data-net="true"] {
+  color: var(--net);
+}
+
+.acts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-2);
+  margin-top: var(--sp-3);
+}
+
+/* ---------- Rows ---------- */
+
+/* A real <ul> (Blocks.tsx), so the UA's own list box has to be reset here —
+   the kit's own reset does not reach an app-local element. */
+.rows {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  max-inline-size: 76ch;
+  border: 1px solid var(--line);
+  border-radius: var(--r-lg);
+  background: var(--bg-elev);
+  overflow: hidden;
+}
+.row {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  padding: var(--sp-3) var(--sp-4);
+}
+.row + .row {
+  border-top: 1px solid var(--line);
+}
+.rowText {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.rowLabel {
+  font: var(--t-body-strong);
+  color: var(--text);
+}
+.row[data-net="true"] .rowLabel {
+  color: var(--net);
+}
+.rowSub {
+  font: var(--t-small);
+  color: var(--text-soft);
+  text-wrap: pretty;
+}
+.rowMeta {
+  flex: none;
+  font: var(--t-mono);
+  font-variant-numeric: var(--t-mono-numeric);
+  color: var(--text-faint);
+}
+
+/* ---------- Section head ---------- */
+
+/* ABOVE the container, over its own hairline. A head inside the bordered box
+   would read as the box's first row rather than as its name. */
+.section {
+  display: flex;
+  align-items: baseline;
+  gap: var(--sp-3);
+  border-block-start: 1px solid var(--line);
+  margin-block-start: var(--sp-3);
+  padding-block: var(--sp-4) var(--sp-2);
+}
+.sectionLabel {
+  margin: 0;
+  flex: none;
+  font: var(--t-eyebrow);
+  letter-spacing: var(--t-eyebrow-tracking);
+  text-transform: var(--t-eyebrow-transform);
+  color: var(--text);
+}
+.sectionMeta {
+  flex: 1;
+  min-width: 0;
+  font: var(--t-mono);
+  font-variant-numeric: var(--t-mono-numeric);
+  color: var(--text-faint);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* ---------- Note ---------- */
+
+.note {
+  margin: 0;
+  max-inline-size: 62ch;
+  font: var(--t-small);
+  color: var(--text-soft);
+  text-wrap: pretty;
+}

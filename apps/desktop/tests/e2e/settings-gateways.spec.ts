@@ -7,12 +7,10 @@ import type { Page } from "@playwright/test";
 import {
   appEntry,
   cleanupEnv,
-  clickMenuItem,
   closeApp,
   launchApp,
   makeEnv,
-  markUserApp,
-  openTileMenu,
+  openAppFromPalette,
   seedRemoteGateway,
   seedRemoteGatewayProfile,
   startMockGateway,
@@ -23,16 +21,18 @@ import type { MockGateway, TestEnv } from "./fixtures";
 /** §12 Settings, §13 Gateways / profiles, §14 cross-cutting. */
 
 /**
- * Open Settings from the sidebar.
+ * Open Settings from the All apps sheet (stem foot).
  *
- * Not `gotoNav(page, 'Settings')`: the sidebar foot is the account row now
- * (#634), and Settings lives in the menu it opens alongside Pair device and
- * Log out. The row's accessible name carries the person's name, so match on
- * the stable "Account menu." suffix instead.
+ * Settings is a launcher destination (#707), not a sidebar page. The account
+ * menu still hosts it too, but the account control is only mounted once the
+ * member identity resolves — All apps is always present on the stem foot.
  */
 async function gotoSettings(page: Page): Promise<void> {
-  await page.getByRole("button", { name: /Account menu\.$/u }).click();
-  await page.getByRole("menuitem", { name: "Settings" }).click();
+  await page.getByRole("button", { name: /All apps/iu }).click();
+  await page
+    .getByRole("dialog", { name: "All apps" })
+    .getByRole("button", { name: "Settings", exact: true })
+    .click();
 }
 
 let env: TestEnv;
@@ -88,20 +88,21 @@ test("12.5 — appearance choices persist across a reload", async () => {
     await waitForHome(page);
     await gotoSettings(page);
     await page.getByTestId("settings-page").waitFor({ state: "visible" });
-    // Cards is a standing control on the same page. `elevated` is never the
-    // default (`outlined`), so a reload that restores it proves the prefs
-    // write path rather than the shipped default. This used to drive the
-    // Density control, which #672 removed along with the density system.
-    const cards = page.getByRole("tablist", { name: "Cards" });
-    await cards.getByRole("tab", { name: "elevated" }).click();
+    // Cards was retired from You (#814); the pref still paints with no
+    // control. Theme is the remaining visual pick on this page. `light` is
+    // never the shipped default (`dark`), so a reload that restores it proves
+    // the prefs write path. Reload is not a restart — 12.6 still covers
+    // Electron process death.
+    const appearance = page.getByRole("tablist", { name: "Appearance" });
+    await appearance.getByRole("tab", { name: "Light" }).click();
     await expect
-      .poll(() => page.evaluate(() => document.documentElement.dataset.cards))
-      .toBe("elevated");
+      .poll(() => page.evaluate(() => document.documentElement.dataset.theme))
+      .toBe("light");
     await page.reload();
     await waitForHome(page);
     await expect
-      .poll(() => page.evaluate(() => document.documentElement.dataset.cards))
-      .toBe("elevated");
+      .poll(() => page.evaluate(() => document.documentElement.dataset.theme))
+      .toBe("light");
   } finally {
     await closeApp(app);
   }
@@ -196,20 +197,30 @@ test("12.4 — the Agents (providers) settings page renders", async () => {
       .getByTestId("settings-nav")
       .getByRole("button", { name: "Agents" })
       .click();
-    // Scoped to the settings surface: it is an overlay now (#634), so the
-    // page underneath keeps its own <h1> mounted behind the dialog.
+    // The modal's h1 is always "Settings"; the selected page is the h2.
     await expect(
-      page.getByTestId("settings-dialog").getByRole("heading", { level: 1 })
-    ).toHaveText("Agents");
+      page
+        .getByTestId("settings-dialog")
+        .getByRole("heading", { name: "Agents" })
+    ).toBeVisible();
     // Realigned: the exclusive "active agent" switch no longer exists. Per
-    // SettingsProvidersScreen.tsx:103-113 the exclusive radio was retired by
-    // per-subsystem runners and became the *default* lane of the Routing
+    // SettingsHarnessesScreen.tsx:103-113 the exclusive radio was retired by
+    // per-subsystem harnesses and became the *default* lane of the Routing
     // table — so the page's primary control is now the "Default agent" select
-    // (SettingsProvidersScreen.tsx:268).
+    // (SettingsHarnessesScreen.tsx:268).
     await expect(
       page.getByRole("combobox", { name: "Default agent" })
     ).toBeVisible({
       timeout: 10_000,
+    });
+    const evidenceDir = path.resolve(
+      import.meta.dirname,
+      "../../../../artifacts/e2e/ui-impact"
+    );
+    await fs.mkdir(evidenceDir, { recursive: true });
+    await page.screenshot({
+      path: path.join(evidenceDir, "issue-743-one-agent-door.png"),
+      fullPage: true,
     });
   } finally {
     await closeApp(app);
@@ -280,7 +291,8 @@ test("13.4 — switching the active gateway re-scopes home", async () => {
       )
       .toBe(newId);
     await expect.poll(() => gateway.calls.length).toBeGreaterThan(callsBefore);
-    await waitForHome(page);
+    // Stem stays mounted across gateway switch; springboard may re-fetch.
+    await expect(page.locator('nav[aria-label="Apps"]')).toBeVisible();
   } finally {
     await closeApp(app);
   }
@@ -361,8 +373,8 @@ test("13.8 — switching to an unreachable gateway degrades gracefully", async (
       deadId
     );
     // No crash — the shell stays mounted even though the gateway is unreachable.
-    // `[data-sidebar]` is the shell chrome root (ShellFrame.tsx:165).
-    await expect(page.locator("[data-sidebar]")).toBeVisible();
+    // The stem (`nav[aria-label="Apps"]`) is the chrome root post-#707.
+    await expect(page.locator('nav[aria-label="Apps"]')).toBeVisible();
   } finally {
     await closeApp(app);
   }
@@ -370,27 +382,18 @@ test("13.8 — switching to an unreachable gateway degrades gracefully", async (
 
 // ─────────────────────────── §14 cross-cutting ───────────────────────────
 
-test("14.2 — an auth failure on publish surfaces a token/Settings prompt", async () => {
-  const id = "todoer";
-  gateway.state.apps = [appEntry({ id, name: "Todoer" })];
+test("14.2 — a first-party inline app has no Build control", async () => {
+  gateway.state.apps = [appEntry({ id: "tasks", name: "Tasks" })];
   const { app, page } = await launchApp(env);
   try {
     await waitForHome(page);
-    await markUserApp(page, { id, name: "Todoer" });
-    await page.reload();
-    await waitForHome(page);
-    await openTileMenu(page, id);
-    await clickMenuItem(page, "Edit with Centraid");
-    await page.getByTestId("builder-body").waitFor({ state: "visible" });
-
-    gateway.state.forceStatus = 401; // every call now rejects with auth_required
-    await page.getByTestId("builder-publish").click();
-    await expect(page.getByTestId("builder-body")).toContainText(
-      /token|Settings/iu,
-      {
-        timeout: 15_000,
-      }
-    );
+    await openAppFromPalette(page, "Tasks");
+    await expect(page.getByTestId("inline-app-view")).toBeVisible();
+    // #799 retired the served-app builder. The titlebar must not still
+    // advertise a Build that cannot load.
+    await expect(
+      page.getByRole("button", { name: "Build", exact: true })
+    ).toHaveCount(0);
   } finally {
     await closeApp(app);
   }

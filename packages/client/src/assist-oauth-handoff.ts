@@ -51,8 +51,7 @@ export async function consumeInitialAssistHandoff(): Promise<AssistHandoffResult
   if (!handoff) {
     return {
       status: "error",
-      message:
-        "This Centraid Assist return link is incomplete. Start Connect again.",
+      message: "This Assist return link is incomplete — start Connect again.",
     };
   }
   return completeHandoff(handoff);
@@ -106,7 +105,7 @@ async function completeHandoff(
       message:
         error instanceof Error
           ? error.message
-          : "Centraid Assist could not complete authorization. Start Connect again.",
+          : "Assist could not finish authorizing — start Connect again.",
     };
   }
 }

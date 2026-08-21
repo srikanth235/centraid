@@ -28,14 +28,15 @@ on:
           - report
           - mutation
       ios_suite:
-        description: "For mobile-ios: run one iOS matrix suite (all | home-loads | template-gate | native-v0-resilience | volume-proof | cold-start | scroll-frames)"
+        description: "For mobile-ios: run one iOS matrix suite (all | home-loads | native-v0-resilience | volume-proof | cold-start | scroll-frames | photos | places-seat)"
         required: false
         default: "all"
         type: choice
         options:
           - all
           - home-loads
-          - template-gate
+          - photos
+          - places-seat
           - native-v0-resilience
           - volume-proof
           - cold-start
@@ -325,7 +326,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        suite: ${{ fromJSON((github.event_name != 'workflow_dispatch' || github.event.inputs.ios_suite == 'all') && '["home-loads","template-gate","native-v0-resilience","volume-proof","cold-start","scroll-frames"]' || format('["{0}"]', github.event.inputs.ios_suite)) }}
+        suite: ${{ fromJSON((github.event_name != 'workflow_dispatch' || github.event.inputs.ios_suite == 'all') && '["home-loads","native-v0-resilience","volume-proof","cold-start","scroll-frames","photos","places-seat"]' || format('["{0}"]', github.event.inputs.ios_suite)) }}
     runs-on: macos-26
     # Each matrix cell owns one simulator and one flow. Native-v0 is the
     # slowest cell; 60m keeps enough room for a transient Maestro retry without
@@ -370,7 +371,7 @@ jobs:
         # Each suite gets a fresh gateway data dir as well as a fresh simulator;
         # tickets and app installs cannot collide across matrix cells.
         run: |
-          bun run turbo run build --filter=@centraid/gateway
+          bun run turbo run build --filter=@centraid/server
           gateway_dir="$RUNNER_TEMP/centraid-mobile-gateway"
           nohup node tests/agent-e2e-mobile/lib/ci-gateway.mjs "$gateway_dir" 18789 > /tmp/centraid-mobile-gateway.log 2>&1 &
           echo "CENTRAID_MOBILE_GATEWAY_PID=$!" >> "$GITHUB_ENV"
@@ -401,7 +402,15 @@ jobs:
       - name: Run iOS suite — ${{ matrix.suite }}
         env:
           MAESTRO_PLATFORM: ios
-        run: node tests/agent-e2e-mobile/flows/${{ matrix.suite }}.mjs
+        run: |
+          case "${{ matrix.suite }}" in
+            photos)
+              node tests/agent-e2e-mobile/run-photos-suite.mjs
+              ;;
+            *)
+              node "tests/agent-e2e-mobile/flows/${{ matrix.suite }}.mjs"
+              ;;
+          esac
       - name: Dump mobile gateway request log
         if: always()
         run: |
@@ -443,7 +452,11 @@ jobs:
     if: >
       github.event_name != 'workflow_dispatch' || github.event.inputs.suite == 'all' || github.event.inputs.suite == 'mobile-android'
     runs-on: ubuntu-latest
-    timeout-minutes: 90
+    # 120, not the iOS job's 60: this lane can pay a cold-cache gradle build
+    # (~21 min, #535) before any flow runs, and swiftshader software rendering
+    # makes each journey slower than the hardware-accelerated iOS simulator.
+    # Raised from 90 when #781 added the three experience probes to this lane.
+    timeout-minutes: 120
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: ./.github/actions/setup
@@ -488,7 +501,7 @@ jobs:
         run: bun run turbo run build --filter=@centraid/mobile...
       - name: Build and start the tokenless mobile test gateway
         run: |
-          bun run turbo run build --filter=@centraid/gateway
+          bun run turbo run build --filter=@centraid/server
           gateway_dir="$RUNNER_TEMP/centraid-mobile-gateway"
           nohup node tests/agent-e2e-mobile/lib/ci-gateway.mjs "$gateway_dir" 18789 > /tmp/centraid-mobile-gateway.log 2>&1 &
           echo "CENTRAID_MOBILE_GATEWAY_PID=$!" >> "$GITHUB_ENV"
@@ -601,6 +614,18 @@ jobs:
           else
             echo "mobile gateway log was not created"
           fi
+      # Mirrors the iOS job's identical step. The harness already rm -rf's this
+      # directory in a finally, so this is belt-and-braces against a run that
+      # dies before the finally — but it was iOS-only, which meant an Android
+      # crash mid-pairing could ship pairing diagnostics in the runs/ artifact.
+      - name: Remove sensitive pairing diagnostics
+        if: always()
+        run: |
+          if [ -d tests/agent-e2e-mobile/runs ]; then
+            find tests/agent-e2e-mobile/runs -type d \
+              -path '*/maestro-debug/*-configure-gateway' \
+              -prune -exec rm -rf {} +
+          fi
       # Bank the apk even if a later flow failed — the artifact is the product of
       # the fingerprinted inputs regardless of whether Maestro passed (see iOS).
       # Guarded on the build having actually produced an apk, so a cache-hit run
@@ -639,7 +664,7 @@ jobs:
       - uses: ./.github/actions/setup
         with:
           turbo-cache: "true"
-      - run: bun run turbo run build --filter=@centraid/gateway --filter=@centraid/tunnel
+      - run: bun run turbo run build --filter=@centraid/server --filter=@centraid/tunnel
       - run: node scripts/test-report/prepare.mjs
       - name: Run pairing flows concurrently
         id: pairing_flows
@@ -889,6 +914,13 @@ jobs:
           pattern: nightly-evidence-*
           path: artifacts
           merge-multiple: true
+      - name: Restore latest weekly real-model evidence
+        continue-on-error: true
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: artifacts/enrichment-live/
+          key: enrichment-live-${{ runner.os }}-${{ github.run_id }}
+          restore-keys: enrichment-live-${{ runner.os }}-
       - run: bun run build
       # #545 A1 — keep continue-on-error so the report still generates when a
       # quality lane fails; a post-step re-reads outcomes and fails the job.

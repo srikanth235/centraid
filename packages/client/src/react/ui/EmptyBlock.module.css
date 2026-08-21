@@ -1,0 +1,43 @@
+/* Empty states (v9 §8). One block, two rungs — the flag moves the type and
+   the measure, never the layout. */
+
+.empty {
+  align-items: flex-start;
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-3);
+  max-inline-size: 44ch;
+  padding-block: var(--sp-6);
+}
+
+.empty[data-routine="true"] {
+  gap: var(--sp-2);
+  max-inline-size: 52ch;
+}
+
+.title {
+  color: var(--text);
+  font: var(--t-display);
+  margin: 0;
+}
+
+.empty[data-routine="true"] .title {
+  font: var(--t-title);
+}
+
+.body {
+  color: var(--text-soft);
+  font: var(--t-reading);
+  margin: 0;
+  text-wrap: pretty;
+}
+
+.empty[data-routine="true"] .body {
+  font: var(--t-body);
+}
+
+.actions {
+  display: flex;
+  gap: var(--sp-2);
+  padding-block-start: var(--sp-1);
+}

@@ -3,8 +3,9 @@ import { View, Pressable, StyleSheet } from "react-native";
 
 import type { IconName } from "@centraid/design";
 
-import { radii, spacing, t, useTheme } from "../theme";
+import { borders, spacing, t, useTheme } from "../theme";
 import type { ThemeColors } from "../theme";
+import AppMark from "./AppMark";
 import Icon from "./Icon";
 import { Text } from "./NativeText";
 
@@ -36,9 +37,7 @@ export default function AppHeader({
       >
         <Icon name="ArrowLeft" size={20} color={colors.text} />
       </Pressable>
-      <View style={[styles.iconWrap, { backgroundColor: color }]}>
-        <Icon name={iconKey} size={16} color="#fff" strokeWidth={2} />
-      </View>
+      <AppMark color={color} iconKey={iconKey} size={32} />
       <View style={styles.titleWrap}>
         <Text style={styles.title} numberOfLines={1}>
           {title}
@@ -60,19 +59,12 @@ const makeStyles = (colors: ThemeColors) =>
       alignItems: "center",
       backgroundColor: colors.bg,
       borderBottomColor: colors.line,
-      borderBottomWidth: StyleSheet.hairlineWidth,
+      borderBottomWidth: borders.hairline,
       flexDirection: "row",
       gap: spacing[3],
       paddingBottom: spacing[3],
       paddingHorizontal: spacing[4],
       paddingTop: spacing[3],
-    },
-    iconWrap: {
-      alignItems: "center",
-      borderRadius: radii.sm,
-      height: 32,
-      justifyContent: "center",
-      width: 32,
     },
     subtitle: { ...t("control"), color: colors.textFaint, marginTop: 2 },
     title: { ...t("bodyStrong"), color: colors.text },

@@ -1,39 +1,31 @@
 /*
  * @centraid/blueprints
  *
- * How Centraid code comes into being. Three paths, one home:
+ * How Centraid code comes into being. Two paths, one home:
  *
- *   1. Blank scaffold — `scaffoldApp` / `scaffoldAppFiles` stamp out an empty
- *      app from `scaffold-defaults`.
- *   2. Automation clone — `cloneTemplate` / `cloneTemplateFiles` copy a
+ *   1. Automation clone — `cloneTemplate` / `cloneTemplateFiles` copy a
  *      bundled automation into editable, user-owned app code.
- *   3. UI-app install — bundled apps under `apps/<id>/` are enrolled in place
+ *   2. UI-app install — bundled apps under `apps/<id>/` are enrolled in place
  *      (`consent.app`, origin `installed`, declared-scope grants). No source is
  *      copied: the main client compiles their UI modules from this package,
  *      while the gateway reads the same tree for catalog metadata and scopes.
  *
- * The gallery half: bundled Centraid UI apps are installed in place and
- * compiled into the main client; automation templates are cloned. Each source
- * folder lives under a
- * kind-segment directory — `apps/<id>/` for shipped UI apps (`apps/agenda/`,
- * `apps/notes/`, `apps/vitals/`, …) and `automations/<id>/` for cloneable
- * automations. Both carry runtime-ready files; ownership and upgrade behavior,
- * not source shape, distinguish the paths.
- * Two layers stack on top of the bundle:
- *   - A user-data cache that can hold newer copies pulled from a remote URL.
- *   - A resolver that picks bundle-or-cache per template, preferring the
- *     higher semver version.
+ * The catalog half: each source folder lives under a kind-segment directory —
+ * `apps/<id>/` for shipped UI apps (`apps/agenda/`, `apps/notes/`, …) and
+ * `automations/<id>/` for cloneable automations. Both carry runtime-ready
+ * files; ownership and upgrade behavior, not source shape, distinguish the
+ * paths. A user-data cache dir may hold newer per-template copies, and the
+ * resolver picks bundle-or-cache per template by higher semver version.
  *
  * Depends only on `@centraid/design` — no engine, no store. Consumed by
- * `@centraid/gateway` (lifecycle routes) and `@centraid/automation` (the
+ * `@centraid/server` (lifecycle routes) and `@centraid/server/automation` (the
  * `ScaffoldFile` contract for automation scaffolding).
  *
- * Gallery surface:
+ * Catalog surface:
  *   - appTemplatesDir: string                                       — bundled dir
  *   - listTemplates(): Promise<TemplateMeta[]>                   — bundled manifest
  *   - resolveTemplates({ cacheDir? }): Promise<ResolvedTemplate[]>
  *   - templateSourceDir(id, { kind?, cacheDir?, source? }): string
- *   - fetchRemoteTemplates({ cacheDir, remoteUrl }): Promise<void>
  */
 
 import { promises as fs } from "node:fs";
@@ -57,6 +49,7 @@ export type {
   TemplateMeta,
   TemplateSource,
 } from "./types.js";
+export { tallyGroupNet, type TallyBalanceData } from "./tally-balance.js";
 
 const DIST_DIR = import.meta.dirname;
 const PACKAGE_ROOT = path.resolve(DIST_DIR, "..");
@@ -71,11 +64,8 @@ const MANIFEST_FILE = "manifest.json";
  * The kind-segment directory a template's files live under, relative to the
  * bundle/cache/remote base: `automations/` for automation apps, `apps/` for
  * everything else. Derived from `kind` (no separate field) and shared by the
- * disk resolver ({@link templateSourceDir}), the remote fetcher
- * ({@link downloadTemplate}), and the manifest build script, so all three
- * stay in lock-step. The bundled layout doubles as the remote layout (GitHub
- * raw serves the checked-in tree), so this prefix must match on disk and over
- * the wire.
+ * disk resolver ({@link templateSourceDir}) and the manifest build script, so
+ * both stay in lock-step.
  */
 export function templateKindDir(kind: TemplateKind | undefined): string {
   return kind === "automation" ? "automations" : "apps";
@@ -94,10 +84,9 @@ export async function listTemplates(): Promise<TemplateMeta[]> {
  * The bundled APP-kind templates (automations excluded). Issue #434:
  * install = enroll the shipped blueprint in place, no copy — so these ids
  * are RESERVED (a code-store app must never shadow one). The main client owns
- * the system UI; the gateway reads {@link bundledAppDir} for metadata, scopes,
- * and the generic opaque-app compatibility route. Automation templates are excluded
- * because they still compile into the vault's git code store (the hidden
- * builder is the compiler).
+ * the system UI; the gateway reads {@link bundledAppDir} for metadata and
+ * scopes. Automation templates are excluded because they still compile into
+ * the vault's git code store.
  */
 export async function listBundledAppTemplates(): Promise<TemplateMeta[]> {
   return (await listTemplates()).filter(
@@ -110,8 +99,7 @@ export async function listBundledAppTemplates(): Promise<TemplateMeta[]> {
  * `@centraid/blueprints` package (`<package>/apps/<id>/`). Issue #434: these
  * are real directories on disk under the installed package — no per-vault
  * copy or materialized cache is needed. The main client compiles the UI from
- * this tree; the gateway reads it for metadata, scopes, and opaque-app
- * compatibility.
+ * this tree; the gateway reads it for metadata and scopes.
  */
 export function bundledAppDir(id: string): string {
   return templateSourceDir(id, { kind: "app" });
@@ -197,75 +185,6 @@ export async function readTemplateFiles(
   );
 }
 
-/**
- * Fetch the remote manifest from `<remoteUrl>/manifest.json` and download any
- * template whose remote version is strictly greater than the cached or
- * bundled copy. Files are written atomically into `<cacheDir>/<id>/...` and
- * `<cacheDir>/manifest.json` is updated last so a partial fetch never points
- * users at incomplete code.
- *
- * Silent on every failure: an offline machine, a 404, a malformed manifest,
- * or a single file fetch error → the cache stays untouched, callers keep
- * resolving to the bundle. Never throws.
- */
-export async function fetchRemoteTemplates(opts: {
-  cacheDir: string;
-  remoteUrl: string;
-  /** Optional fetch implementation (for tests / non-Node environments). */
-  fetchImpl?: typeof fetch;
-}): Promise<void> {
-  const { cacheDir, remoteUrl } = opts;
-  const doFetch = opts.fetchImpl ?? fetch;
-  if (!remoteUrl) return;
-
-  const base = stripTrailingSlash(remoteUrl);
-  let remote: TemplateManifest;
-  try {
-    const res = await doFetch(`${base}/${MANIFEST_FILE}`);
-    if (!res.ok) return;
-    remote = (await res.json()) as TemplateManifest;
-  } catch {
-    return;
-  }
-  if (!remote || !Array.isArray(remote.templates)) return;
-
-  const bundle = await readManifest(appTemplatesDir).catch(() =>
-    emptyManifest()
-  );
-  const cached = await readManifest(cacheDir).catch(() => emptyManifest());
-  const bundleById = new Map(bundle.templates.map((t) => [t.id, t]));
-  const cachedById = new Map(cached.templates.map((t) => [t.id, t]));
-
-  // Per-template: only fetch if remote.version beats whichever local copy
-  // we'd otherwise resolve to (max of bundle, cache).
-  const nextCached: TemplateMeta[] = [...cached.templates];
-  let updated = false;
-  const downloaded = await Promise.all(
-    remote.templates.map(async (rt) => {
-      const localBest = bestOf(bundleById.get(rt.id), cachedById.get(rt.id));
-      if (localBest && compareSemver(rt.version, localBest.version) <= 0)
-        return undefined;
-      return (await downloadTemplate(base, cacheDir, rt, doFetch))
-        ? rt
-        : undefined;
-    })
-  );
-
-  for (const rt of downloaded) {
-    if (!rt) continue;
-    const idx = nextCached.findIndex((t) => t.id === rt.id);
-    if (idx >= 0) nextCached[idx] = rt;
-    else nextCached.push(rt);
-    updated = true;
-  }
-
-  if (!updated) return;
-  await writeManifestAtomic(cacheDir, {
-    manifestVersion: remote.manifestVersion ?? 1,
-    templates: nextCached,
-  });
-}
-
 // ---------------- internal helpers ----------------
 
 async function readManifest(dir: string): Promise<TemplateManifest> {
@@ -275,12 +194,6 @@ async function readManifest(dir: string): Promise<TemplateManifest> {
 
 function emptyManifest(): TemplateManifest {
   return { manifestVersion: 1, templates: [] };
-}
-
-function bestOf(a?: TemplateMeta, b?: TemplateMeta): TemplateMeta | undefined {
-  if (!a) return b;
-  if (!b) return a;
-  return compareSemver(a.version, b.version) >= 0 ? a : b;
 }
 
 /**
@@ -305,86 +218,16 @@ function compareSemver(a: string, b: string): number {
   return 0;
 }
 
-function stripTrailingSlash(s: string): string {
-  return s.endsWith("/") ? s.slice(0, -1) : s;
-}
-
-/**
- * Downloads every file listed in `tmpl.files` into
- * `<cacheDir>/<apps|automations>/<id>/...`, mirroring the bundled layout.
- * Each file is written to a `.tmp` sibling first, then renamed, so a torn
- * fetch never leaves a half-written file in place. Returns false on any
- * file fetch failure — the caller skips updating the manifest entry, so a
- * later run can retry cleanly.
- */
-async function downloadTemplate(
-  base: string,
-  cacheDir: string,
-  tmpl: TemplateMeta,
-  doFetch: typeof fetch
-): Promise<boolean> {
-  const kindDir = templateKindDir(tmpl.kind);
-  const targetDir = path.join(cacheDir, kindDir, tmpl.id);
-  await fs.mkdir(targetDir, { recursive: true });
-  const fileResults = await Promise.all(
-    tmpl.files.map(async (rel) => {
-      const url = `${base}/${kindDir}/${encodeURIComponent(tmpl.id)}/${rel
-        .split("/")
-        .map(encodeURIComponent)
-        .join("/")}`;
-      try {
-        const res = await doFetch(url);
-        if (!res.ok) return false;
-        const buf = Buffer.from(await res.arrayBuffer());
-        const dest = path.join(targetDir, rel);
-        await fs.mkdir(path.dirname(dest), { recursive: true });
-        const tmp = `${dest}.tmp`;
-        await fs.writeFile(tmp, buf);
-        await fs.rename(tmp, dest);
-        return true;
-      } catch {
-        return false;
-      }
-    })
-  );
-  return fileResults.every(Boolean);
-}
-
-async function writeManifestAtomic(
-  dir: string,
-  manifest: TemplateManifest
-): Promise<void> {
-  await fs.mkdir(dir, { recursive: true });
-  const dest = path.join(dir, MANIFEST_FILE);
-  const tmp = `${dest}.tmp`;
-  await fs.writeFile(tmp, JSON.stringify(manifest, null, 2) + "\n");
-  await fs.rename(tmp, dest);
-}
-
 // ---------------------------------------------------------------------------
-// App scaffolders + clone (moved out of @centraid/app-engine in #151; both
-// "how a new app comes into being" — a blank scaffold and a cloned template
-// are both blueprints you instantiate). The gateway lifecycle routes use the
-// file-map (`*Files`) variants; the disk wrappers back the CLI / local paths.
+// Template clone + app metadata edits (moved out of @centraid/server/engine in
+// #151). The gateway lifecycle routes use the file-map (`*Files`) variants;
+// the disk wrappers back the local paths.
 // ---------------------------------------------------------------------------
-export {
-  scaffoldAppFiles,
-  updateAppMetaFiles,
-  appPackageJson,
-  validateAppId,
-  type ScaffoldFile,
-  type ScaffoldAppOpts,
-} from "./scaffold-files.js";
-export {
-  scaffoldApp,
-  listAppsOnDisk,
-  deleteApp,
-  updateAppMeta,
-  isDisplayNameTaken,
-} from "./scaffold.js";
+export { updateAppMetaFiles, validateAppId } from "./app-meta.js";
 export {
   cloneTemplate,
   cloneTemplateFiles,
+  isDisplayNameTaken,
   suggestAppId,
   suggestCloneIdentity,
   suggestCloneIdentityFrom,
@@ -395,4 +238,5 @@ export {
   AppScaffoldError,
   type AppScaffoldErrorCode,
   type AppInfo,
+  type ScaffoldFile,
 } from "./scaffold-types.js";

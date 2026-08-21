@@ -1,20 +1,29 @@
+// governance: allow-repo-hygiene file-size-limit (#738) one cohesive mounted-reader fixture covers provenance, restart durability, revocation, FTS, and the measured 50k-row budget
 import { statSync } from "node:fs";
 import path from "node:path";
 import { DatabaseSync } from "node:sqlite";
 
 import { encode as encodeJpeg } from "jpeg-js";
-import { describe, expect, test } from "vitest";
+import { describe, expect, test, vi } from "vitest";
 
-import { ReplicaSqliteStore } from "@centraid/client/replica/native";
+import { PENDING_OVERLAY_FIELDS } from "@centraid/blueprints/apps/_shared/pending-overlay";
+import {
+  IntentQueue,
+  ReplicaSqliteStore,
+} from "@centraid/client/replica/native";
 import { tempDirSync } from "@centraid/test-kit/temp-dir";
 
 import { MultiVaultReplicaReader } from "./multi-vault-reader";
+import { MultiVaultReplicaSession } from "./multi-vault-session";
+import type { NativeChangeFeed } from "./native-session";
+import { createNativeReplicaSession } from "./native-session";
 import { NodeSqliteDriver } from "./node-sqlite-driver";
 import {
   MAX_MOUNTED_NATIVE_SCOPES,
   MOBILE_REPLICA_BOOTSTRAP_WINDOW,
   THUMBNAIL_SOURCE_BUDGET_BYTES,
 } from "./offline-budgets";
+import { SqliteIntentStore } from "./sqlite-intent-store";
 
 const SHAPES = [
   {
@@ -46,6 +55,110 @@ const SHAPES = [
           "created_at",
           "deleted_at",
         ],
+      },
+    ],
+  },
+] as const;
+
+const JOURNEY_SHAPES = [
+  {
+    shapeId: "tasks-default",
+    appId: "tasks",
+    purpose: "dpv:ServiceProvision",
+    entities: [
+      {
+        entity: "schedule.task",
+        primaryKey: "task_id",
+        columns: [
+          "task_id",
+          "title",
+          "description",
+          "status",
+          "project_id",
+          "completed_at",
+          "deleted_at",
+        ],
+      },
+      {
+        entity: "schedule.project",
+        primaryKey: "project_id",
+        columns: [
+          "project_id",
+          "name",
+          "area",
+          "color",
+          "sort_order",
+          "archived_at",
+        ],
+      },
+    ],
+  },
+  {
+    shapeId: "tally-default",
+    appId: "tally",
+    purpose: "dpv:ServiceProvision",
+    entities: [
+      {
+        entity: "tally.expense",
+        primaryKey: "expense_id",
+        columns: [
+          "expense_id",
+          "group_id",
+          "description",
+          "amount_minor",
+          "original_amount_minor",
+          "original_currency",
+          "settlement_currency",
+          "rate_scaled",
+          "rate_scale",
+          "rate_source",
+          "rate_date",
+          "paid_by",
+          "category",
+          "spent_on",
+          "deleted_at",
+        ],
+      },
+      {
+        entity: "tally.expense_split",
+        primaryKey: "__centraid_row_id",
+        columns: ["__centraid_row_id", "expense_id", "party_id", "share_minor"],
+      },
+    ],
+  },
+  {
+    shapeId: "agenda-default",
+    appId: "agenda",
+    purpose: "dpv:ServiceProvision",
+    entities: [
+      {
+        entity: "core.event",
+        primaryKey: "event_id",
+        columns: ["event_id", "summary", "dtstart", "dtend", "status"],
+      },
+    ],
+  },
+  {
+    shapeId: "notes-default",
+    appId: "notes",
+    purpose: "dpv:ServiceProvision",
+    entities: [
+      {
+        entity: "knowledge.note",
+        primaryKey: "note_id",
+        columns: [
+          "note_id",
+          "body_content_id",
+          "title",
+          "pinned",
+          "notebook_id",
+          "deleted_at",
+        ],
+      },
+      {
+        entity: "core.content_item",
+        primaryKey: "content_id",
+        columns: ["content_id", "title", "media_type"],
       },
     ],
   },
@@ -96,6 +209,127 @@ function seed(file: string, vaultId: string, suffix: string): void {
     ],
   });
   store.close();
+}
+
+function inertFeed(): NativeChangeFeed {
+  return {
+    subscribe: () => () => undefined,
+    setShapeIds: () => Promise.resolve(),
+    resume: () => Promise.resolve(),
+    setActive: () => undefined,
+  };
+}
+
+async function seedPendingJourney(
+  file: string,
+  vaultId: string
+): Promise<void> {
+  const store = new ReplicaSqliteStore(new NodeSqliteDriver(file), vaultId);
+  store.bootstrap({
+    protocolVersion: 1,
+    vaultId,
+    schemaEpoch: "1",
+    cursor: { epoch: `epoch-${vaultId}`, seq: 1 },
+    shapes: JOURNEY_SHAPES.map((shape) => ({
+      ...shape,
+      entities: shape.entities.map((entity) => ({
+        ...entity,
+        columns: [...entity.columns],
+      })),
+    })),
+    rows: [
+      {
+        shapeId: "agenda-default",
+        entity: "core.event",
+        rowId: "event-offline",
+        rowVersion: 7,
+        values: {
+          event_id: "event-offline",
+          summary: "Offline planning session",
+          dtstart: "2026-08-12T09:00:00.000Z",
+          dtend: "2026-08-12T10:00:00.000Z",
+          status: "confirmed",
+        },
+      },
+    ],
+  });
+  store.close();
+
+  let nextId = 0;
+  const session = await createNativeReplicaSession({
+    gatewayAuth: {
+      baseUrl: "http://127.0.0.1:1",
+      gatewayId: "offline-gateway",
+      vaultId,
+    },
+    fetcher: () => Promise.reject(new Error("offline journey must not fetch")),
+    changeFeed: inertFeed(),
+    driver: new NodeSqliteDriver(file),
+    isConnected: () => false,
+    digest: () => Promise.resolve("digest"),
+    idFactory: () => `intent-${++nextId}`,
+  });
+  await session.write("tasks", {
+    action: "save-project",
+    input: { name: "Pending project" },
+  });
+  await session.write("tally", {
+    action: "add-expense",
+    input: {
+      group_id: "group-offline",
+      description: "Survives restart expense",
+      amount_minor: 1_250,
+      original_amount_minor: 1_250,
+      original_currency: "USD",
+      settlement_currency: "USD",
+      rate_scaled: 1_000_000,
+      rate_scale: 6,
+      rate_source: "identity",
+      rate_date: "2026-08-11",
+      paid_by: "owner",
+      category: "food",
+      spent_on: "2026-08-11",
+      splits: [{ party_id: "owner", share_minor: 1_250 }],
+    },
+  });
+  await session.write("tasks", {
+    action: "add",
+    input: {
+      project_id: "pending:intent-1:project",
+      title: "Survives restart task",
+    },
+  });
+  await session.write("agenda", {
+    action: "rsvp",
+    input: {
+      event_id: "event-offline",
+      party_id: "owner",
+      partstat: "accepted",
+    },
+  });
+  expect(
+    (await session.coordinator.pendingIntents()).find(
+      (intent) => intent.appId === "agenda"
+    )?.baseVersions
+  ).toMatchObject([{ rowId: "event-offline", version: 7 }]);
+  await session.write("notes", {
+    action: "create-note",
+    input: {
+      title: "Survives restart note",
+      body_text: "Offline body",
+      format: "markdown",
+    },
+  });
+  await session.coordinator.applyIntentOutcome({
+    intentId: "intent-3",
+    status: "failed",
+    reason: "Retry after restart",
+  });
+  await expect(session.retryPendingWrite("intent-3")).resolves.toMatchObject({
+    intentId: "intent-6",
+    status: "queued",
+  });
+  await session.close();
 }
 
 function seedTenYearLibrary(
@@ -158,6 +392,47 @@ function seedTenYearLibrary(
   database.close();
 }
 
+async function seedPendingDocuments(
+  file: string,
+  vaultId: string,
+  count: number
+): Promise<void> {
+  const driver = new NodeSqliteDriver(file);
+  const queue = new IntentQueue(SqliteIntentStore.create(driver), {
+    digest: () => Promise.resolve("a".repeat(64)),
+  });
+  const enqueueNext = async (index: number): Promise<void> => {
+    if (index >= count) return;
+    const rowId = `pending-${vaultId}-${index}`;
+    await queue.enqueue({
+      intentId: `intent-${vaultId}-${index}`,
+      appId: "docs",
+      action: "create-document",
+      input: { document_id: rowId, title: `Pending document ${index}` },
+      optimistic: [
+        {
+          op: "upsert",
+          shapeId: "docs-default",
+          entity: "core.document",
+          rowId,
+          values: {
+            document_id: rowId,
+            title: `Pending document ${index}`,
+            current_content_id: null,
+            created_at: "2026-08-11T00:00:00.000Z",
+            updated_at: "2026-08-11T00:00:00.000Z",
+            deleted_at: null,
+          },
+        },
+      ],
+    });
+    return enqueueNext(index + 1);
+  };
+  await enqueueNext(0);
+  queue.close();
+  driver.close();
+}
+
 /**
  * Encode a reproducible sample of the product's 256px/82%-quality thumbnail
  * rung. The smooth gradients plus bounded sensor-like grain exercise JPEG
@@ -192,6 +467,141 @@ function measuredThumbnailBytes(): number[] {
 }
 
 describe(MultiVaultReplicaReader, () => {
+  test("shows native Tally, Tasks, Agenda, and Notes writes from the durable outbox after restart", async () => {
+    const root = tempDirSync("centraid-mounted-overlay-");
+    const personal = path.join(root, "personal.db");
+    await seedPendingJourney(personal, "personal");
+    const mounted = {
+      vaultId: "personal",
+      label: "Personal",
+      canWrite: true,
+      databaseName: personal,
+    };
+
+    const assertAppRestart = async (readerName: string): Promise<void> => {
+      const native = await createNativeReplicaSession({
+        gatewayAuth: {
+          baseUrl: "http://127.0.0.1:1",
+          gatewayId: "offline-gateway",
+          vaultId: "personal",
+        },
+        fetcher: () =>
+          Promise.reject(new Error("offline restart must not fetch")),
+        changeFeed: inertFeed(),
+        driver: new NodeSqliteDriver(personal),
+        isConnected: () => false,
+        digest: () => Promise.resolve("digest"),
+        idFactory: () => `restart-${readerName}`,
+      });
+      const reader = new MultiVaultReplicaReader(
+        new NodeSqliteDriver(path.join(root, readerName)),
+        [mounted]
+      );
+      // This is the exact facade mounted by the mobile app. Tally, Tasks, and
+      // Notes begin from empty canonical tables and filter on an optimistic
+      // value; Agenda patches an existing canonical row. Together they prove
+      // both former failure modes after a full session/store reconstruction.
+      const session = new MultiVaultReplicaSession({
+        reader,
+        sessions: new Map([["personal", native]]),
+        scopes: [mounted],
+        focusedVaultId: () => "personal",
+        createId: () => `placement-${readerName}`,
+        sendPlacement: () =>
+          Promise.reject(new Error("offline restart must not place")),
+        isConnected: () => false,
+      });
+      try {
+        const [expense, task, taskSearch, agenda, note] = await Promise.all([
+          session.read("tally", {
+            entity: "tally.expense",
+            where: [
+              {
+                column: "description",
+                op: "eq",
+                value: "Survives restart expense",
+              },
+            ],
+          }),
+          session.read("tasks", {
+            entity: "schedule.task",
+            where: [
+              {
+                column: "title",
+                op: "eq",
+                value: "Survives restart task",
+              },
+            ],
+          }),
+          session.search("tasks", {
+            entity: "schedule.task",
+            query: "survives rest",
+          }),
+          session.read("agenda", {
+            entity: "core.event",
+            where: [{ column: "event_id", op: "eq", value: "event-offline" }],
+          }),
+          session.read("notes", {
+            entity: "knowledge.note",
+            where: [
+              {
+                column: "title",
+                op: "eq",
+                value: "Survives restart note",
+              },
+            ],
+          }),
+        ]);
+        expect(expense.rows[0]?.values).toMatchObject({
+          description: "Survives restart expense",
+          [PENDING_OVERLAY_FIELDS.key]: "intent-2",
+          [PENDING_OVERLAY_FIELDS.status]: "queued",
+          __centraidScopeId: "personal",
+        });
+        expect(task.rows[0]?.values).toMatchObject({
+          project_id: "pending:intent-1:project",
+          title: "Survives restart task",
+          [PENDING_OVERLAY_FIELDS.key]: "intent-6",
+          [PENDING_OVERLAY_FIELDS.status]: "queued",
+          __centraidScopeId: "personal",
+        });
+        expect(
+          task.rows[0]?.values.__centraid_pending_supersedes
+        ).toBeUndefined();
+        expect(taskSearch.rows[0]?.values).toMatchObject({
+          title: "Survives restart task",
+          [PENDING_OVERLAY_FIELDS.key]: "intent-6",
+          [PENDING_OVERLAY_FIELDS.status]: "queued",
+          __centraidScopeId: "personal",
+        });
+        expect(agenda.rows[0]?.values).toMatchObject({
+          summary: "Offline planning session",
+          [PENDING_OVERLAY_FIELDS.key]: "intent-4",
+          [PENDING_OVERLAY_FIELDS.status]: "queued",
+          __centraidScopeId: "personal",
+        });
+        expect(note.rows[0]?.values).toMatchObject({
+          title: "Survives restart note",
+          [PENDING_OVERLAY_FIELDS.key]: "intent-5",
+          [PENDING_OVERLAY_FIELDS.status]: "queued",
+          __centraidScopeId: "personal",
+        });
+      } finally {
+        await session.close();
+      }
+    };
+
+    // RN 0.81/Hermes has no structuredClone. Keep it absent for both cold
+    // reads so Node cannot accidentally hide a native-only runtime failure.
+    vi.stubGlobal("structuredClone", undefined);
+    try {
+      await assertAppRestart("first.db");
+      await assertAppRestart("restarted.db");
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
   test("keeps a writable vault and its item id atomic across equal-sha rows", async () => {
     const root = tempDirSync("centraid-provenance-");
     const personal = path.join(root, "personal.db");
@@ -204,13 +614,13 @@ describe(MultiVaultReplicaReader, () => {
         {
           vaultId: "personal",
           label: "Personal",
-          role: "read",
+          canWrite: false,
           databaseName: personal,
         },
         {
           vaultId: "shared",
           label: "Family",
-          role: "write",
+          canWrite: true,
           databaseName: shared,
         },
       ]
@@ -242,13 +652,13 @@ describe(MultiVaultReplicaReader, () => {
         {
           vaultId: "personal",
           label: "Personal",
-          role: "admin",
+          canWrite: true,
           databaseName: personal,
         },
         {
           vaultId: "shared",
           label: "Family",
-          role: "read",
+          canWrite: false,
           databaseName: shared,
         },
       ]
@@ -299,13 +709,13 @@ describe(MultiVaultReplicaReader, () => {
         {
           vaultId: "personal",
           label: "Personal",
-          role: "admin",
+          canWrite: true,
           databaseName: personal,
         },
         {
           vaultId: "shared",
           label: "Family",
-          role: "read",
+          canWrite: false,
           databaseName: shared,
         },
       ]
@@ -336,13 +746,13 @@ describe(MultiVaultReplicaReader, () => {
         {
           vaultId: "personal",
           label: "Personal",
-          role: "write",
+          canWrite: true,
           databaseName: personal,
         },
         {
           vaultId: "shared",
           label: "Family",
-          role: "write",
+          canWrite: true,
           databaseName: shared,
         },
       ]
@@ -387,13 +797,13 @@ describe(MultiVaultReplicaReader, () => {
         {
           vaultId: "ready",
           label: "Ready",
-          role: "write",
+          canWrite: true,
           databaseName: ready,
         },
         {
           vaultId: "empty",
           label: "Empty",
-          role: "read",
+          canWrite: false,
           databaseName: empty,
         },
       ]
@@ -409,19 +819,24 @@ describe(MultiVaultReplicaReader, () => {
     reader.close();
   });
 
-  test("holds the 50k-item ten-year cold-read and local-search budgets", async () => {
+  test("holds the 50k-item + 200-pending ten-year read/search budgets", async () => {
     const root = tempDirSync("centraid-household-");
     const fixtureScopes = [
-      { vaultId: "personal", label: "Personal", role: "admin" as const },
-      { vaultId: "family", label: "Family", role: "write" as const },
-      { vaultId: "school", label: "School", role: "read" as const },
-      { vaultId: "club", label: "Club", role: "read" as const },
+      { vaultId: "personal", label: "Personal", canWrite: true as const },
+      { vaultId: "family", label: "Family", canWrite: true as const },
+      { vaultId: "school", label: "School", canWrite: false as const },
+      { vaultId: "club", label: "Club", canWrite: false as const },
     ].map((scope) => ({
       ...scope,
       databaseName: path.join(root, `${scope.vaultId}.db`),
     }));
     for (const scope of fixtureScopes)
       seedTenYearLibrary(scope.databaseName, scope.vaultId, 12_500);
+    await Promise.all(
+      fixtureScopes.map((scope) =>
+        seedPendingDocuments(scope.databaseName, scope.vaultId, 50)
+      )
+    );
     const reader = new MultiVaultReplicaReader(
       new NodeSqliteDriver(path.join(root, "mounted.db")),
       fixtureScopes
@@ -478,6 +893,7 @@ describe(MultiVaultReplicaReader, () => {
             searchMs,
             projectionBytes,
             mountedScopes: reader.scopes().length,
+            pendingMutations: 200,
             bootstrapWindowRows: MOBILE_REPLICA_BOOTSTRAP_WINDOW,
             bootstrapPageBytes,
             thumbnailP95Bytes,

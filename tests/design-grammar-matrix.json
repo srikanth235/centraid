@@ -2,13 +2,20 @@
   "issue": 690,
   "revision": 3,
   "surfaces": {
-    "SH": { "profile": "shell", "renderer": "client", "host": "desktop-pwa" },
-    "SH-c": { "profile": "shell", "renderer": "client", "host": "compact-720" },
-    "BI": { "profile": "blueprint", "renderer": "kit-inline", "host": "shell" },
-    "BS": {
+    "SH": {
+      "profile": "shell",
+      "renderer": "client",
+      "host": "desktop-pwa"
+    },
+    "SH-c": {
+      "profile": "shell",
+      "renderer": "client",
+      "host": "compact-720"
+    },
+    "BI": {
       "profile": "blueprint",
-      "renderer": "kit-served",
-      "host": "iframe-webview"
+      "renderer": "react-inline",
+      "host": "shell"
     },
     "MO": {
       "profile": "native",
@@ -55,7 +62,7 @@
       "shared": ["ask-entry", "assistant-destination", "sse-contract"],
       "adapted": ["sheet-vs-panel"],
       "local": ["message-prose"],
-      "referenceStates": ["sh-dark-ask", "bs-light-ask"]
+      "referenceStates": ["sh-dark-ask", "bi-light-ask"]
     },
     "M6": {
       "name": "Row to detail",
@@ -67,18 +74,24 @@
     "M7": {
       "name": "Status / notification",
       "shared": [
+        "one-status-line",
         "decision-notice-status-tiers",
-        "badge-only-decisions",
+        "status-line-never-toast",
         "tone-data"
       ],
-      "adapted": ["toast-vs-banner"],
+      "adapted": ["status-line-placement"],
       "local": ["host-notification-plumbing"],
       "referenceStates": ["sh-dark-status", "bi-light-status"]
     },
     "M8": {
       "name": "Empty / loading / error",
-      "shared": ["triad-anatomy", "error-not-empty", "subject-glyph"],
-      "adapted": ["skeleton-vs-native-activity"],
+      "shared": [
+        "triad-anatomy",
+        "error-not-empty",
+        "subject-glyph",
+        "determinate-progress-never-spinner"
+      ],
+      "adapted": ["static-skeleton-vs-native-placeholder"],
       "local": ["content-shape"],
       "referenceStates": ["sh-light-empty", "mo-dark-error"]
     },
@@ -113,7 +126,8 @@
       "shared": [
         "one-status-line",
         "consequence-copy",
-        "canonical-status-vocabulary"
+        "canonical-status-vocabulary",
+        "offline-banner-not-tooltip"
       ],
       "adapted": ["status-line-placement"],
       "local": ["replica-transport"],
@@ -151,7 +165,7 @@
         "sh-light-first-run",
         "sh-dark-compat",
         "mo-light-pairing",
-        "bs-dark-offline-wall"
+        "bi-dark-offline-wall"
       ]
     },
     "M16": {
@@ -198,14 +212,15 @@
         "progress-meter",
         "verb-object-count",
         "cancel-long-work",
-        "in-app-visibility"
+        "in-app-visibility",
+        "exact-counts-never-spinner"
       ],
-      "adapted": ["native-background-service", "activity-vs-determinate"],
+      "adapted": ["native-background-service", "determinate-only"],
       "local": ["os-notification"],
       "referenceStates": [
         "sh-dark-upload",
         "mo-light-upload",
-        "bs-light-background-work"
+        "bi-light-background-work"
       ]
     },
     "M20": {
@@ -217,7 +232,7 @@
         "sh-light-capture",
         "sh-compact-capture",
         "mo-dark-capture",
-        "bs-light-share-target"
+        "bi-light-share-target"
       ]
     }
   },
@@ -295,9 +310,9 @@
       "viewport": "1440x900"
     },
     {
-      "id": "bs-light-ask",
+      "id": "bi-light-ask",
       "moment": "M5",
-      "surface": "BS",
+      "surface": "BI",
       "scheme": "light",
       "state": "sheet",
       "viewport": "1024x768"
@@ -471,9 +486,9 @@
       "viewport": "390x844"
     },
     {
-      "id": "bs-dark-offline-wall",
+      "id": "bi-dark-offline-wall",
       "moment": "M15",
-      "surface": "BS",
+      "surface": "BI",
       "scheme": "dark",
       "state": "offline-wall",
       "viewport": "1024x768"
@@ -567,9 +582,9 @@
       "viewport": "390x844"
     },
     {
-      "id": "bs-light-background-work",
+      "id": "bi-light-background-work",
       "moment": "M19",
-      "surface": "BS",
+      "surface": "BI",
       "scheme": "light",
       "state": "background",
       "viewport": "1024x768"
@@ -599,9 +614,9 @@
       "viewport": "390x844"
     },
     {
-      "id": "bs-light-share-target",
+      "id": "bi-light-share-target",
       "moment": "M20",
-      "surface": "BS",
+      "surface": "BI",
       "scheme": "light",
       "state": "share-target",
       "viewport": "1024x768"

@@ -1,21 +1,7 @@
 import type { IconName } from "@centraid/design";
 
-import {
-  listVaults,
-  vaultConnections,
-  vaultConnectionSetStatus,
-  vaultImportDiscard,
-  vaultImportPublish,
-  vaultImportRows,
-  vaultImportsList,
-  vaultImportStage,
-  vaultPortableExport,
-  vaultStatus,
-} from "../../../gateway-client.js";
-import type {
-  ImportBridgeProps,
-  PhoneBridgeProps,
-} from "../../screen-contracts.js";
+import { listVaults } from "../../../gateway-client.js";
+import type { PhoneBridgeProps } from "../../screen-contracts.js";
 
 /** Settings → Vault page data (issue #382) — scoped to the ACTIVE vault
  *  only; the cross-vault list + gateway "Connections" group both moved to
@@ -63,6 +49,38 @@ export async function loadThisDeviceData(): Promise<ThisDeviceData> {
     gatewayLabel: label ?? "this gateway",
     offlineCopy: auth.rememberDevice === true,
   };
+}
+
+/**
+ * The modal's foot stamp: what this build is, and which gateway it is talking
+ * to. `Centraid <version> · <host>`.
+ *
+ * ONLY WHAT THE BUILD CAN TRUTHFULLY PRODUCE. The version is the running
+ * build's own (`getChangelog().currentVersion`, which the host reads from the
+ * app itself — the release list is irrelevant here); the host is the authority
+ * of the gateway's base URL. A part this client cannot answer for is left out
+ * rather than guessed, so the stamp is never a hard-coded number pretending to
+ * be a fact — which is exactly what the literal `v0.5.2` it replaces was.
+ */
+export async function loadSettingsStamp(): Promise<string> {
+  const version = await window.CentraidApi.getChangelog?.()
+    .then((changelog) => changelog.currentVersion.replace(/^v/iu, ""))
+    .catch(() => undefined);
+  const host = await window.CentraidApi.getGatewayAuth()
+    .then((auth) => gatewayHost(auth.baseUrl))
+    .catch(() => undefined);
+  return [version ? `Centraid ${version}` : "Centraid", host]
+    .filter((part): part is string => Boolean(part))
+    .join(" · ");
+}
+
+/** The gateway's host, as the member would name it. `''` when unparseable. */
+function gatewayHost(baseUrl: string): string {
+  try {
+    return new URL(baseUrl).host;
+  } catch {
+    return "";
+  }
 }
 
 /**
@@ -142,11 +160,10 @@ async function loadRemoteConnection(
   };
 }
 
-// Account-page data — ports the Phone (app-phone.ts) + Import (app-import.ts)
-// bridge callback wiring for the Settings Account pages. Phone talks to the
-// main process (the tunnel endpoint outlives renderer reloads); Import goes
-// through the vault plane. Returned prop objects drop straight into the
-// existing PhoneScreen / ImportScreen.
+// Account-page data — the Phone (app-phone.ts) bridge callback wiring for the
+// Settings Account pages. Phone talks to the main process, because the tunnel
+// endpoint outlives renderer reloads. The Import pane's callbacks lived here
+// too until issue #807 removed the hidden Import page.
 
 export function phoneCallbacks(
   showToast: (m: string) => void
@@ -192,61 +209,6 @@ export function phoneCallbacks(
         deviceId,
       }).catch(() => undefined);
       return !!result?.removed;
-    },
-  };
-}
-
-export function importCallbacks(
-  showToast: (m: string) => void
-): ImportBridgeProps {
-  return {
-    showToast,
-    exportPortable: vaultPortableExport,
-    discard: (batchId) => vaultImportDiscard(batchId).then(() => undefined),
-    loadData: async () => {
-      const s = await vaultStatus().catch(() => undefined);
-      if (!s) return null;
-      const [batches, connections] = await Promise.all([
-        vaultImportsList(),
-        vaultConnections().catch(() => []),
-      ]);
-      return {
-        batches: batches.map((b) => ({
-          batchId: b.batchId,
-          createdAt: b.createdAt,
-          kind: b.kind,
-          label: b.label,
-          status: b.status,
-          summary: b.summary,
-        })),
-        connections: connections.map((c) => ({
-          connectionId: c.connectionId,
-          kind: c.kind,
-          label: c.label,
-          lastRunAt: c.lastRunAt,
-          lastRunError: c.lastRun?.error ?? null,
-          principal: c.principal,
-          status: c.status,
-        })),
-        vaultName: s.name,
-      };
-    },
-    loadRows: async (batchId) => {
-      const rows = await vaultImportRows(batchId);
-      return rows.map((r) => ({
-        disposition: r.disposition,
-        entityType: r.entityType,
-        externalId: r.externalId,
-        mapping: r.mapping,
-        note: r.note,
-      }));
-    },
-    publish: (batchId) => vaultImportPublish(batchId).then(() => undefined),
-    setConnectionStatus: (connectionId, next) =>
-      vaultConnectionSetStatus(connectionId, next).then(() => undefined),
-    stage: async (payload) => {
-      const staged = await vaultImportStage(payload);
-      return staged.total;
     },
   };
 }

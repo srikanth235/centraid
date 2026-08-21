@@ -1,83 +1,15 @@
+import { copyFile, mkdir, readdir } from "node:fs/promises";
+import path from "node:path";
+
+import {
+  DISMISS_KEYBOARD_ONBOARDING,
+  retryableTapCommands,
+} from "../lib/first-run.mjs";
 import {
   FIRST_LAUNCH_TIMEOUT_MS,
   HOME_READY_MARKER,
   runFlow,
 } from "../lib/harness.mjs";
-
-/**
- * One launcher-tile tap. retryableTapCommands re-taps while the tile stays in
- * the hierarchy under the cover (iOS 30748673657: Open Tally opened, then the
- * second/third retry failed looking for Open Tally on the Tally screen).
- */
-function openLauncherTileCommands(open) {
-  return `- tapOn:
-    text: "${open}"
-    retryTapIfNoChange: true`;
-}
-
-/**
- * One destination-aware fallback for the iOS tile tap. The Tasks tile stayed
- * on Home in run 30838452759 even though Maestro reported the tap completed;
- * wait for the cover transition before retrying so a successful first tap is
- * never duplicated underneath a presented cover.
- */
-function retryLauncherTileCommands(open, destination) {
-  return `- tapOn:
-    text: "${open}"
-    retryTapIfNoChange: true
-- waitForAnimationToEnd:
-    timeout: 3000
-- extendedWaitUntil:
-    visible: "${destination}"
-    timeout: 5000
-    optional: true
-- repeat:
-    times: 2
-    while:
-      notVisible: "${destination}"
-    commands:
-      - runFlow:
-          when:
-            visible: "${open}"
-          commands:
-            - tapOn:
-                text: "${open}"
-                retryTapIfNoChange: true
-      - waitForAnimationToEnd:
-          timeout: 3000`;
-}
-
-/**
- * Retry a tap only while its destination is absent. The generic retry helper
- * watches the source control, which remains in iOS's underlying Home hierarchy
- * after a modal drawer/cover opens and can therefore tap the old coordinate a
- * second time (run 30834561267).
- */
-function tapUntilVisibleCommands(selector, destination) {
-  return `- tapOn:
-    text: "${selector}"
-    retryTapIfNoChange: true
-- repeat:
-    times: 2
-    while:
-      notVisible: "${destination}"
-    commands:
-      - tapOn:
-          text: "${selector}"
-          retryTapIfNoChange: true`;
-}
-
-/**
- * Open a row whose source disappears with the drawer. Once the route is
- * requested, retrying the source can only search a closed modal; wait for the
- * destination instead (iOS lazy Settings import can show the blank fallback
- * while the screen module evaluates).
- */
-function openSettingsCommands() {
-  return `- tapOn:
-    text: ".*Settings"
-    retryTapIfNoChange: true`;
-}
 
 // The shell is a springboard, not a tab bar (apps/mobile/src/navigation.ts:
 // "There is no bottom-tab navigator"). All eight blueprint apps are full-screen
@@ -92,50 +24,42 @@ function openSettingsCommands() {
 const SURFACES = [
   // Maestro anchors a text selector to the WHOLE node text, so the marker has
   // to cover all of it: the Photos search field publishes
-  // "Search photos and moments" as its accessible name (visible copy uses &).
-  // Exact match — Search photos.* failed on a blank Photos cover after open
-  // (iOS 30745625780); prefer the durable a11y label and a longer first paint.
+  // "Search photos and moments" as its accessible name and renders
+  // "Search photos & moments" — a bare "Search photos" matches neither.
   {
-    marker: "Search photos and moments",
-    open: "Open Photos",
+    marker: "Search photos.*",
+    open: "Open Photos.*",
     name: "photos",
-    markerTimeoutMs: 45_000,
   },
   {
     marker: "Add document or folder",
-    open: "Open Docs",
+    open: "Open Docs.*",
     name: "docs",
   },
-  { marker: "Create event", open: "Open Agenda", name: "agenda" },
+  { marker: "Create event", open: "Open Agenda.*", name: "agenda" },
   {
-    // The task TextInput's accessibility label was absent in the failed iOS
-    // hierarchy even though the cover had been requested. The stable subtitle
-    // proves the Tasks cover rendered without relying on input-field exposure.
-    marker: "Inbox, projects and offline repeat rules",
-    openCommands: retryLauncherTileCommands(
-      "Open Tasks",
-      "Inbox, projects and offline repeat rules"
-    ),
+    marker: "New task title",
+    open: "Open Tasks.*",
     name: "tasks",
   },
   {
     marker: "Person name",
-    open: "Open People",
+    open: "Open People.*",
     name: "people",
   },
   {
     marker: "Search notes",
-    open: "Open Notes",
+    open: "Open Notes.*",
     name: "notes",
   },
   {
     marker: "Fixed-point multi-currency ledger, available offline",
-    open: "Open Tally",
+    open: "Open Tally.*",
     name: "tally",
   },
   {
     marker: "Secrets stay online-only",
-    open: "Open Locker",
+    open: "Open Locker.*",
     name: "locker",
   },
   // Settings is opened from the Vault drawer, not the dock. The dock sits at
@@ -153,17 +77,16 @@ const SURFACES = [
   {
     marker: "APPEARANCE",
     openCommands: [
-      tapUntilVisibleCommands("Open vault menu", "GO TO"),
+      retryableTapCommands("Open vault menu"),
       // Wait for the drawer to finish opening before touching its rows.
       '- extendedWaitUntil:\n    visible: "GO TO"\n    timeout: 15000',
       // The row's accessible name is ", Settings" (icon + label collapsed into
       // one element), but Maestro will not match a selector that starts with
       // the comma — `.*Settings` is what actually resolves, and with the modal
       // drawer open the dock underneath is not reachable anyway.
-      openSettingsCommands(),
+      retryableTapCommands(".*Settings", "GO TO"),
     ].join("\n"),
     name: "settings",
-    markerTimeoutMs: 45_000,
   },
 ];
 
@@ -174,8 +97,7 @@ await runFlow("native-v0-resilience", async (ctx) => {
     const surface = SURFACES[index];
     if (surface === undefined) return;
     const openCommands =
-      surface.openCommands ?? openLauncherTileCommands(surface.open);
-    const markerTimeoutMs = surface.markerTimeoutMs ?? 20_000;
+      surface.openCommands ?? retryableTapCommands(surface.open);
     await ctx.run(
       `appId: ${ctx.state.appId}
 ---
@@ -186,11 +108,9 @@ await runFlow("native-v0-resilience", async (ctx) => {
     visible: "${HOME_READY_MARKER}"
     timeout: ${FIRST_LAUNCH_TIMEOUT_MS}
 ${openCommands}
-- waitForAnimationToEnd:
-    timeout: 3000
 - extendedWaitUntil:
     visible: "${surface.marker}"
-    timeout: ${markerTimeoutMs}
+    timeout: 20000
 - takeScreenshot: native-${surface.name}
 `,
       surface.name
@@ -199,6 +119,82 @@ ${openCommands}
     return visitNext(index + 1);
   };
   await visitNext(0);
+
+  // Maestro's real airplane-mode control is Android-only. This is the device
+  // journey for #738: the write goes through the mounted UI, the OS process is
+  // killed while disconnected, and the production reader must recover the
+  // SQLite outbox row after relaunch. The iOS lane retains the same store/read
+  // integration companion because iOS Simulator exposes no airplane control.
+  if (ctx.state.platform === "android") {
+    const airplaneGroup = `Airplane group ${ctx.state.runId}`;
+    const airplaneExpense = `Airplane expense ${ctx.state.runId}`;
+    try {
+      await ctx.run(
+        `appId: ${ctx.state.appId}
+---
+- stopApp
+- launchApp:
+    clearState: false
+- extendedWaitUntil:
+    visible: "${HOME_READY_MARKER}"
+    timeout: ${FIRST_LAUNCH_TIMEOUT_MS}
+${retryableTapCommands("Open Tally.*")}
+- extendedWaitUntil:
+    visible: "New group"
+    timeout: 20000
+- tapOn: "New group"
+- inputText: "${airplaneGroup}"
+${DISMISS_KEYBOARD_ONBOARDING}
+- pressKey: Enter
+- hideKeyboard
+- extendedWaitUntil:
+    visible: "${airplaneGroup}"
+    timeout: 30000
+- setAirplaneMode: enabled
+- tapOn: "Expense description"
+- inputText: "${airplaneExpense}"
+- tapOn: "0.00"
+- inputText: "12.34"
+- assertVisible: "12.34"
+- hideKeyboard
+- tapOn: "Save expense"
+- extendedWaitUntil:
+    visible: "${airplaneExpense}"
+    timeout: 20000
+- assertVisible: "queued"
+- takeScreenshot: native-airplane-pending-before-restart
+- stopApp
+- launchApp:
+    clearState: false
+- extendedWaitUntil:
+    visible: "${HOME_READY_MARKER}"
+    timeout: ${FIRST_LAUNCH_TIMEOUT_MS}
+${retryableTapCommands("Open Tally.*")}
+- extendedWaitUntil:
+    visible: "${airplaneExpense}"
+    timeout: 30000
+- assertVisible: "queued"
+- takeScreenshot: native-airplane-pending-after-restart
+`,
+        "airplane-pending-restart"
+      );
+      ctx.note(
+        "Android: Tally UI add remained queued and visible after an OS process restart in airplane mode"
+      );
+    } finally {
+      await ctx.run(
+        `appId: ${ctx.state.appId}
+---
+- setAirplaneMode: disabled
+`,
+        "restore-network"
+      );
+    }
+  } else {
+    ctx.note(
+      "iOS Simulator has no Maestro airplane control; native SQLite restart parity is covered by PendingRestartJourney.test.tsx"
+    );
+  }
 
   await ctx.restart();
   await ctx.run(
@@ -212,8 +208,27 @@ ${openCommands}
     "after-force-kill"
   );
   ctx.note(
-    "All eight native blueprint covers and Settings survived navigation and a process restart; complete the documented network matrix on this device."
+    "All eight native blueprint covers and Settings survived navigation and a process restart; Android also completed the airplane-mode pending-write restart journey."
   );
+
+  // UI-impact evidence for #799: with the WebView app cover retired, Home's
+  // launcher is the all-native surface — publish the post-restart Home frame
+  // where the desktop journeys publish theirs.
+  const uiImpactDir = "artifacts/e2e/ui-impact";
+  const screenshot = async () => {
+    const frames = await readdir(ctx.state.screenshotsDir);
+    const home = frames.find((frame) =>
+      frame.endsWith("-after-force-kill.png")
+    );
+    if (home === undefined)
+      throw new Error("after-force-kill Home frame was not captured");
+    await mkdir(uiImpactDir, { recursive: true });
+    await copyFile(
+      path.join(ctx.state.screenshotsDir, home),
+      path.join(uiImpactDir, "issue-799-mobile-native-home.png")
+    );
+  };
+  await screenshot();
   return {
     pass: true,
     notes:

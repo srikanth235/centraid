@@ -56,7 +56,7 @@ export function Chrome(props: ChromeProps): ReactNode {
     .join(" ");
 
   return (
-    <div className={frameClass}>
+    <div className={frameClass} data-tone="neutral" data-density="compact">
       <div
         className={styles.lockable}
         inert={props.locked ? true : undefined}
@@ -97,8 +97,10 @@ export function Chrome(props: ChromeProps): ReactNode {
       {/* Overlay layer — `data-kit-host` is display:contents (kit.css), so the
           lock screen / generator / edit modal overlays participate as if direct
           children of the frame (their absolute/fixed positioning resolves
-          against .appRoot). Order matches the served DOM: the generator can be
-          opened from inside the edit modal, and the modal paints after it. */}
+          against .appRoot). This is the marker's only remaining caller: #799
+          retired the `KitElement` base that used to stamp it. Order is
+          deliberate — the generator can be opened from inside the edit modal,
+          and the modal paints after it. */}
       <div data-kit-host>{props.overlays}</div>
     </div>
   );

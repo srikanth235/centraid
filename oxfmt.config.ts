@@ -41,6 +41,13 @@ export default defineConfig({
     // generated code, coverage, mobile build trees, lockfiles, and generated
     // framework declarations. Those files have external or generator owners.
     ...base.ignorePatterns,
+    // The Iroh generator deliberately finalizes these committed bindings with
+    // Oxfmt before rebuild-and-diff CI. Re-include the directory and its three
+    // textual outputs after Ultracite's broad `**/generated` exclusion.
+    "!apps/web/src/generated/",
+    "!apps/web/src/generated/centraid_web_iroh.js",
+    "!apps/web/src/generated/centraid_web_iroh.d.ts",
+    "!apps/web/src/generated/centraid_web_iroh_bg.wasm.d.ts",
     // Xcode owns asset catalog metadata.
     "**/*.xcassets/**/Contents.json",
     // governance-kit owns this vendored tree and workflow byte-for-byte.
@@ -57,7 +64,5 @@ export default defineConfig({
     "apps/web/public/sw.js",
     "scripts/docs-site/src/content/**",
     "packages/blueprints/manifest.json",
-    "packages/design/kit/tokens.css",
-    "packages/design/kit/wall.css",
   ],
 });

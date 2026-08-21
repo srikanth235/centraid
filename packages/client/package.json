@@ -10,9 +10,18 @@
     "./replica/native": "./src/replica/native.ts",
     "./replica/intent-invalidations": "./src/replica/intent-invalidations.ts",
     "./capture": "./src/capture.ts",
+    "./home-copy": "./src/home-copy.ts",
     "./receipt-capture": "./src/receipt-capture.ts",
     "./version-handshake": "./src/version-handshake.ts",
-    "./video-frame": "./src/video-frame.ts",
+    "./approvals-copy": "./src/approvals-copy.ts",
+    "./automations-copy": "./src/automations-copy.ts",
+    "./connectors-copy": "./src/connectors-copy.ts",
+    "./data-copy": "./src/data-copy.ts",
+    "./devices-copy": "./src/devices-copy.ts",
+    "./insights-copy": "./src/insights-copy.ts",
+    "./notifications-copy": "./src/notifications-copy.ts",
+    "./sharing-copy": "./src/sharing-copy.ts",
+    "./surface-copy": "./src/surface-copy.ts",
     "./styles.css": "./src/styles.css"
   },
   "scripts": {
@@ -21,15 +30,14 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@centraid/blob-format": "workspace:*",
     "@centraid/blueprints": "workspace:*",
+    "@centraid/core": "workspace:*",
     "@centraid/design": "workspace:*",
-    "@centraid/protocol": "workspace:*",
     "@sqlite.org/sqlite-wasm": "3.53.0-build1",
     "pdfjs-dist": "6.1.200",
     "qrcode": "^1.5.4",
-    "react": "19.2.8",
-    "react-dom": "19.2.8"
+    "react": "19.2.3",
+    "react-dom": "19.2.3"
   },
   "devDependencies": {
     "@centraid/test-kit": "workspace:*",

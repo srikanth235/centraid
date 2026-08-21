@@ -75,12 +75,6 @@ if (gotSingleInstanceLock) {
   // (appId: dev.centraid.desktop — electron-builder/app-id.json).
   const ICON_PATH = path.join(__dirname, "..", "icon.png");
 
-  // The builder preview iframe is served by the gateway itself (issue #141,
-  // Phase 4): it points at `/centraid/_draft/<sessionId>/<id>/`, a real HTTP
-  // origin the main-process auth-injector authenticates. No custom local
-  // scheme is needed anymore — the old `centraid-preview://` path-mode
-  // protocol was retired so local == remote serving.
-
   let flushWindowState: (() => void) | undefined;
 
   const canOpenExternal = (url: string): boolean => {
@@ -233,8 +227,8 @@ if (gotSingleInstanceLock) {
     // URL into `serve()`, and the gateway's `/centraid/_templates` route
     // fires a one-time best-effort fetch into its cache. The desktop main
     // process no longer touches `@centraid/blueprints`.
-    // Coding-agent detection moved to the gateway (`GET /centraid/_agents/status`):
-    // it's colocated with the runner and probes its own host on demand, so the
+    // Harness detection moved to the gateway (`GET /centraid/_harnesses/status`):
+    // it's colocated with the harness and probes its own host on demand, so the
     // desktop no longer runs a first-launch credential probe.
     app.on("activate", () => {
       if (BrowserWindow.getAllWindows().length === 0) {

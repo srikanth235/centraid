@@ -3,51 +3,34 @@
    keeps its media-specific selection, lightbox, slideshow, and picker rules.
 
    Token layer: the shell injects the GENERIC blueprint token layer onto this
-   same element via `.centraid-inline-scope` (hue 222, product teal `--accent`). Photos'
-   identity is violet (--app-hue 255) with a handful of app-specific tokens the
-   generic layer lacks (--ph-sidebar-w, --ph-tile-r*,
-   --custody-warn). Overriding just `--app-hue` retunes every generic neutral to
-   violet (they all read `hsl(var(--app-hue) …)`); `--app-identity` is re-pinned to a
-   LITERAL violet fallback so the Photos identity stays independent from the
-   product accent while the `--app-identity` swatch knob still wins. The fold doubles the
-   class (`.appRoot.appRoot` → 0,2,0) to beat the injected layer's `.centraid-
-   inline-scope` (0,1,0); dark/media variants add the theme ancestor.
+   same element via `.centraid-inline-scope`. Photos' identity is AMBER — hue 28,
+   `--c-amber` — which is the slot `apps.ts` assigns it on the Binding Layer's
+   identity wheel and what the shell's launcher tile already paints. (It read
+   violet/255 here until the Binding Layer close-out: the app out-shouted its
+   own icon in a hue that
+   belongs to People.) Since the Binding Layer flip `--app-hue` is ONLY the
+   wheel slot — the neutrals are the system's literal paper and no longer read
+   it (packages/design/src/blueprint.ts) — so the identity declaration is these
+   two lines and nothing else. The fold doubles the class (`.appRoot.appRoot` →
+   0,2,0) to beat the injected layer's `.centraid-inline-scope` (0,1,0).
 
    Positioning: the served component modules (Sidebar.module.css, the .selection-
    bar/.lightbox/.slideshow containers) position against the VIEWPORT (100vh,
    position:fixed, viewport `@media` widths) because the served app is full-
    screen. Inline the app is one pane inside the shell, so those are re-scoped
-   here to `position:absolute` against `.shell` and to a component-width
-   `.isNarrow` class (app-inline's `observeWidth`), never the viewport (#505
-   traps 1 + 7). The sidebar <aside>'s own positioning (a served hashed class we
+   here to `position:absolute` against `.shell`; width changes measure and
+   columns in the component modules, not the design-system surface contract
+   (#505 traps 1 + 7). The sidebar <aside>'s own positioning (a served hashed class we
    cannot edit) is neutralised structurally via `.sideHost > aside`. */
 
 /* ---------- Token layer (Photos identity, folded from app.css) ---------- */
 
 .appRoot.appRoot {
   color-scheme: light dark;
-  /* Violet identity — retunes every generic neutral (they read --app-hue). */
-  --app-hue: 255;
-  /* Keep Photos identity independent from the host's product accent. */
-  --app-identity: var(--c-violet);
+  /* Amber identity — the slot apps.ts assigns Photos on the identity wheel. */
+  --app-hue: 28;
+  --app-identity: var(--c-amber);
   --ph-sidebar-w: 250px;
-  --ph-tile-r: 3px;
-  --ph-tile-r-sel: 13px;
-  --custody-warn: var(--warning);
-}
-
-:global(:root[data-theme="dark"]) .appRoot.appRoot {
-  --custody-warn: var(--warning);
-  /* The generic dark layer sets `--bg: var(--bg-wall)`; wall.css (which would
-     define it) never loads inline, so pin a violet-dark backdrop here. */
-  --bg-wall: hsl(var(--app-hue) 16% calc(var(--bg-l, 10%) + 1%));
-}
-
-@media (prefers-color-scheme: dark) {
-  :global(:root:not([data-theme])) .appRoot.appRoot {
-    --custody-warn: var(--warning);
-    --bg-wall: hsl(var(--app-hue) 16% calc(var(--bg-l, 10%) + 1%));
-  }
 }
 
 /* ---------- Base reset (app.css global remainder), scoped ---------- */
@@ -59,12 +42,21 @@
 .appRoot [hidden] {
   display: none !important;
 }
-.appRoot button {
+/* `:where()` ZEROES THIS RULE'S SPECIFICITY, and that is the whole point. A
+   reset is a floor, not an opinion: at `.appRoot button` it scores (0,1,1) and
+   outranks every component that names its own type with a single class, so
+   `.tab { font: var(--t-control) }` lost to `font: inherit` and every shelf tab
+   silently rendered at the inherited Body size — while the ONE tab carrying
+   `[data-current]` scored (0,2,0), won, and came out SMALLER than its
+   neighbours. A control that shrinks when you select it is the visible end of a
+   cascade bug, not a type choice. At (0,0,1) the reset still beats the UA
+   default and still loses to anything a component says about itself. */
+:where(.appRoot) button {
   font: inherit;
   cursor: pointer;
 }
 .appRoot button[disabled] {
-  opacity: 0.5;
+  color: var(--text-disabled);
   cursor: default;
   pointer-events: none;
 }
@@ -73,116 +65,48 @@
   box-shadow: var(--focus-ring);
 }
 
-/* App-level knobs — read off the app ROOT element (the host stamps data-app-*
-   there inline, not on <html>), #505 trap 6. */
-.appRoot[data-app-font="sans"] {
-  font-family: var(--font-sans);
-}
-.appRoot[data-app-font="serif"] {
-  /* The one --font-serif use in the repo, and a deliberate identity choice:
-     "roles, not families" sanctions serif as a ROLE, and this knob rebinds the
-     app's body face to it — it is not a hardcoded family. */
-  font-family: var(--font-serif);
-}
-.appRoot[data-app-font="mono"] {
-  font-family: var(--font-mono);
-}
 .appRoot[data-app-width="narrow"] .scroll {
   max-width: 68rem;
   margin: 0 auto;
 }
 
-@media (prefers-reduced-motion: reduce) {
-  .appRoot *,
-  .appRoot *::before,
-  .appRoot *::after {
-    transition-duration: 0.01ms !important;
-    animation-duration: 0.01ms !important;
-  }
-}
+/* prefers-reduced-motion is honoured globally now (one rule, elsewhere) via
+   --dur-1/--dur-2 collapsing to 0ms — every transition below that reads one
+   of those tokens is covered without a per-component media query. The two
+   ph-tile-ph / filmstrip shimmer keyframes still guard themselves below:
+   their duration is a deliberate ambient-loop literal, not routed through
+   --dur-*, so the global collapse cannot reach them. */
 
 /* ---------- Shell (the .ph-app flex row) ---------- */
 
+/* The `--app-topbar-*` knobs went with the topbar (v4 §3) — this app draws no
+   bar of its own to size. */
 .shell {
   composes: kit-app-shell from global;
-  --app-topbar-gap: 10px;
-  --app-topbar-padding: 14px 20px;
-  /* Positioning context for the drawer + the lightbox/slideshow/selection-bar
-     overlays, so they overlay the app pane inline — never the shell chrome. */
+  /* Positioning context for the lightbox/slideshow/selection-bar overlays, so
+     they overlay the app pane inline — never the shell chrome. */
   -webkit-font-smoothing: antialiased;
+  /* THE PAGE MARGIN IS DECLARED ONCE, HERE, AND INHERITED. Every row that
+     spans the pane — the shelf strip, the toolbar, the album bar, the
+     selection bar, the scroller — used to carry its own hardcoded `20px`,
+     which is how five files come to disagree the moment one of them is
+     edited. They now read `var(--content-margin)`, so the compact rung below is a
+     one-line change instead of a five-line one.
+     20px was also not a number the system has: `--page-margin` is 32 on
+     desktop and 18 on the phone (`packages/design/src/density.ts`), the same
+     scale every native screen already insets by. The web simply had no token
+     to read, so this app guessed — and guessed a third value. */
+  --content-margin: var(--page-margin);
 }
 
-/* The SidebarView Fragment (scrim + <aside>) renders into this host; contents so
-   the <aside> is a real flex child of `.shell` while `#sidebarMount` survives for
-   `$('sidebarMount').hidden`. */
-.sideHost {
-  display: contents;
-}
-/* Neutralise the served aside's viewport positioning (Sidebar.module.css
-   `height:100vh; position:sticky`, a hashed class we cannot edit) — inline it
-   fills the pane height and flows normally. */
-.sideHost > aside {
-  height: 100%;
-  position: relative;
-  top: auto;
-  z-index: 1;
-}
-
-/* ---------- Main / header ---------- */
+/* ---------- Main ---------- */
 
 .main {
   composes: kit-app-main from global;
 }
-.header {
-  composes: kit-app-topbar from global;
-}
-.search {
-  flex: 1;
-  min-width: 9rem;
-  max-width: 30rem;
-}
-/* The magnifier's <label htmlFor="searchInput"> generates no box, so the svg
-   stays the direct flex child `.kit-search svg` sizes — the row is unchanged.
-   kit.css makes that svg `pointer-events: none` (it was there to let clicks
-   fall through to the old wrapping <label>); now the label IS the glyph, so the
-   svg takes the click again and clicking the magnifier still focuses the field. */
-.searchGlyph {
-  display: contents;
-}
-.searchGlyph svg {
-  pointer-events: auto;
-}
-.headerActions {
-  composes: kit-app-tools from global;
-}
-.zoom {
-  display: flex;
-  padding: 2px;
-  border: 1px solid var(--line);
-  border-radius: var(--r-md);
-  background: var(--bg-elev);
-}
-.zoom :global(.ph-header-icon-btn) {
-  width: 32px;
-  height: 30px;
-  border: none;
-  background: none;
-  border-radius: 7px;
-}
-.zoom :global(.ph-header-icon-btn):disabled {
-  opacity: 0.35;
-}
-.askMount {
-  composes: kit-app-ask-mount from global;
-}
 
-/* `#noticeBanner` is an <output> (implicit role=status) — an inline element by
-   default, where the <div> it replaced was block. */
-.noticeBanner {
-  display: block;
-}
-
-/* #live wraps the toolbar + scroll pane; it must be a bounded flex column so
+/* #live wraps the shelf strip, the toolbar row + scroll pane; it must be a
+   bounded flex column so
    `.scroll` (flex:1) scrolls inside the pane. */
 .live {
   flex: 1;
@@ -194,7 +118,7 @@
   flex: 1;
   min-height: 0;
   overflow: auto;
-  padding: 2px 20px var(--sp-7);
+  padding: 2px var(--content-margin) var(--sp-6);
 }
 .content {
   position: relative;
@@ -204,26 +128,77 @@
   margin: 0.75rem 0;
 }
 
+/* ---------- The empty block (§14, proto 4064-4073, 4406) ---------- */
+
+/* Photos' OWN empty state, not the shared `.kit-empty`. The kit's version is
+   `text-align:center; padding:64px 20px` with a 0.95rem/600 title and a 0.82rem
+   sub at 38ch — a centred notice card. §14 asks for something else entirely,
+   and the difference is not decoration:
+
+     * IN FLOW AND LEFT-ALIGNED, 44ch. This is reading copy — a paragraph a
+       member reads once, on the first real screen this app ever shows them.
+       Centred prose is a label; left-aligned prose at a measure is text.
+     * The title is the DISPLAY register and the paragraph is the READING
+       register. Those are the two roles §2.1 says Photos draws in this exact
+       state, and the ramp already carries the phone step-down (display 31→27,
+       reading 19→17.5) so no media query re-derives it here.
+     * `padding: R.gap.xxl 0` — 32px block, none inline, because the block is
+       part of the page, not a card floating in it. */
+.empty {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-3);
+  max-inline-size: 44ch;
+  padding-block: var(--sp-6);
+}
+.emptyTitle {
+  margin: 0;
+  font: var(--t-display);
+  letter-spacing: var(--t-display-tracking, -0.01em);
+  color: var(--text);
+}
+/* `text-wrap: pretty` for the same reason the prototype sets it: a two-word
+   last line in a 44ch paragraph reads as an accident. */
+.emptyBody {
+  margin: 0;
+  font: var(--t-reading);
+  color: var(--text-soft);
+  text-wrap: pretty;
+}
+.emptyActions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-2);
+  padding-block-start: var(--sp-1);
+}
+/* A row that offers nothing costs no height. Trash and a search miss withhold
+   both actions (`emptyOffersImport`), and the buttons are `hidden` rather than
+   unmounted — upload.ts binds `#emptyUpload` once at boot — so this asks
+   whether any of them is actually shown. */
+.emptyActions:not(:has(button:not([hidden]))) {
+  display: none;
+}
+
 /* ---------- Overlays — re-scoped from viewport-fixed to app-pane-absolute ---------- */
 
-.selectionBar {
+/* The phone's selection action bar (§6, §15) — SelectionBottomBar's five
+   56px targets. On compact web/PWA surfaces it replaces the claimed Photos
+   band while selection is active, just as it does on Expo; the shell withdraws
+   the band grid item through `body.has-selection`, leaving this as the one
+   bottom surface. It is an ACTION bar, not a navigation band: it carries no
+   destinations and never calls `frame.claimBand`. Opaque paper and a
+   hairline, never a shadow or blur (§3.1's same rule for the bands — the
+   backdrop is unpredictable photographs either way). */
+.selectionBottomBar {
   position: absolute;
-  left: 50%;
-  transform: translateX(-50%);
-  bottom: max(1rem, env(safe-area-inset-bottom));
+  inset-inline: 0;
+  bottom: 0;
   z-index: 30;
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  max-width: calc(100% - 1.5rem);
+  padding-bottom: env(safe-area-inset-bottom);
   background: var(--bg-elev);
-  border: 1px solid var(--line-strong);
-  background-color: var(--accent-soft);
-  border-radius: 999px;
-  padding: 0.4rem 0.5rem 0.4rem 1rem;
-  box-shadow: var(--shadow-lg);
+  border-block-start: 1px solid var(--line);
 }
-.selectionBar[hidden] {
+.selectionBottomBar:empty {
   display: none;
 }
 .lightbox {
@@ -242,11 +217,24 @@
   align-items: center;
   justify-content: center;
   padding: 2rem 1rem;
-  background: hsl(var(--app-hue) 25% 4% / 0.97);
+  /* A theater stage, not a themed surface, and NEUTRAL: an identity hue is a
+     mark or a content accent, never a full-bleed ground (DESIGN.md, "What an
+     app may set for itself"). Still a literal because the token layer has no
+     opaque stage role — see the seam noted in token-purity-allowlist.ts. */
+  background: hsl(0 0% 4% / 0.97); /* governance: allow-no-hardcoded-colors */
   cursor: pointer;
 }
 .slideshow[hidden] {
   display: none;
+}
+/* `kit-viewer-nav` paints `color: var(--text)` — near-black ink on the LIGHT
+   ramp, which is invisible against this near-black stage. The stage is the
+   one surface in the app where the inverse ink is correct in both themes, so
+   the arrows take it here, exactly as Editor.module.css re-inks its `kit-btn`
+   children for the same backdrop. Reported upstream: the kit has no
+   on-a-dark-stage variant for this control. */
+.slideshow :global(.kit-viewer-nav) {
+  color: var(--text-inv);
 }
 /* kit-modal-back / kit-drop are global kit overlays (position:fixed); double the
    class to beat kit.css and re-scope to the pane. */
@@ -260,59 +248,24 @@
 }
 
 /* ---------- Global remainder OTHER code writes as plain strings ---------- */
-/* Header icon buttons — static (hamburger/zoom/slideshow) AND Enrichment.tsx's
-   face-proposer toggle (rendered as a literal string), so this vocabulary stays
-   global exactly as app.css keeps it. */
-:global(.ph-header-icon-btn) {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 36px;
-  height: 36px;
-  border: 1px solid var(--line);
-  border-radius: var(--r-md);
-  background: var(--bg-elev);
-  color: var(--text-soft);
-  flex-shrink: 0;
-}
-:global(.ph-header-icon-btn):hover {
-  color: var(--text);
-  border-color: var(--line-strong);
-}
-:global(.ph-header-icon-btn)[data-active="true"] {
-  border-color: var(--line-sel);
-  color: var(--accent-text);
-  background: var(--accent-soft);
-}
-:global(.ph-hamburger) {
-  display: none;
-}
-:global(.slideshow-toolbar-btn) {
-  display: none;
-}
-.shell:not(.isNarrow) :global(.slideshow-toolbar-btn) {
-  display: flex;
-}
+/* The `.ph-hamburger` / `.slideshow-toolbar-btn` display toggles are GONE with
+   the header that carried them (v4 §3): Photos draws no chrome of its own
+   inside the content pane, so there is no per-surface show/hide left to
+   express here. */
 
 /* Tile media guts injected by media.ts as plain strings (React never renders
-   these) — the placeholder shimmer + its keyframe, which Timeline.module.css /
-   Lightbox.module.css also reference by name, so BOTH must live global here. */
+   these). The placeholder is a STATIC recessed ground, matching `.kit-skeleton`
+   — which the Binding Layer already de-shimmered — because "Loading is
+   determinate-only with static skeletons; a shimmer is attention-seeking about
+   work the product can simply describe" (DESIGN.md, Components). This app was
+   the last renderer still animating `kit-shimmer` on an infinite loop, and it
+   did it once per unpainted tile, i.e. across the whole grid at once. Dropping
+   the animation also drops the per-component `prefers-reduced-motion` block
+   that guarded it: motion is honoured in ONE global rule now. */
 :global(.ph-tile-ph) {
   position: absolute;
   inset: 0;
-  background: linear-gradient(
-    100deg,
-    var(--bg-sunken) 30%,
-    color-mix(in srgb, var(--bg-sunken) 82%, var(--text-faint)) 50%,
-    var(--bg-sunken) 70%
-  );
-  background-size: 220% 100%;
-  animation: kit-shimmer 1.4s var(--ease) infinite;
-}
-@media (prefers-reduced-motion: reduce) {
-  :global(.ph-tile-ph) {
-    animation: none;
-  }
+  background: var(--bg-sunken);
 }
 :global(.ph-tile-video-badge) {
   position: absolute;
@@ -326,7 +279,7 @@
 :global(.ph-tile-video-badge) svg {
   width: 42px;
   height: 42px;
-  border-radius: 999px;
+  border-radius: var(--r-pill);
   background: color-mix(in oklab, var(--scrim) 56%, transparent);
   padding: var(--sp-3);
   box-sizing: border-box;
@@ -343,23 +296,22 @@
 :global(.ph-tile-audio-badge) svg {
   width: 54px;
   height: 54px;
-  border-radius: 999px;
+  border-radius: var(--r-pill);
   padding: var(--sp-3);
   background: color-mix(in oklab, var(--bg-elev) 82%, transparent);
   box-shadow: var(--shadow-sm);
 }
 :global(.ph-tile-duration) {
   position: absolute;
-  right: 7px;
+  inset-inline-end: 7px;
   bottom: 7px;
   z-index: 2;
   padding: 2px var(--sp-1);
-  border-radius: 4px;
+  border-radius: var(--r-sm);
   background: color-mix(in oklab, var(--scrim) 92%, transparent);
   color: var(--text-inv);
-  font-family: var(--font-mono);
-  font-size: 10px;
-  line-height: 1.25;
+  font: var(--t-mono);
+  font-variant-numeric: var(--t-mono-numeric);
   pointer-events: none;
 }
 
@@ -371,16 +323,16 @@
 :global(.lightbox-faces-title) {
   margin: 0 0 var(--sp-2);
   color: var(--text-faint);
-  font: var(--t-control);
-  text-transform: uppercase;
-  letter-spacing: 0.09em;
+  font: var(--t-eyebrow);
+  text-transform: var(--t-eyebrow-transform);
+  letter-spacing: var(--t-eyebrow-tracking);
 }
 :global(.lightbox-face) {
   display: flex;
   align-items: center;
   flex-wrap: wrap;
   gap: 0.375rem;
-  font-size: 0.85rem;
+  font: var(--t-small);
   margin-bottom: var(--sp-2);
 }
 :global(.lightbox-face) select {
@@ -389,60 +341,23 @@
   font: inherit;
   padding: 0.2rem 0.35rem;
   border: 1px solid var(--line);
-  border-radius: 0.4rem;
+  border-radius: var(--r-md);
   background: transparent;
   color: inherit;
 }
 
-/* The selection bar's "Add to album ▾" menu wrapper — app.tsx queries it by this
-   literal class name for the away-click hit test. */
+/* The selection bar's "Add to album ▾" menu wrapper — selection.tsx queries it
+   by this literal class name for the away-click hit test. */
 :global(.bar-menu-wrap) {
   position: relative;
   display: flex;
 }
-/* Nudge the kit toasts above the floating selection bar (body gets
-   `has-selection` from app.tsx). */
-:global(body.has-selection .kit-toasts) {
-  bottom: 4.75rem;
-}
+/* The `body.has-selection` nudge that used to live here retired with the
+   floating `#selectionBar` pill it was compensating for (v4 §6 close-out):
+   the bar now lives in `#toolbarMount`, in the layout's own flow, so nothing
+   needs to push the frame's status line out of its way — and restyling
+   `.kit-status-line`, a FRAME element, from inside the app is exactly what
+   the frame contract forbids. */
 
-/* ---------- Narrow (phone) — driven by `.isNarrow` on `.shell` ---------- */
-/* Inline the sidebar drawer is absolute within `.shell` (the app pane), not
-   fixed to the viewport as the served @media rules do. These out-specify the
-   served hashed `.sidebar`/`.scrim` rules (0,1,0) so they win at any viewport
-   width, and add the scrim (SidebarView renders it as the first child when the
-   drawer is open). */
-.shell.isNarrow :global(.ph-hamburger) {
-  display: flex;
-}
-.shell.isNarrow .sideHost > aside {
-  position: absolute;
-  inset: 0 auto 0 0;
-  width: 274px;
-  z-index: 46;
-  box-shadow: var(--shadow-lg);
-  transform: translateX(-110%);
-}
-/* Enable the slide only after the first painted frame (`.ready`), so the
-   mount-time narrow snap above is instant and only user-driven open/close
-   animates — the drawer-flash gate (#505). */
-.shell.ready.isNarrow .sideHost > aside {
-  transition: transform 0.26s var(--ease);
-}
-.shell.isNarrow .sideHost > aside[data-open="true"] {
-  transform: translateX(0);
-}
-/* The drawer scrim — SidebarView's first child, a real <button> (kit-modal-scrim)
-   since #573 so it is keyboard-reachable; it was a bare <div>. */
-.shell.isNarrow .sideHost > button {
-  display: block;
-  position: absolute;
-  inset: 0;
-  z-index: 45;
-  background: color-mix(in oklab, var(--scrim) 56%, transparent);
-}
-.shell.isNarrow .header,
-.shell.isNarrow .scroll {
-  padding-left: var(--sp-4);
-  padding-right: var(--sp-4);
-}
+/* Narrow changes measure and column count only. Pointer/touch resolves the
+   shared page margin once in the generated token sheet. */

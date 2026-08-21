@@ -16,9 +16,15 @@ import "./web.css";
 window.CentraidIroh = { fetch: irohFetch, url: irohVirtualUrl };
 installIrohServiceWorkerBridge();
 
+// The bundled `@font-face` rules ride AHEAD of the token CSS in the same
+// string, because `theme-vars.ts` prepends `cssText` as one <style> before
+// anything resolves `--font-sans` — a face declared after the first var()
+// lookup would let the shell paint a frame in the UA default (issue #707).
+// `__CENTRAID_FONT_FACE_CSS__` points at this origin's own `/fonts/`; the
+// `centraid-fonts` Vite plugin serves and emits the files there.
 window.CentraidTokens = {
   apps: [...tokens.apps],
-  cssText: tokens.toCss(),
+  cssText: `${__CENTRAID_FONT_FACE_CSS__}\n${tokens.toCss()}`,
   fonts: tokens.fonts,
   icons: tokens.icons,
   palette: tokens.palette,

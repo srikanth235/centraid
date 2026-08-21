@@ -8,8 +8,14 @@ import React, {
   useState,
 } from "react";
 import { Pressable, ScrollView, StyleSheet, View } from "react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
 
+import {
+  OCR_CONSENT_NOTE,
+  OCR_DECLINED_INLINE,
+  OCR_GATEWAY_NOT_A_CHOICE,
+  OCR_GATEWAY_PANEL,
+  OCR_ON_DEVICE_PANEL,
+} from "@centraid/blueprints/apps/_shared/capture-consent";
 import {
   allocateMinorUnits,
   parseReceiptText,
@@ -20,8 +26,10 @@ import type {
 } from "@centraid/client/receipt-capture";
 
 import { recognizeText } from "../../modules/centraid-ocr";
+import { ConsentGate } from "../kit/components/ConsentGate";
 import { Text } from "../kit/components/NativeText";
-import { showToast } from "../kit/components/Toast";
+import { postStatus } from "../kit/components/status-line";
+import TopSafeArea from "../kit/components/TopSafeArea";
 import { useReplicaQuery } from "../kit/hooks/useReplicaQuery";
 import { useReplica } from "../kit/replica/ReplicaProvider";
 import {
@@ -29,13 +37,19 @@ import {
   surfaceWriteOutcome,
 } from "../kit/replica/write-outcome";
 import { useTheme } from "../kit/theme";
-import { authHeader } from "../lib/gateway";
+import { apiHeaders, authHeader } from "../lib/gateway";
 import {
   backupDeviceMedia,
   backupDocument,
   backupReceiptExpense,
 } from "../lib/upload/media-producer";
 import type { ScanScreenProps } from "../navigation";
+import {
+  answerScanOcrConsent,
+  hydrateScanOcrConsent,
+  scanOcrExtractionAllowed,
+} from "./scan-consent";
+import type { ScanOcrConsentRecord } from "./scan-consent";
 import {
   ChoiceRows,
   CloseHeader,
@@ -82,6 +96,23 @@ export default function ScanScreen({
   const [allocations, setAllocations] = useState<Record<string, string[]>>({});
   const [busy, setBusy] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string>();
+  // THE OCR CONSENT LATCH (issue #712 C3). `undefined` means either "not yet
+  // hydrated" or "never answered" — `ocrConsentReady` tells the two apart so
+  // the extraction effect below never fires on a half-read latch.
+  const [ocrConsent, setOcrConsent] = useState<ScanOcrConsentRecord>();
+  const [ocrConsentReady, setOcrConsentReady] = useState(false);
+
+  useEffect(() => {
+    let active = true;
+    void hydrateScanOcrConsent().then((record) => {
+      if (!active) return;
+      setOcrConsent(record);
+      setOcrConsentReady(true);
+    });
+    return () => {
+      active = false;
+    };
+  }, []);
 
   const groups = useReplicaQuery(
     "tally",
@@ -163,12 +194,41 @@ export default function ScanScreen({
     [gatewayBase]
   );
 
+  // THE LOAD-BEARING RULE (issue #712 C3): extraction is reachable only once
+  // the latch has an explicit answer. While unanswered this waits — never
+  // treats "not yet answered" as "declined" — so the gate below gets to ask
+  // first. Once answered, this fires (or doesn't) exactly once per capture.
   useEffect(() => {
+    if (!fileUri || !ocrConsentReady || !ocrConsent) return;
     const sourceKey = `${fileUri}\0${mediaType}`;
-    if (!fileUri || extractedSource.current === sourceKey) return;
+    if (extractedSource.current === sourceKey) return;
     extractedSource.current = sourceKey;
-    void extract(fileUri, mediaType);
-  }, [extract, fileUri, mediaType]);
+    if (!scanOcrExtractionAllowed(ocrConsent)) return;
+    // Deferred a tick: `extract` sets state (busy) at its own top, before its
+    // first await, and an effect body should not itself trigger a synchronous
+    // React update — see https://react.dev/learn/you-might-not-need-an-effect.
+    void Promise.resolve().then(() => extract(fileUri, mediaType));
+  }, [extract, fileUri, mediaType, ocrConsent, ocrConsentReady]);
+
+  const answerOcrConsent = useCallback(
+    (answer: "on-device" | "not-now"): void => {
+      setOcrConsent(answerScanOcrConsent(answer));
+      // Re-key into the vault's egress-consent ledger (#807 W3), best-effort.
+      // A RECORD, INCLUDING THE "no" — never a gate: this latch is per-device
+      // by law (#712 C3), so the fire gate never reads an `on-device` row.
+      if (!gatewayBase) return;
+      void fetch(`${gatewayBase}/centraid/_vault/enrich/consent`, {
+        body: JSON.stringify({
+          capability: "ocr",
+          decision: answer === "on-device" ? "granted" : "declined",
+          egress: "on-device",
+        }),
+        headers: apiHeaders({ "content-type": "application/json" }),
+        method: "POST",
+      }).catch(() => undefined);
+    },
+    [gatewayBase]
+  );
 
   const takePhoto = async (): Promise<void> => {
     if (!permission?.granted) {
@@ -315,14 +375,12 @@ export default function ScanScreen({
           line_items: lineItems,
         });
       }
-      showToast({
-        message:
-          destination === "tally"
-            ? "Receipt published to Tally."
-            : `Scan saved to ${destination}.`,
-        tone: "accent",
-        action: { label: "Done", onPress: () => navigation.goBack() },
-      });
+      postStatus(
+        destination === "tally"
+          ? "Receipt published to Tally."
+          : `Scan saved to ${destination}.`,
+        { action: { label: "Done", run: () => navigation.goBack() } }
+      );
     } catch (error) {
       surfaceWriteFailure(error, "Scan not saved");
     } finally {
@@ -331,24 +389,42 @@ export default function ScanScreen({
   };
 
   return (
-    <SafeAreaView style={[styles.safe, { backgroundColor: colors.bg }]}>
+    <TopSafeArea style={[styles.safe, { backgroundColor: colors.bg }]}>
       <CloseHeader colors={colors} onClose={() => navigation.goBack()} />
       <ScrollView contentContainerStyle={styles.content}>
-        {fileUri ? (
+        {fileUri && ocrConsentReady && !ocrConsent ? (
+          // THE CONSENT GATE (issue #712 C3), shown once per device, before
+          // the first extraction. Declining still saves the scan — the
+          // destination flow below handles an unextracted scan inline,
+          // never as a dead end.
+          <ConsentGate
+            domain="docs"
+            onDevicePanel={OCR_ON_DEVICE_PANEL}
+            onDevice={{ available: true }}
+            netPanel={OCR_GATEWAY_PANEL}
+            net={{ available: false, reason: OCR_GATEWAY_NOT_A_CHOICE }}
+            note={OCR_CONSENT_NOTE}
+            onRunOnDevice={() => answerOcrConsent("on-device")}
+            onDecline={() => answerOcrConsent("not-now")}
+          />
+        ) : null}
+        {fileUri && !(ocrConsentReady && !ocrConsent) ? (
           <>
             <Text style={[styles.help, { color: colors.textSoft }]}>
               {busy
                 ? "Extracting text locally…"
                 : extraction
                   ? `${extraction.engine} · ${Math.round(extraction.confidence * 100)}% extraction confidence`
-                  : "Extraction unavailable"}
+                  : ocrConsent?.answer === "not-now"
+                    ? OCR_DECLINED_INLINE
+                    : "Extraction unavailable"}
             </Text>
             {errorMessage ? (
               <Text accessibilityRole="alert" style={{ color: colors.danger }}>
                 {errorMessage}
               </Text>
             ) : null}
-            {extraction ? (
+            {extraction || ocrConsent?.answer === "not-now" ? (
               <>
                 <View style={styles.destinationGrid}>
                   {DESTINATIONS.map(({ id, label }) => (
@@ -495,7 +571,7 @@ export default function ScanScreen({
                       {receipt.currency}
                     </Text>
                   </>
-                ) : (
+                ) : extraction ? (
                   <Field
                     label="Reviewed extracted text"
                     value={extraction.text}
@@ -505,6 +581,13 @@ export default function ScanScreen({
                     }
                     colors={colors}
                   />
+                ) : (
+                  // Declined at the gate (issue #712 C3): stated inline,
+                  // never a dead control — the field above simply doesn't
+                  // exist for a scan with no extracted text.
+                  <Text style={[styles.help, { color: colors.textSoft }]}>
+                    {OCR_DECLINED_INLINE}
+                  </Text>
                 )}
                 <PrimaryButton
                   label={busy ? "Saving…" : `Save to ${destination}`}
@@ -537,6 +620,6 @@ export default function ScanScreen({
           </>
         )}
       </ScrollView>
-    </SafeAreaView>
+    </TopSafeArea>
   );
 }

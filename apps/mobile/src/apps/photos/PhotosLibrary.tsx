@@ -5,12 +5,13 @@ import { Image } from "expo-image";
 import * as MediaLibrary from "expo-media-library";
 import React, { memo, useCallback, useMemo, useState } from "react";
 import { Alert, Modal, Pressable, View } from "react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
 
 import Icon from "../../kit/components/Icon";
 import { Text, TextInput } from "../../kit/components/NativeText";
-import { showToast } from "../../kit/components/Toast";
+import { postStatus } from "../../kit/components/status-line";
 import { useReplicaQuery } from "../../kit/hooks/useReplicaQuery";
+import { gridImageProps } from "../../kit/media/grid-image";
+import { imageSource } from "../../kit/media/media-source";
 import { useReplica } from "../../kit/replica/ReplicaProvider";
 import ReplicaStatusBar from "../../kit/replica/ReplicaStatusBar";
 import { useReplicaRefresh } from "../../kit/replica/useReplicaRefresh";
@@ -18,8 +19,12 @@ import {
   surfaceWriteFailure,
   surfaceWriteOutcome,
 } from "../../kit/replica/write-outcome";
+import {
+  revalidateBackedUp,
+  selectFreeUpCandidates,
+} from "../../kit/storage/free-up-space";
+import type { DeviceByteProbe } from "../../kit/storage/free-up-space";
 import { useTheme } from "../../kit/theme";
-import { optimisticRowId } from "../../lib/replica/optimistic";
 import { sha256OfFile } from "../../lib/upload/enqueue";
 import { expoFileSource } from "../../lib/upload/expo-native";
 import { createNativeDigest } from "../../lib/upload/native-digest";
@@ -30,11 +35,8 @@ import {
   InCloudOriginalError,
   openDeviceOriginal,
 } from "./device-media";
-import { revalidateBackedUp, selectFreeUpCandidates } from "./free-up-space";
-import type { DeviceByteProbe } from "./free-up-space";
-import { gridImageProps } from "./grid-image";
-import { imageSource } from "./media-source";
 import { styles } from "./PhotosLibrary.styles";
+import PhotosScreen from "./PhotosScreen";
 import type { PhotoAsset } from "./timeline-source";
 import { usePhotoTimeline } from "./timeline-source";
 
@@ -85,8 +87,8 @@ const AlbumCard = memo(
       >
         {String(album.name ?? "Album")}
       </Text>
-      <Text style={[styles.rowMeta, { color: colors.textSoft }]}>
-        {count} items
+      <Text style={[styles.rowMeta, { color: colors.textFaint }]}>
+        {count} {count === 1 ? "photograph" : "photographs"}
       </Text>
     </Pressable>
   )
@@ -112,10 +114,6 @@ export default function PhotosLibrary({
   const places = useReplicaQuery(
     "photos",
     useMemo(() => ({ entity: "core.place" }), [])
-  );
-  const policies = useReplicaQuery(
-    "photos",
-    useMemo(() => ({ entity: "enrich.policy" }), [])
   );
   const entries = useReplicaQuery(
     "photos",
@@ -214,34 +212,10 @@ export default function PhotosLibrary({
 
   const createAlbum = async (): Promise<void> => {
     if (!session || !title.trim()) return;
-    const albumId = optimisticRowId("album");
-    const createdAt = new Date().toISOString();
     try {
       const result = await session.write("photos", {
         action: "create-album",
         input: { title: title.trim() },
-        optimistic: [
-          {
-            op: "upsert",
-            entity: "core.collection",
-            rowId: albumId,
-            values: {
-              collection_id: albumId,
-              owner_party_id: String(
-                collections.rows[0]?.owner_party_id ?? "local-owner"
-              ),
-              name: title.trim(),
-              cover_content_id: null,
-              parent_collection_id: null,
-              sort_order:
-                Math.max(
-                  0,
-                  ...collections.rows.map((row) => Number(row.sort_order ?? 0))
-                ) + 1,
-              created_at: createdAt,
-            },
-          },
-        ],
       });
       if (surfaceWriteOutcome(result)) {
         setNewAlbum(false);
@@ -292,38 +266,32 @@ export default function PhotosLibrary({
         lines.push(
           `${result.inCloudCount} ${IN_CLOUD_MESSAGE} — their bytes could not be checked, so they were kept.`
         );
-      showToast({
-        message: lines.length
+      postStatus(
+        lines.length
           ? lines.join(" ")
           : result.changedCount || result.missingCount || result.inCloudCount
             ? "Vault freed with exclusions."
-            : "Vault freed.",
-        tone: "accent",
-      });
+            : "Vault freed."
+      );
     } catch (error) {
-      showToast({
-        message: `Free up vault paused: ${error instanceof Error ? error.message : String(error)}`,
-        tone: "danger",
-      });
+      postStatus(
+        `Free up vault paused: ${error instanceof Error ? error.message : String(error)}`
+      );
     } finally {
       setFreeing(false);
     }
   };
   const freeSpace = (): void => {
     if (!pinsHydrated) {
-      showToast({
-        message:
-          "Checking device pins — try again when protected albums finish loading.",
-        tone: "neutral",
-      });
+      postStatus(
+        "Checking device pins — try again when protected albums finish loading."
+      );
       return;
     }
     if (!freeCandidates.length) {
-      showToast({
-        message:
-          "Nothing to free — no verified backups are eligible right now.",
-        tone: "neutral",
-      });
+      postStatus(
+        "Nothing to free — no verified backups are eligible right now."
+      );
       return;
     }
     Alert.alert(
@@ -339,42 +307,21 @@ export default function PhotosLibrary({
       ]
     );
   };
-  const requestEnrichment = async (): Promise<void> => {
-    if (!session) return;
-    try {
-      const result = await session.write("photos", {
-        action: "request-enrichment",
-        input: {},
-      });
-      surfaceWriteOutcome(result, {
-        queuedMessage:
-          "Enrichment will start automatically when the gateway reconnects.",
-      });
-    } catch (error) {
-      surfaceWriteFailure(error, "Enrichment not requested");
-    }
-  };
-
   return (
-    <SafeAreaView
-      style={[styles.safe, { backgroundColor: colors.bg }]}
-      edges={["top"]}
-    >
+    // The band is the way out now (§F, proto:4953-4954), so the head carries
+    // NO back chevron: this surface is the band's `Library` destination, and a
+    // destination that also owns a back arrow gives a member two answers to
+    // "where does this go".
+    <PhotosScreen current="library">
       <View style={styles.header}>
-        <Pressable
-          accessibilityLabel="Back to Photos"
-          accessibilityRole="button"
-          onPress={() => navigation.goBack()}
-        >
-          <Icon name="chevron-left" size={26} color={colors.text} />
-        </Pressable>
         <Text style={[styles.title, { color: colors.text }]}>Library</Text>
         <Pressable
           accessibilityLabel="Create album"
           accessibilityRole="button"
           onPress={() => setNewAlbum(true)}
+          style={styles.headerBtn}
         >
-          <Icon name="plus" size={23} color={colors.accent} />
+          <Icon name="plus" size={22} color={colors.text} />
         </Pressable>
       </View>
       <ReplicaStatusBar />
@@ -393,14 +340,14 @@ export default function PhotosLibrary({
         ListEmptyComponent={
           <View style={styles.pageSection}>
             <Text style={[styles.empty, { color: colors.textSoft }]}>
-              No albums yet. Tap + to create one.
+              No albums yet — tap + to create one.
             </Text>
           </View>
         }
         ListHeaderComponent={
           <View style={styles.pageSection}>
             <Text style={[styles.section, { color: colors.textSoft }]}>
-              YOUR LIBRARY
+              Your library
             </Text>
             <Pressable
               accessibilityLabel="Open favorite photos"
@@ -452,7 +399,7 @@ export default function PhotosLibrary({
               <Row
                 icon="users"
                 title="People"
-                meta={`${new Set(faces.rows.map((row) => row.party_id).filter(Boolean)).size} people · ${faces.rows.filter((row) => !row.confirmed_by_party_id).length} proposals`}
+                meta={`${new Set(faces.rows.map((row) => row.party_id).filter(Boolean)).size} people · ${faces.rows.filter((row) => row.review_state === "proposed").length} proposals`}
                 colors={colors}
               />
             </Pressable>
@@ -481,19 +428,23 @@ export default function PhotosLibrary({
               />
             </Pressable>
             <Text style={[styles.section, { color: colors.textSoft }]}>
-              ALBUMS
+              Albums
             </Text>
           </View>
         }
         ListFooterComponent={
           <View style={styles.pageSection}>
             <Text style={[styles.section, { color: colors.textSoft }]}>
-              BACKUP &amp; STORAGE
+              Backup &amp; storage
             </Text>
             <Pressable
               accessibilityLabel="Open backup health"
               accessibilityRole="button"
-              onPress={() => navigation.navigate("BackupHealth")}
+              onPress={() =>
+                // Cross-stack since issue #712 B2: Backup health is a frame
+                // screen in Settings now, not a Photos route.
+                navigation.navigate("Settings", { screen: "BackupHealth" })
+              }
             >
               <Row
                 icon="cloud"
@@ -522,18 +473,6 @@ export default function PhotosLibrary({
                 colors={colors}
               />
             </Pressable>
-            <Pressable
-              accessibilityLabel="Request photo enrichment"
-              accessibilityRole="button"
-              onPress={() => void requestEnrichment()}
-            >
-              <Row
-                icon="zap"
-                title="Enrichment"
-                meta={`${policies.rows.length} consent policies · request faces, places and metadata`}
-                colors={colors}
-              />
-            </Pressable>
           </View>
         }
       />
@@ -546,14 +485,20 @@ export default function PhotosLibrary({
         <Pressable
           accessibilityLabel="Close create album dialog"
           accessibilityRole="button"
-          style={styles.backdrop}
+          style={[styles.backdrop, { backgroundColor: colors.scrim }]}
           onPress={() => setNewAlbum(false)}
         />
-        <View style={[styles.dialog, { backgroundColor: colors.bgElev }]}>
+        <View
+          style={[
+            styles.dialog,
+            { backgroundColor: colors.bgElev, borderColor: colors.line },
+          ]}
+        >
           <Text style={[styles.dialogTitle, { color: colors.text }]}>
             New album
           </Text>
           <TextInput
+            accessibilityLabel="Album name"
             autoFocus
             value={title}
             onChangeText={setTitle}
@@ -564,17 +509,20 @@ export default function PhotosLibrary({
               { borderColor: colors.lineStrong, color: colors.text },
             ]}
           />
+          {/* The dialog's ONE filled element — the thing it exists to do. */}
           <Pressable
             accessibilityLabel="Create album"
             accessibilityRole="button"
-            style={[styles.create, { backgroundColor: colors.accent }]}
+            style={[styles.create, { backgroundColor: colors.accentFill }]}
             onPress={() => void createAlbum()}
           >
-            <Text style={styles.createText}>Create</Text>
+            <Text style={[styles.createText, { color: colors.textInv }]}>
+              Create
+            </Text>
           </Pressable>
         </View>
       </Modal>
-    </SafeAreaView>
+    </PhotosScreen>
   );
 }
 
@@ -591,14 +539,23 @@ function Row({
 }): React.JSX.Element {
   return (
     <View style={[styles.row, { borderBottomColor: colors.line }]}>
-      <View style={[styles.icon, { backgroundColor: colors.bgSunken }]}>
-        <Icon name={icon} size={18} color={colors.accent} />
+      {/* The row's mark is a quiet outlined tile, not a tinted fill: a page of
+          nine rows would otherwise carry nine filled elements (§18). */}
+      <View
+        style={[
+          styles.icon,
+          { backgroundColor: colors.bgSunken, borderColor: colors.line },
+        ]}
+      >
+        <Icon name={icon} size={19} color={colors.textSoft} />
       </View>
       <View style={styles.rowCopy}>
         <Text style={[styles.rowTitle, { color: colors.text }]}>{title}</Text>
-        <Text style={[styles.rowMeta, { color: colors.textSoft }]}>{meta}</Text>
+        <Text style={[styles.rowMeta, { color: colors.textFaint }]}>
+          {meta}
+        </Text>
       </View>
-      <Icon name="chevron-right" size={18} color={colors.textFaint} />
+      <Icon name="chevron-right" size={18} color={colors.textGhost} />
     </View>
   );
 }

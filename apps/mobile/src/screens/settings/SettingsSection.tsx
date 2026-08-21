@@ -34,7 +34,7 @@ const makeStyles = (colors: ThemeColors) =>
     label: {
       ...t("small"),
       color: colors.textFaint,
-      fontFamily: family.monoMedium,
+      fontFamily: family.sansMedium,
       letterSpacing: 0.8,
       marginBottom: spacing[3],
       textTransform: "uppercase",

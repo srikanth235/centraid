@@ -1,8 +1,9 @@
-import { nodeProject } from "@centraid/test-kit/vitest";
+import { defineConfig } from "vitest/config";
 
-export default nodeProject({
+import { mobileVitestProjects } from "./vitest.projects";
+
+export default defineConfig({
   test: {
-    name: "@centraid/mobile",
-    include: ["src/**/*.test.ts", "src/**/*.test.tsx", "scripts/**/*.test.mjs"],
+    projects: mobileVitestProjects,
   },
 });

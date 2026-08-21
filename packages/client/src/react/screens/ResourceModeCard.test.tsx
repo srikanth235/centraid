@@ -35,8 +35,6 @@ describe("screens/ResourceModeCard", () => {
       workerMaxOldGenerationMb: 1280,
       workerPoolSize: 3,
       replicationConcurrency: 2,
-      staticBrotliQuality: 6,
-      staticGzipQuality: 7,
       sqliteSynchronous: "FULL",
       vaultSweepIntervalMs: 300_000,
       outboxIdleIntervalMs: 1000,
@@ -124,7 +122,7 @@ describe("screens/ResourceModeCard", () => {
       await act(async () => performance.click());
       expect(saveMode).toHaveBeenCalledWith("performance");
       expect(el.textContent).toContain(
-        "Applies fully on the next gateway restart"
+        "applies fully on the next gateway restart"
       );
     });
 
@@ -187,7 +185,7 @@ describe("screens/ResourceModeCard", () => {
         await Promise.resolve();
       });
       expect(el.textContent).toContain(
-        "Applies fully on the next gateway restart"
+        "applies fully on the next gateway restart"
       );
       expect(checkedRadioText(el)).toContain("Performance");
     });
@@ -297,7 +295,7 @@ describe("screens/ResourceModeCard", () => {
       );
       expect(dialog).not.toBeNull();
       // Static preset values from the mirror are visible side by side.
-      expect(dialog?.textContent).toContain("brotli q10");
+      expect(dialog?.textContent).toContain("Replication");
       expect(dialog?.textContent).toContain("Relaxed");
 
       const perf = el.querySelector(
@@ -317,7 +315,7 @@ describe("screens/ResourceModeCard", () => {
         el.querySelector('[data-testid="resource-compare-dialog"]')
       ).toBeNull();
       expect(el.textContent).toContain(
-        "Applies fully on the next gateway restart"
+        "applies fully on the next gateway restart"
       );
     });
   });

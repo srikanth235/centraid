@@ -22,4 +22,23 @@ export const Store = {
       /* swallow quota errors — non-essential */
     }
   },
+  remove(key: string): void {
+    try {
+      localStorage.removeItem(PREFIX + key);
+    } catch {
+      /* a store that cannot forget is worse than one that cannot remember,
+         but there is nothing useful to do about a throwing localStorage */
+    }
+  },
+  /** Every key under a namespace — the bulk-forget the query cache needs when a
+   *  vault change makes a whole generation of answers wrong. */
+  removeByPrefix(prefix: string): void {
+    try {
+      const full = PREFIX + prefix;
+      for (const key of Object.keys(localStorage))
+        if (key.startsWith(full)) localStorage.removeItem(key);
+    } catch {
+      /* see above */
+    }
+  },
 };

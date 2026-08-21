@@ -1,0 +1,26 @@
+{
+  "name": "Text embeddings",
+  "version": "0.1.0",
+  "description": "Embeds new text derivatives in bounded cursor batches.",
+  "enabled": false,
+  "prompt": "Build my seat-local text similarity index from extracted text in bounded batches.",
+  "triggers": [
+    {
+      "kind": "data",
+      "entities": ["core.content_derivative"],
+      "every": "*/5 * * * *"
+    }
+  ],
+  "requires": {},
+  "vault": {
+    "purpose": "dpv:ServiceProvision",
+    "why": "Reads text derivatives and writes vectors through the dedicated validated vector command.",
+    "scopes": [
+      { "schema": "core", "verbs": "read" },
+      { "schema": "enrich", "verbs": "read+act" }
+    ]
+  },
+  "enrich": { "domain": "docs", "capability": "embed-text", "lane": "gateway" },
+  "history": { "keep": { "count": 100 } },
+  "generated": { "by": "centraid-template", "at": "2026-08-10T00:00:00.000Z" }
+}

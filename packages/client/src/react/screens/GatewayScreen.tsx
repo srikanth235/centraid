@@ -1,9 +1,13 @@
+// governance: allow-repo-hygiene file-size-limit one instrument-panel screen
+// (runtime + backup + storage + components + logs + alerts) threading bridge
+// props to each drill-in's own screen component — binding layer v11 traded the
+// tab strip for one scrolling overview, which moved the drill-in links into the
+// body without shortening the prop wiring.
 import { useRef, useState } from "react";
 import type { JSX } from "react";
 
 import {
   availabilityPct,
-  buildOutageRows,
   formatAgo,
   formatClock,
   formatDuration,
@@ -14,11 +18,17 @@ import type {
   GatewayRuntimeSnapshot,
   ReconciledStatus,
 } from "../shell/routes/gatewayData.js";
-import { cx } from "../ui/cx.js";
+import BarsBlock from "../ui/BarsBlock.js";
 import Icon from "../ui/Icon.js";
+import PanelBlock from "../ui/PanelBlock.js";
+import type { PanelFact } from "../ui/PanelBlock.js";
+import RowsBlock from "../ui/RowsBlock.js";
+import type { RowDef } from "../ui/RowsBlock.js";
+import SectionBlock from "../ui/SectionBlock.js";
 import BackupCard from "./BackupCard.js";
 import type { BackupCardProps } from "./BackupCard.js";
 import GatewayAlertsTab from "./GatewayAlertsTab.js";
+import { buildHeartbeatStrip } from "./gatewayHeartbeat.js";
 import GatewayServiceTip from "./GatewayServiceTip.js";
 import LogsScreen from "./LogsScreen.js";
 import type { LogsBridgeProps } from "./LogsScreen.js";
@@ -27,8 +37,10 @@ import type {
   ResourceMode,
   ResourceModeCardProps,
 } from "./ResourceModeCard.js";
-import RestartGatewayButton from "./RestartGatewayButton.js";
-import SettingsDiagnosticsScreen from "./SettingsDiagnosticsScreen.js";
+import RestartGatewayScreen from "./RestartGatewayScreen.js";
+import SettingsDiagnosticsScreen, {
+  componentLabel,
+} from "./SettingsDiagnosticsScreen.js";
 import type {
   DiagnosticsConnectionsProps,
   GatewayHealthDTO,
@@ -37,13 +49,29 @@ import type {
 import StorageScreen from "./StorageScreen.js";
 import type { StorageScreenProps } from "./StorageScreen.js";
 
-import a11y from "../styles/a11y.module.css";
 import styles from "./GatewayScreen.module.css";
 
-// Gateway runtime, backup custody, local storage, component health, logs, and
-// alerts share one instrument panel (#341/#344/#347/#608). Backup/recovery
-// stays on Overview; footprint and limits live on Storage. People & devices
-// remain on Household (#599), where their ownership context is visible.
+/*
+ * System — gateway runtime, backup custody, capacity, resource mode, and the
+ * three drill-ins (#341/#344/#347/#608; binding layer v11).
+ *
+ * ONE SCROLLING OVERVIEW, NO TAB STRIP. The tabs were page-level navigation
+ * dressed as a filter: they put Components, Logs and Alert history in front of
+ * a member who arrived because a backup was overdue, and they hid Capacity
+ * behind a word. In v11 the page reads top to bottom in the order the
+ * questions are asked — is it answering, what is wrong now, are there copies,
+ * is there room, how hard is it working, what is it — and the three diagnostic
+ * pages are LINKS at the foot, under "Look closer". A drill-in is a page, so it
+ * carries its own way back: System is never pinned in the band, and without
+ * that row there is no route home at all.
+ *
+ * Green sections are absent, not empty: "What's wrong now" does not exist when
+ * nothing is.
+ *
+ * People & devices remain on Household (#599), where their ownership context is
+ * visible; the alert history stays here rather than on Notifications, because
+ * durable machine health is System's subject.
+ */
 
 export interface GatewayScreenProps {
   snapshot: GatewayRuntimeSnapshot;
@@ -51,29 +79,29 @@ export interface GatewayScreenProps {
   now: number;
   /** True while a settings write is in flight — the alert card locks. */
   savingAlert?: boolean;
-  onAlertSecondsChange: (seconds: number) => void;
-  onAlertsEnabledChange: (enabled: boolean) => void;
+  onAlertSecondsChange?: (seconds: number) => void;
+  onAlertsEnabledChange?: (enabled: boolean) => void;
   /** Optional launch-at-login toggle; defaults false for older hosts/tests. */
   launchAtLogin?: boolean;
   onLaunchAtLoginChange?: (enabled: boolean) => void;
   /** True while the launch-at-login write is in flight — locks just that switch. */
   savingLaunchAtLogin?: boolean;
-  /** Polled component-health summary — reconciles the Overview orb and
-   *  badges the Components tab. `null` before the first poll lands. */
+  /** Polled component-health summary — reconciles the Overview status and
+   *  names the rows under "What's wrong now". `null` before the first poll. */
   health: GatewayHealthDTO | null;
   loadHealth: SettingsDiagnosticsBridgeProps["loadHealth"];
-  /** Host plumbing for the Components tab's Connections section (issue #665).
+  /** Host plumbing for the Components drill-in's Connections section (#665).
    *  Optional so hosts with no gateway registry (and route tests) still render. */
   connections?: DiagnosticsConnectionsProps;
   streamLogs: LogsBridgeProps["streamLogs"];
   /**
-   * Restart the local embedded gateway (Overview tab, near the runtime
-   * status). Refused for a remote gateway — main answers `{ok: false}`
-   * with an explanation, rendered inline rather than thrown.
+   * Restart the local embedded gateway (Identity section). Refused for a
+   * remote gateway — main answers `{ok: false}` with an explanation, rendered
+   * inline rather than thrown.
    */
-  onRestartGateway: () => Promise<{ ok: boolean; error?: string }>;
+  onRestartGateway?: () => Promise<{ ok: boolean; error?: string }>;
   /** Save `/centraid/_gateway/diagnostics` through a native dialog (Logs
-   *  tab toolbar). `canceled` when the user dismissed the dialog. */
+   *  drill-in toolbar). `canceled` when the user dismissed the dialog. */
   onExportDiagnostics: LogsBridgeProps["onExportDiagnostics"];
   /**
    * Resource mode (#521) — durable owner preference for how hard the gateway
@@ -97,60 +125,73 @@ export interface GatewayScreenProps {
    */
   loadKnobPrefs?: ResourceModeCardProps["loadKnobPrefs"];
   saveKnobPrefs?: ResourceModeCardProps["saveKnobPrefs"];
-  /** Backup custody remains on Overview while local footprint lives on Storage. */
+  /** Backup custody sits above capacity — the copies question comes first. */
   backup?: Omit<BackupCardProps, "now">;
   initialTab?: TabId;
+  /**
+   * Open one of System's pages AS A ROUTE, so the frame's back arrow returns
+   * to the overview and a drill-in can be deep-linked.
+   *
+   * Absent, the screen keeps the page in local state and behaves exactly as it
+   * did — which is what a test rendering it standalone, or a host with no
+   * router, needs. The one thing it must never do is draw its own back
+   * control: that was a second, competing way back sitting inside the page.
+   */
+  onOpenTab?: (tab: TabId) => void;
   loadLocalUsage?: StorageScreenProps["loadLocalUsage"];
   saveStorageLimits?: StorageScreenProps["saveStorageLimits"];
+  loadOwners?: StorageScreenProps["loadOwners"];
+  /** Viewer seats can inspect this gateway but cannot operate its host. */
+  readOnly?: boolean;
+  focus?: "backups" | "capacity";
+  cause?: "backup-alert";
 }
 
-type TabId = "overview" | "storage" | "components" | "logs" | "alerts";
-
-const TABS: readonly { id: TabId; label: string }[] = [
-  { id: "overview", label: "Overview" },
-  { id: "storage", label: "Storage" },
-  { id: "components", label: "Components" },
-  { id: "logs", label: "Logs" },
-  { id: "alerts", label: "Alerts" },
-];
+type TabId =
+  | "overview"
+  | "storage"
+  | "components"
+  | "logs"
+  | "alerts"
+  | "restart";
+type DrillId = Exclude<TabId, "overview">;
 
 const STATUS_WORD: Record<ReconciledStatus, string> = {
-  up: "Operational",
+  up: "Answering",
   degraded: "Degraded",
-  down: "Unreachable",
-  unknown: "Listening…",
+  down: "Not answering",
+  unknown: "Checking…",
 };
 
-/** Only the tail of the sample ring fits the strip comfortably. */
-const STRIP_SAMPLES = 120;
-
-function Figure({
-  label,
-  value,
-  sub,
-}: {
-  label: string;
-  value: string;
-  sub?: string;
-}): JSX.Element {
-  return (
-    <div className={styles.figure}>
-      <div className={styles.figureLabel}>{label}</div>
-      <div className={styles.figureValue}>{value}</div>
-      {sub ? <div className={styles.figureSub}>{sub}</div> : null}
-    </div>
-  );
-}
+/** The drill-in's own title — what the app bar says while you are on it. The
+ *  way BACK is the frame's, not the page's. */
+const DRILL: Record<DrillId, string> = {
+  alerts: "Alert history",
+  components: "Components",
+  logs: "Logs",
+  restart: "Restart the gateway",
+  storage: "Storage",
+};
 
 export default function GatewayScreen(props: GatewayScreenProps): JSX.Element {
   const { snapshot, now, health } = props;
   const heartbeat = snapshot.status;
   const overall = reconcileStatus(heartbeat, health);
-  const unhealthyCount = health
-    ? health.components.filter((c) => c.status !== "ok").length
-    : 0;
+  const unhealthy = health
+    ? health.components.filter((c) => c.status !== "ok")
+    : [];
 
-  const [tab, setTab] = useState<TabId>(props.initialTab ?? "overview");
+  const [localTab, setLocalTab] = useState<TabId>(
+    props.initialTab ?? "overview"
+  );
+  // Routed when the host gave us a way to navigate — the route is then the one
+  // source of truth for which page is showing, and the frame owns the way back.
+  const routed = props.onOpenTab !== undefined;
+  const tab = routed ? (props.initialTab ?? "overview") : localTab;
+  const setTab = (next: TabId): void => {
+    if (props.onOpenTab) props.onOpenTab(next);
+    else setLocalTab(next);
+  };
   const [logsFocus, setLogsFocus] = useState<
     { text: string; nonce: number } | undefined
   >(undefined);
@@ -160,6 +201,7 @@ export default function GatewayScreen(props: GatewayScreenProps): JSX.Element {
     setLogsFocus({ text: component, nonce: jumpNonceRef.current });
     setTab("logs");
   };
+  const drill: DrillId | null = tab === "overview" ? null : tab;
 
   // The gateway's own uptime clock, advanced from the last heartbeat so it
   // ticks between polls. Server-reported, so a desktop/gateway clock skew
@@ -172,12 +214,240 @@ export default function GatewayScreen(props: GatewayScreenProps): JSX.Element {
       ? snapshot.gatewayUptimeMs + Math.max(0, now - snapshot.lastCheckAt)
       : undefined;
   const availability = availabilityPct(snapshot);
-  const outageRows = buildOutageRows(snapshot, now);
-  const samples = snapshot.samples.slice(-STRIP_SAMPLES);
-  const stripSpanMs =
-    samples.length >= 2
-      ? (samples[samples.length - 1]?.at ?? 0) - (samples[0]?.at ?? 0)
-      : 0;
+  // The heartbeat strip — the handoff's picture of availability, drawn from
+  // the window we actually measured. SEAM: `samples` is a per-launch ring, so
+  // the strip names THIS SESSION in its axis, its note and its aria sentence
+  // rather than the handoff's thirty days; a durable daily series has to reach
+  // the gateway contract before the month can be drawn honestly. See
+  // `gatewayHeartbeat.ts` for why the columns are probes and not minutes.
+  const strip = buildHeartbeatStrip(snapshot.samples, now);
+
+  // ── The hero, WHEN THERE IS SOMETHING TO EXPLAIN.
+  //
+  // It used to open the page in every state, and once the strip and the status
+  // line's own stamp landed it was saying nothing the rest of the page had not
+  // already said better: "This browser last synced 4s ago" over a foot that
+  // reads "Synced · 4s ago" and an app bar that reads "checked just now";
+  // "availability 100.0%" over a strip whose entire subject is availability;
+  // "uptime 3h 31m" over an Identity row stating when the gateway started. A
+  // panel restating its own page is furniture, and a bordered one at the top of
+  // the first screenful is expensive furniture.
+  //
+  // A gateway that is NOT ANSWERING is the exception, and the reason to keep
+  // the block at all: that state needs a paragraph, not a row — what stopped,
+  // what did not, and what it means for the other devices — and the page's
+  // subject really is the outage. Degraded stays absent: "What's wrong now"
+  // already names the component and offers the page that can act on it, which
+  // is more than a paragraph could.
+  const heroTitle =
+    snapshot.statusSince === undefined
+      ? STATUS_WORD.down
+      : `Not answering since ${formatClock(snapshot.statusSince)}`;
+  // The consequence, said out loud at the moment it bites. A local gateway is
+  // a child of this app, so "down" also means every other device just lost the
+  // vault — most people meet that fact as "my phone can't see my stuff", with
+  // nothing connecting it back to here.
+  const heroBody = props.readOnly
+    ? `Runs on ${snapshot.gatewayLabel}, and this browser cannot reach it. What the rest of this page shows is the last replica that machine sent.`
+    : snapshot.gatewayKind === "local"
+      ? "The bytes are on this machine's disk; what stopped is the daemon that reads them, so other devices cannot reach it."
+      : "The bytes are on the machine's disk; what is unreachable is the daemon that reads them, a smaller problem.";
+
+  const heroFacts: PanelFact[] = [
+    {
+      key: "uptime",
+      mono: true,
+      value: uptimeMs === undefined ? "——" : formatUptime(uptimeMs),
+    },
+    {
+      key: "latency",
+      mono: true,
+      value:
+        heartbeat === "up" && snapshot.latencyMs !== undefined
+          ? `${snapshot.latencyMs} ms`
+          : "——",
+    },
+    {
+      key: "availability",
+      mono: true,
+      note: `${snapshot.checksTotal} checks this session`,
+      value: availability === undefined ? "——" : `${availability.toFixed(1)}%`,
+    },
+  ];
+  if (snapshot.statusSince !== undefined && !props.readOnly) {
+    heroFacts.push({
+      key: "in this state",
+      mono: true,
+      value: formatDuration(now - snapshot.statusSince),
+    });
+  }
+  if (heartbeat === "down" && snapshot.lastError) {
+    heroFacts.push({
+      key: "last error",
+      mono: true,
+      net: true,
+      value: snapshot.lastError,
+    });
+  }
+
+  // ── What's wrong now. One row per thing, each carrying the way to the page
+  // that can do something about it. Absent entirely when nothing is wrong.
+  const openComponents = (): void => setTab("components");
+  const trouble: RowDef[] = [];
+  if (overall === "down") {
+    trouble.push({
+      id: "gateway-down",
+      meta: "ongoing",
+      net: true,
+      sub:
+        snapshot.statusSince === undefined
+          ? "the machine may be asleep, or the daemon may have stopped"
+          : `since ${formatClock(snapshot.statusSince)} · the machine may be asleep, or the daemon may have stopped`,
+      title: "The gateway is not answering",
+      ...(props.readOnly
+        ? {}
+        : { action: { label: "Components", onClick: openComponents } }),
+    });
+  }
+  for (const component of unhealthy) {
+    trouble.push({
+      id: `unhealthy-${component.component}`,
+      meta: component.status,
+      net: true,
+      sub:
+        component.lastError ??
+        component.detail ??
+        `${component.errorCount} error${component.errorCount === 1 ? "" : "s"} since it last answered`,
+      title: componentLabel(component.component),
+      ...(props.readOnly
+        ? {}
+        : { action: { label: "Components", onClick: openComponents } }),
+    });
+  }
+
+  // ── Identity. Architecture nouns are allowed here and nowhere else.
+  const identity: RowDef[] = [
+    {
+      id: "machine",
+      // UPTIME LIVES HERE NOW, ticking, rather than in a hero fact list: this
+      // is the row about the machine, and how long it has been up is a fact
+      // about the machine.
+      meta: uptimeMs === undefined ? "gateway" : `up ${formatUptime(uptimeMs)}`,
+      sub:
+        uptimeMs === undefined
+          ? `${snapshot.gatewayKind} gateway`
+          : `${snapshot.gatewayKind} gateway · started ${formatClock(now - uptimeMs)}`,
+      title: snapshot.gatewayLabel,
+    },
+    {
+      id: "version",
+      meta: snapshot.version ?? "—",
+      sub:
+        snapshot.protocolVersion === undefined
+          ? "the build this gateway is running"
+          : `protocol ${snapshot.protocolVersion}`,
+      title: "Version",
+    },
+    {
+      id: "checks",
+      // AVAILABILITY AND LATENCY LAND HERE, for the same reason: they are facts
+      // about the probing, and this is the probing's row. The strip above draws
+      // the shape; this states the two numbers the shape cannot.
+      meta:
+        availability === undefined
+          ? "this session"
+          : `${availability.toFixed(1)}% this session`,
+      sub: [
+        `${snapshot.checksTotal.toLocaleString()} run`,
+        `${snapshot.checksFailed.toLocaleString()} failed`,
+        heartbeat === "up" && snapshot.latencyMs !== undefined
+          ? `${snapshot.latencyMs} ms last round trip`
+          : undefined,
+      ]
+        .filter(Boolean)
+        .join(" · "),
+      title: "Heartbeats",
+    },
+  ];
+  if (props.readOnly) {
+    identity.push({
+      id: "restart",
+      meta: "read-only",
+      sub: "restarting the gateway is done on that machine",
+      title: `Runs on ${snapshot.gatewayLabel}`,
+    });
+  } else if (props.onRestartGateway) {
+    // A PAGE, not a button. Twenty seconds with the vault out of reach of
+    // every device is a consequence that belongs in front of the member before
+    // the act, not in a tooltip after it.
+    identity.push({
+      action: {
+        hint: "Read what a restart does, then decide",
+        label: "Restart",
+        onClick: () => setTab("restart"),
+      },
+      id: "restart",
+      sub: "apps reconnect on their own · nothing is written during a restart",
+      title: "Restart the gateway",
+    });
+  }
+
+  // ── Look closer. Pages, linked — not tabs. Storage is absent on purpose:
+  // capacity is already on this page, and its route id survives only so old
+  // deep links land somewhere.
+  const lookCloser: RowDef[] = [
+    {
+      action: {
+        hint: "Open Components",
+        label: "Open",
+        onClick: openComponents,
+      },
+      id: "components",
+      meta:
+        unhealthy.length > 0
+          ? `${unhealthy.length} in trouble`
+          : health
+            ? `${health.components.length} answering`
+            : "not read yet",
+      net: unhealthy.length > 0,
+      sub: "every subsystem, whether it is answering, and what to do if it is not",
+      title: "Components",
+    },
+    {
+      action: {
+        hint: "Open Logs",
+        label: "Open",
+        onClick: () => setTab("logs"),
+      },
+      id: "logs",
+      sub: "the stream, with a focus query · export diagnostics from here",
+      title: "Logs",
+    },
+    {
+      action: {
+        hint: "Open Alert history",
+        label: "Open",
+        onClick: () => setTab("alerts"),
+      },
+      id: "alerts",
+      sub: "every alert this gateway has raised, and what cleared it",
+      title: "Alert history",
+    },
+  ];
+
+  const capacity =
+    props.loadLocalUsage && props.saveStorageLimits ? (
+      <StorageScreen
+        loadLocalUsage={props.loadLocalUsage}
+        saveStorageLimits={props.saveStorageLimits}
+        {...(props.loadOwners ? { loadOwners: props.loadOwners } : {})}
+        gatewayLabel={snapshot.gatewayLabel}
+        readOnly={props.readOnly}
+      />
+    ) : null;
+  const backups = props.backup ? (
+    <BackupCard {...props.backup} now={now} readOnly={props.readOnly} />
+  ) : null;
 
   return (
     <div className={styles.page} data-status={overall}>
@@ -186,7 +456,7 @@ export default function GatewayScreen(props: GatewayScreenProps): JSX.Element {
           <span className={styles.titleIcon}>
             <Icon name="Cellular" size={16} />
           </span>
-          <h1>Gateway</h1>
+          <h1>{drill ? DRILL[drill] : "System"}</h1>
         </div>
         <div className={styles.headMeta}>
           heartbeat · every {Math.round(snapshot.pollIntervalMs / 1000)}s
@@ -196,259 +466,147 @@ export default function GatewayScreen(props: GatewayScreenProps): JSX.Element {
         </div>
       </div>
 
-      <div className={styles.tabs} role="tablist" aria-label="Gateway">
-        {TABS.map((t) => (
-          <button
-            key={t.id}
-            type="button"
-            role="tab"
-            aria-selected={tab === t.id}
-            className={cx(styles.tab, tab === t.id && styles.tabActive)}
-            onClick={() => setTab(t.id)}
-          >
-            {t.label}
-            {t.id === "components" && unhealthyCount > 0 ? (
-              <span className={styles.tabBadge}>{unhealthyCount}</span>
-            ) : null}
-          </button>
-        ))}
-      </div>
+      {/* NO BACK ROW. A drill-in used to open its own "‹ System · Back" row at
+          the top of the page — a second back control, three inches below the
+          frame's own back arrow and pointing at the same place. The drill-ins
+          are routes now (`onOpenTab`), so the arrow in the chrome already
+          returns to the overview and the page keeps its first screenful for
+          what it is actually about. */}
 
       {tab === "overview" ? (
         <>
+          {/* ONLY WHEN IT IS NOT ANSWERING (see `heroTitle` above). No eyebrow
+              either: the badge over the title was a third statement of what the
+              `<h1>` and the body already say. */}
+          {overall === "down" ? (
+            <PanelBlock
+              body={heroBody}
+              facts={heroFacts}
+              title={heroTitle}
+              tone="net"
+              wide
+            />
+          ) : null}
+
+          {/* Availability as a shape rather than a percentage: a percentage
+              cannot say WHEN it stopped, and that is the question people
+              arrive with. Absent until three probes have landed — below that
+              the strip is two rectangles rather than a shape. */}
+          {strip ? (
+            <div data-testid="heartbeat-strip">
+              <BarsBlock
+                ariaLabel={strip.ariaLabel}
+                axis={strip.axis}
+                bars={strip.bars}
+                legend={strip.legend}
+                note={strip.note}
+                partial={strip.partial}
+              />
+            </div>
+          ) : null}
+
+          {/* Pre-focused arrival: the cause is named, and the section it
+              belongs to is the next thing on the page rather than something to
+              go looking for. */}
+          {props.cause === "backup-alert" ? (
+            <div data-testid="system-arrival">
+              <RowsBlock
+                ariaLabel="Why you are here"
+                rows={[
+                  {
+                    id: "arrival",
+                    meta: "why you are here",
+                    sub: "backups are shown first · nothing else has been touched",
+                    title: "You arrived from the backup alert",
+                  },
+                ]}
+              />
+            </div>
+          ) : null}
+
+          {trouble.length > 0 ? (
+            <div>
+              <SectionBlock
+                label="What’s wrong now"
+                meta={String(trouble.length)}
+              />
+              <RowsBlock ariaLabel="What’s wrong now" rows={trouble} />
+            </div>
+          ) : null}
+
           {/* The H5 service offer, relocated here from a blocking onboarding
-              step. Demotes itself to a one-line standing control once the
-              user declines — dismissing the pitch must not retire the only
-              way to install the service — and disappears once installed. */}
-          <GatewayServiceTip />
+              step. Demotes itself to a one-line standing control once the user
+              declines — dismissing the pitch must not retire the only way to
+              install the service — and disappears once installed. */}
+          {props.readOnly ? null : <GatewayServiceTip />}
 
-          {/* Hero — orb + status word on the left, the gauge cluster on the
-              right, heartbeat strip across the bottom. */}
-          <section className={styles.hero}>
-            <div className={styles.heroTop}>
-              <div className={styles.statusCluster}>
-                <span className={styles.orb} aria-hidden="true">
-                  <span className={styles.orbCore} />
-                </span>
-                <div className={styles.statusText}>
-                  <div className={styles.statusWord}>
-                    {STATUS_WORD[overall]}
-                  </div>
-                  <div className={styles.statusSub}>
-                    {snapshot.statusSince === undefined
-                      ? ""
-                      : `for ${formatDuration(now - snapshot.statusSince)} · `}
-                    {snapshot.gatewayKind} gateway “{snapshot.gatewayLabel}”
-                  </div>
-                  {heartbeat === "down" && snapshot.lastError ? (
-                    <div className={styles.statusError}>
-                      {snapshot.lastError}
-                    </div>
-                  ) : null}
-                  {/* The consequence, said out loud at the moment it bites.
-                      A local gateway is a child of this app, so "down" also
-                      means every other device just lost the vault — most
-                      people meet that fact as "my phone can't see my stuff",
-                      with nothing connecting it back to here. */}
-                  {heartbeat === "down" && snapshot.gatewayKind === "local" ? (
-                    <div className={styles.statusSub}>
-                      This gateway runs inside Centraid — while it’s down, your
-                      phone and other devices can’t reach this vault either.
-                    </div>
-                  ) : null}
-                  {overall === "degraded" ? (
-                    <div className={styles.statusDegraded}>
-                      {unhealthyCount} component
-                      {unhealthyCount === 1 ? "" : "s"} reporting trouble — see
-                      Components
-                    </div>
-                  ) : null}
-                </div>
-              </div>
-              <div className={styles.figures}>
-                <Figure
-                  label="Gateway uptime"
-                  value={uptimeMs === undefined ? "——" : formatUptime(uptimeMs)}
-                  {...(snapshot.gatewayStartedAt !== undefined &&
-                  uptimeMs !== undefined
-                    ? { sub: `since ${formatClock(now - uptimeMs)}` }
-                    : {})}
-                />
-                <Figure
-                  label="Latency"
-                  value={
-                    heartbeat === "up" && snapshot.latencyMs !== undefined
-                      ? `${snapshot.latencyMs} ms`
-                      : "——"
-                  }
-                />
-                <Figure
-                  label="Availability"
-                  value={
-                    availability === undefined
-                      ? "——"
-                      : `${availability.toFixed(1)}%`
-                  }
-                  sub={`${snapshot.checksTotal} checks this session`}
-                />
-              </div>
-            </div>
+          {/* Custody before capacity, unless the member arrived asking about
+              room. Each card owns its own section head. */}
+          {props.focus === "capacity" ? (
+            <>
+              {capacity}
+              {backups}
+            </>
+          ) : (
+            <>
+              {backups}
+              {capacity}
+            </>
+          )}
 
-            {/* The strip is a row of bare beat squares, not an image: the name
-                it used to fake with `role="img"` is real text now (absolutely
-                positioned, so it is not a flex item and costs no gap). */}
-            <div className={styles.strip}>
-              <span className={a11y.srOnly}>Recent heartbeat results</span>
-              {samples.length > 0 ? (
-                samples.map((s) => (
-                  <span
-                    key={s.at}
-                    className={styles.beat}
-                    data-ok={s.ok ? "true" : "false"}
-                    title={`${formatClock(s.at)} — ${s.ok ? `ok, ${s.latencyMs ?? "—"} ms` : "no answer"}`}
-                  />
-                ))
-              ) : (
-                <span className={styles.stripEmpty}>
-                  waiting for the first heartbeat…
-                </span>
-              )}
-            </div>
-            <div className={styles.stripAxis}>
-              <span>
-                {stripSpanMs > 0 ? `${formatDuration(stripSpanMs)} ago` : ""}
-              </span>
-              <span>now</span>
-            </div>
-          </section>
+          {!props.readOnly &&
+          props.loadResourceMode &&
+          props.saveResourceMode ? (
+            <ResourceModeCard
+              loadMode={props.loadResourceMode}
+              saveMode={props.saveResourceMode}
+              {...(health?.metrics?.hardwareProfileClass
+                ? { resolvedClass: health.metrics.hardwareProfileClass }
+                : {})}
+              {...(health?.metrics?.resourceMode
+                ? { activeMode: health.metrics.resourceMode }
+                : {})}
+              {...(health?.metrics?.resourceProfile
+                ? { resourceProfile: health.metrics.resourceProfile }
+                : {})}
+              {...(health?.metrics?.backgroundPause
+                ? { backgroundPause: health.metrics.backgroundPause }
+                : {})}
+              {...(health?.metrics?.powerContext
+                ? { powerContext: health.metrics.powerContext }
+                : {})}
+              {...(props.onPauseBackgroundWork
+                ? { onPause: props.onPauseBackgroundWork }
+                : {})}
+              {...(props.onResumeBackgroundWork
+                ? { onResume: props.onResumeBackgroundWork }
+                : {})}
+              {...(props.loadKnobPrefs
+                ? { loadKnobPrefs: props.loadKnobPrefs }
+                : {})}
+              {...(props.saveKnobPrefs
+                ? { saveKnobPrefs: props.saveKnobPrefs }
+                : {})}
+            />
+          ) : null}
 
-          {/* Two packed columns, not one auto-placed grid: shared grid rows
-              let the tall Resource card open a dead column next to it. */}
-          <div className={styles.grid}>
-            <div className={styles.gridCol}>
-              {/* Outage log — every stretch of missed heartbeats this session. */}
-              <section className={styles.panel}>
-                <div className={styles.panelHead}>
-                  <h2>Outage log</h2>
-                  <span className={styles.panelMeta}>
-                    since {formatClock(snapshot.trackingSince)} ·{" "}
-                    {snapshot.checksFailed} failed{" "}
-                    {snapshot.checksFailed === 1 ? "check" : "checks"}
-                  </span>
-                </div>
-                {outageRows.length > 0 ? (
-                  <div className={styles.outages}>
-                    {outageRows.map((o) => (
-                      <div
-                        key={o.id}
-                        className={styles.outage}
-                        data-ongoing={o.ongoing || undefined}
-                      >
-                        <span className={styles.outageDot} />
-                        <span className={styles.outageStart}>
-                          {o.startedLabel}
-                        </span>
-                        <span className={styles.outageDuration}>
-                          {o.durationLabel}
-                          {o.ongoing ? " — ongoing" : ""}
-                        </span>
-                        {o.alerted ? (
-                          <span className={styles.outageBadge}>notified</span>
-                        ) : null}
-                      </div>
-                    ))}
-                  </div>
-                ) : (
-                  <div className={styles.panelEmpty}>
-                    No downtime recorded this session. The log resets when the
-                    app relaunches or you switch gateways.
-                  </div>
-                )}
-              </section>
-
-              {props.loadResourceMode && props.saveResourceMode ? (
-                <ResourceModeCard
-                  loadMode={props.loadResourceMode}
-                  saveMode={props.saveResourceMode}
-                  {...(health?.metrics?.hardwareProfileClass
-                    ? { resolvedClass: health.metrics.hardwareProfileClass }
-                    : {})}
-                  {...(health?.metrics?.resourceMode
-                    ? { activeMode: health.metrics.resourceMode }
-                    : {})}
-                  {...(health?.metrics?.resourceProfile
-                    ? { resourceProfile: health.metrics.resourceProfile }
-                    : {})}
-                  {...(health?.metrics?.backgroundPause
-                    ? { backgroundPause: health.metrics.backgroundPause }
-                    : {})}
-                  {...(health?.metrics?.powerContext
-                    ? { powerContext: health.metrics.powerContext }
-                    : {})}
-                  {...(props.onPauseBackgroundWork
-                    ? { onPause: props.onPauseBackgroundWork }
-                    : {})}
-                  {...(props.onResumeBackgroundWork
-                    ? { onResume: props.onResumeBackgroundWork }
-                    : {})}
-                  {...(props.loadKnobPrefs
-                    ? { loadKnobPrefs: props.loadKnobPrefs }
-                    : {})}
-                  {...(props.saveKnobPrefs
-                    ? { saveKnobPrefs: props.saveKnobPrefs }
-                    : {})}
-                />
-              ) : null}
-            </div>
-
-            <div className={styles.gridCol}>
-              {/* Identity — what the heartbeat is talking to. */}
-              <section className={styles.panel}>
-                <div className={styles.panelHead}>
-                  <h2>Identity</h2>
-                </div>
-                <dl className={styles.idList}>
-                  <div className={styles.idRow}>
-                    <dt>Gateway</dt>
-                    <dd>{snapshot.gatewayLabel}</dd>
-                  </div>
-                  <div className={styles.idRow}>
-                    <dt>Kind</dt>
-                    <dd className={styles.idMono}>{snapshot.gatewayKind}</dd>
-                  </div>
-                  <div className={styles.idRow}>
-                    <dt>Version</dt>
-                    <dd className={styles.idMono}>
-                      {snapshot.version ?? "—"}
-                      {snapshot.protocolVersion === undefined
-                        ? ""
-                        : ` · protocol ${snapshot.protocolVersion}`}
-                    </dd>
-                  </div>
-                  <div className={styles.idRow}>
-                    <dt>Started</dt>
-                    <dd className={styles.idMono}>
-                      {uptimeMs === undefined
-                        ? "—"
-                        : formatClock(now - uptimeMs)}
-                    </dd>
-                  </div>
-                  <div className={styles.idRow}>
-                    <dt>Checks</dt>
-                    <dd className={styles.idMono}>
-                      {snapshot.checksTotal} run · {snapshot.checksFailed}{" "}
-                      failed
-                    </dd>
-                  </div>
-                </dl>
-                <div className={styles.idFooter}>
-                  <RestartGatewayButton onRestart={props.onRestartGateway} />
-                </div>
-              </section>
-            </div>
+          <div>
+            <SectionBlock label="Identity" meta="this machine" />
+            <RowsBlock ariaLabel="Identity" rows={identity} />
           </div>
 
-          {props.backup ? <BackupCard {...props.backup} now={now} /> : null}
+          <div>
+            <SectionBlock label="Look closer" meta="3 pages" />
+            <RowsBlock ariaLabel="Look closer" rows={lookCloser} />
+          </div>
+
+          {/* NO CLOSING NOTE. It was two paragraphs of commentary ABOUT the
+              page — one explaining that this seat withholds verbs, one
+              explaining that System is never pinned in the band. Neither is a
+              fact about the gateway, and the first was doing real work in the
+              wrong place: a row whose verb is withheld should say so ON THE
+              ROW, where the reader is already looking, which is what the
+              Identity row and the read-only rows now do. */}
         </>
       ) : null}
 
@@ -457,16 +615,34 @@ export default function GatewayScreen(props: GatewayScreenProps): JSX.Element {
           <SettingsDiagnosticsScreen
             loadHealth={props.loadHealth}
             onJumpToLogs={jumpToLogs}
-            {...(props.connections ? { connections: props.connections } : {})}
+            onOpenAlerts={() => setTab("alerts")}
+            {...(props.connections
+              ? {
+                  connections: props.readOnly
+                    ? {
+                        loadConnections: props.connections.loadConnections,
+                        ...(props.connections.refreshKey === undefined
+                          ? {}
+                          : { refreshKey: props.connections.refreshKey }),
+                      }
+                    : props.connections,
+                }
+              : {})}
           />
         </div>
       ) : null}
 
-      {tab === "storage" && props.loadLocalUsage && props.saveStorageLimits ? (
+      {tab === "storage" && capacity ? (
+        <div className={styles.tabPane}>{capacity}</div>
+      ) : null}
+
+      {tab === "restart" && props.onRestartGateway ? (
         <div className={styles.tabPane}>
-          <StorageScreen
-            loadLocalUsage={props.loadLocalUsage}
-            saveStorageLimits={props.saveStorageLimits}
+          <RestartGatewayScreen
+            gatewayLabel={snapshot.gatewayLabel}
+            onCancel={() => setTab("overview")}
+            onRestart={props.onRestartGateway}
+            {...(uptimeMs === undefined ? {} : { uptimeMs })}
           />
         </div>
       ) : null}
@@ -476,7 +652,9 @@ export default function GatewayScreen(props: GatewayScreenProps): JSX.Element {
           <LogsScreen
             streamLogs={props.streamLogs}
             focusQuery={logsFocus}
-            onExportDiagnostics={props.onExportDiagnostics}
+            {...(!props.readOnly && props.onExportDiagnostics
+              ? { onExportDiagnostics: props.onExportDiagnostics }
+              : {})}
           />
         </div>
       ) : null}
@@ -484,9 +662,14 @@ export default function GatewayScreen(props: GatewayScreenProps): JSX.Element {
       {tab === "alerts" ? (
         <GatewayAlertsTab
           snapshot={snapshot}
+          readOnly={props.readOnly}
           savingAlert={props.savingAlert}
-          onAlertSecondsChange={props.onAlertSecondsChange}
-          onAlertsEnabledChange={props.onAlertsEnabledChange}
+          {...(props.onAlertSecondsChange
+            ? { onAlertSecondsChange: props.onAlertSecondsChange }
+            : {})}
+          {...(props.onAlertsEnabledChange
+            ? { onAlertsEnabledChange: props.onAlertsEnabledChange }
+            : {})}
           launchAtLogin={props.launchAtLogin}
           savingLaunchAtLogin={props.savingLaunchAtLogin}
           {...(props.onLaunchAtLoginChange

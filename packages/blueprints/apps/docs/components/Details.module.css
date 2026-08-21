@@ -31,7 +31,7 @@
   inset: 0;
   z-index: 44;
   background: color-mix(in oklab, var(--scrim) 39%, transparent);
-  animation: fade 0.2s ease;
+  animation: fade var(--dur-2) var(--ease-entry);
   /* Now a real <button> (kit-plain-btn) so the dismiss gesture is keyboard
      reachable; keep the plain-div cursor it always had. */
   cursor: default;
@@ -39,17 +39,49 @@
 .details {
   position: fixed;
   top: 0;
-  right: 0;
+  inset-inline-end: 0;
   bottom: 0;
   width: min(360px, 92vw);
   z-index: 45;
   background: var(--bg-elev);
-  border-left: 1px solid var(--line);
+  border-inline-start: 1px solid var(--line);
   box-shadow: var(--shadow-lg);
   display: flex;
   flex-direction: column;
-  animation: slideR 0.24s var(--ease);
+  animation: slideR var(--dur-2) var(--ease-entry);
 }
+/* THE DOCKED FORM (the handoff's `infoRailStyle`): a column in the content
+   row, not a sheet over it. Everything the drawer needs to sit above the app
+   — `position: fixed`, a z-index, a shadow, a slide-in from off-screen —
+   comes off, because none of it describes a thing that is simply beside
+   something else. What stays is the width, the ground and the leading edge.
+
+   308px is the handoff's own figure. It is a fixed column rather than a
+   fraction: the rail holds a key/value list whose keys are a fixed width, so
+   a rail that narrowed with the window would wrap its values before the set
+   beside it gained anything worth having.
+
+   It rises rather than sliding, and only the once — `kit-rise` is what the
+   toolbar's own two states use, and a column that flew in from the edge every
+   time a member pressed the toggle would animate the furniture. */
+.railDock {
+  flex: none;
+  inline-size: 308px;
+  display: flex;
+  flex-direction: column;
+  min-block-size: 0;
+  background: var(--bg-elev);
+  border-inline-start: 1px solid var(--line);
+  animation: kit-rise var(--dur-2) var(--ease-entry);
+}
+/* The docked rail is inside the content row, which has its own scroll
+   discipline: the head and foot pin, the body scrolls. Same as the drawer —
+   stated here because the drawer got it from `position: fixed` + `inset` and
+   this box gets it from the row. */
+.railDock .detailsBody {
+  min-block-size: 0;
+}
+
 .detailsHead {
   display: flex;
   align-items: center;
@@ -58,13 +90,34 @@
   border-bottom: 1px solid var(--line);
   flex-shrink: 0;
 }
+/* The eyebrow role whole, from the ramp — caps and tracking travel beside the
+   `font` shorthand as their own tokens, so a local pair is a second copy.
+
+   `flex: 1` is what puts the dismiss at the TRAILING EDGE. The head was a
+   label and a close button shoulder to shoulder at the leading edge with 10px
+   between them, which reads as a chip — as though the X belonged to the word
+   "Details" and would dismiss it. A rail's dismiss belongs at the far end of
+   its own head, where every other closable surface in the product puts one. */
 .detailsHead .lbl {
-  font: var(--t-control);
-  text-transform: uppercase;
-  letter-spacing: 0.09em;
+  flex: 1;
+  font: var(--t-eyebrow);
+  letter-spacing: var(--t-eyebrow-tracking);
+  text-transform: var(--t-eyebrow-transform);
   color: var(--text-faint);
 }
-/* Close button: kit.css's .kit-icon-btn. */
+/* Close: kit.css's `.kit-icon-btn`, dialled down through its own size knob.
+   A full 34px target with full ink is what a VERB gets; this one dismisses a
+   panel the member can bring straight back from the toolbar, so it takes the
+   handoff's own 26px at the faint rung (`infoCloseStyle`: 26px, `ink3`) and
+   comes up to full ink under the pointer. */
+.railClose {
+  --icon-button-size: 26px;
+  flex: none;
+  color: var(--text-faint);
+}
+.railClose:hover {
+  color: var(--text);
+}
 .detailsBody {
   flex: 1;
   overflow: auto;
@@ -73,32 +126,28 @@
 .hero {
   position: relative;
   height: 132px;
-  border-radius: 12px;
+  border-radius: var(--r-lg);
   display: flex;
   align-items: center;
   justify-content: center;
   overflow: hidden;
 }
-.hero img {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-}
-.hero span {
-  font-family: var(--font-mono);
-  font-weight: 600;
-  font-size: 22px;
-  letter-spacing: 0.06em;
+/* The kind mark, in the app's own hue at the text rung — the same colour the
+   list row and the grid card give it, because the handoff draws every kind in
+   the app hue rather than a colour per kind. */
+.heroGlyph {
+  display: flex;
+  color: var(--c-teal-text);
 }
 .detailName {
-  font: var(--t-body-strong);
-  font-size: 16px;
+  font: var(--t-title);
   text-align: center;
   margin-top: 14px;
   overflow-wrap: anywhere;
 }
 .detailExt {
   font: var(--t-mono);
+  font-variant-numeric: var(--t-mono-numeric);
   color: var(--text-faint);
   text-align: center;
   margin-top: var(--sp-1);
@@ -137,30 +186,6 @@
   border-color: color-mix(in oklab, var(--danger) 35%, var(--line));
 }
 
-.detailLabel {
-  font: var(--t-control);
-  text-transform: uppercase;
-  letter-spacing: 0.09em;
-  color: var(--text-faint);
-  margin-bottom: var(--sp-2);
-}
-.detailGrid {
-  display: grid;
-  grid-template-columns: auto 1fr;
-  gap: var(--sp-2) 14px;
-  font: var(--t-small);
-  margin-bottom: 22px;
-}
-.detailGrid dt {
-  font: var(--t-mono);
-  color: var(--text-faint);
-  margin: 0;
-}
-.detailGrid dd {
-  color: var(--text-soft);
-  margin: 0;
-  overflow-wrap: anywhere;
-}
 .detailsFoot {
   display: flex;
   gap: var(--sp-2);
@@ -171,21 +196,87 @@
 
 /* ---------- Version history toggle (issue #352) ---------- */
 /* The toggle button lives in Details; the panel it opens is History.module.css. */
-.versionToggle {
+/* A control that must be text carries the ink step plus a hover GROUND plus a
+   trailing chevron — hover alone is nothing on a phone, and `--text-faint` at
+   rest made this read as a dead section heading rather than the disclosure it
+   is. Geometry (`kit-plain-btn` undoes the UA button box) comes from the kit. */
+
+/* §8's tab strip. Three tabs, a 2px ink bar under the current one — never a
+   fill and never the app's hue, the same rule the shelf strip follows so the
+   two "which one am I on" marks read identically. */
+.tabs {
   display: flex;
-  align-items: center;
-  justify-content: space-between;
-  width: 100%;
-  background: none;
+  gap: var(--sp-4);
+  margin-block: var(--sp-3) var(--sp-2);
+  border-block-end: 1px solid var(--line);
+}
+.tab {
+  padding-block: var(--sp-2);
   border: none;
-  padding: 0;
+  border-block-end: 2px solid transparent;
+  background: none;
+  font: var(--t-small);
+  color: var(--text-faint);
   cursor: pointer;
-  font: var(--t-control);
+}
+.tab[data-current="true"] {
+  border-block-end-color: var(--text);
+  color: var(--text);
+}
+.tab:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
+  border-radius: var(--r-sm);
+}
+
+/* The fact list every tab is made of: a key column in the eyebrow rung and a
+   value that may carry one note under it. Hairlined between rows, because the
+   rail is a list of separate claims and not a paragraph. */
+.facts {
+  display: flex;
+  flex-direction: column;
+  margin: 0;
+}
+.factRow {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-1);
+  padding-block: var(--sp-2);
+}
+.factRow + .factRow {
+  border-block-start: 1px solid var(--line);
+}
+.factKey {
+  font: var(--t-eyebrow);
   text-transform: uppercase;
-  letter-spacing: 0.09em;
+  letter-spacing: 0.06em;
   color: var(--text-faint);
 }
-.versionToggle svg {
-  width: 13px;
-  height: 13px;
+.factValue {
+  margin: 0;
+  font: var(--t-small);
+  color: var(--text);
+}
+.factValue[data-net="true"] {
+  color: var(--net);
+}
+.factNote {
+  display: block;
+  margin-block-start: var(--sp-1);
+  font: var(--t-small);
+  color: var(--text-faint);
+}
+
+.tabLabel {
+  margin-block-start: var(--sp-3);
+  font: var(--t-eyebrow);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-faint);
+}
+
+.railFoot {
+  margin: var(--sp-3) 0 0;
+  font: var(--t-small);
+  color: var(--text-faint);
 }

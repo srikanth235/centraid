@@ -1,7 +1,7 @@
 /**
  * Choose an existing album member as its cover through media.set_album_cover.
  *
- * @type {import('@centraid/app-engine').ActionHandler}
+ * @type {import('@centraid/server/engine').ActionHandler}
  */
 export default async function setAlbumCover({ body, ctx }: HandlerArgs) {
   const input = (body ?? {}) as Record<string, unknown>;

@@ -1,18 +1,15 @@
 import QRCode from "qrcode";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { JSX } from "react";
 
 import type {
   GatewayDeviceTicket,
   GatewayDeviceTicketInput,
-  GatewayMember,
 } from "../../gateway-client.js";
 import { formatClock, formatDuration } from "../shell/routes/gatewayData.js";
 import { cx } from "../ui/cx.js";
 import Icon from "../ui/Icon.js";
-import { pairErrorMessage, roleLabel } from "./device-roles.js";
-import DevicePairTarget from "./DevicePairTarget.js";
-import type { PairGrant, PairVault, PairTarget } from "./DevicePairTarget.js";
+import { pairErrorMessage } from "./device-errors.js";
 
 import controlsCss from "../styles/controls.module.css";
 import buttonCss from "../ui/Button.module.css";
@@ -25,16 +22,14 @@ export interface DevicePairPanelProps {
     input?: GatewayDeviceTicketInput
   ) => Promise<GatewayDeviceTicket>;
   onClose: () => void;
-  /** Everyone the caller shares a vault with — the picker's list (#599). */
-  members?: readonly GatewayMember[];
-  /** The caller's own member id, so "Myself" is distinguishable from a peer. */
-  currentMemberId?: string;
-  /** Vaults the caller may grant, with resolved names. */
-  vaults?: readonly PairVault[];
+  /**
+   * Mint a vault for a NEW person instead of self-pairing (#726 P1 "Add
+   * someone"). Adds the name field the mint needs and the hosting-posture
+   * sentences the minted ticket carries; everything else — TTL, the QR/ticket
+   * surface, copy — is the same self-pair panel unchanged.
+   */
+  forPerson?: boolean;
 }
-
-const NO_MEMBERS: readonly GatewayMember[] = [];
-const NO_VAULTS: readonly PairVault[] = [];
 
 const TTL_PRESETS: readonly { label: string; minutes: number }[] = [
   { label: "15 min", minutes: 15 },
@@ -43,23 +38,27 @@ const TTL_PRESETS: readonly { label: string; minutes: number }[] = [
 ];
 
 /*
- * "Pair a device for <person>" — a device is always somebody's (#599 L2), so
- * the first question is who, not what role. Self-pair is the landing state:
- * pairing your own second phone must not require asking another person for a
- * QR code, and it grants exactly the access you already hold (the gateway
- * derives it — this panel sends no member and no grants for that case).
+ * Pairing has exactly two shapes (#726, #726 P1) and this one panel renders
+ * both, switched on `forPerson`:
+ *
+ *   self-pair (default) — pair another device for YOURSELF. Access is
+ *     ownership: the only ticket a device may mint for itself lands on its
+ *     own owner, reaching exactly the vaults it already owns. Nothing to
+ *     name, nothing to choose beyond how long the ticket stays good for.
+ *   Add someone (`forPerson`) — mint a NEW person a vault of their own,
+ *     hosted on this machine. The one extra input is their name; the ticket
+ *     that comes back is exactly the same QR/paste surface, plus two
+ *     sentences stating what hosting someone else's vault does and doesn't
+ *     confer (verbatim — also in SECURITY.md).
  */
 export default function DevicePairPanel({
   now,
   onCreateTicket,
   onClose,
-  members = NO_MEMBERS,
-  currentMemberId,
-  vaults = NO_VAULTS,
+  forPerson = false,
 }: DevicePairPanelProps): JSX.Element {
   const [minutes, setMinutes] = useState(15);
-  const [target, setTarget] = useState<PairTarget>({ kind: "self" });
-  const [grants, setGrants] = useState<PairGrant[]>([]);
+  const [name, setName] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [ticket, setTicket] = useState<GatewayDeviceTicket | null>(null);
@@ -99,29 +98,27 @@ export default function DevicePairPanel({
     };
   }, [ticket]);
 
+  // The mint's idempotency key (#750): minted once per INTENDED operation and
+  // reused on retry after a failure, so "press Generate again" can never mint
+  // a second owner/vault. A success clears it — "New ticket" is a new intent.
+  const operationRef = useRef<string | null>(null);
+
   const generate = async (): Promise<void> => {
-    if (target.kind === "new" && target.label.trim().length === 0) {
-      setError("Give the new person a name.");
-      return;
-    }
-    if (target.kind !== "self" && grants.length === 0) {
-      setError("Choose at least one vault this device may reach.");
-      return;
-    }
+    if (forPerson && name.trim().length === 0) return;
     setBusy(true);
     setError(null);
+    if (forPerson) operationRef.current ??= crypto.randomUUID();
+    const operationId = operationRef.current;
     try {
-      // Self-pair sends NEITHER member nor grants: the gateway resolves the
-      // caller's own member and clamps to the roles they already hold.
-      const input: GatewayDeviceTicketInput = { ttlMinutes: minutes };
-      if (target.kind === "member") {
-        input.memberId = target.memberId;
-        input.grants = grants;
-      } else if (target.kind === "new") {
-        input.newMemberLabel = target.label.trim();
-        input.grants = grants;
-      }
-      setTicket(await onCreateTicket(input));
+      setTicket(
+        await onCreateTicket({
+          ttlMinutes: minutes,
+          ...(forPerson && operationId !== null
+            ? { forPerson: { label: name.trim() }, operationId }
+            : {}),
+        })
+      );
+      operationRef.current = null;
     } catch (caughtError) {
       setError(pairErrorMessage(caughtError));
     } finally {
@@ -143,28 +140,28 @@ export default function DevicePairPanel({
 
   if (ticket) {
     const expMs = Date.parse(ticket.expiresAt);
-    const granted = ticket.grants ?? [];
     return (
       <div className={styles.pair} data-testid="pair-panel">
         <div className={styles.pairLead}>
-          One-time ticket for <strong>{ticket.memberLabel}</strong>. Scan it in
+          One-time ticket for <strong>{ticket.ownerLabel}</strong>. Scan it in
           Centraid Companion, or paste it into the other device’s pairing
           dialog. It burns on first use.
         </div>
+        {forPerson ? (
+          <div className={styles.postureNote} data-testid="hosting-posture">
+            <p>
+              This vault lives on this machine: whoever owns the machine can
+              read what it holds while it is hosted here.
+            </p>
+            <p>
+              While hosted here, this machine also signs for the vault when its
+              owner is away — moving the vault elsewhere ends both.
+            </p>
+          </div>
+        ) : null}
         <div className={styles.grantSummary}>
-          {(granted.length > 0
-            ? granted
-            : [
-                {
-                  vaultId: ticket.vaultId,
-                  vaultName: ticket.vaultName,
-                  role: ticket.role,
-                },
-              ]
-          ).map((grant) => (
-            <span key={grant.vaultId}>
-              {grant.vaultName ?? grant.vaultId} · {roleLabel(grant.role)}
-            </span>
+          {ticket.vaults.map((vault) => (
+            <span key={vault.vaultId}>{vault.vaultName ?? vault.vaultId}</span>
           ))}
         </div>
         <div className={styles.pairTicketSurface}>
@@ -221,22 +218,30 @@ export default function DevicePairPanel({
     );
   }
 
+  const nameMissing = forPerson && name.trim().length === 0;
+
   return (
     <div className={styles.pair} data-testid="pair-panel">
-      <DevicePairTarget
-        target={target}
-        onTargetChange={(next) => {
-          setTarget(next);
-          setError(null);
-        }}
-        members={members}
-        {...(currentMemberId === undefined ? {} : { currentMemberId })}
-        vaults={vaults}
-        grants={grants}
-        onGrantsChange={setGrants}
-        disabled={busy}
-      />
+      <p className={styles.roleHint}>
+        {forPerson
+          ? "This mints them a vault of their own, hosted on this machine — not a grant into any vault you already own."
+          : "The new device joins as you, with your current access."}
+      </p>
       <div className={styles.pairForm}>
+        {forPerson ? (
+          <label className={styles.nameField}>
+            <span className={styles.nameFieldLabel}>Name</span>
+            <input
+              type="text"
+              className={styles.nameInput}
+              placeholder="Their name"
+              value={name}
+              disabled={busy}
+              onChange={(event) => setName(event.target.value)}
+              data-testid="add-someone-name"
+            />
+          </label>
+        ) : null}
         <fieldset className={styles.ttlGroup} aria-label="Ticket lifetime">
           {TTL_PRESETS.map((preset) => (
             <button
@@ -258,7 +263,7 @@ export default function DevicePairPanel({
           <button
             type="button"
             className={cx(buttonCss.btn, buttonCss.sm, styles.generateBtn)}
-            disabled={busy}
+            disabled={busy || nameMissing}
             onClick={() => void generate()}
           >
             {busy ? (

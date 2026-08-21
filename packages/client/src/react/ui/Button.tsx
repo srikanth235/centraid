@@ -1,22 +1,30 @@
+import { useId } from "react";
 import type { JSX, MouseEvent, ReactNode } from "react";
 
-import type { IconName } from "@centraid/design";
+import type { ButtonVariant, IconName } from "@centraid/design";
+import type { ButtonData } from "@centraid/design/blocks";
 
+import { useCommitAvailability } from "../shell/commitAvailability.js";
 import { cx } from "./cx.js";
 import Icon from "./Icon.js";
 
 import styles from "./Button.module.css";
 
-export type ButtonVariant =
-  | "primary"
-  | "secondary"
-  | "quiet"
-  | "destructive"
-  | "destructiveFilled";
+export type { ButtonVariant } from "@centraid/design";
+
+/**
+ * `md` (default) · `sm` (compact page button) · `chrome` (26px titlebar scale).
+ *
+ * Shell-only, and deliberately absent from the shared `ButtonData`: the phone
+ * has exactly one size because the 44px touch floor IS the size, so offering
+ * this field there would only invite a caller to ask for a titlebar-scale
+ * control on a touch surface.
+ */
 export type ButtonSize = "md" | "sm" | "chrome";
 
-export interface ButtonProps {
-  label?: string;
+/** `label`, `icon`, `disabled` and `commit` are the shared half — see
+ *  `ButtonData`. Everything below is the DOM's own. */
+export interface ButtonProps extends ButtonData {
   /** Arbitrary content — takes precedence over `label` when both are given. */
   children?: ReactNode;
   /**
@@ -26,18 +34,36 @@ export interface ButtonProps {
    */
   onClick?: (e: MouseEvent<HTMLButtonElement>) => void;
   variant?: ButtonVariant;
-  /** `md` (default) · `sm` (compact page button) · `chrome` (26px titlebar scale). */
   size?: ButtonSize;
-  icon?: IconName;
-  disabled?: boolean;
   className?: string;
   title?: string;
   ariaLabel?: string;
+  /**
+   * This control opens and closes something — a section's body, a picker.
+   * The state belongs on the control a member presses, and there is nowhere
+   * else to put it: the thing being disclosed is UNRENDERED while closed, so
+   * assistive tech has only the button to read the state from.
+   */
+  ariaExpanded?: boolean;
+  /**
+   * Is this the control that COMMITS — the one that writes data (issue #708,
+   * C7)? Defaults to `variant === "primary"`, because the filled ink IS the
+   * commit control in this grammar. Set it explicitly on a commit that is not
+   * the view's one filled element, or `false` on a primary that only navigates
+   * (a wizard's "Next" over local state commits nothing).
+   *
+   * A commit control disables itself while the shell cannot commit, and
+   * carries the reason as its accessible description — no screen reimplements
+   * the check.
+   *
+   * Shell-only by design, not by omission: see `ButtonData` for why the phone
+   * queues instead of refusing.
+   */
+  commit?: boolean;
 }
 
 const VARIANT_CLASS: Record<ButtonVariant, string | undefined> = {
   destructive: styles.destructive,
-  destructiveFilled: styles.destructiveFilled,
   primary: styles.primary,
   quiet: styles.quiet,
   secondary: styles.secondary,
@@ -59,32 +85,65 @@ export default function Button({
   className,
   title,
   ariaLabel,
+  ariaExpanded,
+  commit,
 }: ButtonProps): JSX.Element {
+  const availability = useCommitAvailability();
+  const isCommit = commit ?? variant === "primary";
+  const refused = isCommit && availability.blocked && !disabled;
+  const reasonId = useId();
   return (
-    <button
-      type="button"
-      className={cx(
-        size === "chrome" ? styles.chrome : styles.btn,
-        size === "sm" && styles.sm,
-        VARIANT_CLASS[variant],
-        className
-      )}
-      disabled={disabled}
-      title={title}
-      aria-label={ariaLabel}
-      onClick={disabled ? undefined : onClick}
-    >
-      {icon ? (
-        <Icon
-          name={icon}
-          size={14}
-          strokeWidth={
-            variant === "primary" || variant === "destructiveFilled" ? 2 : 1.75
-          }
-        />
+    <>
+      <button
+        type="button"
+        // `.btn` is the base on EVERY size, including chrome. It used to be
+        // swapped out for `.chrome`, which meant a titlebar button silently
+        // lost the shared hover, press and focus-ring rules keyed on `.btn` —
+        // a control with no visible focus ring is a keyboard dead end.
+        className={cx(
+          styles.btn,
+          size === "chrome" && styles.chrome,
+          size === "sm" && styles.sm,
+          VARIANT_CLASS[variant],
+          className
+        )}
+        // The variant, named on the DOM rather than left implicit in a hashed
+        // CSS-module class. The design gallery's control-vocabulary gate
+        // (`scripts/design-gallery.mjs`) reads it to prove the accent fill
+        // belongs to `primary` alone — a claim it can only make against the
+        // real product button, not a fixture (#799).
+        data-variant={variant}
+        disabled={disabled}
+        // A refused commit stays FOCUSABLE (`aria-disabled`, not `disabled`),
+        // so a keyboard reader can land on it and hear why. The recessive
+        // look is a colour token on this leaf — never a container opacity,
+        // which would composite every descendant and void the contrast the
+        // token guarantees. The reason itself renders as visible inline text
+        // right after the button (`.reason`), never a `title` tooltip — the
+        // brief is explicit that a disabled commit states its reason inline,
+        // never only on hover.
+        aria-disabled={refused ? true : undefined}
+        aria-describedby={refused ? reasonId : undefined}
+        title={title}
+        aria-label={ariaLabel}
+        aria-expanded={ariaExpanded}
+        onClick={disabled || refused ? undefined : onClick}
+      >
+        {icon ? (
+          <Icon
+            name={icon}
+            size={14}
+            strokeWidth={variant === "primary" ? 2 : 1.75}
+          />
+        ) : null}
+        {children ?? label}
+      </button>
+      {refused ? (
+        <span className={styles.reason} id={reasonId}>
+          {availability.reason}
+        </span>
       ) : null}
-      {children ?? label}
-    </button>
+    </>
   );
 }
 

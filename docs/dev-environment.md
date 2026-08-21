@@ -19,6 +19,8 @@ bun install
 bun run build                         # packages emit dist/; blueprints regenerate manifest/vendors as needed
 ```
 
+`CLAUDE.md` is a symlink to `AGENTS.md` (`ln -sf AGENTS.md CLAUDE.md`), so every agent CLI reads one manual with no sync burden. Restore the symlink if a tool ever replaces it with a copy.
+
 Smoke:
 
 ```sh
@@ -35,7 +37,7 @@ bun run build && centraid-gateway serve --data-dir ./gw-data --host 127.0.0.1 --
 | **desktop** | `bun run dev:desktop` | Electron window; detached local gateway on `127.0.0.1:17832` by default | Set `CENTRAID_EMBEDDED_GATEWAY=1` only for the in-process test/E2E path |
 | **web** | `bun run dev:web` | Vite default (see `apps/web`) | Needs a reachable gateway or ticket path |
 | **mobile** | `bun run dev:mobile` | Metro **8081** | Pair with a ticket minted in desktop Household → Devices |
-| **gateway-daemon** | `centraid-gateway serve --data-dir <dir> --host 127.0.0.1 --port 8765` | **8765** (example) | No `print-token` (retired #505). **Do not pin `CENTRAID_GATEWAY_TOKEN`** — see below. A fresh `<dir>` auto-founds `Shared` + `Personal` (#603); `centraid-gateway pair` mints a device ticket |
+| **gateway-daemon** | `centraid-gateway serve --data-dir <dir> --host 127.0.0.1 --port 8765` | **8765** (example) | No `print-token` (retired #505). **Do not pin `CENTRAID_GATEWAY_TOKEN`** — see below. A fresh `<dir>` auto-founds `Personal` (#603); `centraid-gateway pair` mints a device ticket |
 | **product CLI** | `centraid status --url http://127.0.0.1:8765 --token <hex>` | (client) | Wire client (`@centraid/cli`); auth via `--token` / `CENTRAID_TOKEN` / `CENTRAID_GATEWAY_TOKEN` |
 | **docs site** | `bun run docs:serve` | **4173** on 127.0.0.1 | After `docs:build` / `docs:bundle` |
 
@@ -59,10 +61,10 @@ The desktop app controls a local gateway, detached by default so it survives the
    centraid-gateway serve --data-dir "<data-dir>" --host 127.0.0.1 --port 17832
    ```
 
-   The gateway serves the **API** on `--port` and the **web UI on a second port** — read the exact `web app: http://127.0.0.1:<p>` line it prints on startup. The web UI it serves is the **build-time snapshot** embedded in `packages/gateway/dist/web`. To preview _uncommitted client edits_, rebuild and re-embed first (no full gateway rebuild needed):
+   The gateway serves the **API** on `--port` and the **web UI on a second port** — read the exact `web app: http://127.0.0.1:<p>` line it prints on startup. The web UI it serves is the **build-time snapshot** embedded in `packages/server/dist/web`. To preview _uncommitted client edits_, rebuild and re-embed first (no full gateway rebuild needed):
 
    ```sh
-   bun run --cwd apps/web build && node packages/gateway/scripts/embed-web.mjs
+   bun run --cwd apps/web build && node packages/server/scripts/embed-web.mjs
    ```
 
 2. **Mint a pairing ticket** for the vault (one line; redeems only over the iroh pairing ALPN `centraid/gw-pair/1` — the HTTP `POST /centraid/_gateway/pair` twin was removed in #555):
@@ -88,7 +90,7 @@ The desktop app controls a local gateway, detached by default so it survives the
    }
    ```
 
-4. Web onboarding opens straight on the ticket path — paste the ticket, then fill in the profile step (display name + avatar colour). The ticket step (`packages/client/src/react/shell/routes/ConnectTicketPanel.tsx`, wrapping `ConnectFlow.tsx`) is shared verbatim with desktop's **Connect with a ticket** option and the switcher's **Add vault** modal; it defaults to `methods={['gateway']}` plus `initialMethod="gateway"`, so there is no method chooser — every surface opens directly on the ticket field. The ticket redeems over iroh, records this device's EndpointId enrollment, and connects to the existing vault — its automations, runs, and data appear as in desktop.
+4. Web onboarding opens straight on the ticket path — paste the ticket, enter Centraid, and set a display name or avatar colour later in Settings → You. On first entry Home automatically prepares its removable sample week so the first screen is useful without another decision. The ticket step (`packages/client/src/react/shell/routes/ConnectTicketPanel.tsx`, wrapping `ConnectFlow.tsx`) is shared verbatim with desktop's **Connect with a ticket** option and the switcher's **Add vault** modal; it defaults to `methods={['gateway']}` plus `initialMethod="gateway"`, so there is no method chooser — every surface opens directly on the ticket field. The ticket redeems over iroh, records this device's EndpointId enrollment, and connects to the existing vault — its automations, runs, and data appear as in desktop.
 
 There is no remote URL+token connection path and no SSH-routed connect (the SSH code was deleted in #603). Browser clients use iroh-wasm and the same EndpointId pairing contract. Do not point a standalone gateway at a data dir the desktop app is **also** running against: `gateway.db` rejects the second writer immediately (see [traps/wal-checkpoint.md](traps/wal-checkpoint.md)).
 

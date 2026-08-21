@@ -41,20 +41,20 @@ describe("shell router", () => {
   it("goes back and forward without re-recording", () => {
     let s = nav(INITIAL_ROUTER, { kind: "home" });
     s = nav(s, { kind: "insights" });
-    s = nav(s, { kind: "discover" });
+    s = nav(s, { kind: "starred" });
     s = routerReducer(s, { type: "back" });
     expect(currentRoute(s)).toStrictEqual({ kind: "insights" });
     expect(canGoForward(s)).toBe(true);
     s = routerReducer(s, { type: "forward" });
-    expect(currentRoute(s)).toStrictEqual({ kind: "discover" });
+    expect(currentRoute(s)).toStrictEqual({ kind: "starred" });
   });
 
   it("truncates the forward branch on a new navigation", () => {
     let s = nav(INITIAL_ROUTER, { kind: "home" });
     s = nav(s, { kind: "insights" });
     s = routerReducer(s, { type: "back" }); // back to home
-    s = nav(s, { kind: "discover" }); // new branch drops insights
-    expect(s.stack.map((r) => r.kind)).toStrictEqual(["home", "discover"]);
+    s = nav(s, { kind: "starred" }); // new branch drops insights
+    expect(s.stack.map((r) => r.kind)).toStrictEqual(["home", "starred"]);
     expect(canGoForward(s)).toBe(false);
   });
 
@@ -72,7 +72,6 @@ describe("shell router", () => {
       "automation-view:a2"
     );
     expect(routeKey({ kind: "app", id: "todos" })).toBe("app:todos");
-    expect(routeKey({ kind: "builder" })).toBe("builder:new:");
     expect(routeKey({ kind: "automation-builder", automationId: "x" })).toBe(
       "automation-builder:x"
     );
@@ -84,6 +83,13 @@ describe("shell router", () => {
     );
     expect(routeKey({ kind: "connectors" })).toBe("connectors");
     expect(routeKey({ kind: "gateway", tab: "alerts" })).toBe("gateway:alerts");
+    expect(
+      routeKey({
+        kind: "gateway",
+        focus: "backups",
+        cause: "backup-alert",
+      })
+    ).toBe("gateway:backups:backup-alert");
   });
 
   it("treats distinct parameterized routes as separate entries", () => {

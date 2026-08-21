@@ -8,6 +8,21 @@
    action text comes from the shared `--accent-text` role; the custody warn tone
    is the semantic `--warning` token. */
 
+/* A VERB WITH ITS SHAPE. `kit-btn` owns the outline, the height and the
+   radius; this only lays the glyph and the word out inside it. It lives here
+   rather than in one component's sheet because the pattern is the app's, not
+   any one region's — the details rail, the trash row, the version list, the
+   upload queue and the folder editors all wear it. */
+.actBtn {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-1);
+}
+/* The glyph never carries the meaning alone in these regions: every one of
+   them keeps its word, so the mark is decoration to the reader and hidden from
+   the screen reader (`Icon` already sets `aria-hidden`). What it buys is a
+   SHAPE to find the row by without reading it. */
+
 /* The compact backup-status dot (Grid card + List row, via Shared's CustodyDot).
    The three tones are compound modifiers on the base dot. */
 .custodyDot {
@@ -15,7 +30,7 @@
   width: 6px;
   height: 6px;
   border-radius: var(--r-pill);
-  margin-left: var(--sp-1);
+  margin-inline-start: var(--sp-1);
   vertical-align: middle;
 }
 .custodyDot.custodyOk {
@@ -31,54 +46,34 @@
 /* The search-hit snippet (List row, via Shared's Snippet). */
 .snippet {
   font: var(--t-small);
-  font-size: 12px;
   color: var(--text-soft);
   margin-top: 2px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 1;
+  line-clamp: 1;
+  overflow-wrap: anywhere;
 }
 .snippet mark {
   background: var(--accent-soft);
   color: var(--accent-text);
-  border-radius: 3px;
+  border-radius: var(--r-sm);
   padding: 0 1px;
 }
 
 /* The vault-canonical star (issue #274) riding a Grid card or List row title. */
 .starInd {
   color: var(--app-identity);
-  font-size: 0.85em;
-  margin-left: var(--sp-1);
-}
-
-/* The play badge over a video thumbnail (Grid card, List row `.small`, Details
-   hero). */
-.mediaPlay {
-  position: absolute;
-  inset: 50% auto auto 50%;
-  transform: translate(-50%, -50%);
-  display: grid;
-  place-items: center;
-  width: 2.25rem;
-  height: 2.25rem;
-  border-radius: 999px;
-  /* Darkens the thumbnail behind it — the scrim token, dialled down. */
-  background: color-mix(in oklab, var(--scrim) 81%, transparent);
-  color: var(--text-inv);
   font-size: var(--t-small-size);
-  padding-left: 2px;
-  pointer-events: none;
-}
-.mediaPlay.small {
-  width: 1.35rem;
-  height: 1.35rem;
-  font-size: 0.55rem;
+  margin-inline-start: var(--sp-1);
+  /* A star glued to the last word reads as a typo. */
+  padding-inline-start: 2px;
 }
 
 /* Free-form label chip (Toolbar's TagChips + Details' Tags editor). */
 .tagChip {
   font: var(--t-mono);
+  font-variant-numeric: var(--t-mono-numeric);
 }
 
 /* Drawer action/footer button pills (Details actions + footer, History
@@ -101,4 +96,27 @@
 .detailBtn {
   flex: 1;
   text-decoration: none;
+}
+
+/* §11's banner. A hairline in `--net` and the container radius — a border, not
+   a fill: nothing has been lost, and a filled alarm bar would say it had. */
+.offline {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-3);
+  margin: var(--sp-3) var(--sp-4) 0;
+  padding: var(--sp-3) var(--sp-4);
+  border: 1px solid var(--net);
+  border-radius: var(--r-lg);
+  background: var(--net-wash);
+}
+
+.offlineText {
+  margin: 0;
+  flex: 1 1 40ch;
+  max-inline-size: 78ch;
+  font: var(--t-small);
+  color: var(--text);
 }

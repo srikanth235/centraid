@@ -1,6 +1,6 @@
 /*
  * Shared harness for the client↔gateway SEAM contract tests (#656 Layer 1B):
- * the storage, backup, atlas, members, capture, conversation-history and
+ * the storage, backup, atlas, owners, devices, conversation-history and
  * app-editing wire surfaces that had no test file at all.
  *
  * Same shape as `gateway-client-contract-fixtures.ts` — stub `window.CentraidApi`
@@ -134,6 +134,86 @@ const ROUTES: Record<string, Responder> = {
   "PUT /centraid/_vault/blob-store": (request) =>
     json({ blob_store: JSON.parse(String(request.body)).blob_store }),
 
+  // ── enrichment tier (the owner's per-domain consent, #352 / S9) ──
+  // The PUT echoes the MERGED state, not the patch: the real route reads the
+  // vault back after writing, and a client that rendered its own patch would
+  // show a tier the vault may never have accepted.
+  "GET /centraid/_vault/enrich": () =>
+    json({
+      enrich: { photos: "gateway", docs: "gateway" },
+      // Additive since #807: the cascade's scoped rules ride alongside the
+      // tiers, and a client that reads only `enrich` is unaffected.
+      rules: [
+        {
+          scope: { type: "domain", ref: "photos" },
+          capability: "ocr",
+          enabled: null,
+          profile: null,
+          trigger: "on-view",
+          updatedAt: "2026-08-16T00:00:00.000Z",
+        },
+      ],
+    }),
+  "PUT /centraid/_vault/enrich/rules": (request) =>
+    json({
+      rule: {
+        scope: {
+          type: (JSON.parse(String(request.body)) as { scope: string }).scope,
+          ref: (JSON.parse(String(request.body)) as { ref?: string }).ref ?? "",
+        },
+        capability: "ocr",
+        enabled: null,
+        profile: null,
+        trigger: "on-demand",
+        updatedAt: "2026-08-16T00:00:00.000Z",
+      },
+    }),
+  "DELETE /centraid/_vault/enrich/rules": () => json({ deleted: true }),
+  "GET /centraid/_vault/enrich/effective": () =>
+    json({
+      tier: "device",
+      rules: [],
+      effective: {
+        capability: "ocr",
+        enabled: true,
+        profileId: "built-in",
+        trigger: "on-ingest",
+        egressCeiling: "on-device",
+      },
+    }),
+  // The egress-consent ledger (#807 Wave 3). The POST answers with the row the
+  // VAULT holds — the route reads it back after the one writer wrote it.
+  "GET /centraid/_vault/enrich/consent": () =>
+    json({
+      consent: [
+        {
+          capability: "faces",
+          egress: "provider",
+          scopeRef: "",
+          decision: "declined",
+          decidedAt: "2026-08-15T10:00:00.000Z",
+          receiptId: null,
+        },
+      ],
+    }),
+  "POST /centraid/_vault/enrich/consent": (request) =>
+    json({
+      consent: {
+        ...(JSON.parse(String(request.body)) as Record<string, unknown>),
+        scopeRef: "",
+        decidedAt: "2026-08-16T00:00:00.000Z",
+        receiptId: null,
+      },
+    }),
+  "PUT /centraid/_vault/enrich": (request) =>
+    json({
+      enrich: {
+        docs: "gateway",
+        photos: "gateway",
+        ...(JSON.parse(String(request.body)) as Record<string, unknown>),
+      },
+    }),
+
   // ── backup engine (#351 wave 4 / #436) ──
   "GET /centraid/_gateway/backup": () =>
     json({
@@ -182,34 +262,87 @@ const ROUTES: Record<string, Responder> = {
   "DELETE /centraid/_vault/demo": () => json({ purged: 3, blocked: [] }),
   "DELETE /centraid/_vault/demo/daily": () => json({ purged: 1, blocked: [] }),
 
-  // ── household roster (#599 L2) ──
-  "GET /centraid/_gateway/members": () =>
+  // ── owner surface (#726) ──
+  "GET /centraid/_gateway/owners": () =>
     json({
-      members: [
+      owners: [
         {
-          memberId: "m-1",
+          ownerId: "o-1",
           label: "Ada",
           createdAt: "2026-07-25T00:00:00.000Z",
-          roles: [],
+          vaults: [],
           deviceCount: 2,
         },
       ],
     }),
-  "POST /centraid/_gateway/members": (request) =>
-    json({ member: { memberId: "m-2", ...JSON.parse(String(request.body)) } }),
-  "PATCH /centraid/_gateway/members/m-1": (request) =>
-    json({ member: { memberId: "m-1", ...JSON.parse(String(request.body)) } }),
-  "DELETE /centraid/_gateway/members/m-1": () =>
-    json({ removed: true, memberId: "m-1", devices: 2 }),
+  "PATCH /centraid/_gateway/owners/o-1": (request) =>
+    json({ owner: { ownerId: "o-1", ...JSON.parse(String(request.body)) } }),
 
-  // ── capture ──
-  "POST /centraid/_gateway/capture/ocr": () =>
-    json({ extraction: { text: "hi", confidence: 0.9, engine: "tesseract" } }),
-  "POST /centraid/_gateway/capture/classify": () =>
-    json({ preview: { kind: "task", title: "Buy milk" } }),
-  "POST /centraid/_vault/blobs": () => json({ sha256: "a".repeat(64) }),
-  "POST /centraid/tally/queries/recent": () => json({ rows: [] }),
-  "POST /centraid/tally/actions/record": () => json({ ok: true }),
+  // ── pairing-ticket mint, self-pair + "Add someone" (#726, #726 P1) ──
+  "POST /centraid/_gateway/devices/ticket": (request) => {
+    const body = JSON.parse(String(request.body)) as {
+      forPerson?: { label: string; vaultName?: string };
+    };
+    if (body.forPerson) {
+      return json({
+        ok: true,
+        ticket: "CENTRAID-TICKET-PERSON",
+        ownerId: "o-new",
+        ownerLabel: body.forPerson.label,
+        vaults: [{ vaultId: "v-new", vaultName: body.forPerson.vaultName }],
+        vaultId: "v-new",
+        vaultName: body.forPerson.vaultName,
+        expiresAt: "2026-07-25T01:00:00.000Z",
+      });
+    }
+    return json({
+      ok: true,
+      ticket: "CENTRAID-TICKET-SELF",
+      ownerId: "o-1",
+      ownerLabel: "Ada",
+      vaults: [{ vaultId: "vault-1", vaultName: "Personal" }],
+      vaultId: "vault-1",
+      vaultName: "Personal",
+      expiresAt: "2026-07-25T01:00:00.000Z",
+    });
+  },
+
+  // ── commons steward-absence recovery (#731 presence, #750 surface) ──
+  // The GET answers the vault's whole commons observability record; the client
+  // reads the `grants` array out of it and nothing else.
+  "GET /centraid/_gateway/commons/recovery": () =>
+    json({
+      vaultId: "vault-1",
+      deviceLinkAt: "2026-08-12T00:00:00.000Z",
+      grants: [
+        {
+          grantId: "grant-1",
+          containerType: "album",
+          steward: {
+            grantId: "grant-1",
+            presence: "absent",
+            stewardVaultId: "vault-gone",
+            silentForMs: 9 * 24 * 60 * 60 * 1000,
+            consecutiveFailures: 12,
+            lastOutcome: "unreachable",
+          },
+        },
+      ],
+    }),
+  "POST /centraid/_gateway/commons/recovery": () =>
+    json({
+      state: "recovered",
+      grantId: "grant-2",
+      circleId: "circle-1",
+      containerType: "album",
+      containerId: "album-1",
+      invitedPartyIds: ["party-b", "party-c"],
+      replayed: false,
+      invitations: [
+        { partyId: "party-b", memberVaultId: "vault-b", state: "delivered" },
+        { partyId: "party-c", state: "claim" },
+      ],
+    }),
 
   // ── conversation history (#420 / #599 Decision 14) ──
   "GET /_centraid-conversations/apps/daily/sessions": () =>
@@ -280,7 +413,7 @@ export const fetchMock: Mock<typeof transport> = vi.fn();
 
 window.CentraidApi = {
   getGatewayAuth,
-  getHostCapabilities: async () => ({ appSessions: false }),
+  getHostCapabilities: async () => ({}),
   onGatewayChanged: () => () => undefined,
   onVaultChanged: () => () => undefined,
 } as unknown as typeof window.CentraidApi;
@@ -289,10 +422,12 @@ vi.stubGlobal("fetch", fetchMock);
 export const storage = await import("./gateway-client-storage.js");
 export const backup = await import("./gateway-client-backup.js");
 export const atlas = await import("./gateway-client-atlas.js");
-export const members = await import("./gateway-client-members.js");
-export const capture = await import("./gateway-client-capture.js");
+export const owners = await import("./gateway-client-owners.js");
+export const devices = await import("./gateway-client-devices.js");
+export const edges = await import("./gateway-client-edges.js");
 export const history = await import("./gateway-client-conversation-history.js");
 export const editing = await import("./gateway-client-editing.js");
+export const vaultOwner = await import("./gateway-client-vault.js");
 const { resetGatewayAuthCache } = await import("./gateway-client-core.js");
 
 /** Registers the per-test reset. Call once at the top level of a test file. */

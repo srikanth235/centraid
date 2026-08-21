@@ -5,7 +5,7 @@
   "description": "Split, settled — a personal expense splitter as a projection of the vault. Track shared costs across groups and friends, see who owes whom, and settle up. A friend is a canonical core.party; a group is a social.circle (the vault's one audience mechanism) decorated by a tally.group with an emoji icon, membership on the circle (you included); an expense stores its resolved splits (equally, exact amounts or percentages), re-validated server-side to sum to the amount; a settlement is a real cash payment. Balances are NEVER stored — they are derived at read time by the balance engine. Adding, editing and deleting expenses, settling up, and managing groups and friends all run through typed vault commands — consent-checked and receipted. No data of its own — revoke the grant and the app goes dark.",
   "version": "0.1.1",
   "iconKey": "Receipt",
-  "colorKey": "forest",
+  "colorKey": "indigo",
   "vault": {
     "purpose": "dpv:ServiceProvision",
     "why": "Keeps your shared expenses split, balanced and settled.",
@@ -659,7 +659,7 @@
     },
     {
       "name": "group",
-      "description": "One group: its meta, members with their net balances, and the expense ledger (newest first), each row decorated with the owner's lent/borrowed amount and its per-person splits.",
+      "description": "One group: its meta, current members plus departed durable ledger participants with their net balances, and the expense ledger (newest first), each row decorated with the owner's lent/borrowed amount and its per-person splits.",
       "input": {
         "type": "object",
         "properties": { "group_id": { "type": "string", "minLength": 1 } },
@@ -757,16 +757,6 @@
   ],
   "knobs": [
     {
-      "key": "appFont",
-      "label": "Font",
-      "type": "segmented",
-      "default": "sans",
-      "options": [
-        { "value": "sans", "label": "Sans" },
-        { "value": "mono", "label": "Mono" }
-      ]
-    },
-    {
       "key": "appColor",
       "label": "Color",
       "type": "swatch",
@@ -779,5 +769,11 @@
         { "value": "#E0567A", "label": "Rose" }
       ]
     }
-  ]
+  ],
+  "seats": {
+    "byteBearing": false,
+    "originActs": ["camera"],
+    "disabledOn": [],
+    "northStar": "splitwise"
+  }
 }

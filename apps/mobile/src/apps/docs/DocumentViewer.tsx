@@ -1,345 +1,425 @@
-import { File, Paths } from "expo-file-system";
+// The stage (Docs handoff Part 2 §8; issue #821) — a document on the dark
+// ground, "a mode with its own exit, and the one thing that drops the band"
+// (deviation 2: `DocsScreen`'s `hideBand`, passed here and nowhere else).
+// Every colour on it is a named stage token off the native theme.
+//
+// What actually renders is what this seat can actually render:
+//   * image  → expo-image off the gateway blob route (or the inline bytes);
+//   * video / audio → expo-video with its own native transport — the same
+//     machinery Photos' lightbox uses;
+//   * PDF → NOTHING pretends to be a page. This phone has no PDF renderer,
+//     so the stage states the fact with the document's own facts beside it
+//     and offers the file to an app that reads the kind. A mocked page here
+//     would be a fabrication (INTEGRATION-NOTES.md → choices).
+//
+// Prev / next step to the previous and next DOCUMENT in the current shelf
+// (the drive's active set, in its default changed-newest order).
+
+import { useNavigation } from "@react-navigation/native";
 import { Image } from "expo-image";
-import * as Sharing from "expo-sharing";
-import { VideoView, useVideoPlayer } from "expo-video";
-import React, { useState } from "react";
-import { Alert, Pressable, StyleSheet, View } from "react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
-import { WebView } from "react-native-webview";
+import { useVideoPlayer, VideoView } from "expo-video";
+import React, { useMemo, useState } from "react";
+import { Pressable, ScrollView, StyleSheet, View } from "react-native";
+
+import { STAGE_ACTIONS } from "@centraid/blueprints/apps/docs/document-copy";
+import {
+  custodyMeta,
+  fmtBytes,
+  typeMeta,
+} from "@centraid/blueprints/apps/docs/format";
 
 import Icon from "../../kit/components/Icon";
 import { Text } from "../../kit/components/NativeText";
-import OptionSheet from "../../kit/components/OptionSheet";
-import { showToast } from "../../kit/components/Toast";
+import { postStatus } from "../../kit/components/status-line";
+import { imageSource, videoSource } from "../../kit/media/media-source";
 import { useReplica } from "../../kit/replica/ReplicaProvider";
-import {
-  surfaceWriteFailure,
-  surfaceWriteOutcome,
-} from "../../kit/replica/write-outcome";
-import { family, useTheme } from "../../kit/theme";
-import { authHeader } from "../../lib/gateway";
-import type { NativeOptimisticMutation } from "../../lib/replica/native-session";
-import {
-  optimisticRowId,
-  optimisticValues,
-} from "../../lib/replica/optimistic";
-import type { DocsScreenProps } from "../../navigation";
-import type { NativeDocument } from "./docs-model";
-import { useDocsLibrary } from "./useDocsLibrary";
-
-function StreamViewer({
-  source,
-}: {
-  source: { uri: string; headers: Record<string, string> };
-}): React.JSX.Element {
-  const player = useVideoPlayer(source);
-  return (
-    <VideoView
-      player={player}
-      nativeControls
-      contentFit="contain"
-      style={styles.viewer}
-    />
-  );
-}
-
-function Viewer({
-  document,
-  url,
-}: {
-  document: NativeDocument;
-  url: string;
-}): React.JSX.Element {
-  const source = { uri: url, headers: authHeader() };
-  if (document.mediaType.startsWith("image/"))
-    return <Image source={source} contentFit="contain" style={styles.viewer} />;
-  if (
-    document.mediaType.startsWith("video/") ||
-    document.mediaType.startsWith("audio/")
-  )
-    return <StreamViewer source={source} />;
-  return (
-    <WebView source={source} style={styles.viewer} allowsInlineMediaPlayback />
-  );
-}
+import GrantSheet from "../../kit/share/GrantSheet";
+import { borders, radii, t, useTheme } from "../../kit/theme";
+import type { ThemeColors } from "../../kit/theme";
+import type { DocsScreenProps, DocsShellNavigation } from "../../navigation";
+import { openElsewhere } from "./docs-export";
+import type { MobileDriveDoc } from "./docs-projection";
+import DocsScreen from "./DocsScreen";
+import { docBytesUrl } from "./document-read-model";
+import { useDocs, useDocsWrite } from "./useDocs";
+import { useDocsGrantAudiences } from "./useDocsGrantAudiences";
 
 export default function DocumentViewer({
   route,
   navigation,
 }: DocsScreenProps<"DocumentViewer">): React.JSX.Element {
+  const { documentId } = route.params;
   const { colors } = useTheme();
-  const { session, gatewayBase, scopes = [] } = useReplica();
-  const [placementKind, setPlacementKind] = useState<"add" | "move">();
-  const drive = useDocsLibrary();
-  const document = drive.documents.find(
-    (item) => item.id === route.params.documentId
+  const styles = useMemo(() => makeStyles(colors), [colors]);
+  const { gatewayBase, vaultId } = useReplica();
+  const shellNavigation = useNavigation<DocsShellNavigation>();
+  const drive = useDocs();
+  const write = useDocsWrite(shellNavigation);
+  // Share is drawn only once the roster is an answer — `null` is "not read
+  // yet", and a Share verb over an unread roster would say "nobody yet" about
+  // a vault full of people.
+  const audiences = useDocsGrantAudiences();
+  const [shareOpen, setShareOpen] = useState(false);
+
+  // The current shelf's steppable set: the active drive, default order.
+  const shelfDocs = useMemo(
+    () => drive.documents.filter((doc) => !doc.trashed),
+    [drive.documents]
   );
-  const url =
-    document && gatewayBase
-      ? `${gatewayBase}/centraid/_gateway/blobs/${encodeURIComponent(
-          document.sourceVaultId ?? ""
-        )}/${encodeURIComponent(document.contentId)}${document.mediaType.startsWith("image/") || document.mediaType === "application/pdf" ? "?variant=preview" : ""}`
-      : "";
-  const action = async (name: string): Promise<void> => {
-    if (
-      !document ||
-      !session ||
-      document.canWrite !== true ||
-      !document.sourceVaultId
-    )
-      return;
-    try {
-      const now = new Date().toISOString();
-      const optimistic: NativeOptimisticMutation[] =
-        name === "trash" && document.raw
-          ? [
-              {
-                op: "upsert",
-                entity: "core.document",
-                rowId: document.rawId ?? document.id,
-                values: optimisticValues(document.raw, {
-                  deleted_at: now,
-                  updated_at: now,
-                }),
-              },
-            ]
-          : name === "unstar" && document.starTag
-            ? [
-                {
-                  op: "delete",
-                  entity: "core.tag",
-                  rowId: String(document.starTag.tag_id),
-                },
-              ]
-            : name === "star" && document.starredConceptId
-              ? (() => {
-                  const tagId = optimisticRowId("star");
-                  return [
-                    {
-                      op: "upsert" as const,
-                      entity: "core.tag",
-                      rowId: tagId,
-                      values: {
-                        tag_id: tagId,
-                        target_type: "core.document",
-                        target_id: document.rawId ?? document.id,
-                        concept_id: document.starredConceptId,
-                        tagged_by_party_id: null,
-                        confidence: null,
-                        tagged_at: now,
-                      },
-                    },
-                  ];
-                })()
-              : [];
-      const write = {
-        action: name,
-        input: { document_id: document.rawId ?? document.id },
-        optimistic,
-      };
-      const result = await session.writeTo(
-        document.sourceVaultId,
-        "docs",
-        write
-      );
-      // A parked write (e.g. moving to trash is medium-risk) must surface for
-      // Approve/Discard rather than silently vanish (M5); denials/failures are
-      // shown, not swallowed.
-      surfaceWriteOutcome(result, {
-        onParked: () =>
-          navigation.navigate("Settings", { screen: "Approvals" }),
-        queuedMessage:
-          "This change will sync automatically when the gateway reconnects.",
-        failureTitle: "Not applied",
-      });
-    } catch (error) {
-      surfaceWriteFailure(error, "Action failed");
+  const index = shelfDocs.findIndex((doc) => doc.document_id === documentId);
+  const doc = index >= 0 ? shelfDocs[index] : undefined;
+
+  const step = (delta: number): void => {
+    const next = shelfDocs[index + delta];
+    if (next) navigation.setParams({ documentId: next.document_id });
+  };
+
+  const onStar = async (target: MobileDriveDoc): Promise<void> => {
+    await write(target.starred ? "unstar" : "star", {
+      document_id: target.document_id,
+    });
+  };
+  const onTrash = async (target: MobileDriveDoc): Promise<void> => {
+    const result = await write("trash", { document_id: target.document_id });
+    if (result) {
+      postStatus("Moved to trash.");
+      navigation.goBack();
     }
   };
-  const place = async (targetVaultId: string): Promise<void> => {
-    const kind = placementKind;
-    setPlacementKind(undefined);
-    if (!kind || !document?.sourceVaultId || !session) return;
-    const result = await session.place({
-      kind,
-      itemType: "core.document",
-      itemId: document.rawId ?? document.id,
-      sourceVaultId: document.sourceVaultId,
-      targetVaultId,
-    });
-    showToast({
-      message:
-        result.reason ??
-        (result.status === "executed"
-          ? "Document placed in the selected vault."
-          : "Document placement queued — it will resume when the gateway is reachable."),
-      tone: result.status === "executed" ? "accent" : "neutral",
-    });
+  const onDownload = async (target: MobileDriveDoc): Promise<void> => {
+    try {
+      await openElsewhere(target, gatewayBase, vaultId);
+    } catch (error) {
+      postStatus(
+        error instanceof Error
+          ? error.message
+          : "This document could not be handed over."
+      );
+    }
   };
-  const share = async (): Promise<void> => {
-    if (!document || !url) return;
-    const file = await File.downloadFileAsync(
-      url.replace("?variant=preview", ""),
-      new File(Paths.cache, document.title),
-      { headers: authHeader(), idempotent: true }
-    );
-    if (await Sharing.isAvailableAsync())
-      await Sharing.shareAsync(file.uri, { mimeType: document.mediaType });
-  };
-  if (!document)
-    return <View style={[styles.viewer, { backgroundColor: colors.bg }]} />;
+
   return (
-    <SafeAreaView
-      style={[styles.safe, { backgroundColor: colors.bg }]}
-      edges={["top", "bottom"]}
-    >
-      <View style={styles.header}>
-        <Pressable
-          accessibilityLabel="Back to documents"
-          accessibilityRole="button"
-          onPress={() => navigation.goBack()}
-        >
-          <Icon name="chevron-left" size={26} color={colors.text} />
-        </Pressable>
-        <Text numberOfLines={1} style={[styles.title, { color: colors.text }]}>
-          {document.title}
-        </Text>
-        <Pressable
-          accessibilityLabel={`Share ${document.title}`}
-          accessibilityRole="button"
-          onPress={() => void share()}
-        >
-          <Icon name="share" size={21} color={colors.accent} />
-        </Pressable>
+    <DocsScreen current="all" hideBand>
+      <View style={styles.stage}>
+        <View style={styles.bar}>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={STAGE_ACTIONS.close}
+            onPress={() => navigation.goBack()}
+            style={styles.close}
+          >
+            <Icon name="x" size={20} color={colors.onStage} />
+          </Pressable>
+          <View style={styles.barTitle}>
+            <Text numberOfLines={1} style={styles.title}>
+              {doc?.title ?? "Document"}
+            </Text>
+            {doc ? (
+              <Text numberOfLines={1} style={styles.meta}>
+                {`${typeMeta(doc.media_type, doc.title).name} · ${fmtBytes(doc.byte_size)}`}
+              </Text>
+            ) : null}
+          </View>
+        </View>
+
+        <View style={styles.body}>
+          {doc ? (
+            <StageMedia
+              doc={doc}
+              gatewayBase={gatewayBase}
+              vaultId={vaultId}
+              offline={drive.offline}
+              styles={styles}
+            />
+          ) : (
+            <Text style={styles.cannot}>
+              This document is not in the drive this device can see.
+            </Text>
+          )}
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Previous document"
+            disabled={index <= 0}
+            onPress={() => step(-1)}
+            style={[styles.stepper, styles.stepPrev]}
+          >
+            <Icon
+              name="chevron-left"
+              size={22}
+              color={index <= 0 ? colors.onStageSoft : colors.onStage}
+            />
+          </Pressable>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Next document"
+            disabled={index < 0 || index >= shelfDocs.length - 1}
+            onPress={() => step(1)}
+            style={[styles.stepper, styles.stepNext]}
+          >
+            <Icon
+              name="chevron-right"
+              size={22}
+              color={
+                index < 0 || index >= shelfDocs.length - 1
+                  ? colors.onStageSoft
+                  : colors.onStage
+              }
+            />
+          </Pressable>
+        </View>
+
+        {doc ? (
+          <View style={styles.bottom}>
+            <StageAction
+              label={doc.starred ? STAGE_ACTIONS.starred : STAGE_ACTIONS.star}
+              icon="star"
+              onPress={() => void onStar(doc)}
+              styles={styles}
+            />
+            <StageAction
+              label={STAGE_ACTIONS.download}
+              icon="download"
+              onPress={() => void onDownload(doc)}
+              styles={styles}
+            />
+            {audiences ? (
+              <StageAction
+                label={STAGE_ACTIONS.share}
+                icon="share"
+                onPress={() => setShareOpen(true)}
+                styles={styles}
+              />
+            ) : null}
+            <StageAction
+              label={STAGE_ACTIONS.properties}
+              icon="info"
+              onPress={() =>
+                navigation.navigate("DocumentProperties", {
+                  documentId: doc.document_id,
+                })
+              }
+              styles={styles}
+            />
+            <StageAction
+              label={STAGE_ACTIONS.trash}
+              icon="trash-2"
+              net
+              onPress={() => void onTrash(doc)}
+              styles={styles}
+            />
+          </View>
+        ) : null}
+
+        {doc ? (
+          <View style={styles.statusRow}>
+            <Text numberOfLines={1} style={styles.statusText}>
+              {`${index + 1} of ${shelfDocs.length} in All` +
+                (custodyMeta(doc.custody_state)
+                  ? ` · ${custodyMeta(doc.custody_state)?.label.toLowerCase()}`
+                  : "")}
+            </Text>
+          </View>
+        ) : null}
       </View>
-      <Viewer document={document} url={url} />
-      <View style={[styles.toolbar, { borderTopColor: colors.line }]}>
-        <Pressable
-          accessibilityLabel={
-            document.starred ? "Remove document star" : "Star document"
-          }
-          accessibilityRole="button"
-          accessibilityState={{
-            disabled: document.canWrite !== true,
-            selected: document.starred,
+      {/* OBJECT-FIRST: the stage is already about this one document, so the
+          shared kit opens over it and asks only who. Outcomes go to the seat's
+          one status line — the sheet paints none of its own. */}
+      {doc && audiences ? (
+        <GrantSheet
+          visible={shareOpen}
+          onClose={() => setShareOpen(false)}
+          audiences={audiences}
+          subject={{
+            subjectType: "core.document",
+            subjectId: doc.document_id,
+            ...(doc.title ? { label: doc.title } : {}),
           }}
-          disabled={document.canWrite !== true}
-          onPress={() => void action(document.starred ? "unstar" : "star")}
-        >
-          <Icon
-            name="star"
-            size={21}
-            color={
-              document.canWrite === true
-                ? document.starred
-                  ? "#d99b18"
-                  : colors.textSoft
-                : colors.textFaint
-            }
-          />
-        </Pressable>
-        <Text style={[styles.meta, { color: colors.textSoft }]}>
-          {document.scopeLabels?.join(" · ") ?? "Vault"} · {document.mediaType}{" "}
-          · {document.custody ?? "local"}
-        </Text>
-        <Pressable
-          accessibilityLabel="Add document to another vault"
-          accessibilityRole="button"
-          onPress={() => setPlacementKind("add")}
-        >
-          <Icon name="copy" size={20} color={colors.accent} />
-        </Pressable>
-        <Pressable
-          accessibilityLabel="Move document to another vault"
-          accessibilityRole="button"
-          accessibilityState={{ disabled: document.canWrite !== true }}
-          disabled={document.canWrite !== true}
-          onPress={() => setPlacementKind("move")}
-        >
-          <Icon
-            name="folder-plus"
-            size={20}
-            color={
-              document.canWrite === true ? colors.accent : colors.textFaint
-            }
-          />
-        </Pressable>
-        <Pressable
-          accessibilityLabel="Move document to trash"
-          accessibilityRole="button"
-          accessibilityState={{ disabled: document.canWrite !== true }}
-          disabled={document.canWrite !== true}
-          onPress={() =>
-            Alert.alert(
-              "Move to trash?",
-              "The current document and its version history remain restorable until vault purge.",
-              [
-                { text: "Cancel" },
-                {
-                  text: "Trash",
-                  style: "destructive",
-                  onPress: () => void action("trash"),
-                },
-              ]
-            )
-          }
-        >
-          <Icon
-            name="trash-2"
-            size={20}
-            color={
-              document.canWrite === true ? colors.danger : colors.textFaint
-            }
-          />
-        </Pressable>
-      </View>
-      <OptionSheet
-        visible={placementKind !== undefined}
-        title={`${placementKind === "move" ? "Move" : "Add"} to…`}
-        options={scopes
-          .filter(
-            (scope) =>
-              scope.role !== "read" &&
-              !document.scopeIds?.includes(scope.vaultId)
-          )
-          .map((scope) => ({
-            id: scope.vaultId,
-            label: scope.label,
-            detail:
-              placementKind === "move"
-                ? "Target commits before source removal"
-                : "Keep in both vaults",
-          }))}
-        onSelect={(vaultId) => void place(vaultId)}
-        onClose={() => setPlacementKind(undefined)}
-      />
-    </SafeAreaView>
+          onStatus={postStatus}
+        />
+      ) : null}
+    </DocsScreen>
   );
 }
 
-const styles = StyleSheet.create({
-  header: {
-    alignItems: "center",
-    flexDirection: "row",
-    gap: 14,
-    minHeight: 50,
-    paddingHorizontal: 14,
-  },
-  meta: {
-    flex: 1,
-    fontFamily: family.sansRegular,
-    fontSize: 11,
-    textAlign: "center",
-  },
-  safe: { flex: 1 },
-  title: { flex: 1, fontFamily: family.sansBold, fontSize: 15 },
-  toolbar: {
-    alignItems: "center",
-    borderTopWidth: 1,
-    flexDirection: "row",
-    height: 52,
-    justifyContent: "space-between",
-    paddingHorizontal: 22,
-  },
-  viewer: { flex: 1 },
-});
+function StageAction({
+  label,
+  icon,
+  net,
+  onPress,
+  styles,
+}: {
+  label: string;
+  icon: string;
+  net?: boolean;
+  onPress: () => void;
+  styles: ReturnType<typeof makeStyles>;
+}): React.JSX.Element {
+  const { colors } = useTheme();
+  const color = net ? colors.net : colors.onStage;
+  return (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={label}
+      onPress={onPress}
+      style={styles.action}
+    >
+      <Icon name={icon} size={18} color={color} />
+      <Text style={[styles.actionLabel, { color }]}>{label}</Text>
+    </Pressable>
+  );
+}
+
+function StageMedia({
+  doc,
+  gatewayBase,
+  vaultId,
+  offline,
+  styles,
+}: {
+  doc: MobileDriveDoc;
+  gatewayBase: string | undefined;
+  vaultId: string | undefined;
+  offline: boolean;
+  styles: ReturnType<typeof makeStyles>;
+}): React.JSX.Element {
+  const kind = typeMeta(doc.media_type, doc.title);
+  const mediaType = String(doc.media_type ?? "");
+  const inline = String(doc.content_uri ?? "").startsWith("data:")
+    ? String(doc.content_uri)
+    : null;
+  const remote = docBytesUrl(doc, gatewayBase, vaultId);
+  const uri = inline ?? (offline ? null : remote);
+
+  if (mediaType.startsWith("image/") && uri) {
+    return (
+      <Image
+        source={imageSource(uri)}
+        contentFit="contain"
+        style={styles.media}
+        accessibilityLabel={doc.title}
+      />
+    );
+  }
+  if (
+    (mediaType.startsWith("video/") || mediaType.startsWith("audio/")) &&
+    uri
+  ) {
+    return <StageTransport uri={uri} styles={styles} />;
+  }
+  // The honest state: no fabricated page. Either this phone cannot render
+  // the kind at all (there is no PDF renderer on this seat), or the bytes
+  // are out of reach — the sentence names which.
+  const reason = uri
+    ? `This phone cannot open ${kind.name} here. Docs holds it, versions it and files it — Open elsewhere hands the file to an app that reads this kind.`
+    : "The bytes of this document are not on this device and the gateway is out of reach, so it cannot open right now.";
+  return (
+    <ScrollView contentContainerStyle={styles.cannotWrap}>
+      <Text style={styles.cannotKind}>{kind.name}</Text>
+      <Text style={styles.cannot}>{reason}</Text>
+      <View style={styles.cannotFacts}>
+        <Text
+          style={styles.cannotFact}
+        >{`Size · ${fmtBytes(doc.byte_size)}`}</Text>
+        <Text style={styles.cannotFact}>
+          {`Bytes · ${custodyMeta(doc.custody_state)?.label.toLowerCase() ?? "not swept yet"}`}
+        </Text>
+      </View>
+    </ScrollView>
+  );
+}
+
+function StageTransport({
+  uri,
+  styles,
+}: {
+  uri: string;
+  styles: ReturnType<typeof makeStyles>;
+}): React.JSX.Element {
+  const player = useVideoPlayer(videoSource(uri), (instance) => {
+    instance.loop = false;
+  });
+  return (
+    <VideoView
+      player={player}
+      nativeControls
+      contentFit="contain"
+      style={styles.media}
+    />
+  );
+}
+
+const makeStyles = (colors: ThemeColors) =>
+  StyleSheet.create({
+    action: {
+      alignItems: "center",
+      flex: 1,
+      gap: 3,
+      justifyContent: "center",
+      minHeight: 56,
+    },
+    actionLabel: { ...t("small"), color: colors.onStage },
+    bar: {
+      alignItems: "center",
+      borderBottomColor: colors.stageLine,
+      borderBottomWidth: borders.hairline,
+      flexDirection: "row",
+      gap: 8,
+      minHeight: 52,
+      paddingHorizontal: 10,
+    },
+    barTitle: { flex: 1, gap: 1, minWidth: 0 },
+    body: { flex: 1, justifyContent: "center", minHeight: 0 },
+    bottom: {
+      borderTopColor: colors.stageLine,
+      borderTopWidth: borders.hairline,
+      flexDirection: "row",
+    },
+    cannot: { ...t("body"), color: colors.onStage, textAlign: "center" },
+    cannotFact: { ...t("mono"), color: colors.onStageSoft },
+    cannotFacts: { alignItems: "center", gap: 4, paddingTop: 16 },
+    cannotKind: {
+      ...t("eyebrow"),
+      color: colors.onStageSoft,
+      paddingBottom: 8,
+      textAlign: "center",
+    },
+    cannotWrap: {
+      flexGrow: 1,
+      justifyContent: "center",
+      paddingHorizontal: 32,
+    },
+    close: {
+      alignItems: "center",
+      height: 44,
+      justifyContent: "center",
+      width: 44,
+    },
+    media: { flex: 1 },
+    meta: { ...t("small"), color: colors.onStageSoft },
+    statusRow: {
+      alignItems: "center",
+      borderTopColor: colors.stageLine,
+      borderTopWidth: borders.hairline,
+      flexDirection: "row",
+      minHeight: 32,
+      paddingHorizontal: 12,
+    },
+    statusText: { ...t("small"), color: colors.onStageSoft, flex: 1 },
+    stepNext: { insetInlineEnd: 12 },
+    stepPrev: { insetInlineStart: 12 },
+    stepper: {
+      alignItems: "center",
+      backgroundColor: colors.stageSunken,
+      borderColor: colors.stageLine,
+      borderRadius: radii.pill,
+      borderWidth: borders.hairline,
+      height: 44,
+      justifyContent: "center",
+      marginTop: -22,
+      position: "absolute",
+      top: "50%",
+      width: 44,
+    },
+    stage: { backgroundColor: colors.stage, flex: 1 },
+    title: { ...t("control"), color: colors.onStage },
+  });

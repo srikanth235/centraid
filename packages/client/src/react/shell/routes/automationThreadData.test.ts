@@ -205,7 +205,7 @@ describe(loadAutomationThreadData, () => {
     vi.mocked(listAgents).mockResolvedValue([
       {
         agentId: "agent-1",
-        hostKey: "digest",
+        enrollmentKey: "digest",
         partyId: "party-1",
         name: "Daily Digest",
         modelRef: "centraid-automation",
@@ -231,6 +231,47 @@ describe(loadAutomationThreadData, () => {
     expect(result?.data.runs[0]?.dateGroup).toBe("Today");
     expect(result?.data.runs[1]?.status).toBe("ok");
     expect(result?.data.runs.every((r) => r.entryKind === "run")).toBe(true);
+  });
+
+  it("surfaces the declared delegate step and its explicit model pin", async () => {
+    vi.mocked(readAutomation).mockResolvedValue(
+      row({
+        manifest: {
+          requires: { model: "provider/member-selected-model" },
+          enrich: {
+            domain: "photos",
+            capability: "ocr",
+            lane: "device",
+            delegateStep: {
+              selected: "delegate",
+              promptRev: "ocr-v1",
+              latency: "Delegate OCR takes seconds.",
+              consequence: "Billed and re-derives eligible photographs.",
+            },
+          },
+        } as CentraidAutomationManifest,
+      })
+    );
+    vi.mocked(listAutomationTurns).mockResolvedValue([]);
+    vi.mocked(getBlocking).mockResolvedValue(blocking());
+    vi.mocked(listOutboxGrants).mockResolvedValue([]);
+    vi.mocked(listAgents).mockResolvedValue([]);
+
+    const result = await loadAutomationThreadData({
+      automationId: "digest/main",
+      gatewayOrigin: "http://127.0.0.1:5173",
+    });
+
+    expect(result?.data.recognition).toStrictEqual({
+      capability: "ocr",
+      selected: "delegate",
+      deterministicLabel: "Deterministic service",
+      delegate: {
+        model: "provider/member-selected-model",
+        latency: "Delegate OCR takes seconds.",
+        consequence: "Billed and re-derives eligible photographs.",
+      },
+    });
   });
 
   // The load-bearing half of the run-screen / compile-screen split: a compile

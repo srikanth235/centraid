@@ -1,12 +1,11 @@
 // Mobile automations client (issue #263 family). The vault's automations are
-// long-lived agent conversations that fire on a trigger; this module lists
+// long-lived automation turns that fire on a trigger; this module lists
 // them, fires one now, and toggles a row's enabled flag — all over the same
 // gateway base (paired tunnel or manual dev URL) the rest of the app uses.
 //
-// Mobile does not depend on `@centraid/automation` (a Node package), so the
-// wire shapes are mirrored here as lean local interfaces, exactly as
-// `lib/gateway.ts` mirrors the apps listing with its own `AppRegistryRow`.
-// The gateway routes are in packages/gateway/src/routes/automations-routes.ts
+// Mobile does not depend on `@centraid/server/automation` (a Node package), so the
+// wire shapes are mirrored here as lean local interfaces.
+// The gateway routes are in packages/server/src/routes/automations-routes.ts
 // (list, turn-now) and lifecycle-automation-routes.ts (set-enabled).
 
 // Every call here goes out with `apiHeaders()` — auth *and* `x-centraid-vault`
@@ -19,7 +18,7 @@
 import { apiHeaders, fetchJson, requireGatewayBase } from "./gateway";
 
 // One trigger entry from a manifest's `triggers[]`, narrowed to the fields the
-// schedule summary reads. Mirrors `@centraid/automation`'s `Trigger` union
+// schedule summary reads. Mirrors `@centraid/server/automation`'s `Trigger` union
 // (CronTrigger.expr is the 5-field schedule; webhook/condition/data fire off
 // events rather than the clock). Unknown kinds fall through to a generic label.
 type WireTrigger =
@@ -86,8 +85,6 @@ const V0_TEMPLATE_IDS = new Set([
   "google-drive-pull",
   "obligation-extractor",
   "renewal-reminders",
-  "screenshot-extractor",
-  "photo-captioner",
 ]);
 
 /**

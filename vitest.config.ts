@@ -1,5 +1,6 @@
 import { defineConfig } from "vitest/config";
 
+import { mobileVitestProjects } from "./apps/mobile/vitest.projects";
 import coverageFloors from "./tests/coverage-floors.json";
 
 // Every package that participates in the repo-wide vitest run. `vitest.diff-
@@ -7,26 +8,22 @@ import coverageFloors from "./tests/coverage-floors.json";
 // touches, so the two configs cannot drift into disagreeing about what exists.
 export const coverageProjects = [
   "vitest.quality.config.ts",
-  "packages/agent-runtime",
-  "packages/app-engine",
-  "packages/automation",
+  "packages/core",
+  "packages/server",
   "packages/backup",
-  "packages/blob-format",
   "packages/blueprints",
   "packages/client",
   "packages/design",
-  "packages/gateway",
-  "packages/protocol",
-  "packages/time-engine",
   "packages/cli",
   "packages/tunnel",
   "packages/test-kit",
   "packages/vault",
   "apps/desktop",
   "apps/extension",
-  "apps/mobile",
+  ...mobileVitestProjects,
   "apps/oauth-worker",
   "apps/web",
+  "packages/model-runtime",
 ];
 
 // What v8 instruments. Shared with the diff-coverage config so a scoped run
@@ -34,10 +31,25 @@ export const coverageProjects = [
 export const coverageInclude = [
   "packages/*/src/**/*.{ts,tsx,js,jsx,mjs,cjs}",
   "apps/*/src/**/*.{ts,tsx,js,jsx,mjs,cjs}",
-  // Bundled apps and their shared browser runtime are production code
-  // co-located outside packages/blueprints/src (issue #630 Wave 0).
+  // The bundled apps are production code co-located outside
+  // packages/blueprints/src (issue #630 Wave 0). The browser substrate they
+  // render on needs no row of its own since #799 folded it into
+  // packages/design/src/elements, which the conventional pattern above covers.
   "packages/blueprints/apps/**/*.{ts,tsx}",
-  "packages/design/kit/**/*.{ts,js}",
+  // The hand-authored source of the published recognition automations. It
+  // lives outside packages/model-runtime/src because it is bundled per handler
+  // rather than compiled with the package (issue #781). Only `.js` is
+  // instrumented: the tree's `.ts` files are its suites and their harness.
+  "packages/model-runtime/automation-handlers/**/*.js",
+  // The hand-authored connector/enricher handlers published under
+  // packages/blueprints/automations (#781). Only the `handler.js` files are
+  // product runtime; app.json/automation.json are manifests and the tree's
+  // `.ts` files are its suites and their harness. The six GENERATED
+  // recognition bundles are excluded below — their source is instrumented
+  // and floored under packages/model-runtime/automation-handlers, and
+  // bundle-drift.test.ts proves the published copies are the same program,
+  // so instrumenting the minified copy would double-count it.
+  "packages/blueprints/automations/**/handler.js",
   // The PWA service worker is load-bearing production offline/caching code that
   // lives outside src/ only because it must be served from the PWA root. Named
   // file, not `apps/*/public/**` — the rest of public/ is static assets (issue
@@ -55,8 +67,12 @@ export const coverageExclude = [
   "packages/backup/src/testing/**",
   // wasm-bindgen glue for the web iroh transport — generated, not hand-owned.
   "apps/web/src/generated/**",
-  // In-tree ACP fake used by agent-runtime tests, not product code.
-  "packages/agent-runtime/src/backends/acp/fake-acp-agent.mjs",
+  // In-tree ACP fake harness used by agent-runtime tests, not product code.
+  "packages/server/src/acp/backends/acp/fake-acp-harness.mjs",
+  // Generated recognition bundles: source-floored upstream (see the
+  // packages/blueprints/automations include note above). The id list matches
+  // packages/model-runtime/build-automation-handlers.ts.
+  "packages/blueprints/automations/{embed-image,embed-text,faces,photo-ocr,place-names,transcript}/**",
 ];
 
 // Root config: aggregates every package as a Vitest project so `vitest run`

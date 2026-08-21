@@ -1,14 +1,23 @@
-// Sidebar region: smart nav (all/recent/starred), the folder list (with
-// inline create/rename editors), the trash entry, and the storage footprint —
-// three separate React roots in app.tsx (#smartNav / #folderList / #storage),
-// so this file exports three top-level components rather than one.
+// Sidebar region: the folder list (with inline create/rename editors) and the
+// storage footprint.
+//
+// SMART NAV (All / Recent / Starred) AND THE TRASH ROW ARE GONE. The shelf
+// strip (components/ShelfStrip.tsx) carries all six shelves — including the
+// three the sidebar used to duplicate — and a second navigation for the same
+// destinations is exactly what the Docs restructure retires (spec §1.7). What
+// remains here is the folder list, whose rename / share / delete affordances
+// have no other home yet, and the footprint.
 import { useEffect, useRef } from "react";
 
+import { armConfirm } from "@centraid/design/elements";
+
+import { PendingWriteActions } from "../../_shared/PendingWriteActions.tsx";
 import { fmtBytes } from "../format.ts";
-import { DELETE_ICON, I, RENAME_ICON } from "../icons.ts";
-import { armConfirm } from "../kit.ts";
-import type { DriveDoc, Folder, Nav } from "../types.ts";
-import { Icon } from "./Shared.tsx";
+import { DELETE_ICON, I, RENAME_ICON, SHARE_ICON } from "../icons.ts";
+import { folderIdFrom, folderShelf } from "../shelves.ts";
+import type { ShelfId } from "../shelves.ts";
+import type { DriveDoc, Folder } from "../types.ts";
+import { ActionBtn, Icon } from "./Shared.tsx";
 
 import styles from "./Sidebar.module.css";
 
@@ -36,41 +45,6 @@ function NavItem({
       <span>{label}</span>
       {count == null ? null : <span className={styles.navCount}>{count}</span>}
     </button>
-  );
-}
-
-export function SmartNav({
-  navKind,
-  counts,
-  onSelectNav,
-}: {
-  navKind: string;
-  counts: { all: number; starred: number; trash: number };
-  onSelectNav: (nav: Nav) => void;
-}) {
-  return (
-    <>
-      <NavItem
-        icon={I.allDocs!}
-        label="All documents"
-        active={navKind === "all"}
-        count={counts.all}
-        onClick={() => onSelectNav({ kind: "all" })}
-      />
-      <NavItem
-        icon={I.clock!}
-        label="Recent"
-        active={navKind === "recent"}
-        onClick={() => onSelectNav({ kind: "recent" })}
-      />
-      <NavItem
-        icon={I.star!}
-        label="Starred"
-        active={navKind === "starred"}
-        count={counts.starred}
-        onClick={() => onSelectNav({ kind: "starred" })}
-      />
-    </>
   );
 }
 
@@ -112,9 +86,7 @@ function FolderCreateEdit({
           if (e.key === "Escape") onCancel();
         }}
       />
-      <button type="button" onClick={commit}>
-        Create
-      </button>
+      <ActionBtn icon="newFolder" label="Create" onClick={commit} />
     </div>
   );
 }
@@ -157,9 +129,7 @@ function FolderRenameEdit({
           if (e.key === "Escape") onCancel();
         }}
       />
-      <button type="button" onClick={commit}>
-        Save
-      </button>
+      <ActionBtn icon="confirm" label="Save" onClick={commit} />
     </div>
   );
 }
@@ -167,10 +137,12 @@ function FolderRenameEdit({
 function FolderRow({
   f,
   activeDocs,
-  navKind,
-  navFolderId,
+  shelf,
   renamingFolderId,
-  onSelectNav,
+  onSelectShelf,
+  onShareFolder,
+  residentFolderIds,
+  onSaveFolder,
   onStartRename,
   onDeleteFolder,
   onRenameCommit,
@@ -178,10 +150,12 @@ function FolderRow({
 }: {
   f: Folder;
   activeDocs: DriveDoc[];
-  navKind: string;
-  navFolderId: string | undefined;
+  shelf: ShelfId;
   renamingFolderId: string | null;
-  onSelectNav: (nav: Nav) => void;
+  onSelectShelf: (shelf: ShelfId) => void;
+  onShareFolder: (folder: Folder) => void;
+  residentFolderIds: ReadonlySet<string>;
+  onSaveFolder: (folder: Folder) => Promise<void>;
   onStartRename: (folderId: string) => void;
   onDeleteFolder: (folder: Folder) => void;
   onRenameCommit: (folderId: string, name: string) => void;
@@ -198,7 +172,7 @@ function FolderRow({
   const count = activeDocs.filter(
     (d) => (d.folder_id ?? null) === f.folder_id
   ).length;
-  const active = navKind === "folder" && navFolderId === f.folder_id;
+  const active = folderIdFrom(shelf) === f.folder_id;
   return (
     <div className={styles.folder}>
       <NavItem
@@ -206,9 +180,34 @@ function FolderRow({
         label={f.name}
         active={active}
         count={count || ""}
-        onClick={() => onSelectNav({ kind: "folder", folderId: f.folder_id })}
+        onClick={() => onSelectShelf(folderShelf(f.folder_id))}
+      />
+      <PendingWriteActions
+        row={f as unknown as Record<string, unknown>}
+        onEdit={() => onStartRename(f.folder_id)}
       />
       <span className={styles.folderTools}>
+        <button
+          type="button"
+          className="kit-icon-btn"
+          aria-label={
+            residentFolderIds.has(f.folder_id)
+              ? "Save to my vault"
+              : `Share ${f.name}`
+          }
+          title={
+            residentFolderIds.has(f.folder_id)
+              ? "Save to my vault"
+              : `Share ${f.name}`
+          }
+          onClick={(e) => {
+            e.stopPropagation();
+            if (residentFolderIds.has(f.folder_id)) void onSaveFolder(f);
+            else onShareFolder(f);
+          }}
+        >
+          <Icon svg={SHARE_ICON} />
+        </button>
         <button
           type="button"
           className="kit-icon-btn"
@@ -245,12 +244,13 @@ function FolderRow({
 export function FolderList({
   folders,
   activeDocs,
-  navKind,
-  navFolderId,
+  shelf,
   renamingFolderId,
   creatingFolder,
-  trashCount,
-  onSelectNav,
+  onSelectShelf,
+  onShareFolder,
+  residentFolderIds,
+  onSaveFolder,
   onStartRename,
   onDeleteFolder,
   onRenameCommit,
@@ -260,12 +260,13 @@ export function FolderList({
 }: {
   folders: Folder[];
   activeDocs: DriveDoc[];
-  navKind: string;
-  navFolderId: string | undefined;
+  shelf: ShelfId;
   renamingFolderId: string | null;
   creatingFolder: boolean;
-  trashCount: number;
-  onSelectNav: (nav: Nav) => void;
+  onSelectShelf: (shelf: ShelfId) => void;
+  onShareFolder: (folder: Folder) => void;
+  residentFolderIds: ReadonlySet<string>;
+  onSaveFolder: (folder: Folder) => Promise<void>;
   onStartRename: (folderId: string) => void;
   onDeleteFolder: (folder: Folder) => void;
   onRenameCommit: (folderId: string, name: string) => void;
@@ -283,23 +284,18 @@ export function FolderList({
           key={f.folder_id}
           f={f}
           activeDocs={activeDocs}
-          navKind={navKind}
-          navFolderId={navFolderId}
+          shelf={shelf}
           renamingFolderId={renamingFolderId}
-          onSelectNav={onSelectNav}
+          onSelectShelf={onSelectShelf}
+          onShareFolder={onShareFolder}
+          residentFolderIds={residentFolderIds}
+          onSaveFolder={onSaveFolder}
           onStartRename={onStartRename}
           onDeleteFolder={onDeleteFolder}
           onRenameCommit={onRenameCommit}
           onRenameCancel={onRenameCancel}
         />
       ))}
-      <NavItem
-        icon={I.trash!}
-        label="Trash"
-        active={navKind === "trash"}
-        count={trashCount || ""}
-        onClick={() => onSelectNav({ kind: "trash" })}
-      />
     </>
   );
 }

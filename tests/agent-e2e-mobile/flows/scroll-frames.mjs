@@ -6,11 +6,19 @@ import {
   rigDriftBudget,
 } from "../../agent-e2e-shared/harness.mjs";
 import { readFrameEvidence } from "../lib/frame-report.mjs";
-import { FIRST_LAUNCH_TIMEOUT_MS, runFlow } from "../lib/harness.mjs";
+import { runFlow } from "../lib/harness.mjs";
 
 /**
- * Frame-drop probe for the Photos grid and the People directory
- * (issue #659 R3c).
+ * Frame-drop probe for the Photos grid (issue #659 R3c).
+ *
+ * It probed the People directory as a second surface until that native screen
+ * was removed pending its v11 design handoff (apps/mobile/src/apps/people/
+ * PeopleHome.tsx is now a wall with no list on it). The People phase is
+ * EXCISED rather than pointed at a stand-in surface: a frame-drop number is
+ * only meaningful against the volume it was declared for, and no other native
+ * list carries People's 5,000-contact year-3 figure. Restore the phase — the
+ * `people-directory-row-0` handle, the fling, and the four People measurements
+ * below — when the rebuilt directory renders rows again.
  *
  * The first cut of this flow measured scroll-SETTLE wall clock, because React
  * Native exposed no frame timeline to Maestro and the honest number needed an
@@ -22,17 +30,21 @@ import { FIRST_LAUNCH_TIMEOUT_MS, runFlow } from "../lib/harness.mjs";
  *
  * ── The contract (owned by apps/mobile, pinned by frame-sampler.test.ts) ────
  *
- *   arm     `openLink: centraid://perf-frames?ms=<window>`  (default 4000,
- *           capped 30000; arming is idempotent while a sample runs)
+ *   arm     tap the DEV `perf-frame-arm` control (6s window). The deep link
+ *           `centraid://perf-frames?ms=<window>` still arms for manual use, but
+ *           iOS confirms custom-scheme opens with a system alert and `simctl
+ *           openurl` often never reaches the Linking listener (30752843689),
+ *           so the flow arms by testID tap.
  *   armed   a 1x1 view with `testID: perf-frame-sampling` exists for the window
  *   report  on close, `testID: perf-frame-report` renders EXACTLY:
  *           `frames=137 expected=241 elapsed=4016ms fps=34.11 targetHz=60 dropped=43.15%`
  *
  * `copyTextFrom` is the blessed read and this flow issues it — it fails loudly
- * if the id is absent, which is the assertion that matters. Maestro keeps
- * `maestro.copiedText` inside the flow, so the next `evalScript` logs the
- * copied value into `maestro.log`; `readFrameEvidence` recovers the number from
- * that uploaded debug output. Parsing is deliberately two-tier: the strict
+ * if the id is absent, which is the assertion that matters. But Maestro keeps
+ * `maestro.copiedText` inside the flow and offers no supported channel back to
+ * a `.mjs` host, so the NUMBER is recovered from the view hierarchies
+ * `--debug-output` already writes under `runs/<id>/maestro-debug/`, where the
+ * report string appears verbatim. Parsing is deliberately two-tier: the strict
  * whole-line pattern first, then an independent `dropped=` / `targetHz=` scan,
  * so a change that escapes or splits the line degrades to a still-correct read
  * instead of a silent zero. A phase that yields NO parse FAILS the flow —
@@ -55,16 +67,14 @@ import { FIRST_LAUNCH_TIMEOUT_MS, runFlow } from "../lib/harness.mjs";
  * | Surface | Year-3         | Seeded here |
  * | ------- | -------------- | ----------- |
  * | Photos  | 90,000 assets  | whatever the CI gateway fixture seeded — NOT year-3 |
- * | People  | 5,000 contacts | whatever the CI gateway fixture seeded — NOT year-3 |
+ * | People  | 5,000 contacts | NOT MEASURED — the native directory is gone |
  *
  * The seeded totals are not observable from the device, so this flow does not
- * guess them. What it CAN observe it reports: the highest positional row index
- * appearing in any hierarchy during the fling is a real lower bound on the rows
- * scrolled past, published as `people rows observed`. A fling over a directory
- * that turns out to hold 12 rows says nothing about a 5,000-row one, and that
- * lower bound is what lets a reader tell the two apart instead of inferring it
- * from seed code. The arrival marker is the People cover subtitle because an
- * empty seeded directory has no row to match.
+ * guess them. While the People phase ran it published what it COULD observe —
+ * `people rows observed`, a real lower bound taken from the positional
+ * `people-directory-row-<index>` handles — because a fling over a directory
+ * that turns out to hold 12 rows says nothing about a 5,000-row one. Photos
+ * has no equivalent positional handle, so no lower bound is claimed for it.
  */
 const OWNER = "tests/agent-e2e-mobile/flows/scroll-frames.mjs";
 const FLINGS = 8;
@@ -75,10 +85,6 @@ const REPO_ROOT = path.resolve(import.meta.dirname, "../../..");
 // (apps/mobile/src/apps/photos/PhotosHome.tsx). Deliberately NOT the "Photos"
 // tab label, which the tab bar draws on every screen.
 const PHOTOS_MARKER = "Search photos and moments";
-// The People cover subtitle (apps/mobile/src/apps/people/PeopleHome.tsx). The
-// CI gateway may seed an empty directory, so a positional row id is not a
-// valid arrival marker; the observed-row metric remains an honest lower bound.
-const PEOPLE_MARKER = "Normalized contacts and duplicate-safe merges";
 
 /** Arm the sampler, fling the surface under test, and read the report back. */
 function flingYaml(appId, marker, markerKind, surface) {
@@ -99,13 +105,18 @@ ${settle}
 # never become part of what it measures.
 # Arm one sample window via the DEV testID — openLink triggers an iOS
 # "Open in Centraid?" alert and often never delivers the URL to Linking
-# (30752843689). The arm control lives in FrameProbe (__DEV__ only).
+# (30752843689). The arm control lives in FrameProbe (__DEV__ only) and is
+# mounted inside the Photos navigator, so it stays observable while the
+# full-screen cover is presented.
 - tapOn:
     id: "perf-frame-arm"
     retryTapIfNoChange: true
-# The sampling marker is intentionally transient: the six-second window can
-# finish before XCTest observes it. The report assertion below is the durable
-# proof that the arm took; an unarmed sampler cannot publish one.
+# Prove the arm took BEFORE flinging — a fling against an unarmed sampler
+# produces no report at all, and that failure would surface later and elsewhere.
+- extendedWaitUntil:
+    visible:
+      id: "perf-frame-sampling"
+    timeout: 10000
 - repeat:
     times: ${FLINGS}
     commands:
@@ -122,7 +133,6 @@ ${settle}
     timeout: ${SAMPLE_WINDOW_MS + 15_000}
 - copyTextFrom:
     id: "perf-frame-report"
-- evalScript: \${console.log("centraid-frame-report " + maestro.copiedText)}
 - takeScreenshot: frame-report-${surface}
 `;
 }
@@ -143,25 +153,7 @@ await runFlow("mobile-scroll-frames", async (ctx) => {
   await ctx.run(
     `appId: ${ctx.state.appId}
 ---
-# Home tiles publish accessibilityLabel "Open Photos" (not the visible
-# "Photos" caption) — bare tapOn Photos ElementNotFound on iOS 30745625780.
-- tapOn:
-    text: "Open Photos"
-    retryTapIfNoChange: true
-# A clean iOS simulator can present the Photos privacy sheet after the cover
-# opens. It sits above the Photos hierarchy, so grant access before waiting on
-# the search marker; the conditional is a no-op once the simulator remembers it.
-- extendedWaitUntil:
-    visible: "Allow Full Access"
-    timeout: 5000
-    optional: true
-- runFlow:
-    when:
-      visible: "Allow Full Access"
-    commands:
-      - tapOn:
-          text: "Allow Full Access"
-          retryTapIfNoChange: true
+- tapOn: "Photos"
 `,
     "open-photos"
   );
@@ -171,54 +163,12 @@ await runFlow("mobile-scroll-frames", async (ctx) => {
   );
   const photos = await readFrameEvidence(ctx.state.runDir, photosStartedAt);
 
-  // Photos and People are full-screen covers. The Home launcher remains
-  // underneath Photos in the iOS hierarchy, so trying to tap Open People
-  // immediately targets an unreachable Home tile (30838452759). Dismiss the
-  // cover through its published HomeKey and prove the launcher is active
-  // before opening the next surface.
-  await ctx.run(
-    `appId: ${ctx.state.appId}
----
-- tapOn:
-    text: "Back to your apps"
-    retryTapIfNoChange: true
-- extendedWaitUntil:
-    visible:
-      text: "Open People"
-    timeout: ${FIRST_LAUNCH_TIMEOUT_MS}
-`,
-    "return-home"
-  );
-
-  // ---- People directory ----------------------------------------------------
-  const peopleStartedAt = Date.now();
-  await ctx.run(
-    `appId: ${ctx.state.appId}
----
-- tapOn:
-    text: "Open People"
-    retryTapIfNoChange: true
-`,
-    "open-people"
-  );
-  await ctx.run(
-    flingYaml(ctx.state.appId, PEOPLE_MARKER, "text", "people"),
-    "fling-people"
-  );
-  const people = await readFrameEvidence(ctx.state.runDir, peopleStartedAt);
-
   // A phase that produced no parse is a FAILURE, not a pass with a hole in it.
-  const unparsed = [
-    ["Photos", photos.report],
-    ["People", people.report],
-  ]
+  const unparsed = [["Photos", photos.report]]
     .filter(([, report]) => report === null)
     .map(([surface]) => surface);
 
-  const worstDropped = Math.max(
-    photos.report?.dropped ?? 0,
-    people.report?.dropped ?? 0
-  );
+  const worstDropped = photos.report?.dropped ?? 0;
   const drift = await rigDriftBudget(REPO_ROOT, "scale", OWNER);
   const withinDrift = drift == null || worstDropped <= drift;
   const passed =
@@ -227,7 +177,7 @@ await runFlow("mobile-scroll-frames", async (ctx) => {
   await recordQualityResult(REPO_ROOT, {
     lane: "scale",
     owner: OWNER,
-    name: `Frame drops over ${FLINGS} flings on Photos and People (JS thread only)`,
+    name: `Frame drops over ${FLINGS} flings on Photos (JS thread only)`,
     status: passed ? "passed" : "failed",
     measurements: [
       {
@@ -249,38 +199,21 @@ await runFlow("mobile-scroll-frames", async (ctx) => {
         unit: "Hz",
       },
       { name: "Photos fps", value: photos.report?.fps ?? -1, unit: "fps" },
-      {
-        name: "People dropped frames",
-        value: people.report?.dropped ?? -1,
-        unit: "percent",
-      },
-      {
-        name: "People display refresh rate",
-        value: people.report?.targetHz ?? -1,
-        unit: "Hz",
-      },
-      { name: "People fps", value: people.report?.fps ?? -1, unit: "fps" },
-      {
-        // Observed lower bound on the seeded directory (D6) — the real total is
-        // not visible from the device, so this is what can honestly be claimed.
-        name: "people rows observed (lower bound on seeded volume)",
-        value: people.peopleRowsObserved,
-        unit: "rows",
-      },
+      // The four People measurements and `people rows observed` were recorded
+      // here until the native directory was removed. They are omitted rather
+      // than reported as -1: a sentinel in a scale ledger reads as a device
+      // that failed to answer, not as a surface that is no longer measured.
       { name: "flings per surface", value: FLINGS, unit: "count" },
     ],
   });
 
   ctx.note(
     `Photos ${photos.report?.dropped ?? "unparsed"}% dropped @ ${photos.report?.targetHz ?? "?"} Hz; ` +
-      `People ${people.report?.dropped ?? "unparsed"}% dropped @ ${people.report?.targetHz ?? "?"} Hz ` +
-      `over at least ${people.peopleRowsObserved} rows; ceiling ${ceiling}% ` +
-      `(JS thread only — UI/native-thread jank is invisible to this sampler)`
+      `ceiling ${ceiling}% (JS thread only — UI/native-thread jank is ` +
+      `invisible to this sampler). People NOT MEASURED: the native directory ` +
+      `was removed pending its v11 design handoff`
   );
-  if (
-    photos.report?.parse === "degraded" ||
-    people.report?.parse === "degraded"
-  ) {
+  if (photos.report?.parse === "degraded") {
     ctx.note(
       "frame report was recovered by the DEGRADED parse — the exact line in " +
         "apps/mobile/src/lib/perf/frame-sampler.ts has changed; realign this " +

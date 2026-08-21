@@ -1,50 +1,107 @@
 /* Loading placeholder that has the SHAPE of the page it is standing in for
-   (issue #659), rather than the words "Loading…" centred in a void. Colours
-   come from the shared tokens only — never a hardcoded grey
-   (docs/traps/design-tokens.md). */
+   (issue #659), restyled to the v9 row geometry (#765, spec §10): the
+   skeleton is a ROWS BLOCK — the same bordered container, the same 44px rung,
+   the same internal hairlines — so nothing reflows when the rows arrive.
+   Colours come from the shared tokens only, never a hardcoded grey
+   (docs/traps/design-tokens.md); `--skel` is the ground a surface paints
+   before its bytes land, which is why it is not `--bg-elev`. */
 
 .pageSkeleton {
-  max-width: 1080px;
-  margin: 0 auto;
-  padding: 24px 0;
+  /* The stagger step. One row breathes 90ms after the one above it, which is
+     what makes the block read as settling rather than blinking. */
+  --skel-step: 90ms;
+
+  background: var(--bg-elev);
+  border: 1px solid var(--line);
+  border-radius: var(--r-lg);
   display: flex;
   flex-direction: column;
-  gap: 12px;
-}
-
-.pageSkeletonRow {
-  height: 64px;
-  border-radius: var(--r-xl);
-  border: 0.5px solid var(--line);
-  background: color-mix(in srgb, var(--bg-elev) 55%, transparent);
-  position: relative;
+  margin-block-start: var(--sp-4);
   overflow: hidden;
 }
 
+.pageSkeletonRow {
+  align-items: center;
+  animation: pageSkeletonPulse 1.6s ease-in-out infinite;
+  display: flex;
+  min-block-size: var(--h-row);
+  padding: var(--sp-2) var(--sp-3);
+}
+
+.pageSkeletonRow + .pageSkeletonRow {
+  border-block-start: 1px solid var(--line);
+}
+
+/* Only the LABEL bone is drawn. A sub, a meta and an action bone would be
+   four promises where the row makes one. Its height is the annotation rung's
+   own size, so the bone occupies exactly the band the text will. */
 .pageSkeletonRow::after {
+  background: var(--skel);
+  block-size: var(--t-mono-size);
+  border-radius: var(--r-sm);
   content: "";
-  position: absolute;
-  inset: 0;
-  background: linear-gradient(
-    90deg,
-    transparent,
-    color-mix(in srgb, var(--bg-elev) 90%, transparent),
-    transparent
-  );
-  transform: translateX(-100%);
-  animation: pageSkeletonSheen 1.4s ease-in-out infinite;
+  display: block;
+  /* The narrowest step; rows 1–5 widen back up to 66% below. Rows past the
+     sixth keep this width rather than inventing a seventh step. */
+  inline-size: 36%;
 }
 
-@keyframes pageSkeletonSheen {
-  to {
-    transform: translateX(100%);
+.pageSkeletonRow:nth-child(1)::after {
+  inline-size: 66%;
+}
+
+.pageSkeletonRow:nth-child(2)::after {
+  inline-size: 60%;
+}
+
+.pageSkeletonRow:nth-child(3)::after {
+  inline-size: 54%;
+}
+
+.pageSkeletonRow:nth-child(4)::after {
+  inline-size: 48%;
+}
+
+.pageSkeletonRow:nth-child(5)::after {
+  inline-size: 42%;
+}
+
+.pageSkeletonRow:nth-child(2) {
+  animation-delay: calc(var(--skel-step) * 1);
+}
+
+.pageSkeletonRow:nth-child(3) {
+  animation-delay: calc(var(--skel-step) * 2);
+}
+
+.pageSkeletonRow:nth-child(4) {
+  animation-delay: calc(var(--skel-step) * 3);
+}
+
+.pageSkeletonRow:nth-child(5) {
+  animation-delay: calc(var(--skel-step) * 4);
+}
+
+.pageSkeletonRow:nth-child(6) {
+  animation-delay: calc(var(--skel-step) * 5);
+}
+
+/* A skeleton breathes; it never spins. */
+@keyframes pageSkeletonPulse {
+  0%,
+  100% {
+    opacity: 0.55;
+  }
+
+  50% {
+    opacity: 0.28;
   }
 }
 
-/* A shimmering block is decoration, and decoration that moves is a problem for
-   readers who asked the OS to stop motion. */
-@media (prefers-reduced-motion: reduce) {
-  .pageSkeletonRow::after {
-    animation: none;
-  }
-}
+/* No `prefers-reduced-motion` block: the token layer honours it in ONE global
+   rule, which pins `animation-duration: 0s` and `animation-iteration-count: 1`
+   on everything. This animation is written to survive that: the keyframe's own
+   0% frame is `opacity: .55`, the resting value, so a collapsed pulse renders
+   as a still, fully legible bone rather than mid-fade at .28. (The retired
+   sheen relied on the same property: its base transform sat outside the row's
+   clip.) */

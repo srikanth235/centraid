@@ -62,22 +62,243 @@ export {
 // Issue #599 decision 11: share-by-placement. The gateway's cross-vault share
 // plane calls these; they sit outside the per-vault handler path by design.
 export {
-  shareToVault,
+  shareItemsToVault,
   unshareFromVault,
   moveOutOfVault,
   readShareOrigin,
   type ShareVaultRef,
-  type ShareToVaultInput,
-  type ShareToVaultResult,
+  type ShareItemsToVaultInput,
+  type ShareItemsToVaultResult,
   type UnshareFromVaultInput,
   type UnshareFromVaultResult,
   type MoveOutOfVaultInput,
   type ShareOriginRecord,
 } from "./share/placement.js";
+// The two halves of a share (issue #726). `readShareClosure` is origin-side
+// and read-only; `projectShareClosure` is audience-side and opens the single
+// transaction. `WireClosure` between them is plain JSON — the shape P3 puts a
+// tunnel under.
 export {
   isShareableItemType,
+  CLOSURE_FORMAT_VERSION,
   type ShareableItemType,
+  type WireClosure,
+  type WireItem,
+  type WireRows,
+  type BlobManifestEntry,
+  type ProjectedItem,
+  type ProjectResult,
 } from "./share/closure.js";
+export {
+  readShareClosure,
+  type ReadShareClosureInput,
+} from "./share/read-closure.js";
+export {
+  projectShareClosure,
+  type ProjectShareClosureOptions,
+} from "./share/project-closure.js";
+// Projection is ingest (D11): the audience's own door, keyed by entity type so
+// vault core never learns an app name.
+export {
+  type ProjectionIngestHook,
+  type ProjectionIngestContext,
+} from "./share/projection-ingest.js";
+export {
+  isCommonsCommandActable,
+  commonsRoutesForCommand,
+  COMMONS_COMMAND_ROUTES,
+  COMMONS_CONTAINER_KEYS,
+  type CommonsCommandRoute,
+  type CommonsContainerKey,
+  type CommonsRouteResolution,
+} from "./share/commons-routing.js";
+export {
+  bindPartyToVault,
+  revokePartyVaultBinding,
+  type PartyVaultBindOutcome,
+  type PartyVaultBindingRow,
+  type PartyVaultRevokeOutcome,
+} from "./share/party-vault-binding.js";
+export {
+  createCommonsGrant,
+  ensureCommonsParty,
+  readCommonsGrant,
+  commonsClosure,
+  commonsClosureSizeBytes,
+  compactCommonsOperations,
+  acknowledgeCommonsSeatCursor,
+  assertCommonsWithinMax,
+  compileCommons,
+  appendCommonsOperation,
+  appendCommonsOperationInTransaction,
+  commonsGrantForCommand,
+  COMMONS_MEMBER_IDENTITY_CHANGED,
+  commonsMemberIdentityChangedReason,
+  executeCommonsCommand,
+  queueCommonsIntent,
+  settleCommonsIntent,
+  cancelCommonsIntent,
+  expireParkedCommonsIntents,
+  readCommonsIntentBasedOnSequence,
+  COMMONS_INTENT_PARK_HORIZON_MS,
+  STALE_CONTEXT_REASON_PREFIX,
+  retainCommonsItem,
+  removeCommonsFromSeat,
+  transferCommonsSteward,
+  commonsCurrentSize,
+  type CommonsCapability,
+  type CommonsDeparturePolicy,
+  type CommonsMemberInput,
+  type CommonsGrantRecord,
+  type CompiledCommonsSeat,
+  type CommonsCommandDecision,
+  type CommonsIntentStatus,
+  type ExecuteCommonsCommandInput,
+  type ExecuteCommonsCommandResult,
+} from "./share/commons.js";
+export {
+  listCommonsGrants,
+  findCommonsGrantForContainer,
+  ensureCommonsGrant,
+  upsertCommonsMember,
+  refuseCommonsMember,
+  removeCommonsMember,
+  revokeCommonsGrant,
+  commonsSeats,
+  recompileCommonsGrants,
+  scrubCommonsSeat,
+  type CommonsMemberRecord,
+  type CommonsGrantView,
+} from "./share/commons-lifecycle.js";
+export {
+  readCommonsCursor,
+  type CommonsCursor,
+} from "./share/commons-cursor.js";
+export {
+  CommonsHistoryError,
+  isCommonsHistoryError,
+  commonsGenesisHash,
+  commonsOpHash,
+  commonsOpChainFields,
+  commonsStateDigest,
+  readCommonsChainHead,
+  readCommonsVerified,
+  verifyCommonsCheckpoint,
+  type CommonsCheckpointAttestation,
+  type CommonsHistoryFaultTag,
+  type CommonsOpChainFields,
+  type CommonsVerifiedPoint,
+} from "./share/commons-chain.js";
+export {
+  commonsIntentBytes,
+  signCommonsIntent,
+  verifyCommonsIntent,
+  type CommonsMemberSignature,
+} from "./share/commons-signature.js";
+export {
+  exportCommonsBootstrap,
+  exportCommonsSyncFrame,
+  applyCommonsBootstrap,
+  applyCommonsIncrement,
+  applyCommonsTombstone,
+  isCommonsIncrementUnusable,
+  queueCommonsInvitation,
+  createCommonsClaimInvitation,
+  claimCommonsInvitation,
+  listCommonsInvitations,
+  answerCommonsInvitation,
+  type CommonsBootstrap,
+  type CommonsIncrement,
+  type CommonsTombstone,
+  type CommonsSyncFrame,
+  type CommonsInvitationRecord,
+} from "./share/commons-bootstrap.js";
+// Command-tail replay (#750 invariant 7): catch-up proportional to what
+// changed, because the steward ships the operations rather than the rows.
+export {
+  isCommonsReplayError,
+  replicaInvocationKey,
+  type CommonsReplicaExecutor,
+  type CommonsTailBlob,
+} from "./share/commons-replay.js";
+// Replica-export recovery: a member re-founds a group whose steward is gone
+// (#731). Deliberate ceremony — see the module header.
+export {
+  recoverCommonsFromReplica,
+  readCommonsRecoveryLineage,
+  type CommonsRecoveryLineage,
+  type CommonsRecoveryRefusal,
+  type CommonsRecoveryResult,
+  type RecoverCommonsFromReplicaInput,
+} from "./share/commons-recovery.js";
+// The GRANT PLANE (#825): a share is a standing grant (who may see/edit what),
+// fulfillment is per-audience-vault delivery state, and the channel is the
+// existing party↔vault binding read as one state. Commons above stays the
+// edit-fulfillment strategy underneath it.
+export {
+  audienceExists,
+  createShareGrant,
+  readShareGrant,
+  readLiveShareGrant,
+  revokeShareGrant,
+  listShareGrantsForAudience,
+  listShareGrantsForSubject,
+  listLiveGrantsReachingParty,
+  resolveAudienceParties,
+  ensureFulfillment,
+  setFulfillmentState,
+  readFulfillment,
+  listFulfillment,
+  UnofferableSubjectError,
+  type CreateShareGrantInput,
+  type CreateShareGrantResult,
+  type RevokeShareGrantResult,
+  type ShareFulfillmentRecord,
+  type ShareFulfillmentState,
+  type ShareGrantAudience,
+  type ShareGrantAudienceKind,
+  type ShareGrantCapability,
+  type ShareGrantRecord,
+} from "./grant/grant-store.js";
+export {
+  isOfferableSubjectType,
+  fulfillmentAnswerFor,
+  shareSubjectDeclaration,
+  SHARE_SUBJECT_REGISTRY,
+  type ShareFulfillmentStrategy,
+  type ShareSubjectDeclaration,
+} from "./grant/subject-registry.js";
+export {
+  channelForParty,
+  type ShareChannel,
+  type ShareChannelState,
+} from "./grant/channel.js";
+// Fulfillment: the act of keeping a grant true. View re-projects the subject
+// over the closure transport, edit routes back through the commons rail, and
+// revoke propagates a removal instead of pretending it reached the peer.
+export {
+  fulfillShareGrant,
+  propagateShareGrantRevocation,
+  ShareGrantMaxSizeError,
+  type FulfillShareGrantInput,
+  type GrantFulfillmentResult,
+  type GrantFulfillmentStep,
+  type GrantRemovalResult,
+  type GrantRemovalStep,
+  type PropagateShareGrantRevocationInput,
+} from "./grant/fulfillment.js";
+export {
+  routeShareGrantEdit,
+  SHARE_GRANT_CO_CONTRIBUTION_COMMANDS,
+  SHARE_GRANT_CO_CONTRIBUTION_TYPES,
+  type ShareGrantEditRoute,
+} from "./grant/fulfillment-edit.js";
+export {
+  mintGrantInvitation,
+  withdrawGrantInvitations,
+  type GrantInvitation,
+  type MintGrantInvitationInput,
+} from "./grant/fulfillment-invite.js";
 // The LOCAL orphan reclaim (#599 d11): each vault unlinks only its own CAS
 // directory entries, so hardlinked bytes survive until the last vault lets go.
 export {
@@ -126,6 +347,17 @@ export {
   type BlobSweepStatus,
   type RemoteTier,
 } from "./blob/custody.js";
+// The custody ROLLUP projection (issue #711) — the aggregate every owner-facing
+// storage surface reads. Exported so the gateway's `storage/status` route can
+// answer with the same buckets an app reads through `blob.custody_rollup`,
+// rather than each client deriving its own idea of "freeable" (issue #712 B3).
+export {
+  custodyRollup,
+  refreshCustodyRollup,
+  type CustodyRollup,
+  type CustodyRollupBucket,
+  type CustodyRollupBucketTotals,
+} from "./blob/custody-rollup.js";
 export {
   BlobCache,
   readBlobCacheSettings,
@@ -410,6 +642,15 @@ export {
   writeSealKeyFile,
 } from "./schema/sealed.js";
 export {
+  identityKeyFileFor,
+  ephemeralVaultIdentitySeed,
+  loadOrCreateVaultIdentitySeed,
+  VaultIdentityMismatchError,
+  vaultIdentityPublicKey,
+  signWithVaultIdentity,
+  verifyVaultIdentitySignature,
+} from "./schema/vault-identity.js";
+export {
   KeyStore,
   KeyStoreError,
   aesGcmKeyProtector,
@@ -525,6 +766,7 @@ export {
 } from "./commands/links.js";
 export { registerPartyCommands } from "./commands/parties.js";
 export { registerMediaCommands } from "./commands/media.js";
+export { registerMediaGazetteerCommands } from "./commands/media-gazetteer.js";
 export {
   registerDocumentCommands,
   FOLDER_SCHEME_URI,
@@ -555,6 +797,48 @@ export {
   type AgentContentVariant,
 } from "./enrich/content.js";
 export {
+  FACE_CLUSTER_MAX_DISTANCE,
+  FACE_MIN_CLUSTER_SIZE,
+  FACE_PARTY_MAX_DISTANCE,
+  FACE_REGION_TARGET_TYPE,
+  rebuildFaceClusters,
+  type FaceClusterResult,
+} from "./enrich/face-clusters.js";
+export {
+  BUILT_IN_PROFILE,
+  preferredDerivation,
+  stampDerivation,
+  stampedModel,
+  type DerivationQuery,
+  type DerivationRecord,
+  type DerivationStamp,
+} from "./enrich/derivation.js";
+export {
+  ENRICH_SCOPE_TYPES,
+  ENRICH_TRIGGERS,
+  deleteEnrichPolicyRule,
+  listEnrichPolicyRules,
+  putEnrichPolicyRule,
+  readEnrichPolicyRule,
+  readEnrichPolicyRuleChain,
+  type EnrichPolicyRule,
+  type EnrichPolicyRuleInput,
+  type EnrichScope,
+  type EnrichScopeType,
+  type EnrichTrigger,
+} from "./enrich/policy-rules.js";
+export {
+  ENRICH_EGRESS_CLASSES,
+  listEnrichConsent,
+  readEnrichConsent,
+  recordEnrichConsent,
+  type EnrichConsentDecision,
+  type EnrichConsentInput,
+  type EnrichConsentKey,
+  type EnrichConsentRecord,
+  type EnrichEgressClass,
+} from "./enrich/egress-consent.js";
+export {
   DEFAULT_ENRICHMENT_LEASE_TTL_MS,
   ENRICHMENT_CAPABILITIES,
   MAX_ENRICHMENT_LEASE_TTL_MS,
@@ -572,6 +856,20 @@ export {
   type EnrichmentCapability,
   type EnrichmentLease,
 } from "./enrich/leases.js";
+export {
+  ENRICH_DOMAINS,
+  isEnrichTier,
+  readEnrichPolicyResolutionInput,
+  readEnrichPolicyTier,
+  type EnrichDomain,
+  type EnrichPolicyResolutionInput,
+} from "./enrich/policy.js";
+export {
+  compareModelIds,
+  makeModelId,
+  parseModelId,
+  type ModelId,
+} from "./enrich/model-id.js";
 export {
   hexHamming,
   registerHammingFn,
@@ -602,6 +900,14 @@ export {
   type StageFileOptions,
   type StageFileResult,
 } from "./ingest/stage-file.js";
+export {
+  isMediaPath,
+  parseTakeoutSidecar,
+  planTakeout,
+  type SidecarFacts,
+  type TakeoutMediaEntry,
+  type TakeoutPlan,
+} from "./ingest/takeout-sidecar.js";
 export {
   parseMbox,
   threadKey,
@@ -643,16 +949,19 @@ export {
   exportPortableVault,
   importPortableVault,
   verifyPortableVault,
-  exportIcs,
-  exportVcards,
-  exportTransactionsCsv,
-  exportMarkdownDirectory,
   type PortableExport,
   type PortableManifest,
   type PortableManifestFile,
 } from "./gateway/portable-export.js";
+export {
+  exportIcs,
+  exportVcards,
+  exportTransactionsCsv,
+  exportMarkdownDirectory,
+} from "./gateway/portable-adapters.js";
 export type { ViewDefinition, ViewJoin, ViewResult } from "./gateway/views.js";
 export {
+  backupVault,
   checkpointVault,
   sha256File,
   type BackupResult,

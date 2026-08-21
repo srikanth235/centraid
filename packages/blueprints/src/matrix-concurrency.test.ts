@@ -1,15 +1,32 @@
 /**
  * Matrix cell blueprints.concurrency (#535 coverable-today).
- * Scaffold builders are pure — concurrent builds must not share arrays/maps.
+ * Clone builders are pure — concurrent builds must not share arrays/maps.
  */
 import { describe, expect, it } from "vitest";
 
-import { scaffoldAppFiles } from "./scaffold-files.js";
+import { cloneTemplateFiles } from "./clone.js";
+import type { ScaffoldFile } from "./scaffold-types.js";
 
-describe("blueprint scaffold concurrency", () => {
-  it("parallel scaffoldAppFiles calls return independent file maps", () => {
+const TEMPLATE: ScaffoldFile[] = [
+  {
+    path: "app.json",
+    content:
+      JSON.stringify(
+        { manifestVersion: 1, id: "source", name: "Source" },
+        null,
+        2
+      ) + "\n",
+  },
+];
+
+describe("blueprint clone concurrency", () => {
+  it("parallel cloneTemplateFiles calls return independent file maps", () => {
     const maps = Array.from({ length: 24 }, (_, i) =>
-      scaffoldAppFiles(`app-${i}`, { name: `App ${i}` })
+      cloneTemplateFiles({
+        newAppId: `app-${i}`,
+        newName: `App ${i}`,
+        templateFiles: TEMPLATE,
+      })
     );
     expect(maps).toHaveLength(24);
     for (let i = 0; i < maps.length; i += 1) {
@@ -22,7 +39,7 @@ describe("blueprint scaffold concurrency", () => {
       expect(appJson.id).toBe(`app-${i}`);
       expect(appJson.name).toBe(`App ${i}`);
     }
-    // Mutate one map only; siblings stay intact.
+    // Mutate one map only; siblings and the shared template stay intact.
     maps[0]![0]!.content = "MUTATED";
     for (let i = 1; i < maps.length; i += 1) {
       expect(maps[i]![0]!.content).not.toBe("MUTATED");
@@ -33,5 +50,6 @@ describe("blueprint scaffold concurrency", () => {
       };
       expect(appJson.id).toBe(`app-${i}`);
     }
+    expect(TEMPLATE[0]!.content).toContain('"id": "source"');
   });
 });

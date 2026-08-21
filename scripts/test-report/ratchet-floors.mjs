@@ -11,8 +11,10 @@
  *   - `tests/mutation-floors.json` (up-only mutation scores, #532)
  *   - perf budget numeric ceilings/floors (tighten-only / widen fails, #532)
  *
- * Any decrease (or budget widen) fails unless the touched file carries an
- * `approvedDeviation` / flow-level `approvedMinimumTestsDeviation` marker.
+ * Any decrease (or budget widen) fails unless the touched file's
+ * `approvedDeviation` (flow-level: `approvedMinimumTestsDeviation`) was
+ * CHANGED in the same change set — mere presence never waives, because the
+ * field is a permanent provenance ledger and is non-empty forever (#781).
  *
  * Deletion of a floor scope, metric key, or flow `minimumTests` counts as a
  * decrease (cannot bypass the ratchet by deleting the key).
@@ -33,7 +35,7 @@ const root = path.resolve(import.meta.dirname, "../..");
 /** Perf budget source files ratcheted under #532 (path → kind). */
 export const PERF_BUDGET_SOURCES = [
   { path: "apps/web/tests/e2e/perf-budgets.ts", exportName: "perfBudgets" },
-  { path: "packages/gateway/benchmarks/low-end-budgets.json" },
+  { path: "packages/server/benchmarks/low-end-budgets.json" },
   // #656 Layer 1F — the nightly rig registry. `regressionMultiplier` and each
   // rig's `budgetMs` are ceilings (tighten-only); `minimumSamples` is a min*
   // floor and may only rise. Before this the absolute ceilings lived as
@@ -123,19 +125,66 @@ export function diffMutationFloors(base, head) {
 
 /**
  * Compare matrix flow minimumTests floors for any downward movement or removal.
- * @param {{ flows?: Array<{ id?: string; minimumTests?: number; approvedMinimumTestsDeviation?: string }> }} base Matrix on the merge base.
- * @param {{ flows?: Array<{ id?: string; minimumTests?: number; approvedMinimumTestsDeviation?: string }> }} head Matrix on the working tree.
+ * An ID rename must name its exact predecessor with
+ * `replacesMinimumTestsFlow`; a prose deviation alone cannot let one new flow
+ * absorb several removed floors.
+ * @param {{ flows?: Array<{ id?: string; surface?: string; dimension?: string; tier?: string; minimumTests?: number; approvedMinimumTestsDeviation?: string; replacesMinimumTestsFlow?: string }> }} base Matrix on the merge base.
+ * @param {{ flows?: Array<{ id?: string; surface?: string; dimension?: string; tier?: string; minimumTests?: number; approvedMinimumTestsDeviation?: string; replacesMinimumTestsFlow?: string }> }} head Matrix on the working tree.
  * @returns {string[]} Human-readable decrease errors.
  */
 export function diffMinimumTests(base, head) {
   const errors = [];
-  const headMap = new Map(
-    (head?.flows ?? []).filter((f) => f?.id).map((f) => [f.id, f])
-  );
-  for (const prev of base?.flows ?? []) {
+  const baseFlows = base?.flows ?? [];
+  const headFlows = head?.flows ?? [];
+  const baseMap = new Map(baseFlows.filter((f) => f?.id).map((f) => [f.id, f]));
+  const headMap = new Map(headFlows.filter((f) => f?.id).map((f) => [f.id, f]));
+  const replacements = new Map();
+  for (const candidate of headFlows) {
+    if (
+      typeof candidate?.replacesMinimumTestsFlow !== "string" ||
+      !candidate.replacesMinimumTestsFlow.trim()
+    ) {
+      continue;
+    }
+    const previousId = candidate.replacesMinimumTestsFlow.trim();
+    const claimed = replacements.get(previousId) ?? [];
+    claimed.push(candidate);
+    replacements.set(previousId, claimed);
+  }
+  for (const [previousId, candidates] of replacements) {
+    if (!baseMap.has(previousId)) {
+      errors.push(`flow replacement names unknown predecessor "${previousId}"`);
+    } else if (headMap.has(previousId)) {
+      errors.push(
+        `flow replacement names retained predecessor "${previousId}"`
+      );
+    }
+    if (candidates.length > 1) {
+      errors.push(
+        `flow "${previousId}" has multiple replacements (${candidates
+          .map((candidate) => `"${candidate.id ?? "<missing id>"}"`)
+          .join(", ")}); ID renames must be one-to-one`
+      );
+    }
+  }
+  for (const prev of baseFlows) {
     if (!prev?.id || prev.minimumTests === undefined) continue;
     const flow = headMap.get(prev.id);
     if (!flow || flow.minimumTests === undefined) {
+      const candidates = replacements.get(prev.id) ?? [];
+      const candidate = candidates.length === 1 ? candidates[0] : undefined;
+      const approvedReplacement =
+        candidate?.id !== undefined &&
+        candidate.id !== prev.id &&
+        !baseMap.has(candidate.id) &&
+        candidate.surface === prev.surface &&
+        candidate.dimension === prev.dimension &&
+        candidate.tier === prev.tier &&
+        typeof candidate.minimumTests === "number" &&
+        candidate.minimumTests >= prev.minimumTests &&
+        typeof candidate.approvedMinimumTestsDeviation === "string" &&
+        candidate.approvedMinimumTestsDeviation.trim();
+      if (approvedReplacement) continue;
       if (
         flow &&
         typeof flow.approvedMinimumTestsDeviation === "string" &&
@@ -149,7 +198,7 @@ export function diffMinimumTests(base, head) {
         );
       } else {
         errors.push(
-          `flow "${prev.id}" removed (had minimumTests ${prev.minimumTests}); add approvedMinimumTestsDeviation on a residual entry or restore the flow`
+          `flow "${prev.id}" removed (had minimumTests ${prev.minimumTests}); add one approved replacement with replacesMinimumTestsFlow: "${prev.id}" or restore the flow`
         );
       }
       continue;
@@ -367,6 +416,35 @@ export function hasApprovedDeviation(head) {
 }
 
 /**
+ * Read an object's approvedDeviation string ("" when absent/invalid).
+ * @param {unknown} obj Floors/mutation JSON object.
+ * @returns {string} Return value.
+ */
+function deviationOf(obj) {
+  if (!obj || typeof obj !== "object") return "";
+  const value =
+    /** @type {{ approvedDeviation?: unknown }} */ (obj).approvedDeviation;
+  return typeof value === "string" ? value : "";
+}
+
+/**
+ * True when head's approvedDeviation both exists and CHANGED vs base.
+ *
+ * Mere presence is not consent: approvedDeviation is a permanent provenance
+ * ledger that is non-empty on every ratcheted file forever, so a
+ * presence-only waiver would waive every decrease and deletion for all time —
+ * the ratchet could never fire (found by the #781 wave-3 audit). A decrease
+ * is deliberate exactly when the same change set extended the ledger.
+ * @param {unknown} base Base-ref object (null on first land).
+ * @param {unknown} head Working-tree object.
+ * @returns {boolean} Return value.
+ */
+export function deviationChanged(base, head) {
+  if (!hasApprovedDeviation(head)) return false;
+  return deviationOf(base) !== deviationOf(head);
+}
+
+/**
  * Run the full floors-up-only ratchet.
  * @param {object} opts Comparison inputs.
  * @param {unknown} opts.baseFloors Floors JSON on the merge base.
@@ -375,7 +453,7 @@ export function hasApprovedDeviation(head) {
  * @param {object} opts.headMatrix Matrix JSON on the working tree.
  * @param {unknown} [opts.baseMutation] Mutation floors on merge base (null = first land).
  * @param {unknown} [opts.headMutation] Mutation floors on head.
- * @param {Array<{ label: string; base: Record<string, number>; head: Record<string, number>; approvedDeviation?: string }>} [opts.perfBudgets] Perf budget comparison entries.
+ * @param {Array<{ label: string; base: Record<string, number>; head: Record<string, number>; approvedDeviation?: string; baseApprovedDeviation?: string }>} [opts.perfBudgets] Perf budget comparison entries.
  * @returns {{ errors: string[]; waived: boolean }} Return value.
  */
 export function ratchetFloors({
@@ -400,7 +478,8 @@ export function ratchetFloors({
     if (
       errs.length &&
       entry.approvedDeviation &&
-      entry.approvedDeviation.trim()
+      entry.approvedDeviation.trim() &&
+      entry.approvedDeviation !== (entry.baseApprovedDeviation ?? "")
     ) {
       continue;
     }
@@ -409,9 +488,9 @@ export function ratchetFloors({
 
   let remainingFloors = floors;
   let remainingMutation = mutation;
-  if (floors.length > 0 && hasApprovedDeviation(headFloors))
+  if (floors.length > 0 && deviationChanged(baseFloors, headFloors))
     remainingFloors = [];
-  if (mutation.length > 0 && hasApprovedDeviation(headMutation))
+  if (mutation.length > 0 && deviationChanged(baseMutation, headMutation))
     remainingMutation = [];
 
   const remaining = [
@@ -586,7 +665,7 @@ function main() {
     );
   }
 
-  /** @type {Array<{ label: string; base: Record<string, number>; head: Record<string, number>; approvedDeviation?: string }>} */
+  /** @type {Array<{ label: string; base: Record<string, number>; head: Record<string, number>; approvedDeviation?: string; baseApprovedDeviation?: string }>} */
   const perfBudgets = [];
   for (const source of PERF_BUDGET_SOURCES) {
     const abs = path.join(root, source.path);
@@ -601,10 +680,11 @@ function main() {
       base: base.numbers,
       head: head.numbers,
       approvedDeviation: head.approvedDeviation,
+      baseApprovedDeviation: base.approvedDeviation,
     });
   }
 
-  const { errors } = ratchetFloors({
+  const { errors, waived } = ratchetFloors({
     baseFloors,
     headFloors,
     baseMatrix,
@@ -619,12 +699,16 @@ function main() {
     );
     for (const e of errors) console.error(`  - ${e}`);
     console.error(
-      "To lower a floor or widen a budget deliberately, set approvedDeviation (coverage/mutation floors, budget source) or approvedMinimumTestsDeviation on the flow."
+      "To lower a floor or widen a budget deliberately, EXTEND the touched file's approvedDeviation with the new rationale (mere presence of old ledger text never waives — #781) or set approvedMinimumTestsDeviation on the same flow. An ID rename also requires an exact one-to-one replacesMinimumTestsFlow mapping."
     );
     process.exitCode = 1;
     return;
   }
-  console.log(`ratchet-floors: ok (no decreases vs ${baseRef})`);
+  console.log(
+    waived
+      ? `ratchet-floors: ok (decrease(s) waived by a CHANGED approvedDeviation vs ${baseRef})`
+      : `ratchet-floors: ok (no decreases vs ${baseRef})`
+  );
 }
 
 const isMain =

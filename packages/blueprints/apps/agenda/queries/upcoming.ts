@@ -524,12 +524,26 @@ export default async function upcomingHandler({ query, ctx }: HandlerArgs) {
     // re-expanding a year of a DAILY series; the month/week views pass their
     // own tighter `to`. expandRrule's own maxInstances backstops it regardless.
     const expandTo = to ?? new Date(fromMs + DEFAULT_EXPAND_MS).toISOString();
-    const rows = expandRecurringEvents(
-      enriched,
-      fromLower,
-      expandTo,
-      ctx.time,
-      (exceptionsRes.rows ?? []) as unknown as StoredRecurrenceException[]
+    // A desktop can temporarily be attached to an older gateway while the
+    // host upgrades. Those gateways expose the vault read surface but not the
+    // shared time helper yet. Keep ordinary events visible and leave a
+    // recurring anchor intact instead of turning the whole agenda into the
+    // misleading "No vault access" error.
+    const timeApi = ctx.time as TimeApi | undefined;
+    const rows = (
+      timeApi
+        ? expandRecurringEvents(
+            enriched,
+            fromLower,
+            expandTo,
+            timeApi,
+            (exceptionsRes.rows ?? []) as unknown as StoredRecurrenceException[]
+          )
+        : enriched.map((event) => ({
+            ...event,
+            is_recurrence_instance: false,
+            instance_key: event.event_id,
+          }))
     )
       .filter((e) => {
         // True lower bound: keep anything still running at `from`. Only

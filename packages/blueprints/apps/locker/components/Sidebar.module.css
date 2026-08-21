@@ -34,7 +34,7 @@
   height: 30px;
   border: none;
   background: none;
-  border-radius: 8px;
+  border-radius: var(--r-md);
   color: var(--text-faint);
 }
 .newbtn {
@@ -67,9 +67,8 @@
   width: 100%;
   padding: var(--sp-2) 10px;
   border: none;
-  border-radius: 8px;
-  font: var(--t-body);
-  font-size: 13.5px;
+  border-radius: var(--r-md);
+  font: var(--t-small);
   background: none;
   color: var(--text-soft);
 }
@@ -80,15 +79,16 @@
 }
 .navItem .lbl {
   flex: 1;
-  text-align: left;
+  text-align: start;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 .navItem .ct {
-  font-family: var(--font-mono);
-  font-size: 10.5px;
+  font-family: var(--font-sans);
+  font-size: var(--t-control-size);
   color: var(--text-faint);
+  font-variant-numeric: var(--t-mono-numeric);
 }
 .navItem:hover {
   background: var(--bg-sunken);
@@ -126,7 +126,6 @@
   background: var(--bg-elev);
   color: var(--text-soft);
   font: var(--t-small);
-  font-size: 12.5px;
 }
 .lock:hover {
   border-color: var(--line-strong);
@@ -137,13 +136,13 @@
 :global(.locker.is-narrow) .side {
   position: fixed;
   top: 0;
-  left: 0;
+  inset-inline-start: 0;
   bottom: 0;
   width: 270px;
   z-index: 60;
   box-shadow: var(--shadow-lg);
   transform: translateX(-110%);
-  transition: transform 0.26s var(--ease);
+  transition: transform var(--dur-2) var(--ease-entry);
 }
 :global(.locker.is-narrow.side-open) .side {
   transform: translateX(0);

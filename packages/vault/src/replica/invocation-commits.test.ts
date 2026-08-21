@@ -46,7 +46,7 @@ function recordJournalPrefix(db: VaultDb, invocationId: string): void {
   db.journal
     .prepare(
       `INSERT INTO agent_command_invocation (
-         invocation_id, command_id, agent_id, grant_id, input_json, status, requested_at
+         invocation_id, command_id, caller_id, grant_id, input_json, status, requested_at
        ) VALUES (?, 'command-1', 'device-1', NULL, '{}', 'checked', ?)`
     )
     .run(invocationId, "2026-07-15T00:00:00.000Z");

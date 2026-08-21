@@ -7,6 +7,8 @@
 import React, { useMemo, useState } from "react";
 import { StyleSheet, View } from "react-native";
 
+import { identityInk } from "@centraid/design";
+
 import { Text, TextInput } from "../../kit/components/NativeText";
 import { radii, spacing, t, useTheme } from "../../kit/theme";
 import type { ThemeColors } from "../../kit/theme";
@@ -41,7 +43,14 @@ export default function YouSection(): React.JSX.Element {
       <View style={styles.card}>
         <View style={styles.identity}>
           <View style={[styles.avatar, { backgroundColor: color }]}>
-            <Text style={styles.avatarInitial}>{initialsOf(name)}</Text>
+            <Text
+              style={[
+                styles.avatarInitial,
+                { color: identityInk(color, colors.text, colors.textInv) },
+              ]}
+            >
+              {initialsOf(name)}
+            </Text>
           </View>
           <TextInput
             value={name}
@@ -75,7 +84,7 @@ const makeStyles = (colors: ThemeColors) =>
       justifyContent: "center",
       width: AVATAR,
     },
-    avatarInitial: { color: "#fff", ...t("bodyStrong") },
+    avatarInitial: { ...t("bodyStrong") },
     card: {
       backgroundColor: colors.bgElev,
       borderColor: colors.line,
@@ -85,9 +94,8 @@ const makeStyles = (colors: ThemeColors) =>
       padding: spacing[4],
     },
     fieldLabel: {
-      ...t("small"),
+      ...t("smallStrong"),
       color: colors.textSoft,
-      fontWeight: "500",
       marginTop: spacing[1],
     },
     identity: { alignItems: "center", flexDirection: "row", gap: spacing[3] },

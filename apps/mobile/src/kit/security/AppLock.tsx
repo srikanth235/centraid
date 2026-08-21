@@ -7,14 +7,7 @@ import React, {
   useRef,
   useState,
 } from "react";
-import {
-  ActivityIndicator,
-  AppState,
-  Pressable,
-  StyleSheet,
-  View,
-} from "react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
+import { AppState, Pressable, StyleSheet, View } from "react-native";
 
 import {
   appLockEnabled,
@@ -25,6 +18,7 @@ import {
 } from "../../lib/app-lock";
 import { clearSecureCache } from "../../lib/secure-storage";
 import { Text } from "../components/NativeText";
+import TopSafeArea from "../components/TopSafeArea";
 import { family, radii, spacing, t, useTheme } from "../theme";
 import type { ThemeColors } from "../theme";
 
@@ -67,7 +61,7 @@ export function AppLockProvider({
       if (await authenticateAppLock()) setUnlocked(true);
       else
         setError(
-          "The biometric key changed. Reinstall Centraid to reset this protected local replica."
+          "Biometric key changed — reinstall Centraid to reset this local replica."
         );
     } catch (caughtError) {
       setError(
@@ -126,15 +120,14 @@ export function AppLockProvider({
     [enabled]
   );
 
-  if (!hydrated)
-    return (
-      <SafeAreaView style={styles.screen}>
-        <ActivityIndicator color={colors.textFaint} />
-      </SafeAreaView>
-    );
+  // The AsyncStorage read behind `hydrated` resolves sub-frame in the common
+  // case (see App.tsx's own note on the lazy-screen Suspense fallback for the
+  // same reasoning): a blank themed fill never registers as more than the one
+  // flash a spinner would have been, and it costs no motion.
+  if (!hydrated) return <TopSafeArea style={styles.screen} />;
   if (enabled && !unlocked)
     return (
-      <SafeAreaView style={styles.screen}>
+      <TopSafeArea style={styles.screen}>
         <View accessibilityViewIsModal style={styles.card}>
           <Text style={styles.eyebrow}>DEVICE LOCK</Text>
           <Text style={styles.title}>Centraid is locked</Text>
@@ -153,14 +146,16 @@ export function AppLockProvider({
             onPress={() => void unlock()}
             style={styles.button}
           >
-            {authenticating ? (
-              <ActivityIndicator color={colors.textInv} />
-            ) : (
-              <Text style={styles.buttonText}>Unlock</Text>
-            )}
+            {/* No spinning glyph: the OS owns the actual biometric prompt, so
+                this button can only say "something is in flight" — a label
+                change plus the disabled state already say that without
+                motion. */}
+            <Text style={styles.buttonText}>
+              {authenticating ? "Authenticating…" : "Unlock"}
+            </Text>
           </Pressable>
         </View>
-      </SafeAreaView>
+      </TopSafeArea>
     );
   return (
     <AppLockContext.Provider value={value}>{children}</AppLockContext.Provider>
@@ -183,13 +178,13 @@ const makeStyles = (colors: ThemeColors) =>
     },
     buttonText: {
       color: colors.textInv,
-      fontFamily: family.sansBold,
-      fontSize: 15,
+      fontFamily: family.sansMedium,
+      fontSize: t("body").fontSize,
     },
     card: {
       backgroundColor: colors.bgElev,
       borderColor: colors.lineStrong,
-      borderRadius: radii.xl,
+      borderRadius: radii.lg,
       borderWidth: 1,
       maxWidth: 420,
       padding: spacing[5],
@@ -198,10 +193,8 @@ const makeStyles = (colors: ThemeColors) =>
     copy: { ...t("body"), color: colors.textSoft, marginTop: spacing[3] },
     error: { ...t("small"), color: colors.danger, marginTop: spacing[3] },
     eyebrow: {
-      ...t("control"),
+      ...t("eyebrow"),
       color: colors.textFaint,
-      fontFamily: family.monoBold,
-      letterSpacing: 1.2,
     },
     screen: {
       alignItems: "center",

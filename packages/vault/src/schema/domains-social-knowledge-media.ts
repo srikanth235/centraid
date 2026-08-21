@@ -95,7 +95,7 @@ CREATE TABLE knowledge_note (
   -- real deletion deferred to the lifecycle sweep's purge window. The FTS
   -- spec's deletedColumn guard keeps trashed notes out of the index. The guard
   -- (issue #441 A4) makes purge_at-without-deleted_at unrepresentable, matching
-  -- core_content_item / core_document / media_media_asset.
+  -- core_content_item / core_document / media_asset.
   deleted_at      TEXT,
   purge_at        TEXT CHECK (purge_at IS NULL OR deleted_at IS NOT NULL)
 ) STRICT;
@@ -115,7 +115,7 @@ CREATE INDEX IF NOT EXISTS idx_annotation_author_party ON knowledge_annotation(a
 `;
 
 export const MEDIA_DDL = `
-CREATE TABLE media_media_asset (
+CREATE TABLE media_asset (
   asset_id         TEXT PRIMARY KEY,
   content_id       TEXT NOT NULL UNIQUE REFERENCES core_content_item(content_id),
   kind             TEXT NOT NULL CHECK (kind IN ('photo','video','audio','scan')),
@@ -133,6 +133,17 @@ CREATE TABLE media_media_asset (
   height           INTEGER CHECK (height > 0),
   duration_s       REAL CHECK (duration_s >= 0),
   exif_json        TEXT CHECK (exif_json IS NULL OR json_valid(exif_json)),
+  -- Edit lineage (issue #711). The photo editor is non-destructive: saving an
+  -- edit writes a NEW asset beside the original and never touches the source
+  -- bytes, so the copy has to say what it came from or the provenance is lost
+  -- the moment it lands. Self-referencing FK, NULL for every camera original
+  -- and every import — "no source" is a real answer the UI must be able to
+  -- read and say plainly, not a hole to paper over with the copy's own
+  -- capture date. An asset may not be its own source (an edit of itself is
+  -- not a thing the editor can produce). SQLite never auto-indexes a child FK
+  -- column, and merge.ts re-points FKs by UPDATE, so it carries its own index.
+  source_asset_id  TEXT REFERENCES media_asset(asset_id)
+                     CHECK (source_asset_id IS NULL OR source_asset_id <> asset_id),
   -- First-class asset state (issue #419) so the Photos replica shape is
   -- self-contained: favorite is a boolean on the asset (no more reconstructing
   -- it from a 3-table core_tag/core_concept join), and archive hides an asset
@@ -144,17 +155,39 @@ CREATE TABLE media_media_asset (
   deleted_at       TEXT,
   purge_at         TEXT CHECK (purge_at IS NULL OR deleted_at IS NOT NULL)
 ) STRICT;
-CREATE INDEX IF NOT EXISTS idx_media_asset_place ON media_media_asset(place_id);
-CREATE INDEX IF NOT EXISTS idx_media_asset_camera_device ON media_media_asset(camera_device_id);
-CREATE INDEX IF NOT EXISTS idx_media_asset_capture_group ON media_media_asset(capture_group_id);
+CREATE INDEX IF NOT EXISTS idx_media_asset_place ON media_asset(place_id);
+CREATE INDEX IF NOT EXISTS idx_media_asset_camera_device ON media_asset(camera_device_id);
+CREATE INDEX IF NOT EXISTS idx_media_asset_capture_group ON media_asset(capture_group_id);
+CREATE INDEX IF NOT EXISTS idx_media_asset_source ON media_asset(source_asset_id);
 
 CREATE TABLE media_face_region (
   region_id             TEXT PRIMARY KEY,
-  asset_id              TEXT NOT NULL REFERENCES media_media_asset(asset_id),
+  asset_id              TEXT NOT NULL REFERENCES media_asset(asset_id),
   bbox_json             TEXT NOT NULL CHECK (json_valid(bbox_json)),
   party_id              TEXT REFERENCES core_party(party_id),
   confidence            REAL CHECK (confidence BETWEEN 0 AND 1),
-  confirmed_by_party_id TEXT REFERENCES core_party(party_id)
+  confirmed_by_party_id TEXT REFERENCES core_party(party_id),
+  -- WHERE A REVIEW QUEUE ENDS (issue #712). Before this column the table could
+  -- only say "confirmed or not", so two of the three answers a member actually
+  -- gives had nowhere to live: "reviewed, deliberately left unnamed" was not
+  -- expressible at all, and "rejected" was a DELETE — which is not a state, so
+  -- the enricher's next run was free to propose the same stranger again and
+  -- the queue could never be finished. media.answer_face_proposal writes
+  -- this; nothing else does.
+  review_state          TEXT NOT NULL DEFAULT 'proposed'
+                          CHECK (review_state IN ('proposed','confirmed','rejected','dismissed')),
+  -- ONE SOURCE OF TRUTH, STRUCTURALLY. "confirmed" is already derivable from
+  -- confirmed_by_party_id, so the two facts are pinned to each other here
+  -- rather than left to agree by convention: a writer cannot mark a region
+  -- confirmed without naming who confirmed it, and cannot name a confirmer
+  -- without the state saying so. Readers may use either and never disagree.
+  CHECK ((review_state = 'confirmed') = (confirmed_by_party_id IS NOT NULL)),
+  -- A PARTY IS AN ASSERTION, NOT A LEFTOVER. party_id on a proposed region is
+  -- the enricher's candidate; on a confirmed one it is the owner's word.
+  -- A rejected or dismissed region asserts neither, so it carries no party --
+  -- which is what keeps rejected rows (now that they survive) out of every
+  -- per-person count that falls back from confirmed_by_party_id to party_id.
+  CHECK (review_state IN ('proposed','confirmed') OR party_id IS NULL)
 ) STRICT;
 CREATE INDEX IF NOT EXISTS idx_face_region_asset ON media_face_region(asset_id);
 CREATE INDEX IF NOT EXISTS idx_face_region_party ON media_face_region(party_id);

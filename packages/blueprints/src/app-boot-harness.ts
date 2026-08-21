@@ -1,4 +1,4 @@
-// governance: allow-repo-hygiene file-size-limit cohesive jsdom boot harness; the fetch/module shims, .module.css-as-JS rewrite, and per-app boot assertions must move together to mirror the gateway serve path
+// governance: allow-repo-hygiene file-size-limit cohesive jsdom boot harness; the fetch/module shims, .module.css-as-JS rewrite, and per-app boot assertions must move together to mirror the shell bundle path
 /* oxlint-disable typescript-eslint/ban-ts-comment -- the package tsconfig has
    no DOM lib (this "src" is node-side); this harness drives the browser apps
    under jsdom, so DOM globals are runtime-real but invisible to tsc. */
@@ -11,7 +11,6 @@ import {
   readdirSync,
   readFileSync,
   rmSync,
-  symlinkSync,
   writeFileSync,
 } from "node:fs";
 import path from "node:path";
@@ -22,7 +21,6 @@ import { createRoot } from "react-dom/client";
 import type { Root as ReactRoot } from "react-dom/client";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
-import { BRAND } from "@centraid/design";
 // Boots a blueprint app the way the v0 client does: its query-free `Root`,
 // the real kit, the workspace React runtime, and a mocked `window.centraid`
 // vault. The retired served adapter and its vendored React copy are not part
@@ -49,29 +47,16 @@ import { BRAND } from "@centraid/design";
 //     app re-runs `refresh()` on window 'focus', so flipping the mock and
 //     dispatching focus walks granted → denied → granted on a single instance.
 //
-// Agenda and Photos additionally boot populated replica fixtures. Agenda's
-// pending-chip assertions consume the production intent-invalidation
-// derivation, so the harness cannot invent a terminal browser signal that the
-// real coordinator would never publish.
-import { replicaIntentInvalidations } from "@centraid/design/kit/intent-invalidations.js";
+// Photos additionally boots a populated replica fixture and is the one app
+// held to the live-read journey (`expectLive`). Agenda drove that journey too —
+// including the pending-chip assertions over the production intent-invalidation
+// derivation — until its interface was removed pending a ground-up redesign;
+// the rebuilt app re-enters here with its own `<app>.test.ts`.
 
 // Resolved from this module's own path, not process.cwd(): cwd differs
 // between a root-run vitest (repo root) and a package-run vitest (this
 // package's dir), but the file's own location never does.
 const PKG = path.resolve(import.meta.dirname, "..");
-// Apps import these as siblings (`./kit.ts`); at rest they live only in `kit/`,
-// and the gateway serves them from a shared dir (SHARED_ASSET_FILES in
-// app-engine/src/http/static-server.ts). Symlinks reproduce that layout.
-const SHARED = [
-  "kit.ts",
-  "elements.js",
-  "edge-upload.js",
-  "turn-stream.js",
-  "assistant-rich.js",
-  "gfm.js",
-  "code-highlight.js",
-  "conversation-client.js",
-];
 
 // The harness compiles the same TS/TSX source the client bundles, using the
 // normal React automatic runtime. The esbuild CLI is used because its JS API
@@ -97,16 +82,16 @@ function transformInlineSource(source: string, rel = "app.tsx"): string {
   );
   return (
     code
-      // The gateway serves a `*.module.css` request as JS at that same URL. Vite/
-      // Vitest, however, owns the `.module.css` extension and would run its own
-      // CSS-modules transform over the harness's compiled JS (see
-      // compileModuleCssLikeTheGateway) — garbage-parsing it and handing the app
-      // a bogus class map with none of the `<style data-centraid-css-module>`
-      // injection. So the harness serves that JS from a sibling
-      // `*.module.css.js` file (written in beforeAll) and rewrites every relative
-      // `*.module.css` import specifier to match — the `.js` tail is what keeps
-      // Vite from hijacking it. Behaviour is identical to the gateway; only the
-      // scratch filename differs from the app source.
+      // A `*.module.css` import resolves to JS: a style-injecting module that
+      // default-exports the class map. Vite/Vitest, however, owns the
+      // `.module.css` extension and would run its own CSS-modules transform
+      // over the harness's compiled JS (see compileModuleCss) — garbage-parsing
+      // it and handing the app a bogus class map with none of the `<style
+      // data-centraid-css-module>` injection. So the harness serves that JS
+      // from a sibling `*.module.css.js` file (written in beforeAll) and
+      // rewrites every relative `*.module.css` import specifier to match — the
+      // `.js` tail is what keeps Vite from hijacking it. Behaviour matches the
+      // shell bundle; only the scratch filename differs from the app source.
       .replace(
         /(?<quote>["'])(?<spec>(?:\.\.?\/)[^"']*\.module\.css)\k<quote>/gu,
         (_m, quote: string, spec: string) => `${quote}${spec}.js${quote}`
@@ -114,13 +99,13 @@ function transformInlineSource(source: string, rel = "app.tsx"): string {
   );
 }
 
-// Compile a `*.module.css` to the same style-injecting, class-map-exporting JS
-// module the gateway serves (app-engine's css-module.ts). Mirrored minimally
-// via the esbuild CLI — esbuild's JS API refuses to load under jsdom (see the
-// note above transformInlineSource), but the CLI is a subprocess and is
-// unaffected. The CLI emits the JS class-map module and the compiled CSS as
-// two files into a temp outdir; we compose the served body from both.
-function compileModuleCssLikeTheGateway(
+// Compile a `*.module.css` to the style-injecting, class-map-exporting JS
+// module each shell's bundler produces for it. Mirrored minimally via the
+// esbuild CLI — esbuild's JS API refuses to load under jsdom (see the note
+// above transformInlineSource), but the CLI is a subprocess and is unaffected.
+// The CLI emits the JS class-map module and the compiled CSS as two files into
+// a temp outdir; we compose the module body from both.
+function compileModuleCss(
   absFile: string,
   appRoot: string,
   scratch: string
@@ -172,39 +157,11 @@ function compileModuleCssLikeTheGateway(
 
 const DENIED = { vaultDenied: { message: "Grant revoked." } };
 
-const AGENDA_EVENT_ID = "event-airplane";
-const AGENDA_INTENT_ID = "intent-airplane-cancel";
-const AGENDA_TITLE = "Airplane-mode planning";
 const PHOTO_ASSET_ID = "asset-airplane";
 const PHOTO_TITLE = "Airplane-mode photo";
-const TALLY_TRASH_ID = "expense-airplane-trash";
 
 /** Populated, clone-safe rows shaped exactly like each app's local query. */
 function replicaFixture(app: string): unknown {
-  if (app === "agenda") {
-    return {
-      events: [
-        {
-          event_id: AGENDA_EVENT_ID,
-          calendar_id: "calendar-local",
-          summary: AGENDA_TITLE,
-          description: "Already present in the local replica.",
-          dtstart: "2099-01-15T09:00:00.000Z",
-          dtend: "2099-01-15T10:00:00.000Z",
-          status: "confirmed",
-          attendees: [],
-          attachments: [],
-        },
-      ],
-      calendars: [
-        {
-          calendar_id: "calendar-local",
-          name: "Local calendar",
-          color: BRAND,
-        },
-      ],
-    };
-  }
   if (app === "photos") {
     return {
       assets: [
@@ -235,35 +192,6 @@ function replicaFixture(app: string): unknown {
       window: 500,
     };
   }
-  if (app === "tally") {
-    return {
-      me: "party-owner",
-      currency: "USD",
-      friends: [],
-      groups: [
-        {
-          group_id: "group-airplane",
-          name: "Offline group",
-          icon: "✈️",
-          color: "#4E68DD",
-          member_count: 1,
-          owner_net_minor: 0,
-        },
-      ],
-      trash: [
-        {
-          expense_id: TALLY_TRASH_ID,
-          description: "Recoverable dinner",
-          amount_minor: 4200,
-          group_name: "Offline group",
-          deleted_at: "2026-07-15T08:00:00.000Z",
-          purge_at: null,
-        },
-      ],
-      owe_total_minor: 0,
-      owed_total_minor: 0,
-    };
-  }
   return {};
 }
 
@@ -275,7 +203,7 @@ const NON_UI_DIRS = new Set(["queries", "actions", "automations"]);
 
 /** All browser-source files of an app, as relative posix paths: `.js`/`.jsx`
  * and their TS counterparts `.ts`/`.tsx`, plus `*.module.css` (a CSS module is
- * imported by the page as JS — see compileModuleCssLikeTheGateway). */
+ * imported by the page as JS — see compileModuleCss). */
 function collectSources(root: string, rel = ""): string[] {
   const out: string[] = [];
   for (const e of readdirSync(path.join(root, rel), { withFileTypes: true })) {
@@ -308,9 +236,10 @@ const settle = () =>
  *
  * Boot calls `refresh()` without awaiting and the apps paint through React's
  * async scheduler, so the DOM that a fixed sleep observes is a guess. Measured:
- * the tally trash shelf lands 4 event-loop turns (~4ms) after its module import
- * resolves locally — 20× inside the old fixed 80ms settle — yet the loaded CI
- * runner still queried a null shelf and failed the `check` job. Dropping settle
+ * a shelf rendered from the local replica lands 4 event-loop turns (~4ms) after
+ * its module import resolves locally — 20× inside the old fixed 80ms settle —
+ * yet the loaded CI runner still queried a null node and failed the `check`
+ * job. Dropping settle
  * to 1ms reproduces that exact failure locally, confirming a race rather than a
  * budget. So poll for the precondition instead of guessing at it.
  *
@@ -337,8 +266,8 @@ async function waitFor(
 }
 
 // The single boot journey runs the app's real esbuild transform + jsdom render
-// plus the remaining fixed settle windows; the slowest app (agenda) lands ~1.5s
-// locally now that the appear-assertions poll (waitFor) instead of sleeping.
+// plus the remaining fixed settle windows; the slowest app lands ~1.5s locally
+// now that the appear-assertions poll (waitFor) instead of sleeping.
 // The affected-package gate runs every package at once; Photos has crossed 8s
 // under that CPU contention even though it remains sub-3s alone. Keep a
 // bounded 20s journey budget rather than turning scheduler load into a false
@@ -357,8 +286,8 @@ function consentBannerShown(): boolean {
 
 /**
  * Mirror one source tree into the boot scratch dir the way the client bundles
- * it: TypeScript stripped, CSS modules compiled to the class-map JS the gateway
- * serves, everything else copied verbatim.
+ * it: TypeScript stripped, CSS modules compiled to their class-map JS,
+ * everything else copied verbatim.
  */
 function mirrorSources(srcRoot: string, destRoot: string): void {
   mkdirSync(destRoot, { recursive: true });
@@ -376,11 +305,7 @@ function mirrorSources(srcRoot: string, destRoot: string): void {
     } else if (rel.endsWith(".module.css")) {
       writeFileSync(
         `${out}.js`,
-        compileModuleCssLikeTheGateway(
-          path.join(srcRoot, rel),
-          srcRoot,
-          destRoot
-        )
+        compileModuleCss(path.join(srcRoot, rel), srcRoot, destRoot)
       );
     } else {
       cpSync(path.join(srcRoot, rel), out);
@@ -390,7 +315,7 @@ function mirrorSources(srcRoot: string, destRoot: string): void {
 
 export function describeAppBoot(
   app: string,
-  options: { expectLive?: boolean; expectReplica?: boolean } = {}
+  options: { expectLive?: boolean } = {}
 ) {
   describe(`${app} boots`, () => {
     let dir: string;
@@ -416,7 +341,7 @@ export function describeAppBoot(
       // Each app gets its own scratch ROOT, laid out like `apps/` itself:
       // `<root>/<app>` beside `<root>/_shared`. An app importing a cross-app
       // module by its real specifier (`../_shared/…`, issue #599) then resolves
-      // exactly as it does when served — and because the shared copy lives
+      // exactly as it does in a shell bundle — and because the shared copy lives
       // inside the app's own root, two app-boot files running in parallel never
       // write the same path.
       bootRoot = path.join(PKG, ".app-boot", app);
@@ -427,30 +352,6 @@ export function describeAppBoot(
       const sharedDir = path.join(PKG, "apps", "_shared");
       if (existsSync(sharedDir))
         mirrorSources(sharedDir, path.join(bootRoot, "_shared"));
-      for (const file of SHARED) {
-        if (!existsSync(path.join(dir, file))) {
-          // The kit layer lives in the design package (#672); the app-engine
-          // serves it at the app-relative path this mirrors.
-          symlinkSync(
-            path.join(PKG, "..", "design", "kit", file),
-            path.join(dir, file)
-          );
-        }
-      }
-      if (app === "photos") {
-        execFileSync(
-          ESBUILD_BIN,
-          [
-            path.resolve(PKG, "../client/src/video-frame.ts"),
-            "--bundle",
-            "--format=esm",
-            "--platform=browser",
-            "--log-level=silent",
-            `--outfile=${path.join(dir, "video-frame.js")}`,
-          ],
-          { encoding: "utf8" }
-        );
-      }
 
       process.on("unhandledRejection", push);
       process.on("uncaughtException", push);
@@ -488,15 +389,7 @@ export function describeAppBoot(
       { timeout: BOOT_TEST_TIMEOUT_MS },
       async () => {
         document.body.innerHTML = '<div id="appRoot"></div>';
-        if (app === "agenda") {
-          // Schedule view renders the populated fixture independent of the
-          // machine's current month, keeping this browser journey deterministic.
-          document.documentElement.dataset.appDefaultView = "schedule";
-        }
-        const granted =
-          options.expectLive || options.expectReplica
-            ? replicaFixture(app)
-            : {};
+        const granted = options.expectLive ? replicaFixture(app) : {};
         let response: unknown = granted;
         let nextReadError: Error | undefined;
         let readCalls = 0;
@@ -541,12 +434,6 @@ export function describeAppBoot(
           },
           write: async (request: unknown) => {
             writeCalls.push(request);
-            if (
-              app === "agenda" &&
-              (request as { action?: string }).action === "cancel-event"
-            ) {
-              return { status: "queued", intentId: AGENDA_INTENT_ID };
-            }
             return {};
           },
           onChange: (listener: (detail: unknown) => void) => {
@@ -555,66 +442,39 @@ export function describeAppBoot(
           },
         };
 
-        const emitAgendaIntentState = (state: "parked" | "denied") => {
-          const invalidations = replicaIntentInvalidations([
-            {
-              intentId: AGENDA_INTENT_ID,
-              payloadHash: "harness-payload",
-              appId: "agenda",
-              action: "cancel-event",
-              input: { event_id: AGENDA_EVENT_ID },
-              state,
-              createdOrder: 1,
-              attempts: 1,
-              optimistic: [],
-              dependencies: [
-                { shapeId: "shape-agenda-events", entity: "core.event" },
-              ],
-            },
-          ]);
-          for (const invalidation of invalidations) {
-            for (const listener of changes) {
-              listener({ ...invalidation, tables: [invalidation.entity] });
-            }
-          }
+        // The frame's contribution channel (Photos v4 §3), recorded rather
+        // than rendered. The client hands every inline app one of these, so
+        // the harness must too — an app that contributes to a bar that isn't
+        // there is exactly the crash this journey exists to catch.
+        const contributed: {
+          appBar: Record<string, unknown> | null;
+          band: Record<string, unknown> | null;
+          status: ({ text: string } | null)[];
+        } = { appBar: null, band: null, status: [] };
+        const frame = {
+          setAppBar: (bar: Record<string, unknown> | null) => {
+            contributed.appBar = bar;
+          },
+          setStatus: (text: string) => {
+            contributed.status.push({ text });
+          },
+          clearStatus: () => {
+            contributed.status.push(null);
+          },
+          claimBand: (claim: Record<string, unknown> | null) => {
+            contributed.band = claim;
+          },
         };
 
         const module = await import(
           pathToFileURL(path.join(dir, "app-root.tsx")).href
         );
         reactRoot = createRoot(document.querySelector("#appRoot")!);
-        reactRoot.render(createElement(module.Root, { rootRef: () => {} }));
+        reactRoot.render(
+          createElement(module.Root, { rootRef: () => {}, frame })
+        );
         await settle();
         expectNoErrors("rendering its granted replica in airplane mode");
-
-        if (app === "tally" && options.expectReplica) {
-          await waitFor(
-            () =>
-              document.querySelector('[aria-label="Trashed expenses"]') !==
-              null,
-            "Tally's trash shelf to render from the local replica"
-          );
-          const shelf = document.querySelector(
-            '[aria-label="Trashed expenses"]'
-          );
-          expect(shelf?.textContent).toContain("Recoverable dinner");
-          const restore = Array.from(
-            shelf?.querySelectorAll<HTMLButtonElement>("button") ?? []
-          ).find((button) => button.textContent?.trim() === "Restore");
-          expect(
-            restore,
-            "Tally trash shelf lost its restore control"
-          ).toBeTruthy();
-          restore?.click();
-          await waitFor(
-            () => writeCalls.length > 0,
-            "Tally's restore click to reach the vault write path"
-          );
-          expect(writeCalls).toContainEqual({
-            action: "restore-expense",
-            input: { expense_id: TALLY_TRASH_ID },
-          });
-        }
 
         if (options.expectLive) {
           await waitFor(
@@ -635,91 +495,7 @@ export function describeAppBoot(
             `${app} never subscribed to its replica read`
           ).toBeGreaterThan(0);
 
-          if (app === "agenda") {
-            const askToCancel = () =>
-              Array.from(
-                document.querySelectorAll<HTMLButtonElement>("button")
-              ).find(
-                (button) => button.textContent?.trim() === "Ask to cancel"
-              );
-            await waitFor(
-              () => document.querySelector(".ag-sched-title") !== null,
-              "Agenda's schedule row to render from the local replica"
-            );
-            const event = document.querySelector(".ag-sched-title");
-            expect(event?.textContent).toBe(AGENDA_TITLE);
-            event?.closest("button")?.click();
-            await waitFor(
-              () => askToCancel() !== undefined,
-              "the Agenda event's drawer to open"
-            );
-            const cancel = askToCancel();
-            expect(
-              cancel,
-              "populated Agenda event did not open its drawer"
-            ).toBeTruthy();
-            cancel?.click();
-            cancel?.click();
-            // waitFor lands the first write; settle then holds a quiet window so
-            // the exactly-one assertion below still proves the second click was
-            // deduped rather than merely not yet delivered.
-            await waitFor(
-              () => writeCalls.length > 0,
-              "Agenda's cancel ask to reach the vault"
-            );
-            await settle();
-            expect(writeCalls).toEqual([
-              {
-                action: "cancel-event",
-                input: { event_id: AGENDA_EVENT_ID },
-                optimistic: undefined,
-              },
-            ]);
-            expect(
-              readCalls,
-              "offline interaction unexpectedly re-read the replica"
-            ).toBe(bootReads);
-            expect(
-              networkCalls,
-              "offline interaction attempted a network request"
-            ).toEqual([]);
-            await waitFor(
-              () => document.querySelector(".kit-pending-chip") !== null,
-              "Agenda's pending chip to paint for the queued cancel"
-            );
-            expect(
-              document.querySelector(".kit-pending-chip")?.textContent
-            ).toBe("cancel asked");
-            expect(document.body.textContent).toContain(AGENDA_TITLE);
-
-            // Reconnect admission parks the exact queued intent: the event stays
-            // canonical and the chip remains until a terminal owner decision.
-            Object.defineProperty(window.navigator, "onLine", {
-              configurable: true,
-              value: true,
-            });
-            emitAgendaIntentState("parked");
-            await new Promise((resolve) => {
-              setTimeout(resolve, 250);
-            });
-            expect(
-              document.querySelector(".kit-pending-chip")?.textContent
-            ).toBe("cancel asked");
-
-            // An exact denial is the rollback signal: only this chip settles and
-            // the unchanged canonical event remains visible.
-            emitAgendaIntentState("denied");
-            await waitFor(
-              () => document.querySelector(".kit-pending-chip") === null,
-              "Agenda's pending chip to settle on the exact denial"
-            );
-            expect(document.querySelector(".kit-pending-chip")).toBeNull();
-            expect(document.body.textContent).toContain(AGENDA_TITLE);
-            expect(
-              readCalls,
-              "exact intent settlement unexpectedly re-read the replica"
-            ).toBe(bootReads);
-          } else if (app === "photos") {
+          if (app === "photos") {
             await waitFor(
               () =>
                 document.querySelector(
@@ -735,6 +511,35 @@ export function describeAppBoot(
               "the populated local Photos row did not render"
             ).toBeTruthy();
             expect(tile?.querySelector("img")?.alt).toBe(PHOTO_TITLE);
+
+            // Photos is a ROUTE INSIDE THE FRAME (v4 §3): it draws no app bar
+            // of its own, it contributes one. A mount that painted a grid but
+            // contributed nothing would leave the frame showing a bare bar,
+            // which is the failure this asserts against.
+            await waitFor(
+              () => contributed.appBar !== null,
+              "Photos to contribute the frame's app bar"
+            );
+            expect(contributed.appBar?.title).toBe("Photos");
+            expect(String(contributed.appBar?.count)).toContain("1");
+            // …and it claims the compact band with its own five destinations,
+            // so the frame renders exactly one band (§3.1).
+            const claimed = (contributed.band ?? {}).destinations as
+              | { id: string }[]
+              | undefined;
+            expect(claimed?.map((d) => d.id)).toEqual([
+              "library",
+              "albums",
+              "people",
+              "search",
+            ]);
+
+            // The app draws no chrome of its own inside the pane: no
+            // hamburger, no in-pane search field in a header, no zoom pair.
+            expect(document.querySelector("#hamburgerBtn")).toBeNull();
+            expect(document.querySelector("#zoomInBtn")).toBeNull();
+            expect(document.querySelector("#sidebarMount")).toBeNull();
+            expect(document.querySelector("#noticeBanner")).toBeNull();
           }
 
           response = DENIED;
@@ -784,7 +589,7 @@ export function describeAppBoot(
             `${app} did not attempt the replacement live read`
           ).toBeGreaterThan(beforeFailure);
           const afterFailure = readCalls;
-          const table = app === "photos" ? "core.content_item" : "core.event";
+          const table = "core.content_item";
           for (const listener of changes) listener({ tables: [table] });
           await waitFor(
             () => readCalls > afterFailure && live.size > 0,

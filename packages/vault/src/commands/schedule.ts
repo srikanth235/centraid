@@ -3,7 +3,7 @@
 // and receipted end to end. Command implementations are domain-owned; the
 // gateway hosts and checks them (§10 negative space).
 
-import { canonicalizeRrule } from "@centraid/time-engine";
+import { canonicalizeRrule } from "@centraid/core/time";
 
 import type { Gateway } from "../gateway/gateway.js";
 import type { CommandDefinition, HandlerCtx } from "../gateway/types.js";
@@ -165,6 +165,11 @@ function proposeEvent(ctx: HandlerCtx): Record<string, unknown> {
     input.reminders && input.reminders.length > 0
       ? JSON.stringify(input.reminders)
       : null;
+  // The write is recorded under the ext row's OWN primary key, not the event
+  // id: every downstream sweep (demo purge above all) deletes by the physical
+  // pk, so an event-keyed registration deleted nothing and left the ext row
+  // holding an FK on the event that would not die (issue #708).
+  const eventExtId = ctx.newId();
   ctx.db
     .prepare(
       `INSERT INTO schedule_event_ext
@@ -172,13 +177,13 @@ function proposeEvent(ctx: HandlerCtx): Record<string, unknown> {
        VALUES (?, ?, ?, 'busy', ?, ?, NULL)`
     )
     .run(
-      ctx.newId(),
+      eventExtId,
       eventId,
       input.calendar_id,
       input.conferencing_uri ?? null,
       remindersJson
     );
-  ctx.wrote("schedule.event_ext", eventId);
+  ctx.wrote("schedule.event_ext", eventExtId);
   const attendees = input.attendee_party_ids ?? [];
   for (const partyId of attendees) {
     const attendeeId = ctx.newId();

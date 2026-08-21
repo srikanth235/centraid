@@ -13,14 +13,15 @@ vi.mock(import("../../lib/assistant"), () => ({
 }));
 
 const {
+  assistantMessageWithPageContext,
   nextProviderConsent,
   persistAssistantSelection,
-  preflightedRunnerSelection,
+  preflightedHarnessSelection,
 } = await import("./useAssistant");
 
 function config(over: Partial<AssistantConfig> = {}): AssistantConfig {
   return {
-    runners: [
+    harnesses: [
       {
         kind: "codex",
         label: "Codex",
@@ -34,7 +35,7 @@ function config(over: Partial<AssistantConfig> = {}): AssistantConfig {
         sessionReady: true,
       },
     ],
-    runnerKind: "codex",
+    harnessKind: "codex",
     models: [],
     selectedModel: "",
     efforts: [],
@@ -46,6 +47,15 @@ function config(over: Partial<AssistantConfig> = {}): AssistantConfig {
 }
 
 describe("nextProviderConsent", () => {
+  it("puts removable page context into the real ledger turn", () => {
+    expect(assistantMessageWithPageContext("What changed?", "Vault")).toBe(
+      "Current page: Vault\n\nWhat changed?"
+    );
+    expect(assistantMessageWithPageContext("What changed?", undefined)).toBe(
+      "What changed?"
+    );
+  });
+
   it("keeps earlier approvals when a consent-gated failover asks for another provider", () => {
     const first = nextProviderConsent(undefined, "claude-code");
     expect(first).toStrictEqual(["claude-code"]);
@@ -60,12 +70,12 @@ describe("nextProviderConsent", () => {
   });
 });
 
-describe("preflightedRunnerSelection", () => {
-  it("retains the prior runner when refreshed session setup or sign-in is incomplete", () => {
+describe("preflightedHarnessSelection", () => {
+  it("retains the prior harness when refreshed session setup or sign-in is incomplete", () => {
     const current = config();
     const fresh = config({
-      runners: [
-        ...current.runners,
+      harnesses: [
+        ...current.harnesses,
         {
           kind: "claude-code",
           label: "Claude Code",
@@ -81,7 +91,7 @@ describe("preflightedRunnerSelection", () => {
         },
       ],
     });
-    const result = preflightedRunnerSelection(current, fresh, "claude-code");
+    const result = preflightedHarnessSelection(current, fresh, "claude-code");
     expect(result.config).toBe(current);
     expect(result.error).toBe("Sign in to Claude Code.");
   });

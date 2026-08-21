@@ -1,0 +1,88 @@
+/* "More in Docs" — the band's overflow sheet (Docs spec §1.5).
+
+   It sits at the foot of the app pane, above where the claimed band renders —
+   the pane already ends where the band begins, so `bottom: 0` needs no
+   knowledge of the band's height.
+
+   OPAQUE PAPER, A HAIRLINE, A 12px RADIUS. No blur, no translucency, no
+   shadow. Rows are 44px minimum, because a target below 44 stops being a
+   target. */
+
+.sheet {
+  /* A <dialog open> carries UA margin, border, a max size and its own colour;
+     it is a sheet in the app's own pane, so all four are taken back here. */
+  margin: 0;
+  max-inline-size: none;
+  max-block-size: none;
+  border: none;
+  color: inherit;
+  position: absolute;
+  inset-inline: 0;
+  bottom: 0;
+  z-index: 40;
+  display: flex;
+  flex-direction: column;
+  padding: var(--sp-2) var(--sp-4) var(--sp-4);
+  padding-bottom: max(var(--sp-4), env(safe-area-inset-bottom));
+  background: var(--bg-elev);
+  border-block-start: 1px solid var(--line);
+  border-start-start-radius: var(--r-lg);
+  border-start-end-radius: var(--r-lg);
+}
+
+/* The grabber says "this is a sheet and it can be dismissed" — it is not a
+   control, so it carries no label and no target of its own. */
+.grabber {
+  align-self: center;
+  inline-size: 36px;
+  block-size: 4px;
+  margin-block-end: var(--sp-2);
+  border-radius: var(--r-pill);
+  background: var(--line-strong);
+}
+
+.rows {
+  display: flex;
+  flex-direction: column;
+}
+.row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-3);
+  min-block-size: var(--h-row);
+  padding-inline: 2px;
+  border: none;
+  border-block-end: 1px solid var(--line);
+  background: none;
+  color: inherit;
+  text-align: start;
+}
+.row[aria-current="page"] .label {
+  font: var(--t-small-strong);
+}
+.label {
+  font: var(--t-small);
+  color: var(--text);
+}
+/* The meta column carries a count, a rule, or both. Numerics are mono and
+   tabular so a column of them lines up and reads in order under RTL. */
+.meta {
+  font: var(--t-mono);
+  font-variant-numeric: var(--t-mono-numeric);
+  direction: var(--t-mono-direction);
+  unicode-bidi: var(--t-mono-bidi);
+  color: var(--text-faint);
+}
+
+.footer {
+  margin: var(--sp-3) 0 0;
+  max-inline-size: 52ch;
+  font: var(--t-small);
+  color: var(--text-soft);
+}
+
+.close {
+  align-self: flex-start;
+  margin-block-start: var(--sp-3);
+}

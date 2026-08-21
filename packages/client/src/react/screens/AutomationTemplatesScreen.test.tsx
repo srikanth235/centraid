@@ -6,11 +6,11 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import type {
   AutomationTemplatesBridgeProps,
-  DiscoverTemplate,
+  CatalogTemplate,
 } from "../screen-contracts.js";
 import AutomationTemplatesScreen from "./AutomationTemplatesScreen.js";
 
-const templates: DiscoverTemplate[] = [
+const templates: CatalogTemplate[] = [
   {
     id: "digest",
     name: "Daily Digest",
@@ -40,7 +40,7 @@ const templates: DiscoverTemplate[] = [
     integrations: ["Slack", "GitHub"],
   },
   {
-    id: "photo-captioner",
+    id: "obligation-extractor",
     name: "Photo captions",
     desc: "Captions and tags new photos.",
     colorKey: "ochre",
@@ -159,7 +159,7 @@ describe("screens/AutomationTemplatesScreen", () => {
       );
       expect(props.onPreview).toHaveBeenCalledOnce();
       const firstArg = (props.onPreview as ReturnType<typeof vi.fn>).mock
-        .calls[0]?.[0] as DiscoverTemplate | undefined;
+        .calls[0]?.[0] as CatalogTemplate | undefined;
       expect(firstArg?.id).toBe("digest");
     });
 

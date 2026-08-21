@@ -52,6 +52,7 @@ export const MACHINERY_BANDS: readonly string[] = [
   "outbox",
   "notifications",
   "blob",
+  "share",
 ];
 
 /** Human labels per pack — the serif vocabulary the census sentence uses. */
@@ -75,6 +76,7 @@ export const ATLAS_PACK_LABELS: Readonly<Record<string, string>> = {
   outbox: "Outbox",
   notifications: "Notifications",
   blob: "Blobs",
+  share: "Sharing",
 };
 
 /**
@@ -275,11 +277,15 @@ export const ATLAS_KIND_FRIENDLY: Readonly<
     blurb: "Notes pinned to a spot in something.",
   },
   // media
-  "media.media_asset": { name: "Media", blurb: "Your photos and videos." },
+  "media.asset": { name: "Media", blurb: "Your photos and videos." },
   "media.face_region": { name: "Faces", blurb: "Faces found in your photos." },
   "media.asset_phash": {
     name: "Fingerprints",
     blurb: "Hashes for spotting duplicate photos.",
+  },
+  "media.face_cluster": {
+    name: "Face groups",
+    blurb: "Faces that look like each other, waiting for a name.",
   },
   // home
   "home.asset_item": {

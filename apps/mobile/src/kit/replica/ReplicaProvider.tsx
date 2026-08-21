@@ -7,7 +7,7 @@ import React, {
   useRef,
   useState,
 } from "react";
-import { AppState, InteractionManager } from "react-native";
+import { AppState } from "react-native";
 
 import { replicaStorageDirectory } from "../../../modules/centraid-storage";
 import { coalesceWork } from "../../lib/coalesce";
@@ -22,7 +22,10 @@ import { restartTunnel } from "../../lib/phone-link";
 import { registerReplicaPushWake } from "../../lib/replica/background-sync";
 import { requireMobileOfflineGateway } from "../../lib/replica/mobile-gateway-compatibility";
 import { MobileGatewayCompatibilityError } from "../../lib/replica/mobile-gateway-compatibility-core";
-import type { MobileCompatibilityDisposition } from "../../lib/replica/mobile-gateway-compatibility-core";
+import type {
+  MobileCompatibilityDisposition,
+  MobileGatewayFeatures,
+} from "../../lib/replica/mobile-gateway-compatibility-core";
 import { MultiVaultReplicaReader } from "../../lib/replica/multi-vault-reader";
 import type { MountedReplicaScope } from "../../lib/replica/multi-vault-reader";
 import { MultiVaultReplicaSession } from "../../lib/replica/multi-vault-session";
@@ -38,36 +41,47 @@ import {
   openMountedReplicaReaderDriver,
   openNativeReplicaDriver,
 } from "../../lib/replica/op-sqlite-driver";
-import { postPlacement } from "../../lib/replica/placement-transport";
+import {
+  postCommons,
+  postPlacement,
+} from "../../lib/replica/placement-transport";
+import { isReplicaStorageFullError } from "../../lib/replica/replica-storage-error";
 import { clearPinnedThumbnailPack } from "../../lib/replica/thumbnail-pack";
 import { nativeSyncAllowed } from "../../lib/upload/native-policy";
 import {
   LAST_BASE,
+  LAST_GATEWAY,
+  LAST_VAULT,
   getActiveVaultLink,
   hydrateVaultLinks,
   subscribeVaultLinks,
 } from "../../lib/vault-links";
 import type { VaultLink } from "../../lib/vault-links";
 import { Store } from "../../storage";
+import { afterInteractions } from "./after-interactions";
+import { planMount } from "./mount-plan";
 import {
   fetcher,
   freshnessKey,
   loadFreshness,
   mountedScopes,
+  refreshCachedScopes,
   removeCachedScope,
   resolveIdentity,
 } from "./replica-mount";
+import { settledReachability } from "./replica-status";
+import type { ReplicaReachability } from "./replica-status";
 
 // Re-exported rather than moved outright: the pairing wall copy is what a
 // consumer of this provider asks for, and `replica-mount` is an implementation
 // detail of it.
 export { REPLICA_UNPAIRED_MESSAGE } from "./replica-mount";
 
-export type ReplicaReachability =
-  | "device-offline"
-  | "gateway-asleep"
-  | "syncing"
-  | "current";
+// Re-exported rather than declared here: `./replica-status` is the pure
+// module that owns what each reachability state MEANS to a member (see its
+// header), so it is the one that gets to name the union. This provider is
+// just what a consumer of the type asks for.
+export type { ReplicaReachability } from "./replica-status";
 
 export interface ReplicaScopeFreshness extends MountedReplicaScope {
   updatedAt?: string;
@@ -94,7 +108,18 @@ export interface ReplicaContextValue {
   refresh?: () => Promise<void>;
   /** C1(b) is a blocking wall: no route-specific degraded modes on skew. */
   compatibility?: MobileCompatibilityDisposition;
+  /**
+   * Which experimental gateway features are switched on, off the one `/info`
+   * answer the compatibility wall already fetched (C1: detected once, never
+   * per screen). `undefined` means no gateway has answered yet this launch —
+   * UNKNOWN, not off, so a surface stays visible until the gateway actually
+   * says otherwise, the same rule the wall itself follows offline.
+   */
+  features?: MobileGatewayFeatures;
   error?: string;
+  /** The real signal behind the `out of room` state (#708): the driver hit
+   *  SQLITE_FULL/ENOSPC opening or reading a replica. */
+  storageFull?: boolean;
 }
 
 const REPLICA_LOADING: ReplicaContextValue = {
@@ -110,17 +135,6 @@ const ReplicaContext = createContext<ReplicaContextValue>(REPLICA_LOADING);
  * back into range still feels like the app noticed.
  */
 const NETWORK_FLAP_WINDOW_MS = 1_500;
-
-/**
- * Resolve once the navigation animation and pending touches have run. React
- * Native's own scheduler owns this — nothing here should be guessing at a
- * timeout for "the UI is usable now".
- */
-function afterInteractions(): Promise<void> {
-  return new Promise((resolve) => {
-    InteractionManager.runAfterInteractions(() => resolve());
-  });
-}
 
 export function ReplicaProvider({
   children,
@@ -169,30 +183,74 @@ export function ReplicaProvider({
         // finish before taking the JS thread.
         await afterInteractions();
         if (cancelled) return;
-        const identity = await resolveIdentity(activeRef.current);
-        await requireMobileOfflineGateway({
+        // PHASE A: decide what to open from disk alone (mount-plan.ts). A
+        // device that already has a (gateway, vault) tuple on disk — the
+        // registry row, or the active-slot projection it falls back to —
+        // opens that replica IMMEDIATELY, offline, without a single await on
+        // the network. `resolveIdentity` (phase B's own network-dependent
+        // ladder) only runs for a genuinely fresh install, where the gateway
+        // holds the only copy of the answer. This is the fix for the defect
+        // this file's header describes: "unpaired" is a DISK fact, never a
+        // network verdict — a plan can only end in the pairing wall (via
+        // `resolveIdentity`'s `REPLICA_UNPAIRED_MESSAGE`) when phase A looked
+        // at every persisted identity there is and found none.
+        const [cachedBase, lastGatewayId, lastVaultId] = await Promise.all([
+          Store.hydrate(LAST_BASE, "http://127.0.0.1"),
+          Store.hydrate(LAST_GATEWAY, ""),
+          Store.hydrate(LAST_VAULT, ""),
+        ]);
+        const plan = planMount({
+          link: activeRef.current,
+          cachedBase,
+          lastIdentity: { gatewayId: lastGatewayId, vaultId: lastVaultId },
+        });
+        const identity: Awaited<ReturnType<typeof resolveIdentity>> =
+          plan.kind === "open"
+            ? {
+                auth: {
+                  baseUrl: plan.baseUrl,
+                  gatewayId: plan.gatewayId,
+                  vaultId: plan.vaultId,
+                },
+                gatewayId: plan.gatewayId,
+                online: false,
+              }
+            : await resolveIdentity(activeRef.current);
+        if (cancelled) return;
+        // The same call that raises the wall also reports what this gateway
+        // switched on — one `/info` read, not one per gated surface.
+        let features = await requireMobileOfflineGateway({
           baseUrl: identity.auth.baseUrl,
-          gatewayId: identity.gatewayId,
           online: identity.online,
         });
         const storageLocation = replicaStorageDirectory();
         const scopes = await mountedScopes(identity, storageLocation);
         const freshness = await loadFreshness(identity.gatewayId, scopes);
-        if (identity.online) {
-          // Push registration, the daily brief and the per-scope notification
-          // syncs are all "eventually" work. Firing them here put four-plus
-          // requests on the radio before the user could touch anything; they
-          // wait until the app is interactive instead.
+        // Push registration, the daily brief and the per-scope notification
+        // syncs are all "eventually" work, fired once the JS thread is free
+        // rather than racing the first frame — and fired at most ONCE per
+        // mount, from whichever of two moments notices the gateway is
+        // actually reachable first. Gating this purely on `identity.online`
+        // at mount would mean a returning device — which now mounts OFFLINE
+        // by design, from the plan above — never registers for push again
+        // until it happens to relaunch while already online; `sendEventualWork`
+        // is the other trigger, called again from `refreshReachability` the
+        // first time a live base resolves.
+        let sentEventualWork = false;
+        const sendEventualWork = (baseUrl: string): void => {
+          if (sentEventualWork) return;
+          sentEventualWork = true;
           void afterInteractions().then(() => {
             if (cancelled) return;
-            void registerReplicaPushWake(identity.auth.baseUrl);
+            void registerReplicaPushWake(baseUrl);
             void scheduleDailyBriefNotification();
             for (const scope of scopes) {
-              void syncDueNotifications(identity.auth.baseUrl, scope.vaultId);
-              void syncNotifications(identity.auth.baseUrl, scope.vaultId);
+              void syncDueNotifications(baseUrl, scope.vaultId);
+              void syncNotifications(baseUrl, scope.vaultId);
             }
           });
-        }
+        };
+        if (identity.online) sendEventualWork(identity.auth.baseUrl);
         if (cancelled) return;
         let connected = identity.online;
         const sessions = new Map<string, NativeReplicaSession>();
@@ -345,6 +403,7 @@ export function ReplicaProvider({
           isNetworkWorkAllowed: nativeSyncAllowed,
           onScopePulled: updateScopeFreshness,
           sendPlacement: (input) => postPlacement(currentBase, input),
+          sendCommons: (input) => postCommons(currentBase, input),
         });
         if (cancelled) {
           await facade.close();
@@ -365,6 +424,49 @@ export function ReplicaProvider({
             multiplex?.updateGatewayBase(liveBase);
             facade?.updateGatewayBase(liveBase);
             facade?.notifyReachable();
+            // THE WALL, RE-RAISED. The mount fails open offline (an
+            // unanswered question is not a judgment — see the module's
+            // header), which makes this the one moment skew becomes a
+            // provable fact: a gateway just answered. An incompatible answer
+            // flips the session to the blocking disposition instead of
+            // letting pulls proceed against a wire contract this build does
+            // not speak.
+            try {
+              // The answer that re-raises the wall is also the answer that
+              // settles the feature flags, so a gateway switched on (or off)
+              // since launch is picked up here rather than at next cold start.
+              features =
+                (await requireMobileOfflineGateway({
+                  baseUrl: liveBase,
+                  online: true,
+                })) ?? features;
+            } catch (wallError) {
+              if (wallError instanceof MobileGatewayCompatibilityError) {
+                setBuilt((current) =>
+                  current?.gatewayKey === gatewayKey
+                    ? {
+                        gatewayKey,
+                        value: {
+                          ...current.value,
+                          compatibility: wallError.disposition,
+                        },
+                      }
+                    : current
+                );
+                return;
+              }
+              throw wallError;
+            }
+            // Phase A (mount-plan.ts) never asks the gateway anything, so
+            // THIS pass is the only one that can notice a scope granted since
+            // the last launch. Priming the cache here does not remount a live
+            // session — it just primes `mountedScopes` for the next mount
+            // (see refreshCachedScopes / mountedScopes in replica-mount.ts).
+            void refreshCachedScopes(identity.gatewayId, liveBase);
+            // The other trigger for the once-only eventual work: a returning
+            // device mounted offline by design, so this is the first moment
+            // it can register for push / notifications this launch.
+            sendEventualWork(liveBase);
           }
           setBuilt((current) =>
             current?.gatewayKey === gatewayKey
@@ -373,6 +475,7 @@ export function ReplicaProvider({
                   value: {
                     ...current.value,
                     ...(liveBase ? { gatewayBase: liveBase } : {}),
+                    ...(features ? { features } : {}),
                     online: connected,
                     reachability: deviceOnline
                       ? liveBase
@@ -388,14 +491,23 @@ export function ReplicaProvider({
               ?.pullNow()
               .then(() => true)
               .catch(() => false);
-            if (!cancelled && pulled) {
+            // `pullNow` is optional-chained — no facade means no pull, which
+            // is not success — so this settle is unconditional. Without it, a
+            // pull that never lands (gateway answered the base but died
+            // before the pull, or the facade was never built) leaves
+            // "Syncing recent changes…" on screen forever: `syncing` above was
+            // set OPTIMISTICALLY, before the pull was even attempted, so
+            // every pass that reaches this point MUST settle somewhere.
+            const landed = pulled === true;
+            if (!cancelled) {
               setBuilt((current) =>
                 current?.gatewayKey === gatewayKey
                   ? {
                       gatewayKey,
                       value: {
                         ...current.value,
-                        reachability: "current",
+                        online: landed,
+                        reachability: settledReachability(landed),
                       },
                     }
                   : current
@@ -420,8 +532,18 @@ export function ReplicaProvider({
             })),
             bootstrapProgress: [...bootstrapProgress.values()],
             ready: true,
+            ...(features ? { features } : {}),
             online: connected,
-            reachability: connected ? "current" : "gateway-asleep",
+            // `device-offline`, not `gateway-asleep`: at this instant phase A
+            // has looked only at disk (mount-plan.ts), so nothing is known
+            // about the gateway either way — `gateway-asleep` is a verdict,
+            // and this is the moment before any verdict exists. Mounting at
+            // `gateway-asleep` flashed a red "Wake help" row on every cold
+            // start for the seconds until `refreshReachability` (phase B)
+            // actually reached the network. `device-offline` is the bar's
+            // silent state (see replica-status.ts) — silence until something
+            // is known beats a false alarm.
+            reachability: connected ? "current" : "device-offline",
             refresh,
           },
         });
@@ -463,6 +585,9 @@ export function ReplicaProvider({
                 setRetryNonce((current) => current + 1);
               },
               ...(compatibility ? { compatibility } : {}),
+              ...(isReplicaStorageFullError(error)
+                ? { storageFull: true }
+                : {}),
               error: error instanceof Error ? error.message : String(error),
             },
           });

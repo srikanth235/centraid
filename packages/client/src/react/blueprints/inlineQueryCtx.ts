@@ -1,13 +1,12 @@
+import { PENDING_OVERLAY_FIELDS } from "@centraid/blueprints/apps/_shared/pending-overlay";
 import type { InlineQueryModule } from "@centraid/blueprints/apps/inline-types";
 
 import type {
   ShellReplicaReadRequest,
   ShellReplicaSearchRequest,
 } from "../../replica/shell-session.js";
-// Reproduce the served bridge's local-query execution (packages/app-engine
-// bridge-script.ts `runLocalQuery` / `localVault`, lines ~158-263) for the
-// INLINE path — but backed directly by the shell replica session instead of the
-// `centraid:replica-read` MessagePort round-trip. A blueprint query module
+// Local-query execution for the inline app path, backed directly by the shell
+// replica session. A blueprint query module
 // (`queries/<name>.ts`) is a pure function of `{ input, ctx }`; here `ctx.vault`
 // reads/searches the local replica, shapes the wire envelopes into the
 // `{ rows, receiptId }` the query expects, and marks an online-only guard the
@@ -64,15 +63,24 @@ export function createOnlineGuard(): InlineOnlineGuard {
 // oversized (masked) or undisclosed field — verbatim behaviour port of the
 // bridge's `guardedRow`, so an inline read escalates to the gateway on exactly
 // the same conditions the iframe path did.
+const PENDING_ROW_PROVENANCE = Symbol("centraid.pending-row-provenance");
+
 function guardedRow(
   envelope: ReplicaRowEnvelope,
-  guard: InlineOnlineGuard
+  guard: InlineOnlineGuard,
+  pending: PendingRowMarker | undefined
 ): Record<string, unknown> {
   const missing = new Map<string, string>();
   for (const key of envelope.oversizedFields ?? [])
     missing.set(key, `oversized field ${key}`);
   const undisclosed = envelope.hasUnavailableFields === true;
-  const values = { ...(envelope.values as Record<string, unknown>) };
+  // An enumerable symbol follows ordinary object spreads performed by query
+  // modules, but cannot leak onto the JSON-shaped result. It gives decorated
+  // rows exact provenance even when they also contain pending foreign keys.
+  const values: Record<string, unknown> & {
+    [PENDING_ROW_PROVENANCE]?: PendingRowMarker;
+  } = { ...(envelope.values as Record<string, unknown>) };
+  if (pending) values[PENDING_ROW_PROVENANCE] = pending;
   const unavailable = (
     target: Record<string, unknown>,
     key: string | symbol
@@ -118,6 +126,95 @@ export interface InlineCtxOptions {
   /** Whether the gateway is currently reachable (default `navigator.onLine`). */
   isOnline?: () => boolean;
   signal?: AbortSignal;
+  /** Mounted scope stamped onto carried pending rows for scoped recovery. */
+  scopeId?: string;
+}
+
+interface PendingRowMarker {
+  rowId: string;
+  identityFields: readonly string[];
+  fields: Record<string, unknown>;
+}
+
+const pendingFieldNames = Object.values(PENDING_OVERLAY_FIELDS);
+
+function pendingMarker(
+  envelope: ReplicaRowEnvelope
+): PendingRowMarker | undefined {
+  if (typeof envelope.values[PENDING_OVERLAY_FIELDS.key] !== "string")
+    return undefined;
+  const identityFields = Object.entries(envelope.values).flatMap(
+    ([field, value]) =>
+      (field === "id" || field.endsWith("_id")) && value === envelope.rowId
+        ? [field]
+        : []
+  );
+  if (identityFields.length === 0) return undefined;
+  return {
+    rowId: envelope.rowId,
+    identityFields,
+    fields: Object.fromEntries(
+      pendingFieldNames.flatMap((field) =>
+        envelope.values[field] === undefined
+          ? []
+          : [[field, envelope.values[field]]]
+      )
+    ),
+  };
+}
+
+function carriedPendingMarker(
+  source: Record<string | symbol, unknown>,
+  carried: Record<string, unknown>,
+  markers: readonly PendingRowMarker[]
+): PendingRowMarker | undefined {
+  const exact = source[PENDING_ROW_PROVENANCE];
+  if (exact && typeof exact === "object") return exact as PendingRowMarker;
+
+  // Explicit query projections do not preserve the symbol. Their first
+  // source-identity field is the row they are presenting; later `*_id`
+  // values are relationships. Match the field as well as its value and refuse
+  // ambiguity instead of ever assigning a parent's controls to its child.
+  for (const [field, value] of Object.entries(carried)) {
+    if (field !== "id" && !field.endsWith("_id")) continue;
+    const candidates = markers.filter(
+      (marker) =>
+        marker.rowId === value && marker.identityFields.includes(field)
+    );
+    if (candidates.length === 1) return candidates[0];
+    if (candidates.length > 1) return undefined;
+  }
+  return undefined;
+}
+
+/**
+ * Query modules may decorate or join a replica row and legitimately select
+ * only product fields. Pending identity/status is shell-owned metadata, so the
+ * shell carries it across that projection by stable row identity. Apps still
+ * declare only action→row projection; they never copy overlay fields by hand.
+ */
+function carryPendingRows(
+  value: unknown,
+  markers: readonly PendingRowMarker[],
+  scopeId: string | undefined
+): unknown {
+  if (Array.isArray(value))
+    return value.map((item) => carryPendingRows(item, markers, scopeId));
+  if (!value || typeof value !== "object") return value;
+  const record = value as Record<string | symbol, unknown>;
+  const carried = Object.fromEntries(
+    Object.entries(record as Record<string, unknown>).map(([key, item]) => [
+      key,
+      carryPendingRows(item, markers, scopeId),
+    ])
+  );
+  const matched = carriedPendingMarker(record, carried, markers);
+  if (!matched) return carried;
+  return {
+    ...carried,
+    ...matched.fields,
+    ...(scopeId ? { __centraidScopeId: scopeId } : {}),
+  };
 }
 
 /**
@@ -128,7 +225,8 @@ export interface InlineCtxOptions {
  */
 export function buildInlineCtx(
   options: InlineCtxOptions,
-  guard: InlineOnlineGuard
+  guard: InlineOnlineGuard,
+  pendingRows: PendingRowMarker[] = []
 ): unknown {
   const { session, appId, signal } = options;
   const effect = (name: string) => (): Promise<never> =>
@@ -139,8 +237,13 @@ export function buildInlineCtx(
       request: ShellReplicaReadRequest
     ): Promise<{ rows: unknown[]; receiptId: string }> {
       const result = await session.read(appId, request);
+      const rows = result.rows.map((row) => {
+        const marker = pendingMarker(row);
+        if (marker) pendingRows.push(marker);
+        return guardedRow(row, guard, marker);
+      });
       return {
-        rows: result.rows.map((row) => guardedRow(row, guard)),
+        rows,
         receiptId: receiptIdFor(result),
       };
     },
@@ -148,8 +251,13 @@ export function buildInlineCtx(
       request: ShellReplicaSearchRequest
     ): Promise<{ rows: unknown[]; receiptId: string }> {
       const result = await session.search(appId, request);
+      const rows = result.rows.map((row) => {
+        const marker = pendingMarker(row);
+        if (marker) pendingRows.push(marker);
+        return guardedRow(row, guard, marker);
+      });
       return {
-        rows: result.rows.map((row) => guardedRow(row, guard)),
+        rows,
         receiptId: receiptIdFor(result),
       };
     },
@@ -187,7 +295,8 @@ export async function runInlineQuery(
   options: InlineCtxOptions & { input?: Record<string, unknown> }
 ): Promise<unknown> {
   const guard = createOnlineGuard();
-  const ctx = buildInlineCtx(options, guard);
+  const pendingRows: PendingRowMarker[] = [];
+  const ctx = buildInlineCtx(options, guard, pendingRows);
   const value = await module.default({
     params: {},
     query: options.input ?? {},
@@ -197,5 +306,5 @@ export async function runInlineQuery(
     ctx,
   });
   if (guard.error) throw guard.error;
-  return value;
+  return carryPendingRows(value, pendingRows, options.scopeId);
 }

@@ -44,7 +44,7 @@ export default async function handler({ ctx, log }) {
   const body = String(pr.body || "").slice(0, 4000);
   const where = [repo, number ? `#${number}` : null].filter(Boolean).join(" ");
 
-  const draft = await ctx.agent({
+  const draft = await ctx.delegate({
     prompt:
       `A pull request just merged${where ? ` in ${where}` : ""}.\n\n` +
       `Title: ${title}\n\nDescription:\n${body || "(none)"}\n\n` +

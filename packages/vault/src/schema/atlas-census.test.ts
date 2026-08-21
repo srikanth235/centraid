@@ -250,6 +250,16 @@ describe("atlas-census", () => {
     expect(census.totals.kinds).toBeGreaterThan(census.totals.populatedKinds);
   });
 
+  test("census first paint defers grant-plane row counts (#825)", () => {
+    const db = freshVault();
+    const census = atlasCensus(db.vault, db.journal);
+    const physicals = census.packs.flatMap((pack) =>
+      pack.tables.map((table) => table.physical)
+    );
+    expect(physicals).not.toContain("share_grant");
+    expect(physicals).not.toContain("share_fulfillment");
+  });
+
   test("pulse buckets provenance writes by entity_type and day within the window", () => {
     const db = freshVault();
     const today = new Date("2026-07-17T12:00:00.000Z");

@@ -52,7 +52,7 @@
 .titleIcon {
   width: 30px;
   height: 30px;
-  border-radius: 9px;
+  border-radius: var(--r-md);
   display: grid;
   place-items: center;
   color: var(--text);
@@ -62,13 +62,13 @@
   margin: 0;
   font-family: var(--font-sans);
   font-weight: 600;
-  font-size: 25px;
+  font-size: var(--t-display-size);
   letter-spacing: -0.02em;
   color: var(--text);
 }
 .headMeta {
-  font-family: var(--font-mono);
-  font-size: 9.5px;
+  font-family: var(--font-sans);
+  font-size: var(--t-control-size);
   letter-spacing: 0.06em;
   text-transform: uppercase;
   color: var(--text-ghost);
@@ -93,7 +93,7 @@
   flex: none;
   align-items: center;
   gap: 6px;
-  font-family: var(--font-mono);
+  font-family: var(--font-sans);
   font-size: var(--t-control-size);
   letter-spacing: 0.04em;
   text-transform: uppercase;
@@ -119,12 +119,12 @@
   border-color: var(--accent);
 }
 .tabBadge {
-  font-family: var(--font-mono);
-  font-size: 9.5px;
+  font-family: var(--font-sans);
+  font-size: var(--t-control-size);
   font-weight: 600;
   line-height: 1;
   padding: 2px 5px;
-  border-radius: 999px;
+  border-radius: var(--r-pill);
   color: var(--c-amber-text);
   background: color-mix(in srgb, var(--c-amber) 16%, transparent);
 }
@@ -137,22 +137,39 @@
   flex-direction: column;
   gap: 16px;
 }
-/* Alerts is a single column of settings rows. Left at the page's 1120px it
-   stretched a 34px toggle across the full width; cap it to a readable measure
-   and centre it so the leftover width sits evenly on both sides — pinned left
-   (the default for a max-width flex child) it dumped all the slack on the
-   right and read as a bug. Logs/Components genuinely want the width, so this
-   is opt-in. */
-.tabPaneForm {
-  max-width: 820px;
-  margin-inline: auto;
+.detailLinks {
+  align-items: center;
+  border-block-end: 1px solid var(--line);
+  display: flex;
+  gap: var(--sp-4);
+  min-block-size: var(--target-min);
+}
+
+.detailLinks button,
+.systemBack {
+  background: transparent;
+  border: 0;
+  color: var(--text-soft);
+  cursor: pointer;
+  font: var(--t-small-strong);
+  min-block-size: var(--target-min);
+  padding: 0;
+}
+
+.detailLinks button:hover,
+.systemBack:hover {
+  color: var(--text);
+}
+
+.systemBack {
+  align-self: flex-start;
 }
 
 /* Hero — the gauge cluster. A faint status-tinted wash bleeds from the
    top edge so the panel itself reads up/down at a glance. */
 .hero {
   position: relative;
-  border-radius: var(--r-xl);
+  border-radius: var(--r-lg);
   border: 0.5px solid var(--line);
   background:
     linear-gradient(
@@ -202,7 +219,7 @@
 .orbCore {
   width: 14px;
   height: 14px;
-  border-radius: 999px;
+  border-radius: var(--r-pill);
   background: var(--pulse);
   box-shadow: 0 0 12px color-mix(in srgb, var(--pulse) 55%, transparent);
 }
@@ -211,7 +228,7 @@
   content: "";
   position: absolute;
   inset: 0;
-  border-radius: 999px;
+  border-radius: var(--r-pill);
   border: 1px solid var(--pulse);
   opacity: 0;
   animation: orbRing 3.2s var(--ease) infinite;
@@ -247,8 +264,8 @@
 
 .statusWord {
   font-family: var(--font-sans);
-  font-weight: 700;
-  font-size: 30px;
+  font-weight: 600;
+  font-size: var(--t-display-size);
   line-height: 1.05;
   letter-spacing: -0.02em;
   color: var(--text);
@@ -257,7 +274,7 @@
    user-supplied and can be a long path-like string. */
 .statusSub {
   margin-top: 5px;
-  font-family: var(--font-mono);
+  font-family: var(--font-sans);
   font-size: var(--t-control-size);
   letter-spacing: 0.03em;
   line-height: 1.45;
@@ -270,8 +287,8 @@
    than that still clips at the text's own edge instead of the card's. */
 .statusError {
   margin-top: 4px;
-  font-family: var(--font-mono);
-  font-size: 10.5px;
+  font-family: var(--font-sans);
+  font-size: var(--t-control-size);
   color: var(--danger);
   max-width: min(380px, 100%);
   overflow: hidden;
@@ -280,8 +297,8 @@
 }
 .statusDegraded {
   margin-top: 4px;
-  font-family: var(--font-mono);
-  font-size: 10.5px;
+  font-family: var(--font-sans);
+  font-size: var(--t-control-size);
   color: var(--c-amber-text);
 }
 
@@ -305,8 +322,8 @@
   padding-left: 26px;
 }
 .figureLabel {
-  font-family: var(--font-mono);
-  font-size: 9.5px;
+  font-family: var(--font-sans);
+  font-size: var(--t-control-size);
   letter-spacing: 0.06em;
   text-transform: uppercase;
   color: var(--text-ghost);
@@ -316,7 +333,7 @@
   white-space: nowrap;
 }
 .figureValue {
-  font-family: var(--font-mono);
+  font-family: var(--font-sans);
   font-weight: 600;
   font-size: var(--t-title-size);
   letter-spacing: -0.01em;
@@ -330,8 +347,8 @@
    truncated count reads as a broken number. */
 .figureSub {
   margin-top: 4px;
-  font-family: var(--font-mono);
-  font-size: 10px;
+  font-family: var(--font-sans);
+  font-size: var(--t-control-size);
   line-height: 1.4;
   color: var(--text-ghost);
 }
@@ -348,7 +365,7 @@
 .beat {
   flex: 1 1 0;
   max-width: 7px;
-  border-radius: var(--r-xs) var(--r-xs) 0 0;
+  border-radius: var(--r-xs) var(--r-xs) var(--r-xs) var(--r-xs);
 }
 .beat[data-ok="true"] {
   height: 100%;
@@ -359,8 +376,8 @@
   background: var(--danger);
 }
 .stripEmpty {
-  font-family: var(--font-mono);
-  font-size: 10.5px;
+  font-family: var(--font-sans);
+  font-size: var(--t-control-size);
   color: var(--text-ghost);
   align-self: center;
 }
@@ -368,8 +385,8 @@
   display: flex;
   justify-content: space-between;
   margin-top: 6px;
-  font-family: var(--font-mono);
-  font-size: 9.5px;
+  font-family: var(--font-sans);
+  font-size: var(--t-control-size);
   letter-spacing: 0.05em;
   text-transform: uppercase;
   color: var(--text-ghost);
@@ -394,7 +411,7 @@
 /* Resource mode card (var(--text)). */
 .resourceLead {
   margin: 10px 18px 0;
-  font-size: 12.5px;
+  font-size: var(--t-small-size);
   line-height: 1.5;
   color: var(--text-faint);
 }
@@ -426,7 +443,7 @@
   text-align: center;
   background: transparent;
   border: 1px solid transparent;
-  border-radius: calc(var(--r-md) - 3px);
+  border-radius: var(--r-sm);
   transition:
     background 0.16s,
     border-color 0.16s,
@@ -442,7 +459,7 @@
 }
 .resourceModeBtn:has(:disabled) {
   cursor: default;
-  opacity: 0.7;
+  opacity: var(--o-disabled);
 }
 .resourceModeBtnActive,
 .resourceModeBtnActive:hover:not(:has(:disabled)) {
@@ -454,7 +471,7 @@
 .resourceModeLabel {
   font-family: var(--font-sans);
   font-weight: 600;
-  font-size: 12.5px;
+  font-size: var(--t-small-size);
   letter-spacing: -0.01em;
   color: var(--text-soft);
 }
@@ -462,8 +479,8 @@
   color: var(--accent);
 }
 .resourceModeHint {
-  font-family: var(--font-mono);
-  font-size: 9px;
+  font-family: var(--font-sans);
+  font-size: var(--t-control-size);
   letter-spacing: 0.01em;
   color: var(--text-ghost);
   font-variant-numeric: tabular-nums;
@@ -492,8 +509,8 @@
   padding: 9px 10px;
   cursor: pointer;
   font-family: var(--font-sans);
-  font-size: var(--t-mono-size);
-  font-weight: 500;
+  font-size: var(--t-control-size);
+  font-weight: 600;
   color: var(--text-soft);
   background: var(--bg-elev);
   border: 0.5px solid var(--line);
@@ -523,14 +540,14 @@
 }
 .resourceNote {
   padding: 0 18px 14px;
-  font-family: var(--font-mono);
-  font-size: 10.5px;
+  font-family: var(--font-sans);
+  font-size: var(--t-control-size);
   color: var(--text-faint);
 }
 .resourceError {
   padding: 0 18px 14px;
-  font-family: var(--font-mono);
-  font-size: 10.5px;
+  font-family: var(--font-sans);
+  font-size: var(--t-control-size);
   color: var(--danger);
 }
 
@@ -552,8 +569,8 @@
   padding: 8px 14px 8px 11px;
   cursor: pointer;
   font-family: var(--font-sans);
-  font-size: var(--t-mono-size);
-  font-weight: 500;
+  font-size: var(--t-control-size);
+  font-weight: 600;
   color: var(--text-soft);
   background: var(--bg-elev);
   border: 0.5px solid var(--line);
@@ -569,7 +586,7 @@
   background: color-mix(in oklab, var(--text) 3%, transparent);
 }
 .resourcePauseBtn:disabled {
-  opacity: 0.6;
+  opacity: var(--o-disabled);
   cursor: default;
 }
 .resourcePauseIcon {
@@ -593,8 +610,8 @@
 }
 .resourcePauseChoicesLabel {
   margin-right: 2px;
-  font-family: var(--font-mono);
-  font-size: 10.5px;
+  font-family: var(--font-sans);
+  font-size: var(--t-control-size);
   letter-spacing: 0.02em;
   color: var(--text-ghost);
 }
@@ -609,8 +626,8 @@
   background: color-mix(in oklab, var(--accent) 8%, transparent);
 }
 .resourcePauseLabel {
-  font-family: var(--font-mono);
-  font-size: 11.5px;
+  font-family: var(--font-sans);
+  font-size: var(--t-control-size);
   color: var(--text);
 }
 
@@ -629,21 +646,21 @@
 }
 .resourceSummaryLine {
   font-size: var(--t-small-size);
-  font-weight: 500;
+  font-weight: 600;
   line-height: 1.4;
   color: var(--text);
 }
 .resourceSummaryAttr {
-  font-family: var(--font-mono);
-  font-size: 10px;
+  font-family: var(--font-sans);
+  font-size: var(--t-control-size);
   letter-spacing: 0.02em;
   color: var(--text-ghost);
 }
 /* Running / saved status, folded into the budget block instead of floating
    as separate note lines below the pause control. */
 .resourceSummaryStatus {
-  font-family: var(--font-mono);
-  font-size: 10.5px;
+  font-family: var(--font-sans);
+  font-size: var(--t-control-size);
   line-height: 1.4;
   color: var(--text-faint);
 }
@@ -656,14 +673,14 @@
   padding: 0 18px 12px;
 }
 .resourcePostureLine {
-  font-size: 12.5px;
+  font-size: var(--t-small-size);
   line-height: 1.45;
   color: var(--text);
 }
 .resourcePostureAttr {
   margin-top: 2px;
-  font-family: var(--font-mono);
-  font-size: 10px;
+  font-family: var(--font-sans);
+  font-size: var(--t-control-size);
   letter-spacing: 0.02em;
   color: var(--text-ghost);
 }
@@ -681,7 +698,7 @@
   background: none;
   border: none;
   cursor: pointer;
-  font-family: var(--font-mono);
+  font-family: var(--font-sans);
   font-size: var(--t-control-size);
   letter-spacing: 0.02em;
   color: var(--text-faint);
@@ -704,8 +721,8 @@
   gap: 6px;
 }
 .resourceDetailsGroupTitle {
-  font-family: var(--font-mono);
-  font-size: 10.5px;
+  font-family: var(--font-sans);
+  font-size: var(--t-control-size);
   letter-spacing: 0.06em;
   text-transform: uppercase;
   color: var(--text-ghost);
@@ -721,7 +738,7 @@
   grid-template-columns: minmax(0, 1fr) auto;
   gap: 12px;
   align-items: baseline;
-  font-size: var(--t-mono-size);
+  font-size: var(--t-control-size);
 }
 .resourceDetailsRow dt {
   color: var(--text-faint);
@@ -730,7 +747,7 @@
   margin: 0;
 }
 .resourceDetailsValue {
-  font-family: var(--font-mono);
+  font-family: var(--font-sans);
   font-size: var(--t-control-size);
   color: var(--text);
   text-align: right;
@@ -748,7 +765,7 @@
 }
 .resourceAdvancedLead {
   margin: 0;
-  font-size: var(--t-mono-size);
+  font-size: var(--t-control-size);
   line-height: 1.45;
   color: var(--text-faint);
 }
@@ -764,18 +781,18 @@
   gap: 12px;
 }
 .resourceKnobLabel {
-  font-size: 12.5px;
+  font-size: var(--t-small-size);
   color: var(--text);
 }
 .resourceKnobTagLinked {
-  font-family: var(--font-mono);
-  font-size: 10px;
+  font-family: var(--font-sans);
+  font-size: var(--t-control-size);
   letter-spacing: 0.02em;
   color: var(--text-ghost);
 }
 .resourceKnobTagCustom {
-  font-family: var(--font-mono);
-  font-size: 10px;
+  font-family: var(--font-sans);
+  font-size: var(--t-control-size);
   letter-spacing: 0.02em;
   color: var(--accent);
 }
@@ -783,8 +800,8 @@
   display: inline-flex;
   align-items: center;
   gap: 4px;
-  font-family: var(--font-mono);
-  font-size: 10px;
+  font-family: var(--font-sans);
+  font-size: var(--t-control-size);
   letter-spacing: 0.02em;
   color: var(--text-ghost);
 }
@@ -799,17 +816,16 @@
   border-radius: var(--r-md);
   border: 0.5px solid var(--line);
   background: var(--bg-elev);
-  font-family: var(--font-mono);
-  font-size: var(--t-mono-size);
+  font-family: var(--font-sans);
+  font-size: var(--t-control-size);
   color: var(--text);
 }
 .resourceKnobInput:disabled {
-  color: var(--text-ghost);
-  opacity: 0.8;
+  color: var(--text-disabled);
 }
 .resourceKnobMeta {
-  font-family: var(--font-mono);
-  font-size: 10px;
+  font-family: var(--font-sans);
+  font-size: var(--t-control-size);
   letter-spacing: 0.02em;
   color: var(--text-ghost);
 }
@@ -819,7 +835,7 @@
   color: var(--text-faint);
 }
 .resourceKnobError {
-  font-family: var(--font-mono);
+  font-family: var(--font-sans);
   font-size: var(--t-control-size);
   color: var(--danger);
 }
@@ -829,15 +845,15 @@
   color: var(--c-amber-text);
 }
 .resourceKnobPending {
-  font-family: var(--font-mono);
-  font-size: 10px;
+  font-family: var(--font-sans);
+  font-size: var(--t-control-size);
   letter-spacing: 0.02em;
   color: var(--text-faint);
 }
 
 /* Panel — shared card shell (Insights family). */
 .panel {
-  border-radius: var(--r-xl);
+  border-radius: var(--r-lg);
   border: 0.5px solid var(--line);
   background: var(--bg-elev);
   overflow: hidden;
@@ -865,225 +881,17 @@
    h2 did, since the h2 is the longer flex item. */
 .panelMeta {
   flex: none;
-  font-family: var(--font-mono);
-  font-size: 10px;
+  font-family: var(--font-sans);
+  font-size: var(--t-control-size);
   letter-spacing: 0.03em;
   white-space: nowrap;
   color: var(--text-ghost);
 }
 .panelEmpty {
   padding: 22px 18px 24px;
-  font-size: 12.5px;
+  font-size: var(--t-small-size);
   line-height: 1.55;
   color: var(--text-faint);
-}
-
-/* Outage log rows. */
-.outages {
-  padding: 10px 8px 12px;
-  /* A long session can log many downtime stretches — the list scrolls inside
-     a fixed-height card instead of growing the column (and the page) without
-     bound. ~6 rows then scroll; the newest sit at the top already. */
-  max-height: 268px;
-  overflow-y: auto;
-  overscroll-behavior: contain;
-}
-/* `minmax(0, 1fr)` not `1fr`: a bare `1fr` floors at the message's min-content
-   width, so an unbroken path/uuid pushed the row wider than the panel — and
-   `.panel { overflow: hidden }` then clipped the badge off the right edge
-   rather than showing anything was wrong.
-   `align-items: start` not `center`: a message wrapping to 2–3 lines left the
-   dot, timestamp and badge floating in the row's vertical middle instead of
-   sitting on the first line. */
-.outage {
-  display: grid;
-  grid-template-columns: 14px auto minmax(0, 1fr) auto;
-  align-items: start;
-  gap: 10px;
-  padding: 9px 10px;
-  border-radius: var(--r-md);
-  --outage-line: 18px;
-}
-.outage + .outage {
-  box-shadow: 0 -0.5px 0 var(--line);
-}
-.outage:hover {
-  background: var(--bg-sunken);
-}
-/* One shared line box (--outage-line) across the dot, timestamp and badge, so
-   they optically centre on the message's FIRST line however far it wraps. */
-.outageDot {
-  width: 7px;
-  height: 7px;
-  margin-top: calc((var(--outage-line) - 7px) / 2);
-  border-radius: 999px;
-  background: var(--danger);
-  opacity: 0.55;
-}
-.outage[data-ongoing] .outageDot {
-  opacity: 1;
-  box-shadow: 0 0 0 3px color-mix(in srgb, var(--danger) 18%, transparent);
-}
-.outageStart {
-  font-family: var(--font-mono);
-  font-size: 11.5px;
-  line-height: var(--outage-line);
-  color: var(--text-soft);
-  white-space: nowrap;
-}
-/* `overflow-wrap: anywhere` — component errors carry absolute vault paths and
-   uuids with no break opportunity; without it they blew the track out. */
-.outageDuration {
-  min-width: 0;
-  font-size: 12.5px;
-  line-height: var(--outage-line);
-  color: var(--text-faint);
-  overflow-wrap: anywhere;
-}
-.outage[data-ongoing] .outageDuration {
-  color: var(--danger);
-  font-weight: 500;
-}
-.outageBadge {
-  font-family: var(--font-mono);
-  font-size: 8.5px;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  white-space: nowrap;
-  margin-top: calc((var(--outage-line) - 12px) / 2);
-  color: var(--c-amber-text);
-  background: color-mix(in srgb, var(--c-amber) 14%, transparent);
-  border-radius: var(--r-sm);
-  padding: 2px 5px;
-}
-
-/* Alert-history rows (Alerts tab) reuse .outage's shell; the dot recolors
-   by event kind so a skim of the list reads severity at a glance. */
-.outageDot[data-kind="recovered"] {
-  background: var(--success);
-  opacity: 1;
-}
-.outageDot[data-kind="degraded"],
-.outageDot[data-kind="version-skew"] {
-  background: var(--c-amber);
-  opacity: 1;
-}
-.outageDot[data-kind="down"],
-.outageDot[data-kind="component-error"] {
-  background: var(--danger);
-  opacity: 1;
-}
-
-/* Down-alert card. */
-.alertBody {
-  padding: 14px 18px 18px;
-  display: flex;
-  flex-direction: column;
-  gap: 16px;
-}
-.alertToggleRow {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 16px;
-}
-.alertToggleLabel {
-  font-size: var(--t-small-size);
-  font-weight: 500;
-  color: var(--text);
-}
-.alertToggleSub {
-  margin-top: 3px;
-  font-size: 11.5px;
-  line-height: 1.5;
-  color: var(--text-faint);
-}
-.switch {
-  flex: none;
-  position: relative;
-  width: 34px;
-  height: 20px;
-  margin-top: 1px;
-  border-radius: 999px;
-  border: 1px solid color-mix(in srgb, var(--text) 28%, transparent);
-  background: color-mix(in srgb, var(--text) 24%, transparent);
-  cursor: pointer;
-  padding: 0;
-  transition:
-    background 0.18s var(--ease),
-    border-color 0.18s var(--ease);
-}
-.switch[data-on] {
-  background: var(--accent);
-  border-color: var(--accent);
-}
-.switch:disabled {
-  opacity: 0.55;
-  cursor: default;
-}
-.switchThumb {
-  position: absolute;
-  top: 2px;
-  left: 2.5px;
-  width: 14px;
-  height: 14px;
-  border-radius: 999px;
-  background: var(--text);
-  box-shadow:
-    0 0 0 1px var(--scrim),
-    0 1px 2px var(--scrim);
-  transition: transform 0.18s var(--ease);
-}
-.switch[data-on] .switchThumb {
-  transform: translateX(13.5px);
-}
-
-.alertAfter {
-  transition: opacity 0.18s var(--ease);
-}
-.alertAfter[data-disabled] {
-  opacity: 0.45;
-}
-.alertAfterLabel {
-  font-family: var(--font-mono);
-  font-size: 9.5px;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  color: var(--text-ghost);
-  margin-bottom: 8px;
-}
-.presets {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-}
-.preset {
-  font-family: var(--font-mono);
-  font-size: 11.5px;
-  height: 27px;
-  padding: 0 11px;
-  border-radius: 999px;
-  border: 0.5px solid var(--line-strong);
-  background: var(--bg-elev);
-  color: var(--text-soft);
-  cursor: pointer;
-  display: inline-flex;
-  align-items: center;
-  transition:
-    border-color 0.15s var(--ease),
-    background 0.15s var(--ease);
-}
-.preset:hover:not(:disabled) {
-  border-color: var(--accent);
-}
-.preset:disabled {
-  cursor: default;
-}
-.presetActive {
-  background: color-mix(in srgb, var(--accent) 14%, transparent);
-  border-color: var(--accent);
-  color: var(--accent-deep);
-  font-weight: 600;
 }
 
 /* Identity list. */
@@ -1102,8 +910,8 @@
   border-top: 0.5px solid var(--line);
 }
 .idRow dt {
-  font-family: var(--font-mono);
-  font-size: 9.5px;
+  font-family: var(--font-sans);
+  font-size: var(--t-control-size);
   letter-spacing: 0.06em;
   text-transform: uppercase;
   color: var(--text-ghost);
@@ -1114,7 +922,7 @@
 .idRow dd {
   margin: 0;
   min-width: 0;
-  font-size: 12.5px;
+  font-size: var(--t-small-size);
   color: var(--text-soft);
   text-align: right;
   overflow: hidden;
@@ -1122,8 +930,8 @@
   white-space: nowrap;
 }
 .idMono {
-  font-family: var(--font-mono);
-  font-size: 11.5px !important;
+  font-family: var(--font-sans);
+  font-size: var(--t-control-size) !important;
 }
 
 /* Restart-gateway action — footer of the Identity panel. */
@@ -1150,14 +958,11 @@
     transform: rotate(360deg);
   }
 }
-@media (prefers-reduced-motion: reduce) {
-  .restartIcon[data-spin="true"] {
-    animation: none;
-  }
-}
+/* No `prefers-reduced-motion` block: the token layer honours it in ONE
+   global rule, which already zeroes `.restartIcon`'s spin. */
 .restartError {
-  font-family: var(--font-mono);
-  font-size: 10.5px;
+  font-family: var(--font-sans);
+  font-size: var(--t-control-size);
   color: var(--danger);
   overflow-wrap: anywhere;
 }
@@ -1195,7 +1000,7 @@
     gap: 14px;
   }
   .statusWord {
-    font-size: 24px;
+    font-size: var(--t-display-size);
   }
   .figures {
     grid-template-columns: repeat(auto-fit, minmax(104px, 1fr));
@@ -1208,25 +1013,7 @@
   }
 }
 
-/* Outage / alert-history rows: the four-track row (dot · time · text · badge)
-   starves the text track. Keep dot, time and badge on the first line and give
-   the message a full-width second line. */
 @container gateway-page (max-width: 560px) {
-  .outage {
-    grid-template-columns: 14px minmax(0, 1fr) auto;
-  }
-  .outageDot,
-  .outageStart {
-    grid-row: 1;
-  }
-  .outageBadge {
-    grid-row: 1;
-    grid-column: 3;
-  }
-  .outageDuration {
-    grid-row: 2;
-    grid-column: 2 / -1;
-  }
   /* Label above value: the right-aligned ellipsized value had nothing left to
      show once the label took its half of the row. */
   .idRow {

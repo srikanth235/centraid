@@ -11,6 +11,7 @@ require_git
 
 ROOT="$(git rev-parse --show-toplevel)"
 cd "$ROOT" || exit 1
+MANIFEST="$(dirname "$0")/directive.yaml"
 
 # Whole-directive waiver: `<!-- governance: allow-issue-templates <reason> -->`
 # in CONSTITUTION.md exempts the directive from this commit's check. Reason
@@ -45,26 +46,28 @@ require_count_at_least() {
     fi
 }
 
-config=".github/ISSUE_TEMPLATE/config.yml"
-proposal=".github/ISSUE_TEMPLATE/proposal.yml"
-bug=".github/ISSUE_TEMPLATE/bug.yml"
+config="$(conf_get issue-templates CONFIG_PATH "$MANIFEST")"
+proposal="$(conf_get issue-templates PROPOSAL_PATH "$MANIFEST")"
+bug="$(conf_get issue-templates BUG_PATH "$MANIFEST")"
 
 if require_file "$config"; then
     require_pattern "$config" '^blank_issues_enabled:[[:space:]]*false$' "blank issues must be disabled so issues use a tracked template"
 fi
 
 if require_file "$proposal"; then
-    for id in context decision scope acceptance validation open-questions; do
+    while IFS= read -r id; do
         require_pattern "$proposal" "^[[:space:]]+id:[[:space:]]*$id$" "proposal form missing '$id' field"
-    done
-    require_count_at_least "$proposal" '^[[:space:]]+required:[[:space:]]*true$' 6 "all six proposal handoff fields must be required"
+    done < <(conf_list issue-templates "$MANIFEST" PROPOSAL_FIELDS)
+    proposal_min="$(conf_get issue-templates PROPOSAL_REQUIRED_MIN "$MANIFEST")"
+    require_count_at_least "$proposal" '^[[:space:]]+required:[[:space:]]*true$' "$proposal_min" "proposal handoff fields must be required"
 fi
 
 if require_file "$bug"; then
-    for id in what-happened expected repro environment; do
+    while IFS= read -r id; do
         require_pattern "$bug" "^[[:space:]]+id:[[:space:]]*$id$" "bug form missing '$id' field"
-    done
-    require_count_at_least "$bug" '^[[:space:]]+required:[[:space:]]*true$' 4 "core bug-report fields must be required"
+    done < <(conf_list issue-templates "$MANIFEST" BUG_FIELDS)
+    bug_min="$(conf_get issue-templates BUG_REQUIRED_MIN "$MANIFEST")"
+    require_count_at_least "$bug" '^[[:space:]]+required:[[:space:]]*true$' "$bug_min" "core bug-report fields must be required"
 fi
 
 directive_end

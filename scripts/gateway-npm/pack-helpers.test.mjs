@@ -15,10 +15,10 @@ import {
 test("rewriteWorkspaceDependencies maps workspace:* to versions and clears private", () => {
   const { packageJson, rewrote } = rewriteWorkspaceDependencies(
     {
-      name: "@centraid/gateway",
+      name: "@centraid/server",
       private: true,
       dependencies: {
-        "@centraid/protocol": "workspace:*",
+        "@centraid/core/protocol": "workspace:*",
         sharp: "^0.35.3",
       },
       devDependencies: {
@@ -26,16 +26,16 @@ test("rewriteWorkspaceDependencies maps workspace:* to versions and clears priva
       },
       scripts: { prepack: "bun run build", test: "vitest" },
     },
-    { "@centraid/protocol": "0.1.0" }
+    { "@centraid/core/protocol": "0.1.0" }
   );
   assert.equal(packageJson.private, false);
-  assert.equal(packageJson.dependencies["@centraid/protocol"], "0.1.0");
+  assert.equal(packageJson.dependencies["@centraid/core/protocol"], "0.1.0");
   assert.equal(packageJson.dependencies.sharp, "^0.35.3");
   assert.equal(packageJson.devDependencies, undefined);
   assert.equal(packageJson.scripts?.prepack, undefined);
   assert.equal(packageJson.scripts?.test, "vitest");
   assert.deepEqual(packageJson.publishConfig, { access: "public" });
-  assert.ok(rewrote.includes("dependencies:@centraid/protocol"));
+  assert.ok(rewrote.includes("dependencies:@centraid/core/protocol"));
 });
 
 test("rewriteWorkspaceDependencies throws on missing workspace package", () => {
@@ -55,14 +55,14 @@ test("rewriteWorkspaceDependencies throws on missing workspace package", () => {
 test("topologicalPublishOrder places deps before dependents", () => {
   const pkgs = {
     protocol: {
-      name: "@centraid/protocol",
+      name: "@centraid/core/protocol",
       version: "0.1.0",
       dependencies: {},
     },
     gateway: {
-      name: "@centraid/gateway",
+      name: "@centraid/server",
       version: "0.1.0",
-      dependencies: { "@centraid/protocol": "workspace:*" },
+      dependencies: { "@centraid/core/protocol": "workspace:*" },
     },
   };
   const order = topologicalPublishOrder(
@@ -98,7 +98,7 @@ test("parseInstallArgs rejects unknown flags", () => {
 test("buildNpmInstallArgs registry vs pack dir", () => {
   assert.deepEqual(
     buildNpmInstallArgs({ version: "0.2.0", fromPackDir: null }),
-    ["@centraid/gateway@0.2.0"]
+    ["@centraid/server@0.2.0"]
   );
   assert.deepEqual(
     buildNpmInstallArgs({

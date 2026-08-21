@@ -1,6 +1,6 @@
 import { StyleSheet } from "react-native";
 
-import { family, radii, spacing, t } from "../../kit/theme";
+import { borders, family, radii, spacing, t } from "../../kit/theme";
 import type { ThemeColors } from "../../kit/theme";
 
 export const makeLockerStyles = (colors: ThemeColors) =>
@@ -21,7 +21,7 @@ export const makeLockerStyles = (colors: ThemeColors) =>
     detailHeader: {
       alignItems: "center",
       borderBottomColor: colors.line,
-      borderBottomWidth: StyleSheet.hairlineWidth,
+      borderBottomWidth: borders.hairline,
       flexDirection: "row",
       justifyContent: "space-between",
       padding: spacing[5],
@@ -29,18 +29,23 @@ export const makeLockerStyles = (colors: ThemeColors) =>
     detailList: { padding: spacing[5] },
     detailSafe: { backgroundColor: colors.bg, flex: 1 },
     detailTitle: { ...t("title"), color: colors.text },
-    disabled: { opacity: 0.5 },
+    // Working recedes by swapping the fill and the label for their own tokens,
+    // never by fading the Pressable — an opacity on the container would carry
+    // the ink fill and the inverse label down together and land the pair below
+    // the contrast the tokens exist to guarantee.
+    disabledPrimary: { backgroundColor: colors.bgSunken },
+    disabledPrimaryText: { color: colors.textDisabled },
     error: { ...t("small"), color: colors.danger, marginTop: spacing[3] },
     field: {
       borderBottomColor: colors.line,
-      borderBottomWidth: StyleSheet.hairlineWidth,
+      borderBottomWidth: borders.hairline,
       paddingVertical: spacing[4],
     },
     fieldCopy: { gap: 4 },
     fieldLabel: {
       ...t("control"),
       color: colors.textFaint,
-      fontFamily: family.monoMedium,
+      fontFamily: family.sansMedium,
       textTransform: "uppercase",
     },
     fieldValue: { ...t("body"), color: colors.text, marginTop: spacing[1] },
@@ -89,14 +94,14 @@ export const makeLockerStyles = (colors: ThemeColors) =>
     },
     modalBack: {
       alignItems: "center",
-      backgroundColor: "rgba(0, 0, 0, 0.45)",
+      backgroundColor: colors.scrim,
       flex: 1,
       justifyContent: "center",
       padding: spacing[5],
     },
     modalCard: {
       backgroundColor: colors.bgElev,
-      borderRadius: radii.xl,
+      borderRadius: radii.lg,
       maxWidth: 440,
       padding: spacing[5],
       width: "100%",
@@ -116,7 +121,7 @@ export const makeLockerStyles = (colors: ThemeColors) =>
     row: {
       alignItems: "center",
       borderBottomColor: colors.line,
-      borderBottomWidth: StyleSheet.hairlineWidth,
+      borderBottomWidth: borders.hairline,
       flexDirection: "row",
       gap: spacing[3],
       minHeight: 68,

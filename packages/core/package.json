@@ -1,0 +1,53 @@
+{
+  "name": "@centraid/core",
+  "version": "0.1.0",
+  "private": false,
+  "description": "Dependency-free shared contracts: gateway wire protocol, CBSF blob codecs, and civil-time recurrence. Thin clients import subpaths only — no root barrel.",
+  "license": "SEE LICENSE IN REPOSITORY",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/srikanth235/centraid.git",
+    "directory": "packages/core"
+  },
+  "files": [
+    "dist",
+    "src",
+    "README.md"
+  ],
+  "type": "module",
+  "exports": {
+    "./protocol": {
+      "react-native": "./src/protocol/index.ts",
+      "types": "./dist/protocol/index.d.ts",
+      "import": "./dist/protocol/index.js",
+      "default": "./dist/protocol/index.js"
+    },
+    "./blob": {
+      "react-native": "./src/blob/index.ts",
+      "types": "./dist/blob/index.d.ts",
+      "import": "./dist/blob/index.js",
+      "default": "./dist/blob/index.js"
+    },
+    "./time": {
+      "react-native": "./src/time/index.ts",
+      "types": "./dist/time/index.d.ts",
+      "import": "./dist/time/index.js",
+      "default": "./dist/time/index.js"
+    }
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "clean": "rm -rf dist",
+    "coverage": "vitest run --coverage",
+    "test": "vitest run",
+    "typecheck": "tsc -p tsconfig.test.json --noEmit"
+  },
+  "devDependencies": {
+    "@centraid/test-kit": "workspace:*",
+    "@types/node": "^26.1.2",
+    "typescript": "catalog:"
+  }
+}

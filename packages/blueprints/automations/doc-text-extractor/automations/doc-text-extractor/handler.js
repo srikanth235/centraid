@@ -16,10 +16,26 @@
  *
  * Deterministic: cursor in ctx.state, ids derived from content ids,
  * re-runs re-stage the same rows and the spine's dedup skips them.
+ *
+ * ENGINE PROFILES (issue #807, Wave 5). Unlike `photo-ocr`, this enricher has
+ * no bundled deterministic engine to fall back to — extracting text from a
+ * scan IS a model turn here, which is why it declares `lane: "gateway"` and
+ * ships disabled. So its two variants are not "local vs remote": they are
+ * "whatever engine this vault runs automations on" (the built-in profile,
+ * unchanged since #299) versus "the engine the member bound `doc-text` to",
+ * which is pinned, prompt-revisioned, and STAMPED — the text derivative gets
+ * an `enrich_derivation` row naming the profile, model and prompt revision
+ * that produced it, so a member can tell two engines' transcriptions apart
+ * and re-derive one without touching the other. The fire path selects the
+ * variant from policy (`automation/fire/fire.ts`); nothing here chooses.
  */
 
 const BATCH = 6;
 const PURPOSE = "dpv:ServiceProvision";
+/** The prompt revision this handler's transcription prompt is at. */
+const PROMPT_REV = "doc-text-v1";
+/** `BUILT_IN_PROFILE` in packages/vault/src/enrich/derivation.ts, restated. */
+const BUILT_IN_PROFILE = "built-in";
 
 const OCR_SCHEMA = {
   type: "object",
@@ -48,6 +64,21 @@ const SUMMARY_SCHEMA = {
 };
 
 export default async function handler({ ctx, log }) {
+  // The engine the policy cascade selected for `doc-text`, as the fire path
+  // resolved it. `deterministic` is the pre-#807 behaviour, byte for byte.
+  const delegateStep = ctx.input?.variant === "delegate";
+  const profileId = ctx.input?.profileId ?? BUILT_IN_PROFILE;
+  const pinnedModel = ctx.input?.delegateModel;
+  if (delegateStep && !pinnedModel)
+    throw new Error("delegate document text requires an explicit pinned model");
+  // The prompt text belongs to this handler, so a profile may only pin a
+  // revision it actually ships — stamping one we did not send would make the
+  // derivation ledger lie.
+  const pinnedPromptRev = ctx.input?.promptRev;
+  if (delegateStep && pinnedPromptRev && pinnedPromptRev !== PROMPT_REV)
+    throw new Error(
+      `delegate document text: the engine profile pins prompt revision "${pinnedPromptRev}", but this handler ships "${PROMPT_REV}"`
+    );
   const cursor = (await ctx.state.get("cursor")) ?? "";
   const derivativeCursor = (await ctx.state.get("derivativeCursor")) ?? "";
   const now = ctx.now;
@@ -57,7 +88,12 @@ export default async function handler({ ctx, log }) {
   const leased = await ctx.vault.read({
     entity: "enrich.request",
     where: [
-      { column: "entity_type", op: "eq", value: "core.content_item" },
+      // Real column names: `enrich_request` carries `target_type`/`target_id`,
+      // never `entity_type`/`entity_id`. The old names are not columns of the
+      // table, so this read threw `unknown column` and `deviceOwned` was
+      // always empty — the gateway backstop ran straight over live device
+      // leases instead of yielding to them.
+      { column: "target_type", op: "eq", value: "core.content_item" },
       { column: "required_capability", op: "eq", value: "pdfText" },
       { column: "drained_at", op: "is-null" },
       { column: "lease_expires_at", op: "gt", value: now },
@@ -66,7 +102,7 @@ export default async function handler({ ctx, log }) {
     purpose: PURPOSE,
   });
   const deviceOwned = new Set(
-    (leased.rows ?? []).map((request) => request.entity_id)
+    (leased.rows ?? []).map((request) => request.target_id)
   );
   const read = await ctx.vault.read({
     entity: "core.content_item",
@@ -130,7 +166,7 @@ export default async function handler({ ctx, log }) {
       // OCR: transcribe what the preview shows, then write the text
       // derivative — the parent document becomes searchable in the same
       // transaction (issue #296 FTS rule).
-      const out = await ctx.agent({
+      const out = await ctx.delegate({
         prompt:
           "The attached image is a page of a document. Transcribe ALL legible text faithfully, " +
           "preserving reading order. Return an empty string if nothing is legible.",
@@ -138,10 +174,38 @@ export default async function handler({ ctx, log }) {
         content: [{ contentId: item.content_id, variant: visual }],
       });
       const text = out && typeof out.text === "string" ? out.text.trim() : "";
+      // Provenance is the delegate variant's whole added value: a pinned
+      // engine's answer is stamped with the ACP-CONFIRMED model identity —
+      // never the pinned id, which is only what was asked for — plus the
+      // profile and prompt revision, so the row says who produced this text.
+      let confirmedModel;
+      if (delegateStep) {
+        confirmedModel =
+          out && typeof out.__centraidModel === "string"
+            ? out.__centraidModel
+            : null;
+        if (!confirmedModel)
+          throw new Error(
+            "delegate document text returned no ACP-confirmed model identity"
+          );
+      }
       if (text.length > 0) {
         await ctx.vault.invoke({
           command: "core.set_extracted_text",
-          input: { content_id: item.content_id, text },
+          input: {
+            content_id: item.content_id,
+            text,
+            ...(delegateStep
+              ? {
+                  capability: "doc-text",
+                  model: confirmedModel,
+                  prompt_rev: PROMPT_REV,
+                  ...(profileId === BUILT_IN_PROFILE
+                    ? {}
+                    : { profile: profileId }),
+                }
+              : {}),
+          },
           purpose: PURPOSE,
         });
         ocred += 1;
@@ -167,7 +231,7 @@ export default async function handler({ ctx, log }) {
       if ((prior.rows ?? []).length > 0) return;
       // Summarize from the text variant — no bytes leave beyond the
       // already-extracted text, size-bounded by the content surface.
-      const out = await ctx.agent({
+      const out = await ctx.delegate({
         prompt:
           "Summarize the attached document text in ONE factual paragraph: what it is, the key " +
           "parties, amounts and dates. No speculation.",

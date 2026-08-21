@@ -1,9 +1,10 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { PaletteConversationSearch } from "./paletteConversationSearch.js";
-import { buildPaletteGroups } from "./paletteData.js";
+import { buildPaletteGroups, buildPaletteSuggestions } from "./paletteData.js";
 import type { PaletteDeps } from "./paletteData.js";
 import type { PaletteEntitySearch } from "./paletteEntitySearch.js";
+import type { PaletteRecentHit, PaletteRecents } from "./paletteRecents.js";
 
 // `vi.mock` is hoisted above the import by vitest, so iconSvg's design-tokens
 // dependency resolves before paletteData.js loads.
@@ -33,61 +34,36 @@ describe("paletteData", () => {
           desc: "Tasks",
         },
       ],
-      drafts: [
-        {
-          id: "d1",
-          name: "Draft One",
-          color: "teal",
-          iconKey: "Sparkle",
-          __draft: true,
-        },
-      ],
-      builderEnabled: true,
       tileVariant: "gradient",
       navigate: vi.fn<PaletteDeps["navigate"]>(),
-      enterBuilder: vi.fn<PaletteDeps["enterBuilder"]>(),
       onClose: vi.fn<PaletteDeps["onClose"]>(),
       ...over,
     } as PaletteDeps;
   }
 
   describe(buildPaletteGroups, () => {
-    it("lists apps + drafts, nav targets, and a create row when the query is empty", () => {
+    it("lists apps and nav targets when the query is empty", () => {
       const groups = buildPaletteGroups("", deps());
-      expect(groups.map((g) => g.group)).toStrictEqual([
-        "Apps",
-        "Go to",
-        "Create",
-      ]);
-      const apps = groups[0]!.items.map((r) => r.label);
-      expect(apps).toContain("Todos");
-      expect(apps).toContain("Draft One");
+      expect(groups.map((g) => g.group)).toStrictEqual(["Apps", "Go to"]);
+      expect(groups[0]!.items.map((r) => r.label)).toContain("Todos");
       expect(groups[1]!.items.map((r) => r.label)).toContain("Settings");
-      expect(groups[2]!.items[0]!.label).toBe("Build a new app…");
     });
 
-    it("filters apps + nav by the query but always keeps a create row", () => {
+    it("filters apps + nav by the query, and never offers a create row (#799)", () => {
       const groups = buildPaletteGroups("todo", deps());
       expect(
         groups.find((g) => g.group === "Apps")?.items.map((r) => r.label)
       ).toStrictEqual(["Todos"]);
       // No nav target matches "todo", so that group is dropped.
       expect(groups.find((g) => g.group === "Go to")).toBeUndefined();
-      const create = groups.find((g) => g.group === "Create")!.items[0]!;
-      expect(create.label).toBe("Build “todo”");
-    });
-
-    it("omits the Create/build row when the builder is disabled (#434)", () => {
-      // The "Build a new app…" row is a builder entry point — gone when hidden.
-      const groups = buildPaletteGroups("", deps({ builderEnabled: false }));
-      expect(groups.map((g) => g.group)).toStrictEqual(["Apps", "Go to"]);
+      // The served-app plane retired with the builder that produced apps for
+      // it: no query resurrects a "Build a new app…" row.
       expect(groups.find((g) => g.group === "Create")).toBeUndefined();
-      // A query still never resurrects it.
-      const filtered = buildPaletteGroups(
-        "budget tracker",
-        deps({ builderEnabled: false })
-      );
-      expect(filtered.find((g) => g.group === "Create")).toBeUndefined();
+      expect(
+        buildPaletteGroups("budget tracker", deps()).find(
+          (g) => g.group === "Create"
+        )
+      ).toBeUndefined();
     });
 
     it("an app row navigates to the app and closes on run", () => {
@@ -97,16 +73,6 @@ describe("paletteData", () => {
       groups[0]!.items[0]!.run();
       expect(onClose).toHaveBeenCalledOnce();
       expect(navigate).toHaveBeenCalledWith({ kind: "app", id: "todos" });
-    });
-
-    it("the create row enters the builder seeded with the trimmed query", () => {
-      const enterBuilder = vi.fn<PaletteDeps["enterBuilder"]>();
-      const groups = buildPaletteGroups(
-        "  budget tracker  ",
-        deps({ enterBuilder })
-      );
-      groups.find((g) => g.group === "Create")!.items[0]!.run();
-      expect(enterBuilder).toHaveBeenCalledWith("budget tracker");
     });
 
     it("adds a Conversations group from the search source and deep-links on run (#420)", () => {
@@ -157,7 +123,7 @@ describe("paletteData", () => {
       ).toBeUndefined();
     });
 
-    it("groups entity-aware vault hits by blueprint and supports navigation", () => {
+    it("groups entity-aware vault hits by app — objects, not apps (#708 §A)", () => {
       const navigate = vi.fn<PaletteDeps["navigate"]>();
       const onClose = vi.fn<PaletteDeps["onClose"]>();
       const ensure = vi.fn<PaletteEntitySearch["ensure"]>();
@@ -168,9 +134,11 @@ describe("paletteData", () => {
             appId: "notes",
             appLabel: "Notes",
             entity: "knowledge.note",
+            kind: "note",
             id: "note-1",
             label: "Café plans",
             snippet: "旅行 ✨",
+            meta: "",
           },
         ],
         reset: vi.fn<PaletteEntitySearch["reset"]>(),
@@ -182,14 +150,122 @@ describe("paletteData", () => {
       );
       expect(ensure).toHaveBeenCalledWith("notes: café");
       const notes = groups.find((group) => group.group === "Notes")!;
+      // Group header carries the owning app's icon + identity hue (point 2).
+      expect(notes.icon).toMatchObject({ hue: "var(--c-slate)" });
+      // Row anatomy (point 3): kind (MONO), title, sub — no `meta` here since
+      // this hit has none, and it must not restate the app label the group
+      // header already carries.
       expect(notes.items[0]).toMatchObject({
         label: "Café plans",
         sub: "旅行 ✨",
-        meta: "Notes",
+        kind: "note",
       });
+      expect(notes.items[0]!.meta).toBeUndefined();
+      // Objects, not apps: the known seam is opening the owning app (no
+      // deep-link plumbing exists yet — see paletteData.ts's `entityRow` doc).
       notes.items[0]!.run();
       expect(onClose).toHaveBeenCalledOnce();
       expect(navigate).toHaveBeenCalledWith({ kind: "app", id: "notes" });
+    });
+
+    it("gives the Conversations group an icon + a conversation kind on its rows", () => {
+      const conversationSearch: PaletteConversationSearch = {
+        ensure: vi.fn<PaletteConversationSearch["ensure"]>(),
+        results: () => [{ id: "c9", title: "Budget chat", snippet: "" }],
+        reset: vi.fn<PaletteConversationSearch["reset"]>(),
+        setOnResults: vi.fn<PaletteConversationSearch["setOnResults"]>(),
+      };
+      const groups = buildPaletteGroups("budget", deps({ conversationSearch }));
+      const convo = groups.find((g) => g.group === "Conversations")!;
+      expect(convo.icon).toBeDefined();
+      expect(convo.items[0]!.kind).toBe("conversation");
+    });
+  });
+
+  describe("Recents + suggestions empty state (#708 §A point 4)", () => {
+    function recentsSource(items: PaletteRecentHit[]): PaletteRecents {
+      return {
+        items: () => items,
+        suggestions: () =>
+          [...new Set(items.map((h) => h.appId))]
+            .map((appId) => items.find((h) => h.appId === appId)!.label)
+            .slice(0, 4),
+        ensure: vi.fn<PaletteRecents["ensure"]>(),
+        reset: vi.fn<PaletteRecents["reset"]>(),
+        setOnResults: vi.fn<PaletteRecents["setOnResults"]>(),
+      };
+    }
+
+    it("shows a Recents group of vault objects before any query", () => {
+      const recents = recentsSource([
+        {
+          appId: "notes",
+          appLabel: "Notes",
+          entity: "knowledge.note",
+          kind: "note",
+          id: "n1",
+          label: "Trip notes",
+          snippet: "",
+          meta: "Aug 3",
+        },
+      ]);
+      const groups = buildPaletteGroups("", deps({ recents }));
+      expect(recents.ensure).toHaveBeenCalledWith();
+      const group = groups.find((g) => g.group === "Recents")!;
+      expect(group).toBeDefined();
+      expect(group.items[0]).toMatchObject({
+        label: "Trip notes",
+        kind: "note",
+        meta: "Aug 3",
+      });
+    });
+
+    it("omits Recents once a query is typed", () => {
+      const recents = recentsSource([
+        {
+          appId: "notes",
+          appLabel: "Notes",
+          entity: "knowledge.note",
+          kind: "note",
+          id: "n1",
+          label: "Trip notes",
+          snippet: "",
+          meta: "",
+        },
+      ]);
+      const groups = buildPaletteGroups("café", deps({ recents }));
+      expect(groups.find((g) => g.group === "Recents")).toBeUndefined();
+    });
+
+    it("omits Recents entirely when there are no hits yet — no empty group", () => {
+      const groups = buildPaletteGroups(
+        "",
+        deps({ recents: recentsSource([]) })
+      );
+      expect(groups.find((g) => g.group === "Recents")).toBeUndefined();
+    });
+
+    it("buildPaletteSuggestions reads the recents source's chips", () => {
+      const recents = recentsSource([
+        {
+          appId: "people",
+          appLabel: "People",
+          entity: "core.party",
+          kind: "person",
+          id: "p1",
+          label: "Alex Rivera",
+          snippet: "",
+          meta: "",
+        },
+      ]);
+      expect(buildPaletteSuggestions(deps({ recents }))).toStrictEqual([
+        "Alex Rivera",
+      ]);
+      expect(recents.ensure).toHaveBeenCalledWith();
+    });
+
+    it("buildPaletteSuggestions returns no chips without a recents source", () => {
+      expect(buildPaletteSuggestions(deps())).toStrictEqual([]);
     });
   });
 });

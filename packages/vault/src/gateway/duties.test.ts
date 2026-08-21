@@ -10,6 +10,7 @@ import { afterEach, assert, beforeEach, describe, expect, test } from "vitest";
 import { tempDir } from "@centraid/test-kit/temp-dir";
 import { bootstrappedVault } from "@centraid/test-kit/vault";
 
+import { blobUriFor } from "../blob/store.js";
 import { bootstrapVault, createGrant, enrollApp } from "../bootstrap.js";
 import type { BootstrapResult } from "../bootstrap.js";
 import { openVaultDb } from "../db.js";
@@ -191,6 +192,42 @@ describe("duties", () => {
     ]);
   });
 
+  // THE SABOTAGE TARGET (#712 P11): drop the media.asset entry from
+  // RETENTION_REFUSALS in duties.ts and this goes red — the policy would fall
+  // through to the missing-column skip and the refusal would lose its stated
+  // reason, which is exactly the "runs and silently retains nothing" duty the
+  // item exists to forbid.
+  test("retention policy on media.asset is refused with a stated reason, never silently skipped", () => {
+    db.vault
+      .prepare(
+        `INSERT INTO core_content_item (content_id, media_type, content_uri, sha256, byte_size, created_at)
+         VALUES ('c-ret', 'image/jpeg', 'file:///x', 'sha-ret', 1, '2019-01-01T00:00:00Z')`
+      )
+      .run();
+    db.vault
+      .prepare(
+        `INSERT INTO media_asset (asset_id, content_id, kind, captured_at)
+         VALUES ('a-ret', 'c-ret', 'photo', '2019-01-01T00:00:00Z')`
+      )
+      .run();
+    db.vault
+      .prepare(
+        `INSERT INTO consent_policy (policy_id, kind, applies_schema, applies_table, rule_json, retention_days, effective_from, priority)
+       VALUES (?, 'retention', 'media', 'media_asset', '{}', 30, '2020-01-01T00:00:00Z', 1)`
+      )
+      .run(uuidv7());
+    const result = gw.sweep(owner);
+    expect(result.retentionDeleted).toBe(0);
+    expect(result.retentionRefused).toHaveLength(1);
+    expect(result.retentionRefused[0]?.entity).toBe("media.asset");
+    expect(result.retentionRefused[0]?.reason).toContain("trash lifecycle");
+    // The asset outlives the policy: retention never reaches this table.
+    const kept = db.vault.prepare("SELECT asset_id FROM media_asset").all();
+    expect(kept.map((row) => ({ ...row }))).toStrictEqual([
+      { asset_id: "a-ret" },
+    ]);
+  });
+
   test("lifecycle sweep purges lapsed trashed notes with their edges (issue #308 A6)", () => {
     const now = new Date().toISOString();
     const past = "2020-01-01T00:00:00Z";
@@ -304,28 +341,20 @@ describe("duties", () => {
 
   /**
    * Seed one of every registered polymorphic dependent pointing at (type, id):
-   * a revocable share, a vector embedding, a sync-map row, a margin annotation,
-   * and an attachment. The attachment carries its OWN bytes (a second content
+   * a vector embedding, a sync-map row, a margin annotation, and an
+   * attachment. The attachment carries its OWN bytes (a second content
    * item) so it never blocks the target's deletion. Returns the ids to assert on.
    */
   function seedPolyDependents(
     type: string,
     id: string
   ): {
-    shareId: string;
     embeddingId: string;
     mapId: string;
     annotationId: string;
     attachmentId: string;
   } {
     const now = new Date().toISOString();
-    const shareId = uuidv7();
-    db.vault
-      .prepare(
-        `INSERT INTO consent_share (share_id, owner_party_id, audience, target_type, target_id, mode, created_at)
-       VALUES (?, ?, 'public_link', ?, ?, 'view', ?)`
-      )
-      .run(shareId, boot.ownerPartyId, type, id, now);
     const embeddingId = uuidv7();
     db.vault
       .prepare(
@@ -375,7 +404,7 @@ describe("duties", () => {
        VALUES (?, ?, ?, ?, 'other', 0, ?)`
       )
       .run(attachmentId, type, id, attachBytes, now);
-    return { shareId, embeddingId, mapId, annotationId, attachmentId };
+    return { embeddingId, mapId, annotationId, attachmentId };
   }
 
   function expectPolyDependentsCleaned(
@@ -383,13 +412,6 @@ describe("duties", () => {
     type: string,
     id: string
   ): void {
-    const share = db.vault
-      .prepare("SELECT revoked_at FROM consent_share WHERE share_id = ?")
-      .get(deps.shareId) as { revoked_at: string | null } | undefined;
-    expect(
-      share?.revoked_at,
-      "share of a purged row must be revoked"
-    ).toBeTruthy();
     expect(
       db.vault
         .prepare("SELECT 1 FROM enrich_embedding WHERE embedding_id = ?")
@@ -443,6 +465,82 @@ describe("duties", () => {
     expectPolyDependentsCleaned(deps, "core.content_item", "poly-c");
   });
 
+  test("purge keeps derivative bytes another content item still claims (issue #750)", () => {
+    const past = "2020-01-01T00:00:00Z";
+    const now = new Date().toISOString();
+    // sha256 is UNIQUE on content items but NOT on derivatives: two items'
+    // thumbs may legally share one CAS entry. Purging the lapsed item must
+    // reclaim only its exclusively-owned bytes.
+    const shared = db.blobs.ingestSync(Buffer.from("purge-shared-thumb"));
+    const lapsedOriginal = db.blobs.ingestSync(Buffer.from("purge-lapsed-og"));
+    const liveOriginal = db.blobs.ingestSync(Buffer.from("purge-live-og"));
+    const item = db.vault.prepare(
+      `INSERT INTO core_content_item
+         (content_id, media_type, content_uri, sha256, byte_size, created_at, deleted_at, purge_at)
+       VALUES (?, 'image/jpeg', ?, ?, ?, ?, ?, ?)`
+    );
+    item.run(
+      "purge-shared-a",
+      blobUriFor(lapsedOriginal.sha256),
+      lapsedOriginal.sha256,
+      lapsedOriginal.byteSize,
+      past,
+      past,
+      past
+    );
+    item.run(
+      "purge-shared-b",
+      blobUriFor(liveOriginal.sha256),
+      liveOriginal.sha256,
+      liveOriginal.byteSize,
+      now,
+      null,
+      null
+    );
+    const derivative = db.vault.prepare(
+      `INSERT INTO core_content_derivative
+         (derivative_id, content_id, variant, sha256, media_type, byte_size, text_content, created_at)
+       VALUES (?, ?, 'thumb', ?, 'image/jpeg', ?, NULL, ?)`
+    );
+    derivative.run(
+      uuidv7(),
+      "purge-shared-a",
+      shared.sha256,
+      shared.byteSize,
+      past
+    );
+    derivative.run(
+      uuidv7(),
+      "purge-shared-b",
+      shared.sha256,
+      shared.byteSize,
+      now
+    );
+
+    const result = gw.sweep(owner);
+    expect(result.contentPurged).toBe(1);
+    // The lapsed item's exclusively-owned original is reclaimed with its rows…
+    expect(
+      db.vault
+        .prepare(
+          `SELECT 1 FROM core_content_item WHERE content_id = 'purge-shared-a'`
+        )
+        .get()
+    ).toBeUndefined();
+    expect(db.blobs.hasSync(lapsedOriginal.sha256)).toBe(false);
+    // …but the SHARED thumb bytes survive: the live item's derivative still
+    // claims them, and the survivor keeps reading its own thumb.
+    expect(db.blobs.hasSync(shared.sha256)).toBe(true);
+    expect(db.blobs.hasSync(liveOriginal.sha256)).toBe(true);
+    expect(
+      db.vault
+        .prepare(
+          `SELECT 1 FROM core_content_derivative WHERE content_id = 'purge-shared-b'`
+        )
+        .get()
+    ).toBeTruthy();
+  });
+
   test("purge sweep cleans every polymorphic dependent of a purged media asset (issue #441 A1)", () => {
     const now = new Date().toISOString();
     const past = "2020-01-01T00:00:00Z";
@@ -456,19 +554,162 @@ describe("duties", () => {
       .run(now);
     db.vault
       .prepare(
-        `INSERT INTO media_media_asset (asset_id, content_id, kind, deleted_at, purge_at)
+        `INSERT INTO media_asset (asset_id, content_id, kind, deleted_at, purge_at)
        VALUES ('poly-a', 'poly-asset-body', 'photo', ?, ?)`
       )
       .run(past, past);
-    const deps = seedPolyDependents("media.media_asset", "poly-a");
+    const deps = seedPolyDependents("media.asset", "poly-a");
     const result = gw.sweep(owner);
     expect(result.assetsPurged).toBe(1);
     expect(
       db.vault
-        .prepare(`SELECT 1 FROM media_media_asset WHERE asset_id = 'poly-a'`)
+        .prepare(`SELECT 1 FROM media_asset WHERE asset_id = 'poly-a'`)
         .get()
     ).toBeUndefined();
-    expectPolyDependentsCleaned(deps, "media.media_asset", "poly-a");
+    expectPolyDependentsCleaned(deps, "media.asset", "poly-a");
+  });
+
+  // ---- edit lineage vs the sweep (issue #711 decision S8) ----
+
+  const PAST = "2020-01-01T00:00:00Z";
+
+  /** A content item, lapsed-trashed when `lapsed`. */
+  function seedContent(id: string, lapsed: boolean): void {
+    db.vault
+      .prepare(
+        `INSERT INTO core_content_item
+           (content_id, media_type, content_uri, sha256, byte_size, created_at, deleted_at, purge_at)
+         VALUES (?, 'image/jpeg', ?, ?, 1, ?, ?, ?)`
+      )
+      .run(
+        id,
+        `data:image/jpeg,${id}`,
+        `sha-${id}`,
+        PAST,
+        lapsed ? PAST : null,
+        lapsed ? PAST : null
+      );
+  }
+
+  /** A photo asset over its own bytes, lapsed-trashed when `lapsed`. */
+  function seedAsset(
+    assetId: string,
+    opts: { lapsed: boolean; sourceAssetId?: string }
+  ): void {
+    seedContent(`${assetId}-body`, false);
+    db.vault
+      .prepare(
+        `INSERT INTO media_asset
+           (asset_id, content_id, kind, source_asset_id, deleted_at, purge_at)
+         VALUES (?, ?, 'photo', ?, ?, ?)`
+      )
+      .run(
+        assetId,
+        `${assetId}-body`,
+        opts.sourceAssetId ?? null,
+        opts.lapsed ? PAST : null,
+        opts.lapsed ? PAST : null
+      );
+  }
+
+  /**
+   * A retention policy with exactly one row past its window. It is enforced
+   * near the END of the sweep, after every purge pass, so `retentionDeleted
+   * === 1` is the assertion that the pass did not abort halfway: a FOREIGN KEY
+   * error in a purge above takes this duty (and the receipt) down with it.
+   */
+  function seedLaterDuty(): void {
+    db.vault
+      .prepare(
+        `INSERT INTO social_thread (thread_id, channel, created_at) VALUES ('th-late', 'sms', ?)`
+      )
+      .run(PAST);
+    seedContent("msg-body", false);
+    db.vault
+      .prepare(
+        `INSERT INTO social_message (message_id, thread_id, sender_handle, sent_at, body_content_id, delivery)
+         VALUES ('m-stale', 'th-late', 'x@y.z', ?, 'msg-body', 'read')`
+      )
+      .run(PAST);
+    db.vault
+      .prepare(
+        `INSERT INTO consent_policy (policy_id, kind, applies_schema, applies_table, rule_json, retention_days, effective_from, priority)
+         VALUES (?, 'retention', 'social', 'message', '{"timestamp_column":"sent_at"}', 365, '2019-01-01T00:00:00Z', 1)`
+      )
+      .run(uuidv7());
+  }
+
+  test("lifecycle sweep skips a lapsed photograph whose derived edit is still live, and keeps sweeping (issue #711 S8)", () => {
+    seedAsset("a-source", { lapsed: true });
+    seedAsset("a-edit", { lapsed: false, sourceAssetId: "a-source" });
+    seedLaterDuty();
+
+    const result = gw.sweep(owner);
+
+    // The self-FK would have aborted the pass; instead the row is declined…
+    expect(result.assetsPurged).toBe(0);
+    expect(result.assetsBlockedByLineage).toStrictEqual(["a-source"]);
+    expect(
+      db.vault
+        .prepare(`SELECT 1 FROM media_asset WHERE asset_id = 'a-source'`)
+        .get(),
+      "the source must survive rather than be force-deleted"
+    ).toBeTruthy();
+    expect(
+      db.vault
+        .prepare(`SELECT 1 FROM media_asset WHERE asset_id = 'a-edit'`)
+        .get(),
+      "the live edit the member never trashed must be untouched"
+    ).toBeTruthy();
+    // …and every duty after the purge still ran.
+    expect(result.retentionDeleted).toBe(1);
+    expect(result.receiptId).toBeTruthy();
+  });
+
+  test("lifecycle sweep purges a lapsed edit before its lapsed source in one pass (issue #711 S8)", () => {
+    seedAsset("a-source", { lapsed: true });
+    seedAsset("a-edit", { lapsed: true, sourceAssetId: "a-source" });
+    seedLaterDuty();
+
+    const result = gw.sweep(owner);
+
+    expect(result.assetsPurged).toBe(2);
+    expect(result.assetsBlockedByLineage).toStrictEqual([]);
+    const remaining = db.vault
+      .prepare("SELECT count(*) AS n FROM media_asset")
+      .get() as { n: number };
+    expect(
+      remaining.n,
+      "trashing a photograph and its edit together empties both in one sweep"
+    ).toBe(0);
+    expect(result.retentionDeleted).toBe(1);
+  });
+
+  test("lifecycle sweep declines a lapsed content item whose asset is a lineage source (issue #711 S8)", () => {
+    // The delete_asset flow lapses the asset and its bytes together, so this
+    // is the same member action as the first test seen from the content pass.
+    seedAsset("a-source", { lapsed: true });
+    db.vault
+      .prepare(
+        "UPDATE core_content_item SET deleted_at = ?, purge_at = ? WHERE content_id = 'a-source-body'"
+      )
+      .run(PAST, PAST);
+    seedAsset("a-edit", { lapsed: false, sourceAssetId: "a-source" });
+    seedLaterDuty();
+
+    const result = gw.sweep(owner);
+
+    expect(result.contentPurged).toBe(0);
+    expect(result.contentBlockedByLineage).toStrictEqual(["a-source-body"]);
+    expect(
+      db.vault
+        .prepare(
+          `SELECT 1 FROM core_content_item WHERE content_id = 'a-source-body'`
+        )
+        .get(),
+      "bytes stay put while the asset that rents them cannot go"
+    ).toBeTruthy();
+    expect(result.retentionDeleted).toBe(1);
   });
 
   test("lifecycle sweep purges lapsed trashed People/Tally rows and cleans their poly refs (issue #441 A4)", () => {

@@ -2,64 +2,148 @@
    prefix dropped). The section eyebrow comes from shared.module.css. */
 
 .memories {
-  margin: 6px 0 22px;
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+  margin: 0;
+  padding: var(--sp-3) 0 var(--sp-4);
+}
+.memoriesHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.memoriesHeader .memoriesLabel {
+  flex: 0 0 auto;
+  padding: 0;
+  color: var(--text-faint);
+}
+.allMemories {
+  margin: 0;
+  padding: 1px 6px;
+  border: none;
+  background: none;
+  color: var(--text);
+  font: var(--t-eyebrow);
+  letter-spacing: var(--t-eyebrow-tracking);
+  text-transform: var(--t-eyebrow-transform);
+  white-space: nowrap;
+  cursor: pointer;
+}
+.allMemories:hover {
+  color: var(--text-soft);
+}
+.allMemories:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
+  border-radius: var(--r-sm);
 }
 .memoriesStrip {
   display: flex;
   gap: var(--sp-3);
   overflow-x: auto;
-  padding-bottom: var(--sp-1);
+  padding: 0;
 }
 .memoriesStrip::-webkit-scrollbar {
   height: 0;
 }
+/* 250x120 desktop / 200x96 phone, 4px radius (v4 handoff §4.6). The image is
+   the scene; the title and subtitle sit on paper below it, not on a scrim. */
 .memoryCard {
-  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
   flex: 0 0 auto;
-  width: 132px;
-  height: 176px;
-  border-radius: 16px;
-  overflow: hidden;
-  border: none;
-  background: var(--bg-sunken) center/cover no-repeat;
-  box-shadow: var(--shadow-sm);
+  width: 250px;
   padding: 0;
-  transition: transform 0.16s var(--ease);
+  border: none;
+  background: none;
+  text-align: start;
+  cursor: pointer;
 }
-.memoryCard:hover {
-  transform: translateY(-2px);
+.memoryCard:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
+  border-radius: var(--r-sm);
 }
-.memoryScrim {
-  position: absolute;
-  inset: 0;
-  background: linear-gradient(
-    to top,
-    color-mix(in oklab, var(--scrim) 86%, transparent),
-    color-mix(in oklab, var(--scrim) 7%, transparent) 55%,
-    transparent
-  );
+@media (max-width: 719px) {
+  .memoryCard {
+    width: 200px;
+  }
+}
+.memoryCover {
+  display: block;
+  flex: 0 0 auto;
+  width: 100%;
+  height: 120px;
+  border-radius: var(--r-sm);
+  background: var(--bg-sunken) center/cover no-repeat;
+}
+@media (max-width: 719px) {
+  .memoryCover {
+    height: 96px;
+  }
 }
 .memoryText {
-  position: absolute;
-  left: 12px;
-  right: 12px;
-  bottom: 12px;
-  text-align: left;
   display: flex;
   flex-direction: column;
   gap: 2px;
 }
 .memoryTitle {
-  font: var(--t-body-strong);
-  font-size: 13px;
-  color: var(--text-inv);
-  line-height: 1.25;
+  font: var(--t-small-strong);
+  color: var(--text);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 .memorySub {
   font: var(--t-mono);
-  font-size: 10px;
-  color: color-mix(in oklab, var(--text-inv) 80%, transparent);
+  font-variant-numeric: var(--t-mono-numeric);
+  direction: var(--t-mono-direction);
+  unicode-bidi: var(--t-mono-bidi);
+  color: var(--text-faint);
+}
+
+/* ── A trip's route sketch (issue #816) ────────────────────────────────── */
+
+/* The cover and the sketch share one coordinate space, so the plate can sit in
+   a corner of the photograph without either one moving the card's layout. */
+.memoryStage {
+  position: relative;
+  display: block;
+  flex: 0 0 auto;
+}
+
+/* A small figure standing on the photograph, bottom-end corner: away from the
+   title underneath and out of the centre, where the subject of a cover usually
+   is. Sunken paper under it, like every other plan view in this app, so the
+   line stays legible over a bright sky or a dark forest alike. Nothing here
+   names a colour and nothing here fetches anything — see RouteSketch. */
+.memoryRoute {
+  position: absolute;
+  inset-block-end: 4px;
+  inset-inline-end: 4px;
+  inline-size: 72px;
+  block-size: 48px;
+  background: color-mix(in oklab, var(--bg-sunken) 82%, transparent);
+  border: 1px solid var(--line);
+  border-radius: var(--r-sm);
+}
+
+/* The travel between stops: a hairline, because the line is a claim about
+   order and not about roads. `vector-effect` keeps it a hairline while the svg
+   scales with the card. */
+.memoryRouteLine {
+  fill: none;
+  stroke: var(--text-faint);
+  stroke-width: 1;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  vector-effect: non-scaling-stroke;
+}
+
+/* A stop the trip actually photographed. Ink, not a hue: a dot's meaning here
+   is its position, and colouring it would invent a category. */
+.memoryRouteStop {
+  fill: var(--text-soft);
 }

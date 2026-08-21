@@ -12,7 +12,7 @@ import {
   GATEWAY_PROTOCOL_VERSION,
   GATEWAY_VERSION,
   ROUTES,
-} from "@centraid/protocol";
+} from "@centraid/core/protocol";
 
 import { main } from "./cli.ts";
 

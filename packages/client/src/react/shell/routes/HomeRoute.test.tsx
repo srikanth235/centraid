@@ -3,84 +3,66 @@ import { createRoot } from "react-dom/client";
 import type { Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+import type * as TypeImport_storage from "../../../gateway-client-local-storage.js";
 import type * as TypeImport_1gl5zx7 from "../../../gateway-client.js";
 import type { ShellActions } from "../actions.js";
 import type * as TypeImport_qcp7vy from "../actions.js";
-import type { HomeRouteProps } from "./HomeRoute.js";
 import type * as TypeImport_1t4fyrr from "./HomeRoute.js";
-import type * as TypeImport_13kqdum from "./templatesData.js";
+import type * as TypeImport_sample from "./homeSample.js";
+import type * as TypeImport_tiles from "./homeTileContent.js";
 
-// Issue #434, Phase 2 — the installed-app context menu rework. A bundled
-// install (its id is a reserved bundled-template id) gets Open / App info /
-// Rename / Star / Uninstall (Share + Reveal dropped, Delete → Uninstall with
-// the data-stays copy). A code-store app keeps Delete.
+// Home is the springboard and nothing else (issue #708): no composer hero, no
+// library shelf, and no identity bar — the app bar above the route carries the
+// title and the two actions. What the route still owns is the two reads the
+// tiles are made of, and the three treatments they resolve to (working, first
+// run, the grid).
 
-const listAutomations = vi.fn<typeof TypeImport_1gl5zx7.listAutomations>();
 const getDailyBrief = vi.fn<typeof TypeImport_1gl5zx7.getDailyBrief>();
-const deleteApp = vi.fn<typeof TypeImport_1gl5zx7.deleteApp>();
-const deleteAutomation = vi.fn<typeof TypeImport_1gl5zx7.deleteAutomation>();
-const runAutomationNow = vi.fn<typeof TypeImport_1gl5zx7.runAutomationNow>();
-const updateAppMeta = vi.fn<typeof TypeImport_1gl5zx7.updateAppMeta>();
-const renameInstalledApp =
-  vi.fn<typeof TypeImport_1gl5zx7.renameInstalledApp>();
 vi.mock(import("../../../gateway-client.js"), () => ({
-  listAutomations: () => listAutomations(),
   getDailyBrief: () => getDailyBrief(),
-  deleteApp: (a) => deleteApp(a),
-  deleteAutomation: (a) => deleteAutomation(a),
-  runAutomationNow: (a) => runAutomationNow(a),
-  updateAppMeta: (a) => updateAppMeta(a),
-  renameInstalledApp: (a) => renameInstalledApp(a),
-}));
-// Home reads its automation rows off the run collector now (one fetch, not
-// two), so the row fixtures each test sets on `listAutomations` ride back
-// through here.
-vi.mock(import("./automationsData.js"), () => ({
-  collectAutomationRuns: async () => ({
-    rows: await listAutomations(),
-    entries: [],
-  }),
-}));
-const loadAppTemplates = vi.fn<typeof TypeImport_13kqdum.loadAppTemplates>();
-vi.mock(import("./templatesData.js"), () => ({
-  loadAppTemplates: () => loadAppTemplates(),
+  getGatewayBackupStatus: () =>
+    Promise.resolve({
+      configured: false,
+      recoveryKit: { confirmedAt: null },
+      vaults: [],
+    }),
+  listGatewayDevices: () => Promise.resolve([]),
 }));
 
-// App info reuses the per-app consent pane — stub its data layer so the modal
-// renders the requested access + a live grant without real gateway I/O.
-vi.mock(import("./appSettingsData.js"), () => ({
-  fetchAppManifestRaw: () => Promise.resolve({ vault: {} }),
-  manifestVaultBlock: () => ({
-    purpose: "dpv:ServiceProvision",
-    why: "Shows your photo library.",
-    scopes: [{ schema: "media", verbs: "read" }],
-  }),
-  buildVaultProps: () => ({
-    block: {
-      purpose: "dpv:ServiceProvision",
-      why: "Shows your photo library.",
-      scopes: [{ schema: "media", verbs: "read" }],
-    },
-    loadData: () =>
-      Promise.resolve({
-        vaultName: "My Vault",
-        grants: [
-          {
-            grantId: "g1",
-            purposeConceptId: "dpv:ServiceProvision",
-            purpose: "Service",
-            scopes: [{ schema: "media", table: null, verbs: "read" }],
-            expiresAt: null,
-          },
-        ],
-        parked: [],
-      }),
-    grant: () => Promise.resolve(),
-    revoke: () => Promise.resolve(),
-    confirm: () => Promise.resolve(),
-    demoLoad: () => Promise.resolve(),
-    demoPurge: () => Promise.resolve(),
-  }),
+vi.mock(import("../useGatewayRuntime.js"), () => ({
+  useGatewayStatus: () => "up",
+}));
+
+const loadHomeTileContent =
+  vi.fn<typeof TypeImport_tiles.loadHomeTileContent>();
+vi.mock(import("./homeTileContent.js"), () => ({
+  loadHomeTileContent: (input: Parameters<typeof loadHomeTileContent>[0]) =>
+    loadHomeTileContent(input),
+  // The tiles' content is stubbed wholesale, so the reader is never asked
+  // anything — it exists only to satisfy the seam.
+  homeTileReader: () =>
+    Promise.resolve({ read: () => Promise.resolve({ rows: [] }) }),
+}));
+
+const getLocalStorageUsage =
+  vi.fn<typeof TypeImport_storage.getLocalStorageUsage>();
+vi.mock(import("../../../gateway-client-local-storage.js"), () => ({
+  getLocalStorageUsage: () => getLocalStorageUsage(),
+}));
+
+const loadHomeSample = vi.fn<typeof TypeImport_sample.loadHomeSample>();
+const seedHomeSample = vi.fn<typeof TypeImport_sample.seedHomeSample>();
+const syncHomeSampleReplica =
+  vi.fn<typeof TypeImport_sample.syncHomeSampleReplica>();
+vi.mock(import("./homeSample.js"), () => ({
+  NO_SAMPLE: { rows: 0, seedable: [] },
+  clearHomeSample: () => Promise.resolve(),
+  loadHomeSample: () => loadHomeSample(),
+  seedHomeSample: (
+    seedable: readonly string[],
+    onProgress?: (progress: TypeImport_sample.HomeSampleProgress) => void
+  ) => seedHomeSample(seedable, onProgress),
+  syncHomeSampleReplica: () => syncHomeSampleReplica(),
 }));
 
 let HomeRoute: typeof TypeImport_1t4fyrr.default;
@@ -88,43 +70,34 @@ let ShellActionsProvider: typeof TypeImport_qcp7vy.ShellActionsProvider;
 let root: Root | null = null;
 let host: HTMLElement | null = null;
 
-const showToast = vi.fn<ShellActions["showToast"]>();
 const navigate = vi.fn<ShellActions["navigate"]>();
-const confirm = vi.fn<ShellActions["confirm"]>();
+const openCommandPalette = vi.fn<ShellActions["openCommandPalette"]>();
 
 function makeActions(): ShellActions {
   return {
-    showToast,
-    builderEnabled: false,
-    enterBuilder: vi.fn<ShellActions["enterBuilder"]>(),
-    openNewAppSheet: vi.fn<ShellActions["openNewAppSheet"]>(),
-    openCommandPalette: vi.fn<ShellActions["openCommandPalette"]>(),
+    showToast: vi.fn<ShellActions["showToast"]>(),
+    openCommandPalette,
     openContextMenu: vi.fn<ShellActions["openContextMenu"]>(),
-    confirm,
+    confirm: vi.fn<ShellActions["confirm"]>(),
     navigate,
   };
 }
 
-const app = (id: string, name = id): UserAppMeta =>
+const app = (id: string): UserAppMeta =>
   ({
     id,
-    name,
+    name: id,
     iconKey: "Todo",
     color: "#123",
     updatedAt: "2020-01-01T00:00:00Z",
   }) as unknown as UserAppMeta;
 
-// Home no longer refetches after a mutation — it edits its lists optimistically
-// and lets the reconcile settle (issue #659), so the seam under test is
-// `mutateApps`. The fake runs the edit against a fixed snapshot and the commit.
-const mutateApps = vi
-  .fn<HomeRouteProps["mutateApps"]>()
-  .mockImplementation(async (edit, commit) => {
-    edit({ userApps: [], drafts: [] });
-    await commit();
-  });
-
-async function render(userApps: UserAppMeta[]): Promise<HTMLElement> {
+async function render(
+  userApps: UserAppMeta[],
+  appsLoading = false,
+  autoSeedSample = false,
+  onAutoSeedStarted = vi.fn<() => void>()
+): Promise<HTMLElement> {
   host = document.createElement("div");
   document.body.append(host);
   root = createRoot(host);
@@ -132,12 +105,10 @@ async function render(userApps: UserAppMeta[]): Promise<HTMLElement> {
     root!.render(
       <ShellActionsProvider value={makeActions()}>
         <HomeRoute
+          appsLoading={appsLoading}
+          autoSeedSample={autoSeedSample}
+          onAutoSeedStarted={onAutoSeedStarted}
           userApps={userApps}
-          drafts={[]}
-          tileVariant="gradient"
-          isStarred={() => false}
-          toggleStar={vi.fn<HomeRouteProps["toggleStar"]>()}
-          mutateApps={mutateApps}
         />
       </ShellActionsProvider>
     );
@@ -152,40 +123,10 @@ async function flush(): Promise<void> {
   });
 }
 
-function openMenuFor(id: string): void {
-  const tile = document.querySelector(
-    `[data-app-id="${id}"] [data-testid="app-tile"]`
-  ) as HTMLElement;
-  tile.dispatchEvent(
-    new MouseEvent("contextmenu", { bubbles: true, clientX: 5, clientY: 5 })
-  );
-}
-
-function menuLabels(): (string | null)[] {
-  return [...document.querySelectorAll('[role="menuitem"]')].map(
-    (b) => b.textContent
-  );
-}
-
-function clickMenuItem(label: string): void {
-  const item = [...document.querySelectorAll('[role="menuitem"]')].find(
-    (b) => b.textContent === label
-  ) as HTMLButtonElement;
-  item.click();
-}
-
 describe("HomeRoute", () => {
   beforeEach(async () => {
-    (globalThis as unknown as { CentraidTokens: unknown }).CentraidTokens = {
-      tileFinish: () => ({
-        background: "#111",
-        boxShadow: "none",
-        glyphColor: "#fff",
-      }),
-    };
     ({ default: HomeRoute } = await import("./HomeRoute.js"));
     ({ ShellActionsProvider } = await import("../actions.js"));
-    listAutomations.mockReset().mockResolvedValue([]);
     getDailyBrief.mockReset().mockResolvedValue({
       date: "2026-07-29",
       events: [],
@@ -194,27 +135,35 @@ describe("HomeRoute", () => {
       balanceMinor: 0,
       currency: "USD",
     });
-    loadAppTemplates.mockReset().mockResolvedValue([
-      {
-        id: "photos",
-        kind: "app",
-        name: "Photos",
-        desc: "Camera roll",
-        colorKey: "blue",
-        iconKey: "Photos",
-        version: "1.0.0",
+    loadHomeTileContent.mockReset().mockResolvedValue({});
+    // No disk budget set: `limitBytes: null` is the shape the gateway sends
+    // when the owner has never capped local storage, and Home says nothing.
+    getLocalStorageUsage.mockReset().mockResolvedValue({
+      scannedAt: 0,
+      totalBytes: 0,
+      components: [],
+      vaults: [],
+      disk: null,
+      limits: {
+        totalLimitBytes: null,
+        warnAtPercent: 90,
+        journalLimitBytes: null,
       },
-    ]);
-    deleteApp.mockReset().mockResolvedValue({ ok: true });
-    updateAppMeta.mockReset().mockResolvedValue({ ok: true });
-    renameInstalledApp.mockReset().mockResolvedValue({ ok: true });
-    showToast.mockClear();
+      limit: {
+        status: "ok",
+        fractionUsed: null,
+        usedBytes: 0,
+        limitBytes: null,
+      },
+    });
+    loadHomeSample.mockReset().mockResolvedValue({ rows: 0, seedable: [] });
+    seedHomeSample.mockReset().mockResolvedValue([]);
+    syncHomeSampleReplica.mockReset().mockResolvedValue(undefined);
     navigate.mockClear();
-    confirm.mockReset().mockResolvedValue(true);
-    // The route's automation feed lives in the shared cache; start each case
-    // from an empty one (issue #659).
+    openCommandPalette.mockClear();
+    // The route's reads live in the shared cache; start each case from an
+    // empty one (issue #659).
     (await import("../queryCache.js")).resetQueryCache();
-    mutateApps.mockClear();
   });
 
   afterEach(() => {
@@ -225,110 +174,269 @@ describe("HomeRoute", () => {
     host = null;
   });
 
-  describe("HomeRoute installed-app context menu", () => {
-    it("a bundled install shows Open / App info / Rename / Star / Uninstall — no Delete, Share, or Reveal", async () => {
-      await render([app("photos", "Photos")]);
-      openMenuFor("photos");
-      const labels = menuLabels();
-      expect(labels).toStrictEqual([
-        "Open",
-        "App info",
-        "Rename",
-        "Star",
-        "Uninstall",
-      ]);
-      expect(labels).not.toContain("Delete");
-      expect(labels).not.toContain("Share");
-      expect(labels).not.toContain("Reveal in Finder");
+  it("tiles the apps that have content, and invites the ones that do not", async () => {
+    loadHomeTileContent.mockResolvedValue({
+      photos: { total: 3, thumbs: ["a.jpg"] },
     });
+    const el = await render([app("photos"), app("tasks")]);
+    expect(el.querySelector('[data-testid="home-springboard"]')).toBeTruthy();
+    const tiles = [...el.querySelectorAll('[data-testid="home-tile"]')];
+    // Tasks is installed but empty, so it is a first move rather than a tile —
+    // the grid holds what has something to show and nothing else.
+    expect(tiles.map((t) => (t as HTMLElement).dataset.appId)).toStrictEqual([
+      "photos",
+    ]);
+    expect(el.querySelector('[data-testid="home-start-band"]')).toBeTruthy();
+    expect(el.querySelector('[data-testid="home-first-run"]')).toBeNull();
+  });
 
-    it("a code-store app keeps Delete (not Uninstall)", async () => {
-      await render([app("notes-x1", "My Notes")]);
-      openMenuFor("notes-x1");
-      const labels = menuLabels();
-      expect(labels).toContain("Delete");
-      expect(labels).not.toContain("Uninstall");
-      expect(labels).not.toContain("App info");
+  it("opens an app from its tile", async () => {
+    loadHomeTileContent.mockResolvedValue({
+      photos: { total: 3, thumbs: ["a.jpg"] },
     });
+    const el = await render([app("photos")]);
+    (el.querySelector('[data-testid="home-tile"]') as HTMLElement).click();
+    expect(navigate).toHaveBeenCalledWith({ kind: "app", id: "photos" });
+  });
 
-    it("Uninstall confirms with the data-stays copy, then calls deleteApp", async () => {
-      await render([app("photos", "Photos")]);
-      openMenuFor("photos");
-      await act(async () => {
-        clickMenuItem("Uninstall");
-        await flush();
-      });
-      expect(confirm).toHaveBeenCalledWith(
-        expect.objectContaining({
-          confirmLabel: "Uninstall",
-          title: "Uninstall Photos?",
-          message:
-            'Removes "Photos" and revokes its access. Your data stays in your vault.',
+  it("a vault with no content anywhere gets the first-run instruction", async () => {
+    const el = await render([app("photos"), app("tasks")]);
+    expect(el.querySelector('[data-testid="home-first-run"]')).toBeTruthy();
+    expect(el.querySelector('[data-testid="home-tile"]')).toBeNull();
+  });
+
+  it("keeps Home in its loading treatment until installed apps settle", async () => {
+    const el = await render([app("photos")], true);
+    expect(el.querySelector('[data-testid="home-first-run"]')).toBeNull();
+    expect(el.querySelector('[data-testid="home-tile"]')).toBeNull();
+    expect(el.textContent).toContain("Reading your vault");
+  });
+
+  it("starts the sample week once when onboarding hands off to Home", async () => {
+    loadHomeSample.mockResolvedValue({ rows: 0, seedable: ["tasks"] });
+    seedHomeSample.mockResolvedValue(["tasks"]);
+    const onAutoSeedStarted = vi.fn<() => void>();
+    await render([app("tasks")], false, true, onAutoSeedStarted);
+    await act(async () => {
+      await flush();
+    });
+    expect(onAutoSeedStarted).toHaveBeenCalledOnce();
+    expect(seedHomeSample).toHaveBeenCalledWith(
+      ["tasks"],
+      expect.any(Function)
+    );
+  });
+
+  it("waits for the initial Home reads before auto-filling the sample week", async () => {
+    loadHomeSample.mockResolvedValue({ rows: 0, seedable: ["tasks"] });
+    seedHomeSample.mockResolvedValue(["tasks"]);
+    let settleTiles: (() => void) | undefined;
+    loadHomeTileContent.mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          settleTiles = () => resolve({});
         })
-      );
-      expect(deleteApp).toHaveBeenCalledWith({ id: "photos" });
-      expect(showToast).toHaveBeenCalledWith('Uninstalled "Photos"');
-    });
+    );
 
-    it("Rename on a bundled app uses the session-free path (renameInstalledApp, not updateAppMeta)", async () => {
-      // openPrompt is a body-portal overlay; stub it to return a new name.
-      const prompt = await import("../prompt.js");
-      vi.spyOn(prompt, "openPrompt").mockResolvedValue("Family Photos");
-      await render([app("photos", "Photos")]);
-      openMenuFor("photos");
-      await act(async () => {
-        clickMenuItem("Rename");
-        await flush();
-      });
-      expect(renameInstalledApp).toHaveBeenCalledWith({
-        id: "photos",
-        name: "Family Photos",
-      });
-      expect(updateAppMeta).not.toHaveBeenCalled();
-      vi.restoreAllMocks();
+    await render([app("tasks")], false, true);
+    await act(async () => {
+      await flush();
     });
+    expect(seedHomeSample).not.toHaveBeenCalled();
 
-    it("App info opens the consent surface — requested access + live grants — with an Uninstall action", async () => {
-      await render([app("photos", "Photos")]);
-      openMenuFor("photos");
-      await act(async () => {
-        clickMenuItem("App info");
-        await flush();
-      });
-      const dialog = document.querySelector("dialog")!;
-      expect(dialog.textContent).toContain("App info");
-      expect(dialog.textContent).toContain("Requested access");
-      expect(dialog.textContent).toContain("Shows your photo library.");
-      // The live grant from loadData renders.
-      expect(dialog.textContent).toContain("Access · My Vault");
-      expect(dialog.textContent).toContain("media");
-      expect(dialog.textContent).toContain("Uninstall");
+    await act(async () => {
+      settleTiles?.();
+      await flush();
     });
+    expect(seedHomeSample).toHaveBeenCalledWith(
+      ["tasks"],
+      expect.any(Function)
+    );
+  });
 
-    it('App info offers an "Automate on this data" deep-link into the editor pre-watching the kind', async () => {
-      // The app requests one scope (`media`); the modal offers a per-kind
-      // "Automate media" button that deep-links to the automation editor with
-      // that entity kind pre-filled as a data trigger (issue #446 follow-up 1).
-      await render([app("photos", "Photos")]);
-      openMenuFor("photos");
-      await act(async () => {
-        clickMenuItem("App info");
-        await flush();
-      });
-      const automate = [...document.querySelectorAll("dialog button")].find(
-        (b) => b.textContent === "Automate media"
-      ) as HTMLButtonElement;
-      expect(automate).toBeTruthy();
-      await act(async () => {
-        automate.click();
-        await flush();
-      });
-      expect(navigate).toHaveBeenCalledWith({
-        kind: "automation-editor",
-        watchEntity: "media",
-      });
-      // The modal closes on navigate.
-      expect(document.querySelector("dialog")).toBeNull();
+  it("never builds tile content before the brief has settled", async () => {
+    // The cache keys a query by its KEY, not by the closure — so a springboard
+    // query that ran while the brief was still in flight cached a tileContent
+    // derived from `brief === undefined` and never recomputed it. Agenda, tasks
+    // and the tally figure are MADE of the brief, so they stayed missing no
+    // matter how full the vault was. Every call must therefore see a brief.
+    let settle: (() => void) | undefined;
+    getDailyBrief.mockImplementation(
+      async () =>
+        new Promise((resolve) => {
+          settle = () =>
+            resolve({
+              date: "2026-07-29",
+              events: [{ at: "2026-07-29T09:00:00Z", id: "e1", title: "Run" }],
+              tasks: [],
+              newPhotos: 0,
+              balanceMinor: 0,
+              currency: "USD",
+            });
+        })
+    );
+    const el = await render([app("agenda")]);
+    expect(loadHomeTileContent).not.toHaveBeenCalled();
+
+    await act(async () => {
+      settle?.();
+      await flush();
     });
+    expect(loadHomeTileContent.mock.calls.length).toBeGreaterThan(0);
+    for (const [input] of loadHomeTileContent.mock.calls)
+      expect(input.brief).toBeDefined();
+    expect(el).toBeTruthy();
+  });
+
+  it("refetches the tiles only after the replica has pulled the seeded rows", async () => {
+    // The seed lands on the GATEWAY, but the tiles read the LOCAL REPLICA —
+    // refreshing before the replica pulled rebuilt them from pre-seed rows,
+    // which is the "pressed the button and nothing filled in until a reload"
+    // bug. So the order is load-bearing: the replica sync resolves first, and
+    // only then do the brief and the springboard feed refetch, exactly once.
+    loadHomeSample.mockResolvedValue({ rows: 0, seedable: ["tasks"] });
+    seedHomeSample.mockResolvedValue(["tasks"]);
+    let finishSync: (() => void) | undefined;
+    syncHomeSampleReplica.mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          finishSync = () => resolve();
+        })
+    );
+    const el = await render([app("tasks")]);
+    const briefCalls = getDailyBrief.mock.calls.length;
+    const tileCalls = loadHomeTileContent.mock.calls.length;
+    const seedButton = el.querySelector(
+      '[data-testid="home-sample-offer"] button'
+    ) as HTMLButtonElement;
+    expect(seedButton).toBeTruthy();
+
+    await act(async () => {
+      seedButton.click();
+      await flush();
+    });
+    expect(seedHomeSample).toHaveBeenCalledWith(
+      ["tasks"],
+      expect.any(Function)
+    );
+    // The sync is still pending: refetching now would rebuild from pre-seed
+    // rows, so nothing may have refetched yet.
+    expect(getDailyBrief).toHaveBeenCalledTimes(briefCalls);
+    expect(loadHomeTileContent).toHaveBeenCalledTimes(tileCalls);
+
+    await act(async () => {
+      finishSync?.();
+      await flush();
+    });
+    expect(getDailyBrief).toHaveBeenCalledTimes(briefCalls + 1);
+    expect(loadHomeTileContent).toHaveBeenCalledTimes(tileCalls + 1);
+  });
+
+  it("advances the fill's progress per app, then names the replica catch-up", async () => {
+    // The seed is about ten seconds of work and it used to be ten seconds of
+    // one unchanging sentence. The route is what turns the run's position into
+    // something Home can say: each app as it starts, then the catch-up while
+    // the replica pulls — the beat where the counts are already full and the
+    // tiles are still empty.
+    loadHomeSample.mockResolvedValue({
+      rows: 0,
+      seedable: ["agenda", "photos"],
+    });
+    let advance: (() => void) | undefined;
+    let finishSeed: (() => void) | undefined;
+    seedHomeSample.mockImplementation(async (seedable, onProgress) => {
+      onProgress?.({ appId: "agenda", done: 0, total: seedable.length });
+      await new Promise<void>((resolve) => {
+        // Two gates, because the two things have to be separable: the second
+        // app STARTING is a different moment from the whole run FINISHING, and
+        // the surface has to be right at both.
+        advance = () =>
+          onProgress?.({ appId: "photos", done: 1, total: seedable.length });
+        finishSeed = () => resolve();
+      });
+      return [...seedable];
+    });
+    let finishSync: (() => void) | undefined;
+    syncHomeSampleReplica.mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          finishSync = () => resolve();
+        })
+    );
+    const el = await render([app("agenda"), app("photos")]);
+    const offer = (): Element | null =>
+      el.querySelector('[data-testid="home-sample-offer"]');
+    const label = (): string | undefined =>
+      offer()?.querySelector(".workingLabel")?.textContent ?? undefined;
+    const counts = (): string | undefined =>
+      offer()?.querySelector(".workingCounts")?.textContent ?? undefined;
+
+    await act(async () => {
+      (offer()!.querySelector("button") as HTMLButtonElement).click();
+      await flush();
+    });
+    expect(label()).toBe("Adding events…");
+    expect(counts()).toBe("0 of 2 apps");
+
+    await act(async () => {
+      advance?.();
+      await flush();
+    });
+    expect(label()).toBe("Adding photographs…");
+    expect(counts()).toBe("1 of 2 apps");
+
+    // Generators done, replica still pulling: the counts are full and the
+    // sentence has moved on rather than stalling on the last app.
+    await act(async () => {
+      finishSeed?.();
+      await flush();
+    });
+    expect(label()).toBe("Catching up…");
+    expect(counts()).toBe("2 of 2 apps");
+
+    await act(async () => {
+      finishSync?.();
+      await flush();
+    });
+    // The run is over: the offer's control is back, and nothing is still
+    // claiming to be working.
+    expect(offer()?.querySelector(".working")).toBeFalsy();
+  });
+
+  it("leaves a mid-seed failure to the existing per-app handling", async () => {
+    // `seedHomeSample` swallows per app and reports by omission, so the route
+    // never sees a rejection — it refreshes, drops the working state, and Home
+    // shows whatever DID land. Unchanged by the progress work.
+    loadHomeSample.mockResolvedValue({
+      rows: 0,
+      seedable: ["agenda", "photos"],
+    });
+    seedHomeSample.mockImplementation(async (seedable, onProgress) => {
+      onProgress?.({ appId: "agenda", done: 0, total: seedable.length });
+      return ["agenda"];
+    });
+    const el = await render([app("agenda"), app("photos")]);
+    const offer = (): Element | null =>
+      el.querySelector('[data-testid="home-sample-offer"]');
+
+    await act(async () => {
+      (offer()!.querySelector("button") as HTMLButtonElement).click();
+      await flush();
+    });
+    await act(async () => {
+      await flush();
+    });
+    expect(syncHomeSampleReplica).toHaveBeenCalledOnce();
+    expect(offer()?.querySelector(".working")).toBeFalsy();
+    expect(offer()?.querySelector("button")).toBeTruthy();
+  });
+
+  it("carries no identity bar and no library shelf — the app bar owns those", async () => {
+    const el = await render([app("photos")]);
+    const labels = [...el.querySelectorAll("button")].map((b) => b.textContent);
+    expect(labels).not.toContain("All apps");
+    expect(labels).not.toContain("Settings");
+    expect(el.querySelector('[data-testid="home-composer"]')).toBeNull();
+    expect(el.querySelector('[data-testid="apps-grid"]')).toBeNull();
   });
 });

@@ -13,6 +13,40 @@ import type { Album, Asset, Place } from "./types.ts";
 
 type Root = { render: (node: ReactNode) => void };
 
+/** What a key pressed over an OPEN lightbox means. Pure, and exported, because
+ *  the interesting half of it is a refusal: while the editor is up, ←/→ mean
+ *  NOTHING. See `viewerKeyAction`. */
+export type ViewerKeyAction =
+  | "cancel-edit"
+  | "close"
+  | "step-prev"
+  | "step-next"
+  | null;
+
+/**
+ * THE EDITOR IS A DECISION SURFACE, AND A DECISION SURFACE DOES NOT LOSE THE
+ * DECISION TO AN ADJACENT KEYSTROKE (§7.4, proto 4627: nothing is written
+ * until Save).
+ *
+ * The viewer beneath the editor steps with ←/→, and the editor is mounted per
+ * asset (`key={asset.asset_id}` in Lightbox.tsx) — so a step while an edit is
+ * in progress silently throws away the member's crop and rotation, with no
+ * prompt and nothing written anywhere. Hence: while editing, the arrows mean
+ * nothing at all, and Escape CANCELS THE EDIT rather than closing the whole
+ * viewer. Escape from the viewer itself still closes it — one Escape, one
+ * layer, innermost first.
+ */
+export function viewerKeyAction(
+  key: string,
+  editing: boolean
+): ViewerKeyAction {
+  if (editing) return key === "Escape" ? "cancel-edit" : null;
+  if (key === "Escape") return "close";
+  if (key === "ArrowLeft") return "step-prev";
+  if (key === "ArrowRight") return "step-next";
+  return null;
+}
+
 export function createLightbox({
   lightboxRoot,
   findAsset,
@@ -29,7 +63,11 @@ export function createLightbox({
   getPlaces: () => Place[];
   refresh: () => Promise<void>;
   slideshow: {
-    openSlideshow: (list: Asset[], startAssetId: string | null) => void;
+    openSlideshow: (
+      list: Asset[],
+      startAssetId: string | null,
+      onStopped?: (stoppedOn: Asset | null) => void
+    ) => void;
   };
 }) {
   // The COMPOSITE key of the open row (asset-key.ts), non-null while open. A
@@ -71,10 +109,19 @@ export function createLightbox({
   // and hands the slideshow the CURRENT visibleAssets() — the same
   // list/order the grid and lightbox were just showing (search/album/
   // favorites scoping included).
+  //
+  // THE VIEWER KEEPS THE PHOTOGRAPH YOU STOPPED ON (§7.3). The slideshow's
+  // status line promises exactly that, so the run reports where it stopped and
+  // the viewer reopens there — not back at the photograph the run began on,
+  // and not closed.
   function startSlideshow(id: string | null) {
     const list = visibleAssets();
+    const wasOpen = openKey != null;
     closeLightbox();
-    slideshow.openSlideshow(list, id ?? null);
+    slideshow.openSlideshow(list, id ?? null, (stoppedOn) => {
+      if (!wasOpen || !stoppedOn) return;
+      openLightbox(assetKey(stoppedOn));
+    });
   }
 
   function renderLightbox() {
@@ -148,11 +195,39 @@ export function createLightbox({
     }
   });
 
+  // IS THE EDITOR UP? Asked of the DOM, not of a mirrored flag: `editing` is
+  // LightboxShell's own state (components/Lightbox.tsx), and a second copy of
+  // it here is a second thing that can be wrong. The editor marks its own root
+  // (`data-editor="open"`, Editor.tsx) exactly so this question has one honest
+  // answer, the same way the Tab trap below reads the live subtree rather than
+  // a remembered focus list.
+  const editorEl = (): HTMLElement | null =>
+    $("lightbox").querySelector<HTMLElement>('[data-editor="open"]');
+
   return {
     openLightbox,
     closeLightbox,
     step,
     startSlideshow,
+    isEditing: () => editorEl() !== null,
+    /**
+     * Cancel an edit in progress, returning to the viewer with the photograph
+     * still open. Fired through the editor's OWN Cancel button rather than a
+     * callback threaded down: the button is the one place that knows what
+     * cancelling means (it is `onCancel` — Lightbox.tsx's `setEditing(false)`),
+     * and going through it means the key and the click can never diverge.
+     * Answers whether it did anything, so a caller can fall through.
+     */
+    cancelEdit: (): boolean => {
+      const button = editorEl()?.querySelector<HTMLButtonElement>(
+        "[data-editor-cancel]"
+      );
+      // A busy editor (a Save in flight) has a disabled Cancel — nothing is
+      // cancelled, and nothing else happens either: the keystroke is spent.
+      if (!button || button.disabled) return false;
+      button.click();
+      return true;
+    },
     isOpen: () => openKey != null,
     renderIfOpen: () => {
       if (openKey != null) renderLightbox();

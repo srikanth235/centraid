@@ -82,7 +82,6 @@ vi.mock(import("react-native"), async () => {
     StyleSheet: {
       absoluteFill: {},
       create: <T,>(styles: T): T => styles,
-      hairlineWidth: 1,
     },
     Text: ({ children }: { children?: React.ReactNode }) =>
       element("span", { children }),
@@ -214,6 +213,7 @@ vi.mock(
   import("../kit/theme"),
   () =>
     ({
+      borders: { hairline: 1 },
       family: {
         monoMedium: "mono-medium",
         monoRegular: "mono",
@@ -221,6 +221,8 @@ vi.mock(
         sansMedium: "sans-medium",
         sansRegular: "sans",
       },
+      radii: { lg: 12, md: 8, pill: 999, sm: 4, xl: 16, xs: 0 },
+      t: () => ({}),
     }) as unknown as Partial<ThemeModule>
 );
 
@@ -341,12 +343,24 @@ describe("Onboarding scenarios", () => {
     click(button("Can't scan? Paste a code instead"));
   }
 
+  function queryTicketInput(): HTMLInputElement | null {
+    return container!.querySelector<HTMLInputElement>(
+      'input[placeholder="Paste the one-line ticket"]'
+    );
+  }
+
+  function ticketInput(): HTMLInputElement {
+    const input = queryTicketInput();
+    if (!input) throw new Error("one-line pairing ticket input not found");
+    return input;
+  }
+
   /** Paste a pair ticket and land on the profile step. */
   async function pairWithPastedTicket(deviceName?: string): Promise<void> {
     if (deviceName !== undefined)
       typeValue(container!.querySelector("input")!, deviceName);
     revealPasteFallback();
-    typeValue(container!.querySelector("textarea")!, "pair-ticket");
+    typeValue(ticketInput(), "pair-ticket");
     click(button("Connect"));
     await flush();
     expect(container!.textContent).toContain("Who's using");
@@ -355,7 +369,7 @@ describe("Onboarding scenarios", () => {
   /** Paste a pair ticket without asserting which step it lands on. */
   async function pasteTicket(): Promise<void> {
     revealPasteFallback();
-    typeValue(container!.querySelector("textarea")!, "pair-ticket");
+    typeValue(ticketInput(), "pair-ticket");
     click(button("Connect"));
     await flush();
   }
@@ -428,16 +442,16 @@ describe("Onboarding scenarios", () => {
     // it calls things — a permanent code box outweighs any button label.
     it("offers scanning first and keeps the code box out of the way", () => {
       expect(button("Scan the QR code")).toBeTruthy();
-      expect(container!.querySelector("textarea")).toBeNull();
+      expect(queryTicketInput()).toBeNull();
       expect(container!.textContent).not.toContain("PAIRING CODE");
 
       revealPasteFallback();
-      expect(container!.querySelector("textarea")).toBeTruthy();
+      expect(ticketInput()).toBeTruthy();
       expect(container!.textContent).toContain("PAIRING CODE");
 
       // …and the way back to the primary path stays open.
       click(button("Scan the QR code instead"));
-      expect(container!.querySelector("textarea")).toBeNull();
+      expect(queryTicketInput()).toBeNull();
     });
 
     it("scans a pair ticket through the camera path", async () => {
@@ -453,7 +467,7 @@ describe("Onboarding scenarios", () => {
     it("reports a pairing failure honestly and allows a retry", async () => {
       mocks.pair.mockRejectedValueOnce(new Error("gateway refused the ticket"));
       revealPasteFallback();
-      typeValue(container!.querySelector("textarea")!, "pair-ticket");
+      typeValue(ticketInput(), "pair-ticket");
       click(button("Connect"));
       await flush();
 

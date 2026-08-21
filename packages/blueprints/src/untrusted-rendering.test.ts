@@ -15,14 +15,10 @@ import {
   safeExternalUrl,
   safeMediaUrl,
 } from "../apps/_shared/untrusted.ts";
-import { EventDrawer } from "../apps/agenda/components/EventDrawer.tsx";
 import { ListRow as DocsRow } from "../apps/docs/components/List.tsx";
 import { LockerList } from "../apps/locker/components/List.tsx";
-import { Card as NoteCard } from "../apps/notes/components/Card.tsx";
-import { TrashCard as PersonCard } from "../apps/people/components/TrashCard.tsx";
+import { Row as PeopleRow } from "../apps/people/components/Shared.tsx";
 import { MemoriesStrip } from "../apps/photos/components/Memories.tsx";
-import { ExpenseRow } from "../apps/tally/components/ExpenseRow.tsx";
-import { Row as TaskRow } from "../apps/tasks/components/Row.tsx";
 
 const VECTORS = [
   "<script>globalThis.pwned=true</script>",
@@ -43,33 +39,12 @@ const VECTORS = [
 type Renderer = (value: string) => string;
 
 const noop = () => undefined;
-const asyncNoop = async () => undefined;
 
+// One row per app that draws member-supplied text. Agenda, Notes, Tally and
+// Tasks are absent because their interfaces are, not because they were
+// excused: each rebuilt app owes this suite a row again the moment it renders
+// a vault string, and the vectors below are what it must render inert.
 const RENDERERS: Record<string, Renderer> = {
-  agenda: (value) =>
-    renderToStaticMarkup(
-      createElement(EventDrawer, {
-        event: {
-          event_id: "event-1",
-          summary: value,
-          description: value,
-          status: "confirmed",
-          dtstart: "2026-07-29T09:00:00Z",
-          dtend: "2026-07-29T10:00:00Z",
-        },
-        calendarName: value,
-        color: null,
-        pending: false,
-        pendingCancel: false,
-        activity: [],
-        onClose: noop,
-        onReschedule: asyncNoop,
-        onRsvp: noop,
-        onAttach: noop,
-        onRemoveAttachment: asyncNoop,
-        onCancel: noop,
-      })
-    ),
   docs: (value) =>
     renderToStaticMarkup(
       createElement(DocsRow, {
@@ -91,9 +66,16 @@ const RENDERERS: Record<string, Renderer> = {
         },
         index: 0,
         selectedIds: new Set(),
+        // Selection is a mode, and the owner disc is member-supplied text on
+        // the row - both are fed the vector rather than stubbed away, since a
+        // display name is exactly the kind of string that reaches the DOM
+        // without ever having been typed by the member reading it.
+        selecting: true,
+        owner: { name: value, initial: value },
         narrow: false,
         search: "",
         trashed: false,
+        offline: false,
         folderName: () => value,
         onOpenDetails: noop,
         onOpenQuick: noop,
@@ -123,27 +105,20 @@ const RENDERERS: Record<string, Renderer> = {
         onClearSearch: noop,
       })
     ),
-  notes: (value) =>
-    renderToStaticMarkup(
-      createElement(NoteCard, {
-        note: {
-          note_id: "note-1",
-          title: value,
-          preview: value,
-          pinned: 0,
-          updated_at: "2026-07-29T09:00:00Z",
-        },
-        search: "",
-        pending: false,
-        onOpen: noop,
-        onTogglePin: noop,
-      })
-    ),
+  // ONE row draws the whole of People — the roster, Search, Touch's three
+  // lists, Trash and Merge all render this component (apps/people/components/
+  // Shared.tsx), so covering it covers every list the app has. Each of its
+  // three text slots is fed the vector, plus the avatar's own name path: a
+  // display name reaches both the monogram and the row's accessible label
+  // without ever having been typed by the member reading it.
   people: (value) =>
     renderToStaticMarkup(
-      createElement(PersonCard, {
-        person: { party_id: "party-1", name: value, role: value },
-        onRestore: noop,
+      createElement(PeopleRow, {
+        avatar: { party_id: "party-1", name: value, avatar_color: null },
+        name: value,
+        sub: value,
+        meta: value,
+        onOpen: noop,
       })
     ),
   photos: (value) =>
@@ -159,41 +134,6 @@ const RENDERERS: Record<string, Renderer> = {
             onOpen: noop,
           },
         ],
-      })
-    ),
-  tally: (value) =>
-    renderToStaticMarkup(
-      createElement(ExpenseRow, {
-        row: {
-          expense_id: "expense-1",
-          group_id: "group-1",
-          group_name: value,
-          description: value,
-          amount_minor: 100,
-          category: "other",
-          spent_on: "2026-07-29",
-          paid_by: "party-1",
-          paid_by_name: value,
-          your_role: "lent",
-          your_amount_minor: 100,
-          splits: [],
-        },
-        currency: "USD",
-        groupSuffix: true,
-        onOpen: noop,
-      })
-    ),
-  tasks: (value) =>
-    renderToStaticMarkup(
-      createElement(TaskRow, {
-        task: {
-          task_id: "task-1",
-          title: value,
-          description: value,
-          status: "needs-action",
-        },
-        onOpen: noop,
-        onToggle: async () => true,
       })
     ),
 };

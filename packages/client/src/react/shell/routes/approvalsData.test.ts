@@ -9,6 +9,11 @@ import type {
 } from "../../../gateway-client-outbox.js";
 import type { VaultParkedEntry } from "../../../gateway-client-vault.js";
 import {
+  APPROVALS_FULL_AT,
+  approvalsCountLine,
+  approvalsHealth,
+  approvalsState,
+  buildEnrichConsentRow,
   buildGrantRow,
   buildActivityRow,
   collapseAdjacentActivity,
@@ -418,5 +423,77 @@ describe(collapseAdjacentActivity, () => {
       reviewEntry({ receiptId: "r2", decision: "deny" })
     );
     expect(collapseAdjacentActivity([a, b])).toHaveLength(2);
+  });
+});
+
+describe("what the frame says about Notifications", () => {
+  it("calls a page with nothing waiting empty, and a long queue full", () => {
+    expect(approvalsState({ grants: 2, waiting: 0 })).toBe("empty");
+    expect(approvalsState({ grants: 2, waiting: 1 })).toBe("ready");
+    expect(approvalsState({ grants: 2, waiting: APPROVALS_FULL_AT })).toBe(
+      "ready"
+    );
+    expect(approvalsState({ grants: 2, waiting: APPROVALS_FULL_AT + 1 })).toBe(
+      "full"
+    );
+  });
+
+  it("counts what is waiting and what is standing, and never says zero", () => {
+    expect(approvalsCountLine({ grants: 2, waiting: 3 })).toBe(
+      "3 decisions waiting · 2 standing grants"
+    );
+    expect(approvalsCountLine({ grants: 1, waiting: 1 })).toBe(
+      "1 decision waiting · 1 standing grant"
+    );
+    expect(approvalsCountLine({ grants: 2, waiting: 0 })).toBe(
+      "Nothing waiting · 2 standing grants"
+    );
+  });
+
+  it("says nothing has happened yet, and offers no inline verb", () => {
+    const health = approvalsHealth({ grants: 0, waiting: 3 });
+    expect(health.label).toBe("3 waiting on you");
+    expect(health.detail).toBe(
+      "Nothing here has happened yet — approving is the act."
+    );
+    expect(health).not.toHaveProperty("action");
+  });
+});
+
+// The egress-consent ledger's rows (issue #807, Wave 3).
+describe(buildEnrichConsentRow, () => {
+  it("reads an answer back as one line, refusals stated as plainly as grants", () => {
+    const declined = buildEnrichConsentRow({
+      capability: "faces",
+      egress: "provider",
+      scopeRef: "",
+      decision: "declined",
+      decidedAt: "2026-08-15T10:00:00.000Z",
+      receiptId: null,
+    });
+
+    expect(declined.id).toBe("faces:provider:");
+    expect(declined.title).toBe("Faces");
+    expect(declined.meta).toBe("provider");
+    expect(declined.sub).toContain("Declined");
+    expect(declined.sub).toContain("at a third-party provider");
+    expect(declined.sub).toContain("this vault");
+  });
+
+  it("names the scope an answer was given for, when it was not the whole vault", () => {
+    const scoped = buildEnrichConsentRow({
+      capability: "doc-text",
+      egress: "on-device",
+      scopeRef: "album-7",
+      decision: "granted",
+      decidedAt: "2026-08-15T10:00:00.000Z",
+      receiptId: "receipt-1",
+    });
+
+    expect(scoped.id).toBe("doc-text:on-device:album-7");
+    expect(scoped.title).toBe("Doc text");
+    expect(scoped.sub).toContain("Granted");
+    expect(scoped.sub).toContain("on this device");
+    expect(scoped.sub).toContain("album-7");
   });
 });

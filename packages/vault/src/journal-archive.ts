@@ -31,7 +31,7 @@
 // `verifyArchivedSegment` are the round-trip and integrity proof.
 //
 // NEEDS-WIRING (see issue #367 report): nothing calls `runJournalArchival`
-// automatically. `VaultPlane.runSweep` (packages/gateway/src/serve/vault-plane.ts)
+// automatically. `VaultPlane.runSweep` (packages/server/src/serve/vault-plane.ts)
 // is the natural home, alongside its existing sweep cadence — that file is
 // owned by a concurrent change in this worktree, so this module ships as a
 // standalone, fully-tested engine the host wires in a later pass. A vault

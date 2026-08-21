@@ -1,6 +1,6 @@
 # Recovery: backup / restore / recover
 
-When backup, restore, or blank-machine `recover` strands mid-flight. Product paths live in `packages/gateway` backup service and `@centraid/backup`.
+When backup, restore, or blank-machine `recover` strands mid-flight. Product paths live in `packages/server` backup service and `@centraid/backup`.
 
 ## Invariants (do not violate while recovering)
 
@@ -52,7 +52,7 @@ For an erase that stranded, or a restore that follows a completed erase, see [va
 
 Phases (conceptually): `discovering → fetching → replaying → fencing → adopting → warming`.
 
-`recover` is an **offline CLI verb** — it takes `gateway.db`'s exclusive lock and refuses while the daemon runs. There is no founding UI and no `vaults:restore` route (issue #603): keep the daemon stopped for the whole sequence, and on a data dir whose `vault/` is empty do not restart it between attempts — auto-founding would create a fresh `Shared` + `Personal` and the dir would no longer be vault-free.
+`recover` is an **offline CLI verb** — it takes `gateway.db`'s exclusive lock and refuses while the daemon runs. There is no founding UI and no `vaults:restore` route (issue #603): keep the daemon stopped for the whole sequence, and on a data dir whose `vault/` is empty do not restart it between attempts — auto-founding would create a fresh `Personal` vault and the dir would no longer be vault-free.
 
 1. Read gateway logs and the `centraid-gateway recover` error output ([logs.md](../logs.md)).
 2. If failure was before **adopting**, re-run `centraid-gateway recover --kit … --password-file … --api-key … --data-dir …`. Remove only the specifically named disposable cache/scratch path when instructed; never remove provider objects or the live vault root.
@@ -81,5 +81,5 @@ Phases (conceptually): `discovering → fetching → replaying → fencing → a
 ## Related
 
 - ARCHITECTURE — restore/recover summary
-- `packages/gateway/src/backup/recover.ts`
+- `packages/server/src/backup/recover.ts`
 - `receipts/issue-439-restore-as-product.md`

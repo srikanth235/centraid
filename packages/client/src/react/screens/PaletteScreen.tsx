@@ -1,7 +1,10 @@
 import { Fragment, useEffect, useReducer, useRef, useState } from "react";
-import type { JSX } from "react";
+import type { CSSProperties, JSX } from "react";
+
+import type { IconName } from "@centraid/design";
 
 import type { PaletteBridgeProps, PaletteRowDTO } from "../screen-contracts.js";
+import AppMark from "../ui/AppMark.js";
 
 import styles from "./PaletteScreen.module.css";
 
@@ -34,7 +37,13 @@ function Row({
       }}
       onClick={onRun}
     >
-      {row.variant === "app" && row.tile ? (
+      {row.variant === "app" && row.appMark ? (
+        <AppMark
+          colorKey={row.appMark.colorKey}
+          iconKey={row.appMark.iconKey as IconName}
+          size={28}
+        />
+      ) : row.variant === "app" && row.tile ? (
         <div
           className={styles.rowTile}
           style={{
@@ -54,7 +63,10 @@ function Row({
         />
       )}
       <div className={styles.rowText}>
-        <div className={styles.rowLabel}>{row.label}</div>
+        <div className={styles.rowTop}>
+          {row.kind ? <span className={styles.rowKind}>{row.kind}</span> : null}
+          <div className={styles.rowLabel}>{row.label}</div>
+        </div>
         {row.sub ? <div className={styles.rowSub}>{row.sub}</div> : null}
       </div>
       {row.kbd ? (
@@ -77,6 +89,7 @@ export default function PaletteScreen({
   buildGroups,
   onClose,
   onReady,
+  suggestions,
 }: PaletteBridgeProps): JSX.Element {
   const [query, setQuery] = useState("");
   const [active, setActive] = useState(0);
@@ -91,6 +104,10 @@ export default function PaletteScreen({
   // Computed inline (not memoized) so an async `refresh()` re-runs buildGroups.
   const groups = buildGroups(query.trim());
   const rows = groups.flatMap((g) => g.items);
+
+  // Empty-state suggestion chips (issue #708 §A) — read only while the field
+  // is empty; a query in progress has its own results to show instead.
+  const chips = query.trim() ? [] : (suggestions?.() ?? []);
 
   // Keep the active index in range as results shrink.
   const clampedActive =
@@ -155,6 +172,7 @@ export default function PaletteScreen({
         <div className={styles.inputrow}>
           <span className={styles.searchIcon} aria-hidden="true">
             <svg
+              aria-hidden="true"
               width="16"
               height="16"
               viewBox="0 0 24 24"
@@ -173,7 +191,7 @@ export default function PaletteScreen({
             className={styles.input}
             type="text"
             autoComplete="off"
-            placeholder="Search everything · use notes: or people: to filter"
+            placeholder="Search everything · notes: people:"
             value={query}
             onChange={(e) => {
               setActive(0);
@@ -183,6 +201,25 @@ export default function PaletteScreen({
           />
           <span className={styles.esc}>esc</span>
         </div>
+        {chips.length > 0 ? (
+          <div className={styles.suggestions}>
+            <span className={styles.suggestionsLabel}>Try</span>
+            {chips.map((chip) => (
+              <button
+                key={chip}
+                type="button"
+                className={styles.suggestionChip}
+                onClick={() => {
+                  setActive(0);
+                  setQuery(chip);
+                  inputRef.current?.focus();
+                }}
+              >
+                {chip}
+              </button>
+            ))}
+          </div>
+        ) : null}
         <div className={styles.results}>
           {rows.length === 0 ? (
             <output className={styles.noResults}>
@@ -192,7 +229,21 @@ export default function PaletteScreen({
           ) : null}
           {groups.map((g, groupIndex) => (
             <Fragment key={g.group}>
-              <div className={styles.group}>{g.group}</div>
+              <div className={styles.group}>
+                {g.icon ? (
+                  <span
+                    className={styles.groupIcon}
+                    style={
+                      g.icon.hue
+                        ? ({ "--group-hue": g.icon.hue } as CSSProperties)
+                        : undefined
+                    }
+                    // oxlint-disable-next-line react/no-danger -- #639 palette groups receive SVG only from the local iconSvg catalog.
+                    dangerouslySetInnerHTML={{ __html: g.icon.html }}
+                  />
+                ) : null}
+                {g.group}
+              </div>
               {g.items.map((item, itemIndex) => {
                 const thisIndex = (groupStarts[groupIndex] ?? 0) + itemIndex;
                 return (

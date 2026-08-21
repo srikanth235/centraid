@@ -1,80 +1,212 @@
-/* Crop/rotate editor (issue #352 phase 3/4), hosted inside the lightbox's
-   dark stage. Authored camelCase (old `editor-` prefix dropped). The stage bg
-   supplies the dark surface; the toolbar tints its `kit-btn` children (kit.css
-   vocabulary — referenced as `:global`) for that backdrop. */
+/* The editor, on the STAGE (v4 handoff §7.4). Hosted inside the viewer, so
+   `--stage` is already under it; what this file owns is the crop overlay, the
+   tool row and the one filled commit.
+
+   THE ONE FILLED INK ELEMENT (§18) is `.commit`, and a DISABLED commit is not
+   filled — enforced on the same class below rather than by swapping classes in
+   the component, so the two can never disagree.
+
+   Logical properties only: the crop rectangle, the tool row and the commit row
+   all mirror under RTL. */
 
 .editor {
   display: flex;
   flex-direction: column;
-  gap: 0.6rem;
-  width: min(34rem, 92vw);
-  color: var(--text-inv);
+  gap: var(--sp-4);
+  inline-size: min(46rem, 100%);
+  color: var(--on-stage);
 }
+
 .canvasWrap {
   position: relative;
   display: flex;
   align-items: center;
   justify-content: center;
-  max-height: 62vh;
+  max-block-size: 58vh;
   touch-action: none;
   cursor: crosshair;
 }
 .canvas {
-  max-width: 100%;
-  max-height: 62vh;
+  max-inline-size: 100%;
+  max-block-size: 58vh;
   object-fit: contain;
-  border-radius: var(--r-sm);
   display: block;
   user-select: none;
-  box-shadow: var(--shadow-lg);
 }
-.cropBox {
+/* THE SOURCE FRAME, WHICH IS NEVER SEEN. The editor paints onto `.canvas`;
+   this element exists only so the source has a place in the DOM for the
+   shell's blob authorizer to find it (see Editor.tsx). It must stay MOUNTED
+   and it must occupy no space — `display: none` would be the obvious way to
+   say the second part, and it is exactly what to avoid: a display-none image
+   is fetched at the browser's own leisure, which turns opening the editor into
+   a wait. Zero-sized and clipped keeps the load eager and the layout unmoved. */
+.source {
   position: absolute;
-  border: 2px dashed var(--text-inv);
-  box-shadow: 0 0 0 9999px color-mix(in oklab, var(--scrim) 76%, transparent);
+  inline-size: 1px;
+  block-size: 1px;
+  opacity: 0;
   pointer-events: none;
 }
-.toolbar {
+
+.loadError {
+  padding: var(--sp-6);
+  margin: 0;
+  font: var(--t-small);
+  color: var(--net);
+  border: 1px solid var(--net);
+  border-radius: var(--r-md);
+}
+
+/* A 1px rectangle in stage ink, everything outside it dimmed by one enormous
+   shadow. The handoff's `rgba(11,11,11,.55)` IS the stage at 55%, so it is
+   said with the token that owns that value rather than pasted as a literal;
+   the rectangle takes `--on-stage` for the same reason (§2.2, token trap). */
+.cropBox {
+  position: absolute;
+  border: 1px solid var(--on-stage);
+  box-shadow: 0 0 0 9999px color-mix(in oklab, var(--stage) 55%, transparent);
+  pointer-events: none;
+}
+/* The dashed thirds grid, inside the rectangle. Two boxes, four borders — no
+   extra elements in the component for something that is purely a guide. */
+.cropBox::before,
+.cropBox::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+.cropBox::before {
+  inset-inline: 33.333%;
+  border-inline: 1px dashed
+    color-mix(in oklab, var(--on-stage) 55%, transparent);
+}
+.cropBox::after {
+  inset-block: 33.333%;
+  border-block: 1px dashed color-mix(in oklab, var(--on-stage) 55%, transparent);
+}
+
+/* ------------------------------------------------------------- tool row */
+
+/* ONE WRAPPING BAR (§7.4, proto 4617-4630): the tools, the sentence and the
+   commit are the same row. `flex-wrap` is what makes it survive a phone —
+   the tools take a line of their own and the commit follows, rather than the
+   explanation being pushed onto a rule of its own. */
+.editBar {
   display: flex;
   align-items: center;
   flex-wrap: wrap;
-  gap: 0.5rem;
+  gap: var(--sp-4);
+  border-block-start: 1px solid var(--stage-line);
+  padding-block-start: var(--sp-4);
 }
-.toolbar :global(.kit-btn) {
-  background: color-mix(in oklab, var(--text-inv) 8%, transparent);
-  border-color: color-mix(in oklab, var(--text-inv) 16%, transparent);
-  color: var(--text-inv);
-}
-.toolbar :global(.kit-btn):hover {
-  background: color-mix(in oklab, var(--text-inv) 16%, transparent);
-}
-.toolbar :global(.kit-btn.primary) {
-  background: var(--accent-deep);
-  border-color: transparent;
-  /* --accent-deep flips light/dark, so its ink must too: --text-inv, never
-     the theme-stable --text-inv (kit.css header contract, #686). */
-  color: var(--text-inv);
-}
-.trashToggle {
+
+.tools {
   display: flex;
   align-items: center;
-  gap: 0.35rem;
-  color: color-mix(in oklab, var(--text-inv) 75%, transparent);
-  font-size: var(--t-small-size);
+  flex-wrap: wrap;
+  gap: var(--sp-2);
+}
+/* Every tool is an outlined stage control. None of them is filled: there is
+   exactly one filled element in this view and it is the commit. */
+.tool {
+  block-size: var(--h-control);
+  min-inline-size: var(--h-control);
+  padding-inline: var(--sp-3);
+  border: 1px solid var(--stage-line);
+  border-radius: var(--r-md);
+  background: transparent;
+  color: var(--on-stage);
+  font: var(--t-small);
   white-space: nowrap;
 }
-.spacer {
-  flex: 1;
+.tool:hover {
+  border-color: var(--on-stage);
 }
-.note {
-  min-height: 0;
-  color: color-mix(in oklab, var(--text-inv) 75%, transparent);
+.tool[aria-pressed="true"] {
+  border-color: var(--on-stage);
+  background: color-mix(in oklab, var(--on-stage) 12%, var(--stage));
 }
-.hint {
+.tool:disabled {
+  /* The recessive state takes its own token on the leaf, never a container
+     `opacity` (§18). */
+  color: var(--text-disabled);
+  border-color: color-mix(in oklab, var(--stage-line) 60%, var(--stage));
+  cursor: default;
+}
+
+/* The ratio group is a real `<fieldset>` (its legend is screen-reader only),
+   so its default chrome is taken back off. */
+.ratios {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-1);
+  border: none;
+  padding: 0;
   margin: 0;
-  color: color-mix(in oklab, var(--text-inv) 55%, transparent);
+  min-inline-size: 0;
 }
-.loadError {
-  padding: 2rem;
-  color: color-mix(in oklab, var(--text-inv) 75%, transparent);
+
+/* A TOOL WHOSE LABEL IS A NUMBER IS SET IN MONO (proto 4621, 4624: `3 : 2`,
+   `−2°`, `Rotate 90°`). Tabular and direction-pinned for the same reason every
+   other numeric in this app is: a mixed digit-and-word run reorders under RTL
+   unless the role says otherwise (§18). */
+.numeric {
+  font: var(--t-mono);
+  font-variant-numeric: var(--t-mono-numeric);
+  direction: var(--t-mono-direction);
+  unicode-bidi: var(--t-mono-bidi);
+}
+
+/* -------------------------------------------------- the point of decision */
+
+/* Cancel then Save, together at the end of the bar (proto 2891-2906). */
+.commitActions {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  flex: none;
+}
+
+/* THE ONE FILLED INK ELEMENT IN THIS VIEW (§18). On the stage, filled ink is
+   the stage's own ink as a ground with the stage as its text — the inversion
+   the surface already owns, so no new role is invented for it. */
+.commit {
+  block-size: var(--h-control);
+  padding-inline: var(--sp-5);
+  border: 1px solid var(--on-stage);
+  border-radius: var(--r-md);
+  background: var(--on-stage);
+  color: var(--stage);
+  font: var(--t-small-strong);
+  flex: none;
+}
+.commit:hover {
+  background: color-mix(in oklab, var(--on-stage) 88%, var(--stage));
+}
+/* A DISABLED COMMIT IS NOT FILLED (§18). It falls back to the same outline
+   every other control in the view wears. */
+.commit:disabled {
+  background: transparent;
+  border-color: color-mix(in oklab, var(--stage-line) 60%, var(--stage));
+  color: var(--text-disabled);
+  cursor: default;
+}
+
+/* The sentence that explains the commit, BESIDE it — at the point of
+   decision, not in a confirmation afterwards (§7.4). */
+.explanation {
+  flex: 1;
+  min-inline-size: 14rem;
+  margin: 0;
+  /* MONO, at the numeric register's size (proto 4626: `11.5px/1.6` mono) —
+     this sentence is the receipt for what the commit writes, and the receipt
+     register in this product is the mono one. It was `--t-small` sans. */
+  font: var(--t-mono);
+  font-variant-numeric: var(--t-mono-numeric);
+  direction: var(--t-mono-direction);
+  unicode-bidi: var(--t-mono-bidi);
+  line-height: 1.6;
+  text-wrap: pretty;
+  color: color-mix(in oklab, var(--on-stage) 72%, var(--stage));
 }

@@ -11,7 +11,7 @@
  *   bun run scripts/ci/configure-sonarcloud.mjs
  *   bun run scripts/ci/configure-sonarcloud.mjs --resolve-noise
  *
- * Policy: docs/sonarcloud.md
+ * Policy: docs/toolchain.md#sonarcloud-autoscan
  */
 
 const ORG = "centraid";
@@ -49,9 +49,17 @@ const SOURCE_EXCLUSIONS = [
   ".github/**",
   "tests/**",
   "packages/tunnel/**",
-  "packages/blueprints/visual-harness/**",
   "packages/blueprints/.app-boot/**",
   "packages/blueprints/kit/**",
+  // Release-generated recognition bundles are deployed artifacts; their
+  // source-of-truth lives under packages/model-runtime, where the
+  // local lint/typecheck/test gates own the implementation.
+  "packages/blueprints/automations/photo-ocr/automations/photo-ocr/handler.js",
+  "packages/blueprints/automations/embed-image/automations/embed-image/handler.js",
+  "packages/blueprints/automations/embed-text/automations/embed-text/handler.js",
+  "packages/blueprints/automations/faces/automations/faces/handler.js",
+  "packages/blueprints/automations/place-names/automations/place-names/handler.js",
+  "packages/blueprints/automations/transcript/automations/transcript/handler.js",
   "packages/test-kit/**",
   "apps/web/src/generated/**",
   "apps/web/public/**",
@@ -80,7 +88,6 @@ const SOURCE_EXCLUSIONS = [
 ];
 
 const CPD_EXCLUSIONS = [
-  "**/visual-harness/**",
   "**/generated/**",
   "**/fixtures.ts",
   "**/*fixture*",
@@ -103,7 +110,6 @@ const COVERAGE_EXCLUSIONS = [
   "**/e2e/**",
   "**/vitest.config.*",
   "**/stryker.config.*",
-  "**/visual-harness/**",
   "**/generated/**",
   "scripts/**",
   "packages/test-kit/**",
@@ -175,7 +181,7 @@ const GATE_CONDITIONS = [
 ];
 
 const RESOLVE_COMMENT =
-  "Centraid Sonar config: style/FP rule silenced project-wide (docs/sonarcloud.md).";
+  "Centraid Sonar config: style/FP rule silenced project-wide (docs/toolchain.md#sonarcloud-autoscan).";
 
 const BULK_CHUNK = 100;
 
@@ -606,7 +612,7 @@ async function main() {
   console.log(
     "Done. Next Autoscan on push/PR will honor scope + multicriteria."
   );
-  console.log("See docs/sonarcloud.md");
+  console.log("See docs/toolchain.md#sonarcloud-autoscan");
 }
 
 main().catch((error) => {

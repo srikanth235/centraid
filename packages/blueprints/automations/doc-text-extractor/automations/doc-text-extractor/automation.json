@@ -21,6 +21,17 @@
       { "schema": "sync", "verbs": "read+act" }
     ]
   },
+  "enrich": {
+    "domain": "docs",
+    "capability": "doc-text",
+    "lane": "gateway",
+    "delegateStep": {
+      "selected": "deterministic",
+      "promptRev": "doc-text-v1",
+      "latency": "Either variant takes one model turn per document; a pinned engine profile changes which engine answers, not the shape of the work.",
+      "consequence": "Model turns are billed. A pinned profile also stamps each document's text with the profile, model and prompt revision that produced it."
+    }
+  },
   "history": {
     "keep": {
       "count": 100

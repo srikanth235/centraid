@@ -18,9 +18,9 @@ import { promises as fs, createWriteStream } from "node:fs";
 import { createServer } from "node:net";
 import path from "node:path";
 
-import { daemonKeyStore } from "../../../packages/gateway/dist/cli/key-store.js";
-import { landlordBearerForEndpointSecret } from "../../../packages/gateway/dist/cli/landlord-auth.js";
-import { daemonLayoutFor } from "../../../packages/gateway/dist/cli/paths.js";
+import { daemonKeyStore } from "../../../packages/server/dist/cli/key-store.js";
+import { landlordBearerForEndpointSecret } from "../../../packages/server/dist/cli/landlord-auth.js";
+import { daemonLayoutFor } from "../../../packages/server/dist/cli/paths.js";
 import {
   createTunnelClient,
   tunnelRequest,
@@ -68,7 +68,7 @@ export async function ensureBuilt() {
     `[harness] missing ${missing.join(", ")} — running scoped build…`
   );
   // Scoped to what this tier actually runs, but the daemon imports
-  // @centraid/app-engine, @centraid/vault, etc. at runtime — turbo's
+  // @centraid/server/engine, @centraid/vault, etc. at runtime — turbo's
   // `dependsOn: ["^build"]` (see turbo.json) pulls the whole workspace
   // dependency graph in for each filter, so this isn't just gateway+tunnel's
   // own dist output, it's everything they transitively need.
@@ -79,7 +79,7 @@ export async function ensureBuilt() {
         "turbo",
         "run",
         "build",
-        "--filter=@centraid/gateway",
+        "--filter=@centraid/server",
         "--filter=@centraid/tunnel",
       ],
       { cwd: REPO_ROOT, stdio: "inherit" }
@@ -161,7 +161,7 @@ async function spawnDaemon(
   { timeoutMs = 60000, port, controlSecret } = {}
 ) {
   const log = createWriteStream(logFile, { flags: "a" });
-  // No --init-vault: a fresh data dir auto-founds Shared + Personal (#603).
+  // No --init-vault: a fresh data dir auto-founds Personal (#603).
   const args = [
     GATEWAY_CLI,
     "serve",
@@ -171,7 +171,13 @@ async function spawnDaemon(
     String(port),
   ];
   const child = spawn(process.execPath, args, {
-    env: { ...process.env, CENTRAID_DATA_PLANE_SECRET: controlSecret },
+    env: {
+      ...process.env,
+      CENTRAID_DATA_PLANE_SECRET: controlSecret,
+      // Automations + connectors ship gated OFF (v0 early feedback); the
+      // paired journeys exercise both, including across the restart path.
+      CENTRAID_EXPERIMENTAL: "automations,connectors",
+    },
     stdio: ["ignore", "pipe", "pipe"],
   });
   let buffer = "";

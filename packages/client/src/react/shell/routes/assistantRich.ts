@@ -1,19 +1,15 @@
-// Assistant rich-answer renderer — thin React-shell adapter over the shared,
-// framework-free kit renderer (packages/design/kit/assistant-rich.js, the
-// single canonical copy since issue #420). The shell keeps its scoped CSS
-// modules: it passes their class names to the shared renderer, so the same
-// string→HTML renderer drives both the kit's Ask panel and this shell, and a
-// rendering change lands in one place. `AssistantScreen` still injects the
-// returned HTML via `dangerouslySetInnerHTML` and re-hydrates refs, exactly as
-// before — the two exported signatures are unchanged.
+// Assistant rich-answer renderer — thin React-shell adapter over the
+// framework-free renderer in `packages/client/src/assistant-rich.ts`. The shell
+// keeps its scoped CSS modules and passes their class names down, so the memo
+// cache below is the only shell-specific behaviour. `AssistantScreen` injects
+// the returned HTML via `dangerouslySetInnerHTML` and re-hydrates refs.
 
 import {
   richAnswerHtml as sharedRichAnswerHtml,
   hydrateRefs as sharedHydrateRefs,
   wireCodeCopy as sharedWireCodeCopy,
-} from "@centraid/design/kit/assistant-rich.js";
-import type { AssistantRichClassOverrides } from "@centraid/design/kit/assistant-rich.js";
-
+} from "../../../assistant-rich.js";
+import type { AssistantRichClassOverrides } from "../../../assistant-rich.js";
 import { resolveAssistantRefs } from "../../../gateway-client.js";
 import { boundedMemo } from "../boundedMemo.js";
 

@@ -1,4 +1,3 @@
-import { AudiencePlacement } from "../../_shared/AudiencePlacement.tsx";
 // `<section class="v-detail">` — back button + (watchtower | item | empty)
 // content. The React port of app.js's `LockerDetail` Lit component. The
 // item-view internals (field descriptors/rows, including the real-TOTP tick)
@@ -188,13 +187,9 @@ export function LockerDetail({
             onRestore={onRestore}
             onPurge={onPurge}
           />
-          {detail && !detail.trashed ? (
-            <AudiencePlacement
-              itemType="locker.item"
-              itemId={detail.item_id}
-              label="Share family item"
-            />
-          ) : null}
+          {/* No placement control here — A7: Locker is structurally excluded
+           *  from sharing (packages/blueprints/apps/_shared/placement-registry.ts).
+           *  A secret is the one thing v0 never lets a member place. */}
         </>
       ) : (
         <EmptyPane />

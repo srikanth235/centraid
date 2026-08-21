@@ -1,0 +1,109 @@
+/* Storage (v4 handoff §12). Figures in the numeric register, sentences in the
+   body register, one outlined action.
+
+   Numerics are mono, tabular and declare their own direction — a figure is not
+   a word, and under RTL the bidi algorithm would otherwise reorder a mixed
+   digit-and-word run (§2.2). Nothing below 11px. Logical properties only. */
+
+.view {
+  display: flex;
+  flex-direction: column;
+  max-inline-size: 34rem;
+  padding-block-start: var(--sp-3);
+}
+
+.lede {
+  margin: 0 0 var(--sp-4);
+  font: var(--t-body);
+  color: var(--text-soft);
+}
+
+/* Section heads carry their own numbers (proto's `sectionBlock(label, meta)`).
+   The two big `.figure` displays that used to open this screen are gone: the
+   prototype's Storage screen has no figure display anywhere, and a 31px total
+   answered a question the screen is not about. Label on the leading edge, the
+   count on the trailing one, exactly as the rows below do it. */
+.head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--sp-3);
+  margin: var(--sp-4) 0 var(--sp-2);
+  padding-block-end: var(--sp-2);
+  border-block-end: 1px solid var(--line);
+}
+.headLabel {
+  font: var(--t-eyebrow);
+  text-transform: var(--t-eyebrow-transform, uppercase);
+  letter-spacing: var(--t-eyebrow-tracking, 0.06em);
+  color: var(--text);
+}
+.headMeta {
+  font: var(--t-mono);
+  font-variant-numeric: var(--t-mono-numeric);
+  direction: var(--t-mono-direction);
+  unicode-bidi: var(--t-mono-bidi);
+  color: var(--text-faint);
+}
+
+.note {
+  margin: 0 0 var(--sp-3);
+  font: var(--t-small);
+  color: var(--text-soft);
+}
+
+/* The free-up statement's one raised line: how much could be released. It is
+   a CLAIM, not a figure display — the prototype's panel leads with a sentence
+   ("Free up 96.4 GB"), so this stays in the body register at full ink weight
+   rather than becoming the numeral this screen deliberately has none of. */
+.claim {
+  margin: 0 0 var(--sp-2);
+  font: var(--t-body);
+  color: var(--text);
+}
+.num {
+  font: var(--t-mono);
+  font-variant-numeric: var(--t-mono-numeric);
+  direction: var(--t-mono-direction);
+  unicode-bidi: var(--t-mono-bidi);
+  color: var(--text);
+}
+
+/* Ruled rows: label on the leading edge, the count on the trailing one. */
+.rows {
+  margin: 0 0 var(--sp-3);
+}
+.row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--sp-3);
+  min-block-size: var(--h-row);
+  padding-block: var(--sp-2);
+  border-block-end: 1px solid var(--line);
+}
+.rowLabel {
+  font: var(--t-small);
+  color: var(--text);
+}
+.rowValue {
+  margin: 0;
+  font: var(--t-mono);
+  font-variant-numeric: var(--t-mono-numeric);
+  direction: var(--t-mono-direction);
+  unicode-bidi: var(--t-mono-bidi);
+  color: var(--text-faint);
+}
+
+/* WAITING IS NOT FAILING (issue #765). Two figures on this screen describe
+   bytes that are on their way rather than bytes that arrived: the Backup
+   verdict `pending`, and the "Queued to be copied elsewhere" row. `--seam` is
+   the role for that exact state — "not yet, and not wrong: pending, expiring,
+   invited" — and using it here is what keeps the screen from having to choose
+   between calling a queue healthy and calling it an alarm. Ink only: the
+   figure stays in the same numeric register, at the same size, in the same
+   place. */
+.headMeta.pending,
+.rowValue.pending {
+  color: var(--seam);
+}

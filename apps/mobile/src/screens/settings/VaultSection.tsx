@@ -281,7 +281,7 @@ const makeStyles = (colors: ThemeColors) =>
       padding: 16,
     },
     error: { ...t("small"), color: colors.danger, marginTop: 8 },
-    fieldLabel: { ...t("small"), color: colors.textSoft, fontWeight: "500" },
+    fieldLabel: { ...t("smallStrong"), color: colors.textSoft },
     fieldLabelSpaced: { marginTop: 8 },
     hint: { ...t("small"), color: colors.textFaint },
     iconGrid: { flexDirection: "row", flexWrap: "wrap", gap: 10 },

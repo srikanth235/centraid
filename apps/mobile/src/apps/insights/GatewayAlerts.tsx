@@ -1,14 +1,13 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { RefreshControl, ScrollView, StyleSheet, View } from "react-native";
-import {
-  SafeAreaView,
-  useSafeAreaInsets,
-} from "react-native-safe-area-context";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import Button from "../../kit/components/Button";
 import HomeKey from "../../kit/components/HomeKey";
 import { Text } from "../../kit/components/NativeText";
-import { family, radii, spacing, t, useTheme } from "../../kit/theme";
+import TopSafeArea from "../../kit/components/TopSafeArea";
+import { memberFacingError } from "../../kit/member-error";
+import { radii, spacing, t, useTheme } from "../../kit/theme";
 import type { ThemeColors } from "../../kit/theme";
 import {
   getNotifications,
@@ -44,7 +43,9 @@ export default function GatewayAlerts(props: {
     } catch (error) {
       setState({
         kind: "error",
-        message: error instanceof Error ? error.message : "Could not load.",
+        message: memberFacingError(
+          error instanceof Error ? error.message : "Could not load."
+        ),
       });
     }
   }, []);
@@ -71,11 +72,11 @@ export default function GatewayAlerts(props: {
 
   const rows = state.kind === "ready" ? state.rows : [];
   return (
-    <SafeAreaView style={styles.safe} edges={["top"]}>
+    <TopSafeArea style={styles.safe} edges={["top"]}>
       <View style={styles.header}>
         <HomeKey variant="leave" onPress={props.onLeave} />
         <View style={styles.headerCopy}>
-          <Text style={styles.title}>Gateway alerts</Text>
+          <Text style={styles.title}>System alerts</Text>
           <Text style={styles.subtitle}>
             Health transitions and recovery updates
           </Text>
@@ -98,11 +99,11 @@ export default function GatewayAlerts(props: {
         }
       >
         {state.kind === "loading" ? (
-          <Text style={styles.empty}>Loading gateway alerts…</Text>
+          <Text style={styles.empty}>Loading system alerts…</Text>
         ) : state.kind === "error" ? (
           <Text style={styles.empty}>{state.message}</Text>
         ) : rows.length === 0 ? (
-          <Text style={styles.empty}>No gateway alerts.</Text>
+          <Text style={styles.empty}>No system alerts.</Text>
         ) : (
           rows.map((row) => (
             <View
@@ -112,10 +113,22 @@ export default function GatewayAlerts(props: {
                 row.readAt === null && { borderColor: colors.accent },
               ]}
             >
-              <Text style={styles.cardTitle}>{row.headline}</Text>
+              <Text style={styles.cardTitle}>
+                {memberFacingError(row.headline)}
+              </Text>
               <Text style={styles.meta}>
-                {new Date(row.lastAt).toLocaleString()}
-                {row.count > 1 ? ` · ${row.count} events` : ""}
+                <Text style={[styles.meta, t("mono")]}>
+                  {new Date(row.lastAt).toLocaleString()}
+                </Text>
+                {row.count > 1 ? (
+                  <>
+                    {" · "}
+                    <Text style={[styles.meta, t("mono")]}>
+                      {row.count}
+                    </Text>{" "}
+                    events
+                  </>
+                ) : null}
               </Text>
               <Text style={styles.detail} selectable>
                 {gatewayAlertDetail(row.detail)}
@@ -144,7 +157,7 @@ export default function GatewayAlerts(props: {
           ))
         )}
       </ScrollView>
-    </SafeAreaView>
+    </TopSafeArea>
   );
 }
 
@@ -152,7 +165,9 @@ function gatewayAlertDetail(detail: Record<string, unknown>): string {
   const preferred = ["detail", "error", "gatewayLabel"]
     .map((key) => detail[key])
     .find((value): value is string => typeof value === "string");
-  return preferred ?? "Open Gateway on desktop for live runtime diagnostics.";
+  return memberFacingError(
+    preferred ?? "Open System on the home machine for live diagnostics."
+  );
 }
 
 const makeStyles = (colors: ThemeColors) =>
@@ -186,9 +201,7 @@ const makeStyles = (colors: ThemeColors) =>
     safe: { backgroundColor: colors.bg, flex: 1 },
     subtitle: { ...t("small"), color: colors.textFaint, marginTop: 2 },
     title: {
+      ...t("display"),
       color: colors.text,
-      fontFamily: family.serif,
-      fontSize: 26,
-      letterSpacing: -0.3,
     },
   });

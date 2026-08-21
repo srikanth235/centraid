@@ -66,68 +66,7 @@ export function tileVisualFromListing(row: {
   };
 }
 
-// Prompt-keyword icon inference for freshly generated apps. The pool is
-// the canonical set above; colour follows the icon (never random) so the
-// same kind of app always lands with the same identity.
-const ICON_KEYS_POOL: IconNameType[] = [
-  "Todo",
-  "Habit",
-  "Journal",
-  "Pomodoro",
-  "Plant",
-  "Water",
-  "Gift",
-  "Mood",
-];
-
-/**
- * Infer a new app's tile identity + short display name from its build
- * prompt. Lifted out of the cards module (issue #263) so the builder's
- * create flow can stamp the same inference into the scaffolded app.json.
- */
-export function inferAppVisual(prompt: string): {
-  iconKey: IconNameType;
-  colorKey: ColorKeyType;
-  color: ColorHexType;
-  name: string;
-} {
-  const p = prompt.toLowerCase();
-  const map: [IconNameType, RegExp][] = [
-    ["Todo", /\b(?:todo|to-do|task|grocery|list|shopping)\b/u],
-    ["Habit", /\b(?:habit|streak|daily)\b/u],
-    ["Journal", /\b(?:journal|diary|note|writing|log|read|reading)\b/u],
-    ["Pomodoro", /\b(?:pomodoro|timer|focus|work\s*block)\b/u],
-    ["Plant", /\b(?:plant|water|garden)\b/u],
-    ["Water", /\b(?:hydrate|water|cup|drink)\b/u],
-    ["Gift", /\b(?:gift|present|idea|wish)\b/u],
-    ["Mood", /\b(?:mood|feel|emotion|check[- ]?in)\b/u],
-  ];
-  let iconKey: IconNameType =
-    ICON_KEYS_POOL[Math.floor(Math.random() * ICON_KEYS_POOL.length)] ?? "Todo";
-  for (const [k, re] of map) {
-    if (re.test(p)) {
-      iconKey = k;
-      break;
-    }
-  }
-  // Colour is derived from the icon, not random — matches the design's
-  // fixture (Todos always indigo, Habits always rose, etc.). If no prompt
-  // keywords hit, `iconKey` falls back to a random pool entry; that entry
-  // still has a canonical colour via colorKeyForIcon().
-  const colorKey = colorKeyForIcon(iconKey);
-  const cleaned = prompt.replace(/^\s*(?:a|an)\s+/iu, "").trim();
-  const words = cleaned.split(/\s+/u).slice(0, 3).join(" ");
-  const name = words.charAt(0).toUpperCase() + words.slice(1);
-  return {
-    iconKey,
-    colorKey,
-    color: colorForIcon(iconKey),
-    name: name || "New app",
-  };
-}
-
-// "X ago" relative-time formatter. Mirrors builder.ts:relativeWhen, but
-// co-located here so app.ts doesn't need to reach into the builder IIFE.
+// "X ago" relative-time formatter.
 export function relativeTime(iso?: string): string {
   return formatRelativeTime(iso);
 }
@@ -186,7 +125,7 @@ export function nodeRunStatus(
 
 /**
  * Translate a 5-field cron expression into a small-caps display
- * string. Covers the patterns the builder agent actually emits
+ * string. Covers the patterns the builder harness actually emits
  * (`0 20 * * 0`, `0 17 * * 1-5`, `*[asterisk-slash]N * * * *`, …);
  * unrecognized expressions fall back to the raw text so the
  * end-user at least sees something stable.
@@ -302,10 +241,10 @@ export function triggersSummary(
 
 /**
  * Render a condition trigger's `where` clauses compactly: one
- * `column op value` line per clause — the builder's authoring form
- * (BuilderAutomationTriggers) and the automation view screen
- * (automationsData) both read a condition trigger's `where`, so this lives
- * here rather than duplicated per layer. Returns `null` for an absent/empty
+ * `column op value` line per clause — the automation editor and the
+ * automation view screen (automationsData) both read a condition trigger's
+ * `where`, so this lives here rather than duplicated per layer. Returns
+ * `null` for an absent/empty
  * `where` (the caller decides what "no clause" renders as); falls back to
  * raw pretty-printed JSON for any shape that isn't a structured
  * `{column, op, value?}` array.

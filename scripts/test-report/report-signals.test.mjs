@@ -2,6 +2,7 @@ import { describe, expect, test } from "vitest";
 
 import {
   agedInfraMismatches,
+  applyExpectedGrey,
   cellIdentityRegressions,
   cellsMissingRatchet,
   collectPlaywrightEvidence,
@@ -13,6 +14,7 @@ import {
   resolvePlaywrightOwner,
   summarizeCellStates,
   sustainedRatchetCandidates,
+  worstEvidenceByOwner,
 } from "./report-signals.mjs";
 import {
   REPORT_COMMENT_MARKER,
@@ -275,7 +277,7 @@ describe("renderSummaryMarkdown", () => {
         cellsMissing: 3,
         unhandledErrors: 1,
         unhandledErrorMessages: ["write EPIPE"],
-        coverageBelowFloor: ["packages/gateway/**"],
+        coverageBelowFloor: ["packages/server/**"],
         validationErrorCount: 0,
         generatedAt: "2026-07-19T00:00:00.000Z",
       },
@@ -454,5 +456,112 @@ describe("cellIdentityRegressions", () => {
       newMissing: ["fixed-replacement"],
       newFailed: ["new-red"],
     });
+  });
+});
+
+describe("worstEvidenceByOwner", () => {
+  test("keeps the worst status when platform files share one owner", () => {
+    const map = worstEvidenceByOwner([
+      { owner: "flows/home.mjs", status: "passed", platform: "android" },
+      { owner: "flows/home.mjs", status: "failed", platform: "ios" },
+      { owner: "flows/other.mjs", status: "passed" },
+    ]);
+    expect(map.get("flows/home.mjs")?.status).toBe("failed");
+    expect(map.get("flows/home.mjs")?.platform).toBe("ios");
+    expect(map.get("flows/other.mjs")?.status).toBe("passed");
+  });
+
+  test("order of arrival never lets a green mask a red", () => {
+    const map = worstEvidenceByOwner([
+      { owner: "flows/home.mjs", status: "failed" },
+      { owner: "flows/home.mjs", status: "passed" },
+    ]);
+    expect(map.get("flows/home.mjs")?.status).toBe("failed");
+  });
+
+  test("an unknown status ranks like missing and cannot mask a failure", () => {
+    const map = worstEvidenceByOwner([
+      { owner: "flows/home.mjs", status: "failed" },
+      { owner: "flows/home.mjs", status: "who-knows" },
+    ]);
+    expect(map.get("flows/home.mjs")?.status).toBe("failed");
+  });
+
+  test("infra-mismatch outranks failed so rig problems stay visible", () => {
+    const map = worstEvidenceByOwner([
+      { owner: "flows/home.mjs", status: "failed" },
+      { owner: "flows/home.mjs", status: "infra-mismatch" },
+    ]);
+    expect(map.get("flows/home.mjs")?.status).toBe("infra-mismatch");
+  });
+});
+
+describe("applyExpectedGrey", () => {
+  const registration = {
+    lane: "accessibility",
+    issue: "https://github.com/srikanth235/centraid/issues/781",
+    reason: "no lane exists yet",
+    owner: "scripts/accessibility-contract.test.mjs",
+    cells: ["vault-core:accessibility"],
+  };
+
+  test("reclassifies a registered no-evidence cell as expected-grey", () => {
+    const { cells, applied, expectedAbsentOwners } = applyExpectedGrey(
+      [{ id: "vault-core:accessibility", state: "lane-did-not-run" }],
+      [registration],
+      {}
+    );
+    expect(cells[0].state).toBe("expected-grey");
+    expect(cells[0].expectedGrey.issue).toBe(registration.issue);
+    expect(applied).toStrictEqual(["vault-core:accessibility"]);
+    expect([...expectedAbsentOwners]).toStrictEqual([registration.owner]);
+  });
+
+  test("is void the moment the named lane has a start marker", () => {
+    const { cells, applied, expectedAbsentOwners } = applyExpectedGrey(
+      [{ id: "vault-core:accessibility", state: "owner-silent" }],
+      [registration],
+      { accessibility: "2026-08-14T07:00:00.000Z" }
+    );
+    expect(cells[0].state).toBe("owner-silent");
+    expect(applied).toStrictEqual([]);
+    expect(expectedAbsentOwners.size).toBe(0);
+  });
+
+  test("never reclassifies real evidence or unregistered cells", () => {
+    const { cells, applied } = applyExpectedGrey(
+      [
+        { id: "vault-core:accessibility", state: "failed" },
+        { id: "web:accessibility", state: "lane-did-not-run" },
+      ],
+      [registration],
+      {}
+    );
+    expect(cells[0].state).toBe("failed");
+    expect(cells[1].state).toBe("lane-did-not-run");
+    expect(applied).toStrictEqual([]);
+  });
+});
+
+describe("findUnmatchedOwners ignoreOwners", () => {
+  test("excludes only the registered evidence-less owners", () => {
+    expect(
+      findUnmatchedOwners(
+        [],
+        {
+          cellOwners: {
+            "vault-core.accessibility": {
+              owner: "scripts/accessibility-contract.test.mjs",
+              tier: "accessibility",
+            },
+            "a.correctness": { owner: "tests/a.test.ts", tier: "unit" },
+          },
+          flows: [],
+        },
+        {
+          ignoreOwners: new Set(["scripts/accessibility-contract.test.mjs"]),
+        }
+      )
+    ).toStrictEqual(["tests/a.test.ts"]);
   });
 });

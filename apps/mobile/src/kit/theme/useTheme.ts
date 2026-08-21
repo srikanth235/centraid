@@ -1,6 +1,5 @@
 import { useColorScheme } from "react-native";
 
-import { useAccent } from "./accent";
 import { resolveScheme, useAppearance } from "./appearance";
 import { resolveTheme } from "./resolve";
 import type { ThemeValue } from "./resolve";
@@ -11,8 +10,5 @@ import type { ThemeValue } from "./resolve";
 // returned `colors` keeps a stable identity per scheme (see resolve.ts), so
 // `useMemo(() => makeStyles(colors), [colors])` in screens is cheap.
 export function useTheme(): ThemeValue {
-  return resolveTheme(
-    resolveScheme(useAppearance(), useColorScheme()),
-    useAccent()
-  );
+  return resolveTheme(resolveScheme(useAppearance(), useColorScheme()));
 }

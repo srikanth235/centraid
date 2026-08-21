@@ -24,9 +24,20 @@ body:
       label: Decision
       description: What did the brainstorming session settle on? Describe the outcome, not the whole transcript.
       placeholder: |
-        Add a `governance foo` verb that does Z. Wire it into the skill verb table. Touch:
-        - governance/SKILL.md
-        - governance/references/VERBS.md
+        Add a signed-archive stream to the backup route. Touch:
+        - packages/core/src/protocol/routes.ts
+        - packages/server/src/routes/backup-routes.ts
+    validations:
+      required: true
+
+  - type: dropdown
+    id: size
+    attributes:
+      label: Size
+      description: Decides who plans the work and whether an execution plan is expected below. Umbrella issues are worked by a root agent per docs/multi-agent.md — one issue, no child issues, slices are sub-agents and PR waves under it, one receipt.
+      options:
+        - Single PR — one agent, one focused diff
+        - Umbrella — orchestrated across slices and PR waves
     validations:
       required: true
 
@@ -43,6 +54,28 @@ body:
         -
     validations:
       required: true
+
+  - type: textarea
+    id: execution-plan
+    attributes:
+      label: Execution plan
+      description: Required for umbrella issues; leave blank for a single PR — the implementing agent plans that itself. Carry what plain dispatch loses — what must not break, which slice owns which files, what has to land before what.
+      placeholder: |
+        Invariants — must hold at every intermediate commit, not only at the end:
+        - Gateway protocol stays wire-compatible with the shipped mobile client.
+
+        Waves — a slice owns files no other in-flight slice touches:
+        1. Slice A — packages/core/src/protocol/** — lands the contract. Exit: package typecheck green, no consumers changed yet.
+        2. Slice B — packages/server/src/routes/** — consumes the contract. Starts only after A lands.
+        3. Slice C — packages/client/** — also depends on A; runs alongside B, no shared files.
+
+        Seams the root re-checks between waves:
+        - Contract types in core against their server handlers and client callers.
+
+        Risks:
+        - <what could go wrong> → <mitigation, or a deliberate acceptance to record in docs/decisions.md>
+    validations:
+      required: false
 
   - type: textarea
     id: acceptance

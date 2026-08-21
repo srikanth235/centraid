@@ -1,7 +1,6 @@
 import type { JSX } from "react";
 
-import { roleBadge } from "../memberScope.js";
-import type { MemberScope } from "../memberScope.js";
+import type { OwnerScope } from "../ownerScope.js";
 
 import styles from "./ScopePicker.module.css";
 
@@ -15,14 +14,14 @@ import styles from "./ScopePicker.module.css";
 // could be retired.
 //
 // Rules the component enforces, so no call site has to remember them:
-//   * vaults this member cannot write to are not offerable targets;
+//   * vaults this owner cannot write to are not offerable targets;
 //   * with only one writable vault there is nothing to choose, so the picker
 //     collapses to a plain statement of where the thing will land;
-//   * the default selection is the member's own vault, never the last one used.
+//   * the default selection is the owner's own vault, never the last one used.
 
 export interface ScopePickerProps {
-  /** Every vault the member holds a role in (own vault first). */
-  scopes: MemberScope[];
+  /** Every vault the owner owns (own vault first). */
+  scopes: OwnerScope[];
   /** The currently chosen target. */
   value: string | undefined;
   onChange: (scopeId: string) => void;
@@ -66,7 +65,7 @@ export default function ScopePicker({
       >
         {writable.map((scope) => (
           <option key={scope.id} value={scope.id}>
-            {scope.label} · {roleBadge(scope.role)}
+            {scope.label}
           </option>
         ))}
       </select>

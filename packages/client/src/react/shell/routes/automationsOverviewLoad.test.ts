@@ -91,7 +91,7 @@ describe("automationsOverviewLoad", () => {
     getBlockingMock.mockResolvedValue({ parked: [], outbox: [] });
     listOutboxGrantsMock.mockResolvedValue([]);
     listAgentsMock.mockResolvedValue([
-      { hostKey: "auto.digest", agentId: "agent-1" },
+      { enrollmentKey: "auto.digest", agentId: "agent-1" },
     ]);
   });
 

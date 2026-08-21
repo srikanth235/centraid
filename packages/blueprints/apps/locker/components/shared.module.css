@@ -33,17 +33,16 @@
   align-items: center;
   justify-content: center;
   color: var(--text-inv);
-  font: var(--font-sans);
+  font-family: var(--font-sans);
   font-weight: 600;
-  font-size: 15px;
+  font-size: var(--t-body-size);
 }
 .imain {
   flex: 1;
   min-width: 0;
 }
 .ititle {
-  font: var(--t-body-strong);
-  font-size: 13.5px;
+  font: var(--t-small-strong);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -53,7 +52,6 @@
 }
 .isub {
   font: var(--t-small);
-  font-size: 12px;
   color: var(--text-faint);
   margin-top: 1px;
   overflow: hidden;
@@ -105,19 +103,18 @@
 .dtile {
   width: 60px;
   height: 60px;
-  border-radius: var(--r-xl);
+  border-radius: var(--r-lg);
   flex-shrink: 0;
   display: flex;
   align-items: center;
   justify-content: center;
   color: var(--text-inv);
-  font: var(--font-sans);
+  font-family: var(--font-sans);
   font-weight: 600;
-  font-size: 24px;
+  font-size: var(--t-display-size);
 }
 .dtitle {
   font: var(--t-title);
-  font-size: 23px;
   letter-spacing: -0.01em;
 }
 .dsub {
@@ -127,7 +124,7 @@
 }
 .fields {
   border: 1px solid var(--line);
-  border-radius: var(--r-xl);
+  border-radius: var(--r-lg);
   background: var(--bg-elev);
   overflow: hidden;
 }

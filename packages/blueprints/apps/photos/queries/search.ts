@@ -79,7 +79,7 @@ export default async function searchHandler({ input, ctx }: HandlerArgs) {
     // into a table scan, and a trashed asset over matched bytes stays out
     // (re-uploading it is the restore path, same as the library query).
     const liveAssets = await ctx.vault.read({
-      entity: "media.media_asset",
+      entity: "media.asset",
       where: [
         { column: "content_id", op: "in", value: contentIds },
         { column: "deleted_at", op: "is-null" },
@@ -100,7 +100,7 @@ export default async function searchHandler({ input, ctx }: HandlerArgs) {
       ctx.vault.read({
         entity: "core.collection_entry",
         where: [
-          { column: "target_type", op: "eq", value: "media.media_asset" },
+          { column: "target_type", op: "eq", value: "media.asset" },
           { column: "target_id", op: "in", value: assetIds },
         ],
         purpose,
@@ -135,7 +135,18 @@ export default async function searchHandler({ input, ctx }: HandlerArgs) {
       const place = asset.place_id
         ? places.byId.get(asset.place_id)
         : undefined;
-      return place ? { place_id: place.place_id, name: place.name } : null;
+      return place
+        ? {
+            place_id: place.place_id,
+            name: place.name,
+            lat: place.lat,
+            lng: place.lng,
+            // Same shape the library projection ships — a search hit's place
+            // phrases exactly like the same photograph's does in the grid.
+            kind: place.kind,
+            gazetteer: place.gazetteer,
+          }
+        : null;
     };
 
     const assets = assetsRaw

@@ -53,7 +53,7 @@
   width: 720px;
   height: 720px;
   transform: translateX(-50%);
-  border-radius: 50%;
+  border-radius: var(--r-pill);
   background: radial-gradient(
     circle,
     color-mix(in srgb, var(--rec-accent) 26%, transparent),
@@ -68,7 +68,7 @@
   z-index: 2;
   width: min(460px, 92vw);
   padding: 36px 36px 28px;
-  border-radius: 18px;
+  border-radius: var(--r-lg);
   background: color-mix(in srgb, var(--text) 88%, transparent);
   border: 0.5px solid color-mix(in srgb, white 8%, transparent);
   box-shadow:
@@ -94,8 +94,8 @@
   display: inline-flex;
   align-items: center;
   gap: 7px;
-  font-family: var(--font-mono);
-  font-size: 10px;
+  font-family: var(--font-sans);
+  font-size: var(--t-control-size);
   font-weight: 600;
   letter-spacing: 0.22em;
   color: color-mix(in srgb, var(--text) 80%, transparent);
@@ -104,14 +104,14 @@
   display: inline-block;
   width: 5px;
   height: 5px;
-  border-radius: 50%;
+  border-radius: var(--r-pill);
   background: var(--rec-accent);
   box-shadow: 0 0 0 2px color-mix(in srgb, var(--rec-accent) 24%, transparent);
 }
 
 .title {
   font-family: var(--font-sans);
-  font-size: 32px;
+  font-size: var(--t-display-size);
   line-height: 1.06;
   font-weight: 600;
   letter-spacing: -0.025em;
@@ -120,7 +120,7 @@
 }
 .title em {
   font-style: italic;
-  font-weight: 500;
+  font-weight: 600;
   background: linear-gradient(
     100deg,
     var(--rec-accent),
@@ -132,7 +132,7 @@
 }
 
 .sub {
-  font-size: 13.5px;
+  font-size: var(--t-small-size);
   line-height: 1.55;
   color: color-mix(in srgb, var(--text) 78%, transparent);
   margin: 0 0 20px;
@@ -146,8 +146,8 @@
   margin: 4px 0 6px;
 }
 .foundMeta {
-  font-family: var(--font-mono);
-  font-size: 11.5px;
+  font-family: var(--font-sans);
+  font-size: var(--t-control-size);
   letter-spacing: 0.02em;
   color: color-mix(in srgb, var(--text) 60%, transparent);
   margin: 0 0 22px;
@@ -160,7 +160,7 @@
   flex-direction: column;
   gap: 8px;
   padding: 10px;
-  border-radius: 12px;
+  border-radius: var(--r-lg);
   border: 1px dashed color-mix(in srgb, white 16%, transparent);
   background: color-mix(in srgb, white 3%, transparent);
   transition:
@@ -176,13 +176,13 @@
   min-height: 96px;
   resize: vertical;
   padding: 10px 12px;
-  font-family: var(--font-mono);
-  font-size: var(--t-mono-size);
+  font-family: var(--font-sans);
+  font-size: var(--t-control-size);
   line-height: 1.5;
   color: var(--text);
   background: color-mix(in srgb, black 24%, transparent);
   border: 0.5px solid color-mix(in srgb, white 10%, transparent);
-  border-radius: 8px;
+  border-radius: var(--r-md);
   outline: none;
   transition:
     border-color 160ms,
@@ -196,7 +196,7 @@
   box-shadow: 0 0 0 3px color-mix(in srgb, var(--rec-accent) 16%, transparent);
 }
 .dropHint {
-  font-size: 11.5px;
+  font-size: var(--t-control-size);
   color: color-mix(in srgb, var(--text) 55%, transparent);
   padding: 0 2px;
 }
@@ -220,8 +220,8 @@
   gap: 6px;
 }
 .fieldLabel {
-  font-family: var(--font-mono);
-  font-size: 9.5px;
+  font-family: var(--font-sans);
+  font-size: var(--t-control-size);
   font-weight: 600;
   letter-spacing: 0.06em;
   text-transform: uppercase;
@@ -234,7 +234,7 @@
   padding: 0 14px;
   font: inherit;
   font-size: var(--t-small-size);
-  font-weight: 500;
+  font-weight: 600;
   color: var(--text);
   background: color-mix(in srgb, white 4%, transparent);
   border: 0.5px solid color-mix(in srgb, white 10%, transparent);
@@ -269,7 +269,7 @@
   flex: none;
   width: 12px;
   height: 12px;
-  border-radius: 50%;
+  border-radius: var(--r-pill);
   border: 2px solid color-mix(in srgb, white 20%, transparent);
   background: transparent;
   transition:
@@ -277,7 +277,7 @@
     border-color 200ms;
 }
 .stageLabel {
-  font-size: 14px;
+  font-size: var(--t-small-size);
   color: color-mix(in srgb, var(--text) 55%, transparent);
   transition: color 200ms;
 }
@@ -322,7 +322,7 @@
   background: none;
   border: none;
   font: inherit;
-  font-size: 12.5px;
+  font-size: var(--t-small-size);
   color: color-mix(in srgb, var(--text) 60%, transparent);
   cursor: pointer;
   transition: color 160ms;
@@ -334,56 +334,17 @@
 .error {
   margin-top: 12px;
   padding: 8px 12px;
-  font-size: var(--t-mono-size);
-  border-radius: 8px;
+  font-size: var(--t-control-size);
+  border-radius: var(--r-md);
   background: color-mix(in srgb, var(--text) 18%, transparent);
   border: 0.5px solid color-mix(in srgb, var(--text) 50%, transparent);
   color: var(--text);
 }
 
-/* First-run choice (FirstRunGate) — two stacked option cards. */
-.choiceGrid {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-  margin-top: 8px;
-}
-.choiceBtn {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  text-align: left;
-  padding: 16px 18px;
-  border-radius: 12px;
-  border: 0.5px solid color-mix(in srgb, white 12%, transparent);
-  background: color-mix(in srgb, white 4%, transparent);
-  cursor: pointer;
-  transition:
-    transform 120ms ease-out,
-    border-color 160ms,
-    background 160ms,
-    box-shadow 200ms;
-}
-.choiceBtn:hover {
-  transform: translateY(-1px);
-  border-color: color-mix(in srgb, var(--rec-accent) 55%, transparent);
-  background: color-mix(in srgb, var(--rec-accent) 10%, transparent);
-  box-shadow: 0 8px 22px var(--scrim);
-}
-.choiceBtn:focus-visible {
-  outline: none;
-  border-color: var(--rec-accent);
-  box-shadow: 0 0 0 3px color-mix(in srgb, var(--rec-accent) 22%, transparent);
-}
-.choiceBtnTitle {
-  font-family: var(--font-sans);
-  font-size: var(--t-small-size);
-  font-weight: 600;
-  letter-spacing: -0.01em;
-  color: var(--text);
-}
-.choiceBtnSub {
-  font-size: 12.5px;
-  line-height: 1.45;
-  color: color-mix(in srgb, var(--text) 65%, transparent);
-}
+/* The first-run chooser's option cards used to live here, because FirstRunGate
+   borrowed this whole module for its stage. They moved to
+   OnboardingScreen.module.css with the Binding Layer migration (#708): the
+   chooser is step zero of ONBOARDING, and rendering it on the recovery
+   screen's surface was what made the product's first screen and its second
+   screen look like they came from two different applications. This file is
+   still the restore-after-erase screen's own, and is not yet migrated. */

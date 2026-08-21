@@ -1,15 +1,17 @@
-import { displayText, safeExternalUrl } from "../../_shared/untrusted.ts";
-import { catOf, fmtDate, monoOf, subOf } from "../format.ts";
 // Field descriptors + rows for the detail pane's read view, keyed by the
 // vault's field names — the per-type shape app.js's `fieldDescriptors()` /
 // `fieldRowTpl()` rendered. `secret` fields hide behind a reveal toggle and
 // carry copy; the password field grows a strength meter on reveal; the OTP
 // row runs the real client-side TOTP tick via totp.ts's `useTotp` hook.
-import { armConfirm } from "../kit.ts";
+import { armConfirm } from "@centraid/design/elements";
+
+import { Meter } from "../../_shared/Meter.tsx";
+import { displayText, safeExternalUrl } from "../../_shared/untrusted.ts";
+import { catOf, fmtDate, monoOf, subOf } from "../format.ts";
 import { copy } from "../logic.ts";
 import { strength, useTotp } from "../totp.ts";
 import type { LockerDetail } from "../types.ts";
-import { Icon, KitMeter } from "./Shared.tsx";
+import { Icon } from "./Shared.tsx";
 
 import styles from "./ItemFields.module.css";
 import shared from "./shared.module.css";
@@ -218,7 +220,7 @@ function FieldRow({
         </div>
         {st ? (
           <div className={shared.strength}>
-            <KitMeter ratio={st.ratio} tone={st.tone} />
+            <Meter ratio={st.ratio} tone={st.tone} />
             <span
               style={{
                 font: "var(--t-mono)",

@@ -1,3 +1,7 @@
+// The DEVICE lane (issue #414 D11, narrowed by #724): what a browser may
+// lease is previews/poster/pdfText. Model-shaped work — OCR, transcription,
+// embedding — is owned by recognition automations and never appears here.
+
 import { beforeEach, describe, expect, test } from "vitest";
 
 import { promoteStagedBlob } from "../blob/promote.js";
@@ -13,6 +17,7 @@ import {
   releaseEnrichmentLease,
   releaseExpiredEnrichmentLeases,
 } from "./leases.js";
+import type { EnrichmentCapability } from "./leases.js";
 
 let db: VaultDb;
 const T0 = "2026-07-15T00:00:00.000Z";
@@ -29,11 +34,11 @@ describe("leases", () => {
       requestedAt: T0,
     });
     queueDeviceEnrichmentRequest(db.vault, {
-      requestId: "transcript-1",
+      requestId: "pdf-text-1",
       entityType: "core.content_item",
-      entityId: "audio-1",
-      capability: "transcript",
-      contributionVariant: "transcript",
+      entityId: "doc-1",
+      capability: "pdfText",
+      contributionVariant: "text",
       requestedAt: "2026-07-15T00:00:01.000Z",
     });
   });
@@ -44,16 +49,16 @@ describe("leases", () => {
       available: 2,
       leased: 0,
     });
-    const transcript = leaseNextEnrichmentRequest(db.vault, {
+    const pdfText = leaseNextEnrichmentRequest(db.vault, {
       deviceId: "phone",
-      capabilities: ["transcript"],
+      capabilities: ["pdfText"],
       now: T0,
       ttlMs: 60_000,
       token: "phone-token",
     });
-    expect(transcript).toMatchObject({
-      requestId: "transcript-1",
-      capability: "transcript",
+    expect(pdfText).toMatchObject({
+      requestId: "pdf-text-1",
+      capability: "pdfText",
       deviceId: "phone",
       token: "phone-token",
       attempt: 1,
@@ -63,10 +68,12 @@ describe("leases", () => {
       available: 1,
       leased: 1,
     });
+    // A device asking for work this lane no longer leases gets nothing, and
+    // learns it by getting nothing — never by being handed model work.
     expect(
       leaseNextEnrichmentRequest(db.vault, {
         deviceId: "browser",
-        capabilities: ["embedding"],
+        capabilities: ["transcript"] as unknown as EnrichmentCapability[],
         now: T0,
         token: "unused",
       })
@@ -109,7 +116,7 @@ describe("leases", () => {
   test("completion is device/token/TTL bound and duplicate completion is a no-op", () => {
     const lease = leaseNextEnrichmentRequest(db.vault, {
       deviceId: "phone",
-      capabilities: ["transcript"],
+      capabilities: ["pdfText"],
       now: T0,
       ttlMs: 60_000,
       token: "right-token",
@@ -126,14 +133,14 @@ describe("leases", () => {
       .prepare(
         `INSERT INTO core_content_item
          (content_id, media_type, content_uri, sha256, byte_size, created_at)
-       VALUES ('audio-1', 'audio/mpeg', 'blob:audio', ?, 10, ?)`
+       VALUES ('doc-1', 'application/pdf', 'blob:doc', ?, 10, ?)`
       )
       .run("c".repeat(64), T0);
     db.vault
       .prepare(
         `INSERT INTO core_content_derivative
          (derivative_id, content_id, variant, media_type, byte_size, text_content, created_at)
-       VALUES ('transcript-row', 'audio-1', 'transcript', 'text/plain', 5, 'hello', ?)`
+       VALUES ('text-row', 'doc-1', 'text', 'text/plain', 5, 'hello', ?)`
       )
       .run(T0);
     expect(
@@ -230,7 +237,7 @@ describe("leases", () => {
     });
   });
 
-  test("claiming video automatically queues its missing poster and transcript", () => {
+  test("claiming video queues its missing poster, and nothing model-shaped", () => {
     const vault = openVaultDb();
     const staged = stageBlobBytes(vault, {
       bytes: Buffer.from("video bytes"),
@@ -260,10 +267,7 @@ describe("leases", () => {
     }[];
     expect(
       rows.map((row) => [row.required_capability, row.contribution_variant])
-    ).toStrictEqual([
-      ["poster", "poster"],
-      ["transcript", "transcript"],
-    ]);
+    ).toStrictEqual([["poster", "poster"]]);
     expect(JSON.parse(rows[0]!.detail)).toStrictEqual({
       contentId: promoted.contentId,
       sha256: staged.sha256,
@@ -286,7 +290,7 @@ describe("leases", () => {
       newId: () => `backfill-${++id}`,
       requestedAt: T0,
     });
-    expect(queued).toHaveLength(2);
+    expect(queued).toHaveLength(1);
     const first = leaseNextEnrichmentRequest(vault.vault, {
       deviceId: "vanished-phone",
       capabilities: ["poster"],
@@ -341,14 +345,6 @@ describe("leases", () => {
       null,
       T0
     );
-    derivative.run(
-      "done-transcript",
-      "transcript",
-      null,
-      "text/plain",
-      "done",
-      T0
-    );
 
     let id = 0;
     expect(
@@ -357,7 +353,7 @@ describe("leases", () => {
         requestedAt: T0,
         limit: 1,
       })
-    ).toStrictEqual(["fair-1", "fair-2"]);
+    ).toStrictEqual(["fair-1"]);
     // node:sqlite hands back null-prototype rows; spreading compares the column
     // data (which is the contract) without asserting the driver's prototype.
     expect(

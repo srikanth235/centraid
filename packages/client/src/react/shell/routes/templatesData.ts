@@ -1,19 +1,17 @@
-import { palette } from "@centraid/design";
-
 import { isAutomationTemplate } from "../../../app-format.js";
 import type { TemplateEntry } from "../../../app-shell-context.js";
 import {
   cloneTemplate as gwCloneTemplate,
-  installTemplate as gwInstallTemplate,
   listAutomations,
   listTemplates,
 } from "../../../gateway-client.js";
 
 // Template catalog data layer — ports the vanilla loadAvailableTemplates
 // (app-cards.ts) + loadAutomationTemplates (app-automations-templates.ts) +
-// cloneTemplate (app-cards.ts). The one gateway catalog splits on kind: Discover
-// + the Home templates tab surface app templates; the automation gallery its
-// own richer slice.
+// cloneTemplate (app-cards.ts). The one gateway catalog splits on kind: the app
+// slice is now read-only (it says which ids are BUNDLED, which is how an app
+// route tells a first-party fixture from a code-store app), while the automation
+// gallery keeps its own richer slice and its clone verb.
 
 /** App templates only (the automation slice has its own surface). */
 export async function loadAppTemplates(): Promise<TemplateEntry[]> {
@@ -33,8 +31,6 @@ export const V0_AUTOMATION_TEMPLATE_IDS = [
   "google-drive-pull",
   "obligation-extractor",
   "renewal-reminders",
-  "screenshot-extractor",
-  "photo-captioner",
 ] as const;
 
 const V0_AUTOMATION_TEMPLATE_ID_SET = new Set<string>(
@@ -61,7 +57,6 @@ const OVERVIEW_SUGGESTION_IDS = [
   "obligation-extractor",
   "google-gmail-pull",
   "renewal-reminders",
-  "screenshot-extractor",
 ] as const;
 
 /** Curated 3–4 automation templates for the fleet empty state. */
@@ -120,38 +115,9 @@ export function surfaceMintedWebhook(w: { url: string; secret: string }): void {
   void w;
 }
 
-/** Install a bundled app template in place and pin it straight to Home
- *  (issue #434): install = registration + consent grants, no code copy, no
- *  git. The app keeps the blueprint's own id and serves from the shipped
- *  package, so it upgrades with every release. Install is idempotent — the
- *  pin is built the same whether this was a fresh install or an already-
- *  installed no-op. Unlike automations (which still clone into the code
- *  store), app templates never fork. Throws on failure. */
-export async function installAppTemplate(
-  tmpl: TemplateEntry,
-  scopeId?: string
-): Promise<UserAppMeta> {
-  const pal = palette as unknown as Record<string, string>;
-  const result = await gwInstallTemplate({
-    templateId: tmpl.id,
-    ...(scopeId ? { scopeId } : {}),
-  });
-  const app = result.app;
-  const colorKey = (app.colorKey ?? tmpl.colorKey) as UserAppMeta["colorKey"];
-  const color = (pal[colorKey] ??
-    pal[tmpl.colorKey] ??
-    "#5847e0") as UserAppMeta["color"];
-  const now = new Date().toISOString();
-  const id = app.id;
-  return {
-    centraidAppId: id,
-    color,
-    colorKey,
-    createdAt: now,
-    desc: app.description || tmpl.desc,
-    iconKey: (app.iconKey ?? tmpl.iconKey) as UserAppMeta["iconKey"],
-    id,
-    name: app.name ?? tmpl.name,
-    updatedAt: now,
-  } as UserAppMeta;
-}
+/* `installAppTemplate` left with Discover (issue #708). Installing a first-party
+   app one at a time was the catalogue's whole verb, and there is no catalogue:
+   every bundled app is installed at vault mount by the gateway, so the client
+   has nothing left to ask for. The wire call it wrapped (`installTemplate`)
+   stays — it is still the gateway's own install seam, used when an app follows
+   a member into an audience vault they were added to. */

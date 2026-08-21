@@ -1,8 +1,8 @@
 import { describe, expect, it, vi } from "vitest";
 
 import {
-  listAutomationTurns,
   listAutomations,
+  listAutomationTurnsByLane,
 } from "../../../gateway-client.js";
 import {
   buildOverviewData,
@@ -12,12 +12,13 @@ import {
 } from "./automationsData.js";
 import type { AutomationFeedEntry } from "./automationsData.js";
 
-// buildOverviewData is pure; stub the gateway module so importing it doesn't
-// run gateway-client-core's load-time window.CentraidApi side-effect. `vi.mock`
-// is hoisted above these imports by vitest, so the stub is in place first.
+// buildOverviewData is pure; stub the gateway barrel so importing it
+// doesn't run gateway-client-core's load-time window.CentraidApi side-effect.
+// `vi.mock` is hoisted above these imports by vitest, so the stub is in
+// place first.
 vi.mock(import("../../../gateway-client.js"), () => ({
   listAutomations: vi.fn<typeof listAutomations>(),
-  listAutomationTurns: vi.fn<typeof listAutomationTurns>(),
+  listAutomationTurnsByLane: vi.fn<typeof listAutomationTurnsByLane>(),
 }));
 
 const row = (
@@ -62,6 +63,41 @@ describe(buildOverviewData, () => {
     expect(data.health.paused).toBe(0); // the disabled row has no runs → draft
     expect(data.health.drafts).toBe(1);
     expect(data.health.attention).toBe(0);
+  });
+
+  it("excludes recognition recipes from member health and preserves their lane", () => {
+    const data = buildOverviewData(
+      [
+        row(),
+        row({
+          id: "photo-ocr",
+          ref: "photo-ocr/photo-ocr",
+          systemLane: "recognition",
+        }),
+      ],
+      [
+        entry(),
+        entry({
+          automationId: "photo-ocr/photo-ocr",
+          turnId: "ocr-run",
+          systemLane: "recognition",
+        }),
+      ]
+    );
+
+    expect(data.health).toStrictEqual({
+      active: 1,
+      attention: 0,
+      drafts: 0,
+      paused: 0,
+    });
+    expect(data.subtitle).toContain("1 recent runs");
+    expect(data.rows.find((item) => item.id === "photo-ocr")?.systemLane).toBe(
+      "recognition"
+    );
+    expect(data.runs.find((item) => item.runId === "ocr-run")?.systemLane).toBe(
+      "recognition"
+    );
   });
 
   it("flags attention when the last run failed", () => {
@@ -345,14 +381,24 @@ describe(deriveAutomationHero, () => {
   });
 });
 
+/** Route `listAutomationTurnsByLane` by its `systemLane` arg, like the real per-lane route does. */
+function stubLanes(
+  byLane: Partial<
+    Record<"member" | "recognition", CentraidAutomationTurnRecord[]>
+  >
+): void {
+  vi.mocked(listAutomationTurnsByLane).mockImplementation(async (input) => {
+    const lane = input.systemLane ?? "member";
+    return (byLane[lane] ?? []) as CentraidAutomationTurnRecord[];
+  });
+}
+
 describe(collectAutomationRuns, () => {
   it("prefers the live automation name over the run-recorded name over the raw ref", async () => {
     vi.mocked(listAutomations).mockResolvedValue([
       row(),
     ] as unknown as CentraidAutomationRow[]);
-    vi.mocked(listAutomationTurns).mockResolvedValue([
-      entry({ automationId: "digest/main" }).run,
-    ] as unknown as CentraidAutomationTurnRecord[]);
+    stubLanes({ member: [entry({ automationId: "digest/main" }).run] });
     const { entries } = await collectAutomationRuns();
     expect(entries[0]?.automationName).toBe("Daily Digest");
   });
@@ -361,16 +407,18 @@ describe(collectAutomationRuns, () => {
     vi.mocked(listAutomations).mockResolvedValue(
       [] as unknown as CentraidAutomationRow[]
     );
-    vi.mocked(listAutomationTurns).mockResolvedValue([
-      {
-        runId: "r1",
-        automationId: "gone-app/gone-auto",
-        automationName: "Gone Automation",
-        startedAt: 1000,
-        ok: true,
-        triggerKind: "cron",
-      },
-    ] as unknown as CentraidAutomationTurnRecord[]);
+    stubLanes({
+      member: [
+        {
+          runId: "r1",
+          automationId: "gone-app/gone-auto",
+          automationName: "Gone Automation",
+          startedAt: 1000,
+          ok: true,
+          triggerKind: "cron",
+        } as unknown as CentraidAutomationTurnRecord,
+      ],
+    });
     const { entries } = await collectAutomationRuns();
     expect(entries[0]?.automationName).toBe("Gone Automation");
   });
@@ -379,15 +427,17 @@ describe(collectAutomationRuns, () => {
     vi.mocked(listAutomations).mockResolvedValue(
       [] as unknown as CentraidAutomationRow[]
     );
-    vi.mocked(listAutomationTurns).mockResolvedValue([
-      {
-        runId: "r1",
-        automationId: "gone-app/gone-auto",
-        startedAt: 1000,
-        ok: true,
-        triggerKind: "cron",
-      },
-    ] as unknown as CentraidAutomationTurnRecord[]);
+    stubLanes({
+      member: [
+        {
+          runId: "r1",
+          automationId: "gone-app/gone-auto",
+          startedAt: 1000,
+          ok: true,
+          triggerKind: "cron",
+        } as unknown as CentraidAutomationTurnRecord,
+      ],
+    });
     const { entries } = await collectAutomationRuns();
     expect(entries[0]?.automationName).toBe("gone-app/gone-auto");
   });
@@ -399,9 +449,7 @@ describe(collectAutomationRuns, () => {
   // over a broken gateway, with no error card and no Retry (desktop e2e 8.2).
   it("propagates a list failure — an empty list must not stand in for a broken gateway", async () => {
     vi.mocked(listAutomations).mockRejectedValue(new Error("500"));
-    vi.mocked(listAutomationTurns).mockResolvedValue(
-      [] as unknown as CentraidAutomationTurnRecord[]
-    );
+    stubLanes({});
     await expect(collectAutomationRuns()).rejects.toThrow("500");
   });
 
@@ -409,9 +457,40 @@ describe(collectAutomationRuns, () => {
     vi.mocked(listAutomations).mockResolvedValue([
       row(),
     ] as unknown as CentraidAutomationRow[]);
-    vi.mocked(listAutomationTurns).mockRejectedValue(new Error("500"));
+    vi.mocked(listAutomationTurnsByLane).mockRejectedValue(new Error("500"));
     const { rows, entries } = await collectAutomationRuns();
     expect(rows).toHaveLength(1);
     expect(entries).toStrictEqual([]);
+  });
+
+  // Issue #731 M2: a bulk photo import fires the recognition automations
+  // once per photo. Before the lane split, one combined
+  // `listAutomationTurns({ limit: 100 })` call meant a flood of recognition
+  // runs could fill the entire 100-row window and leave the member's own
+  // "Recent activity" empty. Each lane is now its own independently-bounded
+  // fetch, so a recognition flood must never crowd the member lane out.
+  it("keeps the member lane populated when the recognition lane is flooded", async () => {
+    vi.mocked(listAutomations).mockResolvedValue([
+      row(),
+    ] as unknown as CentraidAutomationRow[]);
+    const recognitionFlood = Array.from(
+      { length: 100 },
+      (_, i) =>
+        entry({
+          automationId: "photo-ocr/photo-ocr",
+          turnId: `ocr-run-${i}`,
+          systemLane: "recognition",
+        }).run
+    );
+    stubLanes({
+      member: [entry({ automationId: "digest/main" }).run],
+      recognition: recognitionFlood,
+    });
+    const { entries } = await collectAutomationRuns();
+    const memberEntries = entries.filter(
+      (e) => e.automationId === "digest/main"
+    );
+    expect(memberEntries).toHaveLength(1);
+    expect(entries).toHaveLength(101);
   });
 });

@@ -1,5 +1,5 @@
 import type { NativeWriteResult } from "../../lib/replica/native-session";
-import { showToast } from "../components/Toast";
+import { postStatus } from "../components/status-line";
 
 export interface SurfaceWriteOutcomeOptions {
   failureTitle?: string;
@@ -17,9 +17,9 @@ export interface SurfaceWriteOutcomeOptions {
  * result. Executed writes are already visible through their optimistic
  * mutation; every other state needs an explicit affordance.
  *
- * News uses the app-wide toast; decisions remain with the caller's dialog.
- * Returns whether the caller may continue an optimistic success flow (for
- * example, close a modal, extract `output`, or navigate away).
+ * News uses the app-wide status line; decisions remain with the caller's
+ * dialog. Returns whether the caller may continue an optimistic success flow
+ * (for example, close a modal, extract `output`, or navigate away).
  */
 export function surfaceWriteOutcome(
   result: NativeWriteResult,
@@ -29,36 +29,27 @@ export function surfaceWriteOutcome(
   if (result.status === "parked") {
     if (options.onParked) options.onParked();
     else
-      showToast({
-        message: result.reason ?? "This change is ready for owner approval.",
-        tone: "neutral",
-      });
+      postStatus(result.reason ?? "This change is ready for owner approval.");
     return false;
   }
   if (result.status === "queued") {
     if (options.onQueued) options.onQueued();
     else
-      showToast({
-        message:
-          options.queuedMessage ??
-          "Saved offline — it will sync when the gateway reconnects.",
-        tone: "accent",
-      });
+      postStatus(
+        options.queuedMessage ??
+          "Saved offline — it will sync when the gateway reconnects."
+      );
     return true;
   }
   if (result.status === "in-flight") {
     if (options.onInFlight) options.onInFlight();
     else
-      showToast({
-        message: "Saving — the final status remains visible in sync status.",
-        tone: "accent",
-      });
+      postStatus("Saving — the final status remains visible in sync status.");
     return true;
   }
-  showToast({
-    message: `${options.failureTitle ?? "Change not applied"}: ${result.reason ?? "The vault rejected this change."}`,
-    tone: "danger",
-  });
+  postStatus(
+    `${options.failureTitle ?? "Change not applied"}: ${result.reason ?? "The vault rejected this change."}`
+  );
   return false;
 }
 
@@ -66,10 +57,9 @@ export function surfaceWriteFailure(
   error: unknown,
   failureTitle = "Change failed"
 ): void {
-  showToast({
-    message: `${failureTitle}: ${error instanceof Error ? error.message : "Please try again."}`,
-    tone: "danger",
-  });
+  postStatus(
+    `${failureTitle}: ${error instanceof Error ? error.message : "Please try again."}`
+  );
 }
 
 /** Extract the executed/queued command output bag when present. */

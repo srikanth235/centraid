@@ -1,0 +1,147 @@
+/* The People shelf (v4 handoff §5): circular cards, 6 columns on desktop and
+   3 on the phone, each a crop, a name and a count.
+
+   THE CARD HOLDS ITS GEOMETRY. The crop is a square with an `aspect-ratio`,
+   grounded in `--skel` — the ground a surface paints before its bytes arrive
+   (§2.2) — so a person whose cover is not loaded is the same size as one whose
+   is, and nothing reflows when bytes land.
+
+   Logical properties throughout; the count is mono, tabular and declares its
+   own direction; the name is line-clamped, never clipped (§4 of the system
+   handoff). */
+
+.shelf {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-4);
+  padding-block-start: var(--sp-3);
+}
+
+/* Six across on desktop, three on the phone (§5, proto 4432) — a fixed
+   column count rather than `auto-fill`'s floor, which on a wide pane lands
+   near nine and never the six the handoff specifies. */
+.grid {
+  display: grid;
+  grid-template-columns: repeat(6, 1fr);
+  gap: var(--sp-4);
+}
+@media (max-width: 719.98px) {
+  .grid {
+    grid-template-columns: repeat(3, 1fr);
+  }
+}
+
+.card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  border: none;
+  background: none;
+  padding: 0;
+  text-align: center;
+  color: inherit;
+}
+
+.crop {
+  position: relative;
+  display: block;
+  inline-size: 100%;
+  aspect-ratio: 1;
+  overflow: hidden;
+  border-radius: var(--r-pill);
+  background: var(--skel, var(--bg-sunken));
+  border: 1px solid var(--line);
+}
+.card:hover .crop {
+  border-color: var(--line-strong);
+}
+/* The crop's own painted media (media.ts writes an <img> into it as a plain
+   string, so this is a descendant selector, not a class of ours). */
+.crop img {
+  inline-size: 100%;
+  block-size: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.name {
+  font: var(--t-small);
+  color: var(--text);
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  overflow: hidden;
+}
+
+/* An unconfirmed proposal's crop — a DASHED ring, never the confirmed card's
+   solid one, so the difference reads before the label under it does (issue
+   #711 review: a proposal must stay visually distinguishable, never mistaken
+   for a named person). */
+.proposalCrop {
+  border-style: dashed;
+  border-color: var(--line-strong);
+}
+/* The proposal card's own crop <img> — painted by React directly (the
+   confirmed card's `mountMedia` ref does not apply here), positioned with
+   inline width/height/left/top expressed as PERCENTAGES of this square
+   (see People.tsx's `CROP_BOX_UNIT`), same absolute-tile idiom
+   FaceReview.module.css's `.cropImg` uses with pixels. */
+.cropImg {
+  position: absolute;
+  max-inline-size: none;
+  max-block-size: none;
+}
+/* "Not yet named" — soft and never styled like a real name, so the absence
+   of a name reads as absence, not as a name that happens to say "Not yet
+   named" (issue #711 review: a proposal must never look confirmed). */
+.proposalLabel {
+  font: var(--t-small);
+  font-style: italic;
+  color: var(--text-faint);
+}
+.count {
+  font: var(--t-mono);
+  font-variant-numeric: var(--t-mono-numeric);
+  direction: var(--t-mono-direction);
+  unicode-bidi: var(--t-mono-bidi);
+  color: var(--text-faint);
+}
+
+/* Who agreed this is them (issue #712 P6b) — rendered only when the group
+   spans more than one answerer, so this rule paints on very few cards. Faint,
+   below the count: it is provenance about the CLAIM, not about the person, and
+   it must never compete with the name. */
+.confirmedBy {
+  font: var(--t-small);
+  color: var(--text-faint);
+  text-align: start;
+}
+
+/* What this shelf does NOT show, said once rather than implied by an absence. */
+.note {
+  margin: 0;
+  max-inline-size: 520px;
+  font: var(--t-small);
+  color: var(--text-soft);
+}
+
+/* The same sentence as a way in: when review is wired, the note IS the
+ * control (invariant 3 — actions live in bounded controls). */
+.noteButton {
+  margin: 0;
+  max-inline-size: 520px;
+  padding: var(--sp-2) var(--sp-3);
+  font: var(--t-small);
+  color: var(--text-soft);
+  text-align: start;
+  background: transparent;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--r-md);
+  cursor: pointer;
+}
+
+.noteButton:hover {
+  background: var(--bg-press);
+}

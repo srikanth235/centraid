@@ -1,6 +1,6 @@
 import { StyleSheet } from "react-native";
 
-import { family, radii, spacing, t } from "../../kit/theme";
+import { radii, spacing, t } from "../../kit/theme";
 import type { ThemeColors } from "../../kit/theme";
 
 // makeStyles(colors) + useMemo per scheme (matches Settings). The composer row
@@ -70,14 +70,14 @@ export const makeStyles = (colors: ThemeColors) =>
     statusText: { ...t("control"), color: colors.textSoft },
     activityDot: {
       backgroundColor: colors.textFaint,
-      borderRadius: 4,
+      borderRadius: radii.sm,
       height: 7,
       width: 7,
     },
     activityDotBusy: { backgroundColor: colors.accent },
     contextTrack: {
       backgroundColor: colors.bgSunken,
-      borderRadius: 2,
+      borderRadius: radii.sm,
       flex: 1,
       height: 4,
       minWidth: 28,
@@ -85,7 +85,7 @@ export const makeStyles = (colors: ThemeColors) =>
     },
     contextFill: {
       backgroundColor: colors.accent,
-      borderRadius: 2,
+      borderRadius: radii.sm,
       height: 4,
     },
     emptyBody: {
@@ -99,7 +99,7 @@ export const makeStyles = (colors: ThemeColors) =>
       alignItems: "center",
       flex: 1,
       justifyContent: "center",
-      paddingBottom: spacing[7],
+      paddingBottom: spacing[6],
       paddingHorizontal: spacing[6],
     },
     errorText: { ...t("body"), color: colors.danger },
@@ -129,11 +129,13 @@ export const makeStyles = (colors: ThemeColors) =>
     pendingText: { ...t("body"), color: colors.textFaint, fontStyle: "italic" },
     rowLeft: { alignItems: "flex-start" },
     rowRight: { alignItems: "flex-end" },
+    // There is one page for the shell and every app in it — no per-app
+    // surface tone (docs/traps/design-tokens.md).
     safe: { backgroundColor: colors.bg, flex: 1 },
     sendButton: {
       alignItems: "center",
       backgroundColor: colors.accent,
-      borderRadius: 18,
+      borderRadius: radii.lg,
       height: 36,
       justifyContent: "center",
       width: 36,
@@ -150,10 +152,8 @@ export const makeStyles = (colors: ThemeColors) =>
     },
     subtitle: { ...t("small"), color: colors.textSoft, marginTop: 2 },
     title: {
+      ...t("display"),
       color: colors.text,
-      fontFamily: family.serif,
-      fontSize: 26,
-      letterSpacing: -0.3,
     },
     userBubble: {
       backgroundColor: colors.accent,

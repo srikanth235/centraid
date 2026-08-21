@@ -49,7 +49,7 @@
   background: transparent;
   color: var(--text-faint);
   font: inherit;
-  font-size: var(--t-mono-size);
+  font-size: var(--t-control-size);
   font-weight: 600;
   cursor: pointer;
   padding: 4px 6px;
@@ -65,7 +65,7 @@
   padding: 6px;
   background: var(--bg-elev);
   border: 0.5px solid var(--line-strong);
-  border-radius: 12px;
+  border-radius: var(--r-lg);
   box-shadow: var(--shadow-lg);
 }
 .addTriggerMenu {
@@ -83,9 +83,9 @@
   background: transparent;
   text-align: left;
   padding: 10px 12px;
-  border-radius: 8px;
+  border-radius: var(--r-md);
   font: inherit;
-  font-size: 13.5px;
+  font-size: var(--t-small-size);
   color: var(--text);
   cursor: pointer;
 }
@@ -96,7 +96,7 @@
    inside it, and none of them draws a line of its own. */
 .instructionsCard {
   border: 0.5px solid var(--line);
-  border-radius: 16px;
+  border-radius: var(--r-lg);
   background: var(--bg);
   padding: 3px;
   gap: 0;
@@ -137,9 +137,9 @@
   background: var(--bg-sunken);
   color: var(--text);
   font: inherit;
-  font-size: var(--t-mono-size);
+  font-size: var(--t-control-size);
   font-weight: 600;
-  border-radius: 999px;
+  border-radius: var(--r-pill);
   padding: 4px 8px 4px 6px;
   cursor: pointer;
 }
@@ -177,7 +177,7 @@
   flex-wrap: wrap;
   gap: 8px 10px;
   padding: 9px 11px;
-  border-radius: 0 0 13px 13px;
+  border-radius: var(--r-xs) var(--r-xs) var(--r-lg) var(--r-lg);
   margin-top: 2px;
   background: color-mix(in srgb, var(--bg-sunken) 60%, transparent);
 }
@@ -193,7 +193,7 @@
   font-weight: 600;
   cursor: pointer;
   padding: 6px 10px;
-  border-radius: 999px;
+  border-radius: var(--r-pill);
 }
 .instrChip:hover,
 .instrChip[data-open="true"] {
@@ -203,7 +203,7 @@
 }
 .instrChipCount {
   color: var(--text-faint);
-  font-weight: 500;
+  font-weight: 600;
   min-width: 0.8em;
 }
 /* Advisory only — the chips beside it carry the meaning. It gets whatever
@@ -212,7 +212,7 @@
 .instrHint {
   flex: 1 1 auto;
   min-width: 0;
-  font-size: var(--t-mono-size);
+  font-size: var(--t-control-size);
   color: var(--text-ghost);
   white-space: nowrap;
   overflow: hidden;
@@ -223,14 +223,14 @@
     display: none;
   }
 }
-.agentPickerWrap {
+.harnessPickerWrap {
   position: relative;
 }
-.agentChipValue {
+.harnessChipValue {
   color: var(--text-faint);
-  font-weight: 500;
+  font-weight: 600;
 }
-.agentPicker {
+.harnessPicker {
   position: absolute;
   left: 0;
   top: calc(100% + 6px);
@@ -241,35 +241,35 @@
   padding: 14px;
   background: var(--bg-elev);
   border: 0.5px solid var(--line-strong);
-  border-radius: var(--r-xl);
+  border-radius: var(--r-lg);
   box-shadow: var(--shadow-lg);
 }
-.agentPickerTitle {
-  font-size: 14px;
+.harnessPickerTitle {
+  font-size: var(--t-small-size);
   color: var(--text);
 }
-.agentPickerHint {
+.harnessPickerHint {
   margin: 4px 0 0;
-  font-size: var(--t-mono-size);
+  font-size: var(--t-control-size);
   line-height: 1.4;
   color: var(--text-faint);
 }
-.agentPickerField {
+.harnessPickerField {
   display: grid;
   gap: 5px;
   font-size: var(--t-control-size);
   font-weight: 600;
   color: var(--text-faint);
 }
-.agentPickerField select {
+.harnessPickerField select {
   width: 100%;
   border: 0.5px solid var(--line);
-  border-radius: 9px;
+  border-radius: var(--r-md);
   background: var(--bg);
   color: var(--text);
   font: inherit;
   font-size: var(--t-small-size);
-  font-weight: 500;
+  font-weight: 600;
   padding: 8px 30px 8px 9px;
 }
 .connPicker {
@@ -285,7 +285,7 @@
   padding: 12px;
   background: var(--bg-elev);
   border: 0.5px solid var(--line-strong);
-  border-radius: var(--r-xl);
+  border-radius: var(--r-lg);
   box-shadow: var(--shadow-lg);
 }
 .connPickerHead {
@@ -295,13 +295,13 @@
   gap: 10px;
 }
 .connPickerTitle {
-  font-size: 14px;
+  font-size: var(--t-small-size);
   font-weight: 600;
   color: var(--text);
 }
 .connPickerHint {
   margin: 4px 0 0;
-  font-size: var(--t-mono-size);
+  font-size: var(--t-control-size);
   line-height: 1.4;
   color: var(--text-faint);
 }
@@ -311,7 +311,7 @@
   color: var(--text-faint);
   cursor: pointer;
   padding: 4px;
-  border-radius: 8px;
+  border-radius: var(--r-md);
   line-height: 0;
 }
 .connPickerClose:hover {
@@ -338,7 +338,7 @@
   flex-direction: column;
   gap: 6px;
   border: 0.5px solid var(--line);
-  border-radius: 12px;
+  border-radius: var(--r-lg);
   background: var(--bg);
   padding: 6px;
 }
@@ -355,7 +355,7 @@
   background: transparent;
   text-align: left;
   padding: 6px;
-  border-radius: 8px;
+  border-radius: var(--r-md);
   cursor: pointer;
   color: inherit;
   font: inherit;
@@ -368,7 +368,7 @@
   place-items: center;
   width: 32px;
   height: 32px;
-  border-radius: 9px;
+  border-radius: var(--r-md);
   background: var(--bg-sunken);
 }
 .connPickerMeta {
@@ -378,18 +378,18 @@
   min-width: 0;
 }
 .connPickerName {
-  font-size: 13.5px;
+  font-size: var(--t-small-size);
   font-weight: 600;
   color: var(--text);
 }
 .connPickerSub {
-  font-size: 11.5px;
+  font-size: var(--t-control-size);
   color: var(--text-faint);
 }
 .connPickerCheck {
   width: 22px;
   height: 22px;
-  border-radius: 999px;
+  border-radius: var(--r-pill);
   border: 0.5px solid var(--line-strong);
   display: grid;
   place-items: center;
@@ -419,7 +419,7 @@
   align-items: center;
   gap: 8px;
   border: 0;
-  border-radius: 8px;
+  border-radius: var(--r-md);
   background: transparent;
   color: var(--text);
   font: inherit;
@@ -439,7 +439,7 @@
 }
 .connAccountLabel {
   overflow: hidden;
-  font-size: 12.5px;
+  font-size: var(--t-small-size);
   font-weight: 600;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -453,7 +453,7 @@
 }
 .connAccountHealth {
   color: var(--text-faint);
-  font-size: 10.5px;
+  font-size: var(--t-control-size);
   white-space: nowrap;
 }
 .connAccountHealth[data-health="ok"] {
@@ -467,7 +467,7 @@
 .connAccountWarn {
   margin: 0;
   padding: 6px 8px;
-  border-radius: 8px;
+  border-radius: var(--r-md);
   font-size: var(--t-control-size);
   line-height: 1.45;
   color: var(--text-soft);
@@ -493,7 +493,7 @@
 }
 .connFormLead {
   margin: 0;
-  font-size: var(--t-mono-size);
+  font-size: var(--t-control-size);
   line-height: 1.4;
   color: var(--text-faint);
 }
@@ -514,7 +514,7 @@
   background: transparent;
   color: var(--accent);
   font: inherit;
-  font-size: var(--t-mono-size);
+  font-size: var(--t-control-size);
   font-weight: 600;
   cursor: pointer;
   padding: 0;
@@ -523,7 +523,7 @@
 .connGuideList {
   margin: 6px 0 0;
   padding-left: 18px;
-  font-size: var(--t-mono-size);
+  font-size: var(--t-control-size);
   line-height: 1.45;
   color: var(--text-faint);
 }
@@ -536,7 +536,7 @@
 .notifySelect {
   appearance: none;
   font: inherit;
-  font-size: 13.5px;
+  font-size: var(--t-small-size);
   color: var(--text);
   background: var(--bg-elev);
   border: 0.5px solid var(--line);
@@ -550,7 +550,7 @@
      `display` keeps the block box the padding + centering assume. */
   display: block;
   padding: 48px 0;
-  font-size: 14px;
+  font-size: var(--t-small-size);
   color: var(--text-faint);
   text-align: center;
 }
@@ -618,14 +618,14 @@
   gap: 7px;
 }
 .fieldLabel {
-  font-size: var(--t-mono-size);
+  font-size: var(--t-control-size);
   font-weight: 600;
   letter-spacing: 0.02em;
   color: var(--text-faint);
 }
 .input {
   font: inherit;
-  font-size: 14px;
+  font-size: var(--t-small-size);
   color: var(--text);
   background: var(--bg-elev);
   border: 0.5px solid var(--line);
@@ -642,13 +642,13 @@
   color: var(--text-ghost);
 }
 .mono {
-  font-family: var(--font-mono);
-  font-size: 12.5px;
+  font-family: var(--font-code);
+  font-size: var(--t-small-size);
   letter-spacing: 0.01em;
 }
 .textarea {
   font: inherit;
-  font-size: 15.5px;
+  font-size: var(--t-small-size);
   line-height: 1.5;
   color: var(--text);
   background: var(--bg-elev);
@@ -680,12 +680,13 @@
   align-items: center;
   gap: 5px;
   padding: 4px 8px;
-  border-radius: 999px;
+  border-radius: var(--r-pill);
   background: color-mix(in srgb, var(--accent) 10%, transparent);
   color: var(--text-soft);
   font-size: var(--t-control-size);
 }
 .entityToken code {
+  font-family: var(--font-code);
   color: var(--accent);
 }
 .mentionPopover {
@@ -709,7 +710,7 @@
   width: 100%;
   padding: 9px 10px;
   border: 0;
-  border-radius: 7px;
+  border-radius: var(--r-md);
   background: transparent;
   color: var(--text);
   text-align: left;
@@ -722,8 +723,9 @@
   outline: none;
 }
 .mentionOption code {
+  font-family: var(--font-code);
   color: var(--text-ghost);
-  font-size: 10.5px;
+  font-size: var(--t-control-size);
 }
 /* Entity-KIND picker (data/condition trigger inputs) — reuses the @-mention
    popover surface. The input needs a positioned wrapper for the popover to
@@ -733,8 +735,8 @@
   position: relative;
 }
 .pickerKind {
-  font-family: var(--font-mono);
-  font-size: var(--t-mono-size);
+  font-family: var(--font-sans);
+  font-size: var(--t-control-size);
   color: var(--text);
 }
 @keyframes mention-in {
@@ -774,7 +776,7 @@
 .sectionHint {
   margin: 4px 0 0;
   color: var(--text-ghost);
-  font-size: var(--t-mono-size);
+  font-size: var(--t-control-size);
 }
 .addTrigger {
   display: flex;
@@ -787,7 +789,7 @@
   background: transparent;
   color: var(--text-faint);
   font: inherit;
-  font-size: 11.5px;
+  font-size: var(--t-control-size);
   cursor: pointer;
   padding: 4px 6px;
 }
@@ -795,7 +797,7 @@
   color: var(--accent);
 }
 .addTrigger button:disabled {
-  opacity: 0.35;
+  opacity: var(--o-disabled);
   cursor: default;
 }
 /* Lives inside `.triggerEmptyCard`, which already draws the boundary. The
@@ -804,7 +806,7 @@
 .triggerEmpty {
   margin: 0;
   color: var(--text-ghost);
-  font-size: 12.5px;
+  font-size: var(--t-small-size);
   line-height: 1.5;
 }
 .triggerList {
@@ -829,8 +831,8 @@
   gap: 10px;
 }
 .triggerIndex {
-  font-family: var(--font-mono);
-  font-size: 10px;
+  font-family: var(--font-sans);
+  font-size: var(--t-control-size);
   color: var(--text-ghost);
 }
 .triggerSelect {
@@ -859,7 +861,7 @@
   gap: 8px;
   padding: 9px 12px;
   border-radius: var(--r-md);
-  font-size: var(--t-mono-size);
+  font-size: var(--t-control-size);
   line-height: 1.4;
   color: var(--c-amber-text);
   background: color-mix(in srgb, var(--c-amber) 12%, transparent);
@@ -904,7 +906,7 @@
   height: 32px;
   display: grid;
   place-items: center;
-  border-radius: 9px;
+  border-radius: var(--r-md);
   background: color-mix(in srgb, var(--text) 6%, transparent);
   color: var(--text-faint);
 }
@@ -919,12 +921,12 @@
   min-width: 0;
 }
 .trigTitle {
-  font-size: 13.5px;
+  font-size: var(--t-small-size);
   font-weight: 600;
   color: var(--text);
 }
 .trigDesc {
-  font-size: var(--t-mono-size);
+  font-size: var(--t-control-size);
   color: var(--text-faint);
 }
 .trigDetail {
@@ -944,7 +946,7 @@
    was four near-identical copies (.subFieldLabel / .cronPreviewLbl /
    .connGroupLbl / .grantsLbl) differing only by 0.5px and 0.01em. */
 .microLabel {
-  font-size: 10.5px;
+  font-size: var(--t-control-size);
   font-weight: 600;
   letter-spacing: 0.03em;
   color: var(--text-ghost);
@@ -952,11 +954,11 @@
 }
 .trigHint {
   margin: 0;
-  font-size: var(--t-mono-size);
+  font-size: var(--t-control-size);
   color: var(--text-faint);
 }
 .trigHint code {
-  font-family: var(--font-mono);
+  font-family: var(--font-sans);
   font-size: var(--t-control-size);
   color: var(--text-soft);
 }
@@ -971,12 +973,12 @@
   margin-right: 2px;
 }
 .cronPreviewPill {
-  font-family: var(--font-mono);
+  font-family: var(--font-sans);
   font-size: var(--t-control-size);
   color: var(--text-soft);
   background: var(--bg-sunken);
   border: 0.5px solid var(--line);
-  border-radius: 999px;
+  border-radius: var(--r-pill);
   padding: 3px 9px;
 }
 
@@ -1001,7 +1003,7 @@
   flex: 0 1 150px;
   appearance: none;
   font: inherit;
-  font-size: 12.5px;
+  font-size: var(--t-small-size);
   color: var(--text);
   background: var(--bg-elev);
   border: 0.5px solid var(--line);
@@ -1016,7 +1018,7 @@
 .whereValueOff {
   flex: 1 1 120px;
   min-width: 0;
-  font-size: 11.5px;
+  font-size: var(--t-control-size);
   color: var(--text-ghost);
   font-style: italic;
 }
@@ -1026,7 +1028,7 @@
   background: transparent;
   color: var(--text-faint);
   font: inherit;
-  font-size: 11.5px;
+  font-size: var(--t-control-size);
   cursor: pointer;
   padding: 4px 0;
 }
@@ -1039,16 +1041,16 @@
   align-items: center;
   gap: 9px;
   flex-wrap: wrap;
-  font-size: var(--t-mono-size);
+  font-size: var(--t-control-size);
   color: var(--text-faint);
 }
 .webhookUrl {
-  font-family: var(--font-mono);
-  font-size: 11.5px;
+  font-family: var(--font-sans);
+  font-size: var(--t-control-size);
   color: var(--text-soft);
   background: var(--bg-sunken);
   border: 0.5px solid var(--line);
-  border-radius: 7px;
+  border-radius: var(--r-md);
   padding: 5px 9px;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -1060,11 +1062,11 @@
   align-items: center;
   gap: 5px;
   font: inherit;
-  font-size: 11.5px;
+  font-size: var(--t-control-size);
   color: var(--text-faint);
   background: none;
   border: 0.5px solid var(--line-strong);
-  border-radius: 7px;
+  border-radius: var(--r-md);
   padding: 5px 9px;
   cursor: pointer;
 }
@@ -1073,7 +1075,7 @@
   background: var(--bg-sunken);
 }
 .regenBtn:disabled {
-  opacity: 0.6;
+  opacity: var(--o-disabled);
   cursor: default;
 }
 
@@ -1094,20 +1096,20 @@
   gap: 6px;
 }
 .chip {
-  font-size: var(--t-mono-size);
+  font-size: var(--t-control-size);
   color: var(--text-soft);
   background: var(--bg-sunken);
   border: 0.5px solid var(--line);
-  border-radius: 999px;
+  border-radius: var(--r-pill);
   padding: 4px 10px;
 }
 .chipMono {
-  font-family: var(--font-mono);
+  font-family: var(--font-sans);
   font-size: var(--t-control-size);
 }
 .vaultPurpose {
   margin: 0;
-  font-size: 12.5px;
+  font-size: var(--t-small-size);
   color: var(--text-faint);
 }
 
@@ -1124,12 +1126,12 @@
   color: var(--text-faint);
 }
 .notifLine code {
-  font-family: var(--font-mono);
-  font-size: var(--t-mono-size);
+  font-family: var(--font-sans);
+  font-size: var(--t-control-size);
   color: var(--text-soft);
 }
 .notifMeta {
-  font-size: 11.5px;
+  font-size: var(--t-control-size);
   color: var(--text-ghost);
 }
 
@@ -1146,12 +1148,12 @@
   gap: 12px;
 }
 .enableLabel {
-  font-size: 13.5px;
+  font-size: var(--t-small-size);
   font-weight: 600;
   color: var(--text);
 }
 .enableHint {
-  font-size: 11.5px;
+  font-size: var(--t-control-size);
   color: var(--text-faint);
 }
 .switch {
@@ -1172,7 +1174,7 @@
 .switchTrack {
   position: absolute;
   inset: 0;
-  border-radius: 999px;
+  border-radius: var(--r-pill);
   background: var(--text-ghost);
   transition: background 0.16s ease;
 }
@@ -1183,7 +1185,7 @@
   left: 2px;
   width: 18px;
   height: 18px;
-  border-radius: 50%;
+  border-radius: var(--r-pill);
   background: var(--text);
   transition: transform 0.16s ease;
 }
@@ -1195,7 +1197,7 @@
 }
 .behaviorExplainer {
   margin: 0;
-  font-size: 12.5px;
+  font-size: var(--t-small-size);
   line-height: 1.5;
   color: var(--text-faint);
 }
@@ -1210,24 +1212,25 @@
   gap: 9px;
   padding: 8px 10px;
   border: 0.5px solid var(--line);
-  border-radius: 8px;
+  border-radius: var(--r-md);
   background: var(--bg-elev);
 }
-.grantRow[data-revoked="true"] {
-  opacity: 0.55;
+.grantRow[data-revoked="true"] .grantVerb,
+.grantRow[data-revoked="true"] .grantTarget {
+  color: var(--text-disabled);
 }
 .grantVerb {
-  font-family: var(--font-mono);
+  font-family: var(--font-sans);
   font-size: var(--t-control-size);
   color: var(--text-soft);
   background: var(--bg-sunken);
-  border-radius: 5px;
+  border-radius: var(--r-sm);
   padding: 2px 6px;
 }
 .grantTarget {
   flex: 1;
   min-width: 0;
-  font-size: var(--t-mono-size);
+  font-size: var(--t-control-size);
   color: var(--text-soft);
   overflow: hidden;
   text-overflow: ellipsis;
@@ -1235,7 +1238,7 @@
 }
 .grantRevoked {
   flex: none;
-  font-size: 10.5px;
+  font-size: var(--t-control-size);
   font-weight: 600;
   letter-spacing: 0.02em;
   text-transform: uppercase;
@@ -1278,7 +1281,7 @@
 .footerHint {
   margin: 0;
   flex: 1 1 12ch;
-  font-size: var(--t-mono-size);
+  font-size: var(--t-control-size);
   line-height: 1.45;
   color: var(--text-ghost);
   min-width: 0;
@@ -1309,7 +1312,7 @@
   user-select: none;
 }
 .enableText {
-  font-size: var(--t-mono-size);
+  font-size: var(--t-control-size);
   font-weight: 600;
   color: var(--text-faint);
   min-width: 1.6em;
@@ -1320,7 +1323,7 @@
   gap: 10px;
   padding: 14px 14px 12px;
   border: 0.5px dashed var(--line-strong);
-  border-radius: 12px;
+  border-radius: var(--r-lg);
   background: color-mix(in srgb, var(--bg-elev) 50%, transparent);
 }
 .triggerEmptyActions {
@@ -1333,9 +1336,9 @@
   background: var(--bg-elev);
   color: var(--text);
   font: inherit;
-  font-size: 12.5px;
+  font-size: var(--t-small-size);
   font-weight: 600;
-  border-radius: 999px;
+  border-radius: var(--r-pill);
   padding: 7px 12px;
   cursor: pointer;
 }

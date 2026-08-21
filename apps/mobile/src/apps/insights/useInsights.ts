@@ -1,100 +1,193 @@
-import { useCallback, useEffect, useState } from "react";
+// The Analytics place's data half (#765): two reads, one preference, and one
+// export — nothing about layout or copy.
+//
+// The two reads stay independent, as they were before the revamp: usage
+// (`/_insights/summary`, vault-scoped) and health (`/_gateway/health`,
+// gateway-wide) can be served by different gateway versions. The SUMMARY is
+// what this page is: without it there is no page, so its failure is the error
+// state. Health is a qualifier — its failure costs the page its Gateway facts
+// and the uptime clause of the standing line, and nothing else.
+//
+// The window is the page's one parameter. Changing it re-reads, which is why
+// the count facts, the chart, the section metas and the axis can never
+// disagree about which window they are describing: they are all derived from
+// one summary that was fetched for one window.
 
+import { useCallback, useEffect, useRef, useState } from "react";
+
+import type { OpsState } from "../../kit/components/health-line";
 import { GatewayError, resolveGatewayBase } from "../../lib/gateway";
 import { fetchGatewayHealth, fetchInsightsSummary } from "../../lib/insights";
 import type { GatewayHealth, InsightsSummary } from "../../lib/insights";
 import { subscribeVaultLinks } from "../../lib/vault-links";
+import { shareCsv } from "./insights-export";
+import { DEFAULT_WINDOW_DAYS, nothingRan } from "./insights-model";
+import { readWindowPref, writeWindowPref } from "./insights-window-pref";
 
-// The Insights screen mirrors TWO independent gateway surfaces — health
-// (gateway-wide) and usage (vault-scoped) — that can be available on different
-// gateway versions. So `ready` carries each optionally, each with its own error
-// string, and neither one failing collapses the whole screen: a gateway that
-// serves health but not `/_insights` (or vice versa) still shows what it has.
-// A `no-gateway` degrade stays a first-class calm state, distinct from a
-// transport error, matching useAutomations.
-export type InsightsState =
+/** What the gateway answered. `empty` is derived from it, never stored. */
+export type InsightsLoad =
   | { kind: "loading" }
-  | { kind: "no-gateway" }
-  | { kind: "error"; message: string }
+  /** `at` is when the answer landed. Every relative phrase on the page is
+   *  measured from it rather than from `Date.now()` at render time: a clock
+   *  read during render is impure, and a row that silently re-ages on an
+   *  unrelated re-render claims a freshness nothing re-checked. */
   | {
+      at: number;
       kind: "ready";
+      summary: InsightsSummary;
       health?: GatewayHealth;
-      summary?: InsightsSummary;
-      healthError?: string;
-      summaryError?: string;
-    };
+    }
+  /** `reason` is the underlying failure, shown as the error panel's one fact —
+   *  the panel's own body never changes, because what is safe does not. */
+  | { kind: "error"; reason: string };
 
-export interface UseInsights {
-  state: InsightsState;
+export interface InsightsController {
+  load: InsightsLoad;
+  state: OpsState;
+  /** The clock every relative phrase on the page is measured from. */
+  now: number;
+  windowDays: number;
+  setWindowDays: (days: number) => void;
   refreshing: boolean;
+  exporting: boolean;
+  /** A failed export, said once, above the blocks. */
+  exportError: string | undefined;
   refresh: () => Promise<void>;
+  retry: () => void;
+  exportCsv: () => void;
 }
 
-const WINDOW_DAYS = 30;
+const NOT_PAIRED = "This phone is not linked to a vault yet.";
 
-function messageOf(reason: unknown): string {
-  return reason instanceof GatewayError || reason instanceof Error
-    ? reason.message
-    : "Unavailable on this gateway.";
+function describe(error: unknown): string {
+  return (error instanceof GatewayError || error instanceof Error) &&
+    error.message
+    ? error.message
+    : "Your vault's home machine did not answer.";
 }
 
-// The loader lives outside the hook: it closes over nothing but the (stable)
-// state setter, so it needs no `useCallback` identity dance, it is testable on
-// its own, and the effects below are plainly async kick-offs rather than
-// something that could set state during the effect body.
-async function loadInsights(
-  setState: (next: InsightsState) => void
+async function read(
+  windowDays: number,
+  apply: (next: InsightsLoad) => void
 ): Promise<void> {
-  const base = await resolveGatewayBase().catch(() => undefined);
-  if (!base) {
-    setState({ kind: "no-gateway" });
+  if (!(await resolveGatewayBase().catch(() => undefined))) {
+    apply({ kind: "error", reason: NOT_PAIRED });
     return;
   }
-  // Load both in parallel; a failure of one must not sink the other.
-  const [healthRes, summaryRes] = await Promise.allSettled([
-    fetchGatewayHealth(),
-    fetchInsightsSummary(WINDOW_DAYS),
+  // Health must never sink the page, so it resolves to `undefined` on any
+  // failure; the summary is the page, so its failure is the error state.
+  const [summaryResult, health] = await Promise.all([
+    fetchInsightsSummary(windowDays).then(
+      (summary) => ({ ok: true, summary }) as const,
+      (error: unknown) => ({ ok: false, error }) as const
+    ),
+    fetchGatewayHealth().catch(() => undefined),
   ]);
-  const health = healthRes.status === "fulfilled" ? healthRes.value : undefined;
-  const summary =
-    summaryRes.status === "fulfilled" ? summaryRes.value : undefined;
-  // Both failing is a real error (the gateway is reachable but answering
-  // nothing useful) — surface it rather than an empty page.
-  if (!health && !summary) {
-    setState({
-      kind: "error",
-      message: messageOf((healthRes as PromiseRejectedResult).reason),
-    });
+  if (!summaryResult.ok) {
+    apply({ kind: "error", reason: describe(summaryResult.error) });
     return;
   }
-  setState({
+  apply({
+    at: Date.now(),
     kind: "ready",
-    health,
-    summary,
-    healthError:
-      healthRes.status === "rejected" ? messageOf(healthRes.reason) : undefined,
-    summaryError:
-      summaryRes.status === "rejected"
-        ? messageOf(summaryRes.reason)
-        : undefined,
+    summary: summaryResult.summary,
+    ...(health ? { health } : {}),
   });
 }
 
-export function useInsights(): UseInsights {
-  const [state, setState] = useState<InsightsState>({ kind: "loading" });
+/**
+ * Which of the states the page is in.
+ *
+ * There is no `full`: Analytics does not cycle on row count, because its chip
+ * row is unconditional (spec §5 — "its chip row is always shown, not gated by
+ * `full`"), so a `full` state would render exactly the `ready` page. `empty`
+ * is read off the summary rather than stored, so it cannot disagree with what
+ * rendered.
+ */
+export function opsStateFor(load: InsightsLoad): OpsState {
+  if (load.kind === "loading") return "loading";
+  if (load.kind === "error") return "error";
+  return nothingRan(load.summary) ? "empty" : "ready";
+}
+
+export function useInsights(): InsightsController {
+  const [load, setLoad] = useState<InsightsLoad>({ kind: "loading" });
+  const [windowDays, setWindowDays] = useState(DEFAULT_WINDOW_DAYS);
   const [refreshing, setRefreshing] = useState(false);
+  const [exporting, setExporting] = useState(false);
+  const [exportError, setExportError] = useState<string | undefined>();
+  // A ref, not state: the guard has to hold WITHIN a tick, or two taps on
+  // Export before React re-renders would open two share sheets over one file.
+  const inFlight = useRef(false);
+
+  // The stored window arrives after the first read has already started, so a
+  // member whose window is not the default sees one extra read. Waiting for
+  // the preference before reading anything is the alternative to a blank
+  // frame, and a blank frame is worse.
+  useEffect(() => {
+    let cancelled = false;
+    void readWindowPref().then((saved) => {
+      if (!cancelled && saved !== undefined) setWindowDays(saved);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   useEffect(() => {
-    void loadInsights(setState);
+    void read(windowDays, setLoad);
+  }, [windowDays]);
+
+  // Switching the active vault re-points usage at a different vault — re-read,
+  // because the numbers on screen belong to the vault that was selected.
+  useEffect(
+    () => subscribeVaultLinks(() => void read(windowDays, setLoad)),
+    [windowDays]
+  );
+
+  const pickWindow = useCallback((days: number): void => {
+    setWindowDays(days);
+    setLoad({ kind: "loading" });
+    void writeWindowPref(days);
   }, []);
-  // Switching the active Vault re-points usage at a different vault — reload.
-  useEffect(() => subscribeVaultLinks(() => void loadInsights(setState)), []);
 
   const refresh = useCallback(async (): Promise<void> => {
     setRefreshing(true);
-    await loadInsights(setState);
+    setExportError(undefined);
+    await read(windowDays, setLoad);
     setRefreshing(false);
-  }, []);
+  }, [windowDays]);
 
-  return { state, refreshing, refresh };
+  const retry = useCallback((): void => {
+    setLoad({ kind: "loading" });
+    setExportError(undefined);
+    void read(windowDays, setLoad);
+  }, [windowDays]);
+
+  const exportCsv = useCallback((): void => {
+    if (inFlight.current || load.kind !== "ready") return;
+    inFlight.current = true;
+    setExporting(true);
+    setExportError(undefined);
+    void shareCsv(load.summary, windowDays)
+      .catch((error: unknown) => setExportError(describe(error)))
+      .finally(() => {
+        inFlight.current = false;
+        setExporting(false);
+      });
+  }, [load, windowDays]);
+
+  return {
+    exportCsv,
+    exportError,
+    exporting,
+    load,
+    now: load.kind === "ready" ? load.at : 0,
+    refresh,
+    refreshing,
+    retry,
+    setWindowDays: pickWindow,
+    state: opsStateFor(load),
+    windowDays,
+  };
 }

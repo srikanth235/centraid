@@ -1,18 +1,30 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { JSX } from "react";
 
-import { cx } from "../ui/cx.js";
+import ChipsBlock from "../ui/ChipsBlock.js";
+import NoteBlock from "../ui/NoteBlock.js";
+import SectionBlock from "../ui/SectionBlock.js";
 
 import controlsCss from "../styles/controls.module.css";
 import styles from "./LogsScreen.module.css";
 
-// Gateway → Logs: the gateway's realtime diagnostics surface. Streams
+// System → Logs: the gateway's realtime diagnostics surface. Streams
 // the gateway's log lines (SSE, replay-then-live) so a user whose
 // automation/sync/outbox is misbehaving can SEE what the gateway is doing
 // without hunting for a terminal. Prop-driven like the other settings
 // screens: the transport is injected (`streamLogs` → gateway-client),
 // this file owns the view + stream lifecycle (reconnect, follow, filter).
-// Mounted from the Gateway page's Logs tab (GatewayScreen.tsx).
+// Mounted from System's Logs drill-in (GatewayScreen.tsx).
+//
+// THE STREAM STAYS A STREAM (binding layer v11). The handoff draws Logs as
+// five rows, which is what a static mock of a log looks like; two thousand
+// live lines are not rows, and folding them into the row block would cost the
+// windowing, the follow-the-tail behaviour and the monospace column that makes
+// a timestamped stream scannable at all. What v11 fixes here is the FURNITURE
+// around it: the status dot, the line count and the export verb were a bespoke
+// toolbar, and are now the section head; the level filter was three hand-rolled
+// chips and is now the kit's chip group. The search box, Copy and Clear stay a
+// control row — they act on the pane below them, not on the section.
 
 export type LogLevelDTO = "info" | "warn" | "error";
 
@@ -94,10 +106,11 @@ function timeLabel(ts: number): string {
   return `${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
 }
 
-const STATUS_LABEL: Record<StreamStatus, string> = {
-  connecting: "Connecting…",
-  live: "Live",
-  reconnecting: "Reconnecting…",
+/** The head's own word for the stream. Lower case, like every meta in the kit. */
+const STATUS_WORD: Record<StreamStatus, string> = {
+  connecting: "connecting…",
+  live: "live",
+  reconnecting: "reconnecting…",
 };
 
 export default function LogsScreen({
@@ -291,32 +304,45 @@ export default function LogsScreen({
 
   return (
     <div className={styles.wrap}>
-      <div className={styles.toolbar}>
-        <span className={styles.statusDot} data-status={status} />
-        <span className={styles.statusLabel} data-status={status}>
-          {STATUS_LABEL[status]}
-        </span>
-        <span className={styles.countLabel}>
-          {entries.length} line{entries.length === 1 ? "" : "s"}
-          {errorCount > 0
+      {/* Whether it is connected, how much it has, and how much of it is bad —
+          the three facts the old status dot + count line carried, said in the
+          head's own meta. Export is a verb about this whole stretch, so it is
+          the head's quiet action rather than a fourth chip in a toolbar. */}
+      <SectionBlock
+        label="Logs"
+        meta={`${STATUS_WORD[status]} · ${entries.length.toLocaleString()} line${
+          entries.length === 1 ? "" : "s"
+        }${
+          errorCount > 0
             ? ` · ${errorCount} error${errorCount === 1 ? "" : "s"}`
-            : ""}
-        </span>
-        <div className={styles.filters}>
-          {FILTERS.map((f) => (
-            <button
-              key={f.id}
-              type="button"
-              className={cx(
-                controlsCss.chip,
-                filter === f.id && styles.chipActive
-              )}
-              onClick={() => setFilter(f.id)}
-            >
-              {f.label}
-            </button>
-          ))}
-        </div>
+            : ""
+        }`}
+        {...(onExportDiagnostics
+          ? {
+              action: {
+                hint: "Gather this window and the component list into one file",
+                label:
+                  exportState.kind === "pending"
+                    ? "Exporting…"
+                    : "Export diagnostics",
+                onClick: () => void exportDiagnostics(),
+                ...(exportState.kind === "pending" ? { off: true } : {}),
+              },
+            }
+          : {})}
+      />
+      <ChipsBlock
+        ariaLabel="Level"
+        chips={FILTERS.map((f) => ({
+          id: f.id,
+          label: f.label,
+          on: filter === f.id,
+        }))}
+        onPick={(id) => setFilter(id as LevelFilter)}
+      />
+      {/* These act on the PANE, not on the section — a query that narrows what
+          is drawn below it, and two verbs about what is drawn below it. */}
+      <div className={styles.toolbar}>
         <input
           type="search"
           className={styles.search}
@@ -340,18 +366,6 @@ export default function LogsScreen({
         >
           Clear
         </button>
-        {onExportDiagnostics ? (
-          <button
-            type="button"
-            className={controlsCss.chip}
-            onClick={() => void exportDiagnostics()}
-            disabled={exportState.kind === "pending"}
-          >
-            {exportState.kind === "pending"
-              ? "Exporting…"
-              : "Export diagnostics"}
-          </button>
-        ) : null}
       </div>
       {exportState.kind === "done" ? (
         <div className={styles.exportStatus} data-tone="ok">
@@ -402,6 +416,19 @@ export default function LogsScreen({
           </button>
         ) : null}
       </div>
+
+      {/* The second sentence describes a CONTROL, so it is drawn only where
+          that control is. A viewer has no export verb (GatewayScreen withholds
+          `onExportDiagnostics` for a read-only seat), and a note explaining how
+          to use a button that is not on the page is worse than no note: it
+          reads as a control the reader has failed to find. */}
+      <NoteBlock>
+        The stream reads oldest first and takes a focus query, so a failing
+        component can hand this page its own name.
+        {onExportDiagnostics
+          ? " Export diagnostics gathers this window and the component list into one file."
+          : ""}
+      </NoteBlock>
     </div>
   );
 }

@@ -1,0 +1,10 @@
+{
+  "manifestVersion": 1,
+  "id": "place-names",
+  "name": "Place names",
+  "kind": "automation",
+  "description": "Names the nearest town for places that only have coordinates, from a settlement list bundled with Centraid and read on this device. Opt-in, and never overwrites a name you typed.",
+  "version": "0.1.0",
+  "actions": [],
+  "queries": []
+}

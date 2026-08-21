@@ -2,7 +2,7 @@
 
 Erase is the **most destructive** gesture the product exposes and the only one that deliberately destroys key material. This is the runbook for a stranded erase and for the restore that follows one.
 
-Product paths: `packages/gateway/src/routes/vault-routes.ts` (the ceremony), `packages/gateway/src/serve/erase-recovery.ts` (boot roll-forward), `packages/gateway/src/backup/recover.ts` (the restore).
+Product paths: `packages/server/src/routes/vault-routes.ts` (the ceremony), `packages/server/src/serve/erase-recovery.ts` (boot roll-forward), `packages/server/src/backup/recover.ts` (the restore).
 
 ## What erase actually does
 
@@ -59,7 +59,7 @@ Every refusal is deliberate; none is a bug to route around.
 4. Verify the end state: `centraid-gateway vault list --data-dir "$DATA_DIR"` no longer shows the vault, and `keys/<vaultId>.sealkey` is gone.
 5. Zero vaults is **not** a legal steady state since issue #603. The vault health component reports `error: no vault is mounted`, and there is no first-run Create / Restore screen to fall back to — restore is a backup-plane act (below).
 
-> **Do not restart the daemon with an empty `vault/` if you intend to restore.** Auto-founding fires at construction on a data dir with no vault directory, so the next boot creates a brand-new `Shared` + `Personal` and the data dir is no longer vault-free. Keep the daemon **stopped** between the erase and the restore.
+> **Do not restart the daemon with an empty `vault/` if you intend to restore.** Auto-founding fires at construction on a data dir with no vault directory, so the next boot creates a brand-new `Personal` vault and the data dir is no longer vault-free. Keep the daemon **stopped** between the erase and the restore.
 
 ## Steps — restore after an erase, on the same box
 

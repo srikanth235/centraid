@@ -12,7 +12,7 @@ import {
   cbsfDirectoryAad,
   cbsfFrameAad,
   decodeCbsfDirectory,
-} from "@centraid/blob-format";
+} from "@centraid/core/blob";
 
 type Bytes = Uint8Array<ArrayBuffer>;
 

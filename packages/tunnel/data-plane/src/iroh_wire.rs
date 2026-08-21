@@ -14,6 +14,22 @@ pub(crate) const RELAY_PROOF_HEADER: &str = "x-centraid-data-plane-relay";
 /// so loopback delivery never lets a remote peer claim a device identity.
 const DEVICE_IDENTITY_HEADER: &str = "x-centraid-device";
 const DEVICE_PROOF_HEADER: &str = "x-centraid-device-proof";
+/// Peer-plane identity, stamped only by the authorizer (issue #726 P3). Listed
+/// here so a copy is stripped on EVERY lane: a device must not be able to
+/// claim a peer identity, nor a peer a device one.
+const PEER_ENDPOINT_HEADER: &str = "x-centraid-peer-endpoint";
+const PEER_VAULT_HEADER: &str = "x-centraid-peer-vault";
+const PEER_PROOF_HEADER: &str = "x-centraid-peer-proof";
+
+/// Every name only a forwarder may stamp. Mirrored in
+/// `protocol.ts` / `gateway-endpoint.ts::IDENTITY_HEADER_NAMES`.
+const FORWARDER_OWNED_HEADERS: [&str; 5] = [
+    DEVICE_IDENTITY_HEADER,
+    DEVICE_PROOF_HEADER,
+    PEER_ENDPOINT_HEADER,
+    PEER_VAULT_HEADER,
+    PEER_PROOF_HEADER,
+];
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
 #[serde(untagged)]
@@ -105,8 +121,9 @@ pub(crate) fn request_headers(
             || name.eq_ignore_ascii_case(AUTH_MODE_HEADER)
             || name.eq_ignore_ascii_case("host")
             || name.eq_ignore_ascii_case(RELAY_PROOF_HEADER)
-            || name.eq_ignore_ascii_case(DEVICE_IDENTITY_HEADER)
-            || name.eq_ignore_ascii_case(DEVICE_PROOF_HEADER)
+            || FORWARDER_OWNED_HEADERS
+                .iter()
+                .any(|owned| name.eq_ignore_ascii_case(owned))
         {
             continue;
         }
@@ -243,5 +260,38 @@ mod tests {
         let headers = request_headers(&wire, &proved, "owner-token").unwrap();
         assert_eq!(headers.get(DEVICE_IDENTITY_HEADER).unwrap(), "proved");
         assert_eq!(headers.get(DEVICE_PROOF_HEADER).unwrap(), "real-proof");
+    }
+
+    /// Trap 2 (issue #726 P3): the two lanes never cross. A device stream may
+    /// not claim to be a peer, and a peer stream may not claim to be a device;
+    /// only the authorizer's answer puts either name on the request.
+    #[test]
+    fn relay_drops_client_supplied_peer_identity_headers() {
+        let wire = HashMap::from([
+            (
+                PEER_ENDPOINT_HEADER.to_owned(),
+                WireHeaderValue::One("forged-peer".to_owned()),
+            ),
+            (
+                PEER_VAULT_HEADER.to_owned(),
+                WireHeaderValue::One("vlt_victim".to_owned()),
+            ),
+            (
+                PEER_PROOF_HEADER.to_owned(),
+                WireHeaderValue::One("forged-proof".to_owned()),
+            ),
+        ]);
+        let device_lane = Authorization {
+            allowed: true,
+            headers: HashMap::from([(DEVICE_IDENTITY_HEADER.to_owned(), "proved".to_owned())]),
+            upstream_url: None,
+            upstream_token: None,
+        };
+
+        let headers = request_headers(&wire, &device_lane, "owner-token").unwrap();
+        assert!(!headers.contains_key(PEER_ENDPOINT_HEADER));
+        assert!(!headers.contains_key(PEER_VAULT_HEADER));
+        assert!(!headers.contains_key(PEER_PROOF_HEADER));
+        assert_eq!(headers.get(DEVICE_IDENTITY_HEADER).unwrap(), "proved");
     }
 }

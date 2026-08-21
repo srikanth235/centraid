@@ -1,3 +1,5 @@
+import { afterEach, describe, expect, test, vi } from "vitest";
+
 /**
  * Product-CLI contract laws (#656 Layer 3 mutation seed).
  *
@@ -11,7 +13,10 @@
  * Laws, not literals: each test derives its expectation from the banner or
  * from the stubbed gateway response rather than restating the implementation.
  */
-import { afterEach, describe, expect, test, vi } from "vitest";
+import {
+  GATEWAY_MIN_PROTOCOL_VERSION,
+  GATEWAY_PROTOCOL_VERSION,
+} from "@centraid/core/protocol";
 
 import { resolveToken } from "./auth.ts";
 import { main } from "./cli.ts";
@@ -67,10 +72,13 @@ async function runCli(
   return { stdout: out.join(""), stderr: err.join(""), code };
 }
 
+// The protocol pair is stated against the constants for the same reason the
+// rest of this file derives from the banner: a literal floor here stops
+// describing a healthy gateway the moment the floor moves.
 const INFO = {
   version: "0.1.0",
-  protocolVersion: 2,
-  minSupportedProtocol: 2,
+  protocolVersion: GATEWAY_PROTOCOL_VERSION,
+  minSupportedProtocol: GATEWAY_MIN_PROTOCOL_VERSION,
   instanceId: "inst-9",
   capabilities: {
     webSessions: true,

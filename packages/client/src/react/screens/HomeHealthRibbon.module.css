@@ -1,0 +1,56 @@
+.ribbon {
+  align-items: center;
+  background: transparent;
+  border: 0;
+  border-block-end: 1px solid var(--line);
+  box-sizing: border-box;
+  color: var(--text-faint);
+  display: flex;
+  font: var(--t-control);
+  gap: var(--sp-3);
+  inline-size: 100%;
+  min-block-size: 32px;
+  padding: 0 var(--page-margin);
+  text-align: start;
+}
+
+button.ribbon {
+  cursor: pointer;
+}
+
+.ribbon[data-tone="attention"],
+.ribbon[data-tone="urgent"] {
+  border-inline-start: 2px solid var(--signal-tone);
+  color: var(--text);
+  min-block-size: 40px;
+  padding-block: var(--sp-2);
+}
+
+.ribbon[data-tone="attention"] {
+  --signal-tone: var(--attention);
+}
+
+.ribbon[data-tone="urgent"] {
+  --signal-tone: var(--net);
+}
+
+.copy {
+  flex: 1 1 auto;
+  min-inline-size: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.action {
+  color: var(--signal-tone);
+  flex: none;
+  font: var(--t-small-strong);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.ribbon:focus-visible {
+  outline: 2px solid var(--focus-ring-color);
+  outline-offset: -2px;
+}

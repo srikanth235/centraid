@@ -1,4 +1,5 @@
 // Mobile agent-e2e harness. One entry point — `runFlow` — handles setup
+// governance: allow-repo-hygiene file-size-limit The #716 harness centralizes one simulator/gateway lifecycle; splitting it would duplicate cleanup and verdict invariants.
 // (run dir, sim discovery, app-install check), provides a `ctx` surface to
 // the flow body (run / restart / note), and writes a verdict.md at the end.
 //
@@ -24,9 +25,8 @@ import {
   writeFlowVerdict,
 } from "../../agent-e2e-shared/harness.mjs";
 import {
-  completeOnboardingCommands,
-  pasteAndConnectPairingTicketCommands,
-  waitForOnboardingConnectCommands,
+  DISMISS_KEYBOARD_ONBOARDING,
+  retryableTapCommands,
 } from "./first-run.mjs";
 import {
   METRO_ORIGIN,
@@ -69,7 +69,7 @@ const appIdForPlatform = (platform) =>
  * wait, not a product-latency assertion, and nothing is proven by making it tight.
  */
 export const FIRST_LAUNCH_TIMEOUT_MS = 120_000;
-export const HOME_READY_MARKER = "Your apps, ready";
+export const HOME_READY_MARKER = "Home ready";
 // An individual chunk owns one coherent user interaction. Fresh pairing is the
 // slowest legitimate chunk (~4 minutes on the reviewed CI runner); 12 minutes
 // leaves ample network/render headroom while still terminating a wedged
@@ -317,7 +317,9 @@ async function runMaestroChunk(
  *   ctx.state               read-only snapshot of {runId, runDir, udid, appId, ...}
  *   ctx.run(yaml, label?, options?) execute a YAML chunk; screenshots land under runs/.../screenshots/
  *   ctx.restart()           stopApp + launchApp without clearing state — mirrors desktop's ctx.restart()
- *   ctx.configureGateway()  clear state, open scan-first onboarding, redeem a ticket, and complete either valid identity branch
+ *   ctx.configureGateway()  pair from a clean state (iOS retries once with a fresh ticket), or reuse the paired nightly profile when requested
+ *   ctx.ensureDemo(appId)   seed a scenario before the initial replica clone, if absent
+ *   ctx.purgeDemo(appId)    remove a scenario before an empty-vault journey
  *   ctx.note(msg)           record an observation; surfaces in verdict.md
  *
  * Failure model: throw OR return { pass: false, ... }. Either writes a FAIL
@@ -371,7 +373,7 @@ export async function runFlow(slug, fn) {
   const mintPairingTicket = async (gatewayUrl, gatewayToken) => {
     const dataDir = process.env.MAESTRO_GATEWAY_DATA_DIR;
     if (dataDir) {
-      const cli = path.join(REPO_ROOT, "packages/gateway/dist/cli/cli.js");
+      const cli = path.join(REPO_ROOT, "packages/server/dist/cli/cli.js");
       const port = new URL(gatewayUrl).port;
       // A daemon started with a pinned `CENTRAID_GATEWAY_TOKEN` rejects the
       // bearer the CLI would otherwise derive from `keys/endpoint-key.bin`, so
@@ -387,10 +389,6 @@ export async function runFlow(slug, fn) {
           "--data-dir",
           dataDir,
           ...(port ? ["--port", port] : []),
-          "--new-member",
-          `Mobile E2E ${state.runId}`,
-          "--role",
-          "write",
           "--ttl-minutes",
           "30",
           "--json",
@@ -417,9 +415,7 @@ export async function runFlow(slug, fn) {
           ...(gatewayToken ? { authorization: `Bearer ${gatewayToken}` } : {}),
         },
         body: JSON.stringify({
-          role: "write",
           ttlMinutes: 15,
-          newMemberLabel: `Mobile E2E ${state.runId}`,
         }),
       }
     );
@@ -445,6 +441,21 @@ export async function runFlow(slug, fn) {
         "MAESTRO_GATEWAY_URL is required for this mobile journey"
       );
     }
+    if (process.env.MAESTRO_REUSE_PAIRED_STATE === "1") {
+      await ctx.run(
+        `appId: ${state.appId}
+---
+- launchApp:
+    clearState: false
+- extendedWaitUntil:
+    visible: "${HOME_READY_MARKER}"
+    timeout: ${FIRST_LAUNCH_TIMEOUT_MS}
+`,
+        "reuse-paired-gateway"
+      );
+      ctx.note(`reused the paired nightly profile for ${gatewayUrl}`);
+      return;
+    }
     // A cold iOS simulator can lose the first iroh redemption after the
     // onboarding UI has already rendered (30842553646). Retry only on iOS:
     // each attempt mints a fresh one-time ticket and clears app state, so a
@@ -455,22 +466,46 @@ export async function runFlow(slug, fn) {
       try {
         const pairingTicket = await mintPairingTicket(gatewayUrl, gatewayToken);
 
-        // #603 removed the local/manual-URL bypass: every fresh client must
-        // redeem a real one-time pairing ticket. #643/#644 made the default
-        // path scan-first (showPaste=false): open paste via the secondary
-        // control, then fill the ticket field and submit with the live primary
-        // label "Connect" (not the pre-scan-first "Continue with pasted code").
-        // #634 made the profile step conditional: a named roster member goes
-        // straight to Done, while an unnamed member is asked for a profile.
-        // The gateway URL is used only by the host-side harness to mint that
-        // ticket; the phone reaches the gateway through the ticket's iroh
-        // endpoint.
+        // #603 removed the local/manual-URL bypass: every fresh client must redeem
+        // a real one-time pairing ticket. #634 made the profile step conditional:
+        // an owner who already has a name goes straight to Done, while one still
+        // carrying the placeholder label is asked for a profile. The gateway URL
+        // is used only by the host-side harness to mint that ticket; the phone
+        // reaches the gateway through the ticket's iroh endpoint.
         await ctx.run(
           `appId: ${state.appId}
 ---
 - launchApp:
     clearState: true
-${waitForOnboardingConnectCommands(FIRST_LAUNCH_TIMEOUT_MS)}${pasteAndConnectPairingTicketCommands(HOME_READY_MARKER)}`,
+- extendedWaitUntil:
+    visible:
+      text: "Connect your gateway."
+    timeout: ${FIRST_LAUNCH_TIMEOUT_MS}
+- tapOn: "Can't scan? Paste a code instead"
+- extendedWaitUntil:
+    visible: "Paste the one-line ticket"
+    timeout: 10000
+- tapOn: "Paste the one-line ticket"
+# e2e-lint-allow: unasserted-input — throwaway input only provokes iOS keyboard
+# onboarding and is erased before the pairing ticket is entered.
+- inputText: "x"
+${DISMISS_KEYBOARD_ONBOARDING}- eraseText
+# e2e-lint-allow: unasserted-input — Maestro cannot reliably match long
+# long React Native TextInput values; successful redemption below is the
+# end-to-end observation of the one-time ticket. MAESTRO_* shell variables are
+# resolved by Maestro without persisting the live capability in this YAML.
+- inputText: \${MAESTRO_PAIRING_TICKET}
+- hideKeyboard
+# The ticket is deliberately a one-line field, so its stable native Pressable
+# remains in the viewport even while the iOS keyboard is still visible.
+- tapOn:
+    id: "onboarding-connect"
+# Redemption dials the gateway over iroh; on a cold simulator that handshake is
+# the slowest step in the journey, so budget for the network, not the render.
+- extendedWaitUntil:
+    visible: "Who's using this phone[?]|You're all set, [^.]+[.]"
+    timeout: 90000
+`,
           "configure-gateway",
           {
             maestroEnv: { MAESTRO_PAIRING_TICKET: pairingTicket },
@@ -478,16 +513,44 @@ ${waitForOnboardingConnectCommands(FIRST_LAUNCH_TIMEOUT_MS)}${pasteAndConnectPai
           }
         );
 
-        // A second, non-sensitive Maestro chunk keeps the pairing capability
-        // out of retained diagnostics while proving both legitimate identity
-        // paths. Tickets minted above deliberately name their member "Mobile
-        // E2E …", so the normal branch skips the form and greets "Mobile";
-        // the conditional form path remains covered for gateways that return
-        // no roster name.
+        // A second, non-sensitive Maestro chunk keeps the pairing capability out
+        // of retained diagnostics while proving both legitimate identity paths.
+        // Ownership (#726) killed the pre-named-invite mint: a ticket can no
+        // longer carry a chosen label, so the FIRST pairing against a fresh
+        // gateway always lands the placeholder owner "You" (not a set name) and
+        // shows the form. A later flow that reuses the same nightly gateway
+        // process finds that owner already renamed "Nightly" by the run below
+        // and skips straight to Done — both are real product paths, so the
+        // pattern above accepts either.
         await ctx.run(
           `appId: ${state.appId}
 ---
-${completeOnboardingCommands(HOME_READY_MARKER)}`,
+- runFlow:
+    when:
+      visible: "Who's using this phone[?]"
+    commands:
+      - tapOn: "Your name"
+# e2e-lint-allow: unasserted-input — React Native TextInput values are not
+# reliably Maestro-matchable; the personalized done heading below proves the
+# submitted profile name end to end.
+      - inputText: "Nightly"
+      - hideKeyboard
+      - tapOn: "Continue"
+- extendedWaitUntil:
+    visible: "You're all set, [^.]+[.]"
+    timeout: 60000
+# iOS can acknowledge an accessibility tap before the RN Pressable is ready.
+# The button's press animation changes the hierarchy even if navigation was
+# ignored, so retry only while the source control remains visible. The Home
+# marker below remains mandatory and prevents a vacuous pass.
+${retryableTapCommands("Enter Centraid")}
+# The rail remains visible while Home loads, and the async Daily Brief can move
+# every tile when it arrives. Wait for its explicit settled accessibility label
+# so the next tap never uses coordinates captured before that layout shift.
+- extendedWaitUntil:
+    visible: "${HOME_READY_MARKER}"
+    timeout: 30000
+`,
           "complete-onboarding"
         );
         ctx.note(`paired the journey with the gateway at ${gatewayUrl}`);
@@ -501,6 +564,73 @@ ${completeOnboardingCommands(HOME_READY_MARKER)}`,
       }
     };
     await pairAttempt(1);
+  };
+
+  /**
+   * Ensure one deterministic scenario exists before pairing. Seeding on the
+   * host first means the phone's initial replica clone contains the corpus;
+   * flows never race a later refresh or depend on execution order. The GET
+   * guard also lets all five Photos journeys share one gateway boot safely.
+   */
+  ctx.ensureDemo = async (
+    appId,
+    gatewayUrl = process.env.MAESTRO_GATEWAY_URL,
+    gatewayToken = process.env.MAESTRO_GATEWAY_TOKEN ?? ""
+  ) => {
+    if (!gatewayUrl)
+      throw new Error("MAESTRO_GATEWAY_URL is required to seed demo data");
+    const base = gatewayUrl.replace(/\/+$/u, "");
+    const headers = gatewayToken
+      ? { authorization: `Bearer ${gatewayToken}` }
+      : {};
+    const statusResponse = await fetch(`${base}/centraid/_vault/demo`, {
+      headers,
+    });
+    const status = await statusResponse.json().catch(() => ({}));
+    if (!statusResponse.ok || !Array.isArray(status?.apps))
+      throw new Error(
+        `gateway refused demo status (${status?.error ?? statusResponse.status})`
+      );
+    const current = status.apps.find((app) => app?.appId === appId);
+    if (!current?.seedable)
+      throw new Error(`gateway does not ship the ${appId} demo scenario`);
+    if (Number(current.rows) > 0) {
+      ctx.note(`${appId} demo already present (${current.rows} rows)`);
+      return;
+    }
+    const seededResponse = await fetch(
+      `${base}/centraid/_vault/demo/${encodeURIComponent(appId)}`,
+      { headers, method: "POST" }
+    );
+    const seeded = await seededResponse.json().catch(() => ({}));
+    if (!seededResponse.ok)
+      throw new Error(
+        `gateway refused ${appId} demo seed (${seeded?.error ?? seededResponse.status})`
+      );
+    ctx.note(`${appId} demo seeded (${seeded.rows ?? "unknown"} rows)`);
+  };
+
+  ctx.purgeDemo = async (
+    appId,
+    gatewayUrl = process.env.MAESTRO_GATEWAY_URL,
+    gatewayToken = process.env.MAESTRO_GATEWAY_TOKEN ?? ""
+  ) => {
+    if (!gatewayUrl)
+      throw new Error("MAESTRO_GATEWAY_URL is required to purge demo data");
+    const base = gatewayUrl.replace(/\/+$/u, "");
+    const headers = gatewayToken
+      ? { authorization: `Bearer ${gatewayToken}` }
+      : {};
+    const response = await fetch(
+      `${base}/centraid/_vault/demo/${encodeURIComponent(appId)}`,
+      { headers, method: "DELETE" }
+    );
+    const result = await response.json().catch(() => ({}));
+    if (!response.ok)
+      throw new Error(
+        `gateway refused ${appId} demo purge (${result?.error ?? response.status})`
+      );
+    ctx.note(`${appId} demo purged (${result.purged ?? "unknown"} rows)`);
   };
 
   // Mirror desktop's ctx.restart(): kill the app process so AsyncStorage

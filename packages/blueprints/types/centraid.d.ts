@@ -1,18 +1,18 @@
 // Global ambient types for the blueprint apps (TS + CSS-modules conversion).
 //
 // These are GLOBALS on purpose: handlers and page code reference `HandlerArgs`,
-// `HandlerCtx`, `VaultOutcome`, and `window.centraid` by bare name so no value
-// import crosses the app/kit boundary at runtime (esbuild would 404 a plain
-// import of a types-only module; `import type` is stripped, but a global spares
-// the ceremony entirely). Grounded in the real surfaces:
-//   - `window.centraid` — the injected change-bridge client
-//     (packages/app-engine/src/http/bridge-script.ts) and its faithful mock
-//     (packages/blueprints/visual-harness/mock-centraid.js): read/write/onChange.
+// `HandlerCtx`, `VaultOutcome`, and `window.centraid` by bare name, so a
+// types-only module never has to be imported for its side effect of existing
+// (`import type` is stripped, but a global spares the ceremony entirely).
+// Grounded in the real surfaces:
+//   - `window.centraid` — the shell-provided app client
+//     (packages/client/src/react/blueprints/centraid-inline.ts):
+//     read/write/onChange.
 //   - `ctx.vault` — the handler-side vault RPC surface
-//     (packages/app-engine/src/worker/runner.ts `ScopedVault`,
-//     packages/app-engine/src/types.ts `CommonHandlerArgs`/`ActionResult`).
-//   - `VaultOutcome` — the typed-command result the kit narrates
-//     (packages/design/kit/kit.ts `outcomeMessage`).
+//     (packages/server/src/engine/worker/runner.ts `ScopedVault`,
+//     packages/server/src/engine/types.ts `CommonHandlerArgs`/`ActionResult`).
+//   - `VaultOutcome` — the typed-command result the element layer narrates
+//     (packages/design/src/elements/feedback.ts `outcomeMessage`).
 //
 // This is an ambient script (no imports/exports), so every top-level type and
 // interface below is a GLOBAL — visible unqualified from every app/handler,
@@ -20,7 +20,7 @@
 
 // ---------- Typed-command outcome ----------
 
-/** Terminal states a vault write settles into (kit.ts `outcomeMessage`). */
+/** Terminal states a vault write settles into (the element layer's `outcomeMessage`). */
 type VaultOutcomeStatus =
   | "executed"
   | "parked"
@@ -213,7 +213,7 @@ interface HandlerArgs {
 // ---------- window.centraid (page side) ----------
 
 /**
- * A change-feed event (kit.ts `onDataChange`). A non-empty `tables` list must
+ * A change-feed event (the element layer's `onDataChange`). A non-empty `tables` list must
  * intersect an app's declared tables to fire; an empty list ("this app
  * acted") always fires. `intentId`/`intentState` mark optimistic overlay
  * updates.
@@ -244,9 +244,28 @@ interface CentraidChangeDetail {
 interface CentraidScope {
   id: string;
   label: string;
+  /** The member's own vault? The "somewhere other than my own" marker is
+   *  exactly `personal === false` (issue #711 item H). */
+  personal?: boolean;
   color?: string;
   icon?: string;
   canWrite: boolean;
+}
+
+/** One durable member command waiting on (or settled by) its Commons steward.
+ *  Its statuses are the pending-write outbox's own words (issue #750): one
+ *  intent grammar across every surface that renders in-flight writes. */
+interface CentraidCommonsIntent {
+  intentId: string;
+  grantId: string;
+  actorPartyId: string;
+  command: string;
+  input: Record<string, unknown>;
+  status: "queued" | "parked" | "executed" | "denied" | "expired" | "cancelled";
+  reason?: string;
+  stewardLabel?: string;
+  createdAt: string;
+  settledAt?: string;
 }
 
 /** One scope's answer in a `readAll` fan-out. Errors are data, never throws. */
@@ -295,7 +314,25 @@ interface CentraidClient {
     signal?: AbortSignal;
     /** Which mounted scope the write lands in; defaults to the primary. */
     scope?: string;
+    /** Never enter a replica/outbox; a network failure rejects immediately. */
+    onlineOnly?: boolean;
   }) => Promise<T>;
+  /** Retry a retained denied/conflict/failed outbox record as a new intent. */
+  retryPendingWrite?: (intentId: string, scope?: string) => Promise<boolean>;
+  /** Permanently discard a retained denied/conflict/failed outbox record. */
+  discardPendingWrite?: (intentId: string, scope?: string) => Promise<boolean>;
+  /** Navigate to the shell-owned approval inbox when this host provides one. */
+  openApprovals?: () => void;
+  /** Durable member-side Commons overlay; absent on older/single-scope hosts. */
+  commonsIntents?: (opts?: {
+    scope?: string;
+    signal?: AbortSignal;
+  }) => Promise<CentraidCommonsIntent[]>;
+  /** Cancel a Commons intent that has not executed yet; a steward that has already executed it wins. */
+  cancelCommonsIntent?: (opts: {
+    intentId: string;
+    scope?: string;
+  }) => Promise<{ status: string; cancelled: boolean }>;
   /** Place an entity into another mounted audience vault. */
   place?: (opts: {
     linkToken: string;
@@ -304,8 +341,9 @@ interface CentraidClient {
       | "core.collection"
       | "core.content_item"
       | "core.document"
+      | "docs.folder"
       | "locker.item"
-      | "media.media_asset"
+      | "media.asset"
       | "tally.group";
     itemId: string;
     sourceVaultId: string;
@@ -316,17 +354,153 @@ interface CentraidClient {
     accessReceiptId?: string;
     reason?: string;
   }>;
+  /** Share one container as circle-backed commons. */
+  share?: (opts: {
+    containerType:
+      | "core.collection"
+      | "core.content_item"
+      | "core.document"
+      | "docs.folder"
+      | "locker.item"
+      | "media.asset"
+      | "tally.group";
+    containerId: string;
+    sourceVaultId: string;
+    members: Array<{
+      /** Required for an unmounted linked peer; local vaults resolve it at the gateway. */
+      partyId?: string;
+      /** Absent until an invited person creates and joins with a vault. */
+      vaultId?: string;
+      capability: "read" | "read+write";
+    }>;
+    circleId?: string;
+  }) => Promise<{
+    grantId: string;
+    claims: Array<{ partyId: string; claimToken: string }>;
+    [key: string]: unknown;
+  }>;
+  /** People-directory identities, including invitations with no vault yet. */
+  shareTargets?: () => Promise<
+    Array<{
+      partyId: string;
+      label: string;
+      vaultId?: string;
+    }>
+  >;
+  /** Mint a People person inline from the ShareSheet. Online-only: resolves
+   *  only with a real, settled party id — never a pending overlay id. */
+  quickAddPerson?: (opts: {
+    name: string;
+  }) => Promise<{ partyId: string; label: string }>;
+  /** Named Tally-backed circles only; implicit per-container circles never
+   * appear here. */
+  shareCircles?: () => Promise<
+    Array<{
+      circleId: string;
+      label: string;
+      members: Array<{
+        partyId: string;
+        vaultId?: string;
+        capability: "read" | "read+write";
+      }>;
+    }>
+  >;
+  commonsResidents?: (actorVaultId?: string) => Promise<
+    Array<{
+      grantId: string;
+      itemType: string;
+      itemId: string;
+      originItemId: string;
+    }>
+  >;
+  retainCommonsItem?: (opts: {
+    actorVaultId: string;
+    itemType: string;
+    itemId: string;
+  }) => Promise<{ retained: boolean; grantIds: string[] }>;
+  /** The household's cross-vault links (#726 P6) — candidate share
+   *  destinations beyond the member's own mounted scopes, co-hosted and
+   *  remote alike (D3: locality is routing, not semantics). */
+  links?: () => Promise<
+    Array<{
+      linkId: string;
+      vaultId: string;
+      partyId: string;
+      approved: boolean;
+    }>
+  >;
+  /**
+   * The GRANT PLANE (#825) — standing shares over `/centraid/_vault/grants`.
+   * Every call answers the route's parsed JSON body as `unknown`: the parsing
+   * and refusal law lives once in `_shared/grant-door.ts`, shared with the
+   * native seat, so no app reads a payload itself. A refused call rejects with
+   * the route's OWN message, which the sheet prints verbatim.
+   */
+  grants?: {
+    subjects: () => Promise<unknown>;
+    forParty: (partyId: string) => Promise<unknown>;
+    /** `undefined` for an audience this vault has no record of (404). */
+    forAudience: (
+      kind: "party" | "circle",
+      id: string
+    ) => Promise<unknown | undefined>;
+    forSubject: (subjectType: string, subjectId: string) => Promise<unknown>;
+    create: (request: {
+      audienceKind: "party" | "circle";
+      audienceId: string;
+      subjectType: string;
+      subjectId: string;
+      capability: "view" | "edit";
+      subjectLabel?: string;
+    }) => Promise<unknown>;
+    revoke: (grantId: string) => Promise<unknown>;
+  };
   describe?: () => Promise<unknown>;
   /** Subscribe to the change feed; returns the unsubscribe. */
   onChange: (cb: (detail: CentraidChangeDetail) => void) => () => void;
+  /**
+   * Read vault text through the shell's authenticated blob transport. The
+   * shell's document origin is not the gateway — the installable web PWA rides
+   * the iroh tunnel and desktop runs from `file://` — so a relative fetch of a
+   * content URI resolves nowhere and carries no credential.
+   */
+  blobText?: (pathname: string, scope?: string) => Promise<string | null>;
+  /** An authed `blob:` URL for a `/_vault/blobs/…` path, in one scope. */
+  blobUrl?: (pathname: string, scope?: string) => Promise<string | null>;
+  /**
+   * Stream a File into the vault's blob CAS. The upload half of the same
+   * authenticated door — the element layer's `stageFileBytes` is a thin
+   * feature-detected wrapper over this, and the transport lives in the shell
+   * (packages/client blob-staging.ts).
+   */
+  stageBlob?: (
+    file: File,
+    extra?: string,
+    options?: { hash?: boolean; scope?: string }
+  ) => Promise<StagedBlob>;
+  /** Submit a typed derivative contribution against a staged parent's sha. */
+  stageDerivative?: (
+    parentSha: string,
+    variant: string,
+    body: BodyInit,
+    mediaType?: string
+  ) => Promise<StagedBlob>;
   /** Native haptics bridge (mobile shell only; feature-detected). */
   haptic?: Record<string, (() => void) | undefined>;
 }
 
+/** The staging receipt the blob door returns for one contribution. */
+interface StagedBlob {
+  sha256: string;
+  mediaType?: string | null;
+  byteSize?: number;
+  existingContentId?: string | null;
+  casAck?: string | null;
+  custody?: string | null;
+  alreadyPresent?: boolean;
+  [key: string]: unknown;
+}
+
 interface Window {
   centraid: CentraidClient;
-  /** Ask-panel config seeded inline by index.html before app code loads. */
-  KIT_ASK?: Record<string, unknown>;
-  /** The kit's Ask controller, mounted at kit.ts eval time. */
-  kitAsk?: Record<string, unknown>;
 }

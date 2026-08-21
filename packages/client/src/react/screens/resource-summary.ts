@@ -25,21 +25,17 @@ export interface ResourceProfileResolved {
   workerMaxOldGenerationMb: number;
   workerPoolSize: number;
   replicationConcurrency: number;
-  staticBrotliQuality: number;
-  staticGzipQuality: number;
   sqliteSynchronous: "FULL" | "NORMAL";
   vaultSweepIntervalMs: number;
   outboxIdleIntervalMs: number;
 }
 
-/** Knob keys the resolver derives; the first four are owner-tunable (issue #528 Phase F). */
+/** Knob keys the resolver derives; all are owner-tunable (issue #528 Phase F). */
 export type ResourceKnobKey =
   | "workerMaxConcurrent"
   | "workerMaxOldGenerationMb"
   | "workerPoolSize"
-  | "replicationConcurrency"
-  | "staticBrotliQuality"
-  | "staticGzipQuality";
+  | "replicationConcurrency";
 
 /** Provenance of one resolved knob, from `resourceProfile.sources` (issue #528 Phase F). */
 export interface ResourceKnobSource {
@@ -99,15 +95,15 @@ export interface ResourceUsageDTO {
     replication: { passes: number; bytesReplicated: number; busyMs: number };
     backup: { drains: number; bytesUploaded: number; busyMs: number };
     sweeps: { passes: number; busyMs: number };
-    /** `cpuSeconds` is `null` in v1 — agent runs aren't separately CPU-accounted. */
-    agentRuns: { runs: number; busyMs: number; cpuSeconds: number | null };
+    /** `cpuSeconds` is `null` in v1 — harness runs aren't separately CPU-accounted. */
+    harnessRuns: { runs: number; busyMs: number; cpuSeconds: number | null };
   };
   backgroundTimerFiresLastHour: number | null;
 }
 
 /**
  * One measured subsystem row for the resource receipt. `note` carries a
- * clarifying caveat (e.g. the agent-runs "measured, not limited by Conserve"
+ * clarifying caveat (e.g. the harness-runs "measured, not limited by Conserve"
  * label the issue mandates).
  */
 export interface ResourceUsageRow {
@@ -216,10 +212,6 @@ export function resolvedKnobRows(
       label: "Outbox idle poll",
       value: `every ${formatFriendlyMs(r.outboxIdleIntervalMs)}`,
     },
-    {
-      label: "Compression",
-      value: `brotli q${r.staticBrotliQuality} · gzip q${r.staticGzipQuality}`,
-    },
   ];
 }
 
@@ -320,7 +312,7 @@ export function processUsageRows(usage: ResourceUsageDTO): ResourceUsageRow[] {
 }
 
 /**
- * Per-subsystem actuals in the order the receipt renders them. Agent runs
+ * Per-subsystem actuals in the order the receipt renders them. Harness runs
  * carry the explicit "measured, not limited by Conserve" caveat plus the
  * v1 null-CPU note, so Conserve never appears to promise what it can't govern.
  */
@@ -346,9 +338,9 @@ export function subsystemUsageRows(
       value: `${s.sweeps.passes} passes · ${formatBusyMs(s.sweeps.busyMs)} active`,
     },
     {
-      label: "Agent runs",
-      value: `${s.agentRuns.runs} runs · ${formatBusyMs(s.agentRuns.busyMs)} active`,
-      note: "Measured, not limited by Conserve. CPU time for agent runs isn’t separately measurable yet.",
+      label: "Harness runs",
+      value: `${s.harnessRuns.runs} runs · ${formatBusyMs(s.harnessRuns.busyMs)} active`,
+      note: "Measured, not limited by Conserve.",
     },
   ];
 }
@@ -356,8 +348,7 @@ export function subsystemUsageRows(
 // ── L3 "Tune" rung: advanced knobs (issue #528 Phase F) ─────────────────────
 // The four owner-tunable knobs, their prefs plumbing, and the pure validation
 // used by ResourceAdvancedKnobs. Kept React-free so the bounds/warning math
-// stays unit-testable and the component stays under the 500-line cap. Only the
-// first four knobs are tunable; compression quality stays resolver-only.
+// stays unit-testable and the component stays under the 500-line cap.
 
 /** The four owner-tunable knob keys, in the order the L3 rung renders them. */
 export type TunableKnobKey =

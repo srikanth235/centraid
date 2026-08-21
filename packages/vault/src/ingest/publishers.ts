@@ -8,7 +8,15 @@
 import type { DatabaseSync } from "node:sqlite";
 
 import { promoteStagedBlob } from "../blob/promote.js";
+import { setStarredTx } from "../commands/flags.js";
 import { assertTextBodyWithinBudget } from "../commands/inline-body-guard.js";
+import {
+  adoptAssetForContentTx,
+  assetKindFor,
+  exifJsonForMeta,
+  findOrCreatePlaceTx,
+  insertMediaAssetTx,
+} from "../commands/media.js";
 import { nowIso, sha256Hex, uuidv7 } from "../ids.js";
 import { ONTOLOGY_VERSION } from "../schema/migrate.js";
 import { ENRICH_PUBLISHERS } from "./enrich-publishers.js";
@@ -636,14 +644,19 @@ function noteContent(
   return { id, wrote: [{ type: "core.content_item", id }] };
 }
 
-function placeImportedNote(
+/**
+ * Find-or-create a nested collection path under one owner, returning the
+ * deepest collection. Shared by every importer that files what it publishes
+ * (issue #721): a Markdown directory becomes nested notebooks, a Takeout
+ * album folder becomes one flat album — same mechanism, same find-or-create,
+ * so an import never mints a second collection with a name the vault holds.
+ */
+function ensureCollectionPath(
   vault: DatabaseSync,
   ownerPartyId: string,
-  noteId: string,
-  path: string,
+  segments: readonly string[],
   now: string
-): PublishedWrite[] {
-  const segments = path.replaceAll("\\", "/").split("/").slice(0, -1);
+): { collectionId: string | null; wrote: PublishedWrite[] } {
   const wrote: PublishedWrite[] = [];
   let parent: string | null = null;
   for (const name of segments) {
@@ -680,27 +693,54 @@ function placeImportedNote(
     wrote.push({ type: "core.collection", id: collectionId });
     parent = collectionId;
   }
-  if (parent) {
-    const entryId = uuidv7();
-    const position = vault
-      .prepare(
-        "SELECT COALESCE(MAX(position), -1) + 1 AS n FROM core_collection_entry WHERE collection_id = ?"
-      )
-      .get(parent) as { n: number };
-    vault
-      .prepare(
-        `INSERT OR IGNORE INTO core_collection_entry
-           (entry_id, collection_id, target_type, target_id, position, added_at)
-         VALUES (?, ?, 'knowledge.note', ?, ?, ?)`
-      )
-      .run(entryId, parent, noteId, position.n, now);
-    const changes = vault.prepare("SELECT changes() AS n").get() as {
-      n: number;
-    };
-    if (changes.n > 0)
-      wrote.push({ type: "core.collection_entry", id: entryId });
-  }
-  return wrote;
+  return { collectionId: parent, wrote };
+}
+
+/** Append a target to a collection, at most once (the UNIQUE decides). */
+function addCollectionEntry(
+  vault: DatabaseSync,
+  collectionId: string,
+  targetType: string,
+  targetId: string,
+  now: string
+): PublishedWrite[] {
+  const entryId = uuidv7();
+  const position = vault
+    .prepare(
+      "SELECT COALESCE(MAX(position), -1) + 1 AS n FROM core_collection_entry WHERE collection_id = ?"
+    )
+    .get(collectionId) as { n: number };
+  vault
+    .prepare(
+      `INSERT OR IGNORE INTO core_collection_entry
+         (entry_id, collection_id, target_type, target_id, position, added_at)
+       VALUES (?, ?, ?, ?, ?, ?)`
+    )
+    .run(entryId, collectionId, targetType, targetId, position.n, now);
+  const changes = vault.prepare("SELECT changes() AS n").get() as { n: number };
+  return changes.n > 0 ? [{ type: "core.collection_entry", id: entryId }] : [];
+}
+
+function placeImportedNote(
+  vault: DatabaseSync,
+  ownerPartyId: string,
+  noteId: string,
+  path: string,
+  now: string
+): PublishedWrite[] {
+  const segments = path.replaceAll("\\", "/").split("/").slice(0, -1);
+  const placed = ensureCollectionPath(vault, ownerPartyId, segments, now);
+  if (!placed.collectionId) return placed.wrote;
+  return [
+    ...placed.wrote,
+    ...addCollectionEntry(
+      vault,
+      placed.collectionId,
+      "knowledge.note",
+      noteId,
+      now
+    ),
+  ];
 }
 
 const notePublisher: Publisher = {
@@ -761,6 +801,225 @@ const notePublisher: Publisher = {
   },
 };
 
+// ── media.asset (photo-library import, issue #721 A1) ─────────────
+// A photograph from a Takeout archive must become the SAME row as one
+// uploaded from a phone, so this publisher writes through `media.add_asset`'s
+// own primitives (commands/media.ts) rather than a second insert of its own:
+// `adoptAssetForContentTx` for the sha-dedupe/restore rule,
+// `insertMediaAssetTx` for the row, `findOrCreatePlaceTx` for the place,
+// `setStarredTx` for the favorite (the column is a mirror, the tag is the
+// truth — issue #441 A2.1). What is genuinely new here is only what the
+// ARCHIVE knows and an upload does not: the sidecar's testimony and the
+// album folder it sat in.
+
+export interface MediaAssetPayload {
+  /** Bytes already in the CAS (issue #296) — the sha is also their identity. */
+  stagedSha: string;
+  filename: string;
+  mediaType: string;
+  byteSize: number;
+  /** Archive-relative path — the stable Takeout identity, and the external id. */
+  path: string;
+  /** Sidecar capture time. NULL is a fact: nobody knows when this was taken. */
+  capturedAt: string | null;
+  latitude: number | null;
+  longitude: number | null;
+  caption: string | null;
+  favorite: 0 | 1;
+  captureGroupId: string | null;
+  album: string | null;
+}
+
+/** File a published asset into its reconstructed album. */
+function placeImportedAsset(
+  vault: DatabaseSync,
+  ownerPartyId: string,
+  assetId: string,
+  album: string,
+  now: string
+): PublishedWrite[] {
+  const placed = ensureCollectionPath(vault, ownerPartyId, [album], now);
+  if (!placed.collectionId) return placed.wrote;
+  const wrote = [
+    ...placed.wrote,
+    ...addCollectionEntry(
+      vault,
+      placed.collectionId,
+      "media.asset",
+      assetId,
+      now
+    ),
+  ];
+  // The first photo into a coverless album becomes its cover — the same rule
+  // `media.add_to_album` applies, so a reconstructed album has a face too.
+  vault
+    .prepare(
+      `UPDATE core_collection SET cover_content_id =
+         (SELECT content_id FROM media_asset WHERE asset_id = ?)
+       WHERE collection_id = ? AND cover_content_id IS NULL`
+    )
+    .run(assetId, placed.collectionId);
+  return wrote;
+}
+
+const mediaAssetPublisher: Publisher = {
+  entityType: "media.asset",
+  probe(vault, payload) {
+    // Read-only lookup — see the eventPublisher note above. DEDUPE AGAINST
+    // THE WHOLE VAULT, not just this connection's map: the same photograph
+    // re-exported under a different archive name, or already uploaded from
+    // the phone, is the same bytes and therefore the same asset. Canonical
+    // sha256 is what says so (core_content_item.sha256 is UNIQUE).
+    const p = payload as unknown as MediaAssetPayload;
+    if (typeof p.stagedSha !== "string") return null;
+    const existing = vault
+      .prepare(
+        `SELECT a.asset_id FROM media_asset a
+           JOIN core_content_item c ON c.content_id = a.content_id
+          WHERE c.sha256 = ? AND a.deleted_at IS NULL`
+      )
+      .get(p.stagedSha) as { asset_id: string } | undefined;
+    return existing
+      ? {
+          entityId: existing.asset_id,
+          disposition: "skip",
+          note: "these bytes are already in the library",
+        }
+      : null;
+  },
+  create(vault, ownerPartyId, payload, now) {
+    const p = assertPayload<MediaAssetPayload>("MediaAssetPayload", payload);
+    const wrote: PublishedWrite[] = [];
+    const collect = (entityType: string, entityId: string): void => {
+      wrote.push({ type: entityType, id: entityId });
+    };
+    const deps = { vault, now, newId: uuidv7, wrote: collect };
+    const promoted = promoteStagedBlob(
+      { ...deps, creatorPartyId: ownerPartyId },
+      p.stagedSha,
+      p.caption === null ? {} : { title: p.caption }
+    );
+    // Two entries of the same bytes inside ONE archive (Takeout's `(1)`
+    // duplicates) both staged as creates, because neither was in the vault
+    // when the batch was dispositioned. The second one adopts the first's
+    // asset here instead of hitting the content_id UNIQUE.
+    const adopted = adoptAssetForContentTx(
+      deps,
+      promoted.contentId,
+      p.captureGroupId
+    );
+    const meta = promoted.meta;
+    const assetId = adopted ?? uuidv7();
+    if (!adopted) {
+      // SIDECAR BEATS EXIF BEATS NOTHING. Google Photos' record of when a
+      // photo was taken survives edits, re-encodes and stripped EXIF, so it
+      // wins where it exists. The file's own mtime is deliberately NOT a
+      // third tier: a zip stores whatever the exporter's machine felt like
+      // stamping, so it dates the EXPORT, not the photograph. When neither
+      // source knows, captured_at stays NULL and the photo lands undated —
+      // an honest gap the timeline can say out loud.
+      const latitude = p.latitude ?? meta.latitude ?? null;
+      const longitude = p.longitude ?? meta.longitude ?? null;
+      insertMediaAssetTx(vault, {
+        assetId,
+        contentId: promoted.contentId,
+        kind: assetKindFor(promoted.mediaType),
+        capturedAt: p.capturedAt ?? meta.captured_at ?? null,
+        // Takeout's timestamp is a UTC instant with no zone beside it, and
+        // EXIF's is zoneless local — neither states an offset, so there is
+        // nothing honest to put here.
+        tzOffsetMin: null,
+        captureGroupId: p.captureGroupId,
+        sourceAssetId: null,
+        placeId:
+          latitude !== null && longitude !== null
+            ? findOrCreatePlaceTx(deps, latitude, longitude)
+            : null,
+        width: meta.width ?? null,
+        height: meta.height ?? null,
+        durationS: meta.duration_s ?? null,
+        exifJson: exifJsonForMeta(meta),
+      });
+    }
+    applyImportedAssetFlags(deps, ownerPartyId, assetId, p);
+    if (p.album !== null) {
+      wrote.push(
+        ...placeImportedAsset(vault, ownerPartyId, assetId, p.album, now)
+      );
+    }
+    return { entityId: assetId, wrote };
+  },
+  update(vault, entityId, payload, now, ownerPartyId) {
+    const p = assertPayload<MediaAssetPayload>("MediaAssetPayload", payload);
+    const wrote: PublishedWrite[] = [];
+    const collect = (entityType: string, entityId2: string): void => {
+      wrote.push({ type: entityType, id: entityId2 });
+    };
+    const deps = { vault, now, newId: uuidv7, wrote: collect };
+    // An `update` row is the owner having REVIEWED this diff and pressed
+    // publish, so the sidecar's caption, favorite and capture time apply.
+    // Two exceptions, both about not destroying what the vault knows: a
+    // sidecar with NO capture time may not erase one the vault has (COALESCE
+    // — honest absence upstream is not a correction), and a capture group is
+    // additive, never re-pointed.
+    vault
+      .prepare(
+        `UPDATE media_asset
+            SET captured_at = COALESCE(?, captured_at),
+                capture_group_id = COALESCE(capture_group_id, ?)
+          WHERE asset_id = ?`
+      )
+      .run(p.capturedAt, p.captureGroupId, entityId);
+    if (p.caption !== null) {
+      vault
+        .prepare(
+          `UPDATE core_content_item SET title = ?
+            WHERE content_id = (SELECT content_id FROM media_asset WHERE asset_id = ?)`
+        )
+        .run(p.caption, entityId);
+    }
+    applyImportedAssetFlags(deps, ownerPartyId, entityId, p);
+    if (p.album !== null) {
+      wrote.push(
+        ...placeImportedAsset(vault, ownerPartyId, entityId, p.album, now)
+      );
+    }
+    return { wrote };
+  },
+};
+
+/**
+ * The favorite bit, mirrored onto the canonical starred tag exactly as the
+ * media commands do. Only ever SETS: an import fills gaps, it never clears a
+ * star the owner put on a photo here (issue #290 decision 6).
+ */
+function applyImportedAssetFlags(
+  deps: {
+    vault: DatabaseSync;
+    now: string;
+    newId: () => string;
+    wrote: (entityType: string, entityId: string) => void;
+  },
+  ownerPartyId: string,
+  assetId: string,
+  payload: MediaAssetPayload
+): void {
+  if (payload.favorite !== 1) return;
+  deps.vault
+    .prepare("UPDATE media_asset SET favorite = 1 WHERE asset_id = ?")
+    .run(assetId);
+  const row = deps.vault
+    .prepare("SELECT content_id FROM media_asset WHERE asset_id = ?")
+    .get(assetId) as { content_id: string } | undefined;
+  if (!row) return;
+  setStarredTx(
+    { ...deps, actorPartyId: () => ownerPartyId },
+    "core.content_item",
+    row.content_id,
+    true
+  );
+}
+
 /** The publisher registry the spine walks. */
 export const PUBLISHERS: ReadonlyMap<string, Publisher> = new Map(
   [
@@ -770,6 +1029,7 @@ export const PUBLISHERS: ReadonlyMap<string, Publisher> = new Map(
     transactionPublisher,
     lockerItemPublisher,
     notePublisher,
+    mediaAssetPublisher,
     ...ENRICH_PUBLISHERS,
   ].map((p) => [p.entityType, p])
 );

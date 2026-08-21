@@ -195,22 +195,45 @@ export function updateBlobStoreSettings(
   return settings;
 }
 
-/** Enrichment tier per domain (issue #299 §2). Absent means `local`. */
-export type EnrichTier = "off" | "local" | "model";
+/**
+ * Enrichment tier per domain (issue #299 §2, renamed off|local|model →
+ * off|device|gateway by issue #712 C5 — one axis: `off` (nothing runs),
+ * `device` (the member's own phone/laptop, plus deterministic gateway
+ * work), `gateway` (the member's own gateway may additionally do whatever
+ * it is already wired to, including a model turn — see
+ * `packages/server/src/automation/fire/enrich-gate.ts` for what that widens and
+ * does not). Absent means `gateway`, the seeded bootstrap default.
+ */
+export type EnrichTier = "off" | "device" | "gateway";
 
 export interface EnrichSettings {
   photos: EnrichTier;
   docs: EnrichTier;
 }
 
-const ENRICH_TIERS: readonly EnrichTier[] = ["off", "local", "model"];
+const ENRICH_TIERS: readonly EnrichTier[] = ["off", "device", "gateway"];
+
+// COMPAT(enrich-tier-rename #712): a settings bag written before this
+// rename may still hold the old `local`/`model` strings — `settings_json`
+// is a free-form JSON column with no CHECK constraint, so nothing rewrites
+// it on its own. `model` already meant "this domain may take a model
+// turn", which is what `gateway` means now, so it maps up with no
+// widening. `local` meant NO model turn; there is no per-capability
+// consent gate on the execution path yet (decision S9) that would catch a
+// model-lane automation the instant `local` was reinterpreted as the
+// wider `gateway`, so it maps to the conservative `device` — the same "no
+// gateway-lane work" behaviour the vault already had, under the new name.
+const LEGACY_TIER: Readonly<Record<string, EnrichTier>> = {
+  local: "device",
+  model: "gateway",
+};
 
 /**
- * The owner's enrichment policy out of the settings bag. `local` is the
+ * The owner's enrichment policy out of the settings bag. `gateway` is the
  * default on both domains: Tier-0 derivation (EXIF, thumbs, text
- * extraction, phash) never leaves the vault, so it needs no opt-in;
- * `model` — bytes leaving for an inference provider — is a deliberate,
- * per-domain gesture (issue #299 §2).
+ * extraction, phash) never leaves the member's trust domain, so it needs no
+ * opt-in; a THIRD-PARTY PROVIDER seeing bytes is gated separately, per call
+ * (#567) and per capability (decision S9), independently of this tier.
  */
 export function readEnrichSettings(db: VaultDb): EnrichSettings {
   const bag = readVaultSettings(db).enrich;
@@ -218,10 +241,16 @@ export function readEnrichSettings(db: VaultDb): EnrichSettings {
     bag !== null && typeof bag === "object" && !Array.isArray(bag)
       ? (bag as Record<string, unknown>)
       : {};
-  const tier = (v: unknown): EnrichTier =>
-    typeof v === "string" && (ENRICH_TIERS as readonly string[]).includes(v)
-      ? (v as EnrichTier)
-      : "local";
+  const tier = (v: unknown): EnrichTier => {
+    if (
+      typeof v === "string" &&
+      (ENRICH_TIERS as readonly string[]).includes(v)
+    )
+      return v as EnrichTier;
+    if (typeof v === "string" && v in LEGACY_TIER)
+      return LEGACY_TIER[v] as EnrichTier;
+    return "gateway";
+  };
   return { photos: tier(e.photos), docs: tier(e.docs) };
 }
 
@@ -273,7 +302,7 @@ export interface EnrolledApp {
   /**
    * The host-side enrollment key (Centraid app id) — NOT the pretty name.
    * A wide swath of the desktop renderer key-equates this to the app's
-   * slug (folder id, `appLiveUrl`, grant lookups); the pretty name a
+   * slug (folder id, asset paths, grant lookups); the pretty name a
    * consent surface shows lives on `consent_app.display_name` instead,
    * surfaced through `ParkedSummary.caller` (`gateway.ts#callerName`),
    * never through this field.
@@ -462,7 +491,7 @@ export interface EnrolledAgent {
  * Find an active enrolled agent by its host-side key. Automations enroll
  * under their Centraid app id, the same way `lookupAppByName` keys apps;
  * the assistant enrolls under the literal `_assistant` key. The key lives
- * on `agent_agent.host_key` — decoupled from `core_party.display_name`,
+ * on `consent_agent.enrollment_key` — decoupled from `core_party.display_name`,
  * which is free to hold a pretty name without breaking this lookup.
  */
 export function lookupAgentByName(
@@ -472,8 +501,8 @@ export function lookupAgentByName(
   const row = db.vault
     .prepare(
       `SELECT a.agent_id, a.party_id, p.display_name, a.status
-         FROM agent_agent a JOIN core_party p ON p.party_id = a.party_id
-        WHERE a.host_key = ? AND p.kind = 'agent' AND a.status = 'active'
+         FROM consent_agent a JOIN core_party p ON p.party_id = a.party_id
+        WHERE a.enrollment_key = ? AND p.kind = 'agent' AND a.status = 'active'
         ORDER BY a.enrolled_at LIMIT 1`
     )
     .get(name) as
@@ -495,7 +524,7 @@ export function lookupAgentByName(
 
 /**
  * Enroll an agent under a host-side key, once (duaility §12: "the
- * conversation runner and automation fires act as an enrolled agent.agent").
+ * conversation runner and automation fires act as an enrolled consent.agent").
  * Re-enrolling an active key returns the existing row. Identity only —
  * authority still requires an owner-approved grant on the agent's party.
  *
@@ -558,14 +587,14 @@ export function ensureAgentEnrolled(
  */
 export function markAgentRevoked(db: VaultDb, agentId: string): void {
   db.vault
-    .prepare(`UPDATE agent_agent SET status = 'revoked' WHERE agent_id = ?`)
+    .prepare(`UPDATE consent_agent SET status = 'revoked' WHERE agent_id = ?`)
     .run(agentId);
 }
 
 /** Key-free agent summary — safe to serialize onto an owner-facing surface. */
 export interface AgentSummary {
   agentId: string;
-  hostKey: string;
+  enrollmentKey: string;
   partyId: string;
   name: string;
   modelRef: string;
@@ -576,13 +605,13 @@ export interface AgentSummary {
 export function listEnrolledAgents(db: VaultDb): AgentSummary[] {
   const rows = db.vault
     .prepare(
-      `SELECT a.agent_id, a.host_key, a.party_id, p.display_name, a.model_ref, a.enrolled_at
-         FROM agent_agent a JOIN core_party p ON p.party_id = a.party_id
+      `SELECT a.agent_id, a.enrollment_key, a.party_id, p.display_name, a.model_ref, a.enrolled_at
+         FROM consent_agent a JOIN core_party p ON p.party_id = a.party_id
         WHERE a.status = 'active' ORDER BY a.enrolled_at`
     )
     .all() as {
     agent_id: string;
-    host_key: string;
+    enrollment_key: string;
     party_id: string;
     display_name: string;
     model_ref: string;
@@ -590,7 +619,7 @@ export function listEnrolledAgents(db: VaultDb): AgentSummary[] {
   }[];
   return rows.map((r) => ({
     agentId: r.agent_id,
-    hostKey: r.host_key,
+    enrollmentKey: r.enrollment_key,
     partyId: r.party_id,
     name: r.display_name,
     modelRef: r.model_ref,
