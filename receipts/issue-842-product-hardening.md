@@ -23,18 +23,18 @@ W0 — re-arm what's already built:
 
 W1 — the bytes survive:
 
-- [ ] W1.1 Seeded crash-consistency lane over every registered fault point
-- [ ] W1.2 `centraid doctor` (CLI verb + surface) + scheduled scrub
+- [x] W1.1 Seeded crash-consistency lane over every registered fault point
+- [x] W1.2 `centraid doctor` (CLI verb + surface) + scheduled scrub
 - [ ] W1.3 Automated restore drill (in-product + CI)
-- [ ] W1.4 Backup-format archaeology corpus
-- [ ] W1.5 Schema-migration corpus
+- [x] W1.4 Backup-format archaeology corpus
+- [x] W1.5 Schema-migration corpus
 
 W2 — hostile input:
 
 - [x] W2.1 Differential guard testing (three peer path guards agree)
 - [x] W2.2 Prompt-injection corpus against the agent loop (fake ACP)
-- [ ] W2.3 Hostile-peer protocol harness
-- [ ] W2.4 DAST lane (nightly)
+- [x] W2.3 Hostile-peer protocol harness
+- [x] W2.4 DAST lane (nightly)
 
 W3 — time, network, disorder:
 
@@ -51,10 +51,10 @@ W4 — load and limits:
 
 W5 — compatibility and lifecycle:
 
-- [ ] W5.1 WebKit project in web e2e
-- [ ] W5.2 Windows/macOS path-gated CI jobs
-- [ ] W5.3 Released-binary skew lane
-- [ ] W5.4 Install/upgrade lifecycle lane
+- [x] W5.1 WebKit project in web e2e
+- [x] W5.2 Windows/macOS path-gated CI jobs
+- [x] W5.3 Released-binary skew lane
+- [x] W5.4 Install/upgrade lifecycle lane
 
 W6 — ship-time custody:
 

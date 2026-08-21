@@ -140,6 +140,42 @@ jobs:
           path: artifacts/
           retention-days: 7
 
+  # #842 W5.1 — the same web journeys on the two engines the base image does not
+  # ship. WebKit's service-worker lifecycle and Cache-Storage quota, and Gecko's
+  # divergence from Blink, are the whole point: a PWA that only works on Chromium
+  # is not a PWA. The projects are declared in playwright.config.ts but appended
+  # only when CENTRAID_WEB_CROSS_BROWSER=1, so the default `bun run e2e` stays
+  # Chromium-only and does not fail on a missing browser download.
+  #
+  # DELIBERATELY NOT in test-health-report's needs: this lane has never run, so
+  # its first green run is the measurement, not a regression baseline. Promote it
+  # into the report (and the nightly tracking issue) once it has one.
+  web-e2e-cross-browser:
+    if: >
+      github.event_name != 'workflow_dispatch' || github.event.inputs.suite == 'all' || github.event.inputs.suite == 'web'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: ./.github/actions/setup
+        with:
+          turbo-cache: "true"
+      # webkit and firefox, not chromium — the point is the engines web-e2e
+      # cannot reach.
+      - run: bunx playwright install --with-deps webkit firefox
+        working-directory: apps/web
+      - run: bun run build
+      - run: bun run e2e
+        working-directory: apps/web
+        env:
+          CENTRAID_WEB_CROSS_BROWSER: "1"
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        if: failure()
+        with:
+          name: web-e2e-cross-browser-traces
+          path: apps/web/test-results/
+          retention-days: 7
+
   mobile-e2e-ios:
     if: >
       github.event_name != 'workflow_dispatch' || github.event.inputs.suite == 'all' || github.event.inputs.suite == 'mobile'
@@ -766,6 +802,37 @@ jobs:
           path: artifacts/
           retention-days: 14
 
+  # #842 W2.4 — dynamic scan of the BOOTED gateway, as opposed to the static
+  # route-security enumeration the PR lane already runs. Nightly rather than
+  # per-PR because it boots a real server, and it needs `bun run build` for the
+  # same reason the fuzz lane does: it drives packages/server/dist and
+  # packages/core/dist, and reads the ROUTES table rather than a hardcoded list.
+  dast-scan:
+    if: >
+      github.event_name != 'workflow_dispatch' || github.event.inputs.suite == 'all' || github.event.inputs.suite == 'report' || github.event.inputs.suite == 'dast'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: ./.github/actions/setup
+        with:
+          turbo-cache: "true"
+      - run: bun run build
+      # Fails on any finding whose key is not registered in
+      # scripts/security/dast-known-findings.json. Registered ones are recorded
+      # defects whose current behaviour is pinned by the unit judges — removing
+      # an entry is how a fix gets locked in, never adding one to go green.
+      - name: Dynamic scan of the booted gateway HTTP surface
+        run: node scripts/security/dast-scan.mjs --out artifacts/dast/summary.json
+      # Upload `artifacts/` (not `artifacts/dast/`) so merge-multiple download
+      # into the report job keeps `dast/summary.json` — same reason as fuzz.
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        if: always()
+        with:
+          name: nightly-evidence-dast
+          path: artifacts/
+          retention-days: 14
+
   # #587 C1 — performance and scale are an independent parallel lane. New
   # rigs cannot consume the report job's 35-minute budget or prevent coverage
   # and report rendering from starting when this lane is red.
@@ -929,6 +996,7 @@ jobs:
         pairing-cross-network-relay,
         mutation-testing,
         fuzz-parsers,
+        dast-scan,
         quality-performance-scale,
         restore-year3,
         protocol-join,
@@ -1179,6 +1247,7 @@ jobs:
         pairing-cross-network-relay,
         mutation-testing,
         fuzz-parsers,
+        dast-scan,
         quality-performance-scale,
         restore-year3,
         protocol-join,

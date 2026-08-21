@@ -877,6 +877,61 @@ jobs:
           path: artifacts/design-gallery/actual/
           retention-days: 7
 
+  # #842 W5.2 — the desktop journey on the two OSes CI has never launched. Both
+  # are path-gated on `desktop` and DELIBERATELY ABSENT from `check`'s needs, so
+  # they are non-required: per the twice-burned promotion rule recorded in
+  # lane-client-e2e.yml, full OS coverage stays advisory until an OS-specific
+  # area burns us twice. Neither needs the Linux job's xvfb + gnome-keyring
+  # bootstrap: Electron safeStorage uses DPAPI on Windows and the login Keychain
+  # (already unlocked in the runner's user session) on macOS.
+  #
+  # These launch the desktop journey, NOT a signed packaged build. Booting the
+  # signed installer's own journey is the deeper W5.2 goal and stays coupled to
+  # lane-release-desktop.yml, where the Azure/Apple secrets live.
+  desktop-e2e-windows:
+    needs: changes
+    if: needs.changes.outputs.desktop == 'true' || needs.changes.outputs.all == 'true'
+    runs-on: windows-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: ./.github/actions/setup
+        with:
+          turbo-cache: "true"
+      - run: bunx playwright install --with-deps chromium
+        working-directory: apps/desktop
+      - run: bun run build
+      - run: bun run test:e2e
+        working-directory: apps/desktop
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        if: failure()
+        with:
+          name: desktop-e2e-windows-traces
+          path: apps/desktop/test-results/
+          retention-days: 7
+
+  desktop-e2e-macos:
+    needs: changes
+    if: needs.changes.outputs.desktop == 'true' || needs.changes.outputs.all == 'true'
+    runs-on: macos-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: ./.github/actions/setup
+        with:
+          turbo-cache: "true"
+      - run: bunx playwright install --with-deps chromium
+        working-directory: apps/desktop
+      - run: bun run build
+      - run: bun run test:e2e
+        working-directory: apps/desktop
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        if: failure()
+        with:
+          name: desktop-e2e-macos-traces
+          path: apps/desktop/test-results/
+          retention-days: 7
+
   check:
     needs:
       [

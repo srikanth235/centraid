@@ -36,6 +36,10 @@ const requiredJobs = [
   // #839 G10 — the fuzz lane is nightly-only and owns its own job; its summary
   // reaches the report through the same nightly-evidence-* channel.
   "fuzz-parsers:",
+  // #842 W2.4 — the DAST lane boots a real gateway and scans it, so it is
+  // nightly-only and owns its own job; its summary reaches the report through
+  // the same nightly-evidence-* channel.
+  "dast-scan:",
   // #839 G11/G12 — the protocol join lane (one gateway, N mounted vaults, one
   // iroh client per seat) runs at width here; the PR path runs the same file at
   // its 3-seat floor.
@@ -48,6 +52,7 @@ const requiredArtifactNames = [
   "nightly-evidence-pairing-cross-network-relay",
   "nightly-evidence-mutation",
   "nightly-evidence-fuzz",
+  "nightly-evidence-dast",
   "nightly-evidence-join",
 ];
 
@@ -97,6 +102,7 @@ if (reportIdx === -1) {
     "pairing-cross-network-relay",
     "mutation-testing",
     "fuzz-parsers",
+    "dast-scan",
     "protocol-join",
   ]) {
     if (!reportChunk.includes(need)) {
@@ -175,6 +181,35 @@ if (fuzzJobIdx === -1) {
   ) {
     errors.push(
       "fuzz-parsers must upload path: artifacts/ next to nightly-evidence-fuzz (preserves fuzz/ prefix for the report lane)"
+    );
+  }
+}
+
+// #842 W2.4 — same `path: artifacts/` rule as the fuzz and mutation lanes: the
+// scanner writes artifacts/dast/summary.json, and uploading the subdir alone
+// would flatten it to artifacts/summary.json after merge-multiple download.
+const dastJobIdx = e2eCode.indexOf("dast-scan:");
+if (dastJobIdx === -1) {
+  errors.push("e2e.yml missing dast-scan job");
+} else {
+  const dastChunk = e2eCode.slice(dastJobIdx, dastJobIdx + 1_800);
+  if (!dastChunk.includes("node scripts/security/dast-scan.mjs")) {
+    errors.push(
+      "dast-scan job must run the lane via node scripts/security/dast-scan.mjs"
+    );
+  }
+  if (/path:\s*artifacts\/dast\/?/u.test(dastChunk)) {
+    errors.push(
+      "dast-scan must upload path: artifacts/ (not artifacts/dast/) so the summary stays at artifacts/dast/summary.json after merge-multiple download"
+    );
+  }
+  if (
+    !/name:\s*nightly-evidence-dast[\s\S]{0,200}?path:\s*artifacts\/?/u.test(
+      dastChunk
+    )
+  ) {
+    errors.push(
+      "dast-scan must upload path: artifacts/ next to nightly-evidence-dast (preserves dast/ prefix for the report lane)"
     );
   }
 }
@@ -383,6 +418,6 @@ if (errors.length) {
   process.exitCode = 1;
 } else {
   console.log(
-    "nightly-wiring: e2e.yml owns pairing lifecycle, ticket-hygiene, cross-network-relay, mutation-testing, fuzz-parsers, and protocol-join; standalone pairing-relay-e2e removed"
+    "nightly-wiring: e2e.yml owns pairing lifecycle, ticket-hygiene, cross-network-relay, mutation-testing, fuzz-parsers, dast-scan, and protocol-join; standalone pairing-relay-e2e removed"
   );
 }
