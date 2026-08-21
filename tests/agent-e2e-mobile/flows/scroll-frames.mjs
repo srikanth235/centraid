@@ -30,8 +30,11 @@ import { runFlow } from "../lib/harness.mjs";
  *
  * ── The contract (owned by apps/mobile, pinned by frame-sampler.test.ts) ────
  *
- *   arm     `openLink: centraid://perf-frames?ms=<window>`  (default 4000,
- *           capped 30000; arming is idempotent while a sample runs)
+ *   arm     tap the DEV `perf-frame-arm` control (6s window). The deep link
+ *           `centraid://perf-frames?ms=<window>` still arms for manual use, but
+ *           iOS confirms custom-scheme opens with a system alert and `simctl
+ *           openurl` often never reaches the Linking listener (30752843689),
+ *           so the flow arms by testID tap.
  *   armed   a 1x1 view with `testID: perf-frame-sampling` exists for the window
  *   report  on close, `testID: perf-frame-report` renders EXACTLY:
  *           `frames=137 expected=241 elapsed=4016ms fps=34.11 targetHz=60 dropped=43.15%`
@@ -100,7 +103,14 @@ function flingYaml(appId, marker, markerKind, surface) {
 ${settle}
 # Arm one sample window. Nothing is drawn while it runs, so the readout can
 # never become part of what it measures.
-- openLink: "centraid://perf-frames?ms=${SAMPLE_WINDOW_MS}"
+# Arm one sample window via the DEV testID — openLink triggers an iOS
+# "Open in Centraid?" alert and often never delivers the URL to Linking
+# (30752843689). The arm control lives in FrameProbe (__DEV__ only) and is
+# mounted inside the Photos navigator, so it stays observable while the
+# full-screen cover is presented.
+- tapOn:
+    id: "perf-frame-arm"
+    retryTapIfNoChange: true
 # Prove the arm took BEFORE flinging — a fling against an unarmed sampler
 # produces no report at all, and that failure would surface later and elsewhere.
 - extendedWaitUntil:

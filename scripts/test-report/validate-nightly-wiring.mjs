@@ -24,17 +24,24 @@ const requiredFlowScripts = [
 ];
 
 const requiredJobs = [
-  "pairing-lifecycle:",
-  "pairing-ticket-hygiene:",
-  "pairing-cross-network-relay:",
+  // iOS native compilation is one producer; the six device suites fan out from
+  // its artifact so a cold cache never triggers six Xcode builds.
+  "mobile-e2e-ios-build:",
+  "mobile-e2e-ios:",
+  "pairing-e2e:",
   // #532 — mutation scores must reach the report job via nightly-evidence-*.
   "mutation-testing:",
 ];
 
+const retiredPairingJobs = [
+  "pairing-lifecycle:",
+  "pairing-ticket-hygiene:",
+  "pairing-cross-network-relay:",
+];
+
 const requiredArtifactNames = [
-  "nightly-evidence-pairing-lifecycle",
-  "nightly-evidence-pairing-ticket-hygiene",
-  "nightly-evidence-pairing-cross-network-relay",
+  "nightly-mobile-ios-app",
+  "nightly-evidence-pairing",
   "nightly-evidence-mutation",
 ];
 
@@ -51,8 +58,51 @@ const e2eCode = e2e
   })
   .join("\n");
 
+const iosStart = e2eCode.indexOf("mobile-e2e-ios-build:");
+const androidStart = e2eCode.indexOf("mobile-e2e-android:");
+const iosChunk =
+  iosStart === -1
+    ? ""
+    : e2eCode.slice(iosStart, androidStart === -1 ? undefined : androidStart);
+const requiredIosSuites = [
+  "home-loads",
+  "native-v0-resilience",
+  "volume-proof",
+  "cold-start",
+  "scroll-frames",
+  "photos",
+  "places-seat",
+];
+
+if (!iosChunk.includes("fail-fast: false")) {
+  errors.push("iOS matrix must keep all suite evidence when one cell fails");
+}
+for (const suite of requiredIosSuites) {
+  // Scheduled/all runs use the literal matrix vocabulary; targeted
+  // workflow_dispatch runs use the same vocabulary inside a JSON expression.
+  if (
+    !iosChunk.includes(`- ${suite}`) &&
+    !iosChunk.includes(`"${suite}"`) &&
+    !iosChunk.includes(`'${suite}'`)
+  ) {
+    errors.push(`iOS matrix is missing suite ${suite}`);
+  }
+}
+const matrixSuiteToken = ["$", "{{ matrix.suite }}"].join("");
+if (!iosChunk.includes(`nightly-evidence-mobile-ios-${matrixSuiteToken}`)) {
+  errors.push("iOS matrix evidence artifacts must be unique per suite");
+}
+if (!iosChunk.includes(`nightly-debug-mobile-ios-${matrixSuiteToken}-runs`)) {
+  errors.push("iOS matrix debug artifacts must be unique per suite");
+}
+
 for (const job of requiredJobs) {
   if (!e2eCode.includes(job)) errors.push(`e2e.yml missing job key ${job}`);
+}
+
+for (const job of retiredPairingJobs) {
+  if (e2eCode.includes(job))
+    errors.push(`e2e.yml must consolidate retired pairing job ${job}`);
 }
 
 for (const script of requiredFlowScripts) {
@@ -75,10 +125,9 @@ if (reportIdx === -1) {
 } else {
   const reportChunk = e2eCode.slice(reportIdx, reportIdx + 1_200);
   for (const need of [
+    "mobile-e2e-ios-build",
     "mobile-e2e-android",
-    "pairing-lifecycle",
-    "pairing-ticket-hygiene",
-    "pairing-cross-network-relay",
+    "pairing-e2e",
     "mutation-testing",
   ]) {
     if (!reportChunk.includes(need)) {
@@ -281,6 +330,6 @@ if (errors.length) {
   process.exitCode = 1;
 } else {
   console.log(
-    "nightly-wiring: e2e.yml owns pairing lifecycle, ticket-hygiene, cross-network-relay, and mutation-testing; standalone pairing-relay-e2e removed"
+    "nightly-wiring: e2e.yml owns one pairing suite (lifecycle, ticket-hygiene, cross-network-relay) and mutation-testing; standalone pairing-relay-e2e removed"
   );
 }

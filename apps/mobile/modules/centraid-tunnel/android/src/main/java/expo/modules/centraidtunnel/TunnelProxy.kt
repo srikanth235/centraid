@@ -19,16 +19,23 @@ import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
 import org.json.JSONObject
 
-class TunnelProxy(private val openStream: suspend () -> TunnelStream) {
+class TunnelProxy(
+  private val openStream: suspend () -> TunnelStream,
+  private val invalidateConnection: suspend () -> Unit = {},
+) {
   private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
   private var server: ServerSocket? = null
 
   /**
    * Bind 127.0.0.1:0 (ephemeral). Loopback only — the proxy must never be
    * reachable from off-device.
+   *
+   * Android's InetAddress.getLoopbackAddress() is IPv6-first (::1), while the
+   * JS client advertises the proxy as http://127.0.0.1:<port>. Bind the same
+   * IPv4 family explicitly so the advertised URL reaches this listener.
    */
   fun start(): Int {
-    val socket = ServerSocket(0, 64, InetAddress.getLoopbackAddress())
+    val socket = ServerSocket(0, 64, InetAddress.getByName("127.0.0.1"))
     server = socket
     scope.launch { acceptLoop(socket) }
     return socket.localPort
@@ -86,12 +93,26 @@ class TunnelProxy(private val openStream: suspend () -> TunnelStream) {
           output.write(chunk)
           output.flush() // per-chunk flush: SSE stays live
         }
+        // A server-side 5xx is also the compatibility probe's reconnect
+        // signal. Do not keep sending later requests over a connection whose
+        // peer has already rejected this stream.
+        if (status >= 500) invalidateConnectionBestEffort()
       } catch (err: Throwable) {
         // Dial/stream failure → 502, matching the Node reference proxy. If
         // headers already went out, closing the socket mid-body is the only
         // honest signal left.
+        invalidateConnectionBestEffort()
         if (!headersSent) writeSimpleResponse(output, 502, err.message ?: err.toString())
       }
+    }
+  }
+
+  private suspend fun invalidateConnectionBestEffort() {
+    try {
+      invalidateConnection()
+    } catch (_: Throwable) {
+      // The request's socket is already being closed; cleanup must not mask
+      // the original stream failure.
     }
   }
 

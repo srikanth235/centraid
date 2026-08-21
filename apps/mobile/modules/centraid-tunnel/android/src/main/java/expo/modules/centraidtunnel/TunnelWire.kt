@@ -222,12 +222,30 @@ class TunnelTransport private constructor(
       try {
         return IrohAdapter.openBi(cached)
       } catch (_: Throwable) {
+        IrohAdapter.closeConnection(cached)
         connection = null
       }
     }
     val fresh = IrohAdapter.dial(endpoint, ticket, TunnelWire.TUNNEL_ALPN)
-    connection = fresh
-    IrohAdapter.openBi(fresh)
+    try {
+      val stream = IrohAdapter.openBi(fresh)
+      connection = fresh
+      stream
+    } catch (error: Throwable) {
+      IrohAdapter.closeConnection(fresh)
+      throw error
+    }
+  }
+
+  /**
+   * Drop a connection whose stream failed after openBi() had succeeded. A
+   * QUIC connection can accept another stream briefly after its peer has
+   * become unusable, so openBi() alone cannot prove that the cached connection
+   * is healthy.
+   */
+  suspend fun invalidateConnection() = mutex.withLock {
+    connection?.let { IrohAdapter.closeConnection(it) }
+    connection = null
   }
 
   suspend fun close() {

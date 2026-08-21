@@ -8,6 +8,7 @@
 
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
 import React from "react";
+import { View } from "react-native";
 
 import {
   AgendaEvent,
@@ -56,6 +57,7 @@ import {
   SettingsScreen,
   SharingScreen,
 } from "./lazy-screens";
+import FrameProbe from "./src/kit/perf/FrameProbe";
 import { useTheme } from "./src/kit/theme";
 import type {
   AgendaStackParamList,
@@ -74,32 +76,43 @@ const SettingsStack = createNativeStackNavigator<SettingsStackParamList>();
 export function PhotosNavigator(): React.JSX.Element {
   const { colors } = useTheme();
   return (
-    <PhotosStack.Navigator
-      screenOptions={{
-        contentStyle: { backgroundColor: colors.bg },
-        headerShown: false,
-      }}
-    >
-      <PhotosStack.Screen name="PhotosHome" component={PhotosHome} />
-      <PhotosStack.Screen
-        name="PhotoLightbox"
-        component={PhotoLightbox}
-        options={{ animation: "fade_from_bottom", gestureEnabled: false }}
-      />
-      <PhotosStack.Screen name="PhotosLibrary" component={PhotosLibrary} />
-      <PhotosStack.Screen name="PhotosSearch" component={PhotosSearch} />
-      <PhotosStack.Screen name="PlacesView" component={PlacesView} />
-      <PhotosStack.Screen name="PlacesMap" component={PlacesMap} />
-      <PhotosStack.Screen name="PlaceDetail" component={PlaceDetail} />
-      <PhotosStack.Screen name="FaceReview" component={FaceReview} />
-      <PhotosStack.Screen name="PhotosPeople" component={PhotosPeopleView} />
-      <PhotosStack.Screen name="DuplicatesShelf" component={DuplicatesShelf} />
-      <PhotosStack.Screen name="DuplicateReview" component={DuplicateReview} />
-      <PhotosStack.Screen name="PhotosMemories" component={MemoriesView} />
-      <PhotosStack.Screen name="AlbumDetail" component={AlbumDetail} />
-      <PhotosStack.Screen name="PhotoPicker" component={PhotoPicker} />
-      <PhotosStack.Screen name="PhotoStateView" component={PhotoStateView} />
-    </PhotosStack.Navigator>
+    <View style={{ flex: 1 }}>
+      <PhotosStack.Navigator
+        screenOptions={{
+          contentStyle: { backgroundColor: colors.bg },
+          headerShown: false,
+        }}
+      >
+        <PhotosStack.Screen name="PhotosHome" component={PhotosHome} />
+        <PhotosStack.Screen
+          name="PhotoLightbox"
+          component={PhotoLightbox}
+          options={{ animation: "fade_from_bottom", gestureEnabled: false }}
+        />
+        <PhotosStack.Screen name="PhotosLibrary" component={PhotosLibrary} />
+        <PhotosStack.Screen name="PhotosSearch" component={PhotosSearch} />
+        <PhotosStack.Screen name="PlacesView" component={PlacesView} />
+        <PhotosStack.Screen name="PlacesMap" component={PlacesMap} />
+        <PhotosStack.Screen name="PlaceDetail" component={PlaceDetail} />
+        <PhotosStack.Screen name="FaceReview" component={FaceReview} />
+        <PhotosStack.Screen name="PhotosPeople" component={PhotosPeopleView} />
+        <PhotosStack.Screen
+          name="DuplicatesShelf"
+          component={DuplicatesShelf}
+        />
+        <PhotosStack.Screen
+          name="DuplicateReview"
+          component={DuplicateReview}
+        />
+        <PhotosStack.Screen name="PhotosMemories" component={MemoriesView} />
+        <PhotosStack.Screen name="AlbumDetail" component={AlbumDetail} />
+        <PhotosStack.Screen name="PhotoPicker" component={PhotoPicker} />
+        <PhotosStack.Screen name="PhotoStateView" component={PhotoStateView} />
+      </PhotosStack.Navigator>
+      {/* A full-screen native-stack cover sits above the root shell, so the
+        root probe cannot be observed while Photos is presented. */}
+      <FrameProbe />
+    </View>
   );
 }
 
@@ -146,19 +159,24 @@ export function DocsNavigator(): React.JSX.Element {
 export function PeopleNavigator(): React.JSX.Element {
   const { colors } = useTheme();
   return (
-    <PeopleStack.Navigator
-      screenOptions={{
-        contentStyle: { backgroundColor: colors.bg },
-        headerShown: false,
-      }}
-    >
-      <PeopleStack.Screen name="PeopleHome" component={PeopleHome} />
-      <PeopleStack.Screen name="Person" component={PersonView} />
-      <PeopleStack.Screen name="PersonLog" component={PersonLog} />
-      <PeopleStack.Screen name="PersonEditor" component={PersonEditor} />
-      <PeopleStack.Screen name="PersonMerge" component={PersonMerge} />
-      <PeopleStack.Screen name="PeopleTrash" component={PeopleTrash} />
-    </PeopleStack.Navigator>
+    <View style={{ flex: 1 }}>
+      <PeopleStack.Navigator
+        screenOptions={{
+          contentStyle: { backgroundColor: colors.bg },
+          headerShown: false,
+        }}
+      >
+        <PeopleStack.Screen name="PeopleHome" component={PeopleHome} />
+        <PeopleStack.Screen name="Person" component={PersonView} />
+        <PeopleStack.Screen name="PersonLog" component={PersonLog} />
+        <PeopleStack.Screen name="PersonEditor" component={PersonEditor} />
+        <PeopleStack.Screen name="PersonMerge" component={PersonMerge} />
+        <PeopleStack.Screen name="PeopleTrash" component={PeopleTrash} />
+      </PeopleStack.Navigator>
+      {/* Same cover-visibility reasoning as the Photos navigator: the frame
+        probe is exercised while People is presented. */}
+      <FrameProbe />
+    </View>
   );
 }
 

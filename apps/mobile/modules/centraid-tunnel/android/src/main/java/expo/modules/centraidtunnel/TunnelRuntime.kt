@@ -70,7 +70,10 @@ class TunnelRuntime(private val emitStatus: (Map<String, Any?>) -> Unit) {
       try {
         // The desktop is NOT dialed here — the first proxied request dials
         // lazily, and a dead connection is redialed the same way.
-        val boundProxy = TunnelProxy { boundTransport.openTunnelStream() }
+        val boundProxy = TunnelProxy(
+          openStream = { boundTransport.openTunnelStream() },
+          invalidateConnection = { boundTransport.invalidateConnection() },
+        )
         val boundPort = boundProxy.start()
         transport = boundTransport
         proxy = boundProxy

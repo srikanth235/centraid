@@ -46,6 +46,7 @@ import {
   readBodyToEnd,
   readHeaderFrame,
   sanitizeHeaders,
+  tunnelRequestHasBody,
   TUNNEL_ALPN,
   TUNNEL_FORWARDED_HEADER,
 } from "./protocol.js";
@@ -322,7 +323,9 @@ class DesktopTunnel {
     let body: Buffer;
     try {
       header = await readHeaderFrame<TunnelRequestHeader>(recv);
-      body = await readBodyToEnd(recv);
+      body = tunnelRequestHasBody(header)
+        ? await readBodyToEnd(recv)
+        : Buffer.alloc(0);
     } catch {
       await this.respondError(send, 400, "bad_request");
       return;

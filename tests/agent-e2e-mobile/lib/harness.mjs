@@ -268,33 +268,30 @@ async function runMaestroChunk(
   // `takeScreenshot` (the 2026-07-20 home-loads failure did) then leaves
   // nothing to diagnose at all. Keep this pointed inside `state.runDir`, which
   // is already an uploaded artifact path.
+  // Sensitive flows: ticket is a MAESTRO_* env var (YAML keeps a placeholder)
+  // and stdout is quiet. On success discard hierarchy/screenshots; on failure
+  // keep them in the uploaded run dir so CI can diagnose (run 30707656659).
+  // Note: e2e.yml still prunes `*-configure-gateway` debug dirs before upload
+  // as a defense against ticket material on screen; that cleanup is separate.
   const run = sensitive ? spawnQuiet : spawnLive;
-  try {
-    await run(
-      "maestro",
-      [
-        "--udid",
-        state.udid,
-        "test",
-        "--debug-output",
-        debugDir,
-        "--flatten-debug-output",
-        flowFile,
-      ],
-      {
-        cwd: state.screenshotsDir,
-        env: { ...process.env, ...maestroEnv },
-        timeoutMs: MAESTRO_CHUNK_TIMEOUT_MS,
-      }
-    );
-  } finally {
-    // A pairing ticket is a live enrollment capability. Sensitive flows use a
-    // MAESTRO_* variable so the retained YAML contains only a placeholder, run
-    // without console output, and discard Maestro's hierarchy/screenshots even
-    // on failure. The workflow repeats this cleanup before artifact upload as a
-    // defense against abrupt harness termination.
-    if (sensitive) await fs.rm(debugDir, { force: true, recursive: true });
-  }
+  await run(
+    "maestro",
+    [
+      "--udid",
+      state.udid,
+      "test",
+      "--debug-output",
+      debugDir,
+      "--flatten-debug-output",
+      flowFile,
+    ],
+    {
+      cwd: state.screenshotsDir,
+      env: { ...process.env, ...maestroEnv },
+      timeoutMs: MAESTRO_CHUNK_TIMEOUT_MS,
+    }
+  );
+  if (sensitive) await fs.rm(debugDir, { force: true, recursive: true });
 }
 
 /**
@@ -310,9 +307,9 @@ async function runMaestroChunk(
  *       ---
  *       - launchApp: { clearState: true }
  *       - extendedWaitUntil: { visible: { text: "Connect your gateway." }, timeout: 30000 }
- *       - takeScreenshot: 01-ticket-onboarding
+ *       - takeScreenshot: 01-scan-first-onboarding
  *     `);
- *     ctx.note('ticket-only onboarding rendered after clearState');
+ *     ctx.note('scan-first onboarding rendered after clearState');
  *     return { pass: true, notes: 'one-line verdict summary' };
  *   });
  *
@@ -320,7 +317,7 @@ async function runMaestroChunk(
  *   ctx.state               read-only snapshot of {runId, runDir, udid, appId, ...}
  *   ctx.run(yaml, label?, options?) execute a YAML chunk; screenshots land under runs/.../screenshots/
  *   ctx.restart()           stopApp + launchApp without clearing state — mirrors desktop's ctx.restart()
- *   ctx.configureGateway()  pair from a clean state, or reuse the paired nightly profile when requested
+ *   ctx.configureGateway()  pair from a clean state (iOS retries once with a fresh ticket), or reuse the paired nightly profile when requested
  *   ctx.ensureDemo(appId)   seed a scenario before the initial replica clone, if absent
  *   ctx.purgeDemo(appId)    remove a scenario before an empty-vault journey
  *   ctx.note(msg)           record an observation; surfaces in verdict.md
@@ -459,16 +456,24 @@ export async function runFlow(slug, fn) {
       ctx.note(`reused the paired nightly profile for ${gatewayUrl}`);
       return;
     }
-    const pairingTicket = await mintPairingTicket(gatewayUrl, gatewayToken);
+    // A cold iOS simulator can lose the first iroh redemption after the
+    // onboarding UI has already rendered (30842553646). Retry only on iOS:
+    // each attempt mints a fresh one-time ticket and clears app state, so a
+    // failed redemption cannot poison the next attempt. Android keeps its
+    // existing single-attempt behavior until it has its own evidence.
+    const maxPairingAttempts = process.env.MAESTRO_PLATFORM === "ios" ? 2 : 1;
+    const pairAttempt = async (attempt) => {
+      try {
+        const pairingTicket = await mintPairingTicket(gatewayUrl, gatewayToken);
 
-    // #603 removed the local/manual-URL bypass: every fresh client must redeem
-    // a real one-time pairing ticket. #634 made the profile step conditional:
-    // an owner who already has a name goes straight to Done, while one still
-    // carrying the placeholder label is asked for a profile. The gateway URL
-    // is used only by the host-side harness to mint that ticket; the phone
-    // reaches the gateway through the ticket's iroh endpoint.
-    await ctx.run(
-      `appId: ${state.appId}
+        // #603 removed the local/manual-URL bypass: every fresh client must redeem
+        // a real one-time pairing ticket. #634 made the profile step conditional:
+        // an owner who already has a name goes straight to Done, while one still
+        // carrying the placeholder label is asked for a profile. The gateway URL
+        // is used only by the host-side harness to mint that ticket; the phone
+        // reaches the gateway through the ticket's iroh endpoint.
+        await ctx.run(
+          `appId: ${state.appId}
 ---
 - launchApp:
     clearState: true
@@ -501,24 +506,24 @@ ${DISMISS_KEYBOARD_ONBOARDING}- eraseText
     visible: "Who's using this phone[?]|You're all set, [^.]+[.]"
     timeout: 90000
 `,
-      "configure-gateway",
-      {
-        maestroEnv: { MAESTRO_PAIRING_TICKET: pairingTicket },
-        sensitive: true,
-      }
-    );
+          "configure-gateway",
+          {
+            maestroEnv: { MAESTRO_PAIRING_TICKET: pairingTicket },
+            sensitive: true,
+          }
+        );
 
-    // A second, non-sensitive Maestro chunk keeps the pairing capability out
-    // of retained diagnostics while proving both legitimate identity paths.
-    // Ownership (#726) killed the pre-named-invite mint: a ticket can no
-    // longer carry a chosen label, so the FIRST pairing against a fresh
-    // gateway always lands the placeholder owner "You" (not a set name) and
-    // shows the form. A later flow that reuses the same nightly gateway
-    // process finds that owner already renamed "Nightly" by the run below
-    // and skips straight to Done — both are real product paths, so the
-    // pattern above accepts either.
-    await ctx.run(
-      `appId: ${state.appId}
+        // A second, non-sensitive Maestro chunk keeps the pairing capability out
+        // of retained diagnostics while proving both legitimate identity paths.
+        // Ownership (#726) killed the pre-named-invite mint: a ticket can no
+        // longer carry a chosen label, so the FIRST pairing against a fresh
+        // gateway always lands the placeholder owner "You" (not a set name) and
+        // shows the form. A later flow that reuses the same nightly gateway
+        // process finds that owner already renamed "Nightly" by the run below
+        // and skips straight to Done — both are real product paths, so the
+        // pattern above accepts either.
+        await ctx.run(
+          `appId: ${state.appId}
 ---
 - runFlow:
     when:
@@ -546,9 +551,19 @@ ${retryableTapCommands("Enter Centraid")}
     visible: "${HOME_READY_MARKER}"
     timeout: 30000
 `,
-      "complete-onboarding"
-    );
-    ctx.note(`paired the journey with the gateway at ${gatewayUrl}`);
+          "complete-onboarding"
+        );
+        ctx.note(`paired the journey with the gateway at ${gatewayUrl}`);
+        return true;
+      } catch (error) {
+        if (attempt === maxPairingAttempts) throw error;
+        ctx.note(
+          `iOS pairing attempt ${attempt} did not complete; retrying with a fresh ticket`
+        );
+        return pairAttempt(attempt + 1);
+      }
+    };
+    await pairAttempt(1);
   };
 
   /**

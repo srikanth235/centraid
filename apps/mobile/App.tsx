@@ -60,7 +60,6 @@ import ErrorBoundary from "./src/ErrorBoundary";
 import { Text } from "./src/kit/components/NativeText";
 import StatusLine from "./src/kit/components/StatusLine";
 import { ShareIntentIngest } from "./src/kit/hooks/ShareIntentIngest";
-import FrameProbe from "./src/kit/perf/FrameProbe";
 import {
   REPLICA_UNPAIRED_MESSAGE,
   ReplicaProvider,
@@ -156,13 +155,18 @@ function ReplicaErrorBanner(): React.JSX.Element | null {
 }
 
 function ReplicaCompatibilityGate({
+  active,
   children,
 }: {
+  /** Only block the post-onboarding shell. Pairing can set vault links while
+   * the person is still on Done / profile; covering those steps with the wall
+   * (Android 30711575336) traps Maestro on "Reconnect once" before Home. */
+  active: boolean;
   children: React.ReactNode;
 }): React.JSX.Element {
   const { colors } = useTheme();
   const { compatibility, refresh } = useReplica();
-  if (!compatibility) return <>{children}</>;
+  if (!active || !compatibility) return <>{children}</>;
   const copy = MOBILE_COMPATIBILITY_WALL_COPY[compatibility];
   return (
     <SafeAreaView
@@ -204,6 +208,11 @@ function ReplicaCompatibilityGate({
           {copy.body}
         </Text>
         <Pressable
+          // testID so Maestro taps the Pressable, not the child TextView
+          // (Android 30745070094: tapOn "Retry connection" hit clickable=false
+          // Text and never called refresh — wall stayed for the full Home wait).
+          testID="replica-compatibility-retry"
+          accessibilityLabel="Retry connection"
           accessibilityRole="button"
           onPress={() => void refresh?.()}
           style={{
@@ -299,7 +308,7 @@ export default function App(): React.JSX.Element | null {
             >
               <AppLockProvider>
                 <ReplicaProvider>
-                  <ReplicaCompatibilityGate>
+                  <ReplicaCompatibilityGate active={onboarded === true}>
                     <UploadReconciliation />
                     <ShareIntentIngest />
                     <NotificationCoordinator />
@@ -459,11 +468,6 @@ export default function App(): React.JSX.Element | null {
                 </ReplicaProvider>
               </AppLockProvider>
             </ShareIntentProvider>
-            {/* Last child so its absolute readout sits above the navigator.
-              Renders nothing, installs nothing and schedules nothing outside a
-              `__DEV__` build that a probe has explicitly armed — see
-              src/kit/perf/FrameProbe.tsx. */}
-            <FrameProbe />
             <StatusLine />
           </View>
         </SafeAreaProvider>

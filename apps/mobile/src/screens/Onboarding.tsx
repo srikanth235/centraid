@@ -182,11 +182,50 @@ function ConnectionStep({
   const available = isTunnelAvailable();
   const [scanning, setScanning] = useState(false);
   const [showPaste, setShowPaste] = useState(false);
-  const [code, setCode] = useState("");
+  // Uncontrolled pairing field + ref: automation may fill the native EditText
+  // without a per-keystroke onChangeText. hideKeyboard blurs the field, and
+  // onBlur/onEndEditing copy nativeEvent.text into the ref before Connect.
+  const codeRef = useRef("");
+  const codeInputRef = useRef<React.ElementRef<typeof TextInput>>(null);
   const [pairing, setPairing] = useState(false);
   const [error, setError] = useState<string | undefined>(undefined);
   const [permission, requestPermission] = useCameraPermissions();
   const scannedRef = useRef(false);
+
+  const rememberCode = (text: string): void => {
+    codeRef.current = text;
+  };
+
+  const openPaste = (): void => {
+    codeRef.current = "";
+    setError(undefined);
+    setShowPaste(true);
+  };
+
+  const closePaste = (): void => {
+    if (pairing) return;
+    codeRef.current = "";
+    setError(undefined);
+    setShowPaste(false);
+  };
+
+  /**
+   * Submit the pasted ticket. Typed input already fills `codeRef` via
+   * onChangeText. Maestro SET_TEXT can leave only the native field filled —
+   * blur first so onEndEditing/onBlur copy nativeEvent.text, then submit on
+   * the next frame (Android configure-gateway 30716166878).
+   */
+  const submitPaste = (): void => {
+    if (pairing) return;
+    if (codeRef.current.trim()) {
+      submit(codeRef.current);
+      return;
+    }
+    codeInputRef.current?.blur();
+    requestAnimationFrame(() => {
+      submit(codeRef.current);
+    });
+  };
 
   /**
    * Open the scanner, asking for the camera if we may. Resolving permission
@@ -214,7 +253,14 @@ function ConnectionStep({
   };
 
   const submit = (payload: string): void => {
-    if (scannedRef.current || !payload.trim()) return;
+    if (scannedRef.current) return;
+    if (!payload.trim()) {
+      // Silent no-op left Maestro green on the Connect tap while the native
+      // TextInput still showed a ticket (controlled-state desync on Android
+      // run 30713590856). Surface the miss so the next tap/retry is honest.
+      setError("Paste a pairing ticket first.");
+      return;
+    }
     scannedRef.current = true;
     setScanning(false);
     setPairing(true);
@@ -232,6 +278,9 @@ function ConnectionStep({
         onPaired(await readSelfMemberName());
       } catch (caughtError) {
         scannedRef.current = false;
+        // Keep the ticket in the field so the person can fix and retry without
+        // re-pasting. Maestro retype recovery uses eraseText: 2000 before a
+        // second paste so it never doubles the blob (Android 30714733151).
         setError(
           caughtError instanceof Error
             ? caughtError.message
@@ -256,7 +305,12 @@ function ConnectionStep({
             onBarcodeScanned={({ data }) => submit(data)}
           />
         </View>
-        <Pressable onPress={() => setScanning(false)} style={styles.textBtn}>
+        <Pressable
+          accessibilityLabel="Cancel"
+          accessibilityRole="button"
+          onPress={() => setScanning(false)}
+          style={styles.textBtn}
+        >
           <Text style={styles.textBtnLabel}>Cancel</Text>
         </Pressable>
       </View>
@@ -293,8 +347,24 @@ function ConnectionStep({
         <>
           <Text style={[styles.fieldLabel, styles.fieldGap]}>PAIRING CODE</Text>
           <TextInput
-            value={code}
-            onChangeText={setCode}
+            // testID so Maestro can focus the field without matching the lede
+            // "Paste the one-line ticket printed by …" (run 30707656659: empty
+            // submit is silent, so a lede-tap masquerading as field focus
+            // burns the full pairing wait with no error).
+            ref={codeInputRef}
+            testID="pairing-code-input"
+            accessibilityLabel="Paste the one-line ticket"
+            defaultValue=""
+            onChangeText={rememberCode}
+            onChange={(event) => {
+              rememberCode(event.nativeEvent.text);
+            }}
+            // Maestro often commits the full ticket via SET_TEXT; hideKeyboard
+            // / submitPaste.blur() end editing so nativeEvent.text is reliable
+            // in JS before Connect (onBlur's TargetedEvent has no text field).
+            onEndEditing={(event) => {
+              rememberCode(event.nativeEvent.text);
+            }}
             placeholder="Paste the one-line ticket"
             placeholderTextColor={C.textGhost}
             style={styles.phrase}
@@ -326,10 +396,13 @@ function ConnectionStep({
               // never fired submit — ticket stayed on screen for the full wait).
               testID="onboarding-connect"
               label={pairing ? "Connecting…" : "Connect"}
-              onPress={() => (pairing ? undefined : submit(code))}
+              onPress={submitPaste}
             />
             <Pressable
-              onPress={() => (pairing ? undefined : setShowPaste(false))}
+              testID="onboarding-scan-instead"
+              accessibilityLabel="Scan the QR code instead"
+              accessibilityRole="button"
+              onPress={closePaste}
               style={styles.textBtn}
             >
               <Text style={styles.textBtnLabel}>Scan the QR code instead</Text>
@@ -351,8 +424,14 @@ function ConnectionStep({
                 {pairing ? "Connecting…" : "Scan the QR code"}
               </Text>
             </Pressable>
+            {/* testID so Maestro/XCUITest taps the Pressable (run 30711575336:
+                text+accessibilityRole=button still COMPLETED without flipping
+                showPaste on iOS — same class of miss as onboarding-connect). */}
             <Pressable
-              onPress={() => setShowPaste(true)}
+              testID="onboarding-paste"
+              accessibilityLabel="Can't scan? Paste a code instead"
+              accessibilityRole="button"
+              onPress={openPaste}
               style={styles.textBtn}
             >
               <Text style={styles.textBtnLabel}>

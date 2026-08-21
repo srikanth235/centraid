@@ -20,62 +20,13 @@ use tokio::sync::{Mutex, mpsc};
 use tokio_stream::wrappers::ReceiverStream;
 
 use crate::{
-    GW_PAIR_ALPN, MAX_REQUEST_BODY_BYTES, PAIR_ALPN, PEER_LINK_ALPN, PEER_PLANE_PREFIX,
-    TUNNEL_ALPN,
+    GW_PAIR_ALPN, MAX_REQUEST_BODY_BYTES, PAIR_ALPN, PEER_LINK_ALPN, TUNNEL_ALPN,
     iroh_wire::{
         Authorization, RELAY_PROOF_HEADER, TunnelRequestHeader, TunnelResponseHeader,
         WireHeaderValue, read_header, request_headers, response_headers, write_header,
     },
+    plane::{Plane, peer_target_allowed},
 };
-
-/// Which lane a connection arrived on. The lanes share framing and forwarding
-/// and NOTHING else: separate admission decisions, separate injected identity
-/// headers, and — for `Peer` — a hard path confinement (issue #726 P3).
-#[derive(Clone, Copy, PartialEq, Eq, Debug)]
-enum Plane {
-    Device,
-    Peer,
-}
-
-impl Plane {
-    /// Control-plane route that decides admission for this lane. The device
-    /// route answers device-pairing enrollment; the peer route answers "is
-    /// this endpoint a known, non-revoked LINK". Never interchange them.
-    fn authorize_path(self) -> &'static str {
-        match self {
-            Plane::Device => "/centraid/_gateway/tunnel/authorize",
-            Plane::Peer => "/centraid/_gateway/tunnel/peer-authorize",
-        }
-    }
-}
-
-/// TRAP 1 (issue #726 P3). `header.target` is peer-supplied and is pasted onto
-/// `upstream_url` in `serve_stream`, so without this a link addresses the whole
-/// local gateway surface — `/centraid/_gateway/*` included. Loosening this
-/// function is a privilege escalation, not a relaxation.
-///
-/// Byte-identical to `protocol.ts::isPeerPlaneTarget`:
-///   - must EXTEND the prefix (a bare prefix names no resource);
-///   - the path (before `?`/`#`) carries no `%`, no `\`, and no byte <= 0x20,
-///     so no normalisation step is needed to reason about it;
-///   - no `.` / `..` segment.
-fn peer_target_allowed(target: &str) -> bool {
-    if target.len() <= PEER_PLANE_PREFIX.len() || !target.starts_with(PEER_PLANE_PREFIX) {
-        return false;
-    }
-    let path = target
-        .split(['?', '#'])
-        .next()
-        .expect("split always yields a first element");
-    if path
-        .bytes()
-        .any(|byte| byte == b'%' || byte == b'\\' || byte <= 0x20)
-    {
-        return false;
-    }
-    path.split('/')
-        .all(|segment| segment != "." && segment != "..")
-}
 
 #[derive(Debug, Clone)]
 pub struct IrohRelayConfig {
@@ -256,48 +207,46 @@ async fn serve_stream(
         RELAY_PROOF_HEADER,
         reqwest::header::HeaderValue::from_str(&config.control_secret)?,
     );
-    let (body_tx, body_rx) = mpsc::channel::<std::io::Result<Bytes>>(4);
-    tokio::spawn(async move {
-        let mut total = 0_usize;
-        let mut buffer = vec![0_u8; 64 * 1024];
-        loop {
-            match recv.read(&mut buffer).await {
-                Ok(None) => break,
-                Ok(Some(read)) => {
-                    total += read;
-                    if total > MAX_REQUEST_BODY_BYTES {
+    let mut outbound = client.request(method, url).headers(headers);
+    if tunnel_request_has_body(&header) {
+        let (body_tx, body_rx) = mpsc::channel::<std::io::Result<Bytes>>(4);
+        tokio::spawn(async move {
+            let mut total = 0_usize;
+            let mut buffer = vec![0_u8; 64 * 1024];
+            loop {
+                match recv.read(&mut buffer).await {
+                    Ok(None) => break,
+                    Ok(Some(read)) => {
+                        total += read;
+                        if total > MAX_REQUEST_BODY_BYTES {
+                            let _ = body_tx
+                                .send(Err(std::io::Error::new(
+                                    std::io::ErrorKind::InvalidData,
+                                    "tunnel body exceeds limit",
+                                )))
+                                .await;
+                            break;
+                        }
+                        if body_tx
+                            .send(Ok(Bytes::copy_from_slice(&buffer[..read])))
+                            .await
+                            .is_err()
+                        {
+                            break;
+                        }
+                    }
+                    Err(error) => {
                         let _ = body_tx
-                            .send(Err(std::io::Error::new(
-                                std::io::ErrorKind::InvalidData,
-                                "tunnel body exceeds limit",
-                            )))
+                            .send(Err(std::io::Error::other(error.to_string())))
                             .await;
                         break;
                     }
-                    if body_tx
-                        .send(Ok(Bytes::copy_from_slice(&buffer[..read])))
-                        .await
-                        .is_err()
-                    {
-                        break;
-                    }
-                }
-                Err(error) => {
-                    let _ = body_tx
-                        .send(Err(std::io::Error::other(error.to_string())))
-                        .await;
-                    break;
                 }
             }
-        }
-    });
-    let response = client
-        .request(method, url)
-        .headers(headers)
-        .body(reqwest::Body::wrap_stream(ReceiverStream::new(body_rx)))
-        .send()
-        .await
-        .context("forward tunneled request")?;
+        });
+        outbound = outbound.body(reqwest::Body::wrap_stream(ReceiverStream::new(body_rx)));
+    }
+    let response = outbound.send().await.context("forward tunneled request")?;
     write_header(
         &mut send,
         &TunnelResponseHeader {
@@ -312,6 +261,34 @@ async fn serve_stream(
     }
     send.finish()?;
     Ok(())
+}
+
+fn tunnel_request_has_body(header: &TunnelRequestHeader) -> bool {
+    let content_length = header
+        .headers
+        .iter()
+        .find(|(name, _)| name.eq_ignore_ascii_case("content-length"))
+        .map(|(_, value)| value);
+    if let Some(value) = content_length {
+        return match value {
+            WireHeaderValue::One(value) => value
+                .trim()
+                .parse::<u64>()
+                .map(|length| length > 0)
+                .unwrap_or(true),
+            WireHeaderValue::Many(values) => values.iter().any(|value| {
+                value
+                    .trim()
+                    .parse::<u64>()
+                    .map(|length| length > 0)
+                    .unwrap_or(true)
+            }),
+        };
+    }
+    !matches!(
+        header.method.to_ascii_uppercase().as_str(),
+        "GET" | "HEAD" | "OPTIONS" | "TRACE"
+    )
 }
 
 async fn serve_connection(
@@ -549,6 +526,7 @@ pub async fn serve(config: IrohRelayConfig) -> Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::PEER_PLANE_PREFIX;
 
     /// Trap 1 (issue #726 P3). Each rejected case below is a way to reach the
     /// owner surface through a peer link; each accepted case is a real peer

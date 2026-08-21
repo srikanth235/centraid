@@ -66,6 +66,18 @@ runtime.gateway = gateway;
 await gateway.start(`http://127.0.0.1:${port}`);
 
 const server = http.createServer((request, response) => {
+  const startedAt = Date.now();
+  const method = request.method ?? "GET";
+  const target = request.url ?? "/";
+  const finish = (event) => {
+    logger.info(
+      `http ${method} ${target} -> ${response.statusCode} (${event}, ${Date.now() - startedAt}ms)`
+    );
+  };
+  response.once("finish", () => finish("finish"));
+  response.once("close", () => {
+    if (!response.writableFinished) finish("close");
+  });
   void gateway
     .composedHandler(request, response)
     .then((handled) => {

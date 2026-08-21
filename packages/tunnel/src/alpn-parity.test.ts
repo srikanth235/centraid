@@ -35,6 +35,10 @@ const RUST_RELAY = fileURLToPath(
   new URL("../data-plane/src/iroh_relay.rs", import.meta.url)
 );
 
+const RUST_PLANE = fileURLToPath(
+  new URL("../data-plane/src/plane.rs", import.meta.url)
+);
+
 /** `pub const NAME: &[u8] = b"value";` → `value`. */
 function rustByteConst(source: string, name: string): string | undefined {
   const match = new RegExp(
@@ -75,10 +79,13 @@ describe("rust ↔ typescript wire constants", () => {
 
   it("keeps the Rust relay's peer confinement wired to the shared prefix", () => {
     // A guard that stopped reading PEER_PLANE_PREFIX would silently stop
-    // being the same rule as the TypeScript one.
+    // being the same rule as the TypeScript one. The guard lives in plane.rs
+    // (extracted from iroh_relay.rs for the file-size cap); the relay must
+    // still be the call site.
+    const plane = fs.readFileSync(RUST_PLANE, "utf8");
+    expect(plane).toContain("fn peer_target_allowed(target: &str) -> bool");
+    expect(plane).toContain("target.starts_with(PEER_PLANE_PREFIX)");
     const relay = fs.readFileSync(RUST_RELAY, "utf8");
-    expect(relay).toContain("fn peer_target_allowed(target: &str) -> bool");
-    expect(relay).toContain("target.starts_with(PEER_PLANE_PREFIX)");
     expect(relay).toContain("peer_target_allowed(&header.target)");
   });
 });

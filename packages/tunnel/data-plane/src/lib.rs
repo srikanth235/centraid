@@ -3,6 +3,7 @@ pub mod format;
 pub mod http_plane;
 pub mod iroh_relay;
 mod iroh_wire;
+pub mod plane;
 pub mod ticket;
 
 pub const TUNNEL_ALPN: &[u8] = b"centraid/tunnel/1";

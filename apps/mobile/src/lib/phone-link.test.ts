@@ -1,7 +1,74 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
+import { restartTunnel } from "./phone-link";
 import { normalizePairedVaults } from "./phone-link-core";
 import { parsePairingInput, parsePairQr } from "./phone-link-parse";
+
+const stopTunnel = vi.hoisted(() =>
+  vi.fn<(typeof import("../../modules/centraid-tunnel"))["stopTunnel"]>()
+);
+
+vi.mock(import("../../modules/centraid-tunnel"), () => ({
+  addTunnelStatusListener: vi.fn<
+    (typeof import("../../modules/centraid-tunnel"))["addTunnelStatusListener"]
+  >(() => ({ remove: () => undefined })),
+  generateSecretKey:
+    vi.fn<
+      (typeof import("../../modules/centraid-tunnel"))["generateSecretKey"]
+    >(),
+  getTunnelStatus:
+    vi.fn<
+      (typeof import("../../modules/centraid-tunnel"))["getTunnelStatus"]
+    >(),
+  isTunnelAvailable: vi.fn<
+    (typeof import("../../modules/centraid-tunnel"))["isTunnelAvailable"]
+  >(() => false),
+  pairWithDesktop:
+    vi.fn<
+      (typeof import("../../modules/centraid-tunnel"))["pairWithDesktop"]
+    >(),
+  pairWithGateway:
+    vi.fn<
+      (typeof import("../../modules/centraid-tunnel"))["pairWithGateway"]
+    >(),
+  startTunnel:
+    vi.fn<(typeof import("../../modules/centraid-tunnel"))["startTunnel"]>(),
+  stopTunnel,
+}));
+
+vi.mock(
+  import("@react-native-async-storage/async-storage") as Promise<unknown>,
+  () => ({
+    default: {
+      getItem: vi.fn<() => Promise<string | null>>(async () => null),
+      removeItem: vi.fn<() => Promise<void>>(async () => undefined),
+      setItem: vi.fn<() => Promise<void>>(async () => undefined),
+    },
+  })
+);
+
+vi.mock(import("expo-secure-store"), () => ({
+  deleteItemAsync: vi.fn<(key: string) => Promise<void>>(async () => undefined),
+  getItemAsync: vi.fn<(key: string) => Promise<string | null>>(
+    async () => null
+  ),
+  setItemAsync: vi.fn<(key: string, value: string) => Promise<void>>(
+    async () => undefined
+  ),
+}));
+
+vi.mock(import("react-native") as Promise<unknown>, () => ({
+  Platform: { OS: "ios" },
+}));
+
+describe(restartTunnel, () => {
+  it("stops a stale proxy before a compatibility retry remounts it", async () => {
+    stopTunnel.mockResolvedValue(undefined);
+    await restartTunnel();
+
+    expect(stopTunnel).toHaveBeenCalledOnce();
+  });
+});
 
 function encodeGwPair(payload: {
   gw: string;

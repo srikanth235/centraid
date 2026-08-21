@@ -7,7 +7,7 @@ import React, {
   useRef,
   useState,
 } from "react";
-import { AppState, InteractionManager } from "react-native";
+import { AppState } from "react-native";
 
 import { replicaStorageDirectory } from "../../../modules/centraid-storage";
 import { coalesceWork } from "../../lib/coalesce";
@@ -18,6 +18,7 @@ import {
   syncDueNotifications,
   syncNotifications,
 } from "../../lib/notifications-core";
+import { restartTunnel } from "../../lib/phone-link";
 import { registerReplicaPushWake } from "../../lib/replica/background-sync";
 import { requireMobileOfflineGateway } from "../../lib/replica/mobile-gateway-compatibility";
 import { MobileGatewayCompatibilityError } from "../../lib/replica/mobile-gateway-compatibility-core";
@@ -57,6 +58,7 @@ import {
 } from "../../lib/vault-links";
 import type { VaultLink } from "../../lib/vault-links";
 import { Store } from "../../storage";
+import { afterInteractions } from "./after-interactions";
 import { planMount } from "./mount-plan";
 import {
   fetcher,
@@ -133,17 +135,6 @@ const ReplicaContext = createContext<ReplicaContextValue>(REPLICA_LOADING);
  * back into range still feels like the app noticed.
  */
 const NETWORK_FLAP_WINDOW_MS = 1_500;
-
-/**
- * Resolve once the navigation animation and pending touches have run. React
- * Native's own scheduler owns this — nothing here should be guessing at a
- * timeout for "the UI is usable now".
- */
-function afterInteractions(): Promise<void> {
-  return new Promise((resolve) => {
-    InteractionManager.runAfterInteractions(() => resolve());
-  });
-}
 
 export function ReplicaProvider({
   children,
@@ -586,7 +577,13 @@ export function ReplicaProvider({
               ready: true,
               online: false,
               reachability: "gateway-asleep",
-              refresh: async () => setRetryNonce((current) => current + 1),
+              refresh: async () => {
+                // A reconnect wall can be caused by a half-open iroh session
+                // behind a still-running localhost proxy. Recreate that
+                // session before remounting the replica provider.
+                if (compatibility === "reconnect") await restartTunnel();
+                setRetryNonce((current) => current + 1);
+              },
               ...(compatibility ? { compatibility } : {}),
               ...(isReplicaStorageFullError(error)
                 ? { storageFull: true }

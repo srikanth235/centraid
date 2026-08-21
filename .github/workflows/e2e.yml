@@ -1,5 +1,6 @@
 # governance: allow-toolchain-config issue #637 — turbo-cache on build-bearing
-# nightly jobs; mobile-e2e-ios intentionally excluded (macOS native binary risk).
+# nightly jobs, including mobile-e2e-ios now that turbo.json separates native
+# artifacts by runner OS.
 name: e2e
 
 # Nightly product lanes: desktop/web Playwright, mobile agent-e2e, pairing
@@ -12,7 +13,7 @@ on:
     inputs:
       # #496 C3 — re-run one broken lane without the full ~70-min graph.
       suite:
-        description: "Which suite to run (all | desktop | web | mobile | mobile-android | pairing | report | mutation)"
+        description: "Which suite to run (all | desktop | web | mobile | mobile-ios | mobile-android | pairing | report | mutation)"
         required: false
         default: "all"
         type: choice
@@ -21,10 +22,25 @@ on:
           - desktop
           - web
           - mobile
+          - mobile-ios
           - mobile-android
           - pairing
           - report
           - mutation
+      ios_suite:
+        description: "For mobile-ios: run one iOS matrix suite (all | home-loads | native-v0-resilience | volume-proof | cold-start | scroll-frames | photos | places-seat)"
+        required: false
+        default: "all"
+        type: choice
+        options:
+          - all
+          - home-loads
+          - photos
+          - places-seat
+          - native-v0-resilience
+          - volume-proof
+          - cold-start
+          - scroll-frames
 
 # #496 C3 — overlapping schedule + dispatch must not double-run macOS.
 concurrency:
@@ -138,50 +154,32 @@ jobs:
           path: artifacts/
           retention-days: 7
 
-  mobile-e2e-ios:
+  # iOS uses one native-build producer and isolated test runners. The app
+  # binary is the expensive/cacheable part; every suite below gets its own
+  # simulator so onboarding state, Photos privacy state, and XCTest windows
+  # cannot race one another.
+  mobile-e2e-ios-build:
     if: >
-      github.event_name != 'workflow_dispatch' || github.event.inputs.suite == 'all' || github.event.inputs.suite == 'mobile'
+      github.event_name != 'workflow_dispatch' || github.event.inputs.suite == 'all' || github.event.inputs.suite == 'mobile' || github.event.inputs.suite == 'mobile-ios'
     # macos-15 defaults to Xcode 16.4 and only ships up to 26.3. Expo SDK 57's
     # expo-modules-jsi needs Swift tools 6.2 / Xcode 26.4+ (#620); on 16.4 the
     # JSI xcframework step exits 65 with an empty "Could not resolve package
     # dependencies" footer (run 30417451436). macos-26 defaults to 26.5+.
     runs-on: macos-26
-    # Cold macOS native build + serialized journeys exceed 60 on a cache miss;
-    # cancelled counts as red (#557), so the backstop must sit above the
-    # budget. Raised from 60 under #781 after the 08-03/04/06/13 nightlies
-    # were cancelled at exactly this ceiling.
-    timeout-minutes: 90
+    # One cold native build plus cache upload. The suite runners below inherit
+    # this artifact and spend their wall time driving Maestro, not compiling.
+    timeout-minutes: 60
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: ./.github/actions/setup
-        # #637 — deliberately no turbo-cache: macOS is 1-of-1 and must not
-        # restore a Linux-built native/*.node even with RUNNER_OS in the hash.
+        with:
+          # turbo.json includes RUNNER_OS in every task hash, so the signed
+          # macOS tunnel addon cannot restore the Linux native artifact. This
+          # makes the gateway dependency build reuse the same granular cache
+          # Android already hits without changing the native .app cache key.
+          turbo-cache: "true"
       - name: Select Xcode 26.4 or newer
-        run: |
-          set -euo pipefail
-          # Prefer the newest installed ≥26.4 so image rolls stay green without
-          # pinning a patch. Fail loud if the image dropped below Expo's floor.
-          selected=""
-          for app in $(ls -d /Applications/Xcode_26.*.app 2>/dev/null | sort -V -r); do
-            version="${app#/Applications/Xcode_}"
-            version="${version%.app}"
-            major="${version%%.*}"
-            rest="${version#*.}"
-            minor="${rest%%.*}"
-            if [ "$major" -gt 26 ] || { [ "$major" -eq 26 ] && [ "$minor" -ge 4 ]; }; then
-              selected="$app"
-              break
-            fi
-          done
-          test -n "$selected" || {
-            echo "::error::no Xcode ≥26.4 under /Applications (ExpoModulesJSI floor)"
-            ls -d /Applications/Xcode*.app || true
-            exit 1
-          }
-          echo "selecting $selected"
-          sudo xcode-select -s "$selected"
-          xcodebuild -version
-          swift --version
+        run: bash apps/mobile/scripts/select-ci-xcode.sh
       # The iOS dev build is cached and reused whenever nothing that changes the
       # *native binary* changed. A JS/TS commit is served live by Metro, so it
       # must not pay the ~32-minute compile; a config-plugin, native-module,
@@ -206,10 +204,9 @@ jobs:
       #             subsumes the old key's raw ImageOS (the Xcode/SDK version is
       #             the part of the image that actually matters here).
       #
-      # Deliberately NOT caching turbo here. A per-sha key never hits, so every
-      # run would SAVE a fresh multi-hundred-MB blob; against GitHub's 10 GB
-      # per-repo budget with LRU eviction, the natural victim is the .app entry
-      # below — which is only ever read, never re-saved on a hit.
+      # The native .app cache below remains separate and all-or-nothing. Turbo
+      # caches only the gateway dependency tasks; its global RUNNER_OS hash
+      # keeps Linux/macOS native addons isolated.
       - name: Fingerprint the iOS native build inputs
         id: native
         working-directory: apps/mobile
@@ -231,60 +228,13 @@ jobs:
       - name: Assert runner Xcode satisfies React Native and ExpoModulesJSI
         working-directory: apps/mobile
         run: bun run ci:xcode
-      - name: Build and start the tokenless mobile test gateway
-        # Scoped to the gateway's dependency subgraph instead of a full
-        # `bun run build`. tests/agent-e2e-mobile/lib/ci-gateway.mjs imports only
-        # packages/server/dist, and turbo pulls every workspace dependency
-        # (vault, app-engine, agent-runtime, automation, backup, blueprints,
-        # tunnel, client, web, design) in transitively — nothing
-        # the mobile job needs is dropped. The saving is narrow but real, and
-        # comes almost entirely from dropping @centraid/desktop (skills and
-        # data-plane folded into gateway/tunnel in #495).
-        run: |
-          bun run turbo run build --filter=@centraid/server
-          gateway_dir="$RUNNER_TEMP/centraid-mobile-gateway"
-          nohup node tests/agent-e2e-mobile/lib/ci-gateway.mjs "$gateway_dir" 18789 > /tmp/centraid-mobile-gateway.log 2>&1 &
-          echo "CENTRAID_MOBILE_GATEWAY_PID=$!" >> "$GITHUB_ENV"
-          echo "MAESTRO_GATEWAY_URL=http://127.0.0.1:18789" >> "$GITHUB_ENV"
-          for attempt in {1..90}; do
-            if node tests/agent-e2e-mobile/lib/ci-gateway-ready.mjs http://127.0.0.1:18789; then exit 0; fi
-            sleep 2
-          done
-          cat /tmp/centraid-mobile-gateway.log
-          exit 1
-      - name: Install Maestro CLI
-        # The mobile agent-e2e flows drive the installed app through Maestro
-        # (tests/agent-e2e-mobile/lib/harness.mjs → `maestro --udid … test`).
-        # Pin the CLI: the install script honors MAESTRO_VERSION and otherwise
-        # pulls whatever is at `releases/latest`, so an upstream release could
-        # silently change device-driving behavior mid-nightly. cli-2.6.1 is the
-        # current stable release (github.com/mobile-dev-inc/maestro/releases).
-        env:
-          MAESTRO_VERSION: 2.6.1
-        run: |
-          curl -fsSL "https://get.maestro.mobile.dev" | bash
-          echo "$HOME/.maestro/bin" >> "$GITHUB_PATH"
       - name: Boot an iOS simulator
-        run: |
-          udid="$(xcrun simctl list devices available --json | node -e '
-            let input="";
-            process.stdin.on("data", chunk => input += chunk);
-            process.stdin.on("end", () => {
-              const devices = Object.values(JSON.parse(input).devices).flat();
-              const phone = devices.find(device => device.isAvailable && /iPhone/.test(device.name));
-              if (!phone) process.exit(1);
-              process.stdout.write(phone.udid);
-            });
-          ')"
-          echo "SIMULATOR_UDID=$udid" >> "$GITHUB_ENV"
-          xcrun simctl boot "$udid" || true
-          xcrun simctl bootstatus "$udid" -b
+        run: bash apps/mobile/scripts/boot-ci-ios-simulator.sh
       # The built .app for the simulator. This is the single biggest win in the
-      # job (~32m of the 51m). Keyed on the native fingerprint above, so a commit
-      # that touches only JS reuses the binary while ANY native-input or Xcode
-      # change forces a rebuild. No `restore-keys`: a partial-match fallback is
-      # exactly the stale-binary false-pass this must never allow — the key is
-      # all-or-nothing.
+      # lane (~32m of the old 51m). Keyed on the native fingerprint above, so a
+      # commit that touches only JS reuses the binary while ANY native-input or
+      # Xcode change forces a rebuild. No `restore-keys`: a partial-match
+      # fallback is exactly the stale-binary false-pass this must never allow.
       #
       # restore + save are SPLIT rather than the one-step `actions/cache`, because
       # that action declares `post-if: success()` — it saves only when the whole
@@ -357,6 +307,87 @@ jobs:
           xcrun simctl install "$SIMULATOR_UDID" "$app"
           # Confirm the simulator agrees the app is installed and resolvable.
           xcrun simctl get_app_container "$SIMULATOR_UDID" dev.centraid.mobile
+      - name: Package the cached iOS app for suite runners
+        run: |
+          set -euo pipefail
+          tar -czf "$RUNNER_TEMP/centraid-mobile-ios-app.tar.gz" \
+            -C "$HOME/.cache/centraid-mobile-e2e" Centraid.app
+      - name: Publish the cached iOS app to suite runners
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: nightly-mobile-ios-app
+          path: ${{ runner.temp }}/centraid-mobile-ios-app.tar.gz
+          retention-days: 7
+
+  mobile-e2e-ios:
+    needs: mobile-e2e-ios-build
+    if: >
+      needs.mobile-e2e-ios-build.result == 'success' && (github.event_name != 'workflow_dispatch' || github.event.inputs.suite == 'all' || github.event.inputs.suite == 'mobile' || github.event.inputs.suite == 'mobile-ios')
+    strategy:
+      fail-fast: false
+      matrix:
+        suite: ${{ fromJSON((github.event_name != 'workflow_dispatch' || github.event.inputs.ios_suite == 'all') && '["home-loads","native-v0-resilience","volume-proof","cold-start","scroll-frames","photos","places-seat"]' || format('["{0}"]', github.event.inputs.ios_suite)) }}
+    runs-on: macos-26
+    # Each matrix cell owns one simulator and one flow. Native-v0 is the
+    # slowest cell; 60m keeps enough room for a transient Maestro retry without
+    # returning to the old 90m serial-job cap.
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: ./.github/actions/setup
+        with:
+          turbo-cache: "true"
+      - name: Select Xcode 26.4 or newer
+        run: bash apps/mobile/scripts/select-ci-xcode.sh
+      - name: Assert runner Xcode satisfies React Native and ExpoModulesJSI
+        working-directory: apps/mobile
+        run: bun run ci:xcode
+      - name: Download the built iOS app
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: nightly-mobile-ios-app
+          path: ${{ runner.temp }}/centraid-mobile-ios-app
+      - name: Unpack the built iOS app
+        run: |
+          set -euo pipefail
+          rm -rf "$HOME/.cache/centraid-mobile-e2e"
+          mkdir -p "$HOME/.cache/centraid-mobile-e2e"
+          tar -xzf "$RUNNER_TEMP/centraid-mobile-ios-app/centraid-mobile-ios-app.tar.gz" \
+            -C "$HOME/.cache/centraid-mobile-e2e"
+      - name: Boot an iOS simulator
+        run: bash apps/mobile/scripts/boot-ci-ios-simulator.sh
+      - name: Install the built iOS app
+        run: |
+          set -euo pipefail
+          app="$HOME/.cache/centraid-mobile-e2e/Centraid.app"
+          test -d "$app" || { echo "::error::iOS app artifact missing"; exit 1; }
+          bundle_id="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$app/Info.plist")"
+          test "$bundle_id" = 'dev.centraid.mobile' \
+            || { echo "::error::iOS app bundle id is '$bundle_id', expected dev.centraid.mobile"; exit 1; }
+          test -x "$app/Centraid" || { echo "::error::iOS app has no executable"; exit 1; }
+          xcrun simctl install "$SIMULATOR_UDID" "$app"
+          xcrun simctl get_app_container "$SIMULATOR_UDID" dev.centraid.mobile
+      - name: Build and start the tokenless mobile test gateway
+        # Each suite gets a fresh gateway data dir as well as a fresh simulator;
+        # tickets and app installs cannot collide across matrix cells.
+        run: |
+          bun run turbo run build --filter=@centraid/server
+          gateway_dir="$RUNNER_TEMP/centraid-mobile-gateway"
+          nohup node tests/agent-e2e-mobile/lib/ci-gateway.mjs "$gateway_dir" 18789 > /tmp/centraid-mobile-gateway.log 2>&1 &
+          echo "CENTRAID_MOBILE_GATEWAY_PID=$!" >> "$GITHUB_ENV"
+          echo "MAESTRO_GATEWAY_URL=http://127.0.0.1:18789" >> "$GITHUB_ENV"
+          for attempt in {1..90}; do
+            if node tests/agent-e2e-mobile/lib/ci-gateway-ready.mjs http://127.0.0.1:18789; then exit 0; fi
+            sleep 2
+          done
+          cat /tmp/centraid-mobile-gateway.log
+          exit 1
+      - name: Install Maestro CLI
+        env:
+          MAESTRO_VERSION: 2.6.1
+        run: |
+          curl -fsSL "https://get.maestro.mobile.dev" | bash
+          echo "$HOME/.maestro/bin" >> "$GITHUB_PATH"
       - name: Start Metro
         run: |
           CI=1 nohup bunx expo start --dev-client > /tmp/centraid-metro.log 2>&1 &
@@ -368,25 +399,26 @@ jobs:
           exit 1
         working-directory: apps/mobile
       - run: node scripts/test-report/prepare.mjs
-      # Non-short-circuit: each flow always runs and writes evidence; aggregate
-      # exit afterward so a mid-run fail cannot grey later cells (#535 F4).
-      - name: Run all committed mobile journeys
+      - name: Run iOS suite — ${{ matrix.suite }}
         env:
           MAESTRO_PLATFORM: ios
         run: |
-          set +e
-          ec=0
-          node tests/agent-e2e-mobile/flows/home-loads.mjs || ec=$?
-          node tests/agent-e2e-mobile/flows/native-v0-resilience.mjs || ec=$?
-          node tests/agent-e2e-mobile/flows/volume-proof.mjs || ec=$?
-          # #659 R3c — per-launch cold start (volume-proof times 20 launches as
-          # one sum, which is unreadable as an experience) and the Photos
-          # scroll-settle proxy.
-          node tests/agent-e2e-mobile/flows/cold-start.mjs || ec=$?
-          node tests/agent-e2e-mobile/flows/scroll-frames.mjs || ec=$?
-          node tests/agent-e2e-mobile/run-photos-suite.mjs || ec=$?
-          node tests/agent-e2e-mobile/flows/places-seat.mjs || ec=$?
-          exit "$ec"
+          case "${{ matrix.suite }}" in
+            photos)
+              node tests/agent-e2e-mobile/run-photos-suite.mjs
+              ;;
+            *)
+              node "tests/agent-e2e-mobile/flows/${{ matrix.suite }}.mjs"
+              ;;
+          esac
+      - name: Dump mobile gateway request log
+        if: always()
+        run: |
+          if [ -f /tmp/centraid-mobile-gateway.log ]; then
+            tail -n 2000 /tmp/centraid-mobile-gateway.log
+          else
+            echo "mobile gateway log was not created"
+          fi
       - name: Remove sensitive pairing diagnostics
         if: always()
         run: |
@@ -401,13 +433,13 @@ jobs:
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         if: always()
         with:
-          name: nightly-evidence-mobile
+          name: nightly-evidence-mobile-ios-${{ matrix.suite }}
           path: artifacts/
           retention-days: 7
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         if: always()
         with:
-          name: nightly-debug-mobile-runs
+          name: nightly-debug-mobile-ios-${{ matrix.suite }}-runs
           path: tests/agent-e2e-mobile/runs/
           retention-days: 7
           if-no-files-found: ignore
@@ -508,9 +540,9 @@ jobs:
       # already settled. The key pins every AVD-shaping input — bump the trailing
       # -vN to invalidate after an emulator/image bump. Distinct from the apk
       # cache (different key, different path); both can hit independently.
-      - name: AVD cache
+      - name: Restore AVD cache
         id: avd_cache
-        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: |
             ~/.android/avd/*
@@ -533,6 +565,17 @@ jobs:
           emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
           disable-animations: false
           script: echo "Generated AVD snapshot for caching."
+      # Save before Maestro starts. The cache action's implicit post-job save is
+      # skipped when a journey fails, which otherwise makes every red retry pay
+      # the snapshot boot cost again even though the AVD is valid.
+      - name: Save AVD cache
+        if: steps.avd_cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            ~/.android/avd/*
+            ~/.android/adb*
+          key: avd-api34-x86_64-google_apis-pixel6-r4096-c4-v1
       - name: Set up Android SDK + emulator
         id: emu
         # v2.38.0 — prior pin 1dcd009…dd was a typo/orphan SHA (#535 F6).
@@ -563,6 +606,14 @@ jobs:
           # comments and non-ASCII chars tripped its parser (#535). Keep this a
           # single line that hands off to a committed bash file instead.
           script: bash apps/mobile/scripts/android-emulator-e2e.sh
+      - name: Dump mobile gateway request log
+        if: always()
+        run: |
+          if [ -f /tmp/centraid-mobile-gateway.log ]; then
+            tail -n 2000 /tmp/centraid-mobile-gateway.log
+          else
+            echo "mobile gateway log was not created"
+          fi
       # Mirrors the iOS job's identical step. The harness already rm -rf's this
       # directory in a finally, so this is belt-and-braces against a run that
       # dies before the finally — but it was iOS-only, which meant an Android
@@ -600,13 +651,14 @@ jobs:
           retention-days: 7
           if-no-files-found: ignore
 
-  # Pairing journeys (issue #289 / matrix tunnel-pairing). Independent jobs so
-  # one failure still leaves evidence from the others for the health report.
-  pairing-lifecycle:
+  # Pairing journeys (issue #289 / matrix tunnel-pairing). Keep the three flow
+  # verdicts independent and concurrent inside one suite so the Actions UI has
+  # one pairing entry while a failure in one flow does not skip the others.
+  pairing-e2e:
     if: >
       github.event_name != 'workflow_dispatch' || github.event.inputs.suite == 'all' || github.event.inputs.suite == 'pairing'
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 60
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: ./.github/actions/setup
@@ -614,74 +666,79 @@ jobs:
           turbo-cache: "true"
       - run: bun run turbo run build --filter=@centraid/server --filter=@centraid/tunnel
       - run: node scripts/test-report/prepare.mjs
-      - run: node tests/agent-e2e-pairing/flows/device-pairing-lifecycle.mjs
-      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+      - name: Run pairing flows concurrently
+        id: pairing_flows
         if: always()
-        with:
-          name: nightly-evidence-pairing-lifecycle
-          path: artifacts/
-          retention-days: 7
-      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
-        if: always()
-        with:
-          name: nightly-debug-pairing-lifecycle-runs
-          path: tests/agent-e2e-pairing/runs/
-          retention-days: 7
-          if-no-files-found: ignore
+        continue-on-error: true
+        run: |
+          set +e
+          lifecycle_log="$RUNNER_TEMP/pairing-lifecycle.log"
+          ticket_hygiene_log="$RUNNER_TEMP/pairing-ticket-hygiene.log"
+          cross_network_relay_log="$RUNNER_TEMP/pairing-cross-network-relay.log"
 
-  pairing-ticket-hygiene:
-    if: >
-      github.event_name != 'workflow_dispatch' || github.event.inputs.suite == 'all' || github.event.inputs.suite == 'pairing'
-    runs-on: ubuntu-latest
-    timeout-minutes: 20
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - uses: ./.github/actions/setup
-        with:
-          turbo-cache: "true"
-      - run: bun run turbo run build --filter=@centraid/server --filter=@centraid/tunnel
-      - run: node scripts/test-report/prepare.mjs
-      - run: node tests/agent-e2e-pairing/flows/pairing-ticket-hygiene.mjs
-      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
-        if: always()
-        with:
-          name: nightly-evidence-pairing-ticket-hygiene
-          path: artifacts/
-          retention-days: 7
-      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
-        if: always()
-        with:
-          name: nightly-debug-pairing-ticket-hygiene-runs
-          path: tests/agent-e2e-pairing/runs/
-          retention-days: 7
-          if-no-files-found: ignore
+          (set -e; node tests/agent-e2e-pairing/flows/device-pairing-lifecycle.mjs) >"$lifecycle_log" 2>&1 &
+          lifecycle_pid=$!
+          (set -e; node tests/agent-e2e-pairing/flows/pairing-ticket-hygiene.mjs) >"$ticket_hygiene_log" 2>&1 &
+          ticket_hygiene_pid=$!
+          (
+            set -e
+            docker info
+            # Production must never silently fall back to the JS byte pump.
+            test -f packages/tunnel/native/centraid-tunnel-native.linux-x64.node
+            node tests/agent-e2e-pairing/flows/cross-network-relay.mjs
+          ) >"$cross_network_relay_log" 2>&1 &
+          cross_network_relay_pid=$!
 
-  pairing-cross-network-relay:
-    if: >
-      github.event_name != 'workflow_dispatch' || github.event.inputs.suite == 'all' || github.event.inputs.suite == 'pairing'
-    runs-on: ubuntu-latest
-    timeout-minutes: 20
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - uses: ./.github/actions/setup
-        with:
-          turbo-cache: "true"
-      - run: docker info
-      - run: bun run turbo run build --filter=@centraid/server --filter=@centraid/tunnel
-      - run: node scripts/test-report/prepare.mjs
-      # Production must never silently fall back to the JS byte pump.
-      - run: test -f packages/tunnel/native/centraid-tunnel-native.linux-x64.node
-      - run: node tests/agent-e2e-pairing/flows/cross-network-relay.mjs
+          wait "$lifecycle_pid"
+          lifecycle_status=$?
+          wait "$ticket_hygiene_pid"
+          ticket_hygiene_status=$?
+          wait "$cross_network_relay_pid"
+          cross_network_relay_status=$?
+
+          echo "::group::device-pairing-lifecycle"
+          cat "$lifecycle_log"
+          echo "::endgroup::"
+          echo "::group::pairing-ticket-hygiene"
+          cat "$ticket_hygiene_log"
+          echo "::endgroup::"
+          echo "::group::cross-network-relay"
+          cat "$cross_network_relay_log"
+          echo "::endgroup::"
+
+          lifecycle_result=failed
+          [ "$lifecycle_status" -eq 0 ] && lifecycle_result=passed
+          ticket_hygiene_result=failed
+          [ "$ticket_hygiene_status" -eq 0 ] && ticket_hygiene_result=passed
+          cross_network_relay_result=failed
+          [ "$cross_network_relay_status" -eq 0 ] && cross_network_relay_result=passed
+          {
+            echo "lifecycle=$lifecycle_result"
+            echo "ticket_hygiene=$ticket_hygiene_result"
+            echo "cross_network_relay=$cross_network_relay_result"
+          } >> "$GITHUB_OUTPUT"
+      - name: Fail if pairing suite failed
+        if: always()
+        run: |
+          echo "lifecycle=${{ steps.pairing_flows.outputs.lifecycle }}"
+          echo "ticket-hygiene=${{ steps.pairing_flows.outputs.ticket_hygiene }}"
+          echo "cross-network-relay=${{ steps.pairing_flows.outputs.cross_network_relay }}"
+          if [ "${{ steps.pairing_flows.outputs.lifecycle }}" != "passed" ] || \
+             [ "${{ steps.pairing_flows.outputs.ticket_hygiene }}" != "passed" ] || \
+             [ "${{ steps.pairing_flows.outputs.cross_network_relay }}" != "passed" ]; then
+            echo "::error::Pairing suite failed — see the grouped flow logs above"
+            exit 1
+          fi
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         if: always()
         with:
-          name: nightly-evidence-pairing-cross-network-relay
+          name: nightly-evidence-pairing
           path: artifacts/
           retention-days: 7
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         if: always()
         with:
-          name: nightly-debug-pairing-cross-network-relay-runs
+          name: nightly-debug-pairing-runs
           path: tests/agent-e2e-pairing/runs/
           retention-days: 7
           if-no-files-found: ignore
@@ -829,11 +886,10 @@ jobs:
       [
         desktop-e2e,
         web-e2e,
+        mobile-e2e-ios-build,
         mobile-e2e-ios,
         mobile-e2e-android,
-        pairing-lifecycle,
-        pairing-ticket-hygiene,
-        pairing-cross-network-relay,
+        pairing-e2e,
         mutation-testing,
         quality-performance-scale,
         restore-year3,
@@ -871,6 +927,13 @@ jobs:
       - id: coverage
         continue-on-error: true
         run: bun run coverage
+      # #676 — accessibility cells own scripts/accessibility-contract.test.mjs but
+      # node --test never lands in vitest.json. Run + write artifacts/e2e evidence
+      # so nightly zero-grey sees the 15 *:accessibility cells.
+      - id: accessibility
+        if: always()
+        continue-on-error: true
+        run: bun run test:accessibility
       # Durable trend source: the append-only summary series committed to
       # gh-pages. Unlike the quality-history cache above it is never evicted.
       - name: Restore durable report history (gh-pages)
@@ -906,6 +969,13 @@ jobs:
         env:
           TEST_REPORT_SCOPE: nightly
         run: bun run test:report
+      - name: Fail if accessibility contract failed
+        if: always()
+        run: |
+          if [ "${{ steps.accessibility.outcome }}" != "success" ]; then
+            echo "::error::Nightly accessibility contract failed — see step above"
+            exit 1
+          fi
       # Coverage still runs here so the report can render on failure. Perf and
       # scale have their own required nightly job above (#587 C1).
       - name: Fail if quality lanes failed
@@ -1077,11 +1147,10 @@ jobs:
       [
         desktop-e2e,
         web-e2e,
+        mobile-e2e-ios-build,
         mobile-e2e-ios,
         mobile-e2e-android,
-        pairing-lifecycle,
-        pairing-ticket-hygiene,
-        pairing-cross-network-relay,
+        pairing-e2e,
         mutation-testing,
         quality-performance-scale,
         restore-year3,
@@ -1147,11 +1216,10 @@ jobs:
           ### Job results
           - desktop-e2e: \`${{ needs.desktop-e2e.result }}\`
           - web-e2e: \`${{ needs.web-e2e.result }}\`
+          - mobile-e2e-ios-build: \`${{ needs.mobile-e2e-ios-build.result }}\`
           - mobile-e2e-ios: \`${{ needs.mobile-e2e-ios.result }}\`
           - mobile-e2e-android: \`${{ needs.mobile-e2e-android.result }}\`
-          - pairing-lifecycle: \`${{ needs.pairing-lifecycle.result }}\`
-          - pairing-ticket-hygiene: \`${{ needs.pairing-ticket-hygiene.result }}\`
-          - pairing-cross-network-relay: \`${{ needs.pairing-cross-network-relay.result }}\`
+          - pairing-e2e: \`${{ needs.pairing-e2e.result }}\`
           - mutation-testing: \`${{ needs.mutation-testing.result }}\`
           - quality-performance-scale: \`${{ needs.quality-performance-scale.result }}\`
           - test-health-report: \`${{ needs.test-health-report.result }}\`

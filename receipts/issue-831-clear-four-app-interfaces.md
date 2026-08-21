@@ -105,6 +105,15 @@ partial. `apps/desktop/tests/e2e/SCENARIOS.md` drops the retired row.
 `tests/hygiene-budgets.json` tightens `toHaveBeenCalled` 800 → 795 with
 the deleted suites.
 
+## Out of scope
+
+- The rebuilt Agenda, Notes, Tally and Tasks interfaces themselves — this
+  receipt covers only the wholesale removal that clears the ground for them.
+- The web/desktop offline journeys' device-level parity on native; the
+  airplane-mode variant remains tracked by #781.
+- Any change to the four apps' manifests, grants, `actions/`, `queries/`,
+  pending projections, or seeds — all left untouched by design.
+
 ## Verification
 
 `bun run check:push` — 41 of 43 gates green. Two fail on missing binaries

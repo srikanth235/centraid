@@ -320,6 +320,21 @@ async function revokePushRegistration(): Promise<void> {
 let startInFlight: Promise<{ baseUrl: string } | undefined> | undefined;
 
 /**
+ * Reset a proxy whose listener is still running but whose peer connection is
+ * no longer usable. The native status only describes the localhost listener,
+ * so a compatibility retry must stop it before the next mount asks it to dial.
+ */
+export async function restartTunnel(): Promise<void> {
+  // Do not race a start that another foreground consumer already requested.
+  await startInFlight?.catch(() => undefined);
+  // The next resolveGatewayBase call binds a replacement native transport; its
+  // first request must not inherit the connection that this stop just closed.
+  await stopTunnel().catch(() => {
+    /* already stopped or unavailable */
+  });
+}
+
+/**
  * Start (or reuse) the localhost tunnel proxy for the paired peer.
  * Resolves the base URL every RN gateway fetch should use. Returns
  * `undefined` when unpaired or when the native module is unavailable

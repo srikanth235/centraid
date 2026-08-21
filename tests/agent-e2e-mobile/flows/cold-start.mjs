@@ -4,7 +4,11 @@ import {
   recordQualityResult,
   rigDriftBudget,
 } from "../../agent-e2e-shared/harness.mjs";
-import { HOME_READY_MARKER, runFlow } from "../lib/harness.mjs";
+import {
+  FIRST_LAUNCH_TIMEOUT_MS,
+  HOME_READY_MARKER,
+  runFlow,
+} from "../lib/harness.mjs";
 
 /**
  * PER-LAUNCH mobile cold start (issue #659 R3c).
@@ -16,12 +20,14 @@ import { HOME_READY_MARKER, runFlow } from "../lib/harness.mjs";
  * median and p95 of the interval a person actually waits, from tapping the
  * icon to Home being ready.
  *
- * NO ABSOLUTE CEILING. An on-device number from a CI simulator has no
+ * NO QUALITY CEILING. An on-device number from a CI simulator has no
  * distribution yet, and a guessed ceiling would either fence nothing or red the
  * mobile lane on simulator jitter. The gate is the sustained-drift budget every
  * other rig now uses (30 samples, 1.5x the trailing median — the knobs live in
- * tests/quality-rig-budgets.json). An absolute ceiling lands in
- * tests/experience-budgets/mobile.json once the distribution exists.
+ * tests/quality-rig-budgets.json). The shared launch wait is only an operational
+ * backstop so a slow simulator cannot make a valid sample look like a failed
+ * test; an absolute quality ceiling lands in tests/experience-budgets/mobile.json
+ * once the distribution exists.
  *
  * Year-3 declared volume (docs/coding-standards.md D6): NOT MET. These launches
  * run against whatever the e2e first-run flow seeded — effectively an empty
@@ -62,10 +68,18 @@ await runFlow("mobile-cold-start", async (ctx) => {
 ---
 - stopApp
 - launchApp
+- runFlow:
+    when:
+      visible: "No script URL provided.*"
+    commands:
+      # A stopped Expo dev client can occasionally lose its remembered Metro
+      # URL on iOS. Reload only that explicit redbox; a second failure still
+      # falls through to the Home assertion and keeps the sample red.
+      - tapOn: "Reload"
 - extendedWaitUntil:
     visible:
       text: "${HOME_READY_MARKER}"
-    timeout: 30000
+    timeout: ${FIRST_LAUNCH_TIMEOUT_MS}
 `,
       `cold-start-${index + 1}`
     );
