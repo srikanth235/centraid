@@ -48,7 +48,7 @@ Wave 4 — own the devices (G8):
 Wave 5 — close the contract (G13, G15, G16):
 
 - [ ] Report v2: verdict strip, attention queue, grids B–G, consent ledger
-- [ ] Derived lane lists; zero-grey everywhere; RTL+CJK gallery lane
+- [ ] Derived lane lists; zero-grey everywhere; RTL+CJK gallery lane (lane: done)
 - [x] Docs pass (TESTING.md, decisions.md, glossary)
 
 ## What changed
@@ -383,6 +383,36 @@ gains a known-divergence note under DST policy (the law stands; the
 double-fire pin flips when fixed). docs/glossary.md gains the adversary-lane
 vocabulary (fuzz lane, join lane, time zoo, device-only claim,
 provisional-local floor, pin, grant plane).
+
+**W5-C — RTL+CJK gallery fidelity lane.** `design:gallery` now renders the
+same `#ui-preview` surface under `dir="rtl"`/`lang="ar"` and again with the
+copy swapped to Japanese, and judges invariants rather than pixels
+(`scripts/design-gallery-fidelity.mjs`, 34 paired pass/sabotage unit tests
+wired into `scripts:test`): asymmetric boxes must mirror, no computed
+physical `text-align`, the numeric register must carry its `direction:
+ltr`/`unicode-bidi: isolate` pair, a layout container must not carry it, a
+live bidi probe proves the isolate is what holds a date in calendar order
+(the un-isolated control, under Arabic pressure, demonstrably flips), CJK
+copy must reach the one sans stack with its mandatory fallbacks, and no
+type triple may move between renders. Root integration fixed the slice's
+browser-blind spot: Chromium's UA stylesheet computes `unicode-bidi:
+isolate` on every plain block element, so the register is identified by the
+isolate+pinned-ltr **pair** (container judge, ancestor cover, probe source
+picker), and a bare hyphenated ASCII date has no reordering pressure even
+in an RTL paragraph (UAX#9 W4), so the probe's control carries the Arabic
+word while the isolated clone carries the register's honest date-only
+content. The lane ran green in a real browser after fixing its two real
+findings in `packages/client/src/react/ui/AppCard.module.css` (`text-align:
+left` → `start`; `.iconDot` `right: -3px` → `inset-inline-end`) — both
+were demonstrated red first. Not registered in docs/design-divergences.md:
+that register is for sanctioned departures, and these were defects.
+Recorded for the bug-issue pass (outside the gallery's rendered surface, so
+the lane cannot see them): six numeric-register leaves missing the
+direction/bidi pair (`states.module.css` `.workingCounts`/`.versionAt`/
+`.outOfRoomFigures`, `GridBlock.module.css` `.badge`/`.absent`/`.sealed`),
+AppCard's rows-layout physical rules (`:341,346,357` under
+`[data-layout="rows"]`), and `PanelBlock.module.css`'s block-level
+`.factNote` inside a mono fact.
 
 ## Out of scope
 
