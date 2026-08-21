@@ -154,6 +154,17 @@
   React flip; appearance-prefs, profile view-models, insights formatters, and
   near-duplicate `relativeTime` still need consolidation / floors — #545 D5/B8).
 
+- **Expired `peer_link_tickets` rows are filtered, never purged.** Observed
+  while building the hostile-peer lane (#842 W2.3). `hasPending` and `claim`
+  both exclude rows by `expires_at`, so the *logical* reclaim is correct and
+  tested — the door closes on time and an expired ticket cannot be claimed.
+  But nothing physically deletes the row, so an abandoned-ticket workload
+  grows the table without bound. This mirrors the pairing `tickets` table
+  exactly, which is documented as "short-lived by design", so it is recorded
+  as a longevity observation rather than a defect: the two tables should
+  either both gain a purge or the design note should say why unbounded growth
+  is acceptable. Not pinned — no invariant is currently violated.
+
 ## Resolved
 
 - #842 — The `node:sqlite` bundling defect that made

@@ -22,6 +22,11 @@
       "seed": "register /centraid/_new-surface without route metadata",
       "failure": "gateway boot coverage throws for the unclassified prefix"
     },
+    "T6": {
+      "command": "node node_modules/vitest/vitest.mjs run --project @centraid/server hostile-peer -t 'replayed as a fresh'",
+      "seed": "disable PeerLinkTicketStore.claim's conditional DELETE (the single-use burn)",
+      "failure": "the replayed redemption mints a second link and leaves the ticket unburned"
+    },
     "T5": {
       "command": "node scripts/security/dast-scan.mjs",
       "seed": "point the scanner at a gateway with no Host check, a silent 200 on every verb, and a foreign origin reflected with credentials",
@@ -216,6 +221,17 @@
           "lane": "dast",
           "wallClockCost": "low",
           "knob": "scripts/security/dast-known-findings.json",
+          "governance": "tighten-only",
+          "redLastDemonstrated": "2026-08-21"
+        },
+        {
+          "id": "T6",
+          "name": "hostile peer cannot mint a link or re-point a route",
+          "owner": "packages/server/src/serve/hostile-peer.integration.test.ts",
+          "evidence": "replay, out-of-order, refused handshake, duplicate assertion, slow-loris, flood, and expiry driven over a real iroh endpoint; asserted on vault_links / peer_link_tickets rows",
+          "lane": "vitest",
+          "wallClockCost": "low",
+          "knob": "packages/server/src/serve/peer-link-tickets.ts",
           "governance": "tighten-only",
           "redLastDemonstrated": "2026-08-21"
         },
@@ -810,7 +826,7 @@
     "mobile.offline": "tests/agent-e2e-mobile/flows/native-v0-resilience.mjs proves the current happy path; missing disconnect/reconnect recovery evidence. Tracked under #781 (originally #656).",
     "tunnel-pairing.correctness": "packages/tunnel/src/tunnel.integration.test.ts proves the current happy path; missing negative and boundary cases. Tracked under #781 (originally #656).",
     "tunnel-pairing.concurrency": "packages/tunnel/src/tunnel.integration.test.ts proves the current happy path; missing multi-actor interleaving evidence. Tracked under #781 (originally #656).",
-    "tunnel-pairing.security": "tests/agent-e2e-pairing/flows/pairing-ticket-hygiene.mjs proves the current happy path; adversarial peer-target input now covered by tunnel-peer-target-differential (JS↔Rust↔route-layer differential, #842 W2.1); authorization cases still missing. Tracked under #781 (originally #656).",
+    "tunnel-pairing.security": "tests/agent-e2e-pairing/flows/pairing-ticket-hygiene.mjs proves the current happy path; adversarial peer-target input now covered by tunnel-peer-target-differential (JS↔Rust↔route-layer differential, #842 W2.1), and admission/authorization abuse by hostile-peer-state-machine (replay, out-of-order, refused handshake, duplicate assertion, slow-loris, flood, expiry over a real iroh endpoint, #842 W2.3). Remaining depth tracked under #781 (originally #656).",
     "tunnel-pairing.compat": "packages/tunnel/src/wire-conformance.contract.test.ts proves the current happy path; missing migration and version-skew fixtures. Tracked under #781 (originally #656).",
     "vault-core.accessibility": "This service/storage surface has no standalone interactive UI. Its user-visible output is projected into the shared shell and first-party apps, whose real browser accessibility trees are scanned by apps/web/tests/e2e/accessibility.spec.ts. Remaining per-surface negative-state depth is tracked under #781.",
     "blob-custody.accessibility": "This service/storage surface has no standalone interactive UI. Its user-visible output is projected into the shared shell and first-party apps, whose real browser accessibility trees are scanned by apps/web/tests/e2e/accessibility.spec.ts. Remaining per-surface negative-state depth is tracked under #781.",
@@ -3416,6 +3432,15 @@
       "tier": "unit",
       "owner": "packages/tunnel/src/peer-target-differential.test.ts",
       "minimumTests": 9
+    },
+    {
+      "id": "hostile-peer-state-machine",
+      "name": "Hostile peer: protocol-level state-machine abuse over the real endpoint",
+      "surface": "tunnel-pairing",
+      "dimension": "security",
+      "tier": "integration",
+      "owner": "packages/server/src/serve/hostile-peer.integration.test.ts",
+      "minimumTests": 8
     },
     {
       "id": "agent-prompt-injection-red-team",
