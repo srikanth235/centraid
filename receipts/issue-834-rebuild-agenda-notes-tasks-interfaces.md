@@ -597,62 +597,162 @@ sweep rather than by CI.
 
 ## Audit
 
-**REFUTED** — 2026-08-21. Second fresh-context audit, re-adjudicated from
-scratch against the committed range `e40f060e..HEAD` (HEAD is now
-`02dd1ec4`) on `claude/issue-834-integration-prompt-co5z19`, this receipt
-and issue [#834](https://github.com/srikanth235/centraid/issues/834); the
-dirty working tree was excluded.
+**REFUTED** — 2026-08-21. Third fresh-context audit, adjudicated from
+scratch on `claude/issue-834-integration-prompt-co5z19` at HEAD `ecee3b42`
+against the committed range `e40f060e..HEAD` (`git merge-base origin/main
+HEAD` = `e40f060e`; note the local `origin/main` ref was stale at
+`f118e312` and had to be re-fetched before the range was correct), this
+receipt, and `gh issue view 834`. Working tree clean; nothing uncommitted
+was counted.
 
-What the repair fixed, and what holds on re-reading the code:
+**Method.** Re-derived the 180-file change set; replicated the directive's
+own rule-6 matcher (`normalize()` from
+`.governance/packs/governance-kit/audit/directives/receipt-per-issue/check.sh:139`)
+over the receipt prose in both full-path and basename form; ran the
+directive itself; reverse-checked every backticked path in the receipt
+against the diff for phantom claims; read the load-bearing Decisions
+claims against the code; re-ran seven claimed-green gates.
 
-- File coverage over the first six commits (`a7023f24..59144dce`) is now
-  complete — every file of that sub-range is named, including the whole
-  recurrence-summariser slice, `inlineQueryCtx.ts`'s new `time` facade and
-  Tally's dropped `?? template.rrule` fallback.
-- Every `- [x]` row is realized in code. `docs/decisions.md` carries the
-  four `R-*` rulings; Todoist-alone lands in `docs/blueprint-seats.md`,
-  `apps/tasks/app.json`, `index.json` and the regenerated `manifest.json`
-  (no "Things-style" survives there); the journal exclusion runs in all
-  three Notes queries via `apps/_shared/journal-scheme.ts`; exactly one
-  `describeRecurrence` definition exists repo-wide, in
-  `packages/core/src/time/recurrence-summary.ts`;
-  `collapseMissedOccurrences` is present in all three `TimeApi`
-  declarations and on the inline ctx; Agenda's `upcoming` and `search`
-  really do carry `recurrence_summary`.
-- Two claims that read as overclaims are exact:
-  `recurrence-properties.test.ts` was 660 lines at `681d264d` and is 425
-  at HEAD, and `manifest.json` is genuinely NOT regenerated over the
-  wave-1 files — it carries `day-context` and no Notes `journal` entry,
-  as the receipt itself confesses.
+### What holds — the three rule-7 questions all pass on substance
 
-Why the verdict is still REFUTED — a seventh commit, `02dd1ec4` ("wip
-(#834): wave 1 builder snapshot"), is in the committed range and the
-receipt does not describe it at all:
+- **(a) `## What changed` faithfully describes the diff.** All 180 changed
+  paths are accounted for by an accurate grouping; no file is silently
+  absent in substance and no phantom file is claimed. Every backticked
+  path in the receipt that is *not* in the diff
+  (`packages/vault/src/commands/flags.ts`,
+  `packages/vault/src/commands/people.ts`,
+  `packages/blueprints/apps/people/queries/journal.ts`,
+  `apps/_shared/pending-overlay.test.ts`,
+  `packages/client/src/replica/intent-invalidations.ts`,
+  `tests/hygiene-budgets.json`, `tests/coverage-floors.json`,
+  `tests/quality/copy-allowlist.json`,
+  `tests/quality/unbounded-query-waivers.json`) is cited as pre-existing
+  or explicitly untouched, and each of those four gate-knob files is
+  genuinely absent from `git diff e40f060e..HEAD` — the "no other gate knob
+  moved" claim is true.
+- **(b) Every `- [x]` item is realized in the diff.** All 24 are checked and
+  all 24 verify in code. Spot-checked, not taken on prose:
+  `docs/decisions.md:249-258` carries R-northstar / R-journal / R-daycontext
+  / R-shelf-scope; no "Things-style" string survives in `index.json`,
+  `manifest.json`, `apps/tasks/app.json` or `docs/blueprint-seats.md`, and
+  `app.json:661` pins `"northStar": "todoist"`;
+  `apps/agenda/queries/day-context.ts:107` caps the span at
+  `MAX_RANGE_DAYS = 400`, `:306` hard-codes `holidays: []` with the
+  no-source comment, `:315` returns `vaultDenied` as data, and Agenda's
+  `app.json` scopes carry the three read-only flag-vocabulary rows
+  (`core.tag`, `core.concept`, `core.concept_scheme`) with `CHANGE_TABLES`
+  at `app-root.tsx:99`; `readJournalNoteIds`
+  (`apps/_shared/journal-scheme.ts:56`) is imported by exactly
+  `queries/library.ts:27`, `queries/search.ts:24` and
+  `queries/link-targets.ts:11`, and `library.ts:536-540` carries the
+  PRE-exclusion `truncated` contract comment verbatim as the receipt
+  describes it; `describeRecurrence` has exactly one definition repo-wide
+  (`packages/core/src/time/recurrence-summary.ts:100`);
+  `apps/tally/queries/dashboard.ts` really does drop `?? template.rrule`;
+  `handler-reachability.test.ts:64-68` has `AWAITING_HANDOFF` down to
+  `tally` on both surfaces; `app-boot/agenda.test.ts:9` is
+  `expectLive: true`; `BAND_CLAIMING_APPS`
+  (`apps/mobile/src/kit/band/band-owner.ts:81-87`) lists Agenda and Tasks
+  and not Notes; `pending-projection.ts:78-81` declares the `send-to-tasks`
+  exclusion with its one-sentence reason; the root `knip.json` drops the
+  `@react-native-community/datetimepicker` ignore; the manifest IS
+  regenerated over the wave-1/2 files (`queries/journal.ts`,
+  `actions/send-to-tasks.ts`, `queries/day-context.ts`,
+  `components/DayContext.tsx` all present). The four
+  `allow-repo-hygiene file-size-limit` markers are exactly four, each on
+  the file the receipt names, at exactly the line counts it states
+  (859 / 901 / 993 / 552), and `tests/hygiene-budgets.json` is untouched at
+  `toBeTruthyFalsy: 378` / `toHaveBeenCalled: 795`.
+- **(c) The `## Checklist` mirrors the issue.** #834 carries no literal
+  `- [ ]` list; its normative content is the staged plan (stage 0, waves
+  1–3), the five ruled open questions and the gates list. The receipt's
+  four checklist groups mirror those one-for-one, including the offline-
+  journeys ruling (#834 open question 5, left on Docs). Nothing in the
+  issue is dropped or softened.
+- **The `approvedDeviation` matches its JSON knob verbatim.** The paragraph
+  quoted at lines 240–248 is byte-identical to
+  `tests/quality/classification-ratchet.json`'s `approvedDeviation` after
+  `\n` expansion — compared programmatically, not by eye. The matrix
+  edits it describes are real: `desktop.offline`,
+  `blueprints.performance`, the `web-offline-pending-row` and
+  `desktop-delete-app-journey` deviation paragraphs, and the
+  `trackingIssues` rows.
+- **Verification is honest, not decorative.** Seven claimed-green gates
+  re-run here and every number matches exactly:
+  `bun run --cwd packages/blueprints test` → 132 files / 4511 passed;
+  `bunx vitest run packages/core/src/time/` → 4 files / 86 passed;
+  `bunx vitest run --config vitest.quality.config.ts
+  tests/quality/user-facing-qualities.test.ts` → 15 passed;
+  `bun run lint:quality-knobs` → `quality knob governance: no silent
+  widening`; `bun run check:ui-receipt` → `UI receipt gate: evidence
+  verified`; `bun run --cwd packages/blueprints typecheck` → clean over
+  both projects; the wave-1a count reconciles precisely (`apps/tasks` 199 +
+  mobile `tasks-band` 8 + `app-boot/tasks` 1 = 208 across 6 files).
 
-- **54 of the 104 changed files in the range are unnamed**, all from that
-  commit: ~11.4k lines of Agenda/Notes/Tasks chrome, components, CSS
-  modules, `frame.tsx`, `logic.ts`, `views.ts`, `edits.ts` and
-  `apps/tasks/routes.test.ts`.
-- **Two statements are now positively false, not merely incomplete.**
-  `### Wave 1, in progress` says "no `app-root.tsx` paints them" and
-  `## Out of scope` says "no `app-root.tsx` renders them … paint nothing
-  on either surface". At HEAD `apps/notes/app-root.tsx` (850 lines) and
-  `apps/tasks/app-root.tsx` are full rendering trees importing
-  `./logic.ts`, `./shelves.ts`, `./view-copy.ts` and `./components/*`.
-  Only Agenda's root still paints an empty `<div>`, its Chrome and
-  components committed but unmounted.
-- **A third backend delta is unnamed**: `apps/tasks/queries/board.ts` and
-  `apps/tasks/queries/search.ts` now decorate rows with
-  `recurrence_summary`, `missed` and `next_due` from `ctx.time`. The
-  receipt names only Agenda's two queries as carrying summariser output.
-- **An unnamed governance waiver landed**: `apps/notes/app-root.tsx`
-  opens with `governance: allow-repo-hygiene file-size-limit`. Whatever
-  its merits, an allow-marker is a policy fact a receipt must record.
-- `## Verification` covers none of the wave-1 UI — no route, render or
-  design-lint run is recorded for 11.4k committed lines.
+### Why the verdict is REFUTED
 
-`## Checklist` still mirrors the issue honestly: the unchecked wave-1 and
-`check:push` rows are expected mid-umbrella, and no checked row
-overclaims. As before the refutation is description, not inflation — but
-it is now sharper, because the receipt asserts the absence of interfaces
-the committed diff contains.
+The receipt's *content* is honest; its *shape* fails the very directive it
+exists to satisfy. Running the directive at HEAD:
+
+```sh
+bash .governance/packs/governance-kit/audit/directives/receipt-per-issue/check.sh
+```
+
+reported **156 violations against the receipt as authored — 155 of them
+this receipt's** (the 156th is
+`receipts/issue-831-clear-four-app-interfaces.md` missing `## Out of
+scope`, pre-existing on `main` and not this change set's to fix). Measured
+again after this audit block was appended the total is **154**, because the
+matcher reads the whole receipt and two paths this block spells out in full
+now match incidentally; the counts below are the as-authored ones, which
+are the ones the receipt owes.
+
+1. **Rule 6, file coverage — 131 violations.** Rule 6 matches the changed
+   file's **full path** as a case-insensitive substring
+   (`check.sh:401-408`, matcher at `:139`). The `## What changed` trees use
+   a directory header plus bare basenames — e.g. `### Agenda —
+   packages/blueprints/apps/agenda/` at line 285 followed by `Chrome.tsx`,
+   `views.ts`, `edits.ts` at lines 287-290 — so
+   `packages/blueprints/apps/agenda/chrome.tsx` never appears contiguously
+   and the gate scores it uncovered. 131 of the 179 non-receipt changed
+   paths fail this way, across all three app trees, the mobile trees,
+   `packages/blueprints/src/*.test.ts`, the client shell files and
+   `packages/core/src/time/recurrence-properties.test.ts`. A further 12
+   paths are not even named at basename level, because the receipt
+   abbreviates them as `+ .module.css`
+   (lines 293-298, 316-320): `components/EventDetail.module.css`,
+   `EventEditor.module.css`, `ListViews.module.css`, `MoreSheet.module.css`,
+   `QuickAdd.module.css`, `Rail.module.css`, `Shared.module.css` under
+   Agenda, and `Editor/Library/Overlays/Places/States.module.css` under
+   Notes. The house shape for exactly this problem is a `## Files changed`
+   section listing full paths — see
+   `receipts/issue-816-place-as-memory.md:175` — and this receipt has no
+   such section.
+2. **Rule 3, checklist crosswalk — 24 violations, i.e. every checked
+   item.** Rule 3 requires each `- [x]` item's text to appear as a
+   substring in `## What changed` or `## Verification`. None of the 24
+   does. Two representative cases: line 48's item
+   "`packages/blueprints/manifest.json` regenerated over every wave-1/2
+   file" is echoed at line 355 as "`index.json`, `manifest.json` —
+   regenerated over every wave-1/2 file", which is not a superstring of the
+   item; line 47's item "The rows #831 dropped return: `state-honesty`,
+   `shared-css`, `untrusted-rendering`, the accessibility contract, and the
+   app-boot lane" is echoed only in `## Decisions` (line 188), which rule 3
+   does not read. This is not a scoping accident — `issue-816`'s receipt
+   passes the same crosswalk cleanly on `main`, so the standard is
+   reachable; this receipt simply does not meet it.
+3. **Two current-state inaccuracies in the Checklist.** Line 54 says "the
+   two environment reds in `## Verification`", but `## Verification`
+   (lines 557-570) lists **three** — `test:affected`, `design:gallery` and
+   `format:check`. Line 35 claims Notes shipped "65 web + 1 mobile tests";
+   at HEAD `packages/blueprints/apps/notes` runs **75** tests across 8
+   files (the count was right at wave 1b and went stale when wave 2 added
+   `send-to-tasks.test.ts`'s 10 cases). Both understate rather than
+   overclaim, but a receipt states current state.
+
+**Remediation** (no code change implied — the code is sound): add a
+`## Files changed` section in the `issue-816` house shape naming all 179
+non-receipt paths in full, and reword the 24 checklist items so each item's
+text appears verbatim in `## What changed` or `## Verification`. Then fix
+"two environment reds" → three and Notes' "65 web" → 75 (8 files).
+Re-running the directive to zero violations is the acceptance test.
