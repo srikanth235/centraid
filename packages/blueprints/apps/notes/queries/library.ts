@@ -8,6 +8,12 @@
  * Writes go through the knowledge domain's typed commands via this app's
  * actions.
  *
+ * People-journal entries are knowledge notes too, and they are EXCLUDED here
+ * (#834 R-journal): the Journal place — a filter over the journal scheme — is
+ * their one home in Notes, so they never reach the library, the trash shelf,
+ * or the tag chips derived from it. Opening one by id still works (`note`,
+ * `history`). See `../../_shared/journal-scheme.ts`.
+ *
  * A consent denial is a first-class outcome, not an error: the UI renders
  * it as the "ask the owner for access" state, receipt id included.
  *
@@ -17,6 +23,8 @@
  * place unknown vault columns become named fields. Handler logic is otherwise
  * byte-for-byte the pre-conversion JS.
  */
+
+import { readJournalNoteIds } from "../../_shared/journal-scheme.ts";
 
 interface NoteRow {
   note_id: string;
@@ -208,35 +216,39 @@ export default async function libraryHandler({ input, ctx }: HandlerArgs) {
     // Pinned notes ride beside the window, not inside it — a pin is the
     // owner saying "always on top", which must survive the note aging out
     // of the recent slice.
-    const [recent, pinnedNotes, trashedNotes, notebooks] = await Promise.all([
-      ctx.vault.read({
-        entity: "knowledge.note",
-        // Trashed notes (issue #308: delete is reversible) stay out of the library.
-        where: [{ column: "deleted_at", op: "is-null" }],
-        orderBy: { column: "updated_at", dir: "desc" },
-        limit: window,
-        purpose,
-      }),
-      ctx.vault.read({
-        entity: "knowledge.note",
-        where: [
-          { column: "pinned", op: "eq", value: 1 },
-          { column: "deleted_at", op: "is-null" },
-        ],
-        orderBy: { column: "updated_at", dir: "desc" },
-        limit: 200,
-        purpose,
-      }),
-      ctx.vault.read({
-        entity: "knowledge.note",
-        where: [{ column: "deleted_at", op: "not-null" }],
-        orderBy: { column: "deleted_at", dir: "desc" },
-        limit: 200,
-        purpose,
-      }),
-      // Notebooks are collections (issue #274) — the one curation mechanism.
-      ctx.vault.read({ entity: "core.collection", purpose }),
-    ]);
+    const [recent, pinnedNotes, trashedNotes, notebooks, journalNoteIds] =
+      await Promise.all([
+        ctx.vault.read({
+          entity: "knowledge.note",
+          // Trashed notes (issue #308: delete is reversible) stay out of the library.
+          where: [{ column: "deleted_at", op: "is-null" }],
+          orderBy: { column: "updated_at", dir: "desc" },
+          limit: window,
+          purpose,
+        }),
+        ctx.vault.read({
+          entity: "knowledge.note",
+          where: [
+            { column: "pinned", op: "eq", value: 1 },
+            { column: "deleted_at", op: "is-null" },
+          ],
+          orderBy: { column: "updated_at", dir: "desc" },
+          limit: 200,
+          purpose,
+        }),
+        ctx.vault.read({
+          entity: "knowledge.note",
+          where: [{ column: "deleted_at", op: "not-null" }],
+          orderBy: { column: "deleted_at", dir: "desc" },
+          limit: 200,
+          purpose,
+        }),
+        // Notebooks are collections (issue #274) — the one curation mechanism.
+        ctx.vault.read({ entity: "core.collection", purpose }),
+        // The journal marker set, resolved by its own bounded reads. It rides
+        // this Promise.all so the exclusion costs no extra round trip.
+        readJournalNoteIds(ctx.vault, purpose),
+      ]);
     const byId = new Map<string, NoteRow>();
     for (const n of [
       ...((recent.rows ?? []) as unknown as NoteRow[]),
@@ -254,7 +266,13 @@ export default async function libraryHandler({ input, ctx }: HandlerArgs) {
         sort_order: c.sort_order,
       }))
       .toSorted((a, b) => (a.sort_order ?? 0) - (b.sort_order ?? 0));
-    const windowed = [...byId.values()];
+    // Journal entries leave BEFORE anything is derived from the rows: their
+    // ids never reach the placement/attachment/link/tag joins, so no
+    // journal-only concept can surface as a library filter chip and no
+    // journal body is ever previewed or check-tallied here (#834 R-journal).
+    const windowed = [...byId.values()].filter(
+      (note) => !journalNoteIds.has(note.note_id)
+    );
     if (windowed.length === 0) {
       return {
         notes: [],
@@ -316,7 +334,15 @@ export default async function libraryHandler({ input, ctx }: HandlerArgs) {
         }),
       ]
     );
-    const tagRows = (tags.rows ?? []) as unknown as TagRow[];
+    // Re-narrowed to the surviving window in memory. The read is already
+    // `in`-bounded by `noteIds`, but the tag→concept→chip chain is exactly
+    // where a journal-only concept would leak back in as a filter chip, so
+    // the exclusion is enforced HERE rather than trusted upstream (#834
+    // R-journal).
+    const survivingIds = new Set(noteIds);
+    const tagRows = ((tags.rows ?? []) as unknown as TagRow[]).filter((t) =>
+      survivingIds.has(t.target_id)
+    );
     const conceptIds = [...new Set(tagRows.map((t) => t.concept_id))];
     const concepts =
       conceptIds.length > 0
@@ -326,7 +352,13 @@ export default async function libraryHandler({ input, ctx }: HandlerArgs) {
             purpose,
           })
         : { rows: [] };
-    const conceptRows = (concepts.rows ?? []) as unknown as ConceptRow[];
+    // Same re-narrowing, one link further down the chain: `tags` is derived
+    // from these rows, so a concept no surviving note carries must not reach
+    // the chip list even if the read answered wider than it was asked.
+    const wantedConcepts = new Set(conceptIds);
+    const conceptRows = (
+      (concepts.rows ?? []) as unknown as ConceptRow[]
+    ).filter((c) => wantedConcepts.has(c.concept_id));
     const labelByConcept = new Map(
       conceptRows.map((c) => [c.concept_id, c.pref_label])
     );
@@ -501,6 +533,11 @@ export default async function libraryHandler({ input, ctx }: HandlerArgs) {
 
     // A full window means there may be older notes beyond it — the UI
     // offers "Show more" (a re-read with a larger window) and search.
+    // Measured PRE-exclusion, on purpose: the window is what the vault
+    // returned, so a slice made entirely of journal entries still reports
+    // "there is more behind this" rather than claiming the library ends here
+    // (#834 R-journal). The corollary is honest and worth stating — `notes`
+    // may hold fewer than `window` rows while `truncated` is true.
     const truncated =
       ((recent.rows ?? []) as unknown as NoteRow[]).length >= window;
     return {

@@ -1,4 +1,4 @@
-# Design divergences — Docs, People and Photos
+# Design divergences — Docs, People, Photos, and the rebuilt Agenda/Notes/Tasks
 
 This is the shared register of sanctioned per-app divergences from the design briefs. It exists so a reviewer does not "fix" an honest withholding or a deliberate copy/control choice. Change a row here only when the current decision changes; implementation history belongs in the linked issue and receipt.
 
@@ -39,7 +39,7 @@ Two things this is NOT:
 
 The **compact form factor keeps a pad**, `min-height: 52px` and 8px block, because there the three trailing columns fold into a snippet line under the title and the row is genuinely two lines. Same split the handoff makes, and for the same reason: the height is set by what the row holds, not by the surface.
 
-Tasks and Notes read `--density-row` for their rows until their interfaces were cleared for a ground-up redesign ([#831](https://github.com/srikanth235/centraid/issues/831)); Docs' list was the one list in the app answering the density tier with the wrong token, and is now the rung's standing reference.
+Docs' list was the one list in the app answering the density tier with the wrong token, and is the rung's standing reference. Notes read `--density-row` too, lost it when [#831](https://github.com/srikanth235/centraid/issues/831) cleared its interface, and reads it again in the rebuilt library, places, editor and overlay rows ([#834](https://github.com/srikanth235/centraid/issues/834)). Tasks does not, and that is a recorded divergence rather than drift — see [the rebuild section](#agenda-notes-and-tasks--rebuild-divergences-834).
 
 ### The screens the shelf model names
 
@@ -225,7 +225,7 @@ Mobile priorities are the details sheet (custody/folder/tags/facts), tags/filing
 
 ### Binding cut-scope — do NOT build
 
-The current scope has no folder-tree rail, standalone Activity screen, duplicates shelf, or **destroy verb**. The platform destroys only on the schedule a purge date announces, so Trash has no "Empty trash" primary (`frame.tsx` `NO_PRIMARY`). Recent means recently _changed_; the product does not record when a document was opened.
+The current scope has no standalone Activity screen, duplicates shelf, or **destroy verb**. (The folder-tree rail was cut here too, and is no longer: [#835](https://github.com/srikanth235/centraid/issues/835) reversed that ruling and the tree is drawn on a pointer seat — see [the rail's own register below](#the-app-navigation-rail-835).) The platform destroys only on the schedule a purge date announces, so Trash has no "Empty trash" primary (`frame.tsx` `NO_PRIMARY`). Recent means recently _changed_; the product does not record when a document was opened.
 
 ### Known duplication left in place
 
@@ -333,6 +333,20 @@ The brief's `sharing` screen is represented by the vault sharing plane, and its 
 `--seam` is ink for expiring and in-flight states: purge countdowns, pending backup verdicts, and queued-copy rows. `--net-wash` is not used for Photos panels; offline, refused-write, and permission states remain border-and-ink because they are expected or explanatory states, not destructive controls. Revisit only if Photos adds a genuinely destructive or egress panel.
 
 The packed tile geometry, overlay slots, skeleton, viewer stack, scrub rails, filmstrip, info rail, Memories strip, and mono-direction rules are metric-perfect against the v9 brief. Changes require a failing contract or an updated design decision before implementation.
+
+## Agenda, Notes and Tasks — rebuild divergences (#834)
+
+[#831](https://github.com/srikanth235/centraid/issues/831) cleared these three interfaces whole; [#834](https://github.com/srikanth235/centraid/issues/834) drew them again from the ground-up briefs. The rows below are what the rebuilt apps deliberately do differently from the house pattern or from their own briefs. Each is a current decision, not a to-do.
+
+| Divergence | Decision | Enforcement / reason |
+| --- | --- | --- |
+| Tasks declares its own row rungs — `--row-touch: 44px` / `--row-pointer: 40px` in `apps/tasks/Chrome.module.css` — instead of reading `--density-row`. | Keep until the density tier itself carries a pointer/touch split. | The Tasks brief §5 sets the floor by input axis, not by density tier, and the row, the group header and the rail row all answer to the same floor. Declared once at the app root and read by `Board.module.css`, so it is one fact in one place; a per-component literal would not be. Notes and Docs keep `--density-row`. |
+| Agenda's `holidays` layer ships with the switch drawn and the list always empty. | Keep. | There is no holiday source anywhere in the vault — no feed, no subscribed-calendar poller (`schedule.calendar.external_uri` is a label) — so `queries/day-context.ts` answers `[]` with a comment naming the absence. The switch is the shape the layer will take; inventing storage for it is a separate ruling. |
+| Agenda's relationship tier is binary: `inner` when the owner starred that person, `outer` otherwise. | Keep. | The flags-scheme `starred` tag is the only closeness judgment the ontology stores (`packages/vault/src/commands/flags.ts`). Only `inner` earns the one birthday notification; everyone else stays a ribbon. |
+| Notes' native cover is a native screen over the replica, while `handler-reachability.test.ts` still files Notes under `WEBVIEW_APPS`. | Keep the register name; there is no WebView. | #799 retired the WebView host. The register means "this seat's dispatch is answered by the web source", which is still true: the phone shares the blueprint's pure logic (`promote` is imported, not re-derived) rather than re-dispatching every note command. Renaming the register is a repo-wide change of its own. |
+| Notes claims no compact band, so it is absent from `BAND_CLAIMING_APPS`. | Keep until it draws one. | `apps/mobile/src/kit/band/band-owner.ts` — the roster is hand-maintained because the frame cannot enumerate claims, and a settings row offering to hand back a band nobody claimed would name nothing. |
+| Notes' **Send to Tasks** hands one checklist line to Tasks and keeps no copy of the resulting task. | Keep. | `apps/notes/actions/send-to-tasks.ts` mints the canonical `schedule.task` through `schedule.add_task` and links it back with `core.link_entities`. Because Notes holds no row for it, the action is `excluded` from the pending-write overlay with that reason recorded in `apps/notes/pending-projection.ts` — the honest answer, not a missing projection. |
+| The due-task shelf counts the member's own tasks only, on a Tasks app that mounts every visible scope. | Keep. | #834 R-shelf-scope: the shelf is personal attention, and a cross-vault count reintroduces the "someone should, so no one does" failure the Tasks brief bans. |
 
 ## The app navigation rail (#835)
 

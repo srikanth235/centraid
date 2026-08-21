@@ -2,6 +2,8 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import * as Notifications from "expo-notifications";
 import { AppState } from "react-native";
 
+import { planBirthdayNotifications } from "./birthday-notifications";
+import type { BirthdayPerson } from "./birthday-notifications";
 import { authHeader } from "./gateway";
 import * as NotificationModel from "./notification-model";
 import type { DueReminder } from "./notification-model";
@@ -9,6 +11,10 @@ import { planNotifications } from "./notifications-plan";
 import type { MobileNotificationsPull } from "./notifications-plan";
 
 const DELIVERED_KEYS = "centraid:delivered-reminder-keys:v1";
+/** Birthdays this device has already SCHEDULED. Separate from the reminder
+ *  ledger because these are future-dated: the entry is written when the OS
+ *  accepts the trigger, not when the banner appears (#834). */
+const SCHEDULED_BIRTHDAY_KEYS = "centraid:scheduled-birthday-keys:v1";
 const DELIVERED_NOTIFICATION_KEYS = "centraid:delivered-notification-keys:v1";
 /**
  * Separate from the ledger on purpose: a *quiet* Notifications seeds an empty ledger,
@@ -70,6 +76,16 @@ export async function installNotificationCategories(): Promise<void> {
         {
           identifier: NotificationModel.OPEN_ITEM,
           buttonTitle: "Review invite",
+          options: { opensAppToForeground: true },
+        },
+      ]
+    ),
+    Notifications.setNotificationCategoryAsync(
+      NotificationModel.BIRTHDAY_CATEGORY,
+      [
+        {
+          identifier: NotificationModel.OPEN_ITEM,
+          buttonTitle: "Open person",
           options: { opensAppToForeground: true },
         },
       ]
@@ -169,6 +185,69 @@ export async function syncNotifications(
     await AsyncStorage.setItem(SEEDED_NOTIFICATION_LEDGER, "1").catch(
       () => undefined
     );
+}
+
+/**
+ * Schedule the inner-circle birthday notifications (#834).
+ *
+ * REMINDER DELIVERY IS THE PHONE'S ALONE, and this is the one notification day
+ * context earns. The decision — who, when, and what it says — lives entirely
+ * in `planBirthdayNotifications`; this is the I/O shell, and the people it
+ * plans over are read by the caller off the agenda replica (`day-context.ts`)
+ * so nothing here reaches the network.
+ *
+ * Future-dated triggers, so the ledger records what has been SCHEDULED rather
+ * than what has been shown; a re-run therefore never doubles a banner.
+ */
+export async function scheduleBirthdayNotifications(
+  people: readonly BirthdayPerson[],
+  leadDays?: number
+): Promise<number> {
+  const permission = await Notifications.getPermissionsAsync();
+  if (!permission.granted) return 0;
+  const raw = await AsyncStorage.getItem(SCHEDULED_BIRTHDAY_KEYS).catch(
+    () => null
+  );
+  let scheduledValues: string[] = [];
+  if (raw) {
+    try {
+      const parsed: unknown = JSON.parse(raw);
+      if (Array.isArray(parsed))
+        scheduledValues = parsed.filter(
+          (value): value is string => typeof value === "string"
+        );
+    } catch {
+      // Device bookkeeping is disposable; the vault's rows are canonical.
+    }
+  }
+  const scheduled = new Set(scheduledValues);
+  const plan = planBirthdayNotifications({
+    delivered: scheduled,
+    now: new Date(),
+    people,
+    ...(leadDays === undefined ? {} : { leadDays }),
+  });
+  await Promise.all(
+    plan.map((row) =>
+      Notifications.scheduleNotificationAsync({
+        content: {
+          title: row.title,
+          body: row.body,
+          categoryIdentifier: NotificationModel.BIRTHDAY_CATEGORY,
+          data: { kind: "birthday", partyId: row.partyId, url: row.url },
+        },
+        trigger: { type: "date", date: row.at } as never,
+      })
+    )
+  );
+  for (const row of plan) scheduled.add(row.key);
+  // Bound the ledger: a key names one person in one year, so the oldest
+  // entries are birthdays long past.
+  await AsyncStorage.setItem(
+    SCHEDULED_BIRTHDAY_KEYS,
+    JSON.stringify([...scheduled].slice(-2_000))
+  ).catch(() => undefined);
+  return plan.length;
 }
 
 /**

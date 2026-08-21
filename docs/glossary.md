@@ -95,7 +95,18 @@ Schema names follow the same one-axis rule: **a table never repeats its schema n
 | **byte-bearing / record-only** | The two blueprint classes. Record-only apps (tasks, agenda, people, tally) are rows the replica covers fully offline; byte-bearing apps (photos, docs; notes/locker via attachments) need the custody triple, backup engine, and pin/download engine. |
 | **custody triple** | `local-only` (device only — the danger state, tile line `on this device only`), `backed-up` (device + gateway), `remote-only` (gateway only, tile line `on the gateway`). Canonical shape: `apps/mobile/src/apps/photos/timeline-model.ts`. Web's `TileMediaState` is the paint pipeline, not a custody model. |
 | **origin act** | A frame-owned capture capability apps register into — camera, scanner, share-sheet-in, notifications, autofill. One door per capability, never per-app re-implementations. |
-| **north star** | The incumbent product a blueprint deliberately mimics (Photos → Google Photos, Notes → Apple Notes, Docs → Google Drive, Tally → Splitwise, …) so switching costs an owner nothing. Table in [blueprint-seats.md](blueprint-seats.md). |
+| **north star** | The incumbent product a blueprint deliberately mimics (Photos → Google Photos, Notes → Apple Notes, Docs → Google Drive, Tally → Splitwise, Tasks → Todoist, …) so switching costs an owner nothing. Table in [blueprint-seats.md](blueprint-seats.md). |
+
+## Projection doctrine (apps, [#834](https://github.com/srikanth235/centraid/issues/834))
+
+Store once, draw in the asking room's shape. These four words are how the apps talk about each other's facts; using them loosely is how a second copy gets written.
+
+| Term | Meaning | Code |
+| --- | --- | --- |
+| **projection** | A read-only re-shaping of rows another app or another table owns, drawn where it is useful and never copied. A birthday stays canonical on the person; Agenda projects it. An app that stores its own copy of another app's fact has left this doctrine, whatever the screen looks like. | `packages/blueprints/apps/agenda/queries/day-context.ts`; `pending-projection.ts` per app |
+| **day context** | The three costless layers a calendar day learns from elsewhere — birthdays (People), due tasks (Tasks), holidays (subscribed) — answered by one read-only Agenda query over a bounded date range. **A layer is not a calendar**: it carries no hue dot, nothing writes to it, and it never takes grid shape. | `apps/agenda/queries/day-context.ts`, `apps/agenda/day-context.ts` |
+| **ribbon / shelf** | The two shapes day context is allowed to take. A **ribbon** is a day-header annotation for a fact with no time cost (`🎂 Dana`, collapsed to `2 birthdays`); a **shelf** is one collapsed line above the day's first hour (`3 due`) that opens to names and hands off to the owning app. Never an event row, never a grid chip, never a badge. | `apps/agenda/components/DayContext.tsx` |
+| **re-entry** | How a room lets someone back in after they fall behind: one live occurrence for a repeating task with its elapsed periods collapsed beside it (`missed 4 · next is Friday`), a group that offers to catch up, and `won't do` as a respectable exit. The house alternative to a wall of shame. | `packages/core/src/time/recurrence-collapse.ts`; `apps/tasks/components/Board.tsx` |
 
 ## Owners (gateway, #726)
 

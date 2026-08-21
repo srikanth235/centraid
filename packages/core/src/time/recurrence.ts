@@ -460,26 +460,7 @@ export function nextOccurrence(input: NextOccurrenceInput): string | null {
   );
 }
 
-const FREQ_LABELS: Record<ParsedRrule["freq"], string> = {
-  DAILY: "day",
-  WEEKLY: "week",
-  MONTHLY: "month",
-  YEARLY: "year",
-};
-
-export function describeRecurrence(value: string): string | null {
-  const rule = parseRrule(value);
-  if (!rule) return null;
-  const unit = FREQ_LABELS[rule.freq];
-  const cadence =
-    rule.interval === 1 ? `Every ${unit}` : `Every ${rule.interval} ${unit}s`;
-  const days =
-    rule.byDay && rule.byDay.length > 0 ? ` on ${rule.byDay.join(", ")}` : "";
-  const end =
-    rule.count === undefined
-      ? rule.until
-        ? ` until ${rule.until}`
-        : ""
-      : `, ${rule.count} times`;
-  return `${cadence}${days}${end}`;
-}
+// The single member-facing summariser lives in ./recurrence-summary.ts (this
+// file stays at the engine layer, under the 500-line cap); the missed-period
+// collapse lives in ./recurrence-collapse.ts. Both reach the engine from here,
+// never the other way round.

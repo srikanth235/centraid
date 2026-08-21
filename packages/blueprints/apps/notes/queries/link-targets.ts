@@ -1,3 +1,15 @@
+/**
+ * The powerbox's cross-app link picker: one bounded FTS probe per target
+ * entity, each failure isolated so one denied scope cannot empty the sheet.
+ *
+ * The Notes column excludes People-journal entries (#834 R-journal) — the
+ * Journal place is their one home, and a journal entry is not a link target
+ * the owner reaches for from a note. Resolving the marker is part of the
+ * Notes probe, so a denial there makes the Notes column ABSENT (the same
+ * outcome any other failing target gets) rather than silently unfiltered.
+ */
+import { readJournalNoteIds } from "../../_shared/journal-scheme.ts";
+
 interface Target {
   app: string;
   entity: string;
@@ -69,19 +81,27 @@ function first(row: Record<string, unknown>, fields: readonly string[]) {
 export default async function linkTargets({ input, ctx }: HandlerArgs) {
   const term = String(input?.term ?? "").trim();
   if (!term) return { targets: [] };
+  const purpose = "dpv:ServiceProvision";
   const settled = await Promise.allSettled(
     TARGETS.map(async (target) => {
-      const result = await ctx.vault.search({
-        entity: target.entity,
-        query: term,
-        limit: 8,
-        purpose: "dpv:ServiceProvision",
-      });
+      const isNotes = target.entity === "knowledge.note";
+      const [result, journalNoteIds] = await Promise.all([
+        ctx.vault.search({
+          entity: target.entity,
+          query: term,
+          limit: 8,
+          purpose,
+        }),
+        isNotes
+          ? readJournalNoteIds(ctx.vault, purpose)
+          : Promise.resolve(new Set<string>()),
+      ]);
       return (result.rows ?? []).flatMap(
         (row: Record<string, unknown>): Array<Record<string, unknown>> => {
           const id = row[target.id];
           const title = first(row, target.labels);
           if (typeof id !== "string" || !title) return [];
+          if (journalNoteIds.has(id)) return [];
           return [
             {
               type: target.entity,

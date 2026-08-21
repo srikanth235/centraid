@@ -1,8 +1,9 @@
 import { describe, expect, it } from "vitest";
 
+import { collapseMissedOccurrences } from "./recurrence-collapse.js";
+import { describeRecurrence } from "./recurrence-summary.js";
 import {
   applyRecurrenceExceptions,
-  describeRecurrence,
   expandRecurrence,
   nextOccurrence,
 } from "./recurrence.js";
@@ -154,6 +155,165 @@ describe("recurrence lifecycle", () => {
   it("provides a readable preview", () => {
     expect(
       describeRecurrence("FREQ=WEEKLY;INTERVAL=2;BYDAY=MO,WE;COUNT=6")
-    ).toBe("Every 2 weeks on MO, WE, 6 times");
+    ).toBe("Every other week on Monday and Wednesday · 6 times");
+  });
+});
+
+describe(describeRecurrence, () => {
+  // One summariser, one register: every surface renders these exact phrases.
+  it.each([
+    ["FREQ=DAILY", "Daily"],
+    ["FREQ=DAILY;INTERVAL=2", "Every other day"],
+    ["FREQ=DAILY;INTERVAL=5", "Every 5 days"],
+    ["FREQ=WEEKLY", "Weekly"],
+    ["FREQ=WEEKLY;BYDAY=MO", "Every Monday"],
+    ["FREQ=WEEKLY;BYDAY=MO,TU", "Every Monday and Tuesday"],
+    ["FREQ=WEEKLY;BYDAY=MO,WE,FR", "Every Monday, Wednesday and Friday"],
+    ["FREQ=WEEKLY;INTERVAL=2;BYDAY=FR", "Every other Friday"],
+    ["FREQ=WEEKLY;INTERVAL=2", "Every other week"],
+    [
+      "FREQ=WEEKLY;INTERVAL=3;BYDAY=MO,TU",
+      "Every 3 weeks on Monday and Tuesday",
+    ],
+    ["FREQ=MONTHLY", "Every month"],
+    ["FREQ=MONTHLY;INTERVAL=2", "Every other month"],
+    ["FREQ=YEARLY", "Every year"],
+    ["FREQ=YEARLY;INTERVAL=4", "Every 4 years"],
+    ["FREQ=WEEKLY;BYDAY=TH;COUNT=5", "Every Thursday · 5 times"],
+    ["FREQ=WEEKLY;BYDAY=TH;COUNT=1", "Every Thursday · once"],
+    ["FREQ=DAILY;UNTIL=20260905T000000Z", "Daily · until Sep 5, 2026"],
+    // BYDAY steers WEEKLY expansion only, so a monthly rule never claims days.
+    ["FREQ=MONTHLY;BYDAY=MO", "Every month"],
+    // An unparseable UNTIL drops the tail rather than leaking the rule text.
+    ["FREQ=DAILY;UNTIL=SOON", "Daily"],
+  ])("summarises %s as %s", (rrule, expected) => {
+    expect(describeRecurrence(rrule)).toBe(expected);
+  });
+
+  it("returns null for a rule it cannot parse", () => {
+    expect(describeRecurrence("FREQ=HOURLY")).toBeNull();
+  });
+});
+
+describe(collapseMissedOccurrences, () => {
+  it("collapses four missed weeks into one live occurrence", () => {
+    expect(
+      collapseMissedOccurrences({
+        rrule: "FREQ=WEEKLY",
+        scheduledStart: "2026-08-01T09:00:00.000Z",
+        timeZone: "Etc/UTC",
+        anchor: "scheduled",
+        now: "2026-08-26T12:00:00.000Z",
+      })
+    ).toStrictEqual({ missed: 4, nextDue: "2026-08-29T09:00:00.000Z" });
+  });
+
+  it("counts nothing before the first due", () => {
+    expect(
+      collapseMissedOccurrences({
+        rrule: "FREQ=WEEKLY",
+        scheduledStart: "2026-08-01T09:00:00.000Z",
+        anchor: "scheduled",
+        now: "2026-07-30T12:00:00.000Z",
+      })
+    ).toStrictEqual({ missed: 0, nextDue: "2026-08-01T09:00:00.000Z" });
+  });
+
+  it("treats an occurrence landing exactly on now as live, not missed", () => {
+    expect(
+      collapseMissedOccurrences({
+        rrule: "FREQ=DAILY",
+        scheduledStart: "2026-08-01T09:00:00.000Z",
+        anchor: "scheduled",
+        now: "2026-08-03T09:00:00.000Z",
+      })
+    ).toStrictEqual({ missed: 2, nextDue: "2026-08-03T09:00:00.000Z" });
+  });
+
+  it("forgives periods already completed under a scheduled anchor", () => {
+    expect(
+      collapseMissedOccurrences({
+        rrule: "FREQ=WEEKLY",
+        scheduledStart: "2026-08-01T09:00:00.000Z",
+        anchor: "scheduled",
+        now: "2026-08-26T12:00:00.000Z",
+        lastCompletedAt: "2026-08-15T09:00:00.000Z",
+      })
+    ).toStrictEqual({ missed: 1, nextDue: "2026-08-29T09:00:00.000Z" });
+  });
+
+  it("never stacks under a completion anchor, however long the lapse", () => {
+    const overdue = collapseMissedOccurrences({
+      rrule: "FREQ=WEEKLY",
+      scheduledStart: "2026-08-01T09:00:00.000Z",
+      anchor: "completion",
+      now: "2027-08-26T12:00:00.000Z",
+      lastCompletedAt: "2026-08-03T09:00:00.000Z",
+    });
+    expect(overdue).toStrictEqual({
+      missed: 1,
+      nextDue: "2026-08-10T09:00:00.000Z",
+    });
+    expect(
+      collapseMissedOccurrences({
+        rrule: "FREQ=WEEKLY",
+        scheduledStart: "2026-08-01T09:00:00.000Z",
+        anchor: "completion",
+        now: "2026-08-05T12:00:00.000Z",
+        lastCompletedAt: "2026-08-03T09:00:00.000Z",
+      }).missed
+    ).toBe(0);
+  });
+
+  it("keeps the original due live until a completion-anchored task is done", () => {
+    expect(
+      collapseMissedOccurrences({
+        rrule: "FREQ=WEEKLY",
+        scheduledStart: "2026-08-01T09:00:00.000Z",
+        anchor: "completion",
+        now: "2026-08-26T12:00:00.000Z",
+      })
+    ).toStrictEqual({ missed: 1, nextDue: "2026-08-01T09:00:00.000Z" });
+  });
+
+  it("stops at the COUNT bound instead of inventing a next due", () => {
+    expect(
+      collapseMissedOccurrences({
+        rrule: "FREQ=WEEKLY;COUNT=2",
+        scheduledStart: "2026-08-01T09:00:00.000Z",
+        anchor: "scheduled",
+        now: "2026-08-26T12:00:00.000Z",
+      })
+    ).toStrictEqual({ missed: 2, nextDue: null });
+  });
+
+  it("caps a pathological backlog rather than walking forever", () => {
+    const collapsed = collapseMissedOccurrences({
+      rrule: "FREQ=DAILY",
+      scheduledStart: "1990-01-01T09:00:00.000Z",
+      anchor: "scheduled",
+      now: "2026-08-26T12:00:00.000Z",
+    });
+    expect(collapsed.missed).toBe(1000);
+    expect(collapsed.nextDue).toBe("2026-08-27T09:00:00.000Z");
+  });
+
+  it("returns nothing for an unparseable rule or clock", () => {
+    expect(
+      collapseMissedOccurrences({
+        rrule: "FREQ=HOURLY",
+        scheduledStart: "2026-08-01T09:00:00.000Z",
+        anchor: "scheduled",
+        now: "2026-08-26T12:00:00.000Z",
+      })
+    ).toStrictEqual({ missed: 0, nextDue: null });
+    expect(
+      collapseMissedOccurrences({
+        rrule: "FREQ=WEEKLY",
+        scheduledStart: "2026-08-01T09:00:00.000Z",
+        anchor: "scheduled",
+        now: "not a time",
+      })
+    ).toStrictEqual({ missed: 0, nextDue: null });
   });
 });

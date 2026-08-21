@@ -1,0 +1,131 @@
+/* The Tasks chrome (spec §1, §5). Geometry for the two regions this app owns —
+   the rail and the scroll host — composed onto the canonical shell vocabulary.
+   The shared design-token layer (--text, --bg, --line, the type ladder, --sp-*,
+   --r-*, --ease …) is supplied by the shell's scoped token block, so this file
+   references those directly and never loads a token sheet of its own.
+
+   NO APP-LOCAL TOKENS. Docs folds six file-kind colours in here because a kind
+   is a content marker the design package does not name; Tasks has no such
+   vocabulary. A project's dot reads `--c-<hue>-text` straight from the palette,
+   overdue reads `--seam`, and there is nothing left to alias. */
+
+.shell {
+  composes: kit-app-shell from global;
+  /* THE PAGE MARGIN IS DECLARED ONCE AND INHERITED. Every row that spans the
+     pane reads it — the notices, the tool row, the group headers and the task
+     rows all begin on the same edge, and the compact rung is a one-line change
+     rather than a five-line one. */
+  --content-margin: 22px;
+  --rail-width: 232px;
+  /* The row rungs from §5: 44px where a finger lands, 40px where a pointer
+     does. Declared here because the row, the group header and the rail row all
+     answer to the same floor. */
+  --row-touch: 44px;
+  --row-pointer: 40px;
+}
+
+/* Tasks' identity is OCHRE, and it is declared exactly once — in `app.json`'s
+   `colorKey`, which the shell reads to paint the icon chip and the launcher
+   tile. Restating it here as `--app-hue` / `--app-identity` would fork that
+   one fact into app CSS for no reader: project dots take `--c-<hue>-text`
+   straight from the palette, and no control in Tasks spends the identity. */
+
+/* ---------- The rail (§5) ---------- */
+
+.rail {
+  flex: none;
+  inline-size: var(--rail-width);
+  border-inline-end: 1px solid var(--line);
+  overflow-y: auto;
+  padding-block: var(--sp-3);
+  padding-inline: var(--sp-3);
+}
+/* One axis: pointer or touch. Width changes the column count, never the type
+   size — so the rail is withdrawn below its own measure rather than shrunk. */
+.isNarrow .rail {
+  display: none;
+}
+
+/* ---------- The main column ---------- */
+
+.main {
+  composes: kit-app-main from global;
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-inline-size: 0;
+  min-block-size: 0;
+  /* The Ask mount is positioned against this column, not against the pane. */
+  position: relative;
+}
+
+.banner {
+  margin-block: var(--sp-2);
+  margin-inline: var(--content-margin);
+}
+
+/* The tool row: a count, the lenses and the sort verb. ONE horizontal scroller
+   at the narrow rung (§7) — a row that wrapped into three stacked lines would
+   push the first task off the screen, which is the one thing this screen is
+   for. */
+.toolbar {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  min-block-size: 34px;
+  padding-inline: var(--content-margin);
+  padding-block: var(--sp-1);
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.scroll {
+  flex: 1;
+  min-block-size: 0;
+  overflow-y: auto;
+  padding-inline: var(--content-margin);
+  padding-block-end: var(--sp-5);
+}
+
+.skeleton {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+  padding-block-start: var(--sp-3);
+}
+
+/* A denied read keeps the room standing and dims nothing: the banner above
+   states the fact and the list below is genuinely empty, rather than a greyed
+   copy of rows nobody can see. */
+.denied .scroll {
+  padding-block-start: var(--sp-2);
+}
+
+/* ---------- The focus ring, on every interactive element ---------- */
+
+/* The ring is the system's (`--focus-ring`), never restyled here; this rule
+   only makes sure the app's own controls take it and that it is never clipped
+   by the scroll hosts above. */
+.shell :focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
+  border-radius: var(--r-xs);
+}
+
+/* The shell's Ask panel mounts here (#834). Positioned against the main
+   column so the button sits out of the list's reading path; on a phone it
+   moves to the top, where the band owns the bottom edge. */
+.askMount {
+  composes: kit-app-ask-mount from global;
+  position: absolute;
+  inset-inline-end: 16px;
+  bottom: 16px;
+  z-index: 30;
+}
+
+.isNarrow .askMount {
+  top: 12px;
+  inset-inline-end: 14px;
+  bottom: auto;
+  z-index: 45;
+}

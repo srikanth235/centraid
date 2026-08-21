@@ -9,6 +9,7 @@ import type { InlineAppModule } from "../inline-types.ts";
 import { Root, CHANGE_TABLES } from "./app-root.tsx";
 import pendingProjection from "./pending-projection.ts";
 import historyQuery from "./queries/history.ts";
+import journalQuery from "./queries/journal.ts";
 import libraryQuery from "./queries/library.ts";
 import linkTargetsQuery from "./queries/link-targets.ts";
 import noteQuery from "./queries/note.ts";
@@ -25,6 +26,9 @@ const notesInlineApp: InlineAppModule = {
     library: { default: libraryQuery },
     "link-targets": { default: linkTargetsQuery },
     history: { default: historyQuery },
+    // The Journal place — read-only, include-only over the People-journal
+    // scheme the other three projections exclude (#834 R-journal).
+    journal: { default: journalQuery },
     note: { default: noteQuery },
     search: { default: searchQuery },
   } as unknown as InlineAppModule["queries"],

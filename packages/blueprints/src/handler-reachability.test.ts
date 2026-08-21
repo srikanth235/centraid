@@ -63,8 +63,8 @@ const WEBVIEW_APPS = new Set(["notes"]);
  */
 const AWAITING_HANDOFF: Readonly<Record<"web" | "mobile", readonly string[]>> =
   {
-    web: ["agenda", "notes", "tally", "tasks"],
-    mobile: ["agenda", "notes", "tally", "tasks"],
+    web: ["tally"],
+    mobile: ["tally"],
   };
 
 const AWAITING_HANDOFF_RATIONALE =
@@ -190,7 +190,18 @@ const WEB_EXCEPTIONS: Readonly<Record<string, ReachabilityException>> = {
 // contract is the same. Docs' `history` is the version chain the replica's
 // `core.link` revises edges carry (`docs-versions.ts`).
 const NATIVE_QUERY_UI: Readonly<Record<string, readonly string[]>> = {
-  agenda: ["upcoming", "parties", "search"],
+  agenda: [
+    "upcoming",
+    "parties",
+    "search",
+    // Agenda's day-context layers on the phone are the same read done natively
+    // (#834): `day-context.ts` re-states the query emitter's joins over the
+    // `core.party` / `schedule.task` replica rows already inside Agenda's read
+    // scopes, and `AgendaDayContext.tsx` draws that answer as the ribbon and
+    // the collapsed shelf. The copy leaf is shared with the pointer surface, so
+    // the two seats cannot drift.
+    "day-context",
+  ],
   docs: ["drive", "search", "history"],
   people: ["people", "person", "dashboard", "search", "trash"],
   locker: ["auth", "items", "item"],

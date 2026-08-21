@@ -246,18 +246,21 @@ function execute(req: WorkerRequest): void {
       const timeModule = req.timeModuleUrl
         ? ((await import(req.timeModuleUrl)) as {
             applyRecurrenceExceptions: (...args: unknown[]) => unknown;
+            collapseMissedOccurrences: (...args: unknown[]) => unknown;
             describeRecurrence: (...args: unknown[]) => unknown;
             expandRecurrence: (...args: unknown[]) => unknown;
             shiftTemporal: (...args: unknown[]) => unknown;
           })
         : {
             applyRecurrenceExceptions: unavailableTime,
+            collapseMissedOccurrences: unavailableTime,
             describeRecurrence: unavailableTime,
             expandRecurrence: unavailableTime,
             shiftTemporal: unavailableTime,
           };
       const time = Object.freeze({
         applyRecurrenceExceptions: timeModule.applyRecurrenceExceptions,
+        collapseMissedOccurrences: timeModule.collapseMissedOccurrences,
         describeRecurrence: timeModule.describeRecurrence,
         expandRecurrence: timeModule.expandRecurrence,
         shiftTemporal: timeModule.shiftTemporal,

@@ -176,6 +176,13 @@ export interface InlineCentraidClient {
   discardPendingWrite: (intentId: string, scope?: string) => Promise<boolean>;
   /** Leave the app for the shell-owned owner/steward review inbox. */
   openApprovals?: () => void;
+  /**
+   * Leave this app for another first-party one (#834). The one door the
+   * cross-app projections need: Agenda's due-task shelf and Notes' Send to
+   * Tasks both show a fact that another room OWNS, and handing the member
+   * there is navigation, never a second copy of that room's UI.
+   */
+  openApp?: (appId: string, focus?: { taskId?: string }) => void;
   /** Commands durably queued on this member seat while its steward is away. */
   commonsIntents: (opts?: {
     scope?: string;
@@ -534,6 +541,8 @@ export interface CreateInlineCentraidOptions {
   isOnline?: () => boolean;
   /** Shell navigation stays injected; blueprints never import shell routing. */
   onOpenApprovals?: () => void;
+  /** The cross-app door, injected for the same reason (#834). */
+  onOpenApp?: (appId: string, focus?: { taskId?: string }) => void;
 }
 
 function bindingsOf(
@@ -788,6 +797,8 @@ export function createInlineCentraidClient(
     ...(options.onOpenApprovals
       ? { openApprovals: options.onOpenApprovals }
       : {}),
+
+    ...(options.onOpenApp ? { openApp: options.onOpenApp } : {}),
 
     async commonsIntents(opts) {
       const binding = bindingFor(opts?.scope);

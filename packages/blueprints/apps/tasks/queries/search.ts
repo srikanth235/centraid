@@ -102,11 +102,42 @@ export default async function searchHandler({ input, ctx }: HandlerArgs) {
     for (const list of attByTask.values()) {
       list.sort((x, y) => (y.is_primary ?? 0) - (x.is_primary ?? 0));
     }
+    // A hit row is the BOARD's row shape, which since #834 includes the one
+    // summariser's words and the missed-occurrence collapse — a search result
+    // that rendered a raw rule where the board renders a sentence would be the
+    // second summariser this contract exists to forbid.
+    const nowIso = new Date().toISOString();
+    const recurrenceOf = (task: Record<string, unknown>) => {
+      const rrule = typeof task["rrule"] === "string" ? task["rrule"] : null;
+      const start = typeof task["due_at"] === "string" ? task["due_at"] : null;
+      if (!rrule || !start) return {};
+      const anchor = task["recurrence_anchor"];
+      const zone = task["recurrence_tz"];
+      const completed = task["completed_at"];
+      const collapsed = ctx.time.collapseMissedOccurrences({
+        rrule,
+        scheduledStart: start,
+        ...(typeof zone === "string" ? { timeZone: zone } : {}),
+        ...(anchor === "completion" || anchor === "scheduled"
+          ? { anchor }
+          : {}),
+        now: nowIso,
+        ...(typeof completed === "string"
+          ? { lastCompletedAt: completed }
+          : {}),
+      });
+      return {
+        recurrence_summary: ctx.time.describeRecurrence(rrule),
+        missed: collapsed.missed,
+        next_due: collapsed.nextDue,
+      };
+    };
     // Vault order is rank order (best match first) — keep it.
     const tasks = hits.map(({ _rank, _snippet, ...task }) => ({
       ...task,
       attachments: attByTask.get(task.task_id) ?? [],
       snippet: typeof _snippet === "string" ? _snippet : "",
+      ...recurrenceOf(task),
     }));
     return { tasks };
   } catch (error) {

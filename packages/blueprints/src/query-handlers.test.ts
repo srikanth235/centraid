@@ -13,6 +13,7 @@ import { describe, expect, it, vi } from "vitest";
 
 import {
   applyRecurrenceExceptions,
+  collapseMissedOccurrences,
   describeRecurrence,
   expandRecurrence,
   shiftTemporal,
@@ -36,6 +37,7 @@ function ctxOf(rowsByEntity: Record<string, unknown[]>) {
   return {
     time: {
       applyRecurrenceExceptions,
+      collapseMissedOccurrences,
       describeRecurrence,
       expandRecurrence,
       shiftTemporal,

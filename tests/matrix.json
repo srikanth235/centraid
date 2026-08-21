@@ -594,6 +594,14 @@
       "url": "https://github.com/srikanth235/centraid/issues/781",
       "state": "open"
     },
+    "831": {
+      "url": "https://github.com/srikanth235/centraid/issues/831",
+      "state": "closed"
+    },
+    "834": {
+      "url": "https://github.com/srikanth235/centraid/issues/834",
+      "state": "open"
+    },
     "790": {
       "url": "https://github.com/srikanth235/centraid/issues/790",
       "state": "open"
@@ -701,12 +709,12 @@
     "agent-runtime.performance": "Owned by tests/perf/harness-turn.perf.test.ts; records a nightly performance budget and durable numeric measurements.",
     "agent-runtime.scalability": "Owned by tests/scale/harness-sessions.scale.test.ts; records a nightly scalability budget and durable numeric measurements.",
     "agent-runtime.offline": "Skip: harnesses require a live CLI/ACP process; offline is not a runtime dimension (client offline owns UX).",
-    "blueprints.performance": "Partial: tests/scale/large-vault.scale.test.ts exercises the daily-use entity reads behind Photos, People, Agenda, and Notes at the #630 fixture sizes; a rendered interaction budget would strengthen this cell. Tracked under #781 (originally #659).",
+    "blueprints.performance": "Partial: tests/scale/large-vault.scale.test.ts exercises the daily-use entity reads behind Photos, People, Agenda, and Notes at the #630 fixture sizes; a rendered interaction budget would strengthen this cell, and is the sharper gap since #834 gave Agenda, Notes and Tasks interfaces that render those reads. Tracked under #781 (originally #659).",
     "blueprints.scalability": "Owned by tests/scale/blueprint-clones.scale.test.ts; records a nightly scalability budget and durable numeric measurements.",
     "blueprints.offline": "Partial: packages/client/src/replica/app-convergence.contract.test.ts proves deterministic replay for task/contact/expense/event blueprint writes; web/mobile journeys own the consuming offline UI. Tracked under #781 (originally #656).",
     "blueprints.compat": "Partial: packages/blueprints/src/app-manifests.test.ts validates the shipped app.json contract and mobile's protocol wall prevents an incompatible host from mounting those apps. Tracked under #781 (originally #656).",
     "desktop.scalability": "Owned by tests/scale/desktop-windows.scale.test.ts; records a nightly scalability budget and durable numeric measurements.",
-    "desktop.offline": "Partial: apps/desktop/tests/e2e/pending-overlay.spec.ts owns the renderer's offline honesty — a write made with the network severed queues in the durable replica outbox and BOTH the optimistic row and its pending chip survive a full Electron reload. The journey drove Tally, Tasks and Agenda until those three interfaces were removed pending a ground-up redesign; it was rebuilt on Docs, the remaining app whose production rows render the shared pending overlay, so the contract moved seats rather than lapsing. Still missing on this seat, and what keeps the cell partial: the reconnect half (the PWA's apps/web/tests/e2e/offline-reconnect.spec.ts proves replay settles exactly once; desktop has no equivalent) and a UI-driven offline write, which Docs cannot offer while its rename affordances live off the inline seat. Detached-gateway outage logging still covers host-side continuity. Tracked under #781.",
+    "desktop.offline": "Partial: apps/desktop/tests/e2e/pending-overlay.spec.ts owns the renderer's offline honesty — a write made with the network severed queues in the durable replica outbox and BOTH the optimistic row and its pending chip survive a full Electron reload. The journey drove Tally, Tasks and Agenda until #831 cleared those interfaces; the same change rebuilt it on Docs, whose production rows render the shared pending overlay, so the contract moved seats rather than lapsing. It stays on Docs now that #834 has given Agenda, Notes and Tasks interfaces again: the rebuilt Agenda proves the held-write chip at the boot tier instead (packages/blueprints/src/app-boot/agenda.test.ts drives a queued cancel through the production intent-invalidation derivation in airplane mode), which is a cheaper seat for the same contract than a second Electron journey. Still missing on this seat, and what keeps the cell partial: the reconnect half (the PWA's apps/web/tests/e2e/offline-reconnect.spec.ts proves replay settles exactly once; desktop has no equivalent) and a UI-driven offline write, which Docs cannot offer while its rename affordances live off the inline seat. Detached-gateway outage logging still covers host-side continuity. Tracked under #781.",
     "desktop.compat": "Partial: gateway pairing response folding and primary-first multi-vault retention are covered by apps/desktop/src/main/gateway-pairing-core.test.ts; desktop settings/schema version-skew fixtures remain tracked under #781 (originally #656).",
     "web.scalability": "Owned by tests/scale/web-tabs.scale.test.ts; records a nightly scalability budget and durable numeric measurements.",
     "web.compat": "Partial: pairing persistence and primary-first multi-vault retention are covered by apps/web/src/web-host.test.ts; web storage/version-skew fixtures remain tracked under #781 (originally #656).",
@@ -3224,7 +3232,7 @@
       "tier": "e2e",
       "owner": "apps/web/tests/e2e/offline-reconnect.spec.ts",
       "minimumTests": 1,
-      "approvedMinimumTestsDeviation": "Takes over the retired `web-pending-overlay` floor one-to-one. That journey proved the PWA recovers a VISIBLE pending row across a reload while still offline, and it drove Tally, Tasks and Agenda — three interfaces removed whole pending a ground-up redesign, which left it without a subject on this seat. Rather than keep two near-identical offline journeys over the one remaining app that renders the shared pending overlay, the contract moved into `offline-reconnect.spec.ts`, which was itself retargeted from Tasks to Docs in the same change: it now asserts the optimistic title AND its `.kit-pending-chip` survive the offline reload before going on to prove settlement on reconnect. Two named contracts over one journey, exactly as `desktop-real-journey` and `desktop-app-open-journey` share `onboarding-home.spec.ts`. Same surface, dimension, tier and floor; no assertion dropped."
+      "approvedMinimumTestsDeviation": "Takes over the retired `web-pending-overlay` floor one-to-one. That journey proved the PWA recovers a VISIBLE pending row across a reload while still offline, and it drove Tally, Tasks and Agenda — the three interfaces #831 cleared, which left it without a subject on this seat. Rather than keep two near-identical offline journeys over the one remaining app that renders the shared pending overlay, the contract moved into `offline-reconnect.spec.ts`, which was itself retargeted from Tasks to Docs in the same change: it now asserts the optimistic title AND its `.kit-pending-chip` survive the offline reload before going on to prove settlement on reconnect. Two named contracts over one journey, exactly as `desktop-real-journey` and `desktop-app-open-journey` share `onboarding-home.spec.ts`. Same surface, dimension, tier and floor; no assertion dropped. #834 rebuilt Agenda, Notes and Tasks and did NOT move the contract back: one PWA offline journey over Docs still owns both halves, and the rebuilt apps' own pending honesty is proven at the boot tier (packages/blueprints/src/app-boot/agenda.test.ts) rather than by re-splitting this flow."
     },
     {
       "id": "household-sharing-journey",
@@ -3294,7 +3302,7 @@
       "tier": "e2e",
       "owner": "apps/desktop/tests/e2e/delete-app.spec.ts",
       "minimumTests": 8,
-      "approvedMinimumTestsDeviation": "#799 retired the served-app plane, so draft/code-store Delete-via-App-settings cannot be reached: custom apps no longer mount an app view. The eight cases stay in delete-app.spec.ts but now drive the live bundled surface (Tasks): settings opens, Manage has no Delete (#708), and dismiss/Home paths fire no DELETE. Floor stays 8 — the journey transferred, it did not shrink."
+      "approvedMinimumTestsDeviation": "#799 retired the served-app plane, so draft/code-store Delete-via-App-settings cannot be reached: custom apps no longer mount an app view. The eight cases stay in delete-app.spec.ts but now drive the live bundled surface (Tasks, whose interface #831 cleared and #834 rebuilt; the journey drives shell chrome and was unaffected by either): settings opens, Manage has no Delete (#708), and dismiss/Home paths fire no DELETE. Floor stays 8 — the journey transferred, it did not shrink."
     },
     {
       "id": "desktop-launch-time",

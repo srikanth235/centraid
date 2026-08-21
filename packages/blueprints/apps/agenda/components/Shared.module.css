@@ -1,0 +1,59 @@
+/* The small marks every Agenda view draws. */
+
+/* A calendar's hue dot. The VALUE arrives inline (`--dot-hue`) because it is
+   data; the geometry is here. It is a content marker and never appears on a
+   control. */
+.dot {
+  flex: none;
+  inline-size: var(--sp-2);
+  block-size: var(--sp-2);
+  border-radius: var(--r-pill);
+  background: var(--dot-hue, var(--text-faint));
+}
+
+/* Numerics: tabular figures plus the bidi isolation that keeps `today, 17:00`
+   from reordering under RTL. The two always travel together. */
+.num {
+  font-variant-numeric: var(--t-mono-numeric);
+  direction: var(--t-mono-direction);
+  unicode-bidi: var(--t-mono-bidi);
+}
+
+.snippet {
+  color: var(--text-soft);
+  font: var(--t-small);
+}
+.snippet mark {
+  background: var(--accent-soft);
+  color: var(--accent-text);
+  border-radius: var(--r-xs);
+  padding: 0 1px;
+}
+
+/* The held-write mark: a 2px rule on the reading edge and the words beside it.
+   Logical inset, so it mirrors under RTL. */
+.pendingMark {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-2);
+  padding-inline-start: var(--sp-2);
+  border-inline-start: 2px solid var(--text-faint);
+  font: var(--t-annot-label);
+  color: var(--text-soft);
+}
+
+.empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--sp-3);
+  padding: var(--sp-6) var(--sp-4);
+  text-align: center;
+}
+
+.emptyLine {
+  margin: 0;
+  font: var(--t-reading);
+  color: var(--text-soft);
+  max-inline-size: 44ch;
+}

@@ -148,6 +148,12 @@ function TileBody({ body }: { body: HomeTileBody }): JSX.Element {
     case "tasks":
       return (
         <div className={styles.body}>
+          {/* THE GLANCE (#834): today's pile and what is next. A count the
+              member can look at, in the tile's own body ink — never a badge,
+              never a dot, and nothing here is red. */}
+          {body.glance.today ? (
+            <span className={styles.eventTime}>{body.glance.today}</span>
+          ) : null}
           <ul className={styles.taskRows}>
             {body.rows.map((row) => (
               <li
@@ -160,6 +166,11 @@ function TileBody({ body }: { body: HomeTileBody }): JSX.Element {
               </li>
             ))}
           </ul>
+          {/* Pinned under the rows, the way the agenda tile pins its
+              after-line: what is coming, said once. */}
+          {body.glance.next ? (
+            <span className={styles.afterLine}>{body.glance.next}</span>
+          ) : null}
         </div>
       );
     case "tally":

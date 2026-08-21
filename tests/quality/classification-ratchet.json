@@ -1,5 +1,5 @@
 {
-  "approvedDeviation": "#836 re-pins the `tests/matrix.json` fingerprint in\n`tests/quality/classification-ratchet.json` after removing the spent\n`replacesMinimumTestsFlow` marker from `web-offline-pending-row`. That key\nwas a one-time rename claim checked against the merge base, and since #832\nmerged the rename and the marker together it could only report an unknown\npredecessor \u2014 so the ratchet was red on `main` itself. No floor, quality,\ndemonstratedRed or matrixGovernanceFingerprint value moves. Prior: #831.",
+  "approvedDeviation": "#836 re-pins the `tests/matrix.json` fingerprint in\n`tests/quality/classification-ratchet.json` after removing the spent\n`replacesMinimumTestsFlow` marker from `web-offline-pending-row`. That key\nwas a one-time rename claim checked against the merge base, and since #832\nmerged the rename and the marker together it could only report an unknown\npredecessor — so the ratchet was red on `main` itself. #834's own re-pin\nnote is superseded rather than contradicted: its four matrix notes are kept\nwhole and only the marker line leaves. No floor, quality, demonstratedRed or\nmatrixGovernanceFingerprint value moves. Prior: #834.",
   "matrixGovernanceFingerprint": "8657a0b1943b8244ebf0632ca4c4f4ede4e22ee034662db59fc2f39058a34737",
   "fingerprints": {
     "packages/server/src/acp/backends/acp/vault-mcp-server.ts": "62893489b538f861feb46200dc69a53a7ce02b0809224b93f74e2f39fc32276d",
@@ -8,6 +8,6 @@
     "packages/server/src/serve/health-registry.ts": "d1f3fc416ecbe43af2ab4b091fecf3b1041590e52f2002a242e5031c65c9fd04",
     "packages/vault/src/schema/sealed.ts": "40fba400b21048b193006c3e81d063e0fdfb79cfe1dd3b4b90b94bd44547ecc0",
     "tests/quality/fault-points.ts": "805c9c9611cee6a209cba5ff3aa0365e70bb3a3bbbc6e2383cecdd07f50f570e",
-    "tests/matrix.json": "801138fb3d7d1c9234b349efd8ba57f79c2715276ec452913b2361bfa49a67e7"
+    "tests/matrix.json": "a8098d6b6e9a8845de029443180d0bcc0ea3663102a72d580339b61c29da48bd"
   }
 }

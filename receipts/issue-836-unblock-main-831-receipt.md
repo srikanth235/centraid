@@ -94,8 +94,17 @@ gate requires the note to appear in a changed receipt's `## Decisions`:
 `replacesMinimumTestsFlow` marker from `web-offline-pending-row`. That key
 was a one-time rename claim checked against the merge base, and since #832
 merged the rename and the marker together it could only report an unknown
-predecessor — so the ratchet was red on `main` itself. No floor, quality,
-demonstratedRed or matrixGovernanceFingerprint value moves. Prior: #831.
+predecessor — so the ratchet was red on `main` itself. #834's own re-pin
+note is superseded rather than contradicted: its four matrix notes are kept
+whole and only the marker line leaves. No floor, quality, demonstratedRed or
+matrixGovernanceFingerprint value moves. Prior: #834.
+
+`main` moved under this branch while it was open: [#834](https://github.com/srikanth235/centraid/issues/834)
+landed the Agenda / Notes / Tasks rebuild and re-pinned the same fingerprint
+for its own matrix-note refresh. Merging it in makes the pin stale a second
+time, so the note above names #834 as the prior pin and keeps every one of its
+sentences in `tests/matrix.json` — the merge takes #834's current prose for
+`web-offline-pending-row` and removes only the one key this issue is about.
 
 **The section is sourced, not invented.** An agent that never worked #831
 writing a fresh account of that change would be putting words in the receipt's

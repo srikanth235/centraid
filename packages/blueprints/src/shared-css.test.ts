@@ -5,11 +5,20 @@ import { describe, expect, it } from "vitest";
 
 const packageDir = path.resolve(import.meta.dirname, "..");
 const appDir = path.join(packageDir, "apps");
-// The system apps that currently DRAW something. Agenda, Notes, Tally and
-// Tasks are off this list because their interfaces were removed whole pending
-// a ground-up redesign — there is no chrome of theirs to hold to the shared
-// shell. Each returns here with its rebuilt chrome.
-const systemApps = ["docs", "locker", "people", "photos"];
+// The system apps that currently DRAW something. Agenda, Notes and Tasks
+// returned here with their rebuilt chromes (#834); Tally is still off the list
+// because its interface is still removed whole pending a ground-up redesign —
+// there is no chrome of its to hold to the shared shell. It returns here the
+// same way, with a chrome that composes the shell.
+const systemApps = [
+  "agenda",
+  "docs",
+  "locker",
+  "notes",
+  "people",
+  "photos",
+  "tasks",
+];
 
 /** Every bundled app on disk, drawing or not. The bans below are about what an
  *  app must NEVER carry, so they are asked of the directory listing rather
@@ -49,10 +58,10 @@ describe("shared blueprint CSS", () => {
 
   it("does not reintroduce retired global chrome selectors", () => {
     // Scanned across each app's WHOLE source tree rather than one chrome file:
-    // the three apps below have no chrome at the moment (see systemApps), and a
-    // rule keyed to a file that does not exist would quietly assert nothing.
-    // Reading the tree keeps the ban live through the rebuild, wherever the new
-    // chrome ends up living.
+    // these three were rebuilt (#834) and their new chromes are free to put
+    // styling wherever the design asks, so a rule keyed to one file could
+    // quietly assert nothing. Reading the tree keeps the ban on the retired
+    // global selectors live wherever the styling ends up living.
     const retiredSelectors = {
       agenda: [".ag-shell", ".ag-side", ".ag-topbar"],
       notes: [".nt-side", ".nt-topbar", ".nt-hamburger"],

@@ -1,0 +1,137 @@
+/* The day-context layers. Geometry and type only — every value is a token.
+
+   NO HUE ANYWHERE IN THIS FILE, deliberately: the calendars' dot is a content
+   marker for a thing the member can write to, and a layer is not one. What
+   separates a ribbon from an event row here is a dotted rule and the
+   annotation register, never a colour. */
+
+.layers {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+}
+
+.layerRow {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  min-block-size: var(--target-min);
+  font: var(--t-body);
+  color: var(--text);
+  cursor: pointer;
+}
+
+.layerName {
+  flex: 1;
+  min-inline-size: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.layerFrom {
+  flex: none;
+  font: var(--t-annot-label);
+  color: var(--text-faint);
+}
+
+.layerNote {
+  margin: 0;
+  font: var(--t-annot-label);
+  color: var(--text-faint);
+  text-wrap: pretty;
+}
+
+/* ---------- The ribbon, inside a day head or a month cell ---------- */
+
+.ribbon {
+  display: inline-flex;
+  align-items: center;
+  min-inline-size: 0;
+  max-inline-size: 100%;
+  padding-inline: var(--sp-1);
+  border-inline-start: 2px dotted var(--line);
+  font: var(--t-annot-label);
+  color: var(--text-soft);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.ribbonText {
+  min-inline-size: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* ---------- The shelf, above the day's first hour ---------- */
+
+.shelf {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-inline-size: 0;
+}
+
+.shelfToggle {
+  align-self: flex-start;
+  max-inline-size: 100%;
+  border: none;
+  background: transparent;
+  padding: var(--sp-1);
+  border-radius: var(--r-sm);
+  font: var(--t-annot-label);
+  color: var(--text-faint);
+  cursor: pointer;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.shelfToggle:hover {
+  background: var(--bg-hover);
+}
+
+.shelfRows {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  min-inline-size: 0;
+}
+
+.shelfRow {
+  display: block;
+  inline-size: 100%;
+  text-align: start;
+  border: none;
+  background: transparent;
+  padding: var(--sp-1);
+  border-inline-start: 2px dotted var(--line);
+  font: var(--t-annot-label);
+  color: var(--text-soft);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+button.shelfRow {
+  cursor: pointer;
+}
+button.shelfRow:hover {
+  background: var(--bg-hover);
+}
+
+/* 44px on touch, without exception. The shelf is an annotation on a pointer
+   surface and a real target on a finger, and the measure is what changes —
+   never the type size. */
+@media (pointer: coarse) {
+  .shelfToggle,
+  button.shelfRow {
+    min-block-size: var(--target-min);
+    display: flex;
+    align-items: center;
+  }
+}
