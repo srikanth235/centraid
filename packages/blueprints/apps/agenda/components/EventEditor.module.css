@@ -1,0 +1,123 @@
+/* The editor modal. Width is the one knob an app keeps over `kit-modal`. */
+
+.editor {
+  inline-size: min(560px, calc(100vw - var(--sp-6)));
+  max-block-size: calc(100vh - var(--sp-6));
+  display: flex;
+  flex-direction: column;
+}
+
+.head {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  padding: var(--sp-4);
+  border-block-end: 1px solid var(--line);
+}
+
+.heading {
+  flex: 1;
+  margin: 0;
+  font: var(--t-title);
+  letter-spacing: var(--t-title-tracking);
+  color: var(--text);
+}
+
+.body {
+  flex: 1;
+  min-block-size: 0;
+  overflow-y: auto;
+  padding: var(--sp-4);
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-3);
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-1);
+  min-inline-size: 0;
+}
+
+.label {
+  font: var(--t-annot-label);
+  color: var(--text-faint);
+}
+
+.switchRow {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  min-block-size: var(--target-min);
+  font: var(--t-body);
+  color: var(--text);
+}
+
+/* The event's current repetition, in the one sentence the shared summariser
+   produced. This is the only place repetition is described, and it is never
+   the rule. */
+.summaryLine {
+  margin: 0;
+  font: var(--t-annot-label);
+  color: var(--text-soft);
+}
+
+.guests {
+  margin: 0;
+  padding: 0;
+  border: none;
+  display: flex;
+  flex-direction: column;
+}
+
+.guestRow {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  min-block-size: var(--target-min);
+  font: var(--t-body);
+  color: var(--text);
+}
+
+.guestName {
+  flex: 1;
+  min-inline-size: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.guestState {
+  flex: none;
+  font: var(--t-annot-label);
+  color: var(--text-soft);
+}
+
+/* The scope panel. Three equal answers — no filled control here, because the
+   product has no recommendation about which occurrences a change is about. */
+.scope {
+  border-block-start: 1px solid var(--line);
+  padding: var(--sp-4);
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+}
+
+.scopeTitle {
+  margin: 0;
+  font: var(--t-body-strong);
+  color: var(--text);
+}
+
+.scopeQuestion {
+  margin: 0;
+  font: var(--t-body);
+  color: var(--text-soft);
+}
+
+.scopeChoices {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-2);
+}

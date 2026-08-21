@@ -124,6 +124,55 @@ export function promote(note: {
   };
 }
 
+/** One run of the body as the editor draws it: prose the member types into,
+ *  or one checklist line with a real box. */
+export type Segment =
+  | { kind: "text"; from: number; to: number; text: string }
+  | { kind: "check"; line: number; checked: boolean; text: string };
+
+/**
+ * Split a body into the runs the editor draws.
+ *
+ * A CHECKLIST LINE IS A CONTROL, and the rest of the body is prose. Rather
+ * than a second rendered copy of the note beside the writing surface — two
+ * places showing the same sentence, one of them lying whenever the other is
+ * mid-keystroke — the editor draws the box lines as rows and everything
+ * between them as the text the member writes into. `from`/`to` are the run's
+ * character offsets in the body, so an edit and an anchor both address the
+ * same string.
+ */
+export function bodySegments(body: string): Segment[] {
+  const lines = body.split("\n");
+  const out: Segment[] = [];
+  let offset = 0;
+  let runStart = 0;
+  let run: string[] = [];
+  const flush = (end: number): void => {
+    if (run.length === 0) return;
+    out.push({ kind: "text", from: runStart, to: end, text: run.join("\n") });
+    run = [];
+  };
+  lines.forEach((line, index) => {
+    const match = CHECK_RE.exec(line);
+    if (match) {
+      flush(Math.max(0, offset - 1));
+      out.push({
+        kind: "check",
+        line: index,
+        checked: /x/iu.test(match.groups?.mark ?? ""),
+        text: match.groups?.text ?? "",
+      });
+      runStart = offset + line.length + 1;
+    } else {
+      if (run.length === 0) runStart = offset;
+      run.push(line);
+    }
+    offset += line.length + 1;
+  });
+  flush(Math.max(0, offset - 1));
+  return out;
+}
+
 /** Quick create derives a name from the first line, so a note never reaches
  *  the vault nameless and never shows that derivation to the member. */
 export function deriveTitle(title: unknown, body: unknown): string {

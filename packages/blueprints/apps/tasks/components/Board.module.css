@@ -1,0 +1,532 @@
+/* The room's content vocabulary (spec §5): the task row, the family, the group
+   header, the rail rows, the editor's field rows, the panels and the two
+   sheets. Geometry only — every colour, face and rhythm is read from the shared
+   token layer the shell injects, and this file declares none of its own.
+
+   ONE STYLESHEET FOR THE CONTENT because the row is one component used in eight
+   places (components/TaskRow.tsx): splitting its rules per screen is exactly how
+   a due date ends up rendering two different ways in two lists. */
+
+/* ---------- Numerics ---------- */
+
+/* EVERY NUMBER IN THIS PRODUCT IS TABULAR AND BIDI-ISOLATED. Without the
+   isolate, `today, 17:00` reorders under RTL and a member reads a time that was
+   never written — which is why the four properties travel together as one class
+   rather than as a `font:` a caller might take half of. */
+.num {
+  font: var(--t-mono);
+  font-variant-numeric: var(--t-mono-numeric);
+  direction: var(--t-mono-direction);
+  unicode-bidi: var(--t-mono-bidi);
+  color: var(--text-soft);
+}
+
+/* ---------- The task row ---------- */
+
+.rowWrap {
+  border-block-end: 1px solid var(--line);
+}
+/* A pending row takes a 2px inline-start rule and says the words. The rule is
+   ink, never a colour: an unsettled write is not a warning. */
+.rowWrap[data-pending="true"] {
+  border-inline-start: 2px solid var(--text-faint);
+  padding-inline-start: var(--sp-2);
+}
+.rowWrap[data-child="true"] {
+  padding-inline-start: 28px;
+}
+
+.row {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  min-block-size: var(--row-pointer, 40px);
+}
+/* One axis: pointer or touch. 44px is the floor where a finger lands, without
+   exception (§7). */
+@media (pointer: coarse) {
+  .row {
+    min-block-size: var(--row-touch, 44px);
+  }
+}
+.row[data-focused="true"] {
+  background: var(--bg-elev);
+}
+
+.box {
+  flex: none;
+  inline-size: 19px;
+  block-size: 19px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--r-xs);
+  background: transparent;
+  color: var(--text-inv);
+  padding: 0;
+}
+/* A subtask's box is a pill, and smaller: the shape says "part of the family
+   above" before any indent does. */
+.box[data-child="true"] {
+  inline-size: 18px;
+  block-size: 18px;
+  border-radius: var(--r-pill);
+}
+.box[data-done="true"] {
+  background: var(--text);
+  border-color: var(--text);
+}
+
+/* The row's own opening target — the title and the meta, as one control. */
+.open {
+  flex: 1;
+  min-inline-size: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  text-align: start;
+  background: none;
+  border: 0;
+  padding: 0;
+}
+
+.title {
+  font: var(--t-body);
+  color: var(--text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.title[data-done="true"] {
+  color: var(--text-faint);
+  text-decoration: line-through;
+}
+
+/* The meta line is CLAMPED TO ONE LINE. A second line of annotation is a second
+   row of noise for a fact nobody asked to read. */
+.meta {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  font: var(--t-annot-label);
+  color: var(--text-faint);
+  overflow: hidden;
+  white-space: nowrap;
+}
+/* OVERDUE IS THE ATTENTION TONE, NEVER RED. `--net` is reserved for destructive
+   controls and is outlined even there; a task that slipped is context. */
+.meta [data-attention="true"] {
+  color: var(--seam);
+}
+
+.dot {
+  flex: none;
+  inline-size: 6px;
+  block-size: 6px;
+  border-radius: var(--r-pill);
+}
+
+.twist {
+  flex: none;
+  inline-size: 24px;
+  block-size: 24px;
+  background: none;
+  border: 0;
+  color: var(--text-faint);
+}
+
+/* Priority as a trailing micro-caps word, drawn only when a task has one. */
+.priority {
+  flex: none;
+  font: var(--t-eyebrow);
+  letter-spacing: var(--t-eyebrow-tracking);
+  text-transform: var(--t-eyebrow-transform);
+  color: var(--text-soft);
+}
+
+/* The vault marker: a read-only STATUS chip, never a control colour. */
+.vault {
+  flex: none;
+  font: var(--t-eyebrow);
+  letter-spacing: var(--t-eyebrow-tracking);
+  text-transform: var(--t-eyebrow-transform);
+  color: var(--text-faint);
+  border: 1px solid var(--line);
+  border-radius: var(--r-xs);
+  padding-inline: var(--sp-1);
+}
+
+.pendingActions {
+  padding-block-end: var(--sp-1);
+}
+
+/* ---------- Groups ---------- */
+
+.board {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-4);
+  padding-block-start: var(--sp-3);
+}
+.group {
+  display: flex;
+  flex-direction: column;
+}
+
+.groupHead {
+  display: flex;
+  align-items: baseline;
+  gap: var(--sp-2);
+  padding-block: var(--sp-2);
+}
+.groupLabel {
+  font: var(--t-small-strong);
+  color: var(--text);
+}
+.groupHead[data-attention="true"] .groupLabel {
+  color: var(--seam);
+}
+.groupMeta {
+  color: var(--text-faint);
+  overflow: hidden;
+  white-space: nowrap;
+}
+.groupVerbs {
+  margin-inline-start: auto;
+  display: flex;
+  gap: var(--sp-3);
+}
+
+/* A BOUNDED WINDOW SAYS SO. This row is never styled as a footer to be
+   overlooked: a cut list that reads as everything is the defect. */
+.windowEnd {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  padding-block: var(--sp-3);
+}
+
+.emptyActs {
+  display: flex;
+  justify-content: center;
+  gap: var(--sp-2);
+  padding-block-start: var(--sp-3);
+}
+
+.notice {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  margin-block: var(--sp-2);
+}
+
+/* ---------- Rail rows ---------- */
+
+.railHead {
+  font: var(--t-eyebrow);
+  letter-spacing: var(--t-eyebrow-tracking);
+  text-transform: var(--t-eyebrow-transform);
+  color: var(--text-faint);
+  padding-block: var(--sp-3) var(--sp-1);
+}
+.railArea {
+  font: var(--t-annot-label);
+  color: var(--text-faint);
+  padding-block: var(--sp-1);
+}
+.railRow {
+  inline-size: 100%;
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  min-block-size: var(--row-pointer, 40px);
+  padding-inline: var(--sp-2);
+  border: 0;
+  border-radius: var(--r-sm);
+  background: none;
+  text-align: start;
+}
+.railRow[data-current="true"] {
+  background: var(--bg-elev);
+}
+.railLabel {
+  flex: 1;
+  min-inline-size: 0;
+  font: var(--t-body);
+  color: var(--text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.railRow[data-current="true"] .railLabel {
+  font: var(--t-label-on);
+}
+.railFoot {
+  border-block-start: 1px solid var(--line);
+  margin-block-start: var(--sp-3);
+  padding-block-start: var(--sp-2);
+}
+
+/* ---------- Panels and sheets ---------- */
+
+.panelScrim,
+.sheetScrim {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  justify-content: center;
+  background: var(--scrim);
+  z-index: 40;
+}
+.panelScrim {
+  align-items: flex-start;
+  padding-block-start: 12vh;
+}
+.sheetScrim {
+  align-items: flex-end;
+}
+
+.panel {
+  inline-size: min(560px, 92vw);
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-3);
+  background: var(--bg-elev);
+  border: 1px solid var(--line);
+  border-radius: var(--r-lg);
+  box-shadow: var(--shadow-lg);
+  padding: var(--sp-4);
+}
+.sheet {
+  inline-size: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+  background: var(--bg-elev);
+  border-start-start-radius: var(--r-lg);
+  border-start-end-radius: var(--r-lg);
+  box-shadow: var(--shadow-lg);
+  padding: var(--sp-4);
+}
+.sheetRow {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  min-block-size: var(--row-touch, 44px);
+  border: 0;
+  background: none;
+  text-align: start;
+}
+
+/* The capture field is the TITLE rung on a pointer and the READING rung on
+   touch: the title rung clips the placeholder that is doing the nudging. */
+.captureField {
+  inline-size: 100%;
+  font: var(--t-title);
+}
+.captureField[data-touch="true"] {
+  font: var(--t-reading);
+}
+
+.chipRow {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sp-2);
+}
+.panelNote {
+  font: var(--t-annot-label);
+  color: var(--text-faint);
+  margin: 0;
+}
+.panelFoot {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+}
+.panelFoot .num {
+  margin-inline-end: auto;
+}
+.keys {
+  inline-size: 72px;
+}
+
+/* ---------- The two confirms ---------- */
+
+.confirm {
+  inline-size: min(420px, 92vw);
+  border: 1px solid var(--line);
+  border-radius: var(--r-lg);
+  background: var(--bg-elev);
+  color: var(--text);
+  padding: var(--sp-4);
+}
+.confirmTitle {
+  font: var(--t-title);
+  margin: 0 0 var(--sp-2);
+}
+.confirmBody {
+  font: var(--t-body);
+  color: var(--text-soft);
+  margin: 0 0 var(--sp-1);
+}
+/* Destructive is OUTLINED and never filled — the one control in this room that
+   takes the danger tone at all. */
+.confirm [data-net="true"],
+.editorFoot [data-net="true"] {
+  border-color: var(--net);
+  color: var(--net);
+}
+
+/* ---------- The editor ---------- */
+
+.editor {
+  max-inline-size: 720px;
+  display: flex;
+  flex-direction: column;
+  padding-block: var(--sp-3);
+}
+.editorTitle {
+  font: var(--t-title);
+  inline-size: 100%;
+  margin-block-end: var(--sp-3);
+}
+.fieldRow {
+  display: flex;
+  gap: var(--sp-3);
+  padding-block: var(--sp-3);
+  border-block-start: 1px solid var(--line);
+}
+.fieldKey {
+  flex: none;
+  inline-size: 132px;
+  font: var(--t-annot-label);
+  color: var(--text-faint);
+}
+.fieldBody {
+  flex: 1;
+  min-inline-size: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+  font: var(--t-body);
+  color: var(--text);
+}
+.fieldNote {
+  font: var(--t-annot-label);
+  color: var(--text-faint);
+}
+
+/* The anchor pair. The selected card takes the raised surface and an ink
+   border — no hue, because a control never carries the app's. */
+.cards {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-2);
+}
+.card {
+  flex: 1 1 240px;
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-1);
+  text-align: start;
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+  background: none;
+  padding: var(--sp-3);
+}
+.card[aria-pressed="true"] {
+  background: var(--bg-elev);
+  border-color: var(--text);
+}
+.cardHead {
+  font: var(--t-label-on);
+  color: var(--text);
+}
+.cardBody {
+  font: var(--t-annot-label);
+  color: var(--text-soft);
+}
+.tagField {
+  inline-size: 140px;
+}
+.editorFoot {
+  display: flex;
+  gap: var(--sp-2);
+  padding-block-start: var(--sp-4);
+}
+
+/* ---------- Catch up ---------- */
+
+.reentry {
+  max-inline-size: 640px;
+  padding-block: var(--sp-3);
+}
+.reentryHead {
+  font: var(--t-title);
+  color: var(--text);
+  margin: 0 0 var(--sp-2);
+}
+.reentryLead,
+.reentryFoot {
+  font: var(--t-body);
+  color: var(--text-soft);
+  margin: 0 0 var(--sp-1);
+}
+
+/* ---------- The reminder surface ---------- */
+
+.notify {
+  max-inline-size: 480px;
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-3);
+  padding-block: var(--sp-3);
+}
+.notifyCard {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-1);
+  background: var(--bg-elev);
+  border: 1px solid var(--line);
+  border-radius: var(--r-lg);
+  padding: var(--sp-3);
+}
+.notifyApp {
+  font: var(--t-eyebrow);
+  letter-spacing: var(--t-eyebrow-tracking);
+  text-transform: var(--t-eyebrow-transform);
+  color: var(--text-faint);
+}
+/* Three controls and NO FILL: a notification is not a place to put the one
+   filled button, because nothing on it is the obvious answer. */
+.notifyActs {
+  display: flex;
+  gap: var(--sp-2);
+  padding-block-start: var(--sp-2);
+}
+
+/* ---------- The consent gate ---------- */
+
+.gate {
+  max-inline-size: 52ch;
+  padding-block: var(--sp-4);
+}
+.gateTitle {
+  font: var(--t-title);
+  margin: 0 0 var(--sp-2);
+}
+.gateBody {
+  font: var(--t-body);
+  color: var(--text-soft);
+  margin: 0 0 var(--sp-1);
+}
+.gateFacts {
+  display: grid;
+  grid-template-columns: 132px 1fr;
+  gap: var(--sp-1) var(--sp-3);
+  font: var(--t-annot-label);
+  color: var(--text-soft);
+  margin-block: var(--sp-3);
+}

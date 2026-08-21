@@ -1,0 +1,115 @@
+/* The Notes chrome's geometry. The shared token layer (--text, --bg, --line,
+   the type ramp, --r-*, --sp-*, --density-*, --ease…) is injected by the
+   shell under `.centraid-inline-scope`, so this file only READS tokens and
+   never loads a sheet of its own. There are no app-local colour tokens here
+   at all: Notes' identity is the wheel slot and the neutrals are the
+   system's paper. */
+
+.shell {
+  composes: kit-app-shell from global;
+  /* THE PAGE MARGIN IS DECLARED ONCE AND INHERITED. Every row that spans the
+     pane reads it, so the toolbar, the banners, the rail and the set line up
+     on one edge instead of each adding its own inset. */
+  --content-margin: var(--sp-5);
+}
+
+/* Notes' identity is SLATE — the wheel slot `app.json`'s colorKey already
+   names and the launcher tile already paints. The hue appears in the app's
+   icon chip and as a content marker, never on a control. The rule doubles the
+   class so it beats the shell's injected `.centraid-inline-scope` block. */
+.shell.shell {
+  --app-hue: 214;
+  --app-identity: var(--c-slate);
+}
+
+/* THE FOCUS RING, ON EVERY INTERACTIVE ELEMENT. 2px, offset 2, in the
+   reserved link hue — the frame's own ring token, never a local outline. */
+.shell :is(button, a, input, textarea, [tabindex]):focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
+}
+
+.main {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+  min-width: 0;
+}
+
+/* The toolbar row: controls and nothing else. No rule, no title and no count
+   of its own — those are the frame's app bar. It renders only when it carries
+   something (Chrome.tsx returns null otherwise), because an empty band with a
+   border under it is furniture pretending to be a header. */
+.toolbar {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  min-height: var(--h-control);
+  padding: var(--sp-2) var(--content-margin);
+}
+
+.banner {
+  margin: 0 var(--content-margin) var(--sp-2);
+}
+
+/* The Search route's own field — the route's first block, not chrome above
+   every other route. */
+.field {
+  margin: var(--sp-3) var(--content-margin) 0;
+  font: var(--t-reading);
+  color: var(--text);
+  background: var(--bg-elev);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--r-md);
+  min-height: var(--target-min);
+  padding: 0 var(--sp-3);
+}
+
+/* The caption under a set: a fact about what is on screen, in annotation
+   ink, never a second title. */
+.caption {
+  font: var(--t-annot-label);
+  color: var(--text-faint);
+  padding: var(--sp-3) var(--content-margin);
+  margin: 0;
+}
+
+/* The content row: the rail and the scroller side by side. The rail is
+   FURNITURE, not an overlay — a column beside the set the member is reading,
+   never a drawer over it. */
+.content {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+  min-width: 0;
+}
+
+.scroll {
+  flex: 1;
+  min-width: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding-bottom: var(--sp-6);
+}
+
+/* The 232px rung, from the system's own rhythm table. On a narrow pane the
+   rail is not drawn at all (the orchestrator passes `null`), so there is no
+   collapsed state to style and no drawer to open. */
+.rail {
+  width: 232px;
+  flex: none;
+  border-inline-end: 1px solid var(--line);
+  overflow-y: auto;
+  padding: var(--sp-3) 0 var(--sp-6);
+}
+
+.isNarrow .rail {
+  display: none;
+}
+
+/* A denied read leaves the set behind the gate quiet: the panel above it is
+   the screen, and the rows beneath must not read as live. */
+.denied .scroll {
+  opacity: var(--o-disabled);
+}

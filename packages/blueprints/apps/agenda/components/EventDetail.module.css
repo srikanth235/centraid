@@ -1,0 +1,138 @@
+/* The detail panel: a column beside the canvas on a wide surface, the full
+   pane below it on a narrow one. */
+
+.detail {
+  flex: none;
+  inline-size: 320px;
+  min-inline-size: 0;
+  border-inline-start: 1px solid var(--line);
+  padding: var(--sp-4);
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-3);
+}
+
+.head {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  min-inline-size: 0;
+}
+
+.title {
+  flex: 1;
+  min-inline-size: 0;
+  margin: 0;
+  font: var(--t-title);
+  letter-spacing: var(--t-title-tracking);
+  color: var(--text);
+}
+
+.when {
+  margin: 0;
+  font: var(--t-small);
+  color: var(--text-soft);
+}
+
+.description {
+  margin: 0;
+  font: var(--t-reading);
+  color: var(--text);
+  white-space: pre-wrap;
+}
+
+.facts {
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+}
+
+.fact {
+  display: flex;
+  gap: var(--sp-3);
+  font: var(--t-body);
+}
+.fact dt {
+  flex: none;
+  inline-size: 9ch;
+  color: var(--text-faint);
+  font: var(--t-annot-label);
+}
+.fact dd {
+  margin: 0;
+  min-inline-size: 0;
+  color: var(--text);
+}
+
+.sectionLabel {
+  margin: 0 0 var(--sp-2);
+  font: var(--t-eyebrow);
+  letter-spacing: var(--t-eyebrow-tracking);
+  text-transform: var(--t-eyebrow-transform);
+  color: var(--text-faint);
+}
+
+.rsvp {
+  display: flex;
+  flex-direction: column;
+}
+
+.guests,
+.attachments {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+}
+
+.guest,
+.attachment {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-2);
+  min-block-size: var(--target-min);
+  font: var(--t-body);
+}
+
+.guestName,
+.attachmentName {
+  min-inline-size: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.guestState {
+  flex: none;
+  font: var(--t-annot-label);
+  color: var(--text-soft);
+}
+
+/* The held cancellation. The attention tone, not the danger one: nothing has
+   gone wrong, something is waiting on a person. */
+.parked {
+  border: 1px solid var(--line);
+  border-inline-start: 2px solid var(--seam);
+  border-radius: var(--r-md);
+  padding: var(--sp-3);
+  background: var(--bg-sunken);
+}
+
+.parkedBody {
+  margin: 0 0 var(--sp-2);
+  font: var(--t-body);
+  color: var(--text-soft);
+}
+
+.foot {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-2);
+  margin-block-start: auto;
+  padding-block-start: var(--sp-3);
+  border-block-start: 1px solid var(--line);
+}

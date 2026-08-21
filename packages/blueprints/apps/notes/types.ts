@@ -117,6 +117,10 @@ export interface AppState {
   noteId: string | null;
   /** The tag lens over the library — never a place, only a filter. */
   conceptId: string | null;
+  /** Unfiled: a PLACE in the spine, expressed as a filter over the library
+   *  window rather than a route of its own — a note that was never filed
+   *  still opens, and it opens from the library it is already in. */
+  unfiledOnly: boolean;
   search: string;
   searchScope: SearchScope;
   searchResults: Note[] | null;

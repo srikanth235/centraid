@@ -1,0 +1,235 @@
+/* The editor (Notes spec §5): a 66ch measure at the reading rung, an
+   unstyled title above it, and a tool row that scrolls rather than wraps. */
+
+.editor {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-3);
+  padding: var(--sp-3) var(--content-margin) var(--sp-6);
+  max-width: 72ch;
+}
+
+/* An UNSTYLED input at the display rung. No border, no ground, no label — the
+   field looks like the title it will become, so naming a note is a touch
+   rather than a mode. */
+.title {
+  font: var(--t-display);
+  letter-spacing: var(--t-display-tracking);
+  color: var(--text);
+  background: transparent;
+  border: none;
+  padding: 0;
+  width: 100%;
+}
+.title::placeholder {
+  color: var(--text-ghost);
+}
+
+.tools {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-1);
+  overflow-x: auto;
+  min-height: var(--h-control);
+}
+
+.tool {
+  min-width: var(--target-min);
+  min-height: var(--target-min);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-faint);
+  border-radius: var(--r-md);
+  font: var(--t-control);
+}
+.tool:hover {
+  color: var(--text);
+}
+
+/* The one outlined control on the row — `[[` is the act this editor exists
+   for. It is not FILLED: the app bar's Link is the filled control in this
+   context, and one view has one fill. */
+.link {
+  font: var(--t-control);
+}
+
+.pending {
+  min-height: 0;
+}
+
+.body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-1);
+}
+
+/* The prose runs. 66ch is the measure the spec names, at the reading rung. */
+.text {
+  font: var(--t-reading);
+  color: var(--text);
+  background: transparent;
+  border: none;
+  padding: 0;
+  resize: none;
+  width: 100%;
+  max-width: 66ch;
+  field-sizing: content;
+}
+
+/* ---------- Checklist rows ---------- */
+
+.check {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--sp-2);
+  min-height: var(--target-min);
+}
+
+/* The box: 20 under a pointer, 26 on touch, at the sub radius. Ink fill when
+   done — never a colour, and never a tick that means a hue. */
+.box {
+  flex: none;
+  width: 20px;
+  height: 20px;
+  margin-top: 4px;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--r-sm);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-inv);
+  font: var(--t-control);
+}
+.box[aria-checked="true"] {
+  background: var(--accent-deep);
+  border-color: var(--accent-deep);
+}
+
+@media (pointer: coarse) {
+  .box {
+    width: 26px;
+    height: 26px;
+  }
+}
+
+.checkText {
+  font: var(--t-reading);
+  color: var(--text);
+  align-self: center;
+}
+/* A done line is struck through and steps back to annotation ink — read as
+   finished, still readable. */
+.checkText[data-done="true"] {
+  color: var(--text-faint);
+  text-decoration: line-through;
+}
+
+/* ---------- Links, passages, files, tags ---------- */
+
+.block {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sp-2);
+  padding-top: var(--sp-2);
+  border-top: 1px solid var(--line);
+}
+
+.reference {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-1);
+  width: 100%;
+}
+
+/* The entity chip: a pill on the sunken ground, in body ink. NEVER the app
+   hue — identity never lands on a control or on a chip standing in prose. */
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-1);
+  background: var(--bg-sunken);
+  border: 1px solid var(--line);
+  border-radius: var(--r-pill);
+  padding: 0 var(--sp-2);
+  min-height: var(--h-segmented);
+  font: var(--t-body);
+  color: var(--text);
+  white-space: nowrap;
+  max-width: 24ch;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.chipDrop {
+  color: var(--text-faint);
+  min-width: var(--sp-4);
+}
+
+/* An anchored passage takes a 2px rule on its leading edge and states where
+   the link came from. */
+.passage {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  border-inline-start: 2px solid var(--line-strong);
+  padding-inline-start: var(--sp-2);
+  margin: 0;
+}
+.passage[data-degraded="true"] {
+  border-inline-start-color: var(--text-faint);
+}
+
+.passageText {
+  font: var(--t-reading);
+  color: var(--text);
+}
+
+.annot {
+  font: var(--t-annot-label);
+  color: var(--text-faint);
+  margin: 0;
+  font-variant-numeric: tabular-nums;
+  unicode-bidi: isolate;
+}
+
+.file {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  min-height: var(--density-row);
+  width: 100%;
+}
+
+.fileName {
+  font: var(--t-body);
+  color: var(--text);
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tagInput {
+  font: var(--t-body);
+  color: var(--text);
+  background: var(--bg-elev);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--r-md);
+  min-height: var(--h-control);
+  padding: 0 var(--sp-2);
+}
+
+.acts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-2);
+  padding-top: var(--sp-3);
+}
+
+.destructive {
+  color: var(--net);
+  border-color: var(--net);
+}

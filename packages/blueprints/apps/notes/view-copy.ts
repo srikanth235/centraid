@@ -107,6 +107,52 @@ export function searchNoMatch(term: string): string {
   return `Nothing matches “${term}”.`;
 }
 
+/** What the results footer says was searched, on this seat. */
+export const SEARCH_SCOPE = "the live library";
+
+/** The resting panel's chips are LITERAL queries: a member can type any of
+ *  them back and this library will answer. */
+export const SEARCH_EXAMPLES: readonly string[] = [
+  "roadmap",
+  "checklist",
+  "anything I wrote in March",
+];
+
+/**
+ * The four states of the Search route, in the product's own words. The
+ * scaffold that renders them (`_shared/SearchScaffold.tsx`) holds no product
+ * noun; every sentence below is this app's.
+ *
+ * A SEARCH THAT COULD NOT RUN NEVER SAYS "NOTHING MATCHES". The unreachable
+ * panel exists so a closed door and an empty shelf are two different
+ * sentences.
+ */
+export const SEARCH_COPY = {
+  resting: {
+    eyebrow: "Nothing typed",
+    title: "Search the half-remembered",
+    body: SEARCH_EMPTY,
+  },
+  searching: {
+    lead: "Searching titles and bodies.",
+    trail: (count: number): string =>
+      count === 1 ? "match so far." : "matches so far.",
+  },
+  miss: {
+    eyebrow: "No results",
+    title: (query: string): string => searchNoMatch(query),
+    body: "Nothing in titles, bodies, notebooks or tags.",
+    clear: "Clear the query",
+  },
+  unreachable: {
+    eyebrow: "Cannot reach the gateway",
+    title: "The index could not be asked",
+    body: "The search index lives on the gateway.",
+    facts: [] as ReadonlyArray<{ label: string; value: string }>,
+    retry: "Search again",
+  },
+};
+
 /** The powerbox's foot. Locker is not one of the seven kinds, and the sheet
  *  says why rather than leaving its absence to be noticed. */
 export const POWERBOX_FOOT =
