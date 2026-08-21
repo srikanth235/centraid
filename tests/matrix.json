@@ -22,6 +22,11 @@
       "seed": "register /centraid/_new-surface without route metadata",
       "failure": "gateway boot coverage throws for the unclassified prefix"
     },
+    "L3": {
+      "command": "bun run test:qualities backup-archaeology schema-migration-corpus",
+      "seed": "truncate the forward migration to VAULT_MIGRATIONS.slice(0, 1), or tamper a census count in scripts/corpora/schema-epoch-census.json",
+      "failure": "the epoch sweep fails at 'expected 1 to be 3'; a tampered census fails the growth-guard and the restore census"
+    },
     "T6": {
       "command": "node node_modules/vitest/vitest.mjs run --project @centraid/server hostile-peer -t 'replayed as a fresh'",
       "seed": "disable PeerLinkTicketStore.claim's conditional DELETE (the single-use burn)",
@@ -552,6 +557,17 @@
           "knob": "packages/vault/src/gateway/portable-export.ts",
           "governance": "waiver-gated",
           "redLastDemonstrated": "2026-08-01"
+        },
+        {
+          "id": "L3",
+          "name": "old formats and old schema epochs still restore",
+          "owner": "tests/quality/schema-migration-corpus.test.ts",
+          "evidence": "every readable snapshot format restores to a matching census; every schema epoch migrates forward to HEAD preserving its census; a vault stamped ahead is refused uncorrupted",
+          "lane": "vitest",
+          "wallClockCost": "low",
+          "knob": "scripts/corpora/schema-epoch-census.json",
+          "governance": "tighten-only",
+          "redLastDemonstrated": "2026-08-21"
         },
         {
           "id": "D7",
@@ -3432,6 +3448,24 @@
       "tier": "unit",
       "owner": "packages/tunnel/src/peer-target-differential.test.ts",
       "minimumTests": 9
+    },
+    {
+      "id": "backup-format-archaeology",
+      "name": "Every readable snapshot format still restores to a census-matching vault",
+      "surface": "backup-restore",
+      "dimension": "compat",
+      "tier": "integration",
+      "owner": "tests/quality/backup-archaeology.test.ts",
+      "minimumTests": 3
+    },
+    {
+      "id": "schema-migration-corpus",
+      "name": "Every schema epoch migrates forward to HEAD preserving its census",
+      "surface": "backup-restore",
+      "dimension": "compat",
+      "tier": "integration",
+      "owner": "tests/quality/schema-migration-corpus.test.ts",
+      "minimumTests": 4
     },
     {
       "id": "hostile-peer-state-machine",
