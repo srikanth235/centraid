@@ -1,0 +1,27 @@
+{
+  "name": "Centraid",
+  "user": "ubuntu",
+  "build": {
+    "dockerfile": "Dockerfile",
+    "context": "."
+  },
+  "install": "./scripts/cloud-agent-install.sh",
+  "start": "./scripts/cloud-agent-start.sh",
+  "ports": [
+    {
+      "name": "gateway-api",
+      "port": 8765
+    },
+    {
+      "name": "gateway-web",
+      "port": 8766
+    }
+  ],
+  "terminals": [
+    {
+      "name": "gateway",
+      "command": "./scripts/cloud-agent-gateway.sh",
+      "description": "Local centraid-gateway daemon with auto-founded Shared + Personal vaults (API :8765, embedded web UI :8766)."
+    }
+  ]
+}
