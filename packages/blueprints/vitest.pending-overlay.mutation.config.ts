@@ -16,7 +16,10 @@ export default defineConfig({
     name: "@centraid/blueprints/pending-overlay-mutation",
     environment: "node",
     pool: "forks",
-    include: ["apps/_shared/pending-overlay.test.ts"],
+    include: [
+      "apps/_shared/pending-overlay.test.ts",
+      "apps/_shared/pending-overlay-law.test.ts",
+    ],
     testTimeout: 60_000,
     expect: { requireAssertions: true },
   },

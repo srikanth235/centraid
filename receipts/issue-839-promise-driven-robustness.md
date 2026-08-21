@@ -31,9 +31,9 @@ Wave 1 — name the flows (G6, G7):
 Wave 2 — raise the adversaries (G4, G5, G9, G10):
 
 - [ ] Mutation seeds extended over the blueprint app layer and mobile logic
-- [ ] Scope-denial sweep generated from the 37 app.json manifests
-- [ ] Egress-dispatch law; policy-cascade property suite
-- [ ] Fuzz runner + committed crasher corpus, wired to a nightly lane
+- [x] Scope-denial sweep generated from the 37 app.json manifests
+- [x] Egress-dispatch law; policy-cascade property suite
+- [x] Fuzz runner + committed crasher corpus, wired to a nightly lane
 
 Wave 3 — prove the joins (G1, G2, G3, G11, G12):
 
@@ -168,6 +168,35 @@ contract claims it. Root integration: `scripts/lint-law-registry.mjs` gains
 `.stryker-tmp` in SKIP_DIRS (Stryker sandboxes copied law-owning suites and
 produced false duplicate-owner findings).
 
+**W2-3 — fuzz runner, crasher corpus, nightly lane (G10).** `scripts/fuzz/`:
+a dependency-light mutation fuzzer (mulberry32-seeded; eight byte strategies
+plus crossover and a structure-aware JSON pass) over six parser/codec targets
+— protocol-handshake, tunnel-wire, cbsf-directory, wal-keys, fts-match, and
+the fts gateway/replica mirror. Work is measured in iterations, never wall
+clock: two runs at the same seed produce byte-identical summaries (proven in
+the replay suite). Targets import built `dist/*.js` by absolute path (the
+design-gallery precedent); `packages/client` alone is emit-declaration-only,
+so its source is imported through a TS resolve hook. 42 committed corpus
+seeds; unseen behaviour signatures promote inputs into a live corpus (capped
+512). Findings partition through `scripts/fuzz/known-findings.json`: a
+registered class is reported non-fatally, an unregistered class fails the
+lane with the base64 repro. `scripts/fuzz/replay.test.mjs` (14 tests) pins
+every committed crasher to its exact class and message and asserts a
+de-registered class runs clean — the can-never-return lock. Nightly wiring:
+new `fuzz-parsers` job in `e2e.yml` (plus a `fuzz` dispatch suite option),
+evidence artifact `nightly-evidence-fuzz`, all enforced by
+`validate-nightly-wiring.mjs` (job present, artifact named, both scripts run,
+artifact path unflattened). Roughly 112M executions across four hunt seeds
+surfaced three genuine product findings, registered open under #839 with
+product code untouched: `wal.closer-roundtrip-rejected` (`CLOSER_KEY_RE`
+admits `closed-000000000000` but `walGroupCloserKey` throws on the parsed
+result — the codec halves disagree; the segment parser has the end-offset
+guard, the closer parser does not), and `fts-mirror.decision` /
+`fts-mirror.expression` (the client replica's token grammar diverges from the
+gateway's: mark-only queries are refused online but searched offline, and
+`don't` tokenizes to one prefix phrase online but two offline, so ranking and
+the 16-token bound apply to different token streams per plane).
+
 ## Out of scope
 
 - Fixing the pre-existing product defects the new adversaries surface — those
@@ -202,6 +231,12 @@ produced false duplicate-owner findings).
   register with the gates that already exist (validate-matrix,
   validate-nightly-wiring, lint-e2e-flows, mutation floors). The one genuinely
   new gate home is the Wave 2 fuzz runner's nightly lane.
+- **The fuzz replay lock runs nightly, not on the PR path.** The crasher
+  replay suite imports built dist artifacts, which the PR gate list does not
+  guarantee; it runs in the `fuzz-parsers` nightly job (`if: always()`)
+  beside the hunt itself. Same posture as mutation floors: adversarial
+  regression locks live in the nightly lane, and validate-nightly-wiring
+  makes their presence structural.
 
 ## Verification
 

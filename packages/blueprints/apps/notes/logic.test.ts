@@ -20,7 +20,9 @@
 // `textContent`, `hidden`) plus `window.centraid`, so it is stood up by hand
 // below; naming that surface exactly is the point, because anything this
 // module reaches for beyond it fails here rather than silently working.
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { useFakeClock } from "@centraid/test-kit/fake-clock";
+import { describe, expect, it, onTestFinished, vi } from "vitest";
+import type { Mock } from "vitest";
 
 import {
   createLogic,
@@ -123,16 +125,19 @@ class StubFileReader {
   }
 }
 
+type WriteFn = (opts: WriteOpts) => Promise<unknown>;
+type ReadFn = (opts: ReadOpts) => Promise<unknown>;
+
 interface Harness {
   state: AppState;
   data: AppData;
   logic: ReturnType<typeof createLogic>;
-  write: ReturnType<typeof vi.fn>;
-  read: ReturnType<typeof vi.fn>;
-  render: ReturnType<typeof vi.fn>;
-  refresh: ReturnType<typeof vi.fn>;
-  status: ReturnType<typeof vi.fn>;
-  go: ReturnType<typeof vi.fn>;
+  write: Mock<WriteFn>;
+  read: Mock<ReadFn>;
+  render: Mock<() => void>;
+  refresh: Mock<() => Promise<void>>;
+  status: Mock<(text: string, undo?: () => void) => void>;
+  go: Mock<(shelf: unknown) => void>;
   banner: () => { text: string; hidden: boolean };
 }
 
@@ -141,21 +146,30 @@ function harness(
   over: {
     state?: Partial<AppState>;
     data?: Partial<AppData>;
-    write?: (opts: WriteOpts) => Promise<unknown>;
-    read?: (opts: ReadOpts) => Promise<unknown>;
+    write?: WriteFn;
+    read?: ReadFn;
+    /** Withhold the frame's notice banner, as a served mount does. */
+    banner?: boolean;
   } = {}
 ): Harness {
   const appState = state(over.state);
   const appData = data(over.data);
-  const write = vi.fn(
+  const write = vi.fn<WriteFn>(
     over.write ?? (async () => ({ status: "executed" }) as VaultOutcome)
   );
-  const read = vi.fn(over.read ?? (async () => ({})));
+  const read = vi.fn<ReadFn>(over.read ?? (async () => ({})));
+  mountBanner(over.banner !== false);
   (globalThis as { window?: unknown }).window = { centraid: { read, write } };
-  const render = vi.fn();
-  const refresh = vi.fn(async () => {});
-  const status = vi.fn();
-  const go = vi.fn();
+  (globalThis as { FileReader?: unknown }).FileReader = StubFileReader;
+  onTestFinished(() => {
+    delete (globalThis as { window?: unknown }).window;
+    delete (globalThis as { document?: unknown }).document;
+    delete (globalThis as { FileReader?: unknown }).FileReader;
+  });
+  const render = vi.fn<() => void>();
+  const refresh = vi.fn<() => Promise<void>>(async () => {});
+  const status = vi.fn<(text: string, undo?: () => void) => void>();
+  const go = vi.fn<(shelf: unknown) => void>();
   return {
     state: appState,
     data: appData,
@@ -180,18 +194,6 @@ function harness(
   };
 }
 
-beforeEach(() => {
-  mountBanner();
-  (globalThis as { FileReader?: unknown }).FileReader = StubFileReader;
-});
-
-afterEach(() => {
-  vi.useRealTimers();
-  delete (globalThis as { window?: unknown }).window;
-  delete (globalThis as { document?: unknown }).document;
-  delete (globalThis as { FileReader?: unknown }).FileReader;
-});
-
 describe("the notice banner is the app's only imperative surface", () => {
   it("shows a sentence and hides itself again on the empty string", () => {
     const app = harness();
@@ -205,8 +207,7 @@ describe("the notice banner is the app's only imperative surface", () => {
   });
 
   it("is a no-op where the frame did not mount one", () => {
-    mountBanner(false);
-    const app = harness();
+    const app = harness({ banner: false });
     expect(() => app.logic.notice("nowhere to put this")).not.toThrow();
   });
 });
@@ -270,7 +271,7 @@ describe("the raw write path", () => {
     const app = harness({ write: async () => ({ status: "parked" }) });
     await app.logic.write("delete-note", { note_id: "n1" });
     expect(app.state.queued).toBe(1);
-    expect(app.refresh).toHaveBeenCalledTimes(1);
+    expect(app.refresh).toHaveBeenCalledOnce();
   });
 
   it("repaints rather than re-reads when the gateway never answered", async () => {
@@ -281,7 +282,7 @@ describe("the raw write path", () => {
     });
     await app.logic.write("delete-note", { note_id: "n1" });
     expect(app.refresh).not.toHaveBeenCalled();
-    expect(app.render).toHaveBeenCalledTimes(1);
+    expect(app.render).toHaveBeenCalledOnce();
   });
 });
 
@@ -480,16 +481,16 @@ describe("a new note is untitled, unfiled and writing immediately", () => {
 
 describe("the editor's continuous save", () => {
   it("coalesces a burst of keystrokes into one write", async () => {
-    vi.useFakeTimers();
+    const clock = useFakeClock();
     const app = harness({
       data: { notes: [note({ note_id: "n1", body: "a" })] },
     });
     app.logic.saveNote("n1", { body_text: "ab" });
     app.logic.saveNote("n1", { body_text: "abc" });
-    await vi.advanceTimersByTimeAsync(599);
+    await clock.advance(599);
     expect(app.write).not.toHaveBeenCalled();
-    await vi.advanceTimersByTimeAsync(1);
-    expect(app.write).toHaveBeenCalledTimes(1);
+    await clock.advance(1);
+    expect(app.write).toHaveBeenCalledOnce();
     expect(app.write.mock.calls[0]?.[0].input).toStrictEqual({
       note_id: "n1",
       body_text: "abc",
@@ -497,11 +498,11 @@ describe("the editor's continuous save", () => {
   });
 
   it("patches the row it already has instead of re-reading the library", async () => {
-    vi.useFakeTimers();
+    const clock = useFakeClock();
     const row = note({ note_id: "n1", body: "old", preview: "old" });
     const app = harness({ data: { notes: [row] } });
     app.logic.saveNote("n1", { body_text: "# Fresh\n- [x] done\n- [ ] todo" });
-    await vi.advanceTimersByTimeAsync(600);
+    await clock.advance(600);
     expect(app.refresh).not.toHaveBeenCalled();
     expect(row.body).toBe("# Fresh\n- [x] done\n- [ ] todo");
     expect(row.check).toStrictEqual({ total: 2, done: 1 });
@@ -509,32 +510,32 @@ describe("the editor's continuous save", () => {
   });
 
   it("applies a title-only save without touching the body", async () => {
-    vi.useFakeTimers();
+    const clock = useFakeClock();
     const row = note({ note_id: "n1", body: "body", title: "old" });
     const app = harness({ data: { notes: [row] } });
     app.logic.saveNote("n1", { title: "new" });
-    await vi.advanceTimersByTimeAsync(600);
+    await clock.advance(600);
     expect(row.title).toBe("new");
     expect(row.body).toBe("body");
   });
 
   it("counts a parked save on the queue and keeps the banner clear", async () => {
-    vi.useFakeTimers();
+    const clock = useFakeClock();
     const app = harness({ write: async () => ({ status: "parked" }) });
     app.logic.notice("stale");
     app.logic.saveNote("n1", { body_text: "x" });
-    await vi.advanceTimersByTimeAsync(600);
+    await clock.advance(600);
     expect(app.state.queued).toBe(1);
     expect(app.banner().text).toBe("");
   });
 
   it("narrates a refused save on the status line", async () => {
-    vi.useFakeTimers();
+    const clock = useFakeClock();
     const app = harness({
       write: async () => ({ status: "denied", reason: "no grant" }),
     });
     app.logic.saveNote("n1", { body_text: "x" });
-    await vi.advanceTimersByTimeAsync(600);
+    await clock.advance(600);
     expect(app.status).toHaveBeenCalledWith("Denied by consent: no grant");
   });
 });
@@ -829,13 +830,13 @@ describe("tags, links and files", () => {
 
 describe("a checkbox is a character in the body", () => {
   it("ticks an unchecked box and re-tallies from the same text", async () => {
-    vi.useFakeTimers();
+    const clock = useFakeClock();
     const row = note({ note_id: "n1", body: "- [ ] milk\n- [x] bread" });
     const app = harness({ data: { notes: [row] } });
     await app.logic.toggleCheck("n1", 0);
     expect(row.body).toBe("- [x] milk\n- [x] bread");
     expect(row.check).toStrictEqual({ total: 2, done: 2 });
-    await vi.advanceTimersByTimeAsync(600);
+    await clock.advance(600);
     expect(app.write.mock.calls[0]?.[0].input).toStrictEqual({
       note_id: "n1",
       body_text: "- [x] milk\n- [x] bread",
@@ -843,6 +844,7 @@ describe("a checkbox is a character in the body", () => {
   });
 
   it("unticks a ticked box, case-insensitively", async () => {
+    useFakeClock();
     const row = note({ note_id: "n1", body: "  * [X] milk" });
     const app = harness({ data: { notes: [row] } });
     await app.logic.toggleCheck("n1", 0);
@@ -893,12 +895,12 @@ describe("send to Tasks", () => {
 
 describe("search never claims an empty result it did not verify", () => {
   it("waits out the burst, then asks the vault once", async () => {
-    vi.useFakeTimers();
+    const clock = useFakeClock();
     const app = harness({ read: async () => ({ notes: [] }) });
     app.logic.runSearch("oa");
     app.logic.runSearch("oat");
-    await vi.advanceTimersByTimeAsync(150);
-    expect(app.read).toHaveBeenCalledTimes(1);
+    await clock.advance(150);
+    expect(app.read).toHaveBeenCalledOnce();
     expect(app.read.mock.calls[0]?.[0]).toStrictEqual({
       query: "search",
       input: { term: "oat" },
@@ -906,50 +908,50 @@ describe("search never claims an empty result it did not verify", () => {
   });
 
   it("goes back to rest on an emptied box without asking anything", async () => {
-    vi.useFakeTimers();
+    const clock = useFakeClock();
     const app = harness({ state: { search: "oat", searchStatus: "ready" } });
     app.logic.runSearch("   ");
-    await vi.advanceTimersByTimeAsync(150);
+    await clock.advance(150);
     expect(app.read).not.toHaveBeenCalled();
     expect(app.state.searchResults).toBeNull();
     expect(app.state.searchStatus).toBe("resting");
   });
 
   it("holds the matches and calls itself ready", async () => {
-    vi.useFakeTimers();
+    const clock = useFakeClock();
     const hit = note({ note_id: "n1" });
     const app = harness({ read: async () => ({ notes: [hit] }) });
     app.logic.runSearch("oat");
-    await vi.advanceTimersByTimeAsync(150);
+    await clock.advance(150);
     expect(app.state.searchResults).toStrictEqual([hit]);
     expect(app.state.searchStatus).toBe("ready");
   });
 
   it("calls a DENIAL unreachable, never 'nothing matches'", async () => {
-    vi.useFakeTimers();
+    const clock = useFakeClock();
     const app = harness({
       read: async () => ({ vaultDenied: { code: "VAULT_CONSENT" } }),
     });
     app.logic.runSearch("oat");
-    await vi.advanceTimersByTimeAsync(150);
+    await clock.advance(150);
     expect(app.state.searchResults).toBeNull();
     expect(app.state.searchStatus).toBe("unreachable");
   });
 
   it("calls a THROW unreachable too", async () => {
-    vi.useFakeTimers();
+    const clock = useFakeClock();
     const app = harness({
       read: async () => {
         throw new Error("offline");
       },
     });
     app.logic.runSearch("oat");
-    await vi.advanceTimersByTimeAsync(150);
+    await clock.advance(150);
     expect(app.state.searchStatus).toBe("unreachable");
   });
 
   it("drops an answer to a query the member has already moved past", async () => {
-    vi.useFakeTimers();
+    const clock = useFakeClock();
     const app: Harness = harness({
       // The member types on while the vault is answering: the sequence moves
       // under the in-flight read, exactly as a second `runSearch` would move it.
@@ -959,7 +961,7 @@ describe("search never claims an empty result it did not verify", () => {
       },
     });
     app.logic.runSearch("oat");
-    await vi.advanceTimersByTimeAsync(150);
+    await clock.advance(150);
     expect(app.state.searchResults).toBeNull();
   });
 
@@ -979,13 +981,13 @@ describe("search never claims an empty result it did not verify", () => {
 
 describe("the [[ powerbox probe", () => {
   it("asks for link targets once the typing settles", async () => {
-    vi.useFakeTimers();
+    const clock = useFakeClock();
     const targets = [
       { type: "task", id: "t1", title: "Oat milk", app: "tasks" },
     ];
     const app = harness({ read: async () => ({ targets }) });
     app.logic.probeTargets("  oat  ");
-    await vi.advanceTimersByTimeAsync(120);
+    await clock.advance(120);
     expect(app.read.mock.calls[0]?.[0]).toStrictEqual({
       query: "link-targets",
       input: { term: "oat" },
@@ -995,7 +997,7 @@ describe("the [[ powerbox probe", () => {
   });
 
   it("empties the candidate list on an emptied term, without asking", async () => {
-    vi.useFakeTimers();
+    const clock = useFakeClock();
     const app = harness({
       state: {
         powerbox: {
@@ -1007,13 +1009,13 @@ describe("the [[ powerbox probe", () => {
       },
     });
     app.logic.probeTargets("");
-    await vi.advanceTimersByTimeAsync(120);
+    await clock.advance(120);
     expect(app.read).not.toHaveBeenCalled();
     expect(app.state.powerbox.targets).toStrictEqual([]);
   });
 
   it("empties the candidate list rather than keeping stale ones when the read threw", async () => {
-    vi.useFakeTimers();
+    const clock = useFakeClock();
     const app = harness({
       state: {
         powerbox: {
@@ -1028,7 +1030,7 @@ describe("the [[ powerbox probe", () => {
       },
     });
     app.logic.probeTargets("oat");
-    await vi.advanceTimersByTimeAsync(120);
+    await clock.advance(120);
     expect(app.state.powerbox.targets).toStrictEqual([]);
   });
 });

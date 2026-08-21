@@ -6,7 +6,10 @@ export default {
     configFile: "vitest.pending-overlay.mutation.config.ts",
     related: false,
   },
-  testFiles: ["apps/_shared/pending-overlay.test.ts"],
+  testFiles: [
+    "apps/_shared/pending-overlay.test.ts",
+    "apps/_shared/pending-overlay-law.test.ts",
+  ],
   // The one engine that decides what a member sees between pressing a control
   // and the vault answering (#738): which pending intent decorates which row,
   // what a retained failure may still offer (retry / discard), and when an
