@@ -8,6 +8,10 @@
     "SH": "the built shell's #ui-preview component gallery, pointer viewport",
     "SH-c": "the built shell's #ui-preview component gallery, compact viewport"
   },
+  "fidelityLanes": {
+    "cjk": "the SH surface under Japanese copy — the one face's mandatory CJK fallbacks reach every rendered stack, and no role's rung moves with the glyphs",
+    "rtl": "the SH surface under dir=rtl — every asymmetric box mirrors, no physical text alignment survives the flip, and the numeric register keeps its pinned direction and its bidi isolate"
+  },
   "entries": [
     {
       "id": "sh-light",

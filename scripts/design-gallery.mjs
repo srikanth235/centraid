@@ -46,7 +46,12 @@ import path from "node:path";
 import { chromium } from "playwright";
 import { PNG } from "pngjs";
 
-import { fonts, typeForSurface } from "../packages/design/src/index.ts";
+import {
+  fonts,
+  fontStacks,
+  typeForSurface,
+} from "../packages/design/src/index.ts";
+import { runFidelityLanes } from "./design-gallery-fidelity.mjs";
 import { captureLowering } from "./design-gallery-lowering.mjs";
 
 const ROOT = path.resolve(import.meta.dirname, "..");
@@ -418,9 +423,12 @@ const GALLERY_BLOCK_LABELS = [
 const FREEZE_MOTION =
   "*, *::before, *::after { animation: none !important; transition: none !important; caret-color: transparent !important; }";
 
+/** Where `boot.tsx` mounts the in-product component gallery. */
+const PREVIEW_HOST = "#react-preview-root";
+
 async function captureShell(page, origin, entry) {
   await page.goto(`${origin}/#ui-preview`, { waitUntil: "load" });
-  const host = "#react-preview-root";
+  const host = PREVIEW_HOST;
   await page.locator(`${host} > *`).waitFor();
   // The scheme is the product's own attribute, set the way the renderer sets
   // it once it has read the member's preference.
@@ -476,6 +484,15 @@ async function main() {
       SH: "the built shell's #ui-preview component gallery, pointer viewport",
       "SH-c":
         "the built shell's #ui-preview component gallery, compact viewport",
+    },
+    // Read from the SAME surface the SH lane photographs, with the document
+    // direction flipped and the copy replaced by CJK. They take no baseline:
+    // what the rulebook binds under RTL and CJK is a set of invariants, not an
+    // appearance, so they are asserted as values rather than compared as
+    // pixels. See scripts/design-gallery-fidelity.mjs.
+    fidelityLanes: {
+      cjk: "the SH surface under Japanese copy — the one face's mandatory CJK fallbacks reach every rendered stack, and no role's rung moves with the glyphs",
+      rtl: "the SH surface under dir=rtl — every asymmetric box mirrors, no physical text alignment survives the flip, and the numeric register keeps its pinned direction and its bidi isolate",
     },
     entries,
   };
@@ -546,6 +563,30 @@ async function main() {
         }),
       Promise.resolve()
     );
+    // After the captures, never instead of them: a fidelity finding is a
+    // statement about the surface, and it must not stop a baseline being
+    // written or compared. One more page on an already-warm browser and an
+    // already-built dist, which is why this rides inside `design:gallery`
+    // rather than standing up a second gate with its own vite build.
+    const fidelityPage = await browser.newPage({
+      colorScheme: "light",
+      deviceScaleFactor: 1,
+      viewport: VIEWPORTS.desktop,
+    });
+    await fidelityPage.emulateMedia({ reducedMotion: "reduce" });
+    try {
+      failures.push(
+        ...(await runFidelityLanes(fidelityPage, origin, {
+          freezeMotion: FREEZE_MOTION,
+          host: PREVIEW_HOST,
+          legalTypeTriples: assertLegalTypeTriples,
+          productFaceResolved: assertProductFaceResolved,
+          sansStack: fontStacks.sans,
+        }))
+      );
+    } finally {
+      await fidelityPage.close();
+    }
   } finally {
     await browser.close();
     server.close();
