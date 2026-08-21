@@ -196,6 +196,7 @@ export const MUTATION_SEEDS = [
       "packages/core/src/time/timezone.ts",
       "packages/core/src/time/recurrence.test.ts",
       "packages/core/src/time/recurrence-properties.test.ts",
+      "packages/core/src/time/recurrence-lifecycle-properties.test.ts",
       "packages/core/src/time/timezone-properties.test.ts",
       "packages/core/stryker.time.config.mjs",
       "packages/core/vitest.time.mutation.config.ts",

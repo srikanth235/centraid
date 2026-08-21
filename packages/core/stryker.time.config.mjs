@@ -6,6 +6,7 @@ export default {
   testFiles: [
     "src/time/recurrence.test.ts",
     "src/time/recurrence-properties.test.ts",
+    "src/time/recurrence-lifecycle-properties.test.ts",
     "src/time/timezone-properties.test.ts",
   ],
   mutate: [
