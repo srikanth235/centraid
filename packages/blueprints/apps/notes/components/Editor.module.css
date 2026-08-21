@@ -79,11 +79,35 @@
 
 /* ---------- Checklist rows ---------- */
 
+/* The row a checklist line stands in: the line itself, and — only where the
+   line wants a date — the quiet control that hands it to Tasks. */
+.checkRow {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--sp-2);
+  min-inline-size: 0;
+}
+
 .check {
   display: flex;
   align-items: flex-start;
   gap: var(--sp-2);
   min-height: var(--target-min);
+  flex: 1;
+  min-inline-size: 0;
+}
+
+/* Underlined rather than boxed: it is a way OUT of this surface, not one of
+   the editor's own verbs, and the editor already spends its one outlined
+   control on `[[`. */
+.toTask {
+  flex: none;
+  min-height: var(--target-min);
+  font: var(--t-annot);
+  color: var(--text-soft);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  white-space: nowrap;
 }
 
 /* The box: 20 under a pointer, 26 on touch, at the sub radius. Ink fill when

@@ -7,15 +7,18 @@
 // `agenda-band.ts` and honoured here.
 //
 // THE GRID IS FOR THINGS WITH A TIME COST: every row below came from
-// `core.event`. The day-context layers — birthdays, due tasks, holidays —
-// are not read on this surface yet; when they are they decorate a day header,
-// never become a row.
+// `core.event`. The day-context layers decorate a day and NEVER become a row
+// (#834): a birthday rides the day header as a ribbon, and the member's own
+// tasks coming due sit under it as one collapsed shelf that opens on tap. A
+// tap-through leaves for Tasks, which is the room that owns the task —
+// Agenda shows the fact and never edits it.
 //
 // The held-write mark is drawn INLINE (a 2pt inline-start rule and the words),
 // not through a shared component: it is two elements, and a kit file for it
 // would be a dependency for nothing.
 
-import React, { memo, useCallback, useMemo, useState } from "react";
+import AsyncStorage from "@react-native-async-storage/async-storage";
+import React, { memo, useCallback, useEffect, useMemo, useState } from "react";
 import { FlatList, Pressable, View } from "react-native";
 import type { ListRenderItemInfo } from "react-native";
 
@@ -35,12 +38,23 @@ import {
 } from "../../kit/replica/write-outcome";
 import { t, useTheme } from "../../kit/theme";
 import type { ThemeColors } from "../../kit/theme";
+import {
+  BIRTHDAY_LEAD_DEFAULT_DAYS,
+  BIRTHDAY_LEADS,
+  leadLabel,
+} from "../../lib/birthday-notifications";
 import type { AgendaScreenProps } from "../../navigation";
 import type { AgendaBandDestinationKey } from "./agenda-band";
 import AgendaBand from "./AgendaBand";
 import AgendaCreateModal from "./AgendaCreateModal";
 import type { AgendaCreateInput } from "./AgendaCreateModal";
+import AgendaDayContext, {
+  DayRibbon,
+  useBirthdayNotifications,
+} from "./AgendaDayContext";
 import { styles } from "./AgendaHome.styles";
+import { birthdaysOn, dayKeyOf as contextDayKey, dueOn } from "./day-context";
+import type { DueRow, RibbonFact } from "./day-context";
 import type { NativeAgendaEvent } from "./useAgenda";
 import { useAgenda } from "./useAgenda";
 
@@ -52,6 +66,10 @@ interface AgendaDay {
   key: string;
   date: Date;
   events: NativeAgendaEvent[];
+  /** The day's costless facts. Empty is the common case, and it draws
+   *  nothing at all rather than an empty container. */
+  ribbon: RibbonFact[];
+  due: DueRow[];
 }
 
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -59,6 +77,9 @@ const dayKeyOf = (row: AgendaDay): string => row.key;
 /** One shared identity for "nothing to list": a fresh `[]` per render would
  *  make FlatList re-diff a list it already knows is empty. */
 const NO_DAYS: AgendaDay[] = [];
+/** Where the phone keeps its own birthday lead, and the row that opens it. */
+const BIRTHDAY_LEAD_KEY = "centraid:birthday-lead-days:v1";
+const BIRTHDAY_LEAD_ROW = "birthday-lead";
 
 function startOfDay(date: Date): Date {
   const next = new Date(date);
@@ -99,6 +120,11 @@ export default function AgendaHome({
   const [refreshing, setRefreshing] = useState(false);
   const [createOpen, setCreateOpen] = useState(false);
   const [moreOpen, setMoreOpen] = useState(false);
+  /** How far ahead the phone tells the member about an inner-circle birthday.
+   *  A DEVICE preference by construction: reminder delivery is the phone's
+   *  alone, so the lead belongs to the phone that delivers it (#834). */
+  const [leadOpen, setLeadOpen] = useState(false);
+  const [leadDays, setLeadDays] = useState(BIRTHDAY_LEAD_DEFAULT_DAYS);
   /** Calendars the member has switched off. The rail that carries this on a
    *  pointer surface has no room on the phone, so it lives in the band's
    *  overflow sheet — a filter is not a destination. */
@@ -116,6 +142,24 @@ export default function AgendaHome({
   }, [anchor, surface]);
 
   const agenda = useAgenda(range[0], range[1]);
+
+  // The member's stored lead, read once. An unreadable store is not an error:
+  // the default lead is a real answer, and the notification still lands.
+  useEffect(() => {
+    let cancelled = false;
+    void AsyncStorage.getItem(BIRTHDAY_LEAD_KEY)
+      .then((raw) => {
+        const days = Number(raw);
+        if (!cancelled && raw !== null && Number.isFinite(days))
+          setLeadDays(days);
+      })
+      .catch(() => undefined);
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useBirthdayNotifications(agenda.parties, agenda.starred, leadDays);
 
   const visible = useMemo(() => {
     const needle = query.trim().toLowerCase();
@@ -140,7 +184,7 @@ export default function AgendaHome({
     surface,
   ]);
 
-  // One row per DAY, each carrying its own events.
+  // One row per DAY, each carrying its own events and its own decorations.
   const days = useMemo<AgendaDay[]>(() => {
     const out: AgendaDay[] = [];
     let current: AgendaDay | undefined;
@@ -148,13 +192,25 @@ export default function AgendaHome({
       const date = new Date(event.start);
       const key = date.toDateString();
       if (current?.key !== key) {
-        current = { key, date, events: [] };
+        const dayKey = contextDayKey(date);
+        current = {
+          key,
+          date,
+          events: [],
+          ribbon: birthdaysOn(dayKey, agenda.parties, agenda.starred),
+          due: dueOn(dayKey, agenda.dueTasks),
+        };
         out.push(current);
       }
       current.events.push(event);
     }
     return out;
-  }, [visible]);
+  }, [agenda.dueTasks, agenda.parties, agenda.starred, visible]);
+
+  /** Hand a task to Tasks. A NAVIGATION, never an edit. */
+  const openTask = useCallback((): void => {
+    navigation.navigate("Tasks");
+  }, [navigation]);
 
   const openEvent = useCallback(
     (event: NativeAgendaEvent): void => {
@@ -213,9 +269,14 @@ export default function AgendaHome({
 
   const renderDay = useCallback(
     ({ item }: ListRenderItemInfo<AgendaDay>): React.JSX.Element => (
-      <AgendaDayRow day={item} colors={colors} onOpen={openEvent} />
+      <AgendaDayRow
+        day={item}
+        colors={colors}
+        onOpen={openEvent}
+        onOpenTask={openTask}
+      />
     ),
-    [colors, openEvent]
+    [colors, openEvent, openTask]
   );
 
   const listData = agenda.connection === "unavailable" ? NO_DAYS : days;
@@ -326,16 +387,27 @@ export default function AgendaHome({
       <OptionSheet
         visible={moreOpen}
         title="Calendars"
-        options={agenda.calendars.map((calendar) => {
-          const id = String(calendar["calendar_id"] ?? "");
-          return {
-            id,
-            label: String(calendar["name"] ?? "Calendar"),
-            detail: hiddenCalendars.has(id) ? "Hidden" : "Shown",
-          };
-        })}
+        options={[
+          ...agenda.calendars.map((calendar) => {
+            const id = String(calendar["calendar_id"] ?? "");
+            return {
+              id,
+              label: String(calendar["name"] ?? "Calendar"),
+              detail: hiddenCalendars.has(id) ? "Hidden" : "Shown",
+            };
+          }),
+          {
+            id: BIRTHDAY_LEAD_ROW,
+            label: "Birthday reminder",
+            detail: `Inner circle · ${leadLabel(leadDays)} ahead`,
+          },
+        ]}
         onSelect={(id) => {
           setMoreOpen(false);
+          if (id === BIRTHDAY_LEAD_ROW) {
+            setLeadOpen(true);
+            return;
+          }
           setHiddenCalendars((current) => {
             const next = new Set(current);
             if (next.has(id)) next.delete(id);
@@ -344,6 +416,29 @@ export default function AgendaHome({
           });
         }}
         onClose={() => setMoreOpen(false)}
+      />
+
+      {/* Only the inner circle notifies; everyone else stays a ribbon on the
+          day, which is what the sheet's own line says. */}
+      <OptionSheet
+        visible={leadOpen}
+        title="Birthday reminder"
+        selectedId={String(leadDays)}
+        options={BIRTHDAY_LEADS.map((lead) => ({
+          id: String(lead.days),
+          label: lead.label,
+          detail: lead.days === 0 ? "On the day" : "Ahead of the day",
+        }))}
+        onSelect={(id) => {
+          setLeadOpen(false);
+          const days = Number(id);
+          if (!Number.isFinite(days)) return;
+          setLeadDays(days);
+          void AsyncStorage.setItem(BIRTHDAY_LEAD_KEY, id).catch(
+            () => undefined
+          );
+        }}
+        onClose={() => setLeadOpen(false)}
       />
 
       {createOpen ? (
@@ -379,10 +474,12 @@ const AgendaDayRow = memo(
     day,
     colors,
     onOpen,
+    onOpenTask,
   }: {
     day: AgendaDay;
     colors: ThemeColors;
     onOpen: (event: NativeAgendaEvent) => void;
+    onOpenTask: () => void;
   }): React.JSX.Element => {
     const now = new Date();
     const isToday = day.date.toDateString() === now.toDateString();
@@ -413,6 +510,16 @@ const AgendaDayRow = memo(
           </Text>
         </View>
         <View style={styles.eventsCol}>
+          <DayRibbon facts={day.ribbon} colors={colors} />
+          {/* THE SHELF. Collapsed to a count; the names arrive on tap, and a
+              row hands the task to the room that owns it. */}
+          {day.due.length > 0 ? (
+            <AgendaDayContext
+              due={day.due}
+              colors={colors}
+              onOpenTask={onOpenTask}
+            />
+          ) : null}
           {day.events.map((event, index) => (
             <React.Fragment key={event.instanceKey}>
               {/* THE NOW LINE, on the one day that is today: a hairline in

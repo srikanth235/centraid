@@ -17,6 +17,7 @@ import {
 } from "../../kit/hooks/useReplicaQuery";
 import type { AgendaEventModel } from "../../kit/schedule/recurrence";
 import { expandEvent } from "../../kit/schedule/recurrence";
+import { starredParties } from "./day-context";
 
 const value = <T>(row: ReplicaRow, key: string): T | undefined =>
   row[key] as T | undefined;
@@ -43,6 +44,17 @@ export function useAgenda(rangeStart: Date, rangeEnd: Date) {
   // `core.vault` is granted to the agenda shape, so this rides the same
   // offline replica as everything else.
   const vault = useAgendaEntity("core.vault");
+  // THE DAY-CONTEXT LAYERS (#834). Costless facts that decorate a day and
+  // never become a row: the member's own open tasks coming due, and the
+  // starred-flag vocabulary that answers a birthday's relationship tier.
+  // `core.party` is already read above for the guest list. Every entity here
+  // is inside Agenda's declared read scopes, and this seat's replica holds the
+  // member's OWN rows — which is what makes the shelf obey R-shelf-scope
+  // without a scope argument of its own.
+  const tasks = useAgendaEntity("schedule.task");
+  const tags = useAgendaEntity("core.tag");
+  const concepts = useAgendaEntity("core.concept");
+  const schemes = useAgendaEntity("core.concept_scheme");
 
   const queryState = combineReplicaQueryStates([
     events,
@@ -125,9 +137,18 @@ export function useAgenda(rangeStart: Date, rangeEnd: Date) {
     [events.rows, eventExtensions.rows, exceptions.rows, rangeEnd, rangeStart]
   );
 
+  // The starred set is derived once per read rather than per day row: it is a
+  // fact about the vault, not about a day.
+  const starred = useMemo(
+    () => starredParties(schemes.rows, concepts.rows, tags.rows),
+    [concepts.rows, schemes.rows, tags.rows]
+  );
+
   return {
     events: rows,
     canonicalEvents: events.rows,
+    dueTasks: tasks.rows,
+    starred,
     attendees: attendees.rows,
     eventExtensions: eventExtensions.rows,
     parties: parties.rows,

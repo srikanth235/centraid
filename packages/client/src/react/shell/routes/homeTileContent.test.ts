@@ -146,6 +146,9 @@ describe("shell/routes/homeTileContent", () => {
       }),
     });
     expect(content.tasks).toStrictEqual({
+      // UNDATED TASKS NEVER TOUCH TODAY (#834): none of these rows carries a
+      // due date, so the glance says nothing rather than "0 today".
+      glance: { next: "", today: "" },
       rows: [
         { done: false, title: "Renew passport" },
         { done: false, title: "Pack" },
@@ -153,6 +156,40 @@ describe("shell/routes/homeTileContent", () => {
       ],
       total: 2,
     });
+  });
+
+  it("glances at today's pile and the next dated row", async () => {
+    const today = new Date().toISOString().slice(0, 10);
+    const soon = new Date(Date.now() + 3 * 86_400_000)
+      .toISOString()
+      .slice(0, 10);
+    const content = await loadHomeTileContent({
+      reader: readerOf({
+        "schedule.task": [
+          {
+            due_at: today,
+            status: "needs-action",
+            task_id: "t1",
+            title: "Renew passport",
+          },
+          {
+            due_at: today,
+            status: "in-process",
+            task_id: "t2",
+            title: "Pack",
+          },
+          {
+            due_at: soon,
+            status: "needs-action",
+            task_id: "t3",
+            title: "Sign the transfer",
+          },
+          { status: "needs-action", task_id: "t4", title: "Someday" },
+        ],
+      }),
+    });
+    expect(content.tasks?.glance.today).toBe("2 today");
+    expect(content.tasks?.glance.next).toContain("next · Sign the transfer");
   });
 
   it("takes the newest note and document by their own update stamps", async () => {

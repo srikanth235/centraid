@@ -48,6 +48,7 @@ interface RawTag {
 interface RawTask {
   task_id: string;
   status?: string;
+  title?: string;
   due_at?: string | null;
 }
 
@@ -62,9 +63,21 @@ interface BirthdayFact {
   tier: RelationshipTier;
 }
 
+/** One row behind a day's shelf. Identity and title only: Agenda decorates a
+ *  day with it and hands the tap-through to Tasks, which is the room that owns
+ *  the task — so nothing else about it is projected here. */
+interface DueTask {
+  task_id: string;
+  title: string;
+}
+
 interface DueFact {
   day: string;
+  /** Every open task due that day, however few are listed. */
   count: number;
+  /** The first `SHELF_CAP` of them, in due order. A shelf lists; it never
+   *  becomes a second task board with paging of its own. */
+  tasks: DueTask[];
 }
 
 interface HolidayFact {
@@ -98,6 +111,9 @@ const DEFAULT_RANGE_DAYS = 45;
 const PARTY_CAP = 2000;
 const TASK_CAP = 2000;
 const TAG_CAP = 5000;
+/** Rows one day's shelf lists behind its count. A day with nineteen due tasks
+ *  says nineteen and lists the first few; the room that pages them is Tasks. */
+const SHELF_CAP = 8;
 
 /** The statuses a task must be in to count as still coming due. */
 const OPEN_STATUSES = ["needs-action", "in-process"];
@@ -191,6 +207,9 @@ export default async function dayContext({
           { column: "due_at", op: "gte", value: from },
           { column: "due_at", op: "lt", value: dueUpper },
         ],
+        // Due order, so the rows a shelf lists behind its count are the day's
+        // earliest rather than whatever the table happened to hand back.
+        orderBy: { column: "due_at", dir: "asc" },
         limit: TASK_CAP,
         purpose,
       }),
@@ -263,15 +282,20 @@ export default async function dayContext({
     // the day of the instant it stores. Days with no due task are absent
     // rather than zero-filled — the shelf draws marks, not a histogram.
     const counts = new Map<string, number>();
+    const listed = new Map<string, DueTask[]>();
     for (const task of (tasks.rows ?? []) as unknown as RawTask[]) {
       if (task.status !== undefined && !OPEN_STATUSES.includes(task.status))
         continue;
       const day = dayOf(task.due_at);
       if (!day || day < from || day > to) continue;
       counts.set(day, (counts.get(day) ?? 0) + 1);
+      const rows = listed.get(day) ?? [];
+      if (rows.length < SHELF_CAP)
+        rows.push({ task_id: task.task_id, title: task.title ?? "" });
+      listed.set(day, rows);
     }
     const due: DueFact[] = [...counts.entries()]
-      .map(([day, count]) => ({ day, count }))
+      .map(([day, count]) => ({ day, count, tasks: listed.get(day) ?? [] }))
       .toSorted((left, right) => left.day.localeCompare(right.day));
 
     // Holidays have NO source in the vault today. There is no holiday feed,

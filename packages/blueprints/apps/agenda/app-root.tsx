@@ -8,10 +8,18 @@
 // filled verb are contributed through `frame.tsx`, outcomes go to the frame's
 // single status line, and the shell's stem is the only navigation.
 //
-// WAVE BOUNDARY. The day-context layers — birthdays from People, due tasks
-// from Tasks, subscribed holidays — are NOT dispatched here. The seams they
-// mount into are real and named: `Chrome`'s `dayContext` rail slot, and the
-// `dayRibbon` / `dayShelf` props the grids and the lists already accept.
+// THE DAY-CONTEXT LAYERS mount here (#834): `day-context` is dispatched
+// alongside `upcoming` over the same window, and its facts reach the views
+// through `Chrome`'s `dayContext` rail slot and the `dayRibbon` / `dayShelf`
+// props the grids and the lists accept. They are a SECOND read, not a second
+// store: the layers decorate days, they never become event rows, and a read
+// that is refused degrades to no decoration rather than to a broken rail.
+//
+// SCOPE (#834 R-shelf-scope). The due counts are read on the PERSONAL scope
+// only — Agenda is a single-scope mount (`app-inline.tsx` sets no
+// `multiScope`), so `window.centraid.read` addresses the member's own vault
+// and there is deliberately no `readAll` fan-out. A shelf that counted other
+// people's work would reintroduce "someone should, so no one does".
 
 import { useCallback, useEffect, useReducer, useRef, useState } from "react";
 import type { ReactElement, ReactNode } from "react";
@@ -30,6 +38,7 @@ import { LoadingSkeleton } from "../_shared/LoadingSkeleton.tsx";
 import { readPendingOverlay } from "../_shared/pending-overlay.ts";
 import type { InlineAppProps } from "../inline-types.ts";
 import { Chrome } from "./Chrome.tsx";
+import { DayRibbon, DayShelf, LayerToggles } from "./components/DayContext.tsx";
 import { EventDetail } from "./components/EventDetail.tsx";
 import { EventEditor } from "./components/EventEditor.tsx";
 import { MonthGrid, TimeGrid } from "./components/Grid.tsx";
@@ -38,10 +47,18 @@ import { MoreSheet } from "./components/MoreSheet.tsx";
 import { QuickAdd } from "./components/QuickAdd.tsx";
 import { CalendarList, MiniMonth } from "./components/Rail.tsx";
 import { EmptyState } from "./components/Shared.tsx";
+import {
+  dueCountFor,
+  dueTasksFor,
+  NO_DAY_CONTEXT,
+  ribbonsFor,
+} from "./day-context.ts";
+import type { DayContextData, LayerId } from "./day-context.ts";
 import type { RsvpAnswer } from "./edits.ts";
 import { calendarHue, localDayKey, rangeLabel } from "./format.ts";
 import { appBar, bandClaim } from "./frame.tsx";
 import { createLogic } from "./logic.ts";
+import { createMemberPrefs } from "./member-prefs.ts";
 import type {
   AgEvent,
   AppData,
@@ -140,6 +157,10 @@ export function Root({
    *  state and it names the slice; it never pretends the merge was whole. */
   const [deniedCalendars, setDeniedCalendars] = useState<readonly string[]>([]);
 
+  /** Which day's shelf the member has opened. ONE at a time and per day: a
+   *  shelf is a glance, and every day expanded at once is a second task list. */
+  const [openShelf, setOpenShelf] = useState<string | null>(null);
+
   const rootElRef = useRef<HTMLDivElement | null>(null);
   const attachInputRef = useRef<HTMLInputElement | null>(null);
   const skeletonRef = useRef<HTMLDivElement | null>(null);
@@ -158,6 +179,15 @@ export function Root({
   });
   const stateRef = useRef<AppState>(makeState(defaultView(false)));
   const logicRef = useRef<ReturnType<typeof createLogic> | null>(null);
+  /** The day-context facts, and whether the layers may be offered at all. A
+   *  refused or unreachable read leaves this at `NO_DAY_CONTEXT` and
+   *  `layersReady` false, which draws the rail's empty line — never switches
+   *  over facts the app does not have. */
+  const dayContextRef = useRef<DayContextData>(NO_DAY_CONTEXT);
+  const [layersReady, setLayersReady] = useState(false);
+  const prefsRef = useRef<ReturnType<typeof createMemberPrefs> | null>(null);
+  prefsRef.current ??= createMemberPrefs(() => bump());
+  const layers = prefsRef.current.read().layers;
 
   const state = stateRef.current;
   const data = dataRef.current;
@@ -225,10 +255,36 @@ export function Root({
       bump();
     };
 
+    /**
+     * The layers, over the same window. Settled on its OWN — the calendar is
+     * the read that matters, and a denied People or Tasks slice must leave the
+     * grid drawn and merely undecorated. `vaultDenied` comes back inside the
+     * payload rather than as a throw, so both refusals land in one place.
+     */
+    const applyContext = (next: DayContextData | null): void => {
+      if (seq !== loadSeqRef.current) return;
+      const usable = next && !next.vaultDenied;
+      dayContextRef.current = usable ? next : NO_DAY_CONTEXT;
+      setLayersReady(Boolean(usable));
+      bump();
+    };
+
     const range = rangeForView(
       resolveView(stateRef.current.view, compact),
       stateRef.current.anchorDay
     );
+    // The day window the decorations are asked for, as the projection's own
+    // `{from, to}` day keys rather than the calendar's instants. Schedule and
+    // Waiting on have no upper bound, and the query's own forward runway is
+    // the honest answer there rather than a bound invented here.
+    const contextRange = {
+      from: localDayKey(new Date(range.from)),
+      ...(range.to ? { to: localDayKey(new Date(range.to)) } : {}),
+    };
+    void window.centraid
+      .read<DayContextData>({ query: "day-context", input: contextRange })
+      .then(applyContext)
+      .catch(() => applyContext(null));
     try {
       const read = window.centraid.read<UpcomingData>({
         query: "upcoming",
@@ -413,6 +469,20 @@ export function Root({
     []
   );
 
+  const toggleLayer = useCallback((id: LayerId) => {
+    prefsRef.current?.toggleLayer(id);
+  }, []);
+
+  /** Hand a task to Tasks. The tap-through is a NAVIGATION, never an edit:
+   *  Agenda shows that a task comes due and the task's own room owns it. The
+   *  door is absent on hosts that offer no way to leave the app, and then no
+   *  shelf row is drawn as a control at all. */
+  const openInTasks = window.centraid.openApp
+    ? (taskId: string): void => {
+        window.centraid.openApp?.("tasks", { taskId });
+      }
+    : undefined;
+
   const pendingFor = useCallback(
     (ev: AgEvent) =>
       readPendingOverlay(ev as unknown as Record<string, unknown>) as
@@ -470,6 +540,26 @@ export function Root({
     : null;
   const searching = state.search.trim() !== "";
 
+  // ---- the day-context seams ----
+  // Both are plain closures over this render's facts, so switching a layer off
+  // removes its ribbon or its shelf on the next paint and touches nothing else.
+  const dayContext = dayContextRef.current;
+  const dayRibbon = (dayKey: string): ReactNode => (
+    <DayRibbon facts={ribbonsFor(dayKey, dayContext, layers)} />
+  );
+  const dayShelf = (dayKey: string): ReactNode => (
+    <DayShelf
+      dayKey={dayKey}
+      count={dueCountFor(dayKey, dayContext, layers)}
+      tasks={dueTasksFor(dayKey, dayContext, layers)}
+      open={openShelf === dayKey}
+      onToggle={(key) =>
+        setOpenShelf((current) => (current === key ? null : key))
+      }
+      {...(openInTasks ? { onOpenTask: openInTasks } : {})}
+    />
+  );
+
   let canvas: ReactNode;
   if (!loaded) {
     canvas = (
@@ -504,6 +594,8 @@ export function Root({
         onOpen={openEvent}
         onQuickAdd={openQuick}
         onPickDay={pickDay}
+        dayRibbon={dayRibbon}
+        dayShelf={dayShelf}
       />
     );
   } else if (view === "week" || view === "day") {
@@ -520,6 +612,8 @@ export function Root({
         isPending={(ev) => pendingFor(ev) !== undefined}
         onOpen={openEvent}
         onQuickAdd={openQuick}
+        dayRibbon={dayRibbon}
+        dayShelf={dayShelf}
       />
     );
   } else {
@@ -530,6 +624,7 @@ export function Root({
         pendingFor={pendingFor}
         onOpen={openEvent}
         showAwaiting={view === "waiting"}
+        dayShelf={dayShelf}
       />
     );
   }
@@ -703,8 +798,15 @@ export function Root({
               onToggle={toggleCalendar}
             />
           ),
-          // THE SEAM. One line until the layers mount here.
-          dayContext: <span>{RAIL_DAY_CONTEXT_EMPTY}</span>,
+          // THE LAYERS. Switches only once the projection has actually
+          // answered: a refused or unreachable read leaves the section saying
+          // what is true — nothing is decorating these days — rather than
+          // offering three toggles that would change nothing.
+          dayContext: layersReady ? (
+            <LayerToggles layers={layers} onToggle={toggleLayer} />
+          ) : (
+            <span>{RAIL_DAY_CONTEXT_EMPTY}</span>
+          ),
           stateRow,
           canvas,
           detail: selected ? (

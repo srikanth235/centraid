@@ -76,6 +76,14 @@ export function editorStatus(versions: number): string {
 
 export const PENDING_CHIP = "Saved on this device · queued for the vault";
 
+/** The release valve for checklist necrosis: a line that wants a date stops
+ *  being note content and becomes a real task. One to-do system in the house,
+ *  so the control names the room it hands the line to. */
+export const SEND_TO_TASKS = "Send to Tasks";
+export function sentToTasks(title: string): string {
+  return `“${title}” is a task now · receipt`;
+}
+
 export function pendingStatus(queued: number): string {
   return `${queued} writes queued on this device · they settle when the gateway answers`;
 }

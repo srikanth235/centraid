@@ -11,95 +11,35 @@
 // `ctx.time` (queries/board.ts); this module only lays them out.
 import type { Task } from "./types.ts";
 import { familyProgress, missedLabel, sittingSince } from "./view-copy.ts";
+import {
+  dayKey,
+  daysBetween,
+  dueLabel,
+  isDateOnly,
+  isOverdueWhen,
+  monthName,
+  timeOfDay,
+  weekdayName,
+} from "./when.ts";
 
-/** A civil day key (`2026-08-21`) for an ISO instant or a date-only value. */
-export function dayKey(value: string): string {
-  return value.slice(0, 10);
-}
-
-/**
- * Is this due value DATE-ONLY? A bare `YYYY-MM-DD` carries no moment, which is
- * why it sorts before every timed task on its day and reminds at the member's
- * own morning rather than at midnight (§9's midnight problem).
- */
-export function isDateOnly(due: string | null | undefined): boolean {
-  return typeof due === "string" && !due.includes("T");
-}
-
-/** Whole civil days from `from` to `to`, negative when `to` is earlier. */
-export function daysBetween(from: string, to: string): number {
-  const a = Date.parse(`${dayKey(from)}T00:00:00Z`);
-  const b = Date.parse(`${dayKey(to)}T00:00:00Z`);
-  if (Number.isNaN(a) || Number.isNaN(b)) return 0;
-  return Math.round((b - a) / 86_400_000);
-}
-
-const WEEKDAYS = [
-  "Sunday",
-  "Monday",
-  "Tuesday",
-  "Wednesday",
-  "Thursday",
-  "Friday",
-  "Saturday",
-];
-const MONTHS = [
-  "January",
-  "February",
-  "March",
-  "April",
-  "May",
-  "June",
-  "July",
-  "August",
-  "September",
-  "October",
-  "November",
-  "December",
-];
-
-/** The weekday a due value lands on — `next is Friday` and nothing else. */
-export function weekdayName(value: string): string {
-  const parsed = new Date(`${dayKey(value)}T00:00:00Z`);
-  return WEEKDAYS[parsed.getUTCDay()] ?? "";
-}
-
-/** The month an old row has been sitting since — `sitting since March`. */
-export function monthName(value: string): string {
-  const index = Number(value.slice(5, 7)) - 1;
-  return MONTHS[index] ?? "";
-}
-
-/** `17:00` from an ISO instant, in the vault's own wall clock. */
-export function timeOfDay(value: string): string {
-  return value.slice(11, 16);
-}
-
-/**
- * What the meta line says about due-ness. A plain phrase, never a countdown and
- * never a colour word: overdue reads `2 days ago` and takes the attention tone
- * from the stylesheet, so the sentence is the same one a member would say.
- */
-export function dueLabel(
-  due: string | null | undefined,
-  now: string
-): string | null {
-  if (!due) return null;
-  const delta = daysBetween(now, due);
-  const clock = isDateOnly(due) ? "" : `, ${timeOfDay(due)}`;
-  if (delta === 0) return `today${clock}`;
-  if (delta === 1) return `tomorrow${clock}`;
-  if (delta === -1) return `yesterday${clock}`;
-  if (delta < 0) return `${Math.abs(delta)} days ago`;
-  if (delta <= 6) return `${weekdayName(due)}${clock}`;
-  return `${Number(due.slice(8, 10))} ${monthName(due).slice(0, 3)}${clock}`;
-}
+// THE WHEN RULES LIVE IN ONE PLACE — `when.ts`, an import-free leaf both the
+// shell's Home tile and the phone can read (#834). They are re-exported here
+// so every existing caller of `format.ts` is unchanged and there is still
+// exactly one definition of each.
+export {
+  dayKey,
+  daysBetween,
+  dueLabel,
+  isDateOnly,
+  monthName,
+  timeOfDay,
+  weekdayName,
+};
+export { isOverdueWhen } from "./when.ts";
 
 /** Is this row past its moment? The one question overdue tone is drawn from. */
 export function isOverdue(task: Task, now: string): boolean {
-  const due = task.next_due ?? task.due_at;
-  if (!due) return false;
-  return daysBetween(now, due) < 0;
+  return isOverdueWhen(task, now);
 }
 
 /** Every substring in the meta slot may be a number, and every number in this

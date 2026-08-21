@@ -339,6 +339,17 @@ interface CentraidClient {
   discardPendingWrite?: (intentId: string, scope?: string) => Promise<boolean>;
   /** Navigate to the shell-owned approval inbox when this host provides one. */
   openApprovals?: () => void;
+  /**
+   * Leave this app for another first-party one (#834). The projection doctrine
+   * needs exactly this and nothing more: Agenda's due-task shelf shows that a
+   * task comes due and hands the tap-through to Tasks, which is the room that
+   * owns it. `focus` names what the destination should land on when it can;
+   * a host that cannot honour it still opens the app rather than refusing.
+   *
+   * Absent on hosts with no navigation of their own (the served harness), and
+   * an app must then draw NO control rather than a dead one.
+   */
+  openApp?: (appId: string, focus?: { taskId?: string }) => void;
   /** Durable member-side Commons overlay; absent on older/single-scope hosts. */
   commonsIntents?: (opts?: {
     scope?: string;

@@ -110,6 +110,14 @@ export function Chrome(props: ChromeProps): ReactNode {
             props.slots.scroll
           )}
         </div>
+        {/* THE ASSISTANT'S FOUR VERBS (#834): add, complete, reschedule and
+            find. The panel is the shell's (`kit-ask-inline.ts`), it streams a
+            turn under this app's id, and the verbs ARE this app's manifest —
+            `add`, `set-status`, `edit` and the `search` query. It mounts only
+            where the app gives it a mount point, which is why the seam is
+            here: without this node the descriptor's `kitAsk` config is real
+            and unreachable. */}
+        <div className={styles.askMount} data-ask-mount />
       </main>
 
       {props.slots.overlays}

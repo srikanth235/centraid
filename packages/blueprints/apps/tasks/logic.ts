@@ -9,22 +9,17 @@ import { showsEmptyState } from "../_shared/view-state-kit.ts";
 import { daysBetween, isOverdue } from "./format.ts";
 import type { BoardData, ReentryBucket, Task, TaskGroup } from "./types.ts";
 import { GROUPS, inboxMeta, overdueMeta } from "./view-copy.ts";
+import { landsToday } from "./when.ts";
+
+// `landsToday` lives in `when.ts` — the import-free leaf the shell's Home tile
+// and the phone read too (#834) — and is re-exported here so every caller of
+// `logic.ts` is unchanged and there is still exactly one definition.
+export { landsToday };
 
 const OPEN = new Set(["needs-action", "in-process"]);
 
 export function isOpen(task: Task): boolean {
   return OPEN.has(task.status);
-}
-
-/**
- * AN UNDATED TASK NEVER TOUCHES TODAY (ruling 4). Stated once, as a predicate,
- * so no code path can quietly answer it differently — the Today route, the
- * Agenda shelf and the home tile all ask this function.
- */
-export function landsToday(task: Task, now: string): boolean {
-  const due = task.next_due ?? task.due_at;
-  if (!due) return false;
-  return daysBetween(now, due) <= 0;
 }
 
 /**

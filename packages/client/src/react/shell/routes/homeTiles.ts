@@ -100,6 +100,22 @@ export interface HomeTileTaskRow {
 }
 
 /**
+ * The Tasks tile's glance (#834): how much lands TODAY, and what is next.
+ *
+ * NOT A BADGE AND NOT AN ALARM. "3 today" is a pile the member can look at,
+ * drawn in the tile's own body ink like every other tile's summary — there is
+ * no count on the icon, no dot, and nothing red anywhere near it. Both halves
+ * are absent rather than zero: a day with nothing due says nothing, because
+ * "0 today" is a score.
+ */
+export interface HomeTileTaskGlance {
+  /** `3 today`, or "" when nothing lands today. */
+  today: string;
+  /** `next · Sign the transfer, Friday`, or "" when nothing is dated. */
+  next: string;
+}
+
+/**
  * The structurally distinct tile bodies. `empty` is the one that never renders:
  * it is how a tile says it has not earned the grid yet.
  */
@@ -112,8 +128,13 @@ export type HomeTileBody =
   | { kind: "agenda"; title: string; at: string; after: string }
   /** Overlapping face circles. */
   | { kind: "people"; faces: readonly HomeTileFace[]; more: number }
-  /** Checkbox rows; the most recently completed one is struck through. */
-  | { kind: "tasks"; rows: readonly HomeTileTaskRow[] }
+  /** Checkbox rows; the most recently completed one is struck through, with
+   *  the glance above them (#834). */
+  | {
+      kind: "tasks";
+      rows: readonly HomeTileTaskRow[];
+      glance: HomeTileTaskGlance;
+    }
   /** One large figure in the numeric register. */
   | { kind: "tally"; figure: string; caption: string }
   /** A state chip. */
@@ -155,6 +176,8 @@ export interface HomeTileContent {
   tasks?: {
     total: number;
     rows: readonly HomeTileTaskRow[];
+    /** Today's count and the next dated row — the tile's glance (#834). */
+    glance?: HomeTileTaskGlance;
   };
   tally?: { balanceMinor: number; currency: string };
   locker?: { total: number; compromised: number };
@@ -264,7 +287,11 @@ function bodyFor(
     const tasks = content.tasks;
     const rows = taskRows(tasks?.rows ?? []);
     if (!tasks || rows.length === 0) return empty;
-    return { kind: "tasks", rows };
+    return {
+      glance: tasks.glance ?? { next: "", today: "" },
+      kind: "tasks",
+      rows,
+    };
   }
   if (id === "tally") {
     const tally = content.tally;

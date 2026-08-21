@@ -14,6 +14,7 @@
 import { debounce, outcomeMessage } from "@centraid/design/elements";
 
 import { checkStats, deriveTitle, promote } from "./format.ts";
+import { sendLineToTasks } from "./send-to-tasks.ts";
 import { NOTE, TRASH, notebookIdFrom } from "./shelves.ts";
 import type { ShelfId } from "./shelves.ts";
 import type {
@@ -23,7 +24,7 @@ import type {
   Note,
   NoteVersion,
 } from "./types.ts";
-import { RENAME_REFUSAL, notebookDeleted } from "./view-copy.ts";
+import { RENAME_REFUSAL, notebookDeleted, sentToTasks } from "./view-copy.ts";
 
 /** A vault predicate, translated into the product's own sentence. The
  *  gateway stringifies a failed precondition as `"name: column op value"`,
@@ -536,6 +537,8 @@ export function createLogic({
     attachFile,
     removeAttachment,
     toggleCheck,
+    sendLineToTasks: (noteId: string, line: number, text: string) =>
+      sendLineToTasks(write, status, { noteId, line, text }),
     runSearch,
     clearSearch,
     probeTargets,

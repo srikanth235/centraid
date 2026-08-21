@@ -62,6 +62,24 @@ export const styles = StyleSheet.create({
   searchInput: { ...t("body"), flex: 1 },
   subtitle: { ...t("control") },
   title: { ...t("title") },
+  /** THE DAY-CONTEXT RIBBON (#834): a costless fact about the day on a 2pt
+   *  rule, in the annotation register — decoration on the day, never a card
+   *  competing with a meeting. */
+  ribbon: {
+    ...t("annotLabel"),
+    borderStartWidth: 2,
+    paddingStart: 8,
+  },
+  /** The collapsed due shelf and its rows. 44pt targets, without exception. */
+  shelfRow: {
+    borderStartWidth: 2,
+    justifyContent: "center",
+    minHeight: 44,
+    paddingStart: 8,
+  },
+  shelfText: { ...t("annotLabel") },
+  shelfToggle: { justifyContent: "center", minHeight: 44 },
+
   /** The now line: a hairline in the attention tone with its time at the
    *  reading edge. Drawn on the Day surface only. */
   nowLine: { alignItems: "center", flexDirection: "row", gap: 6 },

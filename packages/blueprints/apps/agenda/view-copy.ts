@@ -35,14 +35,33 @@ export const TODAY = "Today";
 export const PREVIOUS = "Previous";
 export const NEXT = "Next";
 
-/** The rail's three sections. `DAY_CONTEXT` is a labelled EMPTY slot in this
- *  wave: the layers that fill it — birthdays, due tasks, holidays — land with
- *  the day-context projection, and a section that drew nothing would be a
- *  header standing over air. */
+/** The rail's three sections. `DAY_CONTEXT` holds the three layers; the empty
+ *  line stands in its place when the read was refused or could not be made, so
+ *  a rail that cannot decorate a day says so rather than offering switches
+ *  over facts it does not have. */
 export const RAIL_CALENDARS = "Calendars";
 export const RAIL_DAY_CONTEXT = "Day context";
 export const RAIL_DAY_CONTEXT_EMPTY = "Nothing decorating these days yet.";
 export const RAIL_MINI_MONTH = "Month at a glance";
+
+/**
+ * The day-context layers' own words live in `day-context-copy.ts` — an
+ * IMPORT-FREE leaf, because the phone draws the same ribbon and the same shelf
+ * and cannot import a module with `.ts`-extension imports (#834). Re-exported
+ * here so Agenda's surfaces read one copy table and there is still exactly one
+ * definition of each string.
+ */
+export {
+  BIRTHDAY_LEAD_DEFAULT_DAYS,
+  BIRTHDAY_LEADS,
+  LAYERS,
+  LAYERS_READ_ONLY,
+  ribbonCollapsed,
+  ribbonCollapsedBirthdays,
+  SHELF_HIDE,
+  SHELF_OPEN_IN_TASKS,
+  shelfDue,
+} from "./day-context-copy.ts";
 
 /** The grid's own promise, said once where a member might expect otherwise:
  *  a date with no time cost is never a row here. */

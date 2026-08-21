@@ -55,6 +55,8 @@
   flex: 1;
   min-inline-size: 0;
   min-block-size: 0;
+  /* The Ask mount is positioned against this column, not against the pane. */
+  position: relative;
 }
 
 .banner {
@@ -108,4 +110,22 @@
   outline: none;
   box-shadow: var(--focus-ring);
   border-radius: var(--r-xs);
+}
+
+/* The shell's Ask panel mounts here (#834). Positioned against the main
+   column so the button sits out of the list's reading path; on a phone it
+   moves to the top, where the band owns the bottom edge. */
+.askMount {
+  composes: kit-app-ask-mount from global;
+  position: absolute;
+  inset-inline-end: 16px;
+  bottom: 16px;
+  z-index: 30;
+}
+
+.isNarrow .askMount {
+  top: 12px;
+  inset-inline-end: 14px;
+  bottom: auto;
+  z-index: 45;
 }

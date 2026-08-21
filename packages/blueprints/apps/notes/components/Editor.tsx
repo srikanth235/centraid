@@ -15,11 +15,13 @@ import { PendingWriteActions } from "../../_shared/PendingWriteActions.tsx";
 import { displayText, safeMediaUrl } from "../../_shared/untrusted.ts";
 import { bodySegments, promote, tallyLabel } from "../format.ts";
 import { resolveAnchor } from "../powerbox.ts";
+import { wantsDate } from "../send-to-tasks.ts";
 import type { Note, NoteAttachment, NoteReference } from "../types.ts";
 import {
   ANCHOR_DEGRADED,
   BACKLINKS_NOTE,
   PENDING_CHIP,
+  SEND_TO_TASKS,
   anchoredFrom,
 } from "../view-copy.ts";
 
@@ -33,6 +35,9 @@ export interface EditorProps {
   /** Every keystroke, optimistically. */
   onEdit: (patch: { title?: string; body_text?: string }) => void;
   onToggleCheck: (line: number) => void;
+  /** Hand this checklist line to Tasks (#834). The row decides WHETHER the
+   *  control is drawn; the orchestrator owns the write. */
+  onSendToTasks: (line: number, text: string) => void;
   /** Open the powerbox for the passage currently selected. */
   onLink: (
     anchor: {
@@ -101,33 +106,51 @@ function applyTool(
   return `${body.slice(0, lineStart)}${prefix}${body.slice(lineStart)}`;
 }
 
-/** One checklist row: a 20/26 box at the sub radius, ink-filled when done and
- *  the text struck through in annotation ink. */
+/**
+ * One checklist row: a 20/26 box at the sub radius, ink-filled when done and
+ * the text struck through in annotation ink.
+ *
+ * SEND TO TASKS sits beside the box, and ONLY on a line that wants a date
+ * (`send-to-tasks.ts` `wantsDate`). It is a quiet control that really writes:
+ * one `schedule.add_task` row on the same spine Tasks reads, linked back to
+ * this note. Nothing is stored here about the line afterwards — the point of
+ * the gesture is that the commitment LEAVES.
+ */
 function ChecklistRow({
   text,
   checked,
   onToggle,
+  onSendToTasks,
 }: {
   text: string;
   checked: boolean;
   onToggle: () => void;
+  onSendToTasks?: (() => void) | undefined;
 }) {
   return (
-    // WAVE 2 HOOKS HERE. `Send to Tasks` belongs on this row, beside the box,
-    // on a line that wants a date — and it is deliberately NOT drawn yet: a
-    // control that cannot act is worse than an absent one.
-    <label className={styles.check}>
-      <input
-        type="checkbox"
-        className={styles.box}
-        checked={checked}
-        aria-label={displayText(text) || "Checklist item"}
-        onChange={onToggle}
-      />
-      <span className={styles.checkText} data-done={String(checked)}>
-        {displayText(text)}
-      </span>
-    </label>
+    <div className={styles.checkRow}>
+      <label className={styles.check}>
+        <input
+          type="checkbox"
+          className={styles.box}
+          checked={checked}
+          aria-label={displayText(text) || "Checklist item"}
+          onChange={onToggle}
+        />
+        <span className={styles.checkText} data-done={String(checked)}>
+          {displayText(text)}
+        </span>
+      </label>
+      {onSendToTasks ? (
+        <button
+          type="button"
+          className={`kit-plain-btn ${styles.toTask}`}
+          onClick={onSendToTasks}
+        >
+          {SEND_TO_TASKS}
+        </button>
+      ) : null}
+    </div>
   );
 }
 
@@ -317,6 +340,11 @@ export function Editor(props: EditorProps): ReactNode {
               text={segment.text}
               checked={segment.checked}
               onToggle={() => props.onToggleCheck(segment.line)}
+              onSendToTasks={
+                wantsDate(segment)
+                  ? () => props.onSendToTasks(segment.line, segment.text)
+                  : undefined
+              }
             />
           ) : (
             <textarea

@@ -60,6 +60,11 @@
         "verbs": "read"
       },
       {
+        "schema": "schedule",
+        "table": "add_task",
+        "verbs": "act"
+      },
+      {
         "schema": "tally",
         "table": "expense",
         "verbs": "read"
@@ -503,6 +508,31 @@
           "start": { "type": "integer", "minimum": 0 }
         },
         "required": ["note_id", "target_type", "target_id"],
+        "additionalProperties": false
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "status": { "type": "string" },
+          "output": { "type": "object" },
+          "reason": { "type": "string" }
+        }
+      },
+      "writes": []
+    },
+    {
+      "name": "send-to-tasks",
+      "description": "Hand one checklist line to Tasks: mints the canonical schedule.task row through schedule.add_task (undated unless the line carried a date) and links it back to the note through core.link_entities. Notes keeps no copy of the task.",
+      "confirmation": "none",
+      "input": {
+        "type": "object",
+        "properties": {
+          "title": { "type": "string", "minLength": 1 },
+          "due_at": { "type": "string", "minLength": 1 },
+          "note_id": { "type": "string", "minLength": 1 },
+          "exact": { "type": "string" }
+        },
+        "required": ["title", "note_id"],
         "additionalProperties": false
       },
       "output": {

@@ -38,6 +38,7 @@ async function handleNotificationResponse(
     kind?: unknown;
     taskId?: unknown;
     eventId?: unknown;
+    partyId?: unknown;
   };
   const plan = notificationActionPlan(action, data);
   try {
@@ -69,6 +70,16 @@ async function handleNotificationResponse(
         rootNavigationRef.navigate("Agenda", {
           screen: "AgendaEvent",
           params: { eventId: plan.eventId },
+        });
+      return;
+    }
+    // A birthday is ABOUT a person, so the tap lands on that person. The
+    // calendar holds no row for it and never will (#834).
+    if (plan.kind === "open-person") {
+      if (rootNavigationRef.isReady())
+        rootNavigationRef.navigate("People", {
+          screen: "Person",
+          params: { personId: plan.partyId },
         });
       return;
     }

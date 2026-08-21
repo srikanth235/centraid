@@ -564,6 +564,10 @@ export function Root({
         onToggleCheck={(line) => {
           if (state.noteId) void logic.toggleCheck(state.noteId, line);
         }}
+        onSendToTasks={(line, text) => {
+          if (state.noteId)
+            void logic.sendLineToTasks(state.noteId, line, text);
+        }}
         onLink={openPowerbox}
         onProbe={onProbe}
         onAddTag={(label) => {
