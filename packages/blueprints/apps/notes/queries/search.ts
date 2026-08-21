@@ -6,6 +6,11 @@
  * mirroring the library projection's shape row-for-row so the UI renders
  * either list with the same code.
  *
+ * People-journal entries are EXCLUDED from the hits (#834 R-journal) exactly
+ * as they are from the library: the Journal place is their one home in Notes.
+ * The exclusion runs over the ranked hits, so a search whose every match was
+ * a journal entry answers an empty list rather than a filtered-looking one.
+ *
  * A consent denial is a first-class outcome, not an error: the UI renders
  * it as the "ask the owner for access" state, receipt id included.
  *
@@ -15,6 +20,8 @@
  * place unknown vault columns become named fields. Handler logic is otherwise
  * byte-for-byte the pre-conversion JS.
  */
+
+import { readJournalNoteIds } from "../../_shared/journal-scheme.ts";
 
 interface NoteRow {
   note_id: string;
@@ -160,15 +167,22 @@ export default async function searchHandler({ input, ctx }: HandlerArgs) {
   const term = String(input?.term ?? "").trim();
   if (!term) return { notes: [] };
   try {
-    const matches = await ctx.vault.search({
-      entity: "knowledge.note",
-      query: term,
-      // Trashed notes (issue #308: delete is reversible) never match.
-      where: [{ column: "deleted_at", op: "is-null" }],
-      limit: 100,
-      purpose,
-    });
-    const hits = (matches.rows ?? []) as unknown as NoteRow[];
+    const [matches, journalNoteIds] = await Promise.all([
+      ctx.vault.search({
+        entity: "knowledge.note",
+        query: term,
+        // Trashed notes (issue #308: delete is reversible) never match.
+        where: [{ column: "deleted_at", op: "is-null" }],
+        limit: 100,
+        purpose,
+      }),
+      readJournalNoteIds(ctx.vault, purpose),
+    ]);
+    // Journal entries drop out of the ranked hits before anything is joined
+    // to them (#834 R-journal), so no journal body is decoded or previewed.
+    const hits = ((matches.rows ?? []) as unknown as NoteRow[]).filter(
+      (note) => !journalNoteIds.has(note.note_id)
+    );
     if (hits.length === 0) return { notes: [] };
     const noteIds = hits.map((n) => n.note_id);
     const [placements, notebooks, attachments] = await Promise.all([

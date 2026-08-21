@@ -8,7 +8,12 @@ export default {
     "src/time/recurrence-properties.test.ts",
     "src/time/timezone-properties.test.ts",
   ],
-  mutate: ["src/time/recurrence.ts", "src/time/timezone.ts"],
+  mutate: [
+    "src/time/recurrence.ts",
+    "src/time/recurrence-collapse.ts",
+    "src/time/recurrence-summary.ts",
+    "src/time/timezone.ts",
+  ],
   reporters: ["clear-text", "json"],
   jsonReporter: {
     fileName: "../../artifacts/mutation/time-engine-report.json",

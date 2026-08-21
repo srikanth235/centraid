@@ -159,7 +159,23 @@ interface TimeApi {
     instances: readonly RecurrenceInstance[],
     exceptions: readonly RecurrenceException[]
   ) => RecurrenceInstance[];
+  /**
+   * The ONE member-facing recurrence summary ("Every other Friday · 5 times").
+   * Apps render this string; a raw rule never reaches a surface.
+   */
   describeRecurrence: (rrule: string) => string | null;
+  /**
+   * A repeating item never stacks: elapsed unactioned periods collapse into a
+   * count beside the single live occurrence ("missed 4 · next is Friday").
+   */
+  collapseMissedOccurrences: (input: {
+    rrule: string;
+    scheduledStart: string;
+    timeZone?: string;
+    anchor?: "scheduled" | "completion";
+    now: string;
+    lastCompletedAt?: string;
+  }) => { missed: number; nextDue: string | null };
   /** Shift a wall-clock or zoned instant without host-TZ conversion. */
   shiftTemporal: (value: string, deltaMs: number) => string;
 }

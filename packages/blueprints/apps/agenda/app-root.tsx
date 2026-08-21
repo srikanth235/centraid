@@ -28,6 +28,14 @@ export const CHANGE_TABLES = [
   "core.attachment",
   "core.content_item",
   "core.vault",
+  // The day-context projection's own entities (#834 R-daycontext): open tasks
+  // coming due, and the starred-flag vocabulary that answers a birthday's
+  // relationship tier. Without them a completed task or a newly starred
+  // person would leave the grid's decorations stale until the next nav.
+  "schedule.task",
+  "core.tag",
+  "core.concept",
+  "core.concept_scheme",
 ];
 
 export function Root({ rootRef }: InlineAppProps): ReactElement {

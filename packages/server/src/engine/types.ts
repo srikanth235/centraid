@@ -109,7 +109,18 @@ export interface ScopedTime {
     instances: readonly ScopedRecurrenceInstance[],
     exceptions: readonly ScopedRecurrenceException[]
   ) => ScopedRecurrenceInstance[];
+  /** The one member-facing recurrence summary; apps never render a raw rule. */
   describeRecurrence: (rrule: string) => string | null;
+  /** Elapsed unactioned periods, collapsed onto the single live occurrence. */
+  collapseMissedOccurrences: (input: {
+    rrule: string;
+    scheduledStart: string;
+    timeZone?: string;
+    anchor?: "scheduled" | "completion";
+    now: string;
+    lastCompletedAt?: string;
+  }) => { missed: number; nextDue: string | null };
+  shiftTemporal: (value: string, deltaMs: number) => string;
 }
 
 export interface CommonHandlerArgs {

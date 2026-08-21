@@ -12,7 +12,7 @@
     {
       "id": "tasks",
       "name": "Tasks",
-      "desc": "A Things-style task manager over your vault's canonical tasks.",
+      "desc": "A Todoist-depth task manager over your vault's canonical tasks.",
       "colorKey": "teal",
       "iconKey": "Check",
       "version": "0.3.1"

@@ -14,10 +14,11 @@ import { describe, expect, test } from "vitest";
 
 import { fc } from "@centraid/test-kit/fast-check";
 
+import { collapseMissedOccurrences } from "./recurrence-collapse.js";
+import { describeRecurrence } from "./recurrence-summary.js";
 import {
   applyRecurrenceExceptions,
   canonicalizeRrule,
-  describeRecurrence,
   expandRecurrence,
   nextOccurrence,
   parseRrule,
@@ -153,15 +154,16 @@ describe("rrule normalisation", () => {
       ),
       { numRuns: 60, seed: 65615 }
     );
-    // Singular for interval 1, plural otherwise — the count/until tail is
-    // mutually exclusive (COUNT wins over UNTIL).
-    expect(describeRecurrence("FREQ=DAILY")).toBe("Every day");
+    // Natural phrasing for interval 1, plural otherwise — the count/until tail
+    // is mutually exclusive (COUNT wins over UNTIL) and never leaks the raw
+    // rule string into a member-facing surface.
+    expect(describeRecurrence("FREQ=DAILY")).toBe("Daily");
     expect(describeRecurrence("FREQ=DAILY;INTERVAL=3")).toBe("Every 3 days");
     expect(
       describeRecurrence("FREQ=DAILY;COUNT=2;UNTIL=20301231T000000Z")
-    ).toBe("Every day, 2 times");
+    ).toBe("Daily · 2 times");
     expect(describeRecurrence("FREQ=DAILY;UNTIL=20301231T000000Z")).toBe(
-      "Every day until 20301231T000000Z"
+      "Daily · until Dec 31, 2030"
     );
   });
 });
@@ -485,6 +487,61 @@ describe("occurrence lifecycle laws", () => {
         timeZone: "Etc/UTC",
       })
     ).toBeNull();
+  });
+
+  test("a summary never leaks rule syntax into a member-facing surface", () => {
+    fc.assert(
+      fc.property(
+        fc.constantFrom(...FREQS),
+        fc.integer({ min: 1, max: 12 }),
+        fc.uniqueArray(fc.constantFrom(...DAYS), {
+          minLength: 1,
+          maxLength: 3,
+        }),
+        (freq, interval, days) => {
+          const summary = describeRecurrence(
+            `FREQ=${freq};INTERVAL=${interval};BYDAY=${days.join(",")};UNTIL=20300105T000000Z`
+          );
+          expect(summary).not.toBeNull();
+          expect(summary).not.toMatch(/FREQ=|BYDAY=|INTERVAL=|UNTIL=|\d{8}T/u);
+          expect(summary).toContain("· until Jan 5, 2030");
+        }
+      ),
+      { numRuns: 60, seed: 65631 }
+    );
+  });
+
+  test("missed periods collapse onto one live occurrence and never stack", () => {
+    fc.assert(
+      fc.property(fc.integer({ min: 0, max: 12 }), (weeks) => {
+        const now = new Date(
+          Date.parse("2026-08-01T12:00:00.000Z") + weeks * 7 * 86_400_000
+        ).toISOString();
+        const scheduled = collapseMissedOccurrences({
+          rrule: "FREQ=WEEKLY",
+          scheduledStart: "2026-08-01T09:00:00.000Z",
+          timeZone: "Etc/UTC",
+          anchor: "scheduled",
+          now,
+        });
+        // One period per elapsed week, and exactly one occurrence still live.
+        expect(scheduled.missed).toBe(weeks + 1);
+        expect(Date.parse(scheduled.nextDue as string)).toBeGreaterThan(
+          Date.parse(now)
+        );
+        expect(
+          collapseMissedOccurrences({
+            rrule: "FREQ=WEEKLY",
+            scheduledStart: "2026-08-01T09:00:00.000Z",
+            timeZone: "Etc/UTC",
+            anchor: "completion",
+            now,
+            lastCompletedAt: "2026-08-01T10:00:00.000Z",
+          }).missed
+        ).toBeLessThanOrEqual(1);
+      }),
+      { numRuns: 13, seed: 65632 }
+    );
   });
 });
 

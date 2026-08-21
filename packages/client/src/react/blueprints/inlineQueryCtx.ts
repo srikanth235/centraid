@@ -1,5 +1,12 @@
 import { PENDING_OVERLAY_FIELDS } from "@centraid/blueprints/apps/_shared/pending-overlay";
 import type { InlineQueryModule } from "@centraid/blueprints/apps/inline-types";
+import {
+  applyRecurrenceExceptions,
+  collapseMissedOccurrences,
+  describeRecurrence,
+  expandRecurrence,
+  shiftTemporal,
+} from "@centraid/core/time";
 
 import type {
   ShellReplicaReadRequest,
@@ -281,6 +288,17 @@ export function buildInlineCtx(
     fetch: (): Promise<never> =>
       Promise.reject(guard.mark("fetch is online-only")),
     vault,
+    // The same civil-time engine the gateway worker mounts (engine/worker/
+    // runner.ts). It is pure and dependency-free, so the inline path runs it
+    // in-process rather than escalating a recurrence query to the gateway —
+    // and both planes therefore summarise a rule identically.
+    time: {
+      applyRecurrenceExceptions,
+      collapseMissedOccurrences,
+      describeRecurrence,
+      expandRecurrence,
+      shiftTemporal,
+    },
   };
 }
 

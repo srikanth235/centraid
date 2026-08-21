@@ -46,6 +46,21 @@
       },
       {
         "schema": "core",
+        "table": "tag",
+        "verbs": "read"
+      },
+      {
+        "schema": "core",
+        "table": "concept",
+        "verbs": "read"
+      },
+      {
+        "schema": "core",
+        "table": "concept_scheme",
+        "verbs": "read"
+      },
+      {
+        "schema": "core",
         "table": "attach",
         "verbs": "act"
       },
@@ -396,6 +411,39 @@
         "type": "object",
         "properties": {
           "events": {
+            "type": "array"
+          },
+          "vaultDenied": {
+            "type": "object"
+          }
+        }
+      }
+    },
+    {
+      "name": "day-context",
+      "description": "The cross-app facts that decorate a calendar day, as one read-only projection: birthdays recurring inside the window (each `{party_id, name, month, day, tier}`, where `tier` is `inner` when the owner starred that person and `outer` otherwise), the count of still-open tasks (`needs-action`/`in-process`) coming due per day, and holidays. Holidays are always `[]` today — the vault has no holiday source. Due counts are THIS vault's tasks only; there is no cross-vault aggregation. `from`/`to` are inclusive `YYYY-MM-DD` days, defaulting to today plus 45 days and capped at a 400-day span.",
+      "input": {
+        "type": "object",
+        "properties": {
+          "from": {
+            "type": "string"
+          },
+          "to": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "birthdays": {
+            "type": "array"
+          },
+          "due": {
+            "type": "array"
+          },
+          "holidays": {
             "type": "array"
           },
           "vaultDenied": {
