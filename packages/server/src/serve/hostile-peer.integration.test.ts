@@ -91,8 +91,14 @@ interface HostileWorld {
   links: VaultLinksStore;
   endpoint: GatewayEndpointHandle;
   client: TunnelClient;
-  connection: Connection;
   server: http.Server;
+  /**
+   * Dial the peer plane. The peer ALPN admits a stranger only while admission
+   * holds (a live ticket or link), and that decision is taken AT CONNECT — so
+   * every test mints its ticket or establishes its link BEFORE calling this,
+   * exactly as a real ceremony's ticket precedes the dial.
+   */
+  connect: () => Promise<Connection>;
   /** Live + revoked link rows this gateway holds. */
   linkRowCount: () => number;
   /** Rows in `peer_link_tickets`, live or expired. */
@@ -100,12 +106,13 @@ interface HostileWorld {
 }
 
 const worlds: HostileWorld[] = [];
+const connections: Connection[] = [];
 const dataDirs: string[] = [];
 
 async function closeEverything(): Promise<void> {
+  for (const connection of connections.splice(0)) connection.close(0n, []);
   await Promise.all(
     worlds.splice(0).map(async (world) => {
-      world.connection.close(0n, []);
       await world.client.close().catch(() => undefined);
       await world.endpoint.close().catch(() => undefined);
       await new Promise<void>((resolve) => world.server.close(() => resolve()));
@@ -174,14 +181,17 @@ async function hostileWorld(
   });
 
   const client = await createTunnelClient({ relays: "disabled" });
-  const connection = await client.connectPeer(endpoint.ticket());
 
   const world: HostileWorld = {
     links,
     endpoint,
     client,
-    connection,
     server,
+    connect: async () => {
+      const connection = await client.connectPeer(endpoint.ticket());
+      connections.push(connection);
+      return connection;
+    },
     linkRowCount: () =>
       (
         database.db
@@ -292,8 +302,9 @@ describe("hostile peer: protocol-level state-machine abuse", () => {
     const world = await hostileWorld();
     const ticket = world.links.tickets.mint(HOST.vaultId, HOST.publicKey);
     expect(world.ticketRowCount()).toBe(1);
+    const connection = await world.connect();
 
-    const first = await ask(world.connection, {
+    const first = await ask(connection, {
       method: "POST",
       target: "/centraid/_peer/link/redeem",
       body: redeemBody(ticket),
@@ -305,7 +316,7 @@ describe("hostile peer: protocol-level state-machine abuse", () => {
     expect(world.ticketRowCount()).toBe(0);
     expect(world.links.isLinked(world.client.endpointId)).toBe(true);
 
-    const replay = await ask(world.connection, {
+    const replay = await ask(connection, {
       method: "POST",
       target: "/centraid/_peer/link/redeem",
       body: redeemBody(ticket),
@@ -326,8 +337,9 @@ describe("hostile peer: protocol-level state-machine abuse", () => {
   test("a valid route assertion sent before the link writes nothing", async () => {
     const world = await hostileWorld();
     world.links.tickets.mint(HOST.vaultId, HOST.publicKey);
+    const connection = await world.connect();
 
-    const premature = await ask(world.connection, {
+    const premature = await ask(connection, {
       method: "POST",
       target: "/centraid/_peer/route/assert",
       body: signedAssertion(world.client.endpointId, Date.now() + 60_000),
