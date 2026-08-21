@@ -291,24 +291,28 @@ bun run design:gallery -- --update   # then keep only bi-light / bi-dark
 bun run design:gallery               # bi-dark: 0.00% changed, max channel delta 0
 ```
 
-**THE REFRESHED bi-light / bi-dark BASELINES WERE CAPTURED ON THE WRONG
-BROWSER, and this is stated plainly rather than discovered in review.** CI pins
-Chrome Headless Shell **151.0.7922.34** (`playwright chromium-headless-shell
-v1234`); this container ships Chromium **141.0.7390.37** and
-`cdn.playwright.dev` is refused by the session's egress policy (`CONNECT tunnel
-failed, response 403`), so the pinned build cannot be fetched here. The gap is
-measurable: re-verifying the six baselines this change does NOT touch reports
-`sh-light 2.45%`, `sh-c-light 4.79%`, `mo-advisory-light 8.83%` — pure
-rasterizer delta on unchanged content, against a 1% tolerance. `mo-advisory` is
-the same kind of page as `bi` (a dense token list), so CI will very likely
-report a similar delta against these captures.
+The first attempt at this re-capture used the wrong browser and is worth
+recording, because it is the failure mode this lane is built to catch. CI pins
+**Chrome for Testing 151.0.7922.34** (`playwright chromium-headless-shell
+v1234`); this container ships Chromium 141 and `cdn.playwright.dev` is refused
+by the session's egress policy, so `playwright install` cannot reach it. A
+baseline captured on 141 is content-correct and rasterizes differently: CI
+measured `bi-light 4.53%` / `bi-dark 4.41%` against a 1% tolerance, while the
+six lanes this change does not touch sat at 0.00%. That is the whole signature
+of a wrong-rasterizer baseline, and the gate caught it.
 
-The CONTENT of the new baselines is correct — locally they verify at 0.00% —
-and the finish is one command on any machine with the pinned browser:
+The fix was to get the right browser rather than to widen anything. Chrome for
+Testing publishes the identical artifact `cdn.playwright.dev` mirrors, at a
+host this session may reach:
 
 ```sh
-bun run design:gallery -- --update   # bi-light and bi-dark only
+curl -o shell.zip https://storage.googleapis.com/chrome-for-testing-public/151.0.7922.34/linux64/chrome-headless-shell-linux64.zip
+unzip -q shell.zip -d "$PLAYWRIGHT_BROWSERS_PATH/chromium_headless_shell-1234/"
 ```
+
+On that binary all eight lanes verify at **0.00% changed, max channel delta 0**
+— including the six untouched ones, which is what proves the environment now
+matches CI rather than merely agreeing with itself.
 
 Format, lint and the design gates:
 
