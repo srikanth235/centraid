@@ -13,14 +13,11 @@
   --content-margin: var(--sp-5);
 }
 
-/* Notes' identity is SLATE — the wheel slot `app.json`'s colorKey already
-   names and the launcher tile already paints. The hue appears in the app's
-   icon chip and as a content marker, never on a control. The rule doubles the
-   class so it beats the shell's injected `.centraid-inline-scope` block. */
-.shell.shell {
-  --app-hue: 214;
-  --app-identity: var(--c-slate);
-}
+/* Notes' identity is SLATE, and it is declared exactly once — in `app.json`'s
+   `colorKey`. The shell paints the icon chip and the launcher tile from that
+   key, so restating the hue as `--app-hue` / `--app-identity` here would be a
+   second copy of one fact and a token this app never reads. Nothing in Notes
+   spends the identity hue on a control, so there is no declaration to make. */
 
 /* THE FOCUS RING, ON EVERY INTERACTIVE ELEMENT. 2px, offset 2, in the
    reserved link hue — the frame's own ring token, never a local outline. */

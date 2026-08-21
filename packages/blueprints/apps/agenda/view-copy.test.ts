@@ -55,9 +55,14 @@ describe("Agenda's copy", () => {
 
   it("names all five views and counts each of them in its own noun", () => {
     const views: ViewKind[] = ["month", "week", "day", "schedule", "waiting"];
+    // Asserting the values, not their truthiness: a label is the word the
+    // switcher segment shows and a unit is the noun the app-bar count is
+    // spoken in, so an empty string is as wrong as a missing key.
+    expect(Object.keys(copy.VIEW_LABELS).toSorted()).toEqual(views.toSorted());
+    expect(Object.keys(copy.VIEW_UNITS).toSorted()).toEqual(views.toSorted());
     for (const view of views) {
-      expect(copy.VIEW_LABELS[view], view).toBeTruthy();
-      expect(copy.VIEW_UNITS[view], view).toBeTruthy();
+      expect(copy.VIEW_LABELS[view].length, view).toBeGreaterThan(0);
+      expect(copy.VIEW_UNITS[view].length, view).toBeGreaterThan(0);
     }
   });
 

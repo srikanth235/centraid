@@ -7,8 +7,9 @@
    marker derived from the shared identity wheel and arrives as an inline
    custom property, never as a rule in a stylesheet.
 
-   The retired `.ag-shell` / `.ag-side` / `.ag-topbar` selectors are gone for
-   good — the sidebar was a second navigation column beside the shell's stem
+   The retired global ag-prefixed shell/side/topbar selectors are gone for
+   good — and are not spelled out here, because the ban is enforced by
+   substring over this whole tree (shared-css.test.ts). The sidebar was a second navigation column beside the shell's stem
    and the topbar was a header restating the frame's own app bar. */
 
 .shell {

@@ -3,9 +3,11 @@
 // regions, expressed as one React tree so `app-root.tsx` renders one tree
 // instead of a dozen imperative roots.
 //
-// THERE IS NO TOPBAR AND NO SIDEBAR NAVIGATION HERE. The retired `.ag-shell` /
-// `.ag-side` / `.ag-topbar` trio is permanently banned (shared-css.test.ts):
-// navigation is the shell's stem, the title and the view switcher are the
+// THERE IS NO TOPBAR AND NO SIDEBAR NAVIGATION HERE. The retired global
+// ag-prefixed shell/side/topbar trio is permanently banned, and the ban is
+// enforced by substring over this whole tree (shared-css.test.ts), so the dead
+// selectors are not spelled out even in a comment: navigation is the shell's
+// stem, the title and the view switcher are the
 // frame's app bar (frame.tsx), and outcomes are the frame's one status line.
 // What is left in this file is what the spec actually draws — a 232px rail
 // beside a canvas.

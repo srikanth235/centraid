@@ -24,15 +24,11 @@
   --row-pointer: 40px;
 }
 
-/* Tasks' identity is OCHRE — hue 70, the slot `apps.ts` assigns it, what
-   `app.json`'s `colorKey` says, and what the launcher tile already paints. The
-   hue appears in the icon chip and as a CONTENT MARKER (project dots) only; a
-   control that took it would be a defect. The doubled class beats the shell's
-   injected `.centraid-inline-scope` block, which is appended at runtime. */
-.shell.shell {
-  --app-hue: 70;
-  --app-identity: var(--c-ochre);
-}
+/* Tasks' identity is OCHRE, and it is declared exactly once — in `app.json`'s
+   `colorKey`, which the shell reads to paint the icon chip and the launcher
+   tile. Restating it here as `--app-hue` / `--app-identity` would fork that
+   one fact into app CSS for no reader: project dots take `--c-<hue>-text`
+   straight from the palette, and no control in Tasks spends the identity. */
 
 /* ---------- The rail (§5) ---------- */
 

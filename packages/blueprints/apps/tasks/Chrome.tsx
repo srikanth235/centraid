@@ -7,9 +7,10 @@
 // colour and no control recipe.
 //
 // THE RETIRED SELECTORS ARE GONE FOR GOOD. The pre-rebuild chrome stamped a
-// global `.tk-shell`/`.tk-side`/`.tk-topbar` trio so sibling stylesheets could
+// global tk-prefixed shell/side/topbar trio so sibling stylesheets could
 // reach across a module boundary; that seam is permanently banned (trap #5,
-// packages/blueprints/src/shared-css.test.ts). Every class in this tree is
+// packages/blueprints/src/shared-css.test.ts), which reads this whole tree as
+// text — so the dead selectors are not spelled out even in a comment. Every class in this tree is
 // module-scoped or part of the global `kit-*` vocabulary the host loads once.
 //
 // EVERYTHING VARIABLE ARRIVES AS A SLOT, the same shape `docs/Chrome.tsx` and
