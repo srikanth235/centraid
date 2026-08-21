@@ -3,7 +3,7 @@
  *
  * Property fuzz: arbitrary clamps and requests fail closed, never throw, never
  * widen. Loader, oracles, and vault fixture live in
- * `manifest-scope-denial.sweep-fixtures.ts`; the enumerated positive and
+ * `manifest-scope-denial.sweep.test-fixtures.ts`; the enumerated positive and
  * negative halves are in `manifest-scope-denial.sweep.test.ts` and
  * `manifest-scope-denial.closed-grammar.test.ts`.
  */
@@ -28,8 +28,8 @@ import {
   openSweepVault,
   sweep,
   undeclaredSentence,
-} from "./manifest-scope-denial.sweep-fixtures.js";
-import type { ClampScope } from "./manifest-scope-denial.sweep-fixtures.js";
+} from "./manifest-scope-denial.sweep.test-fixtures.js";
+import type { ClampScope } from "./manifest-scope-denial.sweep.test-fixtures.js";
 
 describe("bundled manifest scope-denial sweep (#839 G4)", () => {
   beforeAll(openSweepVault);

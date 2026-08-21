@@ -2777,7 +2777,7 @@
         "packages/vault/src/gateway/consent.ts",
         "packages/server/src/enrich/engine-profiles.ts"
       ],
-      "propertyFlow": "manifest-scope-denial-sweep",
+      "propertyFlow": "manifest-scope-denial-closed-grammar",
       "mutationSeed": null,
       "appEngineColumn": false
     },
@@ -3857,12 +3857,30 @@
     },
     {
       "id": "manifest-scope-denial-sweep",
-      "name": "Every bundled manifest clamp denies closed inside the six-class refusal grammar",
+      "name": "Every declared bundled-manifest scope × verb is allowed (loading + positive sweep)",
       "surface": "gateway",
       "dimension": "security",
       "tier": "integration",
       "owner": "packages/server/src/serve/manifest-scope-denial.sweep.test.ts",
-      "minimumTests": 18
+      "minimumTests": 4
+    },
+    {
+      "id": "manifest-scope-denial-closed-grammar",
+      "name": "Every undeclared bundled-manifest combination denies closed inside the six-class refusal grammar",
+      "surface": "gateway",
+      "dimension": "security",
+      "tier": "integration",
+      "owner": "packages/server/src/serve/manifest-scope-denial.closed-grammar.test.ts",
+      "minimumTests": 10
+    },
+    {
+      "id": "manifest-scope-denial-fuzz",
+      "name": "Bundled-manifest scope-denial holds under property fuzz",
+      "surface": "gateway",
+      "dimension": "security",
+      "tier": "integration",
+      "owner": "packages/server/src/serve/manifest-scope-denial.fuzz.test.ts",
+      "minimumTests": 4
     },
     {
       "id": "extension-origin-matching",

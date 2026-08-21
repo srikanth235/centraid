@@ -4,7 +4,7 @@
  * The negative half: every undeclared combination fails CLOSED with the exact
  * grammar, and one positive case per deny class proves the closed grammar is
  * the whole vocabulary. Loader, oracles, and vault fixture live in
- * `manifest-scope-denial.sweep-fixtures.ts`; the positive half is in
+ * `manifest-scope-denial.sweep.test-fixtures.ts`; the positive half is in
  * `manifest-scope-denial.sweep.test.ts`.
  */
 
@@ -27,12 +27,12 @@ import {
   openSweepVault,
   sweep,
   undeclaredSentence,
-} from "./manifest-scope-denial.sweep-fixtures.js";
+} from "./manifest-scope-denial.sweep.test-fixtures.js";
 import type {
   ClampScope,
   DenyClass,
   Verb,
-} from "./manifest-scope-denial.sweep-fixtures.js";
+} from "./manifest-scope-denial.sweep.test-fixtures.js";
 
 describe("bundled manifest scope-denial sweep (#839 G4)", () => {
   beforeAll(openSweepVault);

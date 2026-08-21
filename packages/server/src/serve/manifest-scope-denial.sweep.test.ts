@@ -3,7 +3,7 @@
  *
  * Loading checks and the positive half: every declared scope × verb is
  * evaluable and allowed. The shared loader, oracles, and vault fixture live in
- * `manifest-scope-denial.sweep-fixtures.ts`; the negative-grammar half is in
+ * `manifest-scope-denial.sweep.test-fixtures.ts`; the negative-grammar half is in
  * `manifest-scope-denial.closed-grammar.test.ts` and the property fuzz in
  * `manifest-scope-denial.fuzz.test.ts`. See the fixtures header for why the
  * grant is maximal and why the sweep lives in `packages/server`.
@@ -24,7 +24,7 @@ import {
   openSweepVault,
   sweep,
   verbsOf,
-} from "./manifest-scope-denial.sweep-fixtures.js";
+} from "./manifest-scope-denial.sweep.test-fixtures.js";
 
 describe("bundled manifest scope-denial sweep (#839 G4)", () => {
   beforeAll(openSweepVault);
