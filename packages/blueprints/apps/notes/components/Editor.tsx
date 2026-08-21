@@ -8,7 +8,7 @@
 // the member types into (`format.ts` `bodySegments`). The alternative — a
 // rendered copy beside a writing copy — puts the same sentence on screen
 // twice and makes one of them wrong on every keystroke.
-import { useEffect, useRef, useState } from "react";
+import { useRef, useState } from "react";
 import type { ReactNode } from "react";
 
 import { PendingWriteActions } from "../../_shared/PendingWriteActions.tsx";
@@ -34,12 +34,14 @@ export interface EditorProps {
   onEdit: (patch: { title?: string; body_text?: string }) => void;
   onToggleCheck: (line: number) => void;
   /** Open the powerbox for the passage currently selected. */
-  onLink: (anchor: {
-    exact: string;
-    prefix: string;
-    suffix: string;
-    start: number;
-  } | null) => void;
+  onLink: (
+    anchor: {
+      exact: string;
+      prefix: string;
+      suffix: string;
+      start: number;
+    } | null
+  ) => void;
   /** The caret moved inside a `[[` — the sigil opens the same sheet. */
   onProbe: (body: string, caret: number) => void;
   onAddTag: (label: string) => void;
@@ -84,7 +86,12 @@ const PREFIX: Record<string, string> = {
   quote: "> ",
 };
 
-function applyTool(body: string, key: string, from: number, to: number): string {
+function applyTool(
+  body: string,
+  key: string,
+  from: number,
+  to: number
+): string {
   const wrap = WRAP[key];
   if (wrap)
     return `${body.slice(0, from)}${wrap[0]}${body.slice(from, to)}${wrap[1]}${body.slice(to)}`;
@@ -109,21 +116,18 @@ function ChecklistRow({
     // WAVE 2 HOOKS HERE. `Send to Tasks` belongs on this row, beside the box,
     // on a line that wants a date — and it is deliberately NOT drawn yet: a
     // control that cannot act is worse than an absent one.
-    <div className={styles.check}>
-      <button
-        type="button"
-        className={`kit-plain-btn ${styles.box}`}
-        role="checkbox"
-        aria-checked={checked}
+    <label className={styles.check}>
+      <input
+        type="checkbox"
+        className={styles.box}
+        checked={checked}
         aria-label={displayText(text) || "Checklist item"}
-        onClick={onToggle}
-      >
-        <span aria-hidden="true">{checked ? "✓" : ""}</span>
-      </button>
+        onChange={onToggle}
+      />
       <span className={styles.checkText} data-done={String(checked)}>
         {displayText(text)}
       </span>
-    </div>
+    </label>
   );
 }
 
@@ -211,14 +215,15 @@ export function Editor(props: EditorProps): ReactNode {
   const fileRef = useRef<HTMLInputElement | null>(null);
   const areaRef = useRef<HTMLTextAreaElement | null>(null);
   const [title, setTitle] = useState(shown.untitled ? "" : shown.heading);
-
-  // The title field follows the note the member opened, not the last one they
-  // typed into: switching notes with the editor open must not carry a name
-  // across.
-  useEffect(() => {
+  // THE FIELD FOLLOWS THE NOTE THE MEMBER OPENED, not the last one they typed
+  // into. Adjusting the draft during render on an id change is React's own
+  // answer for state derived from a prop — an effect would paint one frame of
+  // the previous note's name into this note's field first.
+  const [shownNoteId, setShownNoteId] = useState(note.note_id);
+  if (shownNoteId !== note.note_id) {
+    setShownNoteId(note.note_id);
     setTitle(shown.untitled ? "" : shown.heading);
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- keyed on the note, not on its derived heading
-  }, [note.note_id]);
+  }
 
   const segments = bodySegments(body);
   const tally = tallyLabel(note.check);
@@ -401,11 +406,7 @@ export function Editor(props: EditorProps): ReactNode {
         >
           Attach a file
         </button>
-        <button
-          type="button"
-          className="kit-btn"
-          onClick={props.onOpenHistory}
-        >
+        <button type="button" className="kit-btn" onClick={props.onOpenHistory}>
           Version history
         </button>
         <button

@@ -57,7 +57,10 @@ describe("first-line promotion", () => {
   });
 
   test("leading blank lines do not become the heading", () => {
-    const shown = promote({ title: "", preview: "\n\nthe first real line\nrest" });
+    const shown = promote({
+      title: "",
+      preview: "\n\nthe first real line\nrest",
+    });
     expect(shown.heading).toBe("the first real line");
     expect(shown.preview).toBe("rest");
   });

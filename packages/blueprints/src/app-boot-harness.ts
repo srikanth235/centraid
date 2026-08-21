@@ -21,6 +21,13 @@ import { createRoot } from "react-dom/client";
 import type { Root as ReactRoot } from "react-dom/client";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
+import {
+  decoratePendingMutation,
+  definePendingProjection,
+  pendingPatch,
+  projectPendingWrite,
+} from "@centraid/blueprints/apps/_shared/pending-overlay";
+
 // Boots a blueprint app the way the v0 client does: its query-free `Root`,
 // the real kit, the workspace React runtime, and a mocked `window.centraid`
 // vault. The retired served adapter and its vendored React copy are not part
@@ -47,11 +54,11 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 //     app re-runs `refresh()` on window 'focus', so flipping the mock and
 //     dispatching focus walks granted → denied → granted on a single instance.
 //
-// Photos additionally boots a populated replica fixture and is the one app
-// held to the live-read journey (`expectLive`). Agenda drove that journey too —
-// including the pending-chip assertions over the production intent-invalidation
-// derivation — until its interface was removed pending a ground-up redesign;
-// the rebuilt app re-enters here with its own `<app>.test.ts`.
+// Agenda and Photos boot populated replica fixtures and are the apps held to
+// the live-read journey (`expectLive`). Agenda's pending-chip assertions
+// consume the production intent-invalidation derivation, so the harness cannot
+// invent a terminal browser signal that the real coordinator would never
+// publish.
 
 // Resolved from this module's own path, not process.cwd(): cwd differs
 // between a root-run vitest (repo root) and a package-run vitest (this
@@ -63,6 +70,17 @@ const PKG = path.resolve(import.meta.dirname, "..");
 // refuses to load under the jsdom environment (realm-split Uint8Array trips
 // its TextEncoder startup invariant).
 const ESBUILD_BIN = path.resolve(PKG, "../..", "node_modules/.bin/esbuild");
+
+// The intent-invalidation derivation is the client's (packages/client/src/
+// replica/intent-invalidations.ts). It is loaded BY PATH rather than as
+// `@centraid/client/replica/intent-invalidations` because `@centraid/client`
+// already depends on `@centraid/blueprints`: declaring the reverse edge — even
+// as a devDependency — would make Turbo's topological `^build` graph cyclic.
+const { replicaIntentInvalidations } = await import(
+  pathToFileURL(
+    path.resolve(PKG, "../client/src/replica/intent-invalidations.ts")
+  ).href
+);
 
 // Loader by extension for the client-bundled source graph.
 function loaderForExt(rel: string): "jsx" | "tsx" | "ts" {
@@ -160,8 +178,44 @@ const DENIED = { vaultDenied: { message: "Grant revoked." } };
 const PHOTO_ASSET_ID = "asset-airplane";
 const PHOTO_TITLE = "Airplane-mode photo";
 
+const AGENDA_EVENT_ID = "event-airplane";
+const AGENDA_INTENT_ID = "intent-airplane-cancel";
+const AGENDA_TITLE = "Airplane-mode planning";
+
+/**
+ * The one action this journey drives, declared the way the app declares it
+ * (apps/agenda/pending-projection.ts) rather than re-derived: the harness must
+ * project a cancel exactly as production does, or the chip it asserts on is a
+ * chip nothing in the product would ever paint.
+ */
+const AGENDA_PENDING_PROJECTION = definePendingProjection({
+  appId: "agenda",
+  actions: {
+    "cancel-event": ({ input }) =>
+      pendingPatch("core.event", input.event_id, input),
+  },
+});
+
 /** Populated, clone-safe rows shaped exactly like each app's local query. */
 function replicaFixture(app: string): unknown {
+  if (app === "agenda") {
+    return {
+      events: [
+        {
+          event_id: AGENDA_EVENT_ID,
+          calendar_id: "calendar-local",
+          summary: AGENDA_TITLE,
+          description: "Already present in the local replica.",
+          dtstart: "2099-01-15T09:00:00.000Z",
+          dtend: "2099-01-15T10:00:00.000Z",
+          status: "confirmed",
+          attendees: [],
+          attachments: [],
+        },
+      ],
+      calendars: [{ calendar_id: "calendar-local", name: "Local calendar" }],
+    };
+  }
   if (app === "photos") {
     return {
       assets: [
@@ -389,6 +443,12 @@ export function describeAppBoot(
       { timeout: BOOT_TEST_TIMEOUT_MS },
       async () => {
         document.body.innerHTML = '<div id="appRoot"></div>';
+        if (app === "agenda") {
+          // The Schedule view renders the populated fixture independent of the
+          // machine's current month, which keeps this browser journey
+          // deterministic. The knob is the app's own `appDefaultView`.
+          document.documentElement.dataset.appDefaultView = "schedule";
+        }
         const granted = options.expectLive ? replicaFixture(app) : {};
         let response: unknown = granted;
         let nextReadError: Error | undefined;
@@ -405,6 +465,49 @@ export function describeAppBoot(
           networkCalls.push(args[0]);
           throw new Error("synthetic airplane mode");
         };
+        /**
+         * Re-project the queued cancel through the PRODUCTION projection and
+         * push the decorated row down the live read, exactly as the replica
+         * composition would. The row keeps its place on the agenda: a held
+         * cancellation is a designed state, not a disappearance.
+         */
+        const updateAgendaOverlay = (
+          intentState: "queued" | "parked" | "denied"
+        ): void => {
+          if (app !== "agenda") return;
+          const projected = projectPendingWrite(AGENDA_PENDING_PROJECTION, {
+            appId: "agenda",
+            action: "cancel-event",
+            input: { event_id: AGENDA_EVENT_ID },
+            intentId: AGENDA_INTENT_ID,
+          });
+          const mutation = projected.optimistic[0];
+          if (!mutation || mutation.op !== "upsert") return;
+          const decorated = decoratePendingMutation(mutation, {
+            intentId: AGENDA_INTENT_ID,
+            state: intentState,
+            action: "cancel-event",
+            ...(intentState === "parked"
+              ? { reason: "Waiting for the owner to approve this change." }
+              : intentState === "denied"
+                ? { reason: "The owner denied this cancellation." }
+                : {}),
+          });
+          const current = response as {
+            events: Array<Record<string, unknown>>;
+            calendars: Array<Record<string, unknown>>;
+          };
+          response = {
+            ...current,
+            events: current.events.map((event) =>
+              event.event_id === mutation.rowId
+                ? { ...event, ...decorated.values }
+                : event
+            ),
+          };
+          for (const listener of live) listener(response);
+        };
+
         window.centraid = {
           appId: app,
           read: (request?: {
@@ -434,6 +537,13 @@ export function describeAppBoot(
           },
           write: async (request: unknown) => {
             writeCalls.push(request);
+            if (
+              app === "agenda" &&
+              (request as { action?: string }).action === "cancel-event"
+            ) {
+              updateAgendaOverlay("queued");
+              return { status: "queued", intentId: AGENDA_INTENT_ID };
+            }
             return {};
           },
           onChange: (listener: (detail: unknown) => void) => {
@@ -466,6 +576,39 @@ export function describeAppBoot(
           },
         };
 
+        /**
+         * The terminal owner decision, delivered the way the real coordinator
+         * delivers it: the overlay row is re-decorated AND the client's own
+         * intent-invalidation derivation names which shapes went stale. Using
+         * the production derivation is the point — a hand-rolled doorbell
+         * would prove the harness can invalidate, not that the app is wired to
+         * the signal it will actually receive.
+         */
+        const emitAgendaIntentState = (
+          intentState: "parked" | "denied"
+        ): void => {
+          updateAgendaOverlay(intentState);
+          const invalidations = replicaIntentInvalidations([
+            {
+              intentId: AGENDA_INTENT_ID,
+              payloadHash: "harness-payload",
+              appId: "agenda",
+              action: "cancel-event",
+              input: { event_id: AGENDA_EVENT_ID },
+              state: intentState,
+              createdOrder: 1,
+              attempts: 1,
+              optimistic: [],
+              dependencies: [
+                { shapeId: "shape-agenda-events", entity: "core.event" },
+              ],
+            },
+          ]);
+          for (const invalidation of invalidations)
+            for (const listener of changes)
+              listener({ ...invalidation, tables: [invalidation.entity] });
+        };
+
         const module = await import(
           pathToFileURL(path.join(dir, "app-root.tsx")).href
         );
@@ -495,7 +638,94 @@ export function describeAppBoot(
             `${app} never subscribed to its replica read`
           ).toBeGreaterThan(0);
 
-          if (app === "photos") {
+          if (app === "agenda") {
+            const eventRow = (): Element | null =>
+              document.querySelector(`[data-event-id="${AGENDA_EVENT_ID}"]`);
+            const askToCancel = (): HTMLButtonElement | undefined =>
+              Array.from(
+                document.querySelectorAll<HTMLButtonElement>("button")
+              ).find((button) => button.textContent?.trim() === "Ask to cancel");
+
+            await waitFor(
+              () => eventRow() !== null,
+              "Agenda's schedule row to render from the local replica"
+            );
+            expect(eventRow()?.textContent).toContain(AGENDA_TITLE);
+            (eventRow() as HTMLButtonElement | null)?.click();
+            await waitFor(
+              () => askToCancel() !== undefined,
+              "the Agenda event's detail panel to open"
+            );
+            askToCancel()?.click();
+            // waitFor lands the write; settle then holds a QUIET window so the
+            // exactly-one assertion below proves no second dispatch came out
+            // of the re-render, rather than merely not having arrived yet.
+            await waitFor(
+              () => writeCalls.length > 0,
+              "Agenda's cancel ask to reach the vault"
+            );
+            await settle();
+            expect(writeCalls).toStrictEqual([
+              {
+                action: "cancel-event",
+                input: { event_id: AGENDA_EVENT_ID },
+              },
+            ]);
+            expect(
+              readCalls,
+              "offline interaction unexpectedly re-read the replica"
+            ).toBe(bootReads);
+            expect(
+              networkCalls,
+              "offline interaction attempted a network request"
+            ).toStrictEqual([]);
+
+            await waitFor(
+              () => document.querySelector(".kit-pending-chip") !== null,
+              "Agenda's held-write chip to paint for the queued cancel"
+            );
+            expect(
+              document.querySelector(".kit-pending-chip")?.textContent
+            ).toBe("cancel asked");
+            expect(document.body.textContent).toContain(AGENDA_TITLE);
+
+            // Reconnect admission PARKS the exact queued intent: the event
+            // stays canonical and the chip stays until a terminal decision.
+            Object.defineProperty(window.navigator, "onLine", {
+              configurable: true,
+              value: true,
+            });
+            emitAgendaIntentState("parked");
+            await settle();
+            expect(
+              document.querySelector(".kit-pending-chip")?.textContent
+            ).toBe("cancel asked");
+
+            // A denial is durable attention state: the row and its explanation
+            // stay until the member edits, retries, or discards it.
+            emitAgendaIntentState("denied");
+            await waitFor(
+              () =>
+                document.querySelector(".kit-pending-chip")?.textContent ===
+                "denied",
+              "Agenda's denied chip to persist on the exact outcome"
+            );
+            expect(document.body.textContent).toContain(AGENDA_TITLE);
+            // The doorbell is trailing-debounced, so this is polled rather
+            // than read on the frame the chip settled on.
+            await waitFor(
+              () => readCalls > bootReads,
+              "the outbox state change to invalidate the composed replica read"
+            );
+            expect(
+              readCalls,
+              "outbox state changes did not invalidate the composed replica read"
+            ).toBeGreaterThan(bootReads);
+            expect(
+              networkCalls,
+              "outbox state invalidation attempted a network read"
+            ).toStrictEqual([]);
+          } else if (app === "photos") {
             await waitFor(
               () =>
                 document.querySelector(
@@ -589,7 +819,7 @@ export function describeAppBoot(
             `${app} did not attempt the replacement live read`
           ).toBeGreaterThan(beforeFailure);
           const afterFailure = readCalls;
-          const table = "core.content_item";
+          const table = app === "agenda" ? "core.event" : "core.content_item";
           for (const listener of changes) listener({ tables: [table] });
           await waitFor(
             () => readCalls > afterFailure && live.size > 0,

@@ -135,9 +135,10 @@ describe("the meta line", () => {
       }),
       now: NOW,
     });
-    for (const part of parts) {
-      if (/\d/u.test(part.text)) expect(part.numeric).toBe(true);
-    }
+    const unmarked = parts.filter(
+      (part) => /\d/u.test(part.text) && part.numeric !== true
+    );
+    expect(unmarked).toStrictEqual([]);
   });
 
   it("puts the project first and the tags after the facts", () => {

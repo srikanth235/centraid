@@ -29,7 +29,10 @@
     width: 100%;
     max-width: 100%;
     margin: auto 0 0;
-    border-radius: var(--r-lg) var(--r-lg) 0 0;
+    /* The two top corners only — written as the two corner longhands so each
+       one still reads a single rung off the shared scale. */
+    border-top-left-radius: var(--r-lg);
+    border-top-right-radius: var(--r-lg);
   }
 }
 
@@ -159,7 +162,8 @@
   z-index: 40;
   background: var(--bg-elev);
   border-top: 1px solid var(--line);
-  border-radius: var(--r-lg) var(--r-lg) 0 0;
+  border-top-left-radius: var(--r-lg);
+  border-top-right-radius: var(--r-lg);
   box-shadow: var(--shadow-lg);
   padding: var(--sp-3);
   display: flex;

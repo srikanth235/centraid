@@ -2,7 +2,13 @@
 // passage carries.
 import { describe, expect, test } from "vitest";
 
-import { KIND_ORDER, anchorFrom, groupTargets, probeAt, resolveAnchor } from "./powerbox.ts";
+import {
+  KIND_ORDER,
+  anchorFrom,
+  groupTargets,
+  probeAt,
+  resolveAnchor,
+} from "./powerbox.ts";
 import type { LinkTarget } from "./types.ts";
 
 const target = (app: string, id: string): LinkTarget => ({
@@ -78,6 +84,8 @@ describe("anchored passages", () => {
   });
 
   test("a passage edited away degrades rather than pointing at the wrong words", () => {
-    expect(resolveAnchor("nothing like it here", anchorFrom(body, 20, 30))).toBeNull();
+    expect(
+      resolveAnchor("nothing like it here", anchorFrom(body, 20, 30))
+    ).toBeNull();
   });
 });

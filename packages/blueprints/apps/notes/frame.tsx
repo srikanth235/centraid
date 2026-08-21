@@ -54,9 +54,7 @@ const NO_PRIMARY: ReadonlySet<string> = new Set([
  */
 export function primaryLabel(shelf: ShelfId): string | null {
   if (shelf === NOTE) return "Link";
-  return typeof shelf === "string" && NO_PRIMARY.has(shelf)
-    ? null
-    : "New note";
+  return typeof shelf === "string" && NO_PRIMARY.has(shelf) ? null : "New note";
 }
 
 export interface AppBarState extends AppBarBase {
@@ -77,7 +75,10 @@ export interface AppBarState extends AppBarBase {
 
 export function barCount(state: AppBarState): ReactNode {
   if (state.count === null) return undefined;
-  return countLabel(state.count, shelfCopy(state.shelf, state.notebookName).unit);
+  return countLabel(
+    state.count,
+    shelfCopy(state.shelf, state.notebookName).unit
+  );
 }
 
 export function barTitle(state: AppBarState): string {

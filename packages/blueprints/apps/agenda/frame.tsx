@@ -41,7 +41,7 @@ const BAND_ICONS: Readonly<Record<ViewKind, string>> = {
   week: "Calendar",
   day: "Clock",
   schedule: "List",
-  waiting: "Inbox",
+  waiting: "Users",
 };
 
 /**

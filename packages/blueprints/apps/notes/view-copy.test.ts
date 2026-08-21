@@ -3,6 +3,7 @@
 // before it reaches a member's screen.
 import { describe, expect, test } from "vitest";
 
+import { BOOKS, JOURNAL, TRASH } from "./shelves.ts";
 import {
   BACKLINKS_NOTE,
   CAPTURE_CUSTODY,
@@ -42,7 +43,6 @@ import {
   staleReplica,
   windowEnd,
 } from "./view-copy.ts";
-import { BOOKS, JOURNAL, TRASH } from "./shelves.ts";
 
 describe("the spec's copy table, verbatim", () => {
   test("the rail states the division in words", () => {
@@ -138,7 +138,9 @@ describe("the spec's copy table, verbatim", () => {
     expect(`${CAPTURE_SCANNER} ${CAPTURE_WHAT}`).toBe(
       "Docs owns the scanner. This is a photograph, attached to a note."
     );
-    expect(CAPTURE_CUSTODY).toBe("On this phone only until the gateway answers");
+    expect(CAPTURE_CUSTODY).toBe(
+      "On this phone only until the gateway answers"
+    );
     expect(`${VOICE_NO_TRANSCRIPT_YET} ${VOICE_AUDIO_READABLE}`).toBe(
       "No transcript yet. The audio is safe and readable as audio."
     );
@@ -189,7 +191,8 @@ describe("no filler, anywhere", () => {
   });
 
   test("every literal stays inside the copy ratchet's own limits", () => {
-    for (const line of EVERY_STRING) expect(line.length).toBeLessThanOrEqual(120);
+    for (const line of EVERY_STRING)
+      expect(line.length).toBeLessThanOrEqual(120);
   });
 });
 

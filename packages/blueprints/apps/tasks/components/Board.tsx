@@ -84,6 +84,10 @@ export function TaskFamily({
   );
 }
 
+/** A stable empty list, so a header with no verbs does not hand a fresh array
+ *  identity down on every render. */
+const NO_VERBS: readonly { label: string; run: () => void }[] = [];
+
 export interface GroupHeaderProps {
   group: TaskGroup;
   /** At most two, and the second is withheld on touch (§5). */
@@ -93,7 +97,7 @@ export interface GroupHeaderProps {
 
 export function GroupHeader({
   group,
-  verbs = [],
+  verbs = NO_VERBS,
   narrow,
 }: GroupHeaderProps): ReactNode {
   const offered = narrow ? verbs.slice(0, 1) : verbs.slice(0, 2);
@@ -114,7 +118,7 @@ export function GroupHeader({
             key={verb.label}
             type="button"
             className="kit-plain-btn"
-            onClick={verb.run}
+            onClick={() => verb.run()}
           >
             {verb.label}
           </button>

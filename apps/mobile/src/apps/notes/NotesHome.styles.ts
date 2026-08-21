@@ -1,0 +1,178 @@
+import { StyleSheet } from "react-native";
+
+import { borders, family, radii, t } from "../../kit/theme";
+
+export const styles = StyleSheet.create({
+  backlink: {
+    borderRadius: radii.md,
+    borderWidth: borders.hairline,
+    gap: 2,
+    paddingHorizontal: 12,
+    paddingVertical: 9,
+  },
+  backlinkLabel: {
+    fontFamily: family.sansMedium,
+    fontSize: t("mono").fontSize,
+  },
+  backlinkMeta: {
+    fontFamily: family.sansRegular,
+    fontSize: t("mono").fontSize,
+  },
+  backlinks: { gap: 8, marginTop: 18 },
+  body: {
+    ...t("body"),
+    minHeight: 280,
+    paddingTop: 12,
+    textAlignVertical: "top",
+  },
+  button: {
+    alignItems: "center",
+    borderRadius: radii.lg,
+    flexDirection: "row",
+    gap: 7,
+    justifyContent: "center",
+    minHeight: 44,
+    paddingHorizontal: 16,
+  },
+  buttonText: {
+    fontFamily: family.sansMedium,
+    fontSize: t("body").fontSize,
+  },
+  chip: {
+    borderRadius: radii.pill,
+    borderWidth: borders.hairline,
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+  },
+  chipText: {
+    fontFamily: family.sansMedium,
+    fontSize: t("mono").fontSize,
+  },
+  controls: {
+    flexDirection: "row",
+    gap: 8,
+    paddingHorizontal: 20,
+    paddingVertical: 12,
+  },
+  editor: { flex: 1, paddingHorizontal: 20 },
+  editorActions: {
+    flexDirection: "row",
+    gap: 9,
+    paddingBottom: 18,
+    paddingHorizontal: 20,
+    paddingTop: 12,
+  },
+  empty: {
+    alignItems: "center",
+    gap: 8,
+    paddingHorizontal: 36,
+    paddingVertical: 72,
+  },
+  emptyBody: {
+    ...t("body"),
+    textAlign: "center",
+  },
+  emptyTitle: {
+    fontFamily: family.sansMedium,
+    fontSize: t("reading").fontSize,
+  },
+  fill: { flex: 1 },
+  header: {
+    alignItems: "center",
+    flexDirection: "row",
+    gap: 12,
+    paddingHorizontal: 20,
+    paddingVertical: 14,
+  },
+  headerCopy: { flex: 1 },
+  headerTitle: {
+    fontFamily: family.sansMedium,
+    fontSize: t("display").fontSize,
+    letterSpacing: -0.7,
+  },
+  iconButton: {
+    alignItems: "center",
+    height: 44,
+    justifyContent: "center",
+    width: 44,
+  },
+  linkAction: {
+    borderRadius: radii.md,
+    borderWidth: borders.hairline,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+  },
+  linkMeta: {
+    fontFamily: family.sansRegular,
+    fontSize: t("control").fontSize,
+    marginTop: 2,
+  },
+  linkTitle: {
+    fontFamily: family.sansMedium,
+    fontSize: t("mono").fontSize,
+  },
+  linkWrap: { gap: 7, marginTop: 16 },
+  list: { paddingBottom: 110, paddingHorizontal: 20 },
+  modalHeader: {
+    alignItems: "center",
+    flexDirection: "row",
+    gap: 12,
+    paddingHorizontal: 20,
+    paddingVertical: 14,
+  },
+  modalTitle: {
+    flex: 1,
+    fontFamily: family.sansMedium,
+    fontSize: t("title").fontSize,
+  },
+  note: {
+    borderBottomWidth: borders.hairline,
+    gap: 6,
+    paddingVertical: 17,
+  },
+  noteMeta: {
+    fontFamily: family.sansRegular,
+    fontSize: t("mono").fontSize,
+  },
+  notePreview: {
+    ...t("small"),
+  },
+  noteTitle: {
+    fontFamily: family.sansMedium,
+    fontSize: t("reading").fontSize,
+  },
+  picker: { flex: 1, paddingHorizontal: 20 },
+  pickerCopy: {
+    ...t("small"),
+    marginBottom: 12,
+  },
+  search: {
+    alignItems: "center",
+    borderRadius: radii.lg,
+    borderWidth: borders.hairline,
+    flex: 1,
+    flexDirection: "row",
+    gap: 8,
+    minHeight: 44,
+    paddingHorizontal: 12,
+  },
+  searchInput: {
+    flex: 1,
+    fontFamily: family.sansRegular,
+    fontSize: t("body").fontSize,
+    minHeight: 42,
+  },
+  sheet: { flex: 1 },
+  subtitle: {
+    fontFamily: family.sansRegular,
+    fontSize: t("mono").fontSize,
+    marginTop: 2,
+  },
+  title: {
+    borderBottomWidth: borders.hairline,
+    fontFamily: family.sansMedium,
+    fontSize: t("title").fontSize,
+    paddingBottom: 10,
+    paddingTop: 12,
+  },
+});

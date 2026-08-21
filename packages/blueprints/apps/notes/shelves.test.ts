@@ -67,9 +67,9 @@ describe("routes", () => {
 
 describe("the phone's band", () => {
   test("five destinations: four places plus the frame's More", () => {
-    expect(BAND_DESTINATIONS.map((destination) => destination.label)).toStrictEqual(
-      ["Library", "Notebooks", "Journal", "Search"]
-    );
+    expect(
+      BAND_DESTINATIONS.map((destination) => destination.label)
+    ).toStrictEqual(["Library", "Notebooks", "Journal", "Search"]);
   });
 
   test("only acts sit behind More", () => {

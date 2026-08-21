@@ -122,7 +122,11 @@ export interface AppState {
    *  still opens, and it opens from the library it is already in. */
   unfiledOnly: boolean;
   search: string;
+  /** Everywhere, or the notebook the member reached Search FROM. */
   searchScope: SearchScope;
+  /** That notebook, remembered on the way in — a scope control with no
+   *  notebook behind it would be a pair of buttons meaning the same thing. */
+  scopeNotebookId: string | null;
   searchResults: Note[] | null;
   searchStatus: "resting" | "searching" | "ready" | "unreachable";
   searchSeq: number;

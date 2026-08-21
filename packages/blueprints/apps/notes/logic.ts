@@ -263,12 +263,6 @@ export function createLogic({
     600
   );
 
-  /** Save the body immediately — used where the member's next act would
-   *  otherwise race the debounce (opening history, leaving the editor). */
-  async function flushBody(noteId: string, body: string): Promise<void> {
-    await act("edit-note", { note_id: noteId, body_text: body });
-  }
-
   async function togglePin(note: Note): Promise<void> {
     const pinned = note.pinned === 1 ? 0 : 1;
     await write("edit-note", { note_id: note.note_id, pinned });
@@ -378,7 +372,12 @@ export function createLogic({
   async function linkNote(
     noteId: string,
     target: LinkTarget,
-    anchor: { exact: string; prefix: string; suffix: string; start: number } | null
+    anchor: {
+      exact: string;
+      prefix: string;
+      suffix: string;
+      start: number;
+    } | null
   ): Promise<void> {
     const input: Record<string, unknown> = {
       note_id: noteId,
@@ -400,8 +399,10 @@ export function createLogic({
   async function attachFile(noteId: string, file: File): Promise<void> {
     const dataUri = await new Promise<string>((resolve, reject) => {
       const reader = new FileReader();
-      reader.onerror = () => reject(new Error("unreadable"));
-      reader.onload = () => resolve(String(reader.result ?? ""));
+      reader.addEventListener("error", () => reject(new Error("unreadable")));
+      reader.addEventListener("load", () =>
+        resolve(String(reader.result ?? ""))
+      );
       reader.readAsDataURL(file);
     }).catch(() => "");
     if (!dataUri) {
@@ -521,7 +522,6 @@ export function createLogic({
     loadHistory,
     createNote,
     saveNote,
-    flushBody,
     togglePin,
     moveNote,
     deleteNote,
@@ -561,6 +561,17 @@ export function rowsFor(
     rows = rows.filter((note) =>
       (note.notebook_ids ?? []).includes(notebookId)
     );
+  // THE SCOPE IS THE MEMBER'S, and it only exists where they came from a
+  // notebook: Everywhere is the default, This notebook narrows to the place
+  // Search was reached from.
+  if (
+    state.search.trim() &&
+    state.searchScope === "notebook" &&
+    state.scopeNotebookId
+  ) {
+    const scopeId = state.scopeNotebookId;
+    rows = rows.filter((note) => (note.notebook_ids ?? []).includes(scopeId));
+  }
   if (state.unfiledOnly)
     rows = rows.filter((note) => (note.notebook_ids ?? []).length === 0);
   if (state.conceptId) {

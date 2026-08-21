@@ -34,7 +34,8 @@ export const RAIL_TAGS = "Tags · how a note is seen";
  *  guilt: a pile is a fact the member can look at. */
 export const UNFILED_ROW = "Unfiled";
 export const UNFILED_NOTE = "a note that was never filed still opens";
-export const JOURNAL_ROW = "Journal · written by People · kept apart from the rest";
+export const JOURNAL_ROW =
+  "Journal · written by People · kept apart from the rest";
 
 /** Day one: one sentence, two acts, counts blanked (§4). */
 export const EMPTY_DAY_ONE = "Write the first one.";
@@ -170,7 +171,8 @@ export const BACKLINKS_NOTE =
 export function anchoredFrom(noteTitle: string): string {
   return `anchored passage · linked from ${noteTitle}`;
 }
-export const ANCHOR_DEGRADED = "the passage was edited · this anchor now points at the note";
+export const ANCHOR_DEGRADED =
+  "the passage was edited · this anchor now points at the note";
 
 /** Capture and voice — the two origin acts (§1). Each names where the
  *  content lands and states its local custody before it syncs. */

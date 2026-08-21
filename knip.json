@@ -126,7 +126,6 @@
       ],
       "ignoreDependencies": [
         "@babel/core",
-        "@react-native-community/datetimepicker",
         "expo-system-ui"
       ]
     },

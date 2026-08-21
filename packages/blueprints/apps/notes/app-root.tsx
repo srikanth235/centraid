@@ -21,6 +21,7 @@ import {
 
 import { publishOutcome } from "../_shared/app-frame.tsx";
 import { SearchScaffold } from "../_shared/SearchScaffold.tsx";
+import { libraryReachability } from "../_shared/view-state-kit.ts";
 import type { InlineAppProps } from "../inline-types.ts";
 import { Chrome } from "./Chrome.tsx";
 import { Editor } from "./components/Editor.tsx";
@@ -135,6 +136,7 @@ function makeState(view: AppState["view"]): AppState {
     unfiledOnly: false,
     search: "",
     searchScope: "everywhere",
+    scopeNotebookId: null,
     searchResults: null,
     searchStatus: "resting",
     searchSeq: 0,
@@ -294,12 +296,20 @@ export function Root({
   const go = useCallback(
     (shelf: ShelfId) => {
       if (shelf !== SEARCH && state.search) logic.clearSearch();
+      // Reaching Search FROM a notebook is what gives the scope pair its
+      // second option; reaching it from anywhere else leaves Everywhere as
+      // the only honest answer.
+      if (shelf === SEARCH) {
+        state.scopeNotebookId = notebookIdFrom(state.shelf);
+        if (!state.scopeNotebookId) state.searchScope = "everywhere";
+      }
       state.shelf = shelf;
       state.creatingNotebook = false;
       state.renamingNotebookId = null;
       setMoreOpen(false);
       if (shelf === JOURNAL) void core.refreshJournal();
-      if (shelf === HISTORY && state.noteId) void logic.loadHistory(state.noteId);
+      if (shelf === HISTORY && state.noteId)
+        void logic.loadHistory(state.noteId);
       bump();
     },
     [core, logic, state]
@@ -380,9 +390,13 @@ export function Root({
   const openNotebookName = openNotebookId
     ? logic.notebookName(openNotebookId)
     : undefined;
-  const rows =
-    shelf === JOURNAL ? data.journal : rowsFor(data, state, shelf);
+  const rows = shelf === JOURNAL ? data.journal : rowsFor(data, state, shelf);
   const openNote = state.noteId ? logic.findNote(state.noteId) : null;
+  const offline =
+    libraryReachability({
+      hostStatus: rootElRef.current?.dataset.gatewayStatus ?? null,
+      readFailed: readFailedState,
+    }) === "unreachable";
   const searching = Boolean(state.search.trim());
 
   const onOpen = useCallback(
@@ -397,12 +411,14 @@ export function Root({
   /** The powerbox, from the `[[` sigil and from the bar's filled Link — one
    *  sheet, two doors, and the same anchor in both. */
   const openPowerbox = useCallback(
-    (anchor: {
-      exact: string;
-      prefix: string;
-      suffix: string;
-      start: number;
-    } | null) => {
+    (
+      anchor: {
+        exact: string;
+        prefix: string;
+        suffix: string;
+        start: number;
+      } | null
+    ) => {
       state.powerbox.open = true;
       state.powerbox.anchor = anchor ?? {
         exact: "",
@@ -595,8 +611,11 @@ export function Root({
   // do not grow two grammars for "nothing matches".
   const scroll = (
     <>
-      {/* A replica that ANSWERED but lagged is stale, not offline. */}
-      {readFailedState && loaded ? (
+      {/* OFFLINE IS READ, NEVER INVENTED: the host stamps its own answer on
+          this app's root (`data-gateway-status`), and a failed read is only
+          the fallback evidence. A replica that ANSWERED but lagged is stale,
+          which is this notice — not an error. */}
+      {offline && loaded ? (
         <Stale
           at={new Date().toISOString().slice(11, 16)}
           onRefresh={() => void core.refresh()}
@@ -670,8 +689,31 @@ export function Root({
       </div>
     );
 
+  const scopePair =
+    shelf === SEARCH && state.scopeNotebookId ? (
+      <div>
+        {(["everywhere", "notebook"] as const).map((scope) => (
+          <button
+            key={scope}
+            type="button"
+            className="kit-btn"
+            aria-pressed={state.searchScope === scope}
+            onClick={() => {
+              state.searchScope = scope;
+              bump();
+            }}
+          >
+            {scope === "everywhere" ? "Everywhere" : "This notebook"}
+          </button>
+        ))}
+      </div>
+    ) : null;
+
   const toolbar = showsViewToggle(shelf) ? (
-    <div role="group" aria-label="Arrangement">
+    // The pair sits inside the chrome's own `role="toolbar"`, which is where
+    // the row is named; a second group label here would announce the same
+    // furniture twice.
+    <div>
       <button
         type="button"
         className="kit-btn"
@@ -694,6 +736,7 @@ export function Root({
       >
         List
       </button>
+      {scopePair}
     </div>
   ) : null;
 

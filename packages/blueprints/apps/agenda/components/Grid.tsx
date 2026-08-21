@@ -67,6 +67,7 @@ function GridEvent({
     <button
       type="button"
       className={pending ? `${styles.event} kit-pending` : styles.event}
+      data-event-id={rowKey(ev)}
       data-clamped={String(segment.clamped)}
       onClick={() => onOpen(ev)}
     >

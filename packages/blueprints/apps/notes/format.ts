@@ -79,7 +79,10 @@ export function checkStats(body: unknown): { total: number; done: number } {
 
 /** The card's checklist tally — `14 of 22` — or null where a note has no
  *  boxes at all. Numerals are tabular wherever this lands. */
-export function tallyLabel(check?: { total: number; done: number }): string | null {
+export function tallyLabel(check?: {
+  total: number;
+  done: number;
+}): string | null {
   if (!check || check.total === 0) return null;
   return `${check.done} of ${check.total}`;
 }
@@ -113,14 +116,18 @@ export function promote(note: {
   );
   const lines = source.split("\n");
   const firstIndex = lines.findIndex((line) => line.trim() !== "");
-  const firstLine = firstIndex === -1 ? "" : stripInline(lines[firstIndex]).trim();
+  const firstLine =
+    firstIndex === -1 ? "" : stripInline(lines[firstIndex]).trim();
   const typed = stripInline(note.title).trim();
   const untitled = typed === "" || typed === firstLine;
   const rest = firstIndex === -1 ? [] : lines.slice(firstIndex + 1);
   return {
     heading: untitled ? firstLine : typed,
     untitled,
-    preview: (untitled ? rest : lines).join("\n").replace(/^\n+/u, "").trimEnd(),
+    preview: (untitled ? rest : lines)
+      .join("\n")
+      .replace(/^\n+/u, "")
+      .trimEnd(),
   };
 }
 
@@ -222,7 +229,10 @@ export function ageLabel(when: unknown, now: number = Date.now()): string {
 /** How long a trashed note has left, from the purge date the vault stamped.
  *  Null where the row carries none — this app never counts down from a date
  *  it had to invent. */
-export function daysLeft(purgeAt: unknown, now: number = Date.now()): number | null {
+export function daysLeft(
+  purgeAt: unknown,
+  now: number = Date.now()
+): number | null {
   const stamp = Date.parse(String(purgeAt ?? ""));
   if (Number.isNaN(stamp)) return null;
   return Math.max(0, Math.ceil((stamp - now) / DAY_MS));

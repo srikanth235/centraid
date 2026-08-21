@@ -71,6 +71,10 @@ function Row({
     <button
       type="button"
       className={pending ? `${styles.row} kit-pending` : styles.row}
+      // The row's stable identity, on the element. Boot and end-to-end
+      // journeys address a row by what it IS rather than by a class name,
+      // which is presentation and free to change.
+      data-event-id={rowKey(ev)}
       onClick={() => onOpen(ev)}
     >
       <CalendarDot hue={hue} />

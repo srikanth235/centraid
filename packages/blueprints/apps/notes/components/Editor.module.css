@@ -89,6 +89,7 @@
 /* The box: 20 under a pointer, 26 on touch, at the sub radius. Ink fill when
    done — never a colour, and never a tick that means a hue. */
 .box {
+  appearance: none;
   flex: none;
   width: 20px;
   height: 20px;
@@ -101,7 +102,7 @@
   color: var(--text-inv);
   font: var(--t-control);
 }
-.box[aria-checked="true"] {
+.box:checked {
   background: var(--accent-deep);
   border-color: var(--accent-deep);
 }

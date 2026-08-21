@@ -205,11 +205,14 @@ export function createLogic({ state, data, frame, render, refresh }: LogicDeps) 
     eventId: string
   ): Promise<VaultOutcome | undefined> {
     const outcome = await act("cancel-event", { event_id: eventId });
-    const executed = narrate(outcome);
+    // A HELD ASK IS NOT A FAILURE, so it is answered before `narrate` gets a
+    // chance to put a reason in the notice banner: the row already carries the
+    // mark and the status line already carries the sentence.
     if (narrateHeld(outcome)) {
       render();
       return outcome;
     }
+    const executed = narrate(outcome);
     if (executed || outcome?.status === "denied") await refresh();
     else render();
     return outcome;

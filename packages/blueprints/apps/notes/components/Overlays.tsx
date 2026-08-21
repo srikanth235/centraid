@@ -154,7 +154,9 @@ export interface MoreSheetProps {
  *  Trash and Version history are acts, so they live here. */
 export function MoreSheet(props: MoreSheetProps): ReactNode {
   return (
-    <div className={styles.sheet} role="dialog" aria-label="More in Notes">
+    // A non-modal `<dialog>`: the sheet stands over the band without taking
+    // the page hostage — the member can still see where they were.
+    <dialog open className={styles.sheet} aria-label="More in Notes">
       {MORE_SHELVES.map((shelf) => (
         <button
           key={String(shelf)}
@@ -172,6 +174,6 @@ export function MoreSheet(props: MoreSheetProps): ReactNode {
       <button type="button" className="kit-btn" onClick={props.onClose}>
         Close
       </button>
-    </div>
+    </dialog>
   );
 }
