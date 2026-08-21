@@ -1,0 +1,50 @@
+{
+  "note": "W6.3 (#842) CI egress ratchet. Every workflow listed here installs and runs dependency code with NO step-security/harden-runner step, so an exfiltrating dependency, build plugin, or test would reach the network unobserved. This is the state of the repo on the day the gate landed, pinned so it can only shrink: a NEW workflow must carry harden-runner, and an entry whose workflow has since been hardened (or deleted) fails the gate as stale. Removing an entry is the whole point — see scripts/security/lint-ci-egress.mjs for the mechanism and the umbrella receipt for the recommended rollout order (secret-holding release lanes first, then ci.yml, then the nightly lanes).",
+  "workflows": {
+    "ci.yml": {
+      "reason": "Highest install volume and the only open-PR listener, so it runs dependency code from every fork PR. Hardening it needs a learned allowlist (registry.npmjs.org, bun.sh, GitHub APIs, Playwright/Chromium CDN, SonarCloud) — start in egress-policy: audit, read the run summary, then flip to block. Priority 2."
+    },
+    "e2e.yml": {
+      "reason": "Nightly Playwright lane; downloads browsers, so its allowlist is the widest in the repo. Harden after ci.yml has a learned allowlist to copy. Priority 4."
+    },
+    "enrichment-live-weekly.yml": {
+      "reason": "Weekly lane that deliberately talks to live third-party enrichment endpoints; a block policy needs those destinations enumerated first. Priority 5."
+    },
+    "extension-e2e.yml": {
+      "reason": "Browser-extension e2e; same Chromium download surface as e2e.yml. Priority 4."
+    },
+    "interop-weekly.yml": {
+      "reason": "Weekly backup-format interop lane; no secrets, low blast radius. Priority 5."
+    },
+    "lane-client-e2e.yml": {
+      "reason": "workflow_call lane under ci.yml/e2e.yml; inherits their allowlist once either is hardened. Priority 4."
+    },
+    "lane-gateway-package.yml": {
+      "reason": "Packaging lane, no publish credentials. Priority 3."
+    },
+    "lane-release-companion.yml": {
+      "reason": "Sideline companion packaging; runs on companion-v* tags only. Priority 3."
+    },
+    "lane-release-desktop.yml": {
+      "reason": "Holds APPLE_API_KEY and the Azure Trusted Signing client secret. A dependency that reached the network during `bun run dist` would be sitting next to the signing identity. Priority 1 — harden this lane first."
+    },
+    "lane-release-gateway-npm.yml": {
+      "reason": "Holds NPM_TOKEN and builds native modules (a compile step is arbitrary code execution by definition). Priority 1."
+    },
+    "lane-release-mobile.yml": {
+      "reason": "Holds EXPO_TOKEN and store credentials; EAS submits from CI. Its allowlist must include Expo/EAS endpoints. Priority 2."
+    },
+    "oauth-worker.yml": {
+      "reason": "Holds the Cloudflare deploy token for the Assist OAuth courier — the one worker that brokers user Google tokens. Small workflow, narrow allowlist (Cloudflare API), so it is the cheapest priority-1 win."
+    },
+    "sonarcloud.yml": {
+      "reason": "Token-gated configurator; talks only to sonarcloud.io, so its allowlist is nearly a one-liner. Priority 3."
+    },
+    "toolchain-upgrade.yml": {
+      "reason": "Opens dependency-bump PRs, so by construction it installs unreviewed new versions — the exact scenario an egress policy is for. Blocked on knowing the registry allowlist. Priority 2."
+    },
+    "web.yml": {
+      "reason": "Holds the Cloudflare Pages deploy credentials for the public PWA origin. Priority 1."
+    }
+  }
+}

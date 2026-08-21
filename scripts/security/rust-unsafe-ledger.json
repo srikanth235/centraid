@@ -1,0 +1,9 @@
+{
+  "_comment": "Tighten-only ledger of `unsafe` sites in first-party Rust (issue #842 W7.2). A count ABOVE its entry fails: new unsafe needs a deliberate, reviewed ledger bump. A count BELOW its entry also fails: the ledger must be lowered in the same change that removes the unsafe, so the ratchet can never silently slacken. Every unsafe site must additionally carry a `// SAFETY:` comment, which no ledger entry can waive.",
+  "_unblock": "cargo is present in CI; this lane needs no extra tooling and always runs.",
+  "crates": {
+    "apps/web/iroh-wasm": 0,
+    "packages/tunnel/data-plane": 0,
+    "packages/tunnel/native": 0
+  }
+}

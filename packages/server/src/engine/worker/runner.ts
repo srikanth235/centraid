@@ -7,8 +7,17 @@
  *  - timeout enforcement (parent terminates worker on overrun)
  *  - a controlled API surface (ctx.vault is just message passing)
  *
- * It is NOT a security sandbox against hostile code. Hardening to that level
- * (isolated-vm or child-process + permission flags) is a future swap-in.
+ * Issue #842 W7.1 narrows that: before the handler graph is imported, this
+ * worker installs the app-handler sandbox (`../sandbox/install.ts`), which
+ * refuses every node builtin outside a computational allowlist (no `fs`, no
+ * `net`, no `child_process`, no `module`), revokes ambient network globals,
+ * and empties `process.env`. Network reach survives only as the governed
+ * `ctx.fetch` capability, which holds the pre-revocation `fetch` privately.
+ *
+ * It is still NOT an OS sandbox: handler code shares this process's address
+ * space, descriptors and uid, and a native addon would escape every check.
+ * The full, per-mechanism limits are in `../sandbox/install.ts` — read them
+ * before describing this boundary in a threat model.
  *
  * The handler's only data door is `ctx.vault` (issue #286 phase 2: apps are
  * projections over the owner's vault — the per-app data.sqlite is gone).
@@ -36,6 +45,28 @@ import { register } from "node:module";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
 import { parentPort, workerData } from "node:worker_threads";
+
+/**
+ * Load the sandbox bootstrap by absolute path. A plain `../sandbox/boot.js`
+ * specifier does not resolve when this worker runs from `src/` under native
+ * type stripping (see the header of `sandbox/boot.ts`), so the `.js`/`.ts`
+ * choice is made here the same way `ensureTsLoader` makes it below.
+ */
+async function loadSandboxBoot(): Promise<
+  typeof import("../sandbox/boot.js")
+> {
+  const dir = path.join(import.meta.dirname, "..", "sandbox");
+  const js = path.join(dir, "boot.js");
+  const file = existsSync(js) ? js : path.join(dir, "boot.ts");
+  return (await import(pathToFileURL(file).href)) as typeof import("../sandbox/boot.js");
+}
+
+/**
+ * The real `fetch`, captured at module evaluation — before the sandbox revokes
+ * the global. `ctx.fetch` closes over this binding, so the handler's only
+ * network reach is the capability the host hands it, never ambient authority.
+ */
+const hostFetch = globalThis.fetch;
 
 /**
  * Install the `.ts`/`.tsx` module-customization hooks (worker/ts-loader-hooks)
@@ -232,7 +263,7 @@ const log = {
 const abortController = new AbortController();
 const baseCtx = {
   fetch: (input: string, init?: RequestInit) =>
-    fetch(input, { ...init, signal: abortController.signal }),
+    hostFetch(input, { ...init, signal: abortController.signal }),
   abortSignal: abortController.signal,
   vault,
 };
@@ -268,6 +299,13 @@ function execute(req: WorkerRequest): void {
       // A TS handler graph needs the esbuild loader hook before it can import
       // under plain Node; a JS handler skips this entirely.
       if (/\.tsx?$/u.test(req.handlerFile)) ensureTsLoader();
+      // Containment goes on LAST — after every trusted import above, and
+      // immediately before the untrusted graph is reachable. The handler file
+      // is the taint root; everything it pulls in inherits the confinement.
+      const { loadSandbox } = await loadSandboxBoot();
+      const boot = await loadSandbox();
+      const sandbox = boot.installWorkerSandbox(boot.appHandlerPolicy());
+      sandbox.taint(pathToFileURL(req.handlerFile).href);
       const mod = (await import(pathToFileURL(req.handlerFile).href)) as {
         default?: (args: unknown) => Promise<unknown>;
       };
