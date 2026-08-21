@@ -10,6 +10,7 @@ export default {
     "apps/agenda/views.test.ts",
     "apps/agenda/day-context.test.ts",
     "apps/agenda/view-copy.test.ts",
+    "apps/agenda/format-locale.test.ts",
   ],
   // Agenda's arithmetic and its narration. `views.ts` decides which day an
   // event is drawn on, what counts as all-day and how a multi-day run lays
@@ -20,9 +21,10 @@ export default {
   // projection and the scope-panel mapping; `day-context.ts` derives the
   // day's own facts.
   //
-  // Deliberately OUT: `format.ts` (no suite of its own yet — its callers are
-  // asserted through views/day-context, so mutating it would ratchet in a
-  // hole rather than close one), `view-copy.ts` (a copy table, discarded by
+  // `format.ts` joined the mutate set when `format-locale.test.ts` (#839 W3-C)
+  // gave it a suite of its own pinning the locale decisions.
+  //
+  // Deliberately OUT: `view-copy.ts` (a copy table, discarded by
   // `ignoreStatic`), `app-root.tsx` / `frame.tsx` / `Chrome.tsx` /
   // `components/` (rendering) and `queries/` (real gateway).
   mutate: [
@@ -30,6 +32,7 @@ export default {
     "apps/agenda/edits.ts",
     "apps/agenda/views.ts",
     "apps/agenda/day-context.ts",
+    "apps/agenda/format.ts",
   ],
   reporters: ["clear-text", "json"],
   jsonReporter: {

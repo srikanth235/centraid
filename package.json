@@ -104,6 +104,7 @@
     "test:governance-shell": "bash scripts/test.sh",
     "test:hygiene-ratchet": "node scripts/test-report/hygiene-ratchet.mjs",
     "test:interop:backup": "bun run --cwd packages/backup test:interop",
+    "test:join": "node node_modules/vitest/vitest.mjs run --project @centraid/server --reporter=default --reporter=json --outputFile=artifacts/join/summary.json protocol-join-lane",
     "test:matrix": "node scripts/test-report/validate-matrix.mjs && node scripts/test-report/validate-nightly-wiring.mjs && node scripts/test-report/validate-release-wiring.mjs",
     "test:mutation": "node scripts/mutation/run.mjs",
     "test:mutation:pr": "node scripts/mutation/run.mjs --affected --enforce-floors",

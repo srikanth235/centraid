@@ -21,6 +21,10 @@ const requiredFlowScripts = [
   "tests/agent-e2e-pairing/flows/device-pairing-lifecycle.mjs",
   "tests/agent-e2e-pairing/flows/pairing-ticket-hygiene.mjs",
   "tests/agent-e2e-pairing/flows/cross-network-relay.mjs",
+  // #839 G8 — a committed Maestro suite that e2e.yml never invokes is a roster
+  // that silently stopped running; the mobile jobs must call both suites.
+  "tests/agent-e2e-mobile/run-photos-suite.mjs",
+  "tests/agent-e2e-mobile/run-home-apps-suite.mjs",
 ];
 
 const requiredJobs = [
@@ -70,7 +74,10 @@ for (const script of requiredFlowScripts) {
 }
 
 for (const name of requiredArtifactNames) {
-  if (!e2eCode.includes(name))
+  // Boundary-anchored, not includes(): a superstring rename (say,
+  // nightly-evidence-joinery) must fail, or the report job's merge-multiple
+  // download silently loses the evidence while this gate stays green.
+  if (!new RegExp(`${name}(?![\\w-])`, "u").test(e2eCode))
     errors.push(`e2e.yml missing artifact name ${name}`);
 }
 

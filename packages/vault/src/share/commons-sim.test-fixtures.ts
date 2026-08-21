@@ -80,10 +80,7 @@ type Weights = Partial<Record<ActionName, number>>;
 
 /** The #839 grant verbs ride the same picker, appended so a program WITHOUT
  *  the plane draws the exact #731 schedule its seed always drew. */
-const WITH_GRANT_PLANE: Weights = {
-  ...ACTION_WEIGHTS,
-  ...GRANT_ACTION_WEIGHTS,
-};
+const PLANE_WEIGHTS: Weights = { ...ACTION_WEIGHTS, ...GRANT_ACTION_WEIGHTS };
 
 function isGrantAction(name: ActionName): name is GrantActionName {
   return name in GRANT_ACTION_WEIGHTS;
@@ -584,10 +581,10 @@ export function runCommonsSimulation(options: SimOptions): SimReport {
   const rng = rngFor(options.seed);
   const world = createWorld(options);
   try {
-    // Two albums per ordered steward pair: enough slots for one grant to end
-    // standing and another to end severed inside a single program.
+    // Two albums per ordered steward pair: four slots over two stewards, so
+    // one grant can end standing and another severed in the same program.
     if (options.grantPlane === true) buildPlaneFor(world, 2);
-    const weights = world.plane ? WITH_GRANT_PLANE : ACTION_WEIGHTS;
+    const weights = world.plane ? PLANE_WEIGHTS : ACTION_WEIGHTS;
     for (let step = 0; step < options.actions; step += 1) {
       world.step = step;
       for (const grant of world.grants)

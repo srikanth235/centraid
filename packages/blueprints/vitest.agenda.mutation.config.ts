@@ -23,6 +23,7 @@ export default defineConfig({
       "apps/agenda/views.test.ts",
       "apps/agenda/day-context.test.ts",
       "apps/agenda/view-copy.test.ts",
+      "apps/agenda/format-locale.test.ts",
     ],
     testTimeout: 60_000,
     expect: { requireAssertions: true },

@@ -151,8 +151,9 @@ jobs:
     # Cold macOS native build + serialized journeys exceed 60 on a cache miss;
     # cancelled counts as red (#557), so the backstop must sit above the
     # budget. Raised from 60 under #781 after the 08-03/04/06/13 nightlies
-    # were cancelled at exactly this ceiling.
-    timeout-minutes: 90
+    # were cancelled at exactly this ceiling. Raised again to 105 under #839
+    # when the home-apps suite (10-minute aggregate ceiling) joined the run.
+    timeout-minutes: 105
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: ./.github/actions/setup
@@ -388,6 +389,10 @@ jobs:
           node tests/agent-e2e-mobile/flows/scroll-frames.mjs || ec=$?
           node tests/agent-e2e-mobile/run-photos-suite.mjs || ec=$?
           node tests/agent-e2e-mobile/flows/places-seat.mjs || ec=$?
+          # #839 G8 — the five home-app journeys that are not Photos. One
+          # fresh pairing, four reuses; budget in flows/home-apps-budget.md.
+          # Tally has no journey (held under #831).
+          node tests/agent-e2e-mobile/run-home-apps-suite.mjs || ec=$?
           exit "$ec"
       - name: Remove sensitive pairing diagnostics
         if: always()
@@ -1173,6 +1178,7 @@ jobs:
         pairing-ticket-hygiene,
         pairing-cross-network-relay,
         mutation-testing,
+        fuzz-parsers,
         quality-performance-scale,
         restore-year3,
         protocol-join,

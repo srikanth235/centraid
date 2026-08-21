@@ -30,7 +30,7 @@ Wave 1 — name the flows (G6, G7):
 
 Wave 2 — raise the adversaries (G4, G5, G9, G10):
 
-- [ ] Mutation seeds extended over the blueprint app layer and mobile logic
+- [x] Mutation seeds extended over the blueprint app layer and mobile logic
 - [x] Scope-denial sweep generated from the 37 app.json manifests
 - [x] Egress-dispatch law; policy-cascade property suite
 - [x] Fuzz runner + committed crasher corpus, wired to a nightly lane
@@ -39,11 +39,11 @@ Wave 3 — prove the joins (G1, G2, G3, G11, G12):
 
 - [ ] Join rig: one gateway + N in-process seats; grant verbs in the seeded
   simulator; revocation propagation and parked lifecycle owned
-- [ ] Version-skew lane; time zoo under the fake clock
+- [x] Version-skew lane; time zoo under the fake clock
 
 Wave 4 — own the devices (G8):
 
-- [ ] Maestro roster extended beyond photos; device-only claims named
+- [x] Maestro roster extended beyond photos; device-only claims named
 
 Wave 5 — close the contract (G13, G15, G16):
 
@@ -197,7 +197,67 @@ gateway's: mark-only queries are refused online but searched offline, and
 `don't` tokenizes to one prefix phrase online but two offline, so ranking and
 the 16-token bound apply to different token streams per plane).
 
+**W2-1 — mutation seeds over the blueprint app layer and the phone (G9).**
+`scripts/mutation/seeds.mjs` grows 16→24 seeds: tasks, notes, agenda, the
+`_shared` engines (pending-overlay, selection, triage, search-scaffold), and
+`apps/mobile` (src/lib pure logic). Three new suites (171 tests): notes and
+agenda `logic.ts` had no tests at all (now 82.74 / 89.87 file scores);
+pending-overlay measured 48.23 against its existing suite — below the
+absolute-weakness line — and `pending-overlay-law.test.ts` (54 branch cases
+over every export) took it to 96.79. Every floor added is PROVISIONAL-LOCAL
+at (local − 11), the local/CI gap #656 measured applied in the pessimistic
+direction, with the re-seed instruction recorded in
+`tests/mutation-floors.json#_w2Comment`. Two structural discoveries recorded
+there: Stryker's vitest runner dry-runs a jsdom project as "No tests were
+executed" (so `_shared/untrusted.ts` cannot be seeded until a node-side
+suite exists; the new suites were built node-side over a three-property DOM
+stub), and mutation sandboxes cannot resolve the `../design/src` alias (bare
+specifier → dist required, documented per config). Deliberately out, with
+reasons in each config: const tables zeroed by `ignoreStatic`, mobile
+`notification-model`/`phone-link-parse` (their own suites never execute
+24 of 98 mutants — flagged follow-up), rendering, real-gateway queries. A
+fixer pass then split the over-ceiling suites (notes 1128 lines → three
+files, pending-overlay 730 → two, agenda likewise) and replaced all 42
+`toHaveBeenCalled*` assertions with recording fakes asserting accumulated
+outcome state — hygiene ratchet back at its untouched 795 budget, no
+mutation score dropped (notes +0.44). Root integration: four
+`engineRegistry` rows (triage, search, pendingOverlay, selection) gained
+their `mutationSeed` column; the split files joined the seeds' watch lists;
+agenda's mutate set widened to `format.ts` once W3-C's suite existed
+(re-measured 79.30 against the unchanged 74 floor).
+
 ### Wave 3 — prove the joins (landed so far)
+
+**W3-B — protocol join lane + version-skew wall (G11, G12).**
+`packages/server/src/serve/protocol-join-lane.test.ts`: one `serve()`
+daemon, N mounted vaults, one iroh tunnel client per seat (its own
+EndpointId, its own enrolled owner), every assertion over real QUIC. Four
+laws: a grant crosses mounted vaults and only the addressed seat receives it
+(bystanders empty, cross-vault reads refused `vault_not_enrolled`, three
+concurrent share gestures mint exactly one grant); revocation severs rather
+than pauses (a later edit reaches a newly-added seat while the severed seat
+stays empty, and removal takes both the document and content-item
+projections to zero); a parked payload survives a transport reconnect, then
+settles once and never unparks (denied stays denied on an approve-retry,
+task count unchanged); and the update wall — judging every synthetic
+protocol version 0…N+2 against the live gateway yields exactly one accepted
+point, the documented refusal string verbatim on both sides, no fallback
+mode, with min==current pinned so a window widening must be deliberate.
+Nightly home: own `protocol-join` job at `CENTRAID_JOIN_SEATS=5` (the PR
+path runs the same file at its 3-seat floor), artifact
+`nightly-evidence-join`, enforced by validate-nightly-wiring with an
+eight-perturbation bite proof. The flagged `gateway.ts:1579` crash window
+came back clean on the reachable path — `readDurableParkedDenial` replays
+the journal receipt, pinned with the file:line named; a true kill in the
+journal-to-settlement gap needs the kill harness (#842 W1 territory).
+`buildTestGateway` was evaluated and not adopted (listener-free, so
+unreachable by tunnel; still zero callers — retirement candidate for the
+docs pass). Root integration: `test:join` alias in package.json;
+`fuzz-parsers` added to the nightly-failure-issue needs for consistency
+with `protocol-join`; the two Maestro suites joined
+`requiredFlowScripts` (a committed roster e2e.yml never invokes must fail
+the gate); artifact-name matching boundary-anchored so a superstring
+rename can no longer pass.
 
 **W3-C — time zoo (G12).** 113 tests across five files, all under the fake
 clock with zone bands read off the runtime's own tzdata, never assumed:
