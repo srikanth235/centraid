@@ -2947,6 +2947,235 @@
       "note": "The SDK-import ban is owned by [law:recognition-self-contained]; the dispatch-path law is gap G5 (#839 Wave 2)."
     }
   ],
+  "joinLaws": [
+    {
+      "id": "join-grant-delivery",
+      "label": "Grant delivery is addressed",
+      "kind": "scripted",
+      "lane": "protocol-join",
+      "owner": "packages/server/src/serve/protocol-join-lane.test.ts",
+      "testName": "a grant crosses mounted vaults over the real transport, and only the addressed seat receives it",
+      "flow": null,
+      "seats": ["origin", "custodian", "viewer"],
+      "statement": "A grant fulfilled on one mounted vault reaches exactly the addressed seat over the real wire; every other joined seat sees nothing."
+    },
+    {
+      "id": "join-revocation-severance",
+      "label": "Revocation severs, never pauses",
+      "kind": "scripted",
+      "lane": "protocol-join",
+      "owner": "packages/server/src/serve/protocol-join-lane.test.ts",
+      "testName": "revocation propagates across the join and severs delivery, not merely pauses it",
+      "flow": null,
+      "seats": ["origin", "custodian", "viewer"],
+      "statement": "Revoking a grant propagates across the join and ends delivery to the revoked seat; a paused-but-resumable stream is a failure, not a pass."
+    },
+    {
+      "id": "join-parked-lifecycle",
+      "label": "Parked writes settle once",
+      "kind": "scripted",
+      "lane": "protocol-join",
+      "owner": "packages/server/src/serve/protocol-join-lane.test.ts",
+      "testName": "a parked payload survives a transport reconnect, then settles once and never unparks",
+      "flow": null,
+      "seats": ["origin", "custodian", "viewer"],
+      "statement": "A payload parked before a transport drop survives the reconnect and settles exactly once; it never returns to parked afterwards."
+    },
+    {
+      "id": "join-version-skew",
+      "label": "Version skew meets one wall",
+      "kind": "scripted",
+      "lane": "protocol-join",
+      "owner": "packages/server/src/serve/protocol-join-lane.test.ts",
+      "testName": "an N-1 client meets one update wall over the real transport, with no fallback mode",
+      "flow": null,
+      "seats": ["origin", "custodian", "viewer"],
+      "statement": "An out-of-window client joining the gateway is refused with one update wall and no degraded fallback mode."
+    },
+    {
+      "id": "sim-schedule-replay",
+      "label": "Schedules replay from their seed",
+      "kind": "simulation",
+      "lane": "per-pr",
+      "owner": "packages/vault/src/share/commons-sim.test.ts",
+      "testName": "the same seed produces the same program",
+      "flow": "commons-grant-plane-simulation",
+      "seats": ["origin", "custodian", "viewer"],
+      "statement": "A seeded interleaving is a program: the same seed yields the same schedule, so a simulation failure is replayable rather than anecdotal."
+    },
+    {
+      "id": "sim-grant-plane-replay",
+      "label": "The grant plane replays too",
+      "kind": "simulation",
+      "lane": "per-pr",
+      "owner": "packages/vault/src/share/commons-sim.test.ts",
+      "testName": "the grant plane replays from its seed too",
+      "flow": "commons-grant-plane-simulation",
+      "seats": ["origin", "custodian", "viewer"],
+      "statement": "The grant plane rides the same seeded schedule as the commons rail, and a run that proved nothing about grants is itself a failure."
+    },
+    {
+      "id": "sim-seeded-convergence",
+      "label": "Every seed converges",
+      "kind": "simulation",
+      "lane": "per-pr",
+      "owner": "packages/vault/src/share/commons-sim.test.ts",
+      "testName": "seed %i converges and holds every golden invariant",
+      "flow": "commons-grant-plane-simulation",
+      "seats": ["origin", "custodian", "viewer"],
+      "statement": "Across the pinned seed set — including the regression seeds earlier runs found — cursor-gapped members converge and every golden invariant holds through pulls, crash-restarts and compaction."
+    },
+    {
+      "id": "sim-wide-overlap",
+      "label": "Five seats, three grants, heavy overlap",
+      "kind": "simulation",
+      "lane": "per-pr",
+      "owner": "packages/vault/src/share/commons-sim.test.ts",
+      "testName": "a five-seat, three-grant world with heavy overlap also converges",
+      "flow": "commons-grant-plane-simulation",
+      "seats": ["origin", "custodian", "viewer"],
+      "statement": "Widening the world past the join lane's floor — five seats sharing three overlapping grants — does not break convergence."
+    },
+    {
+      "id": "sim-grant-commons-interleave",
+      "label": "Grant lifecycle interleaves with the rail",
+      "kind": "simulation",
+      "lane": "per-pr",
+      "owner": "packages/vault/src/share/commons-sim.test.ts",
+      "testName": "seed 839001 interleaves the grant lifecycle with the commons rail",
+      "flow": "commons-grant-plane-simulation",
+      "seats": ["origin", "custodian", "viewer"],
+      "statement": "Grant create / fulfil / origin-edit operations interleaved with commons traffic on one seeded schedule still converge to one domain state."
+    }
+  ],
+  "journeys": {
+    "trackingIssue": "839",
+    "suites": [
+      {
+        "id": "home-apps",
+        "label": "Home apps",
+        "runner": "tests/agent-e2e-mobile/run-home-apps-suite.mjs",
+        "budgetDoc": "tests/agent-e2e-mobile/flows/home-apps-budget.md",
+        "budgetMinutes": 10,
+        "flows": [
+          {
+            "id": "docs-drive",
+            "label": "Docs drive",
+            "owner": "tests/agent-e2e-mobile/flows/docs-drive.mjs",
+            "flow": null
+          },
+          {
+            "id": "agenda-week",
+            "label": "Agenda week",
+            "owner": "tests/agent-e2e-mobile/flows/agenda-week.mjs",
+            "flow": null
+          },
+          {
+            "id": "notes-library",
+            "label": "Notes library",
+            "owner": "tests/agent-e2e-mobile/flows/notes-library.mjs",
+            "flow": null
+          },
+          {
+            "id": "tasks-board",
+            "label": "Tasks board",
+            "owner": "tests/agent-e2e-mobile/flows/tasks-board.mjs",
+            "flow": null
+          },
+          {
+            "id": "locker-gate",
+            "label": "Locker gate",
+            "owner": "tests/agent-e2e-mobile/flows/locker-gate.mjs",
+            "flow": null
+          }
+        ]
+      },
+      {
+        "id": "photos",
+        "label": "Photos",
+        "runner": "tests/agent-e2e-mobile/run-photos-suite.mjs",
+        "budgetDoc": "tests/agent-e2e-mobile/flows/photos-budget.md",
+        "budgetMinutes": 8,
+        "flows": [
+          {
+            "id": "photos-permissions",
+            "label": "Photos permissions",
+            "owner": "tests/agent-e2e-mobile/flows/photos-permissions.mjs",
+            "flow": "mobile-photos-permissions"
+          },
+          {
+            "id": "photos-library",
+            "label": "Photos library",
+            "owner": "tests/agent-e2e-mobile/flows/photos-library.mjs",
+            "flow": "mobile-photos-library"
+          },
+          {
+            "id": "photos-viewer",
+            "label": "Photos viewer",
+            "owner": "tests/agent-e2e-mobile/flows/photos-viewer.mjs",
+            "flow": "mobile-photos-viewer"
+          },
+          {
+            "id": "photos-search",
+            "label": "Photos search",
+            "owner": "tests/agent-e2e-mobile/flows/photos-search.mjs",
+            "flow": "mobile-photos-search"
+          },
+          {
+            "id": "photos-select-write",
+            "label": "Photos select and write",
+            "owner": "tests/agent-e2e-mobile/flows/photos-select-write.mjs",
+            "flow": "mobile-photos-select-write"
+          }
+        ]
+      },
+      {
+        "id": "standalone",
+        "label": "Standalone journeys (no aggregate budget)",
+        "runner": null,
+        "budgetDoc": null,
+        "budgetMinutes": null,
+        "flows": [
+          {
+            "id": "cold-start",
+            "label": "Cold start",
+            "owner": "tests/agent-e2e-mobile/flows/cold-start.mjs",
+            "flow": "mobile-cold-start"
+          },
+          {
+            "id": "home-loads",
+            "label": "Home loads",
+            "owner": "tests/agent-e2e-mobile/flows/home-loads.mjs",
+            "flow": "mobile-real-journey"
+          },
+          {
+            "id": "native-v0-resilience",
+            "label": "Native v0 resilience",
+            "owner": "tests/agent-e2e-mobile/flows/native-v0-resilience.mjs",
+            "flow": "mobile-native-v0-resilience"
+          },
+          {
+            "id": "places-seat",
+            "label": "Places seat",
+            "owner": "tests/agent-e2e-mobile/flows/places-seat.mjs",
+            "flow": "mobile-photos-places"
+          },
+          {
+            "id": "scroll-frames",
+            "label": "Scroll frames",
+            "owner": "tests/agent-e2e-mobile/flows/scroll-frames.mjs",
+            "flow": "mobile-scroll-frames"
+          },
+          {
+            "id": "volume-proof",
+            "label": "Volume proof",
+            "owner": "tests/agent-e2e-mobile/flows/volume-proof.mjs",
+            "flow": "mobile-volume-proof"
+          }
+        ]
+      }
+    ]
+  },
   "flows": [
     {
       "id": "blueprint-placement-law",

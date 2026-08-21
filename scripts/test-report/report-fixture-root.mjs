@@ -33,6 +33,120 @@ export const CAPTURED_MS = Date.parse(CAPTURED_AT);
 export const OWNER = "owners/unit-owner.mjs";
 export const CELL_ID = "vault:correctness";
 
+/** The synthetic join-law suite grid E derives its two rows from (#839 W5). */
+export const JOIN_OWNER = "owners/join-lane.test.mjs";
+/** The synthetic Maestro journey grid G derives its single row from. */
+export const JOURNEY_OWNER = "tests/agent-e2e-mobile/flows/fixture-flow.mjs";
+const JOURNEY_RUNNER = "tests/agent-e2e-mobile/run-fixture-suite.mjs";
+const JOURNEY_BUDGET_DOC = "tests/agent-e2e-mobile/flows/fixture-budget.md";
+
+/**
+ * The two report-v2 registry blocks (#839 Wave 5) every synthetic root owes.
+ * Exported because a second honesty harness
+ * (`generate-nightly-semantics.test.mjs`) builds its own matrices and must
+ * declare the same lanes against the same files.
+ * @returns {{joinLaws: object[], journeys: object}} Grid E and grid G sources.
+ */
+export function registryBlocks() {
+  return { joinLaws: joinLawsFixture(), journeys: journeysFixture() };
+}
+
+/**
+ * Write the suites, runner and budget doc the registry blocks name. Every
+ * synthetic root must call this, because `validate-report-registries.mjs`
+ * reads the declarations back out of these files.
+ * @param {string} root Synthetic repo root.
+ */
+export function writeRegistryFiles(root) {
+  mkdirSync(path.join(root, "owners"), { recursive: true });
+  // Grid E's synthetic suite. The validator counts `test(` declarations here
+  // and compares that count against the joinLaws rows, so this file carries
+  // exactly as many as `joinLawsFixture` declares.
+  writeFileSync(
+    path.join(root, JOIN_OWNER),
+    [
+      'test("the fixture join law holds", () => {});',
+      'test("the fixture simulation replays from its seed", () => {});',
+      "",
+    ].join("\n")
+  );
+  // Grid G's synthetic suite: one runner whose FLOWS list and BUDGET_MS the
+  // validator reads back, one journey, one budget doc.
+  mkdirSync(path.join(root, "tests/agent-e2e-mobile/flows"), {
+    recursive: true,
+  });
+  writeFileSync(path.join(root, JOURNEY_OWNER), "// fixture Maestro flow\n");
+  writeFileSync(
+    path.join(root, JOURNEY_RUNNER),
+    [
+      'const FLOWS = ["fixture-flow.mjs"];',
+      "const BUDGET_MS = 4 * 60_000;",
+      "",
+    ].join("\n")
+  );
+  writeFileSync(
+    path.join(root, JOURNEY_BUDGET_DOC),
+    "# Fixture journey budget\n\nFour minutes, aggregate.\n"
+  );
+}
+
+/**
+ * Grid E's rows. Two laws — one scripted, one simulation — because
+ * `validate-report-registries.mjs` requires both halves of the grid to exist,
+ * and both are owned by one synthetic suite whose test count matches.
+ */
+function joinLawsFixture() {
+  return [
+    {
+      id: "fixture-scripted-law",
+      label: "Fixture scripted law",
+      kind: "scripted",
+      lane: "protocol-join",
+      owner: JOIN_OWNER,
+      testName: "the fixture join law holds",
+      flow: null,
+      seats: ["origin", "custodian", "viewer"],
+      statement:
+        "A synthetic scripted join law, so grid E has a row to render.",
+    },
+    {
+      id: "fixture-simulation-law",
+      label: "Fixture simulation law",
+      kind: "simulation",
+      lane: "per-pr",
+      owner: JOIN_OWNER,
+      testName: "the fixture simulation replays from its seed",
+      flow: null,
+      seats: ["origin"],
+      statement: "A synthetic simulation law, so grid E's second half renders.",
+    },
+  ];
+}
+
+/** Grid G's rows: one budgeted suite over the one synthetic journey. */
+function journeysFixture() {
+  return {
+    trackingIssue: "839",
+    suites: [
+      {
+        id: "fixture",
+        label: "Fixture suite",
+        runner: JOURNEY_RUNNER,
+        budgetDoc: JOURNEY_BUDGET_DOC,
+        budgetMinutes: 4,
+        flows: [
+          {
+            id: "fixture-flow",
+            label: "Fixture flow",
+            owner: JOURNEY_OWNER,
+            flow: null,
+          },
+        ],
+      },
+    ],
+  };
+}
+
 /** The eight consent layers the ledger must always carry, minimally shaped. */
 function consentLedgerFixture() {
   return Array.from({ length: 8 }, (_, index) => ({
@@ -123,6 +237,11 @@ export function baseMatrix() {
       },
     ],
     consentLedger: consentLedgerFixture(),
+    // #839 Wave 5 — the registries grids E and G derive from. Both are pinned
+    // to files `makeFixtureRoot` writes, so a fixture cannot claim a lane the
+    // synthetic root does not actually contain.
+    joinLaws: joinLawsFixture(),
+    journeys: journeysFixture(),
   };
 }
 
@@ -146,6 +265,12 @@ export function makeFixtureRoot(options = {}) {
     path.join(root, "scripts/mutation"),
     { recursive: true }
   );
+  // The adversary panel (#839 Wave 5) reads the fuzz target catalog and the
+  // committed corpus counts, so the synthetic root carries both. The catalog
+  // is plain data — nothing here loads a target's entry module.
+  cpSync(path.join(realRoot, "scripts/fuzz"), path.join(root, "scripts/fuzz"), {
+    recursive: true,
+  });
   writeFileSync(
     path.join(root, "package.json"),
     `${JSON.stringify({ name: "report-fixture", workspaces: { packages: [] } }, null, 2)}\n`
@@ -155,6 +280,7 @@ export function makeFixtureRoot(options = {}) {
   writeFileSync(path.join(root, "tests/mutation-floors.json"), "{}\n");
   mkdirSync(path.join(root, "owners"), { recursive: true });
   writeFileSync(path.join(root, OWNER), "test('owned behaviour', () => {});\n");
+  writeRegistryFiles(root);
   mkdirSync(path.join(root, "docs"), { recursive: true });
   writeFileSync(
     path.join(root, "docs/blueprint-seats.md"),

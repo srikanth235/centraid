@@ -2,6 +2,7 @@ import { access, glob, readFile } from "node:fs/promises";
 import path from "node:path";
 
 import { MUTATION_SEEDS } from "../mutation/seeds.mjs";
+import { validateReportRegistries } from "./validate-report-registries.mjs";
 
 const root = path.resolve(import.meta.dirname, "../..");
 /**
@@ -461,6 +462,16 @@ export async function validateAppAxes(matrix, options, flowIds) {
   } else {
     errors.push("matrix has no consentLedger");
   }
+
+  // #839 Wave 5 — grids E and G rest on two more registry blocks, `joinLaws`
+  // and `journeys`. Their locks read the owning suites and Maestro runners off
+  // disk (see `validate-report-registries.mjs`), so they ride the same
+  // `checkFiles` switch as every other on-disk check here; `options` carries
+  // the root through unchanged. `checkReportRegistries: false` lets a fixture
+  // that exercises an unrelated rule opt out without also disabling the file
+  // checks it does need — the real matrix never passes it.
+  if (checkFiles && options.checkReportRegistries !== false)
+    errors.push(...(await validateReportRegistries(matrix, options)));
 
   errors.push(...(await Promise.all(deferred)).filter(Boolean));
   return errors;

@@ -19,7 +19,9 @@
     "appSeats",
     "appStates",
     "engineRegistry",
-    "consentLedger"
+    "consentLedger",
+    "joinLaws",
+    "journeys"
   ],
   "properties": {
     "version": { "type": "integer", "minimum": 1 },
@@ -403,6 +405,89 @@
             "items": { "enum": ["origin", "custodian", "viewer"] }
           },
           "note": { "type": "string", "minLength": 1 }
+        }
+      }
+    },
+    "joinLaws": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": [
+          "id",
+          "label",
+          "kind",
+          "lane",
+          "owner",
+          "testName",
+          "flow",
+          "seats",
+          "statement"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "id": { "type": "string", "minLength": 1 },
+          "label": { "type": "string", "minLength": 1 },
+          "kind": { "enum": ["scripted", "simulation"] },
+          "lane": { "type": "string", "minLength": 1 },
+          "owner": { "type": "string", "minLength": 1 },
+          "testName": { "type": "string", "minLength": 1 },
+          "flow": { "type": ["string", "null"], "minLength": 1 },
+          "seats": {
+            "type": "array",
+            "minItems": 1,
+            "items": { "enum": ["origin", "custodian", "viewer"] }
+          },
+          "statement": { "type": "string", "minLength": 1 }
+        }
+      }
+    },
+    "journeys": {
+      "type": "object",
+      "required": ["trackingIssue", "suites"],
+      "additionalProperties": false,
+      "properties": {
+        "trackingIssue": { "type": "string", "minLength": 1 },
+        "suites": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "object",
+            "required": [
+              "id",
+              "label",
+              "runner",
+              "budgetDoc",
+              "budgetMinutes",
+              "flows"
+            ],
+            "additionalProperties": false,
+            "properties": {
+              "id": { "type": "string", "minLength": 1 },
+              "label": { "type": "string", "minLength": 1 },
+              "runner": { "type": ["string", "null"], "minLength": 1 },
+              "budgetDoc": { "type": ["string", "null"], "minLength": 1 },
+              "budgetMinutes": {
+                "type": ["number", "null"],
+                "exclusiveMinimum": 0
+              },
+              "flows": {
+                "type": "array",
+                "minItems": 1,
+                "items": {
+                  "type": "object",
+                  "required": ["id", "label", "owner", "flow"],
+                  "additionalProperties": false,
+                  "properties": {
+                    "id": { "type": "string", "minLength": 1 },
+                    "label": { "type": "string", "minLength": 1 },
+                    "owner": { "type": "string", "minLength": 1 },
+                    "flow": { "type": ["string", "null"], "minLength": 1 }
+                  }
+                }
+              }
+            }
+          }
         }
       }
     }

@@ -10,6 +10,7 @@ describe("validateMatrix", () => {
     const { errors } = await validateMatrix(baseMatrix(), {
       checkEnvGates: false,
       checkWorkspaceCompleteness: false,
+      checkReportRegistries: false,
     });
     expect(errors).toEqual([]);
   });

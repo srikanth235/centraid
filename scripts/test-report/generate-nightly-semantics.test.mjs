@@ -6,6 +6,8 @@ import { describe, expect, test } from "vitest";
 
 import { tempDirSync } from "@centraid/test-kit/temp-dir";
 
+import { registryBlocks, writeRegistryFiles } from "./report-fixture-root.mjs";
+
 /**
  * Honesty-contract tests for the test-health report generator (issue #656
  * Layer 1F).
@@ -77,6 +79,9 @@ function baseMatrix() {
         appEngineColumn: false,
       },
     ],
+    // #839 Wave 5 — the registries grids E and G derive from, pinned to the
+    // files `makeRoot` writes.
+    ...registryBlocks(),
     consentLedger: Array.from({ length: 8 }, (_, index) => ({
       id: `layer-${index}`,
       label: `Layer ${index}`,
@@ -108,6 +113,11 @@ function makeFixtureRoot(options = {}) {
     path.join(root, "scripts/mutation"),
     { recursive: true }
   );
+  // The adversary panel (#839 Wave 5) reads the fuzz target catalog and the
+  // committed corpus counts off disk.
+  cpSync(path.join(realRoot, "scripts/fuzz"), path.join(root, "scripts/fuzz"), {
+    recursive: true,
+  });
   writeFileSync(
     path.join(root, "package.json"),
     `${JSON.stringify({ name: "report-fixture", workspaces: { packages: [] } }, null, 2)}\n`
@@ -117,6 +127,8 @@ function makeFixtureRoot(options = {}) {
   writeFileSync(path.join(root, "tests/mutation-floors.json"), "{}\n");
   mkdirSync(path.join(root, "owners"), { recursive: true });
   writeFileSync(path.join(root, OWNER), "test('owned behaviour', () => {});\n");
+  // #839 Wave 5 — the suites, runner and budget doc grids E and G derive from.
+  writeRegistryFiles(root);
   mkdirSync(path.join(root, "docs"), { recursive: true });
   writeFileSync(
     path.join(root, "docs/blueprint-seats.md"),
@@ -223,6 +235,9 @@ describe("accessibility has no expected-grey escape (#791)", () => {
         apps: [],
         seatDoctrine: "docs/blueprint-seats.md#engine-contracts",
       },
+      // #839 Wave 5 — grids E and G still owe rows even in a matrix built to
+      // exercise one accessibility cell; absence is not expressible.
+      ...registryBlocks(),
     };
   }
 

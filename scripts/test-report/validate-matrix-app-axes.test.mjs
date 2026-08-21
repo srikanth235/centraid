@@ -14,6 +14,7 @@ describe("app axes: seats, grid B, grid D, engines, consent", () => {
     const { errors } = await validateMatrix(baseMatrix(), {
       checkEnvGates: false,
       checkWorkspaceCompleteness: false,
+      checkReportRegistries: false,
     });
     expect(errors).toEqual([]);
   });
@@ -36,6 +37,7 @@ describe("app axes: seats, grid B, grid D, engines, consent", () => {
     const { errors } = await validateMatrix(matrix, {
       checkEnvGates: false,
       checkWorkspaceCompleteness: false,
+      checkReportRegistries: false,
     });
     expect(
       errors.some((e) => e.includes("citation anchor does not exist"))
@@ -48,6 +50,7 @@ describe("app axes: seats, grid B, grid D, engines, consent", () => {
     const { errors } = await validateMatrix(matrix, {
       checkEnvGates: false,
       checkWorkspaceCompleteness: false,
+      checkReportRegistries: false,
     });
     expect(
       errors.some((e) =>
@@ -95,6 +98,7 @@ describe("app axes: seats, grid B, grid D, engines, consent", () => {
     const { errors } = await validateMatrix(matrix, {
       checkEnvGates: false,
       checkWorkspaceCompleteness: false,
+      checkReportRegistries: false,
     });
     expect(
       errors.some(
@@ -149,6 +153,7 @@ describe("app axes: seats, grid B, grid D, engines, consent", () => {
     const { errors } = await validateMatrix(matrix, {
       checkEnvGates: false,
       checkWorkspaceCompleteness: false,
+      checkReportRegistries: false,
     });
     expect(
       errors.some(
@@ -167,6 +172,7 @@ describe("app axes: seats, grid B, grid D, engines, consent", () => {
     const { errors } = await validateMatrix(matrix, {
       checkEnvGates: false,
       checkWorkspaceCompleteness: false,
+      checkReportRegistries: false,
     });
     expect(
       errors.some((e) =>
@@ -184,6 +190,7 @@ describe("app axes: seats, grid B, grid D, engines, consent", () => {
     const { errors } = await validateMatrix(matrix, {
       checkEnvGates: false,
       checkWorkspaceCompleteness: false,
+      checkReportRegistries: false,
     });
     expect(
       errors.some((e) =>
@@ -242,6 +249,7 @@ describe("app axes: seats, grid B, grid D, engines, consent", () => {
     const { errors } = await validateMatrix(matrix, {
       checkEnvGates: false,
       checkWorkspaceCompleteness: false,
+      checkReportRegistries: false,
     });
     expect(
       errors.some((e) =>
@@ -338,6 +346,7 @@ describe("app axes: seats, grid B, grid D, engines, consent", () => {
     const { errors } = await validateMatrix(matrix, {
       checkEnvGates: false,
       checkWorkspaceCompleteness: false,
+      checkReportRegistries: false,
     });
     expect(
       errors.some((e) =>

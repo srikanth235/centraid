@@ -451,12 +451,20 @@ Android decisions mirror iOS where the artifact exists: Android uses the same fi
 
 [`scripts/test-report`](scripts/test-report) ingests the matrix, Vitest JSON, `coverage/coverage-summary.json`, every Playwright JSON result, agent-e2e evidence, and perf/scale JSON. It emits one self-contained page at `dist/test-report/index.html` with:
 
-- seven collapsed user-facing quality rows above the engineering heatmap. Each row shows one status light, its name, the weakest-link sentence, and `N/M gates`; expanding shows only gate status, name, and owner. Lane, cost, knob governance, and demonstrated-red date remain in the gate tooltip. Grey means no gate exists, never health;
-- the clickable surface × quality-dimension heatmap first;
+- a **verdict strip** — `shippable` / `degraded` / `red`, or `no evidence` when no lane reported into the render — with the reasons that produced it and the deltas against last night's durable history point;
+- an **attention queue**: every red, newly-grey, still-grey and stale item, each with the file that owns it and its tracking-issue hook;
+- the app-shaped grids — app × seat, app × shared engine, app × designed state — then **join laws and simulation**, the **adversary panel**, and **journeys with budget vs actual**;
+- the **consent ledger**: one row per permission layer, with its enforcement point, refusal grammar, adversary, and seat coverage;
+- seven collapsed user-facing quality rows. Each row shows one status light, its name, the weakest-link sentence, and `N/M gates`; expanding shows only gate status, name, and owner. Lane, cost, knob governance, and demonstrated-red date remain in the gate tooltip. Grey means no gate exists, never health;
+- the clickable surface × quality-dimension heatmap;
 - canonical owners, tier, lane, last status, and runtime in the cell inspector;
 - coverage versus floor, per-package wall clock, slowest ten files, and skip counts;
 - perf/scale trends;
 - grey missing or stale evidence instead of an absent lane.
+
+The verdict and the queue are **computed from the same grading the rest of the page renders** — cells, floors, lanes — never hand-assigned, and the queue's severity comes from the matrix's own claim for a cell (`surfaces[].assessment`) against tonight's observed state: `S1` a cell the matrix calls solid went red, `S2` any other red or a lane that reported last night and is silent tonight, `S3` an absence that was already there, `S4` a standing finding pinned in a register. The `S1`/`S2` band rides into the auto-filed nightly tracking issue via `summary.json#attentionQueue` and [`scripts/ci/report-cell-delta.mjs`](scripts/ci/report-cell-delta.mjs), under the 24h SLA above.
+
+**No hand-written lane list survives in the generator.** Every row source is a registry that a validator pins to the code it names: `tests/matrix.json#joinLaws` to the owning suites' own `test(...)` declarations (including their count), `tests/matrix.json#journeys` to each Maestro runner's own `FLOWS` array and `BUDGET_MS` ceiling and to every flow file on disk, plus [`scripts/mutation/seeds.mjs`](scripts/mutation/seeds.mjs), [`scripts/fuzz/targets.mjs`](scripts/fuzz/targets.mjs) with its committed corpus, and the matrix's `engineRegistry` and `consentLedger`. The locks live in [`scripts/test-report/validate-report-registries.mjs`](scripts/test-report/validate-report-registries.mjs) and run under `bun run test:matrix`. The point is that **absence is unexpressible**: a lane that dies loses its evidence, not its row, so it renders grey rather than disappearing. Sparklines draw only from durable history that exists — fewer than two nights renders an empty slot, never an invented trend.
 
 PR CI uploads the report even when coverage fails. Nightly jobs upload surface evidence; the final job merges the latest pairing/relay artifact, reruns the full Vitest coverage suite, then publishes one report after performance and scale run. `bun run test:report:smoke` verifies the generator without requiring prior test artifacts.
 
