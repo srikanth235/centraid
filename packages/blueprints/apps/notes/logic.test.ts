@@ -1,3 +1,6 @@
+import { describe, expect, it, onTestFinished, vi } from "vitest";
+import type { Mock } from "vitest";
+
 // Notes' vault IO, held to the sentences an outcome earns (#839 W2-1).
 //
 // EVERY WRITE HERE IS OPTIMISTIC, so the thing worth pinning is not "a command
@@ -21,8 +24,6 @@
 // below; naming that surface exactly is the point, because anything this
 // module reaches for beyond it fails here rather than silently working.
 import { useFakeClock } from "@centraid/test-kit/fake-clock";
-import { describe, expect, it, onTestFinished, vi } from "vitest";
-import type { Mock } from "vitest";
 
 import {
   createLogic,

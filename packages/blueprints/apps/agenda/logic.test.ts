@@ -1,3 +1,6 @@
+import { describe, expect, it, onTestFinished, vi } from "vitest";
+import type { Mock } from "vitest";
+
 // Agenda's vault IO (#839 W2-1).
 //
 // THREE OUTCOMES, THREE DIFFERENT SENTENCES, none of them an error — that is
@@ -18,7 +21,7 @@
 // this module touches is one `querySelector` plus `textContent`/`hidden`, and
 // `window.centraid`; both are stood up by hand below, so anything the module
 // reaches for beyond them fails here rather than silently working.
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { useFakeClock } from "@centraid/test-kit/fake-clock";
 
 import type { InlineFrame } from "../inline-types.ts";
 import { createLogic } from "./logic.ts";
@@ -84,17 +87,20 @@ function mountBanner(present = true): void {
   };
 }
 
+type WriteFn = (opts: WriteOpts) => Promise<unknown>;
+type ReadFn = (opts: ReadOpts) => Promise<unknown>;
+
 interface Harness {
   state: AppState;
   data: AppData;
   logic: ReturnType<typeof createLogic>;
   frame: InlineFrame;
-  setStatus: ReturnType<typeof vi.fn>;
-  clearStatus: ReturnType<typeof vi.fn>;
-  write: ReturnType<typeof vi.fn>;
-  read: ReturnType<typeof vi.fn>;
-  render: ReturnType<typeof vi.fn>;
-  refresh: ReturnType<typeof vi.fn>;
+  setStatus: Mock<InlineFrame["setStatus"]>;
+  clearStatus: Mock<InlineFrame["clearStatus"]>;
+  write: Mock<WriteFn>;
+  read: Mock<ReadFn>;
+  render: Mock<() => void>;
+  refresh: Mock<() => Promise<void>>;
   banner: () => { text: string; hidden: boolean };
 }
 
@@ -102,27 +108,34 @@ function harness(
   over: {
     state?: Partial<AppState>;
     data?: Partial<AppData>;
-    write?: (opts: WriteOpts) => Promise<unknown>;
-    read?: (opts: ReadOpts) => Promise<unknown>;
+    write?: WriteFn;
+    read?: ReadFn;
+    /** Withhold the frame's notice banner, as a served mount does. */
+    banner?: boolean;
   } = {}
 ): Harness {
   const appState = state(over.state);
   const appData = data(over.data);
-  const write = vi.fn(
+  const write = vi.fn<WriteFn>(
     over.write ?? (async () => ({ status: "executed" }) as VaultOutcome)
   );
-  const read = vi.fn(over.read ?? (async () => ({})));
+  const read = vi.fn<ReadFn>(over.read ?? (async () => ({})));
+  mountBanner(over.banner !== false);
   (globalThis as { window?: unknown }).window = { centraid: { read, write } };
-  const setStatus = vi.fn();
-  const clearStatus = vi.fn();
+  onTestFinished(() => {
+    delete (globalThis as { window?: unknown }).window;
+    delete (globalThis as { document?: unknown }).document;
+  });
+  const setStatus = vi.fn<InlineFrame["setStatus"]>();
+  const clearStatus = vi.fn<InlineFrame["clearStatus"]>();
   const frame: InlineFrame = {
-    setAppBar: vi.fn(),
+    setAppBar: vi.fn<InlineFrame["setAppBar"]>(),
     setStatus,
     clearStatus,
-    claimBand: vi.fn(),
+    claimBand: vi.fn<InlineFrame["claimBand"]>(),
   };
-  const render = vi.fn();
-  const refresh = vi.fn(async () => {});
+  const render = vi.fn<() => void>();
+  const refresh = vi.fn<() => Promise<void>>(async () => {});
   return {
     state: appState,
     data: appData,
@@ -147,16 +160,6 @@ function harness(
   };
 }
 
-beforeEach(() => {
-  mountBanner();
-});
-
-afterEach(() => {
-  vi.useRealTimers();
-  delete (globalThis as { window?: unknown }).window;
-  delete (globalThis as { document?: unknown }).document;
-});
-
 describe("the in-pane notice", () => {
   it("shows a reason and hides itself on the empty string", () => {
     const app = harness();
@@ -170,8 +173,7 @@ describe("the in-pane notice", () => {
   });
 
   it("is a no-op on a frame that mounted no banner", () => {
-    mountBanner(false);
-    const app = harness();
+    const app = harness({ banner: false });
     expect(() => app.logic.notice("nowhere")).not.toThrow();
   });
 });
@@ -221,7 +223,7 @@ describe("the raw write path", () => {
   it("re-reads after any answered write, and only repaints after none", async () => {
     const answered = harness({ write: async () => ({ status: "failed" }) });
     await answered.logic.write("edit-event", { event_id: "e1" });
-    expect(answered.refresh).toHaveBeenCalledTimes(1);
+    expect(answered.refresh).toHaveBeenCalledOnce();
     expect(answered.render).not.toHaveBeenCalled();
 
     const unreachable = harness({
@@ -231,7 +233,7 @@ describe("the raw write path", () => {
     });
     await unreachable.logic.write("edit-event", { event_id: "e1" });
     expect(unreachable.refresh).not.toHaveBeenCalled();
-    expect(unreachable.render).toHaveBeenCalledTimes(1);
+    expect(unreachable.render).toHaveBeenCalledOnce();
   });
 });
 
@@ -392,14 +394,14 @@ describe("cancelling parks, and a park is not a failure", () => {
     await app.logic.cancelEvent("e1");
     expect(app.setStatus).toHaveBeenCalledWith(OUTCOME_PARKED, {});
     expect(app.refresh).not.toHaveBeenCalled();
-    expect(app.render).toHaveBeenCalledTimes(1);
+    expect(app.render).toHaveBeenCalledOnce();
     expect(app.banner()).toStrictEqual({ text: "", hidden: true });
   });
 
   it("re-reads once the vault actually applied it", async () => {
     const app = harness({ write: async () => ({ status: "executed" }) });
     await app.logic.cancelEvent("e1");
-    expect(app.refresh).toHaveBeenCalledTimes(1);
+    expect(app.refresh).toHaveBeenCalledOnce();
   });
 
   it("re-reads a denial too — the window it drew is no longer trustworthy", async () => {
@@ -407,7 +409,7 @@ describe("cancelling parks, and a park is not a failure", () => {
       write: async () => ({ status: "denied", reason: "no grant" }),
     });
     await app.logic.cancelEvent("e1");
-    expect(app.refresh).toHaveBeenCalledTimes(1);
+    expect(app.refresh).toHaveBeenCalledOnce();
     expect(app.banner().text).toBe("Denied by consent: no grant");
   });
 
@@ -417,7 +419,7 @@ describe("cancelling parks, and a park is not a failure", () => {
     });
     await app.logic.cancelEvent("e1");
     expect(app.refresh).not.toHaveBeenCalled();
-    expect(app.render).toHaveBeenCalledTimes(1);
+    expect(app.render).toHaveBeenCalledOnce();
     expect(app.banner().text).toBe("The vault refused: owner_only: x.");
   });
 
@@ -460,12 +462,12 @@ describe("attachments", () => {
 
 describe("search asks the vault, never the loaded window", () => {
   it("coalesces the typing into one read", async () => {
-    vi.useFakeTimers();
+    const clock = useFakeClock();
     const app = harness({ read: async () => ({ events: [] }) });
     app.logic.applySearchInput("den");
     app.logic.applySearchInput("dentist");
-    await vi.advanceTimersByTimeAsync(200);
-    expect(app.read).toHaveBeenCalledTimes(1);
+    await clock.advance(200);
+    expect(app.read).toHaveBeenCalledOnce();
     expect(app.read.mock.calls[0]?.[0]).toStrictEqual({
       query: "search",
       input: { term: "dentist" },
@@ -473,56 +475,56 @@ describe("search asks the vault, never the loaded window", () => {
   });
 
   it("keeps the member's own text, spaces and all", async () => {
-    vi.useFakeTimers();
+    const clock = useFakeClock();
     const app = harness({ read: async () => ({ events: [] }) });
     app.logic.applySearchInput("  dentist ");
-    await vi.advanceTimersByTimeAsync(200);
+    await clock.advance(200);
     expect(app.state.search).toBe("  dentist ");
     expect(app.state.searchResults).toStrictEqual([]);
   });
 
   it("drops back to no search on a box holding only spaces", async () => {
-    vi.useFakeTimers();
+    const clock = useFakeClock();
     const app = harness({
       state: { searchResults: [event({ event_id: "e1" })] },
     });
     app.logic.applySearchInput("   ");
-    await vi.advanceTimersByTimeAsync(200);
+    await clock.advance(200);
     expect(app.read).not.toHaveBeenCalled();
     expect(app.state.searchResults).toBeNull();
   });
 
   it("holds the matches the vault found", async () => {
-    vi.useFakeTimers();
+    const clock = useFakeClock();
     const hit = event({ event_id: "e1" });
     const app = harness({ read: async () => ({ events: [hit] }) });
     app.logic.applySearchInput("dentist");
-    await vi.advanceTimersByTimeAsync(200);
+    await clock.advance(200);
     expect(app.state.searchResults).toStrictEqual([hit]);
   });
 
   it("reads a missing events key as an empty match set", async () => {
-    vi.useFakeTimers();
+    const clock = useFakeClock();
     const app = harness({ read: async () => ({}) });
     app.logic.applySearchInput("dentist");
-    await vi.advanceTimersByTimeAsync(200);
+    await clock.advance(200);
     expect(app.state.searchResults).toStrictEqual([]);
   });
 
   it("says UNKNOWN — not 'nothing matches' — when the index was out of reach", async () => {
-    vi.useFakeTimers();
+    const clock = useFakeClock();
     const app = harness({
       read: async () => {
         throw new Error("offline");
       },
     });
     app.logic.applySearchInput("dentist");
-    await vi.advanceTimersByTimeAsync(200);
+    await clock.advance(200);
     expect(app.state.searchResults).toBeNull();
   });
 
   it("drops an answer the member has already typed past", async () => {
-    vi.useFakeTimers();
+    const clock = useFakeClock();
     const app: Harness = harness({
       read: async () => {
         // A second keystroke lands while this read is in flight.
@@ -531,19 +533,19 @@ describe("search asks the vault, never the loaded window", () => {
       },
     });
     app.logic.applySearchInput("dentist");
-    await vi.advanceTimersByTimeAsync(200);
+    await clock.advance(200);
     expect(app.state.searchResults).toBeNull();
   });
 
   it("clears the box and bars a live read from landing", async () => {
-    vi.useFakeTimers();
+    const clock = useFakeClock();
     const app = harness({
       state: { search: "dentist", searchResults: [event({ event_id: "e1" })] },
     });
     app.logic.clearSearch();
     expect(app.state.search).toBe("");
     expect(app.state.searchResults).toBeNull();
-    await vi.advanceTimersByTimeAsync(200);
+    await clock.advance(200);
     expect(app.read).not.toHaveBeenCalled();
   });
 });
