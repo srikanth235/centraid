@@ -13,6 +13,8 @@
 // implementation ran does not change the answer.
 
 import type { PDFDocumentProxy } from "pdfjs-dist";
+// eslint-disable-next-line import/default -- Vite's ?url loader synthesizes the default URL export; governance: allow-no-unjustified-suppressions upstream module has no source-level default (#414)
+import pdfWorkerUrl from "pdfjs-dist/legacy/build/pdf.worker.min.mjs?url";
 
 // The shared browser capture pipeline. It sits on the blueprints side of the
 // package edge because Photos' upload path needs it too and blueprints must
@@ -56,22 +58,9 @@ function readBlobBytes(source: Blob): Promise<ArrayBuffer> {
   });
 }
 
-// The worker URL is imported HERE rather than at module scope, and that
-// placement is load-bearing rather than stylistic. `?url` compiles to a module
-// whose whole body is one string constant, so a top-level import makes it a
-// static dependency of every chunk that reaches this file — including `boot`.
-// Vite then emits it as its own chunk, and the cold shell spends a real HTTP
-// request fetching ~35 characters before any PDF exists (measured as the 18th
-// same-origin request against a 17 ceiling, issue #676). Awaited alongside the
-// display build, it rides that chunk's request instead and costs nothing until
-// a PDF is actually parsed. Keep it dynamic; `apps/docs/pdf-text.ts` does the
-// same for the same reason.
 async function loadPdfJs(): Promise<PdfJs> {
-  pdfRuntime ??= Promise.all([
-    import("pdfjs-dist/legacy/build/pdf.mjs"),
-    import("pdfjs-dist/legacy/build/pdf.worker.min.mjs?url"),
-  ]).then(([pdfjs, worker]) => {
-    pdfjs.GlobalWorkerOptions.workerSrc = worker.default;
+  pdfRuntime ??= import("pdfjs-dist/legacy/build/pdf.mjs").then((pdfjs) => {
+    pdfjs.GlobalWorkerOptions.workerSrc = pdfWorkerUrl;
     return pdfjs;
   });
   return pdfRuntime;

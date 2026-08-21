@@ -12,17 +12,10 @@
     },
     "apps/web/tests/e2e/perf-waterfall.spec.ts#1": {
       "kind": "static-skip",
-      "line": 817,
+      "line": 861,
       "snippet": "test.skip(",
       "issue": 781,
       "reason": "The iroh request counter only exists in a freshly built bundle; the assertion self-skips against a stale dist instead of failing, which is why this owner cannot back a solid cell (originally #656)."
-    },
-    "packages/server/src/acp/automation/live-automation-failover.test.ts#1": {
-      "kind": "conditional-skip",
-      "line": 32,
-      "snippet": "test.skipIf(process.env.CENTRAID_LIVE_AUTOMATION !== \"1\")(",
-      "issue": 790,
-      "reason": "Drives real harness binaries, so it is opt-in via CENTRAID_LIVE_AUTOMATION=1 and cannot run on a hermetic PR lane (rig lane split to #790 by #781; originally #656)."
     },
     "packages/backup/src/interop-clawgnition.test.ts#1": {
       "kind": "env-gate",
@@ -37,6 +30,13 @@
       "snippet": "describe.skipIf(SKIP_REASON !== null)(SUITE_TITLE, () => {",
       "issue": 790,
       "reason": "The collection-time gate for the same cross-repo interop suite; skips the whole describe (including beforeAll) with a named reason instead of failing (rig lane split to #790 by #781; originally #656)."
+    },
+    "packages/server/src/acp/automation/live-automation-failover.test.ts#1": {
+      "kind": "conditional-skip",
+      "line": 32,
+      "snippet": "test.skipIf(process.env.CENTRAID_LIVE_AUTOMATION !== \"1\")(",
+      "issue": 790,
+      "reason": "Drives real harness binaries, so it is opt-in via CENTRAID_LIVE_AUTOMATION=1 and cannot run on a hermetic PR lane (rig lane split to #790 by #781; originally #656)."
     },
     "packages/server/src/cli/cli.test.ts#1": {
       "kind": "runtime-skip",
@@ -173,7 +173,7 @@
     },
     "tests/scale/restore-10gib.scale.test.ts#1": {
       "kind": "conditional-skip",
-      "line": 114,
+      "line": 115,
       "snippet": "test.skipIf(!ENABLED)(",
       "issue": 790,
       "reason": "#659 S3. Ten GiB of chunk + AEAD + restore is ~5 minutes and ~25 GiB of scratch; it has its own nightly job (restore-year3 in e2e.yml) which sets CENTRAID_SCALE_RESTORE_GIB=10. Skipping loudly when unset is deliberate — the alternative is silently shrinking to a size that proves nothing (rig lane split to #790 by #781; originally #659)."

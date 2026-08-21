@@ -2,6 +2,9 @@
 // dependency: Vite emits its display chunk and worker asset with the inline
 // Docs app instead of relying on same-origin files in the shared kit.
 
+// eslint-disable-next-line import/default -- Vite's ?url loader synthesizes the default URL export; governance: allow-no-unjustified-suppressions upstream module has no source-level default (#414)
+import pdfWorkerUrl from "pdfjs-dist/legacy/build/pdf.worker.min.mjs?url";
+
 const MAX_TEXT_CHARS = 1_000_000;
 const MAX_PDF_PAGES = 2_000;
 
@@ -79,17 +82,9 @@ export function loadPdfJs(): Promise<PdfJsModule> {
   ensurePdfJsCompatibility();
 
   if (!runtimeLoad) {
-    // Both imports are dynamic on purpose. `?url` is a module holding a single
-    // string, so importing it at module scope pins it into the static graph of
-    // every chunk that reaches this file and costs the cold shell one HTTP
-    // request for ~35 characters (#676). See the twin comment in
-    // packages/client/src/device-enrichment-compute.ts.
-    runtimeLoad = Promise.all([
-      import("pdfjs-dist/legacy/build/pdf.mjs"),
-      import("pdfjs-dist/legacy/build/pdf.worker.min.mjs?url"),
-    ]).then(([module, worker]) => {
+    runtimeLoad = import("pdfjs-dist/legacy/build/pdf.mjs").then((module) => {
       const pdfjs = module as unknown as PdfJsModule;
-      pdfjs.GlobalWorkerOptions.workerSrc = resolveWorkerUrl(worker.default);
+      pdfjs.GlobalWorkerOptions.workerSrc = resolveWorkerUrl(pdfWorkerUrl);
       return pdfjs;
     });
   }

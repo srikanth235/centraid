@@ -105,6 +105,57 @@ partial. `apps/desktop/tests/e2e/SCENARIOS.md` drops the retired row.
 `tests/hygiene-budgets.json` tightens `toHaveBeenCalled` 800 → 795 with
 the deleted suites.
 
+### Checklist crosswalk
+
+Added under #676. The `receipt-per-issue` crosswalk is skipped while any
+required section is missing, so it never ran against this receipt until
+`## Out of scope` was restored; the six items below then had no citation.
+Each is quoted from `## Checklist` and pointed at the paragraph that already
+evidences it. Nothing new is claimed about #831's work here.
+
+- `packages/blueprints/apps/{agenda,notes,tally,tasks}` keep only their non-UI graph; each `app-root.tsx` is a `Root` that paints one empty element and keeps `CHANGE_TABLES`
+  → the first paragraph above.
+- `app-inline.tsx` descriptors unchanged — `pendingProjection`, `changeTables`, `queries`, `kitAsk`, Tasks' `multiScope` all stand
+  → same paragraph, last sentence, and the `## Decisions` note on what stays
+  installed.
+- `apps/mobile/src/apps/{agenda,notes,tally,tasks}` keep their five routes; each screen paints the themed page ground and declares the props its route hands it
+  → the second paragraph above.
+- `handler-reachability`'s `AWAITING_HANDOFF` names all four on web and mobile; the justification test still proves every id is a real manifest
+  → the `## Decisions` paragraph recording the suspension in that register
+  rather than as ~70 per-handler exceptions.
+- Desktop and web offline journeys retargeted onto Docs; `desktop.offline` keeps an owner and `web-pending-overlay`'s floor is taken over one-to-one
+  → the `tests/matrix.json` paragraph above and the offline-journeys paragraph
+  in `## Decisions`.
+- `bun run check:push`: 41/43 green; the two reds are this container's missing Electron and Chromium headless-shell binaries (see below)
+  → `## Verification`.
+
+## Out of scope
+
+Section added under #676, which found this receipt failing the
+`receipt-per-issue` gate for its absence. It restates boundaries #831
+already drew in `## Decisions`; no claim about #831's work is added or
+changed.
+
+- **The replacement interfaces.** #831 clears the four covers; designing
+  and building what replaces them is the separate work this clearing
+  makes room for. Until then each `app-root.tsx` paints one empty
+  element and the four apps are reachable only through the assistant,
+  the palette and home tiles.
+- **Everything below the surface.** `app.json`, `actions/`, `queries/`,
+  `pending-projection.ts` and `seed.js` are untouched for all four apps.
+  No handler, grant, manifest or seed is removed or renamed.
+- **Removing `@react-native-community/datetimepicker`.** Its JS
+  importers left with the Agenda and Tasks native editors, but it is
+  still autolinked into `ios/Podfile.lock` and the committed native
+  fingerprints. Dropping it is a native-state change needing CocoaPods
+  and a fingerprint refresh, so it stays a dependency and is recorded in
+  knip's `apps/mobile` `ignoreDependencies`.
+- **Executing the two retargeted Playwright journeys.** Not run in the
+  authoring container for want of the Electron and Chromium
+  headless-shell binaries — see `## Verification`. (They have since been
+  run: #676 replays `apps/desktop/tests/e2e/pending-overlay.spec.ts` and
+  the web lane green.)
+
 ## Verification
 
 `bun run check:push` — 41 of 43 gates green. Two fail on missing binaries
