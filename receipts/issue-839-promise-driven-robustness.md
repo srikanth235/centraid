@@ -49,7 +49,7 @@ Wave 5 — close the contract (G13, G15, G16):
 
 - [ ] Report v2: verdict strip, attention queue, grids B–G, consent ledger
 - [ ] Derived lane lists; zero-grey everywhere; RTL+CJK gallery lane
-- [ ] Docs pass (TESTING.md, decisions.md, glossary)
+- [x] Docs pass (TESTING.md, decisions.md, glossary)
 
 ## What changed
 
@@ -344,6 +344,45 @@ have zero source hits post-#789/#831, and the unregistered
 `photos-permissions.mjs` carries a vacuous bare-"Home" assertion the linter
 would catch if the six photos flows were registered — both queued for the
 dormant-gate re-arm pass (#842 W0).
+
+### Wave 5 — close the contract (landed so far)
+
+**W5-B — grid wiring.** Grid B: the five Wave 4 device flows promoted to
+owners of the agenda/docs/notes/tasks/locker origin cells (11 owned / 9
+tracked gaps / 4 skips; every gap carries the open umbrella). Grid D
+deliberately unchanged: locker.denied and photos.denied are already owned by
+default-CI app-boot suites, and a cell has one owner — swapping in a
+nightly-only device flow would trade proof away, not add it. Three new
+registered flows — `enrich-policy-cascade-properties` (16 properties),
+`manifest-scope-denial-sweep` (18 declared sites expanding to ~90 cases; the
+floor is the static count the validator sees), `commons-grant-plane-simulation`
+(the scope-commons precedent extended to the grant plane) — filling
+policy-cascade, refusal-grammar, and sharing-grants `propertyFlow` columns.
+`consent` stays null honestly (its second source file is untouched by the
+sweep; one flow never serves two rows). Root additions on top:
+`recurrence-properties` registered (14 fast-check properties that existed
+unregistered in `packages/core/src/time/`) filling `recurrence.propertyFlow`
+— adversary columns now 8 of 19 — and the mutation seed-census unit test
+(`scripts/mutation/run.test.mjs`) updated to the 24-seed truth with a
+config-name pattern admitting hyphenated seeds.
+
+**W5-D — docs pass.** TESTING.md absorbs the new machinery as current state:
+the 24-seed mutation census, new sections for the non-engine seeds (with the
+jsdom-Stryker limitation and the provisional-local floor doctrine), the fuzz
+lane (why replay is nightly-only: five of six targets import built dist),
+the protocol join lane and its four laws, the time zoo, and the home-app
+device journeys; the `buildTestGateway` drift corrected to disk truth
+(listener-free, zero callers, retirement candidate). docs/decisions.md gains
+the dated ruling block "Adversary lanes and provisional evidence (#839)" —
+A-floors (the provisional-local exception and why it is pessimistic),
+A-replay (the nightly placement of the crasher lock), A-held (`held` as a
+first-class cell status citing the closed ruling that held it), A-pinned
+(the pin doctrine, enumerating the standing pins) — and the G-revoke ruling
+is qualified in place by defect D1, not superseded. docs/cron-timezone.md
+gains a known-divergence note under DST policy (the law stands; the
+double-fire pin flips when fixed). docs/glossary.md gains the adversary-lane
+vocabulary (fuzz lane, join lane, time zoo, device-only claim,
+provisional-local floor, pin, grant plane).
 
 ## Out of scope
 
