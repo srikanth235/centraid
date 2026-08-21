@@ -18,7 +18,7 @@ Wave 0 — encode the shape (G6, G7, G14, G16):
 - [x] Coverage floors: tasks/agenda/notes graduated out of the blueprint blend,
   blend re-seeded from a measured run, first `apps/mobile` floors (pure-logic
   scope) — no number decreases
-- [ ] `tests/matrix.json` gains seats, appSeats (Grid B), appStates (Grid D),
+- [x] `tests/matrix.json` gains seats, appSeats (Grid B), appStates (Grid D),
   engineRegistry, and consentLedger blocks; `validate-matrix.mjs` enforces
   them; report renders Grid B/D skeletons
 
@@ -80,8 +80,32 @@ paragraph records the method and the blend-key replacement waiver. TESTING.md
 Layer 5 and the floors table updated; the stale "mobile is deliberately
 ungated" comment in `vitest.config.ts` rescoped to screens.
 
-**W0-C — matrix schema v2 + report grid skeletons.** (In flight — filled in on
-wave completion.)
+**W0-C — matrix schema v2 + report grid skeletons (G6, G7, G16).**
+`tests/matrix.json` gains five blocks between `appEngines` and `flows`:
+`seats` (3 rows citing the seat-doctrine anchors), `appSeats` (Grid B, 8×3 =
+24 cells: `owned{owner,tier}` | `gap{trackingIssue}` | `skip{reason,citation}`),
+`appStates` (Grid D, 8×7 = 56 cells mirroring every `app.json#states` block in
+both directions), `engineRegistry` (19 engines with source anchors; null
+`propertyFlow`/`mutationSeed` is a visible adversary gap for Wave 2), and
+`consentLedger` (the 8 permission layers; `app-scope-manifests` is the tracked
+adversary hole, gap G4). `validate-matrix.mjs` grew `validateAppAxes`: app axes
+must equal the `app.json` glob set, every app owes every cell, owned needs an
+existing path, gap needs a registered open issue, skip needs a followable
+citation (real doc anchor or registered issue), engine sources/flows/seeds are
+cross-checked against the flow list and `scripts/mutation/seeds.mjs`, and the
+Grid D column set must equal the manifest state partition.
+`tests/matrix.schema.json` mirrors it for editors. `generate.mjs` renders both
+grids directly after the app × engine grid with a neutral declared/unowned/
+excluded alphabet — deliberately not graded green — and adds
+`summary.appSeatCells`/`appStateCells`; no new exits, `cellsMissing` proven
+identical (135) before and after, `historyPoint` whitelist untouched until
+Wave 5. Real owners wired where they provably exist: photos origin/viewer
+journeys, tasks dayone/denied, notes dayone/conflict/denied, agenda
+parked/denied; tally rows are skips citing #831; locker viewer skip cites the
+seat profile's `disabledOn`. The synthetic-root harnesses in
+`generate.test.mjs` and `generate-nightly-semantics.test.mjs` copy
+`scripts/mutation/` into the fixture root since the validator now imports the
+seed catalog.
 
 ## Out of scope
 
@@ -107,6 +131,12 @@ wave completion.)
   points apart; blending them would waste the view-model surface's strength.
   They deliberately overlap on one file; vitest gives each key its own
   coverage map.
+- **#831 is closed, and a skip may cite it.** The validator requires skip
+  citations to be *registered* issues (open or closed) — a held interface
+  cites the ruling that held it — while gap cells require an **open** issue.
+- **Grid B starts thinner than reality**: docs and locker already have real
+  per-seat journeys; they stay `gap` in Wave 0 by design and Wave 1 promotes
+  them.
 - The check pipeline itself is not restructured by this issue: new artifacts
   register with the gates that already exist (validate-matrix,
   validate-nightly-wiring, lint-e2e-flows, mutation floors). The one genuinely

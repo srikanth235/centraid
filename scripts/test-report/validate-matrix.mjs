@@ -12,7 +12,7 @@ const root = path.resolve(import.meta.dirname, "../..");
  * and which way they flow — orthogonal to form factor — so the set is closed
  * by product doctrine, not by what happens to be built.
  */
-export const SEAT_IDS = ["origin", "custodian", "viewer"];
+const SEAT_IDS = ["origin", "custodian", "viewer"];
 const allowedStatuses = new Set(["solid", "partial", "gap", "skip"]);
 const boilerplatePartial =
   /has some owning proof but is incomplete or not continuously exercised/iu;
@@ -97,6 +97,25 @@ async function fileExists(cwd, target) {
 }
 
 /**
+ * The `states` block of a bundled app manifest — the design's own word on
+ * which honest states the app owes — or the error explaining why grid D has
+ * nothing to mirror.
+ */
+async function readManifestStates(cwd, appId) {
+  const manifestPath = `packages/blueprints/apps/${appId}/app.json`;
+  try {
+    const { states } = JSON.parse(
+      await readFile(path.join(cwd, manifestPath), "utf8")
+    );
+    if (!Array.isArray(states?.designed) || !Array.isArray(states?.excluded))
+      return { error: `appStates ${appId} manifest declares no states block` };
+    return { states };
+  } catch {
+    return { error: `appStates ${appId} has no manifest at ${manifestPath}` };
+  }
+}
+
+/**
  * #839 Wave 0 (gaps G6, G7, G16) — the app-shaped axes: `seats`, `appSeats`
  * (grid B), `appStates` (grid D), the full `engineRegistry`, and the
  * `consentLedger`. Every one of them is TOTAL AND CLOSED in the same sense as
@@ -112,11 +131,45 @@ async function validateAppAxes(matrix, options, flowIds) {
   const issues = matrix.trackingIssues ?? {};
   const openIssue = (issue) => issues[String(issue)]?.state === "open";
 
+  // Every disk check is DEFERRED into one `Promise.all`: these blocks name
+  // hundreds of paths, and a validator that stats them one await at a time is
+  // needlessly serial. Each deferred check resolves to an error string or null.
+  const deferred = [];
+  function requirePath(target, message) {
+    if (!checkFiles) return;
+    deferred.push(
+      fileExists(cwd, target).then((found) =>
+        found ? null : `${message}: ${target}`
+      )
+    );
+  }
+  // One anchor cache, keyed by the PROMISE so concurrent citations of the same
+  // document read it once. A citation pointing at a heading the doc does not
+  // have reads as doctrine while protecting nothing.
+  const anchorCache = new Map();
+  function anchorsFor(docPath) {
+    if (!anchorCache.has(docPath))
+      anchorCache.set(
+        docPath,
+        documentAnchors(cwd, docPath).catch(() => null)
+      );
+    return anchorCache.get(docPath);
+  }
+  async function citationError(citation, label) {
+    const [docPath, anchor] = String(citation ?? "").split("#");
+    if (!docPath || !anchor) return `${label} citation is not a doc#anchor`;
+    if (!checkFiles) return null;
+    const anchors = await anchorsFor(docPath);
+    if (!anchors)
+      return `${label} citation document does not exist: ${docPath}`;
+    return anchors.has(anchor)
+      ? null
+      : `${label} citation anchor does not exist: ${citation}`;
+  }
+
   const seats = Array.isArray(matrix.seats) ? matrix.seats : null;
   const seatIds = seats?.map((seat) => seat?.id) ?? [];
-  if (!seats) {
-    errors.push("matrix has no seats registry");
-  } else {
+  if (seats) {
     if (
       JSON.stringify([...seatIds].sort()) !==
       JSON.stringify([...SEAT_IDS].sort())
@@ -128,37 +181,27 @@ async function validateAppAxes(matrix, options, flowIds) {
     for (const seat of seats) {
       if (!seat?.label?.trim())
         errors.push(`seat ${seat?.id ?? "(missing)"} has no label`);
-      if (!seat?.doctrine?.trim())
+      if (seat?.doctrine?.trim())
+        deferred.push(citationError(seat.doctrine, `seat ${seat.id}`));
+      else
         errors.push(`seat ${seat?.id ?? "(missing)"} has no doctrine citation`);
     }
+  } else {
+    errors.push("matrix has no seats registry");
   }
 
-  // One anchor cache: a citation that points at a heading the doc does not
-  // have reads as doctrine while protecting nothing.
-  const anchorCache = new Map();
-  async function citationError(citation, label) {
-    const [docPath, anchor] = String(citation ?? "").split("#");
-    if (!docPath || !anchor) return `${label} citation is not a doc#anchor`;
-    if (!checkFiles) return null;
-    if (!anchorCache.has(docPath)) {
-      anchorCache.set(
-        docPath,
-        await documentAnchors(cwd, docPath).catch(() => null)
-      );
-    }
-    const anchors = anchorCache.get(docPath);
-    if (!anchors)
-      return `${label} citation document does not exist: ${docPath}`;
-    return anchors.has(anchor)
-      ? null
-      : `${label} citation anchor does not exist: ${citation}`;
-  }
-  for (const seat of seats ?? []) {
-    const error = await citationError(seat?.doctrine, `seat ${seat?.id}`);
-    if (error) errors.push(error);
-  }
-
-  const expectedApps = checkFiles ? await bundledAppIds(cwd) : null;
+  const [expectedApps, manifestStates] = await Promise.all([
+    checkFiles ? bundledAppIds(cwd) : null,
+    // Grid D mirrors each app's own manifest, so read them all up front.
+    checkFiles && Array.isArray(matrix.appStates?.apps)
+      ? Promise.all(
+          matrix.appStates.apps.map(async (app) => [
+            app?.id,
+            await readManifestStates(cwd, app?.id),
+          ])
+        ).then((entries) => new Map(entries))
+      : new Map(),
+  ]);
   /** The app axis of a grid must equal the bundled apps, in any order. */
   function checkAppAxis(block, declared) {
     if (!expectedApps) return;
@@ -193,8 +236,7 @@ async function validateAppAxes(matrix, options, flowIds) {
             errors.push(`${label} is owned but has no owning journey`);
           else if (path.isAbsolute(cell.owner) || cell.owner.includes(".."))
             errors.push(`${label} owner must be a repository-relative path`);
-          else if (checkFiles && !(await fileExists(cwd, cell.owner)))
-            errors.push(`${label} owner does not exist: ${cell.owner}`);
+          else requirePath(cell.owner, `${label} owner does not exist`);
           if (typeof cell.tier !== "string" || !cell.tier)
             errors.push(`${label} is owned but has no owning tier`);
         } else if (cell.status === "gap") {
@@ -216,8 +258,7 @@ async function validateAppAxes(matrix, options, flowIds) {
                 `${label} skip cites unregistered issue ${citation}; add it to trackingIssues`
               );
           } else {
-            const error = await citationError(citation, `${label} skip`);
-            if (error) errors.push(error);
+            deferred.push(citationError(citation, `${label} skip`));
           }
         } else {
           errors.push(`${label} has invalid status ${cell.status}`);
@@ -255,32 +296,13 @@ async function validateAppAxes(matrix, options, flowIds) {
       declared.add(app?.id);
       // The manifest is the design's own word on which states this app owes;
       // the grid may not disagree with it, in either direction.
-      let manifestStates = null;
-      if (checkFiles) {
-        const manifestPath = `packages/blueprints/apps/${app?.id}/app.json`;
-        try {
-          manifestStates = JSON.parse(
-            await readFile(path.join(cwd, manifestPath), "utf8")
-          ).states;
-        } catch {
-          errors.push(
-            `appStates ${app?.id} has no manifest at ${manifestPath}`
-          );
-        }
-        if (
-          manifestStates &&
-          (!Array.isArray(manifestStates.designed) ||
-            !Array.isArray(manifestStates.excluded))
-        ) {
-          errors.push(`appStates ${app?.id} manifest declares no states block`);
-          manifestStates = null;
-        }
-      }
-      const designed = new Set(manifestStates?.designed ?? []);
+      const manifest = manifestStates.get(app?.id);
+      if (manifest?.error) errors.push(manifest.error);
+      const designed = new Set(manifest?.states?.designed);
       const excluded = new Set(
-        (manifestStates?.excluded ?? []).map((entry) => entry?.state ?? entry)
+        manifest?.states?.excluded?.map((entry) => entry?.state ?? entry)
       );
-      if (manifestStates) {
+      if (manifest?.states) {
         const partition = [...designed, ...excluded].sort();
         if (JSON.stringify(partition) !== JSON.stringify([...stateIds].sort()))
           errors.push(
@@ -299,12 +321,11 @@ async function validateAppAxes(matrix, options, flowIds) {
             errors.push(`${label} is owned but has no owning proof`);
           else if (path.isAbsolute(cell.owner) || cell.owner.includes(".."))
             errors.push(`${label} owner must be a repository-relative path`);
-          else if (checkFiles && !(await fileExists(cwd, cell.owner)))
-            errors.push(`${label} owner does not exist: ${cell.owner}`);
+          else requirePath(cell.owner, `${label} owner does not exist`);
         } else if (cell.status !== "gap" && cell.status !== "excluded") {
           errors.push(`${label} has invalid status ${cell.status}`);
         }
-        if (!manifestStates) continue;
+        if (!manifest?.states) continue;
         if (excluded.has(stateId) && cell.status !== "excluded")
           errors.push(
             `${label} is ${cell.status} but the app manifest excludes that state; mirror app.json#states`
@@ -347,8 +368,7 @@ async function validateAppAxes(matrix, options, flowIds) {
           source.includes("..")
         )
           errors.push(`${label} source must be a repository-relative path`);
-        else if (checkFiles && !(await fileExists(cwd, source)))
-          errors.push(`${label} source does not exist: ${source}`);
+        else requirePath(source, `${label} source does not exist`);
       }
       if (engine?.propertyFlow != null && !flowIds.has(engine.propertyFlow))
         errors.push(
@@ -378,9 +398,7 @@ async function validateAppAxes(matrix, options, flowIds) {
 
   // ---- The consent ledger (8 permission layers) ---------------------------
   const ledger = matrix.consentLedger;
-  if (!Array.isArray(ledger)) {
-    errors.push("matrix has no consentLedger");
-  } else {
+  if (Array.isArray(ledger)) {
     if (ledger.length !== 8)
       errors.push(
         `consentLedger must declare exactly eight permission layers; got ${ledger.length}`
@@ -405,21 +423,17 @@ async function validateAppAxes(matrix, options, flowIds) {
           errors.push(
             `${label} enforcement must be a repository-relative path`
           );
-        else if (checkFiles && !(await fileExists(cwd, enforcement)))
-          errors.push(`${label} enforcement does not exist: ${enforcement}`);
+        else requirePath(enforcement, `${label} enforcement does not exist`);
       }
       if (!layer?.refusalGrammar?.trim())
         errors.push(`${label} has no refusal grammar`);
       const symbolRef = /^(?<file>[\w./-]+\.[a-z]+)#/u.exec(
         String(layer?.refusalGrammar ?? "")
       );
-      if (
-        symbolRef &&
-        checkFiles &&
-        !(await fileExists(cwd, symbolRef.groups.file))
-      )
-        errors.push(
-          `${label} refusal grammar points at a file that does not exist: ${symbolRef.groups.file}`
+      if (symbolRef)
+        requirePath(
+          symbolRef.groups.file,
+          `${label} refusal grammar points at a file that does not exist`
         );
       const adversary = layer?.adversary;
       if (!adversary || typeof adversary !== "object") {
@@ -433,9 +447,10 @@ async function validateAppAxes(matrix, options, flowIds) {
             errors.push(
               `${label} adversary owner must be a repository-relative path`
             );
-          else if (checkFiles && !(await fileExists(cwd, adversary.owner)))
-            errors.push(
-              `${label} adversary owner does not exist: ${adversary.owner}`
+          else
+            requirePath(
+              adversary.owner,
+              `${label} adversary owner does not exist`
             );
         }
         if (adversary.flow != null && !flowIds.has(adversary.flow))
@@ -466,8 +481,11 @@ async function validateAppAxes(matrix, options, flowIds) {
             `${label} note cites unregistered issue #${match.groups.issue}; add it to trackingIssues with its state`
           );
     }
+  } else {
+    errors.push("matrix has no consentLedger");
   }
 
+  errors.push(...(await Promise.all(deferred)).filter(Boolean));
   return errors;
 }
 
