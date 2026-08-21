@@ -517,7 +517,7 @@ export function Root({
       for (const stop of liveUnsubRef.current) stop();
       liveUnsubRef.current = [];
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- mount-once wiring, stable deps via refs
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- mount-once wiring, stable deps via refs (#834)
   }, []);
 
   // ---- derive ----

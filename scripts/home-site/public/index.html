@@ -1,57 +1,76 @@
 <!doctype html>
-<html lang="en" data-theme="paper">
+<html lang="en">
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Centraid — software for a market of one</title>
+    <!-- Resolve the theme before first paint. NO `data-theme` means "follow
+         the system", which is what the generated token sheet's
+         `prefers-color-scheme` block answers — so the attribute is set here
+         only when the visitor has actually chosen one, and the page never
+         paints the wrong theme. Keep the storage key and the legacy migration
+         in sync with docs.js. -->
+    <title>Centraid — your data, in a vault you own</title>
     <meta
       name="description"
-      content="Centraid is personal software with the ownership inverted: one vault on your own machine holds your life's record on a single shared ontology, apps are agent-built projections over it, and every device is a client of a gateway you run."
+      content="Your photos, documents, notes, calendar, tasks, people, passwords and shared expenses live in one vault on your own disk — and eight apps that work like the ones you already use borrow it. Delete an app and you lose nothing. Leaving is copying a folder. No accounts, no cloud, no landlord."
     />
+    <script>
+      (() => {
+        let theme;
+        try {
+          theme = localStorage.getItem("centraid-theme");
+        } catch {
+          /* storage blocked (private mode) — fall through to the media query */
+        }
+        // `paper`/`night` were this site's own theme names before it moved
+        // onto the product's tokens; migrate a returning visitor's choice
+        // rather than silently ignoring it.
+        const legacy = { night: "dark", paper: "light" };
+        if (legacy[theme]) theme = legacy[theme];
+        if (theme === "light" || theme === "dark") {
+          document.documentElement.dataset.theme = theme;
+        }
+      })();
+    </script>
     <link rel="icon" href="assets/centraid-mark.svg" />
-    <link rel="preconnect" href="https://fonts.googleapis.com" />
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <!-- The one bundled face, served from this origin. Nothing here reaches a
+         font CDN: the product ships Instrument Sans with no network fetch, and
+         a page that advertises "no cloud" should not open with one. -->
     <link
-      href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,300..900;1,9..144,300..900&family=Newsreader:ital,opsz,wght@0,6..72,400..700;1,6..72,400..700&family=IBM+Plex+Mono:ital,wght@0,400;0,500;0,600;1,400&display=swap"
-      rel="stylesheet"
+      rel="preload"
+      as="font"
+      type="font/woff2"
+      href="assets/fonts/instrument-sans-latin-400-normal.woff2"
+      crossorigin
     />
+    <link
+      rel="preload"
+      as="font"
+      type="font/woff2"
+      href="assets/fonts/instrument-sans-latin-600-normal.woff2"
+      crossorigin
+    />
+    <link rel="stylesheet" href="assets/centraid-tokens.css" />
     <style>
-      :root {
-        --paper: #f6f0e3;
-        --paper-2: #efe7d4;
-        --card: #fbf7ec;
-        --ink: #20261f;
-        --ink-2: #55604f;
-        --ink-3: #83907c;
-        --line: rgba(32, 38, 31, 0.16);
-        --line-soft: rgba(32, 38, 31, 0.09);
-        --accent: #0d7263;
-        --accent-bright: #3ec8b4;
-        --amber: #b3690e;
-        --shadow: rgba(32, 38, 31, 0.14);
-        --grain-opacity: 0.5;
-        --accent-soft: rgba(62, 200, 180, 0.35);
+      /* Centraid landing page.
 
-        --display: "Fraunces", georgia, serif;
-        --body: "Newsreader", georgia, serif;
-        --font-mono: "IBM Plex Mono", ui-monospace, monospace;
-      }
-      [data-theme="night"] {
-        --paper: #111612;
-        --paper-2: #0c110d;
-        --card: #171d17;
-        --ink: #ece5d2;
-        --ink-2: #a8ab97;
-        --ink-3: #6f7565;
-        --line: rgba(236, 229, 210, 0.2);
-        --line-soft: rgba(236, 229, 210, 0.1);
-        --accent: #4ed0bc;
-        --accent-bright: #4ed0bc;
-        --amber: #dfa044;
-        --shadow: rgba(0, 0, 0, 0.5);
-        --grain-opacity: 0.28;
-        --accent-soft: rgba(78, 208, 188, 0.3);
-      }
+         Every colour, face, radius, duration and rung here comes from
+         assets/centraid-tokens.css — the SAME lowering the shell renders on
+         (packages/design's `toCss()`), emitted by scripts/site-tokens.mjs.
+         This page declares no palette, no second face, and no type scale of
+         its own; the one step beyond the product ramp is `--t-hero-size`,
+         which scales the display ROLE and is registered in
+         docs/design-divergences.md.
+
+         The invariants this page is bound by, and what they cost it:
+           · One ramp, one face. Instrument Sans at 400/600, self-hosted. The
+             platform code stack appears only on commands, paths and literals.
+           · The shell spends no colour. The accent IS the ink; emphasis is a
+             step on the ink ramp, never a hue. `--link` is prose links only.
+           · Very little elevation. A card is a sheet on the page — a hairline
+             and a raised ground, never an offset shadow.
+           · One motion grammar. 280ms to enter, 140ms for a state change, and
+             no scale, tilt or drift under the pointer. */
 
       * {
         box-sizing: border-box;
@@ -62,57 +81,44 @@
         scroll-behavior: smooth;
       }
       section[id] {
-        scroll-margin-top: 86px;
+        scroll-margin-top: 78px;
       }
       ::selection {
-        background: var(--accent-soft);
+        background: var(--bg-sel);
       }
       body {
-        font-family: var(--body);
-        font-size: 19px;
-        line-height: 1.6;
-        background: var(--paper);
-        color: var(--ink);
+        font: var(--t-reading);
+        background: var(--bg);
+        color: var(--text);
         -webkit-font-smoothing: antialiased;
         overflow-x: hidden;
         transition:
-          background 0.4s ease,
-          color 0.4s ease;
-      }
-      /* paper grain */
-      body::after {
-        content: "";
-        position: fixed;
-        inset: 0;
-        z-index: 60;
-        pointer-events: none;
-        opacity: var(--grain-opacity);
-        background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='240' height='240'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3CfeComponentTransfer%3E%3CfeFuncA type='linear' slope='0.06'/%3E%3C/feComponentTransfer%3E%3C/filter%3E%3Crect width='240' height='240' filter='url(%23n)'/%3E%3C/svg%3E");
+          background var(--dur-1) var(--ease),
+          color var(--dur-1) var(--ease);
       }
 
       a {
         color: inherit;
       }
-      .u {
-        color: var(--accent);
+      /* Prose links: the one reserved hue, always underlined (DESIGN.md,
+         "Link is not a size role"). */
+      .u,
+      .prose a,
+      .install-notes a {
+        color: var(--link);
         text-decoration: underline;
-        text-decoration-thickness: 2px;
-        text-underline-offset: 4px;
-        text-decoration-color: color-mix(
-          in oklab,
-          var(--accent) 45%,
-          transparent
-        );
-        transition: text-decoration-color 0.18s ease;
+        text-underline-offset: 3px;
+        text-decoration-thickness: 1px;
       }
-      .u:hover {
-        text-decoration-color: var(--accent);
+      :focus-visible {
+        outline: 2px solid var(--focus-ring-color);
+        outline-offset: 2px;
       }
 
       .wrap {
         max-width: 1120px;
         margin: 0 auto;
-        padding: 0 clamp(20px, 4.5vw, 56px);
+        padding: 0 clamp(var(--sp-4), 4.5vw, calc(var(--sp-6) * 2));
       }
 
       /* ---------- header ---------- */
@@ -120,34 +126,35 @@
         position: sticky;
         top: 0;
         z-index: 50;
-        background: color-mix(in oklab, var(--paper) 88%, transparent);
+        background: var(--bg-hud);
         backdrop-filter: blur(10px);
-        border-bottom: 1px solid var(--line-soft);
+        border-bottom: 1px solid var(--line);
       }
       .head-row {
         display: flex;
         align-items: center;
         justify-content: space-between;
-        padding: 14px clamp(20px, 4.5vw, 56px);
+        gap: var(--sp-3);
+        padding: var(--sp-2) clamp(var(--sp-4), 4.5vw, calc(var(--sp-6) * 2));
         max-width: 1240px;
         margin: 0 auto;
       }
       .brand {
         display: flex;
         align-items: center;
-        gap: 11px;
-        font-family: var(--display);
-        font-weight: 640;
-        font-size: 21px;
-        letter-spacing: -0.01em;
+        gap: var(--sp-2);
+        font: var(--t-title);
         text-decoration: none;
+        white-space: nowrap;
       }
+      /* The mark is an identity chip: 26% of its own size, no gloss and no
+         drop shadow (DESIGN.md, "Elevation & Depth"). */
       .brand .mark {
-        width: 30px;
-        height: 30px;
-        border-radius: 8px;
+        width: 28px;
+        height: 28px;
+        border-radius: 7.28px;
         overflow: hidden;
-        box-shadow: 2px 2px 0 var(--shadow);
+        flex: none;
       }
       .brand .mark img {
         width: 100%;
@@ -157,62 +164,49 @@
       nav {
         display: flex;
         align-items: center;
-        gap: 2px;
+        gap: var(--sp-1);
       }
       nav a {
-        font-family: var(--font-mono);
-        font-size: 12.5px;
-        letter-spacing: 0.05em;
-        text-transform: lowercase;
-        color: var(--ink-2);
+        font: var(--t-control);
+        color: var(--text-soft);
         text-decoration: none;
-        padding: 8px 11px;
-        border-radius: 6px;
-        transition: color 0.15s ease;
+        padding: var(--sp-2) var(--sp-3);
+        border-radius: var(--r-md);
+        transition:
+          color var(--dur-1) var(--ease),
+          background var(--dur-1) var(--ease);
       }
       nav a:hover {
-        color: var(--accent);
-      }
-      nav .city-link {
-        color: var(--accent);
-      }
-      nav .city-link:hover {
-        color: var(--ink);
+        color: var(--text);
+        background: var(--bg-hover);
       }
       nav .docs-link {
-        color: var(--paper);
-        background: var(--ink);
-        margin-left: 6px;
-        box-shadow: 3px 3px 0 var(--shadow);
-        transition:
-          transform 0.15s ease,
-          box-shadow 0.15s ease;
+        color: var(--text-inv);
+        background: var(--accent-fill);
+        margin-left: var(--sp-1);
       }
       nav .docs-link:hover {
-        color: var(--paper);
-        transform: translate(-1px, -1px);
-        box-shadow: 4px 4px 0 var(--shadow);
+        color: var(--text-inv);
+        background: var(--accent-deep-hover);
       }
       .toggle {
-        width: 34px;
-        height: 34px;
-        margin-left: 8px;
-        border-radius: 50%;
-        border: 1px solid var(--line);
+        width: var(--h-control);
+        height: var(--h-control);
+        margin-left: var(--sp-1);
+        border-radius: var(--r-md);
+        border: 1px solid var(--line-strong);
         background: transparent;
-        color: var(--ink-2);
+        color: var(--text-soft);
         display: grid;
         place-items: center;
         cursor: pointer;
         transition:
-          color 0.2s ease,
-          border-color 0.2s ease,
-          transform 0.3s ease;
+          color var(--dur-1) var(--ease),
+          border-color var(--dur-1) var(--ease);
       }
       .toggle:hover {
-        color: var(--accent);
-        border-color: var(--accent);
-        transform: rotate(30deg);
+        color: var(--accent-hover);
+        border-color: var(--accent-hover);
       }
       .toggle svg {
         width: 16px;
@@ -221,159 +215,135 @@
 
       /* ---------- hero ---------- */
       .hero {
-        position: relative;
-        padding-block: clamp(64px, 12vh, 140px) clamp(56px, 8vh, 96px);
+        padding-block: clamp(var(--sp-band), 12vh, var(--sp-band-xl))
+          clamp(var(--sp-band), 8vh, var(--sp-band-lg));
       }
       .kicker {
-        font-family: var(--font-mono);
-        font-size: 12.5px;
-        letter-spacing: 0.22em;
-        text-transform: uppercase;
-        color: var(--accent);
+        font: var(--t-eyebrow);
+        letter-spacing: var(--t-eyebrow-tracking);
+        text-transform: var(--t-eyebrow-transform);
+        color: var(--text-faint);
         display: flex;
         align-items: center;
-        gap: 14px;
+        gap: var(--sp-3);
       }
       .kicker::after {
         content: "";
-        flex: 0 0 64px;
+        flex: 0 0 56px;
         height: 1px;
-        background: var(--accent);
-        opacity: 0.5;
+        background: var(--line-strong);
       }
+      /* The display role, scaled — same face, same weight, same tracking.
+         Emphasis is a step on the ink ramp: the sentence sits at the secondary
+         rung so the phrase that matters can be primary ink. */
       .hero h1 {
-        margin-top: 26px;
-        font-family: var(--display);
-        font-weight: 480;
-        font-optical-sizing: auto;
-        font-size: clamp(46px, 8.4vw, 118px);
-        line-height: 1.02;
-        letter-spacing: -0.025em;
-        max-width: 11em;
+        margin-top: var(--sp-5);
+        font-family: var(--font-sans);
+        font-weight: 600;
+        font-size: var(--t-hero-size);
+        line-height: 1.06;
+        letter-spacing: var(--t-display-tracking);
+        color: var(--text-soft);
+        max-width: 14ch;
       }
       .hero h1 em {
-        font-style: italic;
-        font-weight: 560;
-        color: var(--accent);
+        font-style: normal;
+        color: var(--text);
       }
       .hero .lede {
-        margin-top: 34px;
-        max-width: 34em;
-        font-size: clamp(19px, 2.2vw, 23px);
-        line-height: 1.55;
-        color: var(--ink-2);
+        margin-top: var(--sp-5);
+        max-width: var(--measure-lede);
+        color: var(--text-soft);
       }
       .hero .lede b {
         font-weight: 600;
-        color: var(--ink);
+        color: var(--text);
       }
       .cta-row {
-        margin-top: 40px;
+        margin-top: var(--sp-6);
         display: flex;
         align-items: center;
-        gap: 18px;
+        gap: var(--sp-3);
         flex-wrap: wrap;
       }
+      /* Button: the product recipe. `primary` is the ink fill and there is at
+         most one per view; `secondary` is the raised action beside it. */
       .btn {
-        font-family: var(--font-mono);
-        font-size: 14px;
-        font-weight: 500;
-        letter-spacing: 0.02em;
+        font: var(--t-control);
         text-decoration: none;
-        padding: 14px 26px;
-        border: 1.5px solid var(--ink);
+        min-height: var(--target-min);
+        padding: 0 var(--sp-5);
+        border-radius: var(--r-md);
+        border: 1px solid transparent;
         display: inline-flex;
         align-items: center;
-        gap: 10px;
+        gap: var(--sp-2);
         transition:
-          transform 0.15s ease,
-          box-shadow 0.15s ease,
-          background 0.15s ease;
+          background var(--dur-1) var(--ease),
+          border-color var(--dur-1) var(--ease),
+          color var(--dur-1) var(--ease);
       }
       .btn-primary {
-        background: var(--ink);
-        color: var(--paper);
-        box-shadow: 5px 5px 0 var(--shadow);
+        background: var(--accent-fill);
+        color: var(--text-inv);
+        border-color: var(--accent-fill);
       }
       .btn-primary:hover {
-        transform: translate(-2px, -2px);
-        box-shadow: 7px 7px 0 var(--shadow);
+        background: var(--accent-deep-hover);
+        border-color: var(--accent-deep-hover);
       }
       .btn-ghost {
-        color: var(--ink);
-        background: transparent;
-        box-shadow: 5px 5px 0 transparent;
+        color: var(--text);
+        background: var(--bg-elev);
+        border-color: var(--line-strong);
       }
       .btn-ghost:hover {
-        box-shadow: 5px 5px 0 var(--shadow);
-        transform: translate(-2px, -2px);
-        background: var(--card);
+        color: var(--accent-hover);
+        border-color: var(--accent-hover);
       }
       .hero-notes {
-        margin-top: 34px;
-        font-family: var(--font-mono);
-        font-size: 12.5px;
-        letter-spacing: 0.04em;
-        color: var(--ink-3);
+        margin-top: var(--sp-5);
+        font: var(--t-mono);
+        color: var(--text-faint);
         display: flex;
-        gap: 8px;
+        gap: var(--sp-2);
         align-items: center;
         flex-wrap: wrap;
       }
-      .hero-notes .dot {
-        color: var(--accent);
-      }
+      /* Badge: `--attention` is type and border, never a fill (DESIGN.md,
+         "Colors"). Beta is the one genuinely heads-up mark on the page. */
       .beta-pill {
-        font-family: var(--font-mono);
-        font-size: 11px;
-        letter-spacing: 0.12em;
-        color: var(--amber);
-        border: 1px solid color-mix(in oklab, var(--amber) 55%, transparent);
-        padding: 3px 9px;
-        border-radius: 999px;
-      }
-      /* big ghost numeral behind hero */
-      .hero .ghost {
-        position: absolute;
-        right: -0.05em;
-        top: clamp(20px, 6vh, 70px);
-        font-family: var(--display);
-        font-weight: 300;
-        font-style: italic;
-        font-size: clamp(160px, 26vw, 380px);
-        line-height: 1;
-        color: transparent;
-        -webkit-text-stroke: 1.5px
-          color-mix(in oklab, var(--accent) 32%, transparent);
-        pointer-events: none;
-        user-select: none;
+        font: var(--t-control);
+        color: var(--attention);
+        border: 1px solid var(--attention);
+        padding: 1px var(--sp-2);
+        border-radius: var(--r-pill);
       }
 
       /* ---------- manifesto rule ---------- */
       .rule {
         border: 0;
-        border-top: 1px solid var(--line);
+        border-top: 1px solid var(--line-strong);
         margin: 0;
       }
       .rule-label {
         display: flex;
         justify-content: space-between;
-        font-family: var(--font-mono);
-        font-size: 11.5px;
-        letter-spacing: 0.14em;
-        text-transform: uppercase;
-        color: var(--ink-3);
-        padding: 10px 0 0;
+        gap: var(--sp-4);
+        font: var(--t-eyebrow);
+        letter-spacing: var(--t-eyebrow-tracking);
+        text-transform: var(--t-eyebrow-transform);
+        color: var(--text-faint);
+        padding: var(--sp-2) 0 0;
       }
 
       /* ---------- chapters ---------- */
       .chapter {
-        position: relative;
         display: grid;
         grid-template-columns: minmax(0, 5fr) minmax(0, 6fr);
-        gap: clamp(32px, 5vw, 72px);
+        gap: clamp(var(--sp-6), 5vw, calc(var(--sp-6) * 2));
         align-items: center;
-        padding-block: clamp(64px, 10vh, 120px);
+        padding-block: clamp(var(--sp-band), 10vh, var(--sp-band-lg));
       }
       .chapter.flip .prose {
         order: 2;
@@ -382,108 +352,85 @@
         order: 1;
       }
       .ch-no {
-        font-family: var(--font-mono);
-        font-size: 12.5px;
-        letter-spacing: 0.2em;
-        text-transform: uppercase;
-        color: var(--amber);
+        font: var(--t-eyebrow);
+        letter-spacing: var(--t-eyebrow-tracking);
+        text-transform: var(--t-eyebrow-transform);
+        color: var(--text-faint);
         display: flex;
         align-items: baseline;
-        gap: 12px;
-        margin-bottom: 18px;
+        gap: var(--sp-2);
+        margin-bottom: var(--sp-4);
       }
       .ch-no .n {
-        font-family: var(--display);
-        font-style: italic;
-        font-size: 30px;
-        font-weight: 400;
-        color: var(--accent);
+        font: var(--t-mono);
+        font-variant-numeric: var(--t-mono-numeric);
         letter-spacing: 0;
+        color: var(--text-soft);
       }
-      .chapter h2 {
-        font-family: var(--display);
-        font-weight: 520;
-        font-size: clamp(30px, 3.9vw, 46px);
-        line-height: 1.08;
-        letter-spacing: -0.02em;
-        max-width: 12em;
+      .chapter h2,
+      .strip h2,
+      .install h2 {
+        font-family: var(--font-sans);
+        font-weight: 600;
+        font-size: var(--t-chapter-size);
+        line-height: 1.1;
+        letter-spacing: var(--t-display-tracking);
+        color: var(--text-soft);
+        max-width: 16ch;
       }
-      .chapter h2 em {
-        font-style: italic;
-        color: var(--accent);
-        font-weight: 560;
+      .chapter h2 em,
+      .strip h2 em,
+      .install h2 em,
+      .foot-manifesto em {
+        font-style: normal;
+        color: var(--text);
       }
       .chapter .prose p {
-        margin-top: 20px;
-        color: var(--ink-2);
-        max-width: 32em;
+        margin-top: var(--sp-4);
+        color: var(--text-soft);
+        max-width: var(--measure-reading);
       }
       .chapter .prose p b {
-        color: var(--ink);
+        color: var(--text);
         font-weight: 600;
       }
       .chapter .prose .aside {
-        margin-top: 22px;
-        font-family: var(--font-mono);
-        font-size: 12.5px;
-        line-height: 1.7;
-        color: var(--ink-3);
-        border-left: 2px solid var(--accent);
-        padding-left: 14px;
-        max-width: 30em;
-      }
-      .chapter .prose .aside a {
-        color: var(--accent);
-        text-decoration: none;
-        border-bottom: 1px solid
-          color-mix(in oklab, var(--accent) 45%, transparent);
-      }
-      .chapter .prose .aside a:hover {
-        border-bottom-color: var(--accent);
+        margin-top: var(--sp-5);
+        font: var(--t-body);
+        color: var(--text-faint);
+        border-left: 2px solid var(--line-strong);
+        padding-left: var(--sp-3);
+        max-width: var(--measure-reading);
       }
 
       /* ---------- artifacts ---------- */
+      /* Surface: raised paper with a hairline. No offset shadow, no tilt, and
+         nothing moves under the pointer — the product reserves its three
+         shadows for a dialog, a sheet and a popover. */
       .artifact {
-        position: relative;
-        background: var(--card);
-        border: 1px solid var(--ink);
-        box-shadow: 9px 9px 0 var(--shadow);
-        font-family: var(--font-mono);
-        font-size: 13px;
-        line-height: 1.75;
-        transition:
-          transform 0.25s ease,
-          box-shadow 0.25s ease,
-          rotate 0.25s ease;
-      }
-      .tilt-l {
-        rotate: -0.7deg;
-      }
-      .tilt-r {
-        rotate: 0.7deg;
-      }
-      .artifact:hover {
-        rotate: 0deg;
-        transform: translate(-2px, -2px);
-        box-shadow: 12px 12px 0 var(--shadow);
+        background: var(--bg-elev);
+        border: 1px solid var(--line);
+        border-radius: var(--r-lg);
+        font: var(--t-body);
+        line-height: 1.7;
       }
       .artifact-head {
         display: flex;
         align-items: center;
         justify-content: space-between;
-        gap: 12px;
-        padding: 10px 16px;
+        gap: var(--sp-3);
+        padding: var(--sp-2) var(--sp-4);
         border-bottom: 1px solid var(--line);
-        font-size: 11.5px;
-        letter-spacing: 0.1em;
-        text-transform: uppercase;
-        color: var(--ink-3);
+        font: var(--t-eyebrow);
+        letter-spacing: var(--t-eyebrow-tracking);
+        text-transform: var(--t-eyebrow-transform);
+        color: var(--text-faint);
       }
       .artifact-head .tag {
-        color: var(--accent);
+        color: var(--text-soft);
       }
       .artifact-body {
-        padding: 18px 20px 22px;
+        padding: var(--sp-4) var(--sp-4) var(--sp-5);
         overflow-x: auto;
       }
 
@@ -491,243 +438,277 @@
       .t-line {
         display: grid;
         grid-template-columns: 74px 1fr;
-        gap: 14px;
-        padding: 5px 0;
+        gap: var(--sp-3);
+        padding: var(--sp-1) 0;
       }
       .t-who {
-        color: var(--ink-3);
+        color: var(--text-faint);
         text-align: right;
         user-select: none;
       }
-      .t-who.you {
-        color: var(--amber);
-      }
+      .t-who.you,
       .t-who.agent {
-        color: var(--accent);
+        color: var(--text-soft);
       }
       .t-msg {
-        color: var(--ink);
+        color: var(--text);
       }
       .t-msg .dim {
-        color: var(--ink-3);
+        color: var(--text-faint);
       }
       .t-msg .nl {
         display: block;
       }
+      /* Chip: a bounded label, at the micro rung. */
       .tool-chip {
         display: table;
-        font-size: 11.5px;
-        color: var(--accent);
-        border: 1px solid color-mix(in oklab, var(--accent) 45%, transparent);
-        border-radius: 4px;
-        padding: 1px 8px;
-        margin: 3px 0;
-        background: color-mix(in oklab, var(--accent) 7%, transparent);
+        font: var(--t-control);
+        font-family: var(--font-code);
+        color: var(--text-soft);
+        border: 1px solid var(--line-strong);
+        border-radius: var(--r-sm);
+        padding: 1px var(--sp-2);
+        margin: var(--sp-1) 0;
       }
+      /* A timestamp is a numeric annotation: tabular Sans, never the code
+         stack (DESIGN.md, "Typography"). */
       .t-stamp {
-        color: var(--ink-3);
-        font-size: 11.5px;
+        font: var(--t-mono);
+        font-variant-numeric: var(--t-mono-numeric);
+        direction: var(--t-mono-direction);
+        unicode-bidi: var(--t-mono-bidi);
+        color: var(--text-faint);
       }
 
-      /* file-tree artifact */
+      /* file-tree artifact — a path is a code surface */
       .ft {
-        color: var(--ink);
+        font-family: var(--font-code);
+        color: var(--text);
         white-space: nowrap;
       }
       .ft-row {
         display: flex;
-        gap: 20px;
+        gap: var(--sp-5);
       }
       .ft-row .ft-l {
         flex: 0 0 200px;
       }
       .ft .d {
-        color: var(--accent);
+        color: var(--text);
         font-weight: 600;
       }
       .ft .c {
-        color: var(--ink-3);
-        font-style: italic;
+        font-family: var(--font-sans);
+        color: var(--text-faint);
       }
       .ft .hl {
-        color: var(--amber);
+        color: var(--text);
+        font-weight: 600;
       }
 
       /* consent artifact */
       .consent-rows {
-        margin: 6px 0 14px;
+        margin: var(--sp-2) 0 var(--sp-3);
       }
       .consent-row {
         display: flex;
         justify-content: space-between;
-        gap: 20px;
-        padding: 7px 2px;
-        border-bottom: 1px dashed var(--line);
+        gap: var(--sp-5);
+        padding: var(--sp-2) 0;
+        border-bottom: 1px solid var(--line);
       }
       .consent-row .scope {
-        color: var(--ink);
+        color: var(--text);
       }
       .consent-row .verb {
-        color: var(--accent);
+        color: var(--text-soft);
       }
       .consent-actions {
         display: flex;
-        gap: 12px;
-        margin: 16px 0 12px;
+        gap: var(--sp-2);
+        margin: var(--sp-4) 0 var(--sp-3);
       }
       .consent-btn {
-        font-family: var(--font-mono);
-        font-size: 12.5px;
-        padding: 8px 18px;
-        border: 1.5px solid var(--ink);
-        background: var(--ink);
-        color: var(--paper);
-        cursor: default;
+        font: var(--t-control);
+        min-height: var(--h-control);
+        display: inline-flex;
+        align-items: center;
+        padding: 0 var(--sp-4);
+        border-radius: var(--r-md);
+        border: 1px solid var(--accent-fill);
+        background: var(--accent-fill);
+        color: var(--text-inv);
       }
+      /* `revoke…` is destructive, so it is OUTLINED in `--net` — a filled
+         destructive control is not part of this grammar. */
       .consent-btn.ghost {
         background: transparent;
-        color: var(--ink-2);
-        border-color: var(--line);
+        color: var(--net);
+        border-color: var(--net);
       }
       .consent-fine {
-        font-size: 11.5px;
-        color: var(--ink-3);
-        font-style: italic;
+        font: var(--t-body);
+        color: var(--text-faint);
+      }
+
+      /* ---------- the apps grid ---------- */
+      /* Each card is the product's sheet recipe: raised paper, hairline,
+         `--r-lg`, no shadow. The north-star line is the eyebrow role. */
+      .app-grid {
+        margin-top: var(--sp-6);
+        display: grid;
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+        gap: var(--sp-4);
+      }
+      .app {
+        background: var(--bg-elev);
+        border: 1px solid var(--line);
+        border-radius: var(--r-lg);
+        padding: var(--sp-5);
+      }
+      .app .swap {
+        font: var(--t-eyebrow);
+        letter-spacing: var(--t-eyebrow-tracking);
+        text-transform: var(--t-eyebrow-transform);
+        color: var(--text-faint);
+      }
+      .app h3 {
+        font: var(--t-title);
+        letter-spacing: var(--t-title-tracking);
+        margin-top: var(--sp-2);
+      }
+      .app p + p,
+      .app h3 + p {
+        margin-top: var(--sp-2);
+        font: var(--t-body);
+        color: var(--text-soft);
+      }
+      .apps-foot {
+        margin-top: var(--sp-5);
+        font: var(--t-body);
+        color: var(--text-faint);
+        max-width: var(--measure-reading);
+      }
+      @media (max-width: 1020px) {
+        .app-grid {
+          grid-template-columns: repeat(2, minmax(0, 1fr));
+        }
+      }
+      @media (max-width: 560px) {
+        .app-grid {
+          grid-template-columns: minmax(0, 1fr);
+        }
       }
 
       /* ---------- where it runs strip ---------- */
       .strip {
-        padding-block: clamp(56px, 9vh, 100px);
+        padding-block: clamp(var(--sp-band), 9vh, var(--sp-band-lg));
       }
       .strip-head {
         display: flex;
         align-items: baseline;
         justify-content: space-between;
-        gap: 20px;
+        gap: var(--sp-5);
         flex-wrap: wrap;
-        margin-bottom: 40px;
-      }
-      .strip h2 {
-        font-family: var(--display);
-        font-weight: 520;
-        font-size: clamp(30px, 3.9vw, 46px);
-        letter-spacing: -0.02em;
-        line-height: 1.08;
-      }
-      .strip h2 em {
-        font-style: italic;
-        color: var(--accent);
+        margin-bottom: var(--sp-6);
       }
       .strip .strip-note {
-        font-family: var(--font-mono);
-        font-size: 12.5px;
-        color: var(--ink-3);
-        max-width: 26em;
-        line-height: 1.7;
+        font: var(--t-body);
+        color: var(--text-faint);
+        max-width: 46ch;
       }
       .homes {
         display: grid;
         grid-template-columns: repeat(3, 1fr);
-        gap: 0;
-        border: 1px solid var(--ink);
-        background: var(--card);
-        box-shadow: 9px 9px 0 var(--shadow);
+        border: 1px solid var(--line);
+        border-radius: var(--r-lg);
+        background: var(--bg-elev);
+        overflow: hidden;
       }
       .home {
-        padding: 28px 26px 30px;
+        padding: var(--sp-5) var(--sp-5) var(--sp-6);
         border-right: 1px solid var(--line);
-        position: relative;
       }
       .home:last-child {
         border-right: 0;
       }
       .home .h-no {
-        font-family: var(--font-mono);
-        font-size: 11px;
-        letter-spacing: 0.16em;
-        color: var(--amber);
-        text-transform: uppercase;
+        font: var(--t-eyebrow);
+        letter-spacing: var(--t-eyebrow-tracking);
+        text-transform: var(--t-eyebrow-transform);
+        color: var(--text-faint);
       }
       .home h3 {
-        font-family: var(--display);
-        font-weight: 560;
-        font-size: 23px;
-        letter-spacing: -0.01em;
-        margin-top: 10px;
+        font: var(--t-title);
+        letter-spacing: var(--t-title-tracking);
+        margin-top: var(--sp-2);
       }
       .home p {
-        margin-top: 10px;
-        font-size: 16px;
-        line-height: 1.55;
-        color: var(--ink-2);
+        margin-top: var(--sp-2);
+        font: var(--t-body);
+        color: var(--text-soft);
       }
       .home code {
-        font-family: var(--font-mono);
-        font-size: 12px;
-        color: var(--accent);
+        font-family: var(--font-code);
+        color: var(--text);
       }
 
       /* ---------- install ---------- */
       .install {
-        padding-block: clamp(56px, 9vh, 110px) clamp(72px, 10vh, 130px);
+        padding-block: clamp(var(--sp-band), 9vh, var(--sp-band-lg))
+          clamp(var(--sp-band-lg), 10vh, var(--sp-band-xl));
       }
       .install .ch-no {
-        margin-bottom: 14px;
-      }
-      .install h2 {
-        font-family: var(--display);
-        font-weight: 520;
-        font-size: clamp(30px, 3.9vw, 46px);
-        letter-spacing: -0.02em;
-        line-height: 1.08;
-      }
-      .install h2 em {
-        font-style: italic;
-        color: var(--accent);
+        margin-bottom: var(--sp-3);
       }
       .install-grid {
-        margin-top: 40px;
+        margin-top: var(--sp-6);
         display: grid;
         grid-template-columns: minmax(0, 7fr) minmax(0, 4fr);
-        gap: clamp(28px, 4vw, 56px);
+        gap: clamp(var(--sp-5), 4vw, calc(var(--sp-6) * 2));
         align-items: start;
       }
       .term {
-        background: var(--card);
-        border: 1px solid var(--ink);
-        box-shadow: 9px 9px 0 var(--shadow);
+        background: var(--bg-elev);
+        border: 1px solid var(--line);
+        border-radius: var(--r-lg);
+        overflow: hidden;
       }
       .term-bar {
         display: flex;
         align-items: center;
-        gap: 6px;
-        padding: 10px 14px;
+        gap: var(--sp-1);
+        padding: var(--sp-2) var(--sp-3);
         border-bottom: 1px solid var(--line);
         flex-wrap: wrap;
       }
+      /* Segmented: the product's tab recipe, at its own 28px height. */
       .tab {
-        font-family: var(--font-mono);
-        font-size: 12px;
-        letter-spacing: 0.04em;
-        padding: 6px 13px;
+        font: var(--t-control);
+        height: var(--h-segmented);
+        padding: 0 var(--sp-3);
+        border-radius: var(--r-sm);
         cursor: pointer;
-        color: var(--ink-3);
+        color: var(--text-soft);
         border: 1px solid transparent;
         background: none;
-        transition: all 0.15s ease;
+        transition:
+          color var(--dur-1) var(--ease),
+          background var(--dur-1) var(--ease);
       }
       .tab.on {
-        color: var(--paper);
-        background: var(--ink);
+        color: var(--text-inv);
+        background: var(--accent-fill);
       }
       .tab:not(.on):hover {
-        color: var(--accent);
+        color: var(--text);
+        background: var(--bg-hover);
       }
       .term-body {
         position: relative;
-        padding: 22px 22px 24px;
-        font-family: var(--font-mono);
-        font-size: 13.5px;
+        padding: var(--sp-5) var(--sp-5) var(--sp-5);
+        font-family: var(--font-code);
+        font-size: var(--t-body-size);
         line-height: 1.8;
       }
       .cmd {
@@ -737,118 +718,115 @@
         display: block;
       }
       .cmd .cm {
-        color: var(--ink-3);
-        font-style: italic;
+        font-family: var(--font-sans);
+        color: var(--text-faint);
       }
       .cmd .ln {
         display: flex;
-        gap: 10px;
+        gap: var(--sp-2);
         align-items: flex-start;
       }
       .cmd .p {
-        color: var(--accent);
-        font-weight: 600;
+        color: var(--text-faint);
         user-select: none;
       }
       .cmd code {
-        color: var(--ink);
+        color: var(--text);
         word-break: break-all;
-        font-family: var(--font-mono);
+        font-family: var(--font-code);
       }
       .copy {
         position: absolute;
-        top: 14px;
-        right: 14px;
-        width: 32px;
-        height: 32px;
-        border: 1px solid var(--line);
-        background: var(--paper);
-        color: var(--ink-2);
+        top: var(--sp-3);
+        right: var(--sp-3);
+        width: var(--h-control);
+        height: var(--h-control);
+        border: 1px solid var(--line-strong);
+        border-radius: var(--r-md);
+        background: var(--bg);
+        color: var(--text-soft);
         display: grid;
         place-items: center;
         cursor: pointer;
-        transition: all 0.15s ease;
+        transition:
+          color var(--dur-1) var(--ease),
+          border-color var(--dur-1) var(--ease);
       }
-      .copy:hover {
-        color: var(--accent);
-        border-color: var(--accent);
-      }
+      .copy:hover,
       .copy.done {
-        color: var(--accent);
-        border-color: var(--accent);
+        color: var(--accent-hover);
+        border-color: var(--accent-hover);
       }
       .copy svg {
         width: 14px;
         height: 14px;
       }
       .install-notes {
-        font-size: 16.5px;
-        line-height: 1.65;
-        color: var(--ink-2);
+        color: var(--text-soft);
       }
       .install-notes p + p {
-        margin-top: 14px;
+        margin-top: var(--sp-3);
       }
       .install-notes code {
-        font-family: var(--font-mono);
-        font-size: 13px;
-        color: var(--accent);
-        background: color-mix(in oklab, var(--accent) 8%, transparent);
-        padding: 1px 6px;
-        border-radius: 4px;
+        font-family: var(--font-code);
+        font-size: var(--t-body-size);
+        color: var(--text);
+        background: var(--bg-elev);
+        border: 1px solid var(--line);
+        padding: 1px var(--sp-1);
+        border-radius: var(--r-sm);
       }
 
       /* ---------- footer ---------- */
       footer {
         border-top: 1px solid var(--line);
-        padding: clamp(48px, 8vh, 90px) 0 44px;
-        background: var(--paper-2);
+        padding: clamp(var(--sp-band), 8vh, var(--sp-band-lg)) 0 var(--sp-6);
+        background: var(--bg-app);
       }
       .foot-manifesto {
-        font-family: var(--display);
-        font-weight: 460;
-        font-size: clamp(24px, 3.4vw, 40px);
+        font-family: var(--font-sans);
+        font-weight: 600;
+        font-size: var(--t-chapter-size);
         line-height: 1.2;
-        letter-spacing: -0.015em;
-        max-width: 22em;
-      }
-      .foot-manifesto em {
-        font-style: italic;
-        color: var(--accent);
+        letter-spacing: var(--t-display-tracking);
+        color: var(--text-soft);
+        max-width: 28ch;
       }
       .foot-row {
-        margin-top: 44px;
+        margin-top: var(--sp-6);
         display: flex;
         align-items: center;
         justify-content: space-between;
-        gap: 18px;
+        gap: var(--sp-4);
         flex-wrap: wrap;
-        font-family: var(--font-mono);
-        font-size: 12.5px;
-        color: var(--ink-3);
+        font: var(--t-body);
+        color: var(--text-faint);
       }
       .foot-row a {
-        color: var(--ink-2);
+        color: var(--text-soft);
         text-decoration: none;
-        border-bottom: 1px solid var(--line);
-        transition: color 0.15s ease;
+        border-bottom: 1px solid var(--line-strong);
+        transition: color var(--dur-1) var(--ease);
       }
       .foot-row a:hover {
-        color: var(--accent);
+        color: var(--text);
       }
       .foot-links {
         display: flex;
-        gap: 20px;
+        gap: var(--sp-5);
         flex-wrap: wrap;
       }
 
       /* ---------- reveals ---------- */
+      /* Entry and settle: one duration, one curve, opacity and a short lift.
+         `prefers-reduced-motion` is already zeroed once, globally, by the
+         generated token sheet. */
       .r {
         opacity: 0;
-        transform: translateY(22px);
+        transform: translateY(var(--sp-3));
         transition:
-          opacity 0.7s cubic-bezier(0.2, 0.7, 0.2, 1),
-          transform 0.7s cubic-bezier(0.2, 0.7, 0.2, 1);
+          opacity var(--dur-2) var(--ease-entry),
+          transform var(--dur-2) var(--ease-entry);
         transition-delay: var(--d, 0s);
       }
       .r.in {
@@ -856,22 +834,14 @@
         transform: none;
       }
       .hero .r {
-        transform: translateY(16px);
-      }
-
-      :focus-visible {
-        outline: 2px solid var(--accent);
-        outline-offset: 3px;
+        transform: translateY(var(--sp-2));
       }
 
       @media (max-width: 900px) {
-        body {
-          font-size: 17.5px;
-        }
         .chapter {
           grid-template-columns: minmax(0, 1fr);
-          gap: 36px;
-          padding-block: 56px;
+          gap: var(--sp-6);
+          padding-block: var(--sp-band);
         }
         .chapter.flip .prose {
           order: 1;
@@ -892,18 +862,11 @@
         .home:last-child {
           border-bottom: 0;
         }
-        .hero .ghost {
-          display: none;
-        }
         nav .hide-sm {
           display: none;
         }
       }
       @media (prefers-reduced-motion: reduce) {
-        * {
-          animation: none !important;
-          transition-duration: 0.01ms !important;
-        }
         .r {
           opacity: 1;
           transform: none;
@@ -925,8 +888,8 @@
           Centraid
         </a>
         <nav>
-          <a href="#data" class="hide-sm">data</a>
           <a href="#apps" class="hide-sm">apps</a>
+          <a href="#sharing" class="hide-sm">sharing</a>
           <a href="#devices" class="hide-sm">devices</a>
           <a href="city/" class="city-link">city</a>
           <a
@@ -953,20 +916,19 @@
 
     <!-- HERO -->
     <section class="hero wrap">
-      <div class="ghost" aria-hidden="true">1</div>
-      <p class="kicker r" style="--d: 0.05s">Centraid · personal software</p>
+      <p class="kicker r" style="--d: 0.05s">
+        Centraid · the personal superapp
+      </p>
       <h1 class="r" style="--d: 0.14s">
-        Software for a <em>market of one.</em>
+        Own your data. <em>The apps only borrow it.</em>
       </h1>
       <p class="lede r" style="--d: 0.26s">
-        Most software is built for everyone, which is why none of it quite fits
-        you — and why your life ends up scattered across a hundred vendors'
-        databases. Centraid inverts the ownership:
-        <b>your data</b> lives in one vault on your own machine, on one shared
-        model with no silos; <b>your apps</b> are thin projections over it,
-        written and rewritten by an agent to fit you;
-        <b>your devices</b> connect peer-to-peer to one gateway you run. No
-        accounts, no cloud, no landlord.
+        Photos, documents, notes, calendar, tasks, people, passwords, shared
+        expenses — all of it <b>one record in a vault on your own disk</b>.
+        Eight apps that work like the ones you already use read and write it, so
+        your calendar knows your people and your spending knows its receipts.
+        Delete an app and you lose nothing of yours; leaving is
+        <b>copying a folder.</b>
       </p>
       <div class="cta-row r" style="--d: 0.38s">
         <a href="#install" class="btn btn-primary">get it running</a>
@@ -974,7 +936,7 @@
       </div>
       <p class="hero-notes r" style="--d: 0.48s">
         <span>no accounts</span><span class="dot">·</span><span>no cloud</span
-        ><span class="dot">·</span><span>no build step</span
+        ><span class="dot">·</span><span>no subscription</span
         ><span class="dot">·</span>
         <span class="beta-pill">β beta</span>
       </p>
@@ -983,38 +945,189 @@
     <div class="wrap">
       <hr class="rule" />
       <div class="rule-label">
-        <span>How it works</span><span>in five chapters</span>
+        <span>What ships in the box</span><span>eight apps · one record</span>
       </div>
     </div>
 
-    <!-- 01 · YOUR DATA -->
-    <section class="chapter wrap" id="data">
+    <!-- THE APPS -->
+    <section class="strip wrap" id="apps">
+      <div class="strip-head">
+        <h2 class="r">
+          The apps you'd expect. <em>None of them owns your data.</em>
+        </h2>
+        <p class="strip-note r" style="--d: 0.1s">
+          each app deliberately works like the best product in its category, so
+          switching costs you nothing new to learn.
+        </p>
+      </div>
+      <div class="app-grid">
+        <div class="app r" style="--d: 0.05s">
+          <p class="swap">in place of google photos</p>
+          <h3>Photos</h3>
+          <p>
+            Camera roll, timeline, albums, memories — faces and places proposed
+            on your own hardware, originals landing on your own machine, not a
+            datacenter.
+          </p>
+        </div>
+        <div class="app r" style="--d: 0.09s">
+          <p class="swap">in place of google drive</p>
+          <h3>Docs</h3>
+          <p>
+            A drive for the documents that matter: folders, previews, version
+            history — deduplicated, receipted, restorable.
+          </p>
+        </div>
+        <div class="app r" style="--d: 0.13s">
+          <p class="swap">in place of apple notes</p>
+          <h3>Notes</h3>
+          <p>
+            Notebooks, a journal, quick capture — and links to any person, plan
+            or file you keep, links that survive every edit.
+          </p>
+        </div>
+        <div class="app r" style="--d: 0.17s">
+          <p class="swap">in place of google calendar</p>
+          <h3>Agenda</h3>
+          <p>
+            Events, RSVPs, recurrences stated in words. Birthdays and due tasks
+            surface on the day by themselves — no second calendar.
+          </p>
+        </div>
+        <div class="app r" style="--d: 0.21s">
+          <p class="swap">in place of todoist</p>
+          <h3>Tasks</h3>
+          <p>
+            Projects, priorities, and repeats that forgive: a missed routine
+            collapses to "missed 4 · next is Friday" instead of a wall of shame.
+          </p>
+        </div>
+        <div class="app r" style="--d: 0.25s">
+          <p class="swap">in place of google contacts</p>
+          <h3>People</h3>
+          <p>
+            Every person you know, once — dates, debts, gift ideas, when you
+            last reconnected — the same row your calendar, photos and expenses
+            reference.
+          </p>
+        </div>
+        <div class="app r" style="--d: 0.29s">
+          <p class="swap">in place of 1password</p>
+          <h3>Locker</h3>
+          <p>
+            Logins, cards, Wi-Fi and notes — sealed at rest, revealed one at a
+            time, every reveal leaving a receipt.
+          </p>
+        </div>
+        <div class="app r" style="--d: 0.33s">
+          <p class="swap">in place of splitwise</p>
+          <h3>Tally</h3>
+          <p>
+            Shared expenses for a household or a trip: everyone adds, every
+            member's own copy derives the same balances.
+          </p>
+        </div>
+      </div>
+      <p class="apps-foot r" style="--d: 0.2s">
+        Apps are windows, not warehouses. Any one of them can be uninstalled,
+        replaced or rewritten and your record does not move an inch — which is
+        the whole point of keeping it one layer below them.
+      </p>
+    </section>
+
+    <div class="wrap">
+      <hr class="rule" />
+      <div class="rule-label">
+        <span>Why the record comes first</span><span>in five chapters</span>
+      </div>
+    </div>
+
+    <!-- 01 · ONE RECORD -->
+    <section class="chapter wrap" id="record">
       <div class="prose">
-        <p class="ch-no r"><span class="n">01</span> your data</p>
+        <p class="ch-no r"><span class="n">01</span> one record</p>
         <h2 class="r" style="--d: 0.08s">
-          One vault holds <em>the whole record.</em>
+          Apps that finally <em>know each other.</em>
         </h2>
         <p class="r" style="--d: 0.16s">
-          Your people, money, health, documents, messages and plans live in
-          <b>one vault on your disk</b>, on one shared ontology: "a person",
-          "money moved", "something was measured" are declared exactly once, and
-          every app extends or references them — never re-declares them. Star a
-          document in one app and every other app knows, because there is
-          <b>no silo to copy across</b>.
+          Under the eight apps sits <b>one record on one shared model</b>: a
+          person, a payment, a plan, a picture is declared exactly once, and
+          every app draws on the same rows. The friend in People <b>is</b> the
+          birthday in Agenda, the face in Photos, the balance in Tally — one
+          row, not four copies drifting apart.
         </p>
         <p class="r" style="--d: 0.22s">
-          Apps <b>borrow</b> the record through scoped grants you sign, every
-          access leaves a receipt, and secrets are sealed even at rest. Export
-          is honest: copy a directory.
+          So cross-app life just happens: birthdays ride your calendar without a
+          second calendar, due tasks fold into your day, a checklist line in
+          Notes becomes a real task in one gesture — linked back, never copied.
+          <b>Star something once and every app knows.</b>
         </p>
         <p class="aside r" style="--d: 0.28s">
-          One consent-checked door, an append-only journal beside it.
-          <a href="docs/data/">The data pillar →</a> ·
-          <a href="docs/ontology/">the full ontology →</a>
+          One ontology under everything — extended by apps, never re-declared.
+          <a href="docs/ontology/">The full ontology →</a> ·
+          <a href="docs/apps/">the apps pillar →</a>
         </p>
       </div>
       <div class="artifact-col">
-        <div class="artifact tilt-r r" style="--d: 0.12s">
+        <div class="artifact r" style="--d: 0.12s">
+          <div class="artifact-head">
+            <span>people · meera</span><span class="tag">one row</span>
+          </div>
+          <div class="artifact-body">
+            <div class="t-msg" style="margin-bottom: 4px">
+              one person, projected everywhere:
+            </div>
+            <div class="consent-rows">
+              <div class="consent-row">
+                <span class="scope">Agenda</span>
+                <span class="verb">🎂 rides Mar 14 as a ribbon</span>
+              </div>
+              <div class="consent-row">
+                <span class="scope">Photos</span>
+                <span class="verb">214 photos · faces you confirmed</span>
+              </div>
+              <div class="consent-row">
+                <span class="scope">Tally</span>
+                <span class="verb">owes you ₹1,250 · Goa trip</span>
+              </div>
+              <div class="consent-row">
+                <span class="scope">Docs</span>
+                <span class="verb">Lease.pdf · shared with her</span>
+              </div>
+            </div>
+            <div class="consent-fine">
+              one canonical row · four projections · zero copies to drift.
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- 02 · YOUR VAULT -->
+    <section class="chapter flip wrap" id="vault">
+      <div class="prose">
+        <p class="ch-no r"><span class="n">02</span> your vault</p>
+        <h2 class="r" style="--d: 0.08s">
+          A record you can <em>hold in your hand.</em>
+        </h2>
+        <p class="r" style="--d: 0.16s">
+          It all lives in <b>one vault on your disk</b> — files you can see,
+          copy and walk away with. Export is honest: copy a directory. No export
+          request form, no 30-day download link, no format held hostage.
+        </p>
+        <p class="r" style="--d: 0.22s">
+          Apps <b>borrow</b> the record through scoped grants you sign —
+          installing one is a sentence you can read, not a shrug — every access
+          leaves a receipt in an append-only journal, and secrets stay sealed
+          even at rest.
+        </p>
+        <p class="aside r" style="--d: 0.28s">
+          One consent-checked door, an append-only journal beside it.
+          <a href="docs/data/">The data pillar →</a>
+        </p>
+      </div>
+      <div class="artifact-col">
+        <div class="artifact r" style="--d: 0.12s">
           <div class="artifact-head">
             <span>~/vaults/local</span><span class="tag">yours</span>
           </div>
@@ -1054,88 +1167,22 @@
       </div>
     </section>
 
-    <!-- 02 · YOUR APPS -->
-    <section class="chapter flip wrap" id="apps">
-      <div class="prose">
-        <p class="ch-no r"><span class="n">02</span> your apps</p>
-        <h2 class="r" style="--d: 0.08s">
-          Apps are windows, <em>not warehouses.</em>
-        </h2>
-        <p class="r" style="--d: 0.16s">
-          Eight blueprints ship in the box —
-          <b>Docs, Photos, Notes, People, Locker, Tally, Agenda, Tasks</b> — and
-          none of them owns a byte of your data. An app is a folder of plain
-          HTML and JavaScript that renders vault rows and mutates them through
-          typed commands. Delete one and nothing of yours is lost.
-        </p>
-        <p class="r" style="--d: 0.22s">
-          Don't like how one works? Tell the <b>builder</b>. It edits the app in
-          conversation against a live preview, on a draft — publish flips it
-          onto every device you own.
-          <b>Software that fits, because it's refitted.</b>
-        </p>
-        <p class="aside r" style="--d: 0.28s">
-          No private databases, no build step — a folder you can read in an
-          evening.
-          <a href="docs/apps/">The apps pillar →</a>
-        </p>
-      </div>
-      <div class="artifact-col">
-        <div class="artifact tilt-l r" style="--d: 0.12s">
-          <div class="artifact-head">
-            <span>builder · docs</span><span class="tag">draft</span>
-          </div>
-          <div class="artifact-body">
-            <div class="t-line">
-              <span class="t-who you">you</span>
-              <span class="t-msg"
-                >Separate receipts from documents, and show a monthly total next
-                to each folder.</span
-              >
-            </div>
-            <div class="t-line">
-              <span class="t-who agent">builder</span>
-              <span class="t-msg"
-                ><span class="tool-chip"
-                  >⚙ vault_sql → folders, roles, txn joins</span
-                >
-                Receipts already carry a canonical role — no new table needed.
-                Drafted a filtered view + a query joining receipts to
-                transactions.
-                <span class="dim nl">Preview is live. Publish?</span></span
-              >
-            </div>
-            <div class="t-line">
-              <span class="t-who you">you</span>
-              <span class="t-msg">Publish.</span>
-            </div>
-            <div class="t-line">
-              <span class="t-who agent">builder</span>
-              <span class="t-msg"
-                >Done — <b>docs</b> is updated on all your devices.</span
-              >
-            </div>
-          </div>
-        </div>
-      </div>
-    </section>
-
     <!-- 03 · THE ASSISTANT -->
     <section class="chapter wrap" id="assistant">
       <div class="prose">
         <p class="ch-no r"><span class="n">03</span> the assistant</p>
         <h2 class="r" style="--d: 0.08s">
-          Data that's alive, <em>not just stored.</em>
+          Ask one place <em>about everything.</em>
         </h2>
         <p class="r" style="--d: 0.16s">
-          The point of one model is that something can finally
-          <b>think across it</b>. The assistant reads your whole vault with
-          plain SQL — receipted, row-capped — and answers questions no siloed
-          app could: joins across your people, money, calendar and documents,
-          because they were never separated.
+          The point of one record is that something can finally
+          <b>think across it</b>. The assistant reads your whole vault —
+          receipted, row-capped — and answers what no siloed app could, because
+          your people, money, calendar and documents were never separated in the
+          first place.
         </p>
         <p class="r" style="--d: 0.22s">
-          It writes only through the <b>same typed commands</b> your apps use —
+          It acts only through the <b>same typed commands</b> your apps use —
           consequential acts pause for your confirmation, and when you correct
           it, the correction becomes a durable rule it consults next time.
         </p>
@@ -1146,7 +1193,7 @@
         </p>
       </div>
       <div class="artifact-col">
-        <div class="artifact tilt-r r" style="--d: 0.12s">
+        <div class="artifact r" style="--d: 0.12s">
           <div class="artifact-head">
             <span>assistant</span><span class="tag">your vault</span>
           </div>
@@ -1177,69 +1224,62 @@
       </div>
     </section>
 
-    <!-- 04 · THE LONG GAME -->
-    <section class="chapter flip wrap" id="automations">
+    <!-- 04 · SHARING -->
+    <section class="chapter flip wrap" id="sharing">
       <div class="prose">
-        <p class="ch-no r"><span class="n">04</span> the long game</p>
+        <p class="ch-no r"><span class="n">04</span> your people</p>
         <h2 class="r" style="--d: 0.08s">
-          Automations ferry your life <em>back home.</em>
+          Sharing is a grant, <em>not an upload.</em>
         </h2>
         <p class="r" style="--d: 0.16s">
-          Agents on schedules and data triggers pull your world into the vault —
-          Gmail, calendars, contacts, GitHub. <b>Centraid Assist</b> makes
-          Google consent one click while keeping tokens sealed only on your
-          gateway; Advanced lets operators use their own OAuth client. Every
-          imported row is staged for review and stamped with where it came from.
-          Drop an <b>.mbox, .ics, .vcf or CSV</b> on the import door and it
-          enters the same way.
+          Sharing is a sentence you sign:
+          <b>this person may view this album, until I say otherwise.</b> A new
+          photo reaches them with no second gesture, an edit follows, and
+          revoking asks their vault to remove its copy — delivered vault to
+          vault, <b>no cloud in the middle</b>.
         </p>
         <p class="r" style="--d: 0.22s">
-          Writes to the outside world go through an <b>outbox you approve</b> —
-          you read the actual email before it sends. And every run keeps a
-          durable transcript: when you wonder why it did what it did, you
-          <b>read the conversation back</b>.
+          A household shares one machine without sharing one identity:
+          <b>each person gets a sovereign vault</b> — not a sub-account — and
+          what crosses between them is exactly what was granted. A Tally group
+          is the same idea for money: everyone adds expenses, every member's own
+          copy derives the same balances.
         </p>
         <p class="aside r" style="--d: 0.28s">
-          Cron, webhook, condition, or a change in your data — templates to
-          start from.
-          <a href="docs/data/#automations">Automations →</a> ·
-          <a href="docs/data/#connections">connections →</a>
+          Grants, circles and shared containers — the same sheet in Docs, Photos
+          and People.
+          <a href="docs/apps/#linking">Linking &amp; sharing →</a>
         </p>
       </div>
       <div class="artifact-col">
-        <div class="artifact tilt-l r" style="--d: 0.12s">
+        <div class="artifact r" style="--d: 0.12s">
           <div class="artifact-head">
-            <span>automation · briefing</span><span class="tag">run #214</span>
+            <span>sharing · Goa 2025</span><span class="tag">album</span>
           </div>
           <div class="artifact-body">
-            <div class="t-line">
-              <span class="t-stamp">06:30</span>
-              <span class="t-msg dim">trigger · cron 30 6 * * *</span>
+            <div class="t-msg" style="margin-bottom: 4px">
+              who can see this album:
             </div>
-            <div class="t-line">
-              <span class="t-who agent">briefing</span>
-              <span class="t-msg"
-                ><span class="tool-chip"
-                  >⚙ vault_sql → agenda ⋈ tasks ⋈ people</span
-                >
-                <span class="tool-chip"
-                  >⚙ read → sync.staged batches</span
-                ></span
-              >
+            <div class="consent-rows">
+              <div class="consent-row">
+                <span class="scope">Amma</span>
+                <span class="verb">view · delivered</span>
+              </div>
+              <div class="consent-row">
+                <span class="scope">Ravi</span>
+                <span class="verb">view · delivered</span>
+              </div>
+              <div class="consent-row">
+                <span class="scope">trip circle · 4 people</span>
+                <span class="verb">edit · everyone adds photos</span>
+              </div>
             </div>
-            <div class="t-line">
-              <span class="t-who agent">briefing</span>
-              <span class="t-msg"
-                >Two meetings, both after lunch. Rent is due Friday. 14 new
-                emails staged from Gmail overnight — one looks like the missing
-                car-service invoice.</span
-              >
+            <div class="consent-actions" aria-hidden="true">
+              <span class="consent-btn">share…</span>
+              <span class="consent-btn ghost">revoke…</span>
             </div>
-            <div class="t-line">
-              <span class="t-stamp">06:31</span>
-              <span class="t-msg dim"
-                >transcript saved · readable any time</span
-              >
+            <div class="consent-fine">
+              a grant stands until revoked — then their copy is asked to go.
             </div>
           </div>
         </div>
@@ -1261,11 +1301,11 @@
           relay to rent, no account to lose.
         </p>
         <p class="r" style="--d: 0.22s">
-          Pairing a phone is one QR code — a ticket that burns on use. Devices
-          authenticate by key, are enrolled per-vault, and
-          <b>revocation cuts live connections</b>, not just future ones. Your
-          harness runtime is pluggable too: Claude Code or Codex behind the same
-          leash.
+          Offline is designed, not accidental: your phone reads its own local
+          replica, and a write made in a tunnel queues and lands
+          <b>exactly once</b> when you're back. Pairing is one QR code — a
+          ticket that burns on use — and
+          <b>revocation cuts live connections</b>, not just future ones.
         </p>
         <p class="aside r" style="--d: 0.28s">
           Desktop shell, always-on daemon, phone in your pocket — one wire
@@ -1274,7 +1314,7 @@
         </p>
       </div>
       <div class="artifact-col">
-        <div class="artifact tilt-r r" style="--d: 0.12s">
+        <div class="artifact r" style="--d: 0.12s">
           <div class="artifact-head">
             <span>gateway · devices</span><span class="tag">star of 3</span>
           </div>
@@ -1422,13 +1462,12 @@
         <div class="install-notes r" style="--d: 0.2s">
           <p>
             First launch asks your name, mints your vault, and lands on the app
-            grid — clone a blueprint from <code>Discover</code> and it's yours
-            to reshape.
+            grid. Installing an app from <code>Discover</code> is a grant you
+            can read, not a copy — uninstall any time and your data stays.
           </p>
           <p>
-            Ten minutes in you can pair your phone from
-            <code>Settings → Phone</code>, drop an .mbox or .ics on the import
-            door, and ask the assistant your first cross-silo question.
+            Ten minutes in you can pair your phone with one QR code and ask the
+            assistant your first cross-silo question.
             <a class="u" href="docs/start/">The start guide</a> walks the whole
             first day.
           </p>
@@ -1440,8 +1479,8 @@
     <footer>
       <div class="wrap">
         <p class="foot-manifesto r">
-          Most software is built for everyone, so none of it fits anyone.
-          <em>Yours can just fit you.</em>
+          Your record will outlive every app that ever held a piece of it.
+          <em>Keep it somewhere you own.</em>
         </p>
         <div class="foot-row">
           <span>© 2026 Centraid — your data · your apps · your devices</span>
@@ -1463,29 +1502,34 @@
     </footer>
 
     <script>
-      // theme: persisted, defaults to system preference (paper for light)
+      // Theme: the product's own two names, `light` and `dark`. The <head>
+      // script already pinned a stored choice before first paint; until the
+      // visitor picks one there is no `data-theme` at all and the generated
+      // token sheet follows the system.
       const root = document.documentElement;
-      const saved = localStorage.getItem("centraid-theme");
-      if (saved) {
-        root.dataset.theme = saved;
-      } else if (window.matchMedia("(prefers-color-scheme: dark)").matches) {
-        root.dataset.theme = "night";
-      }
       const icons = {
-        paper:
+        light:
           '<svg id="toggle-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/></svg>',
-        night:
-          '<svg id="toggle-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="4.2"/><path d="M12 2v2.5M12 19.5V22M2 12h2.5M19.5 12H22M4.9 4.9l1.8 1.8M17.3 17.3l1.8 1.8M19.1 4.9l-1.8 1.8M6.7 17.3l-1.8 1.8"/></svg>',
+        dark: '<svg id="toggle-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="4.2"/><path d="M12 2v2.5M12 19.5V22M2 12h2.5M19.5 12H22M4.9 4.9l1.8 1.8M17.3 17.3l1.8 1.8M19.1 4.9l-1.8 1.8M6.7 17.3l-1.8 1.8"/></svg>',
       };
+      const resolved = () =>
+        root.dataset.theme === "light" || root.dataset.theme === "dark"
+          ? root.dataset.theme
+          : window.matchMedia("(prefers-color-scheme: dark)").matches
+            ? "dark"
+            : "light";
       const toggle = document.getElementById("toggle");
       const syncIcon = () => {
-        toggle.innerHTML =
-          icons[root.dataset.theme === "night" ? "night" : "paper"];
+        toggle.innerHTML = icons[resolved()];
       };
       syncIcon();
       toggle.addEventListener("click", () => {
-        root.dataset.theme = root.dataset.theme === "night" ? "paper" : "night";
-        localStorage.setItem("centraid-theme", root.dataset.theme);
+        root.dataset.theme = resolved() === "dark" ? "light" : "dark";
+        try {
+          localStorage.setItem("centraid-theme", root.dataset.theme);
+        } catch {
+          /* storage blocked — the choice still holds for this page view */
+        }
         syncIcon();
       });
 

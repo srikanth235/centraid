@@ -5,28 +5,33 @@
   const root = document.documentElement;
 
   // ---------- theme ----------
-  const saved = localStorage.getItem("centraid-theme");
-  if (saved) {
-    root.dataset.theme = saved;
-  } else if (window.matchMedia("(prefers-color-scheme: dark)").matches) {
-    root.dataset.theme = "night";
-  }
+  // The product's own two names, `light` and `dark`. DocsLayout's <head>
+  // script already pinned a stored choice before first paint; until the
+  // visitor picks one there is no `data-theme` at all and the generated token
+  // sheet follows the system.
   const icons = {
-    paper:
+    light:
       '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/></svg>',
-    night:
-      '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="4.2"/><path d="M12 2v2.5M12 19.5V22M2 12h2.5M19.5 12H22M4.9 4.9l1.8 1.8M17.3 17.3l1.8 1.8M19.1 4.9l-1.8 1.8M6.7 17.3l-1.8 1.8"/></svg>',
+    dark: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="4.2"/><path d="M12 2v2.5M12 19.5V22M2 12h2.5M19.5 12H22M4.9 4.9l1.8 1.8M17.3 17.3l1.8 1.8M19.1 4.9l-1.8 1.8M6.7 17.3l-1.8 1.8"/></svg>',
   };
+  const resolvedTheme = () =>
+    root.dataset.theme === "light" || root.dataset.theme === "dark"
+      ? root.dataset.theme
+      : window.matchMedia("(prefers-color-scheme: dark)").matches
+        ? "dark"
+        : "light";
   const toggle = document.querySelector("#theme-toggle");
   const syncIcon = () => {
-    if (toggle)
-      toggle.innerHTML =
-        icons[root.dataset.theme === "night" ? "night" : "paper"];
+    if (toggle) toggle.innerHTML = icons[resolvedTheme()];
   };
   syncIcon();
   toggle?.addEventListener("click", () => {
-    root.dataset.theme = root.dataset.theme === "night" ? "paper" : "night";
-    localStorage.setItem("centraid-theme", root.dataset.theme);
+    root.dataset.theme = resolvedTheme() === "dark" ? "light" : "dark";
+    try {
+      localStorage.setItem("centraid-theme", root.dataset.theme);
+    } catch {
+      /* storage blocked — the choice still holds for this page view */
+    }
     syncIcon();
   });
 

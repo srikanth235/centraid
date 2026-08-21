@@ -1,24 +1,25 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="1200" height="630" viewBox="0 0 1200 630" role="img" aria-labelledby="title desc">
   <title id="title">Centraid documentation</title>
   <desc id="desc">A social preview card for Centraid docs.</desc>
-  <defs>
-    <filter id="grain" x="0" y="0" width="100%" height="100%">
-      <feTurbulence type="fractalNoise" baseFrequency="0.7" numOctaves="2" stitchTiles="stitch" />
-      <feColorMatrix type="saturate" values="0" />
-      <feComponentTransfer>
-        <feFuncA type="linear" slope="0.08" />
-      </feComponentTransfer>
-    </filter>
-  </defs>
-  <rect width="1200" height="630" fill="#f6f0e3" />
-  <rect width="1200" height="630" filter="url(#grain)" opacity="0.55" />
-  <rect x="64" y="64" width="1072" height="502" fill="#fbf7ec" stroke="#20261f" stroke-width="2" />
-  <rect x="90" y="90" width="82" height="82" rx="18" fill="#0d7263" />
-  <path d="M131 112c22 0 38 16 38 37s-16 37-38 37-38-16-38-37 16-37 38-37Zm0 18c-12 0-20 8-20 19s8 19 20 19 20-8 20-19-8-19-20-19Z" fill="#fbf7ec" />
-  <text x="196" y="139" fill="#20261f" font-family="IBM Plex Mono, ui-monospace, monospace" font-size="26" font-weight="600" letter-spacing="4">CENTRAID DOCS</text>
-  <text x="90" y="302" fill="#20261f" font-family="Fraunces, Georgia, serif" font-size="76" font-weight="500">Your data. Your apps.</text>
-  <text x="90" y="390" fill="#0d7263" font-family="Fraunces, Georgia, serif" font-size="76" font-style="italic" font-weight="600">Your devices.</text>
-  <text x="94" y="470" fill="#55604f" font-family="Newsreader, Georgia, serif" font-size="34">Local-first personal software with one private vault,</text>
-  <text x="94" y="514" fill="#55604f" font-family="Newsreader, Georgia, serif" font-size="34">first-party apps, and peer-to-peer devices.</text>
-  <path d="M914 126h154M914 166h116M914 206h154M914 246h94" stroke="#b3690e" stroke-width="8" stroke-linecap="round" opacity="0.85" />
+  <!-- Drawn in the product's light theme, values taken from packages/design:
+       #FDFDFC page, #F5F4F2 raised paper, #E5E4E1 the explicit boundary,
+       #141414 / #5A5A58 the first two ink rungs, and #EFEEEB the hairline.
+       A social renderer has no webfont, so the family names the product face
+       first and falls back to whatever the rasterizer actually has; the ramp
+       here is the product's — one face, two weights, no italic and no
+       serif. -->
+  <rect width="1200" height="630" fill="#FDFDFC" />
+  <rect x="64" y="64" width="1072" height="502" rx="12" fill="#F5F4F2" stroke="#E5E4E1" stroke-width="1" />
+  <!-- The product mark, at the icon chip's own 26% radius. -->
+  <g transform="translate(104 104) scale(0.16)">
+    <rect width="512" height="512" rx="112" fill="#111317" />
+    <path d="M351 159a136 136 0 1 0 0 194" fill="none" stroke="#f4f1e9" stroke-width="54" stroke-linecap="round" />
+    <circle cx="349" cy="256" r="28" fill="#3EC8B4" />
+  </g>
+  <text x="204" y="146" fill="#5A5A58" font-family="Instrument Sans, Helvetica Neue, system-ui, sans-serif" font-size="24" font-weight="600" letter-spacing="1.5">CENTRAID DOCS</text>
+  <text x="104" y="312" fill="#5A5A58" font-family="Instrument Sans, Helvetica Neue, system-ui, sans-serif" font-size="76" font-weight="600" letter-spacing="-1.5">Your data. Your apps.</text>
+  <text x="104" y="400" fill="#141414" font-family="Instrument Sans, Helvetica Neue, system-ui, sans-serif" font-size="76" font-weight="600" letter-spacing="-1.5">Your devices.</text>
+  <text x="104" y="474" fill="#5A5A58" font-family="Instrument Sans, Helvetica Neue, system-ui, sans-serif" font-size="30">Local-first personal software with one private vault,</text>
+  <text x="104" y="516" fill="#5A5A58" font-family="Instrument Sans, Helvetica Neue, system-ui, sans-serif" font-size="30">first-party apps, and peer-to-peer devices.</text>
+  <path d="M914 130h154M914 170h116M914 210h154M914 250h94" stroke="#E5E4E1" stroke-width="6" stroke-linecap="round" />
 </svg>
