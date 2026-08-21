@@ -1,0 +1,334 @@
+{
+  "_readme": [
+    "Peer-plane target verdict corpus (issue #842 W2.1).",
+    "",
+    "The peer path confinement is implemented three times: `peer_target_allowed`",
+    "in packages/tunnel/data-plane/src/iroh_relay.rs (the production relay),",
+    "`isPeerPlaneTarget` in packages/tunnel/src/protocol.ts (the pure-JS",
+    "endpoint), and the route-layer re-check in",
+    "packages/server/src/routes/peer-plane.ts. A divergence between them is a",
+    "privilege question, not a style question, and it fails nowhere but on a",
+    "real link.",
+    "",
+    "This file is the shared verdict corpus: each vector states the ONE answer",
+    "every implementation must give for `target`. It is read by",
+    "packages/tunnel/src/peer-target-differential.test.ts, which also drives a",
+    "seeded fast-check generator whose nastiest finds are curated back here.",
+    "",
+    "Vectors marked `pin` record a verdict that is currently WRONG against the",
+    "guards' own documented intent (see `pins` below). They are pinned, not",
+    "tolerated: the day the product moves, the pin goes red and the record is",
+    "revisited deliberately (docs/decisions.md, ruling A-pinned).",
+    "",
+    "Every `target` here is representable as a Rust `&str` (well-formed UTF-8,",
+    "no lone surrogates) so the corpus can be read by a Rust test unchanged."
+  ],
+  "version": 1,
+  "prefix": "/centraid/_peer/",
+  "pins": {
+    "bare-prefix-admitted-by-query-or-fragment": [
+      "Both guards document 'must EXTEND the prefix (a bare prefix names no",
+      "resource)', but both apply that length test to the WHOLE target rather",
+      "than to the path. `/centraid/_peer/?` and `/centraid/_peer/#x` are",
+      "longer than the prefix while their path IS the bare prefix, so both",
+      "implementations answer `true` where the documented rule says `false`.",
+      "Not an escalation — the resolved pathname stays inside the plane and no",
+      "peer-plane route matches it — but the documented sentence is false on a",
+      "reachable input. Minimal case: `/centraid/_peer/?`."
+    ]
+  },
+  "vectors": [
+    {
+      "name": "linkRedeem",
+      "target": "/centraid/_peer/link/redeem",
+      "allowed": true,
+      "note": "Real peer route."
+    },
+    {
+      "name": "linkHello",
+      "target": "/centraid/_peer/link/hello",
+      "allowed": true,
+      "note": "Real peer route."
+    },
+    {
+      "name": "routeAssert",
+      "target": "/centraid/_peer/route/assert",
+      "allowed": true,
+      "note": "Real peer route."
+    },
+    {
+      "name": "blobWithQuery",
+      "target": "/centraid/_peer/blobs/a1b2c3?range=0-1023",
+      "allowed": true,
+      "note": "Query is not part of the confined path."
+    },
+    {
+      "name": "fragment",
+      "target": "/centraid/_peer/x#frag",
+      "allowed": true,
+      "note": "Fragment is not part of the confined path."
+    },
+    {
+      "name": "queryCarriesTraversal",
+      "target": "/centraid/_peer/x?next=../../_gateway/devices",
+      "allowed": true,
+      "note": "Dot segments in the QUERY climb nothing: the path is what is concatenated onto the upstream URL."
+    },
+    {
+      "name": "emptySegment",
+      "target": "/centraid/_peer//",
+      "allowed": true,
+      "note": "An empty segment is neither '.' nor '..' and resolves inside the plane."
+    },
+    {
+      "name": "pathParameterTraversal",
+      "target": "/centraid/_peer/..;/_gateway",
+      "allowed": true,
+      "note": "Adversarial: '..;' is the Tomcat-style path-parameter traversal. Safe HERE only because nothing downstream strips ';' — the segment is literal."
+    },
+    {
+      "name": "fullwidthDotConfusable",
+      "target": "/centraid/_peer/．．/_gateway",
+      "allowed": true,
+      "note": "Adversarial: U+FF0E FULLWIDTH FULL STOP. Safe only because no implementation NFKC-normalises the target; the segment stays literal."
+    },
+    {
+      "name": "authorityLookingSegment",
+      "target": "/centraid/_peer/user@evil.example:8080/x",
+      "allowed": true,
+      "note": "Adversarial: userinfo + port. A path segment cannot become an authority once the target is proved to start with the absolute prefix."
+    },
+    {
+      "name": "gatewayNamedSegment",
+      "target": "/centraid/_peer/_gateway",
+      "allowed": true,
+      "note": "A segment SPELLED like the owner surface is still inside the plane."
+    },
+    {
+      "name": "nonAsciiSegment",
+      "target": "/centraid/_peer/résumé",
+      "allowed": true,
+      "note": "Multi-byte UTF-8: no forbidden byte, and the byte-length test and the UTF-16 length test agree because the prefix is ASCII."
+    },
+    {
+      "name": "astralSegment",
+      "target": "/centraid/_peer/𝕏",
+      "allowed": true,
+      "note": "Astral plane (surrogate PAIR, well-formed). Rust byte length 20, JS UTF-16 length 18 — both exceed the prefix."
+    },
+    {
+      "name": "empty",
+      "target": "",
+      "allowed": false,
+      "note": "Boundary: empty target."
+    },
+    {
+      "name": "root",
+      "target": "/",
+      "allowed": false,
+      "note": "Boundary: shorter than the prefix."
+    },
+    {
+      "name": "prefixMinusSlash",
+      "target": "/centraid/_peer",
+      "allowed": false,
+      "note": "Boundary: one byte short of the prefix."
+    },
+    {
+      "name": "barePrefix",
+      "target": "/centraid/_peer/",
+      "allowed": false,
+      "note": "Boundary: the prefix names no resource."
+    },
+    {
+      "name": "prefixSiblingName",
+      "target": "/centraid/_peerish/x",
+      "allowed": false,
+      "note": "A longer name that merely starts the same way."
+    },
+    {
+      "name": "doubleLeadingSlash",
+      "target": "//centraid/_peer/x",
+      "allowed": false,
+      "note": "Authority trick: '//host' would reparse as a network-path reference."
+    },
+    {
+      "name": "upperCasePrefix",
+      "target": "/CENTRAID/_PEER/x",
+      "allowed": false,
+      "note": "Case game: the prefix match is case-sensitive in both languages."
+    },
+    {
+      "name": "mixedCasePrefix",
+      "target": "/centraid/_Peer/x",
+      "allowed": false,
+      "note": "Case game, single letter."
+    },
+    {
+      "name": "absoluteUrl",
+      "target": "http://evil.example/centraid/_peer/x",
+      "allowed": false,
+      "note": "Authority trick: a full URL never starts with the absolute prefix."
+    },
+    {
+      "name": "leadingSpace",
+      "target": " /centraid/_peer/x",
+      "allowed": false,
+      "note": "Whitespace game: no implementation trims."
+    },
+    {
+      "name": "ownerSurface",
+      "target": "/centraid/_gateway/tunnel/authorize",
+      "allowed": false,
+      "note": "The escalation this guard exists to refuse."
+    },
+    {
+      "name": "vaultSurface",
+      "target": "/centraid/_vault/blobs",
+      "allowed": false,
+      "note": "Outside the plane."
+    },
+    {
+      "name": "dotDotSegment",
+      "target": "/centraid/_peer/../_gateway/devices",
+      "allowed": false,
+      "note": "Literal traversal."
+    },
+    {
+      "name": "dotThenDotDot",
+      "target": "/centraid/_peer/./../_gateway",
+      "allowed": false,
+      "note": "Mixed dot segments."
+    },
+    {
+      "name": "deepTraversal",
+      "target": "/centraid/_peer/a/../../_gateway",
+      "allowed": false,
+      "note": "Traversal after a legitimate segment."
+    },
+    {
+      "name": "trailingDotDot",
+      "target": "/centraid/_peer/..",
+      "allowed": false,
+      "note": "Boundary: traversal as the only extension."
+    },
+    {
+      "name": "trailingDot",
+      "target": "/centraid/_peer/.",
+      "allowed": false,
+      "note": "Boundary: current-directory segment."
+    },
+    {
+      "name": "percentEncodedDotDot",
+      "target": "/centraid/_peer/%2e%2e/_gateway",
+      "allowed": false,
+      "note": "Single escape: refused by the blanket '%' rule, not by decoding."
+    },
+    {
+      "name": "percentEncodedUpperCase",
+      "target": "/centraid/_peer/%2E%2E/_gateway",
+      "allowed": false,
+      "note": "Case game inside the escape."
+    },
+    {
+      "name": "percentEncodedSlash",
+      "target": "/centraid/_peer/a%2f..%2fb",
+      "allowed": false,
+      "note": "Encoded separator."
+    },
+    {
+      "name": "doublePercentEncoded",
+      "target": "/centraid/_peer/%252e%252e/_gateway",
+      "allowed": false,
+      "note": "Double escape: a decode-once implementation would be fooled; the blanket rule is not."
+    },
+    {
+      "name": "overlongUtf8Escape",
+      "target": "/centraid/_peer/%c0%af_gateway",
+      "allowed": false,
+      "note": "Overlong UTF-8 encoding of '/'."
+    },
+    {
+      "name": "overlongUtf8EscapeThreeByte",
+      "target": "/centraid/_peer/%e0%80%af",
+      "allowed": false,
+      "note": "Three-byte overlong encoding of '/'."
+    },
+    {
+      "name": "loneTrailingPercent",
+      "target": "/centraid/_peer/x%",
+      "allowed": false,
+      "note": "Malformed escape."
+    },
+    {
+      "name": "backslashTraversal",
+      "target": "/centraid/_peer/a\\..\\b",
+      "allowed": false,
+      "note": "Windows separator."
+    },
+    {
+      "name": "backslashPrefixed",
+      "target": "/centraid/_peer/..\\_gateway",
+      "allowed": false,
+      "note": "Backslash after a literal '..' fragment."
+    },
+    {
+      "name": "space",
+      "target": "/centraid/_peer/a b",
+      "allowed": false,
+      "note": "0x20 is refused: request-line splitting."
+    },
+    {
+      "name": "nullByte",
+      "target": "/centraid/_peer/a\u0000b",
+      "allowed": false,
+      "note": "NUL truncation game."
+    },
+    {
+      "name": "tab",
+      "target": "/centraid/_peer/a\u0009b",
+      "allowed": false,
+      "note": "Control byte."
+    },
+    {
+      "name": "unitSeparator",
+      "target": "/centraid/_peer/a\u001fb",
+      "allowed": false,
+      "note": "Boundary: 0x1f is the last refused control byte."
+    },
+    {
+      "name": "crlfInjection",
+      "target": "/centraid/_peer/x\r\n/_gateway",
+      "allowed": false,
+      "note": "Request smuggling attempt."
+    },
+    {
+      "name": "barePrefixWithQuery",
+      "target": "/centraid/_peer/?",
+      "allowed": true,
+      "pin": "bare-prefix-admitted-by-query-or-fragment",
+      "note": "PINNED DEFECT. Documented intent says false; both guards answer true. Minimal case."
+    },
+    {
+      "name": "barePrefixWithFragment",
+      "target": "/centraid/_peer/#",
+      "allowed": true,
+      "pin": "bare-prefix-admitted-by-query-or-fragment",
+      "note": "PINNED DEFECT. Same class, fragment separator."
+    },
+    {
+      "name": "barePrefixWithQueryPayload",
+      "target": "/centraid/_peer/?next=/centraid/_gateway/devices",
+      "allowed": true,
+      "pin": "bare-prefix-admitted-by-query-or-fragment",
+      "note": "PINNED DEFECT. The payload climbs nothing — the resolved path is still the bare prefix — which is why this is a broken sentence and not an escalation."
+    },
+    {
+      "name": "barePrefixWithFragmentTraversal",
+      "target": "/centraid/_peer/#/../_gateway",
+      "allowed": true,
+      "pin": "bare-prefix-admitted-by-query-or-fragment",
+      "note": "PINNED DEFECT. Dot segments after '#' are never part of the path."
+    }
+  ]
+}

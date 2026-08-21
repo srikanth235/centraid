@@ -81,6 +81,7 @@
     "perf:app-weight": "node scripts/perf/app-weight.mjs",
     "perf:gateway": "turbo run build --filter=@centraid/server && bun run --cwd packages/server perf:low-end",
     "perf:runtime-probe": "node packages/server/scripts/probe-runtime-sqlite.mjs",
+    "perf:send-to-first-token": "node scripts/perf/send-to-first-token.mjs",
     "release:classify": "node scripts/release/classify.mjs",
     "release:matrix": "node scripts/release/matrix.mjs",
     "release:prepare": "node scripts/release/prepare.mjs",

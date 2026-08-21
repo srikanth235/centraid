@@ -58,7 +58,10 @@ const ROOT = path.resolve(import.meta.dirname, "..");
 //            YAML on a flow's behalf. Members with no YAML at all (spawn, metro,
 //            …) are scanned too and simply contribute zero steps — cheap, and it
 //            means a helper that GROWS a YAML snippet is covered from day one.
-const SCAN_DIRS = ["tests/agent-e2e-mobile/flows", "tests/agent-e2e-mobile/lib"];
+const SCAN_DIRS = [
+  "tests/agent-e2e-mobile/flows",
+  "tests/agent-e2e-mobile/lib",
+];
 
 // Vitest/node:test siblings are excluded by rule: `*.test.mjs` files assert the
 // linter's and the harness's behaviour with deliberately-violating FIXTURES, so
@@ -72,8 +75,8 @@ const isTestFile = (name) => name.endsWith(".test.mjs");
 const EXCLUDED = new Set();
 
 /** The files to lint, relative to `root`, discovered from disk. Exported so the
- * unit tests can prove discovery on a synthetic tree — i.e. that a new flow
- * cannot escape the linter without someone deleting it. */
+ * unit tests can hold the roster against the directory listing itself — the
+ * proof that a new flow cannot escape the linter by being new. */
 export function discoverFiles(root = ROOT) {
   const files = [];
   for (const dir of SCAN_DIRS) {

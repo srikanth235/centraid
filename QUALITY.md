@@ -29,16 +29,6 @@
   else's Home — a wrong statement, not merely a leak. Needs a vault-side read
   of how place rows travel with a scope.
 
-- **`apps/mobile/src/apps/tally/PendingRestartJourney.test.tsx` cannot load**:
-  `Cannot bundle Node.js built-in "node:sqlite" imported from
-  "src/lib/replica/node-sqlite-driver.ts"`. The whole file fails to collect, so
-  its journey assertions have not run for some time — a silently absent test,
-  not a flake. Reproduced on the base tree with all working changes stashed
-  while #805 was in flight, so it predates that branch and is unrelated to it.
-  The driver imports the Node builtin directly and mobile's vitest client
-  environment refuses to externalize it; the fix is a config or driver-seam
-  change, not a copy change, so #805 left it alone.
-
 - **Two container-hermeticity defects found by an attempted in-container full
   coverage run** (13,203 green / 3 red, all environmental): (1)
   `packages/agent-runtime/src/backends/acp/launch.test.ts` inherits the real
@@ -165,6 +155,27 @@
   near-duplicate `relativeTime` still need consolidation / floors — #545 D5/B8).
 
 ## Resolved
+
+- #842 — The `node:sqlite` bundling defect that made
+  `apps/mobile/src/apps/tally/PendingRestartJourney.test.tsx` uncollectable is
+  fixed at the harness, and the class of failure is now gated. Root cause: the
+  externalization plugin in `packages/test-kit/src/vitest.ts` shipped on the
+  jsdom preset only, while a `// @vitest-environment jsdom` docblock inside a
+  *node* project sends that one file through the same Vite client environment —
+  environments are chosen per file, plugins per project, so the file was
+  transformed with `noExternal: true` and no way to hand `node:sqlite` back to
+  Node. The plugin now ships on both presets, and
+  `apps/mobile/src/lib/replica/node-sqlite-driver.jsdom.test.ts` pins the seam
+  (remove the plugin from the node preset and that file stops collecting). The
+  journey file itself is not restored: it asserted a Tally native cover that
+  #831/#832 removed whole pending a ground-up redesign, and it was deleted with
+  the interface it covered. It owned no `tests/matrix.json` row, so no floor
+  moved with it — what the rebuild owes back is a re-authored pending-restart
+  journey against the new cover. `scripts/ci/collection-tripwire.mjs` is the
+  backstop: it reads `artifacts/test-results/vitest.json` and fails on any file
+  that reports `failed` with zero assertion results, so a suite that errors
+  before collecting a single test can no longer read as absent to every
+  counting gate (matrix floors, skip budget, quarantine ledger).
 
 - #816 — Removed `react-native-maps`. Nothing had imported it since Places
   moved to the shared `place-map.ts` projection, and #816 rules the phone's map

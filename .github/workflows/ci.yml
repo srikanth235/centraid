@@ -385,6 +385,15 @@ jobs:
             echo "A green job here is a **second-attempt** pass, not a clean one."
           } >> "$GITHUB_STEP_SUMMARY"
           bun run test:perf:pr
+      # #842 W0.5 — send → first token, the product's most-felt latency, which
+      # had no rig at all until now. Times a real `runAcpTurn` against the
+      # scripted fake ACP harness, so the provider is held constant and the
+      # number is dead time this repo owns. ~3 s for 35 turns, and it needs the
+      # `bun run build` above for @centraid/server's dist, which is why it
+      # rides here. The ceiling it reads is tighten-only; see the entry's
+      # `probe` field for exactly which half of the interval is fenced.
+      - name: Send-to-first-token ceiling
+        run: bun run perf:send-to-first-token
       - run: bun run coverage
       # #656 Layer 5 / #842 W0.1 — the PR lane's total wall clock against the
       # tighten-only ceiling in tests/suite-wall-clock.json. The ceiling shipped

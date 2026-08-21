@@ -91,7 +91,10 @@ function relative(name) {
 function firstLine(message) {
   if (typeof message !== "string" || message.trim() === "")
     return "no message recorded";
-  return message.split("\n").find((line) => line.trim() !== "").trim();
+  return message
+    .split("\n")
+    .find((line) => line.trim() !== "")
+    .trim();
 }
 
 if (process.argv[1] === import.meta.filename) {

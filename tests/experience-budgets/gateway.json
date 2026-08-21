@@ -3,14 +3,26 @@
   "surface": "gateway",
   "metrics": {
     "sendToFirstToken": {
-      "status": "unmeasured",
-      "volume": "n/a — no deterministic provider stub exists",
-      "probe": "NONE TODAY. This is the single most-felt latency in the product and the repo cannot measure it: every harness path in tests/perf/harness-turn.perf.test.ts measures DISPATCH throughput (2,000 harness dispatches), not the interval between the owner pressing send and the first token rendering. Closing it needs a stub ACP harness that emits its first token after a fixed delay, so the measurement is the gateway's + client's dead time with the provider held constant."
+      "status": "measured",
+      "volume": "empty vault, no conversation history — 9 runs of 25-30 sampled turns, each after 5 discarded warmups, provider held constant at zero think time",
+      "probe": "scripts/perf/send-to-first-token.mjs — drives a real runAcpTurn against the scripted packages/server/src/acp/backends/acp/fake-acp-harness.mjs (--mode=normal) and times t0 (send) → first `assistant.delta`. PARTIAL BY CONSTRUCTION, and this entry says so rather than implying the whole interval is fenced. IN the span: harness process spawn, the ACP initialize handshake, session/new, session/prompt dispatch, and the stream translation in packages/server/src/acp/backends/acp/backend.ts. OUT of it: the HTTP/SSE conversation route in front of runAcpTurn, every client (no renderer, no frame, no composer), and a real provider's own time to first token — that last one is deliberately excluded, because it is the provider's number and not a regression this repo can fix. STILL UNMEASURED: the route + client half, which needs the desktop/web e2e mock gateway to serve a fixed-delay SSE turn plus a client-side first-token marker to observe; the `sendToFirstToken` entries in desktop.json and web.json remain unmeasured for exactly that reason.",
+      "ceilingP95Ms": 320,
+      "_provenance": {
+        "at": "2026-08-21",
+        "host": "linux x64, 4 cpus, shared container under concurrent sibling load (load average 3.3 of 4 during the noisiest runs); @centraid/server consumed from its built dist",
+        "observedP95Ms": 105.7,
+        "observedMedianMs": 60.9,
+        "observedMinMs": 39.2,
+        "observedMaxMs": 114.2,
+        "note": "MEASURED — and what it replaces is NO NUMBER AT ALL. Before this the product's most-felt latency had no rig: tests/perf/harness-turn.perf.test.ts measures 2,000 registry dispatches against a stubbed runTurn, so it never spawns a harness, never speaks ACP, and could not see this interval. The stub the old probe text asked for turned out to already exist (fake-acp-harness.mjs, the ACP backend suite's fixture); the missing piece was a rig pointing at it. Nine independent runs of 25-30 samples put per-run p95 between 53.4 ms on an idle container and 105.7 ms under concurrent load, with a median that barely moved (52-61 ms) — so the spread is host contention on the process spawn, not variance in the path itself. Every observed* value above records the WORST run, never the friendliest. The number is dominated by node process spawn plus the JSON-RPC handshake, which is the honest shape of a first turn. READ IT AS A LOWER BOUND on what the vault owner feels: it fences a gateway-side regression — a slower spawn, an added handshake round trip, a blocking step inserted before the prompt goes out — not the whole perceived interval.",
+        "headroom": "~3.0x worst observed p95, matching the requestToFirstByte grammar in this file. It is deliberately sized against the CONTENDED measurement, because a shared CI runner is the contended case: a ceiling seeded from the idle 53 ms p95 would fence runner jitter rather than a regression. TIGHTEN once a real distribution exists on whichever lane runs the probe."
+      }
     },
     "reconnectToFresh": {
       "status": "unmeasured",
       "volume": "50,000 replica rows",
-      "probe": "NONE TODAY. tests/scale/replica-bootstrap.scale.test.ts measures a windowed bootstrap with an in-flight deletion, which is the closest existing signal; the perceived number needs the change-stream resume path timed from disconnect to first correct frame."
+      "probe": "NONE TODAY. tests/scale/replica-bootstrap.scale.test.ts measures a windowed bootstrap with an in-flight deletion, which is the closest existing signal; the perceived number needs the change-stream resume path timed from disconnect to first correct frame.",
+      "_blockedOn": "BLOCKED-EXTERNAL (#842 register): no harness times the change-stream resume path from disconnect to first correct frame at the 50,000-replica-row volume; the existing replica-bootstrap scale rig measures a windowed bootstrap, not reconnect staleness. Per tests/experience-budgets/README.md, `unmeasured` with this loud probe is the sanctioned honest state — it carries NO ceiling and gates nothing by design, and no number is invented here. Unblocking is a harness slice: time the resume path, then seed `ceilingMs` and flip status to `measured`."
     },
     "requestToFirstByte": {
       "status": "measured",
