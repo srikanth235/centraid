@@ -117,17 +117,21 @@ describe("probe", () => {
       seatFor: reach,
       now,
     });
-    // eslint-disable-next-line no-console
-    console.log("REMOVAL", JSON.stringify(removal.steps));
     const held = home.audience.vault
       .prepare("SELECT COUNT(*) AS n FROM core_share_origin")
       .get();
-    // eslint-disable-next-line no-console
-    console.log("AUDIENCE core_share_origin rows:", JSON.stringify(held));
     const titles = home.audience.vault
       .prepare("SELECT title FROM core_content_item")
       .all();
-    // eslint-disable-next-line no-console
-    console.log("AUDIENCE content:", JSON.stringify(titles));
+    expect({
+      steps: removal.steps,
+      held,
+      titles,
+      state: readFulfillment(
+        home.origin.vault,
+        grant.grantId,
+        AUDIENCE_VAULT
+      ),
+    }).toStrictEqual("SHOW ME");
   });
 });
