@@ -245,7 +245,7 @@ gitleaks detect --source . --no-git --config .gitleaks.toml
 node scripts/ci/osv-lockfile-scan.mjs
 ```
 
-SonarCloud Autoscan remains a second-opinion maintainability/security check on PRs; it is not one of these three gates. Scope exclusions, silenced noise rules, and the idempotent apply script live in [the toolchain contract](docs/toolchain.md#sonarcloud-autoscan) (`scripts/ci/configure-sonarcloud.mjs`).
+SonarCloud Autoscan remains a second-opinion maintainability/security check on PRs; it is not one of these three gates, and it is **token-gated**: analysis is SonarCloud-side Automatic Analysis on the `srikanth235_centraid` project, and the project's configuration — scope exclusions, silenced noise rules, quality profiles and gate — is applied by `scripts/ci/configure-sonarcloud.mjs`, run from [`.github/workflows/sonarcloud.yml`](.github/workflows/sonarcloud.yml) on pushes that touch the configurator, weekly, and on manual dispatch. That lane runs only when the optional `SONAR_TOKEN` secret is present (a personal token with project administer); without it every step is skipped and the run logs an explicit skip notice, so a clone or fork with no token gets no SonarCloud coverage rather than a silent half-configured one. Policy detail lives in [the toolchain contract](docs/toolchain.md#sonarcloud-autoscan).
 
 ## Known metadata exposure to backup providers
 

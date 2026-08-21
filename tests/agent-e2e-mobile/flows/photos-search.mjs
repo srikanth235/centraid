@@ -13,8 +13,6 @@ ${retryableTapCommands("Open Photos.*")}
     timeout: ${FIRST_LAUNCH_TIMEOUT_MS}
 ${retryableTapCommands("Search")}
 - tapOn: "Search photographs"
-# e2e-lint-allow: input-observed — Results and the seeded album row below are
-# the end-to-end observation of this exact deterministic query.
 - inputText: "Tahoe scouting"
 - hideKeyboard
 - extendedWaitUntil:

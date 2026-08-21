@@ -30,38 +30,65 @@
 //
 // Escape hatch: a step legitimately exempt from a rule carries, on its own line
 // or the line above, `# e2e-lint-allow: <rule> — <reason>` where <rule> is
-// `unasserted-input` or `route-name`. The throwaway keystroke that provokes the
-// keyboard sheet and the secret token (whose value cannot be asserted) are the
-// only two exemptions today; each says why.
+// `unasserted-input` or `route-name` — a marker naming anything else suppresses
+// NOTHING and is a dead comment (photos-search carried `input-observed`, a rule
+// that never existed, for its whole life; #842 W0.4 removed it). The throwaway
+// keystroke that provokes the keyboard sheet and the secret token (whose value
+// cannot be asserted) are the exemptions today; each says why.
 //
 // Following scripts/lint-css-classes.mjs and lint-types.sh: a silent no-op is a
-// FAILURE. If this ever scans zero steps, its file list or step grammar is
-// stale, not clean — and a self-test of its own rules runs first so the linter
-// cannot rot into always-passing.
+// FAILURE. Its roster is discovered from disk (see SCAN_DIRS) so a flow can
+// never escape by being new; if a discovered flow yields zero steps, the step
+// grammar is stale, not clean — and a self-test of its own rules runs first so
+// the linter cannot rot into always-passing.
 
-import { readFileSync, existsSync } from "node:fs";
+import { readdirSync, readFileSync } from "node:fs";
 import path from "node:path";
 
 const ROOT = path.resolve(import.meta.dirname, "..");
 
-// Every file that embeds Maestro YAML in a template literal. The flows plus the
-// harness helpers (configureGateway/restart) that emit YAML on their behalf.
-// A flow that lives elsewhere is unchecked — add it here, exactly like
-// lint-css-classes.mjs's TARGETS.
-const FILES = [
-  "tests/agent-e2e-mobile/flows/agenda-week.mjs",
-  "tests/agent-e2e-mobile/flows/cold-start.mjs",
-  "tests/agent-e2e-mobile/flows/docs-drive.mjs",
-  "tests/agent-e2e-mobile/flows/home-loads.mjs",
-  "tests/agent-e2e-mobile/flows/locker-gate.mjs",
-  "tests/agent-e2e-mobile/flows/native-v0-resilience.mjs",
-  "tests/agent-e2e-mobile/flows/notes-library.mjs",
-  "tests/agent-e2e-mobile/flows/places-seat.mjs",
-  "tests/agent-e2e-mobile/flows/scroll-frames.mjs",
-  "tests/agent-e2e-mobile/flows/tasks-board.mjs",
-  "tests/agent-e2e-mobile/lib/first-run.mjs",
-  "tests/agent-e2e-mobile/lib/harness.mjs",
-];
+// The roster is DISCOVERED, never hand-listed. A hardcoded list is a silent
+// escape hatch: the five `photos-*` flows landed after the list was written and
+// went unlinted for their whole life (#842 W0.4). Every `.mjs` under these two
+// directories is scanned, so a flow file dropped on disk is linted the moment it
+// exists — no linter edit, nothing to forget.
+//
+//   flows/   one journey each; all of them embed Maestro YAML.
+//   lib/     the harness helpers (configureGateway/restart/first-run) that emit
+//            YAML on a flow's behalf. Members with no YAML at all (spawn, metro,
+//            …) are scanned too and simply contribute zero steps — cheap, and it
+//            means a helper that GROWS a YAML snippet is covered from day one.
+const SCAN_DIRS = ["tests/agent-e2e-mobile/flows", "tests/agent-e2e-mobile/lib"];
+
+// Vitest/node:test siblings are excluded by rule: `*.test.mjs` files assert the
+// linter's and the harness's behaviour with deliberately-violating FIXTURES, so
+// linting them would flag strings that exist precisely to be flagged.
+const isTestFile = (name) => name.endsWith(".test.mjs");
+
+// Individually excluded files, each with the reason it cannot be linted. EMPTY
+// today, and it should stay that way: the honest fix for a file this linter
+// misreads is a rule that understands it, not an exemption. Anything added here
+// needs a comment naming what about the file defeats the step grammar.
+const EXCLUDED = new Set();
+
+/** The files to lint, relative to `root`, discovered from disk. Exported so the
+ * unit tests can prove discovery on a synthetic tree — i.e. that a new flow
+ * cannot escape the linter without someone deleting it. */
+export function discoverFiles(root = ROOT) {
+  const files = [];
+  for (const dir of SCAN_DIRS) {
+    const names = readdirSync(path.resolve(root, dir)).sort();
+    for (const name of names) {
+      if (!name.endsWith(".mjs") || isTestFile(name)) continue;
+      const rel = `${dir}/${name}`;
+      if (EXCLUDED.has(rel)) continue;
+      files.push(rel);
+    }
+  }
+  return files;
+}
+
+const isFlowFile = (rel) => rel.startsWith(`${SCAN_DIRS[0]}/`);
 
 // Tab-bar labels + route names. These come from apps/mobile/App.tsx (Tab.Screen
 // tabBarLabel / name) — the label is drawn in the tab bar on every screen, and
@@ -302,28 +329,42 @@ function selfTest() {
 
 function main() {
   selfTest();
+  const files = discoverFiles();
   let stepsScanned = 0;
   let filesScanned = 0;
   const findings = [];
-  for (const rel of FILES) {
-    const abs = path.resolve(ROOT, rel);
-    if (!existsSync(abs)) {
-      console.error(
-        `FAIL — listed flow file is missing: ${rel}. Update FILES in this linter.`
-      );
-      process.exit(1);
-    }
+  const emptyFlows = [];
+  for (const rel of files) {
     filesScanned += 1;
-    const { findings: fs, steps } = lintFlowSource(readFileSync(abs, "utf8"));
+    const { findings: fs, steps } = lintFlowSource(
+      readFileSync(path.resolve(ROOT, rel), "utf8")
+    );
     stepsScanned += steps;
+    if (steps === 0 && isFlowFile(rel)) emptyFlows.push(rel);
     for (const f of fs) findings.push({ file: rel, ...f });
   }
 
-  // Silent-no-op guard (see header).
+  // Silent-no-op guards (see header). Discovery removed the stale-list failure
+  // mode, so what is left to catch is a stale step GRAMMAR: a journey file this
+  // linter can no longer parse reads as "clean" and must read as broken.
+  if (filesScanned === 0) {
+    console.error(
+      `FAIL — discovered zero files under ${SCAN_DIRS.join(", ")}. ` +
+        `The scan directories moved; fix SCAN_DIRS in this linter.`
+    );
+    process.exit(1);
+  }
+  if (emptyFlows.length > 0) {
+    console.error(
+      `\nFAIL — flow file(s) matched zero Maestro steps; the step grammar is stale, not clean:\n`
+    );
+    for (const rel of emptyFlows) console.error(`  ${rel}`);
+    process.exit(1);
+  }
   if (stepsScanned === 0) {
     console.error(
       `FAIL — scanned ${filesScanned} file(s) but matched zero Maestro steps. ` +
-        `The step grammar or FILES list is stale, not clean.`
+        `The step grammar is stale, not clean.`
     );
     process.exit(1);
   }

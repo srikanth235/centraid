@@ -386,6 +386,23 @@ jobs:
           } >> "$GITHUB_STEP_SUMMARY"
           bun run test:perf:pr
       - run: bun run coverage
+      # #656 Layer 5 / #842 W0.1 — the PR lane's total wall clock against the
+      # tighten-only ceiling in tests/suite-wall-clock.json. The ceiling shipped
+      # with #656 but no lane ever ran the gate, so the one budget that pushes
+      # BACK on test-flooding had never fenced a PR. It scores the vitest JSON
+      # report `bun run coverage` just wrote — the only place it can see one.
+      # The existence check is load-bearing: the script exits 0 with "not
+      # measured" when the artifact is absent, which is right on a laptop and
+      # wrong in the lane that enforces it — a missing report here means the
+      # wiring rotted, not that the suite met its budget.
+      - name: Suite wall-clock ceiling
+        run: |
+          set -euo pipefail
+          if [ ! -f artifacts/test-results/vitest.json ]; then
+            echo "::error title=Suite wall-clock unmeasured::artifacts/test-results/vitest.json is missing after \`bun run coverage\`; the wall-clock ceiling cannot be enforced, so this lane fails rather than passing silently."
+            exit 1
+          fi
+          bun run test:suite-wall-clock
       # #532 — changed-line coverage vs origin/main must be ≥80% (or approvedDeviation).
       - name: Fetch origin/main for diff coverage
         run: git fetch --no-tags origin main 2>/dev/null || true

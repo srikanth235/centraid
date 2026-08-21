@@ -2,9 +2,11 @@
 // A linter that always exits 0 is worse than no linter: these assert that each
 // rule REJECTS a synthetic violation and ACCEPTS the compliant twin.
 import assert from "node:assert/strict";
+import { readdirSync, readFileSync } from "node:fs";
+import path from "node:path";
 import test from "node:test";
 
-import { lintFlowSource } from "./lint-e2e-flows.mjs";
+import { discoverFiles, lintFlowSource } from "./lint-e2e-flows.mjs";
 
 const rules = (src) =>
   lintFlowSource(src)
@@ -100,4 +102,95 @@ test("a finding carries the 1-based line of the offending step", () => {
 test("the step count backs the silent-no-op guard", () => {
   assert.equal(lintFlowSource("").steps, 0);
   assert.equal(lintFlowSource('- tapOn: "Save"\n').steps, 1);
+});
+
+// ---- roster discovery (#842 W0.4). The five `photos-*` journeys and
+// `volume-proof` were invisible to this linter for their whole lives because the
+// roster was a hand-written FILES array nobody remembered to extend. These prove
+// the roster now comes from disk, so being new is not a way to escape a rule.
+
+/** A throwaway repo shaped like the real one: `<root>/tests/agent-e2e-mobile/
+ * {flows,lib}` populated with the given `dir/name` files. */
+function fixtureRoot(files) {
+  const root = mkdtempSync(path.join(tmpdir(), "e2e-flow-roster-"));
+  for (const dir of ["flows", "lib"])
+    mkdirSync(path.join(root, "tests/agent-e2e-mobile", dir), {
+      recursive: true,
+    });
+  for (const [rel, body] of Object.entries(files))
+    writeFileSync(path.join(root, "tests/agent-e2e-mobile", rel), body);
+  return root;
+}
+
+test("discovery picks up a flow dropped on disk, with no linter edit", () => {
+  const root = fixtureRoot({
+    "flows/brand-new-journey.mjs": '- assertVisible: "Something"\n',
+    "lib/harness.mjs": "",
+  });
+  assert.deepEqual(discoverFiles(root), [
+    "tests/agent-e2e-mobile/flows/brand-new-journey.mjs",
+    "tests/agent-e2e-mobile/lib/harness.mjs",
+  ]);
+});
+
+test("discovery skips non-.mjs files and `*.test.mjs` siblings", () => {
+  const root = fixtureRoot({
+    "flows/real.mjs": "",
+    "flows/real.md": "",
+    "lib/frame-report.mjs": "",
+    "lib/frame-report.test.mjs": "",
+  });
+  assert.deepEqual(discoverFiles(root), [
+    "tests/agent-e2e-mobile/flows/real.mjs",
+    "tests/agent-e2e-mobile/lib/frame-report.mjs",
+  ]);
+});
+
+test("the real roster covers every flow file on disk", () => {
+  const files = discoverFiles();
+  const onDisk = readdirSync(
+    path.resolve(import.meta.dirname, "../tests/agent-e2e-mobile/flows")
+  )
+    .filter((name) => name.endsWith(".mjs"))
+    .map((name) => `tests/agent-e2e-mobile/flows/${name}`)
+    .sort();
+  assert.deepEqual(
+    files.filter((f) => f.includes("/flows/")),
+    onDisk
+  );
+  // Including the journeys the old hand-written list forgot.
+  for (const forgotten of [
+    "photos-library",
+    "photos-permissions",
+    "photos-search",
+    "photos-select-write",
+    "photos-viewer",
+    "volume-proof",
+  ])
+    assert.ok(
+      files.includes(`tests/agent-e2e-mobile/flows/${forgotten}.mjs`),
+      `${forgotten} must be linted`
+    );
+});
+
+test("SABOTAGE: a flow with a vacuous assertion is caught through discovery", () => {
+  const root = fixtureRoot({
+    // Exactly the shape that escaped: a new journey nobody added to a list.
+    "flows/sneaky.mjs": '- tapOn: "Photos.*"\n- assertVisible: "Photos"\n',
+  });
+  const [rel] = discoverFiles(root);
+  assert.equal(rel, "tests/agent-e2e-mobile/flows/sneaky.mjs");
+  assert.deepEqual(rules(readFileSync(path.join(root, rel), "utf8")), [
+    "route-name",
+  ]);
+});
+
+test("an allow marker naming a rule that does not exist suppresses nothing", () => {
+  // photos-search carried `# e2e-lint-allow: input-observed` — no such rule.
+  assert.deepEqual(
+    rules(
+      '# e2e-lint-allow: input-observed — sounds plausible, is not a rule\n- inputText: "x"\n- tapOn: "Save"\n'
+    ),
+    ["unasserted-input"]
+  );
 });

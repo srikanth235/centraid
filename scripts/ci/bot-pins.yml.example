@@ -1,5 +1,15 @@
-# E6 — bot-maintained generated pins (scaffold).
-# Promote to .github/workflows/bot-pins.yml once a pin regenerator exists.
+# E6 — bot-maintained generated pins (scaffold). TEMPLATE, NOT A LIVE WORKFLOW.
+#
+# This file is a `.example`: nothing in the repo runs it, imports it, or reads
+# it — by design. It is the hand-off shape for issue #468 E6 (see
+# receipts/issue-468-solo-maintainer-leverage.md), kept so the day a pin
+# regenerator exists there is a ready starting point rather than a blank page.
+#
+# To activate: copy to `.github/workflows/bot-pins.yml`, replace the placeholder
+# step with the real regenerator invocations (recompute catalog hashes / pricing
+# snapshot, `--check` on PR to fail on drift), and wire it into CI. Until then it
+# lives here, unwired, and must NOT be added to `.github/workflows/`.
+#
 # schedule: weekly; steps: recompute catalog hashes / pricing snapshot with --check on PR.
 name: bot-pins
 on:
