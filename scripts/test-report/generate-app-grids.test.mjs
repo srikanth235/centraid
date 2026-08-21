@@ -85,6 +85,42 @@ describe("app × seat and app × designed state grids", () => {
     );
   });
 
+  test("a held state renders with its citation, never as silence", () => {
+    const matrix = axesMatrix();
+    matrix.trackingIssues[831] = {
+      url: "https://example.invalid/831",
+      state: "closed",
+    };
+    matrix.appStates.apps[0].states.dayone = {
+      status: "held",
+      citation: "#831",
+    };
+    const root = makeFixtureRoot({
+      matrix,
+      appManifestStates: { designed: ["dayone", "denied"], excluded: [] },
+    });
+    const result = runGenerate(root);
+    expect(result.status).toBe(0);
+    // The cell is neutral like a skip — a held interface is not a gap — but it
+    // carries the ruling that held it, in the cell and in its tooltip.
+    expect(result.html).toContain(
+      "designed, but held with the interface pending #831"
+    );
+    expect(result.html).toMatch(/axis-skipped[^>]*>–<small>#831<\/small>/u);
+    // Counted, not dropped: a held cell is never missing from the tally.
+    expect(result.summary.appStateCells).toEqual({
+      declared: 1,
+      unowned: 0,
+      skipped: 1,
+    });
+    // And it changes nothing about cell health.
+    const plain = runGenerate(makeFixtureRoot());
+    expect(result.summary.cellsMissing).toBe(plain.summary.cellsMissing);
+    expect(result.summary.cellsExpectedGrey).toBe(
+      plain.summary.cellsExpectedGrey
+    );
+  });
+
   test("an excluded state renders as a structural exclusion, not a gap", () => {
     const matrix = axesMatrix();
     matrix.appStates.apps[0].states.denied = { status: "excluded" };

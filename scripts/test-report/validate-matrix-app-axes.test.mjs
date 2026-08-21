@@ -192,6 +192,50 @@ describe("app axes: seats, grid B, grid D, engines, consent", () => {
     ).toBe(true);
   });
 
+  test("a designed state may be HELD, but only against a registered ruling", async () => {
+    const matrix = baseMatrix();
+    const held = (citation) => ({
+      status: "held",
+      ...(citation === undefined ? {} : { citation }),
+    });
+    // The happy shape: tally designs every state and can own none until the
+    // ruling that cleared its interface is answered, so the cell says exactly
+    // that instead of joining the undifferentiated grey.
+    matrix.appStates.apps[6].states.dayone = held("#839");
+    const accepted = await validateMatrix(matrix, {
+      checkFiles: false,
+      checkEnvGates: false,
+    });
+    expect(
+      accepted.errors.some((e) => e.includes("appStates tally.dayone"))
+    ).toBe(false);
+
+    // A hold with no ruling behind it is just a gap that stopped being counted.
+    matrix.appStates.apps[6].states.dayone = held();
+    const uncited = await validateMatrix(matrix, {
+      checkFiles: false,
+      checkEnvGates: false,
+    });
+    expect(
+      uncited.errors.some(
+        (e) =>
+          e.includes("appStates tally.dayone") &&
+          e.includes("is held but cites no issue")
+      )
+    ).toBe(true);
+
+    matrix.appStates.apps[6].states.dayone = held("#4242");
+    const unregistered = await validateMatrix(matrix, {
+      checkFiles: false,
+      checkEnvGates: false,
+    });
+    expect(
+      unregistered.errors.some((e) =>
+        e.includes("held cites unregistered issue #4242")
+      )
+    ).toBe(true);
+  });
+
   test("SABOTAGE: rejects an engine registry source path that is dead", async () => {
     const matrix = baseMatrix();
     matrix.engineRegistry[0].source = ["packages/vault/src/gone.ts"];

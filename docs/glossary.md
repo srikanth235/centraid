@@ -97,6 +97,16 @@ Schema names follow the same one-axis rule: **a table never repeats its schema n
 | **origin act** | A frame-owned capture capability apps register into — camera, scanner, share-sheet-in, notifications, autofill. One door per capability, never per-app re-implementations. |
 | **north star** | The incumbent product a blueprint deliberately mimics (Photos → Google Photos, Notes → Apple Notes, Docs → Google Drive, Tally → Splitwise, Tasks → Todoist, …) so switching costs an owner nothing. Table in [blueprint-seats.md](blueprint-seats.md). |
 
+## App admission (blueprints, [blueprint-seats.md](blueprint-seats.md#app-admission-contract))
+
+| Term | Meaning | Code |
+| --- | --- | --- |
+| **designed state** | One honest state an app's design calls for — the app's own `app.json#states.designed` entry, not a state some other app happens to draw. Its opposite is an `excluded` state: one the design makes structurally unrepresentable, costing a reason and a citation. "Nobody has built it yet" is neither; that is a gap. | `packages/blueprints/apps/<app>/app.json`; `packages/blueprints/src/app-states.test.ts` |
+| **canonical designed states** | The closed seven every UI blueprint partitions into designed and excluded — `dayone`, `pending`, `offline`, `stale`, `conflict`, `parked`, `denied`. Closed by doctrine, so an eighth arrives by amending the list, never by one app inventing it. | `CANONICAL_DESIGNED_STATES` in `packages/server/src/engine/registry/manifest.ts` |
+| **admission contract** | The six named claims an app satisfies to sit in the shell — valid manifest, engine conformance, designed states owned or tracked, seats owned or tracked, pending projection registered, placement declared or structurally absent. The shell half of admission; TESTING.md's contract of the same name is the evidence half (which tier falsifies which claim). | [blueprint-seats.md](blueprint-seats.md#app-admission-contract); `tests/matrix.json`; `scripts/test-report/validate-app-axes.mjs` |
+| **engine registry** | The one roster of the shared engines, each row naming its source, its property flow, its mutation seed, and whether it takes a column in the app × engine grid. The registry and that grid's columns are one fact seen twice, held equal by the validator. | `tests/matrix.json#engineRegistry`; `packages/blueprints/apps/_shared/` |
+| **consent ledger** | The eight permission layers a member's answer can sit in, each naming where it is enforced, its refusal grammar, which seats it binds, and the adversary proof that it refuses — or the open issue admitting it has none. | `tests/matrix.json#consentLedger` |
+
 ## Projection doctrine (apps, [#834](https://github.com/srikanth235/centraid/issues/834))
 
 Store once, draw in the asking room's shape. These four words are how the apps talk about each other's facts; using them loosely is how a second copy gets written.

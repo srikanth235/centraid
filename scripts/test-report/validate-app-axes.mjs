@@ -281,6 +281,24 @@ export async function validateAppAxes(matrix, options, flowIds) {
           else if (path.isAbsolute(cell.owner) || cell.owner.includes(".."))
             errors.push(`${label} owner must be a repository-relative path`);
           else requirePath(cell.owner, `${label} owner does not exist`);
+        } else if (cell.status === "held") {
+          // A HELD state is designed, unbuilt, and NOT a gap: the interface it
+          // would belong to was cleared by a ruling, so no owner can exist
+          // until that ruling's redesign lands. The citation is that ruling —
+          // registered so it is followable, and NOT required to be open,
+          // because the issue closes when the clearing lands while the hold
+          // itself continues. Silence is the thing this forbids: a held cell
+          // renders with its citation rather than vanishing into the grey.
+          const citation = String(cell.citation ?? "");
+          const issueRef = /^#(?<issue>\d+)$/u.exec(citation);
+          if (!issueRef)
+            errors.push(
+              `${label} is held but cites no issue; use the ruling that held it, e.g. #831 (got ${citation || "none"})`
+            );
+          else if (!issues[issueRef.groups.issue])
+            errors.push(
+              `${label} held cites unregistered issue ${citation}; add it to trackingIssues`
+            );
         } else if (cell.status !== "gap" && cell.status !== "excluded") {
           errors.push(`${label} has invalid status ${cell.status}`);
         }

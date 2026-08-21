@@ -682,7 +682,7 @@
     "cross-linking": "Flow vault-cross-link owns core.link_entities (packages/vault/src/gateway/ext.test.ts).",
     "people": "Flow people-crm owns people.* commands (packages/vault/src/commands/people.test.ts).",
     "blank-machine-restore": "Product blank-machine journey is recover.integration.test.ts (recover() + kit). Backup primitive round-trips live under packages/backup engine tests.",
-    "appStates.copy-owners": "Copy-level owners in appStates (agenda.parked, agenda.denied, notes.denied) prove the state's user-facing copy renders, not that the state is reachable end-to-end; reachability promotion is Wave 1+ work under #839.",
+    "appStates.copy-owners": "Copy-level owners in appStates (notes.pending, notes.stale) prove the state's user-facing copy renders under a render condition that can actually fire, not that the state was driven end-to-end; every other owned cell names a proof that reaches the state itself — the app-boot browser journeys, the app's own pending projection, or the view-state predicate that fires the banner. Tracked under #839.",
     "agent-runtime.contracts": "Coverable-today suite (#535): owned by packages/server/src/acp/matrix-contracts.test.ts. Tracked under #781 (originally #656).",
     "agent-runtime.durability": "Coverable-today suite (#535): owned by packages/server/src/acp/matrix-durability.test.ts. Tracked under #781 (originally #656).",
     "agent-runtime.concurrency": "Coverable-today suite (#535): owned by packages/server/src/acp/matrix-concurrency.test.ts. Tracked under #781 (originally #656).",
@@ -808,7 +808,8 @@
     "web.journey": "apps/web/tests/e2e/web-pwa.spec.ts is a single test shared with the security claim; the install-to-app journey has no separate owner. Tracked under #781 (originally #656).",
     "mobile.correctness": "apps/mobile has no coverage floor scope, so nothing gates the replica session code these unit owners exercise. Tracked under #781 (originally #656).",
     "mobile.durability": "apps/mobile/src/lib/upload/crash.test.ts proves upload crash recovery, but apps/mobile has no coverage floor gating the storage code around it. Tracked under #781 (originally #656).",
-    "mobile.journey": "tests/agent-e2e-mobile/flows/home-loads.mjs runs on iOS only, so the Android journey is unproven and the flow declares three checks. Tracked under #781 (originally #656)."
+    "mobile.journey": "tests/agent-e2e-mobile/flows/home-loads.mjs runs on iOS only, so the Android journey is unproven and the flow declares three checks. Tracked under #781 (originally #656).",
+    "app-admission": "The named claims an app satisfies to sit in the shell are docs/blueprint-seats.md#app-admission-contract; the appSeats, appStates and appEngines blocks here are that contract's ledger, and scripts/test-report/validate-app-axes.mjs is what refuses an app that goes quiet about one of them."
   },
   "cellOwners": {
     "vault-core.correctness": {
@@ -1747,6 +1748,10 @@
       "owner": "packages/blueprints/src/no-inference-client.test.ts",
       "flow": "blueprint-enrichment-law"
     },
+    "provider-egress-dispatch": {
+      "statement": "Outbound provider requests leave centraid only through the ACP dispatch path — runTurn resolving a HARNESSES spec and spawning it via harnessSpawnEnv, downstream of decideEnrichmentGate — never through a provider SDK import, a provider API host literal, or a host-path HTTP client.",
+      "owner": "packages/server/src/provider-egress-dispatch.test.ts"
+    },
     "one-computation": {
       "statement": "A pure product-law computation is a projection or a shared module imported by every seat, never two seat-local implementations.",
       "owner": "packages/blueprints/src/one-computation.test.ts",
@@ -2245,12 +2250,14 @@
             "trackingIssue": "839"
           },
           "custodian": {
-            "status": "gap",
-            "trackingIssue": "839"
+            "status": "owned",
+            "owner": "apps/desktop/tests/e2e/docs-drive.spec.ts",
+            "tier": "e2e"
           },
           "viewer": {
-            "status": "gap",
-            "trackingIssue": "839"
+            "status": "owned",
+            "owner": "apps/web/tests/e2e/docs-drive.spec.ts",
+            "tier": "e2e"
           }
         }
       },
@@ -2262,8 +2269,9 @@
             "trackingIssue": "839"
           },
           "custodian": {
-            "status": "gap",
-            "trackingIssue": "839"
+            "status": "owned",
+            "owner": "apps/desktop/tests/e2e/locker.spec.ts",
+            "tier": "e2e"
           },
           "viewer": {
             "status": "skip",
@@ -2301,8 +2309,9 @@
             "trackingIssue": "839"
           },
           "viewer": {
-            "status": "gap",
-            "trackingIssue": "839"
+            "status": "owned",
+            "owner": "apps/web/tests/e2e/people.spec.ts",
+            "tier": "e2e"
           }
         }
       },
@@ -2404,7 +2413,8 @@
             "status": "gap"
           },
           "pending": {
-            "status": "gap"
+            "status": "owned",
+            "owner": "packages/blueprints/src/app-boot/agenda.test.ts"
           },
           "offline": {
             "status": "gap"
@@ -2417,11 +2427,11 @@
           },
           "parked": {
             "status": "owned",
-            "owner": "packages/blueprints/apps/agenda/view-copy.test.ts"
+            "owner": "packages/blueprints/src/app-boot/agenda.test.ts"
           },
           "denied": {
             "status": "owned",
-            "owner": "packages/blueprints/apps/agenda/view-copy.test.ts"
+            "owner": "packages/blueprints/src/app-boot/agenda.test.ts"
           }
         }
       },
@@ -2429,13 +2439,15 @@
         "id": "docs",
         "states": {
           "dayone": {
-            "status": "gap"
+            "status": "owned",
+            "owner": "packages/blueprints/src/docs-shelves.test.ts"
           },
           "pending": {
             "status": "gap"
           },
           "offline": {
-            "status": "gap"
+            "status": "owned",
+            "owner": "packages/blueprints/src/docs-shelves.test.ts"
           },
           "stale": {
             "status": "gap"
@@ -2447,7 +2459,8 @@
             "status": "gap"
           },
           "denied": {
-            "status": "gap"
+            "status": "owned",
+            "owner": "packages/blueprints/src/app-boot/docs.test.ts"
           }
         }
       },
@@ -2458,7 +2471,8 @@
             "status": "gap"
           },
           "pending": {
-            "status": "gap"
+            "status": "owned",
+            "owner": "packages/blueprints/apps/_shared/pending-overlay.test.ts"
           },
           "offline": {
             "status": "gap"
@@ -2473,7 +2487,8 @@
             "status": "gap"
           },
           "denied": {
-            "status": "gap"
+            "status": "owned",
+            "owner": "packages/blueprints/src/app-boot/locker.test.ts"
           }
         }
       },
@@ -2485,13 +2500,15 @@
             "owner": "packages/blueprints/src/state-honesty.test.ts"
           },
           "pending": {
-            "status": "gap"
+            "status": "owned",
+            "owner": "packages/blueprints/apps/notes/view-copy.test.ts"
           },
           "offline": {
             "status": "gap"
           },
           "stale": {
-            "status": "gap"
+            "status": "owned",
+            "owner": "packages/blueprints/apps/notes/view-copy.test.ts"
           },
           "conflict": {
             "status": "gap"
@@ -2501,7 +2518,7 @@
           },
           "denied": {
             "status": "owned",
-            "owner": "packages/blueprints/apps/notes/view-copy.test.ts"
+            "owner": "packages/blueprints/src/app-boot/notes.test.ts"
           }
         }
       },
@@ -2527,7 +2544,8 @@
             "status": "gap"
           },
           "denied": {
-            "status": "gap"
+            "status": "owned",
+            "owner": "packages/blueprints/src/app-boot/people.test.ts"
           }
         }
       },
@@ -2535,13 +2553,15 @@
         "id": "photos",
         "states": {
           "dayone": {
-            "status": "gap"
+            "status": "owned",
+            "owner": "packages/blueprints/src/photos-view-state.test.ts"
           },
           "pending": {
             "status": "gap"
           },
           "offline": {
-            "status": "gap"
+            "status": "owned",
+            "owner": "packages/blueprints/src/photos-view-state.test.ts"
           },
           "stale": {
             "status": "gap"
@@ -2553,7 +2573,8 @@
             "status": "gap"
           },
           "denied": {
-            "status": "gap"
+            "status": "owned",
+            "owner": "packages/blueprints/src/app-boot/photos.test.ts"
           }
         }
       },
@@ -2561,25 +2582,32 @@
         "id": "tally",
         "states": {
           "dayone": {
-            "status": "gap"
+            "status": "held",
+            "citation": "#831"
           },
           "pending": {
-            "status": "gap"
+            "status": "held",
+            "citation": "#831"
           },
           "offline": {
-            "status": "gap"
+            "status": "held",
+            "citation": "#831"
           },
           "stale": {
-            "status": "gap"
+            "status": "held",
+            "citation": "#831"
           },
           "conflict": {
-            "status": "gap"
+            "status": "held",
+            "citation": "#831"
           },
           "parked": {
-            "status": "gap"
+            "status": "held",
+            "citation": "#831"
           },
           "denied": {
-            "status": "gap"
+            "status": "held",
+            "citation": "#831"
           }
         }
       },
@@ -2591,7 +2619,8 @@
             "owner": "packages/blueprints/apps/tasks/logic.test.ts"
           },
           "pending": {
-            "status": "gap"
+            "status": "owned",
+            "owner": "packages/blueprints/apps/_shared/pending-overlay.test.ts"
           },
           "offline": {
             "status": "gap"

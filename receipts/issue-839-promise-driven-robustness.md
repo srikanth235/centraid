@@ -24,9 +24,9 @@ Wave 0 — encode the shape (G6, G7, G14, G16):
 
 Wave 1 — name the flows (G6, G7):
 
-- [ ] App admission contract stated for all eight apps
-- [ ] Every designed state has a named owner per seat, or a tracked gap
-- [ ] Tally rows grey-with-citation (#831), never silently absent
+- [x] App admission contract stated for all eight apps
+- [x] Every designed state has a named owner per seat, or a tracked gap
+- [x] Tally rows grey-with-citation (#831), never silently absent
 
 Wave 2 — raise the adversaries (G4, G5, G9, G10):
 
@@ -123,6 +123,52 @@ by the pin alone; blend provenance re-measured (44.12/36.31 five-tree,
 numeric floor changed; `docs/blueprint-seats.md` gains a Designed states
 subsection and `docs/traps/coverage-run-filters.md` records the `--project`
 coverage footgun.
+
+### Wave 1 — name the flows
+
+`docs/blueprint-seats.md` gains `## App admission contract` — six named claims
+(valid manifest, engine conformance, states owned/tracked, seats
+owned/tracked/refused, pending projection per action, placement declared or
+structurally absent), each citing its gate; it delimits itself from
+TESTING.md's same-named evidence-ladder section (shell half vs evidence half).
+`docs/glossary.md` gains designed state, canonical designed states, admission
+contract, engine registry, consent ledger. Grid B promotions (verified
+per-seat journeys): docs.custodian, docs.viewer, locker.custodian,
+people.viewer. Grid D goes 5→19 owned (app-boot suites for agenda
+pending/parked/denied, docs dayone/offline/denied, locker pending/denied,
+notes pending/stale/denied, people.denied, photos dayone/offline/denied,
+tasks.pending via driven pending projections); every refusal recorded with
+reasons (source-text greps and component-isolation specs are below the owned
+bar; conflict is unbuilt everywhere). Tally's seven Grid D cells become
+`{status:"held", citation:"#831"}` — a new cell status enforced by
+`validate-app-axes.mjs` (citation must be a registered issue), mirrored in
+`tests/matrix.schema.json`, rendered grey with the citation badge, counted
+with skips, zero-grey contract proven unmoved.
+
+### Wave 2 — raise the adversaries (landed so far)
+
+**W2-2 — scope-denial sweep, egress-dispatch law, policy-cascade properties.**
+`packages/server/src/serve/manifest-scope-denial.sweep.test.ts` (90 tests):
+all 37 app.json manifests through the real validators into the real
+`evaluateConsent` under a deliberately maximal grant, asserting the closed
+six-class ConsentDeny grammar verbatim, with a clamp oracle biconditional
+(refuses ⟺ not covered) and 300-run fast-check fuzzing of malformed scope
+entries (deny, never throw). Placed in packages/server (not vault) because
+vault must never depend on app-engine — rationale in the file header.
+`packages/server/src/provider-egress-dispatch.test.ts` (6 tests):
+`[law:provider-egress-dispatch]`, registered in the matrix laws block —
+provider SDK specifiers, provider host literals, and host-path HTTP clients
+banned across packages/server/src/{acp,enrich,engine,routes,serve} +
+apps/{desktop,web,extension}/src (659 files, per-root sanity floors), with the
+positive dispatch road asserted and sabotage self-tests; current tree clean.
+`packages/server/src/automation/fire/enrich-resolve.property.test.ts`
+(16 tests): last-non-null-write per field, ceiling never raised by any rule
+chain, fail-closed on unreadable tiers, order-insensitivity exactly where the
+contract claims it. Root integration: `scripts/lint-law-registry.mjs` gains
+`.stryker-tmp` in SKIP_DIRS (Stryker sandboxes copied law-owning suites and
+produced false duplicate-owner findings).
+
+## Out of scope
 
 - Fixing the pre-existing product defects the new adversaries surface — those
   become their own issues, linked from the report's auto-filed lane (Wave 5).

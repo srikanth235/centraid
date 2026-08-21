@@ -38,6 +38,10 @@ const SKIP_DIRS = new Set([
   // other check:push gates run concurrently. Those copies are build products,
   // not additional law owners.
   ".app-boot",
+  // Stryker sandboxes copy whole packages (including law-owning suites) into
+  // this gitignored scratch tree while a mutation seed runs. Those copies are
+  // build products, not additional law owners.
+  ".stryker-tmp",
 ]);
 
 const TEST_FILE_RE = /\.(?:test|spec)\.(?:ts|tsx|mts|mjs|js|jsx)$/u;

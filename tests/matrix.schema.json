@@ -454,6 +454,15 @@
         },
         {
           "type": "object",
+          "required": ["status", "citation"],
+          "additionalProperties": false,
+          "properties": {
+            "status": { "const": "held" },
+            "citation": { "type": "string", "minLength": 1 }
+          }
+        },
+        {
+          "type": "object",
           "required": ["status"],
           "additionalProperties": false,
           "properties": { "status": { "enum": ["gap", "excluded"] } }
