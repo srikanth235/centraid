@@ -49,6 +49,10 @@ const GOLDEN = fileURLToPath(
   new URL("../fixtures/peer-target-golden.json", import.meta.url)
 );
 
+const CORPUS = fileURLToPath(
+  new URL("../fixtures/peer-target-corpus.json", import.meta.url)
+);
+
 interface GoldenVector {
   name: string;
   target: string;
@@ -218,6 +222,77 @@ const adversarialTarget = fc
   )
   .map(([head, pieces]) => head + pieces.join(""));
 
+/*
+ * The committed JS↔Rust bridge (issue #842 W2.1).
+ *
+ * `peer-target-golden.json` is the CURATED corpus — cases a human thought
+ * worth naming, plus the pins. This second corpus is its MACHINE half: a
+ * deterministically seeded draw off the same generator, each row carrying the
+ * verdict the product guard gives, read UNCHANGED by
+ * `data-plane/tests/peer_target_differential.rs`. The two languages then agree
+ * on a shared, growing set of inputs neither author wrote down — the differ-
+ * ential complement to alpn-parity.test.ts's source-text pin.
+ *
+ * Determinism is the whole point: `fc.sample` is a pure function of (seed,
+ * count), so a regenerated corpus is byte-identical on any machine, and CI can
+ * diff the committed file against a fresh draw to catch a hand edit.
+ */
+const CORPUS_SEED = 726_003;
+const CORPUS_DRAWS = 700;
+const CORPUS_CAP = 480;
+
+interface CorpusRow {
+  target: string;
+  jsVerdict: boolean;
+}
+
+/**
+ * `String#isWellFormed` is ES2024 and the tunnel test tsconfig targets an
+ * older lib, so we spell the lone-surrogate check out: a string is well-formed
+ * iff every high surrogate is followed by a low one and no low surrogate
+ * stands alone. A lone surrogate is exactly what a Rust `&str` cannot hold.
+ */
+function isWellFormedString(value: string): boolean {
+  for (let index = 0; index < value.length; index += 1) {
+    const code = value.charCodeAt(index);
+    if (code >= 0xd8_00 && code <= 0xdb_ff) {
+      const next = value.charCodeAt(index + 1);
+      if (Number.isNaN(next) || next < 0xdc_00 || next > 0xdf_ff) return false;
+      index += 1;
+    } else if (code >= 0xdc_00 && code <= 0xdf_ff) {
+      return false;
+    }
+  }
+  return true;
+}
+
+/**
+ * Materialise the corpus deterministically. Only WELL-FORMED targets survive:
+ * a lone surrogate is not representable as a Rust `&str`, so admitting one into
+ * a corpus the Rust lane must read would break the bridge — the JS-only lone-
+ * surrogate divergence is pinned above, never smuggled in here.
+ */
+function generateCorpus(): CorpusRow[] {
+  const drawn = fc.sample(adversarialTarget, {
+    numRuns: CORPUS_DRAWS,
+    seed: CORPUS_SEED,
+  });
+  const rows: CorpusRow[] = [];
+  const seen = new Set<string>();
+  for (const target of drawn) {
+    if (!isWellFormedString(target) || seen.has(target)) continue;
+    seen.add(target);
+    rows.push({ target, jsVerdict: isPeerPlaneTarget(target) });
+    if (rows.length >= CORPUS_CAP) break;
+  }
+  return rows;
+}
+
+/** One row per line: stable to diff and countable against the 625-line cap. */
+function serializeCorpus(rows: CorpusRow[]): string {
+  return `[\n${rows.map((row) => `  ${JSON.stringify(row)}`).join(",\n")}\n]\n`;
+}
+
 describe("peer-plane target differential", () => {
   test("every reachable implementation returns the same verdict", () => {
     fc.assert(
@@ -325,7 +400,9 @@ describe("peer-plane target differential", () => {
       `${PEER_PLANE_PREFIX}\uDFFF/x`,
       `${PEER_PLANE_PREFIX}a\uDC00b`,
     ]) {
-      expect(target.isWellFormed()).toBe(false);
+      // A lone surrogate: matched as its own code point, so a well-formed
+      // astral pair never does.
+      expect(/\p{Surrogate}/u.test(target)).toBe(true);
       expect(isPeerPlaneTarget(target)).toBe(true);
       // What the guard actually judged: the replacement, not the input.
       expect(Buffer.from(target, "utf8").toString("utf8")).not.toBe(target);
@@ -396,6 +473,41 @@ describe("peer-plane target differential", () => {
     expect(hasClass((t) => t === "")).toBe(true); // empty boundary
     expect(hasClass((t) => t === PEER_PLANE_PREFIX)).toBe(true); // prefix boundary
     expect(golden.vectors.filter((v) => v.pin !== undefined)).toHaveLength(4);
+  });
+
+  test("the generated corpus is deterministic and matches the committed file", () => {
+    const fresh = serializeCorpus(generateCorpus());
+    // Bootstrap / regenerate with CENTRAID_WRITE_PEER_CORPUS=1; the normal run
+    // only READS, so a stray edit fails here instead of being overwritten.
+    if (process.env.CENTRAID_WRITE_PEER_CORPUS === "1") {
+      fs.writeFileSync(CORPUS, fresh);
+    }
+    expect(fresh).toBe(fs.readFileSync(CORPUS, "utf8"));
+    // A second draw at the same seed is byte-identical — a pure function of
+    // (seed, count). This is what lets the Rust lane trust the committed file.
+    expect(serializeCorpus(generateCorpus())).toBe(fresh);
+  });
+
+  test("every generated corpus row is well-formed and self-consistent", () => {
+    const rows = JSON.parse(fs.readFileSync(CORPUS, "utf8")) as CorpusRow[];
+    expect(rows.length).toBeGreaterThan(200);
+    const seen = new Set<string>();
+    for (const row of rows) {
+      expect(row.target).toBeTypeOf("string");
+      // Every target the Rust test will read must be a valid `&str`.
+      expect(isWellFormedString(row.target)).toBe(true);
+      expect(seen.has(row.target)).toBe(false);
+      seen.add(row.target);
+      // The recorded verdict is the product guard's own answer, recomputed so
+      // a hand-edited corpus cannot silently record a lie for Rust to match.
+      expect(row.jsVerdict).toBe(isPeerPlaneTarget(row.target));
+      expect(rustModel(row.target)).toBe(row.jsVerdict);
+      expect(routeLayerModel(row.target)).toBe(row.jsVerdict);
+    }
+    // Both verdicts are exercised: an all-reject corpus proves nothing about
+    // the accept path the Rust guard must also match.
+    expect(rows.some((row) => row.jsVerdict)).toBe(true);
+    expect(rows.some((row) => !row.jsVerdict)).toBe(true);
   });
 
   test("the Rust guard still says what rustModel transliterates", () => {

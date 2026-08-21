@@ -164,6 +164,8 @@ Every other gate here pushes one way — more tests, higher floors — so the ch
 
 It measures the sum of per-file durations from the vitest JSON report rather than the run's elapsed time, because elapsed time varies with host load and concurrency while the sum is the work the suite actually asked for. With no report present it prints "not measured" and exits 0 — a budget that could not be measured must never read as a budget that was met.
 
+The lane that enforces it is CI `verify`, in the step immediately after `bun run coverage` writes `artifacts/test-results/vitest.json`; `check:full` runs it at the same point locally. That step asserts the report exists before invoking the gate, because the "not measured" exit-0 above is right on a laptop and wrong in the lane that enforces the ceiling — a missing report there means the wiring rotted, not that the suite met its budget.
+
 ### Test-kit seams (#656 Layer 4)
 
 The kit path is enforced, not merely recommended. In test files, oxlint bans raw `fs.mkdtemp*` (use `tempDir()` / `tempDirSync()`), `vi.useFakeTimers` / `vi.setSystemTime` / `vi.useRealTimers` (use `useFakeClock()`), and `Math.random()` (use `seededRandom()`). `bootstrappedVault()` exists so the shortest path to a vault fixture is also the correct one.

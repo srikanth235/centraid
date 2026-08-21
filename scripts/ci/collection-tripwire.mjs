@@ -10,12 +10,14 @@
  * ledger, and the coverage floors all see a smaller universe rather than a
  * violated one. The suite becomes silently absent instead of red.
  *
- * `apps/mobile/src/apps/tally/PendingRestartJourney.test.tsx` sat that way for
- * months (`Cannot bundle Node.js built-in "node:sqlite"`): named in receipt
- * after receipt as "pre-existing", counted by nothing, fixed by nobody, and
- * eventually deleted along with the interface it covered without its journey
- * assertions ever running again. This gate turns that class into a named,
- * self-explaining failure with an owner.
+ * `apps/mobile/src/apps/tally/PendingRestartJourney.test.tsx` sat that way from
+ * #738 to #842 (`Cannot bundle Node.js built-in "node:sqlite"`). A red that
+ * every receipt could truthfully call "pre-existing, reproduces on a clean
+ * tree" is one nothing forces anyone to own: no floor moved, no budget counted
+ * it, no quarantine entry expired, and it was eventually deleted along with the
+ * interface it covered without its journey assertions running again. Naming the
+ * shape is what gives that class an owner — this failure says "zero tests
+ * collected", not "one more red in the mobile suite".
  *
  * It reads the same artifact the health report and the wall-clock ceiling read
  * (`artifacts/test-results/vitest.json`), so it costs one file read on a lane

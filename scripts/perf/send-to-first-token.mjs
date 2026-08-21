@@ -62,7 +62,8 @@ export function parseArgs(argv) {
   const out = { samples: 25, warmup: 3, report: false };
   for (let i = 0; i < argv.length; i++) {
     if (argv[i] === "--samples" && argv[i + 1]) out.samples = Number(argv[++i]);
-    else if (argv[i] === "--warmup" && argv[i + 1]) out.warmup = Number(argv[++i]);
+    else if (argv[i] === "--warmup" && argv[i + 1])
+      out.warmup = Number(argv[++i]);
     else if (argv[i] === "--report") out.report = true;
   }
   return out;
@@ -174,14 +175,27 @@ async function main() {
     /** @type {unknown} */ (runAcpTurn)
   );
 
+  // Both passes are STRICTLY SERIAL, and the reduce-over-a-promise-chain
+  // idiom (the same one tests/perf/harness-turn.perf.test.ts uses) is how
+  // that is expressed without an await inside a loop. Serial is the
+  // measurement, not an oversight: N harness processes spawned at once on a
+  // 4-cpu host would measure contention between the samples rather than the
+  // gateway's dead time, which is the one thing this probe exists to see.
+  //
   // Warmups are discarded, not averaged in: the first turns pay module
   // resolution and a cold page cache, which is real cost but not the steady
   // state a regression would move.
-  for (let i = 0; i < args.warmup; i++) await sample(driver);
+  await Array.from({ length: args.warmup }).reduce(async (previous) => {
+    await previous;
+    await sample(driver);
+  }, Promise.resolve());
 
   /** @type {number[]} */
   const values = [];
-  for (let i = 0; i < args.samples; i++) values.push(await sample(driver));
+  await Array.from({ length: args.samples }).reduce(async (previous) => {
+    await previous;
+    values.push(await sample(driver));
+  }, Promise.resolve());
   const stats = summarize(values);
 
   const line = `send-to-first-token: n=${stats.n} min=${stats.minMs.toFixed(1)}ms median=${stats.medianMs.toFixed(1)}ms p95=${stats.p95Ms.toFixed(1)}ms max=${stats.maxMs.toFixed(1)}ms (host ${process.platform} ${process.arch}, ${os.cpus().length} cpus)`;

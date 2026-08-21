@@ -27,9 +27,12 @@ describe("node:sqlite driver under a jsdom docblock", () => {
       "collected",
     ]);
 
-    expect(
-      driver.all<{ id: string; note: string }>("SELECT * FROM pin")
-    ).toStrictEqual([{ id: "restart", note: "collected" }]);
+    // Field-by-field rather than a whole-object compare: `node:sqlite` returns
+    // null-prototype rows, which no object matcher treats as a plain object.
+    const rows = driver.all<{ id: string; note: string }>("SELECT * FROM pin");
+    expect(rows).toHaveLength(1);
+    expect(rows[0].id).toBe("restart");
+    expect(rows[0].note).toBe("collected");
 
     driver.close();
   });
