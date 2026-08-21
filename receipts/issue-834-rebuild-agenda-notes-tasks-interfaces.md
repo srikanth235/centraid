@@ -18,6 +18,10 @@ UI exists to call them. Later waves grow this receipt.
 - [x] Agenda gains the read-only `day-context` query, registered in its manifest and inline descriptor, with `CHANGE_TABLES` grown to match
 - [x] Notes' `library`, `search` and `link-targets` exclude journal-scheme notes through one shared `apps/_shared/journal-scheme.ts`
 - [x] Handler tests cover the day-context projection, its boundedness and denial shape, and the journal exclusion across all three Notes queries
+- [x] The shared recurrence engine lands before the apps, as one humanised summariser and one missed-period collapse
+- [x] `collapseMissedOccurrences` is threaded through every `TimeApi` declaration and mounted on the inline query ctx
+- [x] No surface renders a raw rule: Tally's dashboard drops its RRULE fallback and Agenda's rows carry `recurrence_summary`
+- [x] The recurrence properties file is back under the 625-line hygiene limit, split rather than trimmed
 - [ ] Wave 1 — the rebuilt Agenda interface dispatches `day-context` and leaves `AWAITING_HANDOFF`
 - [ ] Wave 1 — the rebuilt Notes interface, including the Journal place that is now these notes' one home
 - [ ] Wave 1 — the rebuilt Tasks interface at the Todoist depth bar
@@ -89,19 +93,25 @@ re-decorates the grid instead of leaving it stale until the next nav.
 There is no cross-vault aggregation behind those counts and no peer read
 in the handler.
 
-The `day-context` literal appears only in `app.json` and `app-inline.tsx`
-— the two files `handler-reachability.test.ts` skips — because Agenda is
-still in `AWAITING_HANDOFF` and that gate asserts its handler names are
-ABSENT from the rendered tree. No `NATIVE_QUERY_UI` / `WEB_EXCEPTIONS` row
-is added: those must name a live handler dispatch, which wave 1 supplies.
+No live `day-context` dispatch exists yet. The name is registered
+(`packages/blueprints/apps/agenda/app.json`, `app-inline.tsx`), reasoned
+about in prose (`app-root.tsx`'s `CHANGE_TABLES` comment,
+`docs/decisions.md`) and exercised by
+`packages/blueprints/src/day-context-journal-queries.test.ts`, but nothing
+in the rendered tree calls it — which is what `handler-reachability.test.ts`
+asserts while Agenda sits in `AWAITING_HANDOFF`. No `NATIVE_QUERY_UI` /
+`WEB_EXCEPTIONS` row is added either: those must name a live handler
+dispatch, which wave 1 supplies.
 
 ## What changed
 
-`docs/decisions.md` gains `## Rebuilding Agenda, Notes and Tasks (#834)` —
-a dated ruling paragraph, the four-row `R-*` table, and the closing
-operational-consequence sentence. `docs/blueprint-seats.md`'s Tasks row is
-Todoist alone and links the ruling.
+Four rulings land in `docs/decisions.md` as
+`## Rebuilding Agenda, Notes and Tasks (#834)` — R-northstar, R-journal,
+R-daycontext, R-shelf-scope: a dated ruling paragraph, the four-row `R-*`
+table, and the closing operational-consequence sentence.
 
+Agenda gains the read-only `day-context` query, registered in its manifest
+and inline descriptor, with `CHANGE_TABLES` grown to match.
 `packages/blueprints/apps/agenda/queries/day-context.ts` is new: a
 read-only projection answering `{birthdays, due, holidays}` (plus
 `vaultDenied` on denial, as data rather than a throw) over an inclusive
@@ -114,6 +124,8 @@ read-only flag-vocabulary scopes;
 map; `packages/blueprints/apps/agenda/app-root.tsx` adds `schedule.task`,
 `core.tag`, `core.concept` and `core.concept_scheme` to `CHANGE_TABLES`.
 
+Notes' `library`, `search` and `link-targets` exclude journal-scheme notes
+through one shared `apps/_shared/journal-scheme.ts`.
 `packages/blueprints/apps/_shared/journal-scheme.ts` is new: the
 People-journal scheme URI, the `entry` notation, and `readJournalNoteIds`
 — three bounded reads resolving the marker to a set of note ids.
@@ -126,45 +138,174 @@ derived. The two pre-existing copies of the scheme URI
 `packages/blueprints/apps/people/queries/journal.ts`) are deliberately left
 alone — they are other packages' trees.
 
-`packages/blueprints/apps/tasks/app.json` and
-`packages/blueprints/index.json` replace "A Things-style task manager"
-with the Todoist-consistent phrasing; `packages/blueprints/manifest.json`
-is regenerated and picks up both that copy and the new query file.
+Tasks' north star reads Todoist and only Todoist in
+`docs/blueprint-seats.md`, `packages/blueprints/apps/tasks/app.json` and
+`packages/blueprints/index.json`: the seats row is Todoist alone and links
+the ruling, and the two catalogue entries replace "A Things-style task
+manager" with the Todoist-consistent phrasing.
+`packages/blueprints/manifest.json` is regenerated and picks up both that
+copy and the new query file.
 
-`packages/blueprints/src/day-context-journal-queries.test.ts` is new: nine
-tests over a mocked `ctx.vault` that records every read.
+Handler tests cover the day-context projection, its boundedness and denial
+shape, and the journal exclusion across all three Notes queries:
+`packages/blueprints/src/day-context-journal-queries.test.ts` is new, nine
+tests over a mocked `ctx.vault` that records every read. This receipt,
+`receipts/issue-834-rebuild-agenda-notes-tasks-interfaces.md`, is the
+umbrella's one receipt and grows with each wave.
+
+### The shared recurrence engine, ahead of the apps
+
+Agenda and Tasks both have to say when a thing repeats, so the shared
+recurrence engine lands before the apps, as one humanised summariser and
+one missed-period collapse — otherwise the rebuild grows two grammars
+that drift.
+
+`packages/core/src/time/recurrence-summary.ts` is new and is THE
+member-facing summariser: day and month names spelled out, an ordinal
+month-day, an "every other" cadence, a count or an until clause, and
+`null` for a rule it cannot phrase. The terse version is excised from
+`packages/core/src/time/recurrence.ts`, which keeps a comment saying
+where the two moved and that they reach the engine from there and never
+the other way round. `packages/core/src/time/recurrence-collapse.ts` is
+also new: `collapseMissedOccurrences` answers `{missed, nextDue}` so a
+repeating item never stacks — elapsed unactioned periods collapse into a
+count beside the single live occurrence, capped at `MAX_MISSED`, with the
+clock injected rather than read. `packages/core/src/time/index.ts`
+re-exports both and drops `describeRecurrence` from the `recurrence.js`
+line.
+
+`collapseMissedOccurrences` is threaded through every `TimeApi`
+declaration and mounted on the inline query ctx, rather than reaching one
+plane: `packages/server/src/engine/types.ts` (which also gains the
+`shiftTemporal` row it was missing),
+`packages/blueprints/types/centraid.d.ts`, and
+`packages/server/src/engine/worker/runner.ts`, where the frozen `time`
+bag and its `unavailableTime` fallbacks both grow the member.
+`packages/client/src/react/blueprints/inlineQueryCtx.ts` mounts a `time`
+facade on the inline query ctx where there was none — the same five pure
+functions the gateway worker mounts, imported straight from
+`@centraid/core/time`, so the inline plane summarises a rule identically
+instead of escalating to the gateway.
+
+`packages/blueprints/apps/tally/queries/dashboard.ts` drops its
+`?? template.rrule` fallback: a rule the summariser cannot phrase now
+ships `preview: null` rather than putting RRULE syntax on a member-facing
+surface. No surface renders a raw rule: Tally's dashboard drops its RRULE
+fallback and Agenda's rows carry `recurrence_summary` (below). The Tally
+change is member-visible and is made here because the summariser is the
+thing that decides what "unphrasable" means.
+
+`packages/core/src/time/recurrence.test.ts` and
+`packages/core/src/time/recurrence-properties.test.ts` grow cases for the
+new grammar and the collapse; the lifecycle properties then move out into
+the new `packages/core/src/time/recurrence-lifecycle-properties.test.ts`.
+The recurrence properties file is back under the 625-line hygiene limit,
+split rather than trimmed — 660 lines before, 425 now. The three places
+that name the time suite's files follow it:
+`packages/core/stryker.time.config.mjs` (which also adds the two new
+modules to `mutate`), `packages/core/vitest.time.mutation.config.ts` and
+`scripts/mutation/seeds.mjs`. `packages/blueprints/src/query-handlers.test.ts`
+adds `collapseMissedOccurrences` to the `ctx.time` it builds for handlers.
+
+### Wave 1, in progress
+
+The wave-1 rows above stay unchecked, but builder snapshots for the three
+rooms are in the range and are not finished interfaces: no `app-root.tsx`
+paints them, nothing dispatches `day-context`, and all three apps remain
+in `AWAITING_HANDOFF`.
+
+What is committed is the pure, DOM-free half each room is derived from:
+route tables over `apps/_shared/shelves.ts`, page-side shapes grounded in
+the queries that already exist, clock-injected formatters, Tasks' twelve
+board states, its record-only scope declaration and board fan-out, and
+each room's copy table. Every file of it, by path:
+
+- Agenda — `packages/blueprints/apps/agenda/types.ts`,
+  `packages/blueprints/apps/agenda/view-copy.ts`
+- Notes — `packages/blueprints/apps/notes/types.ts`,
+  `packages/blueprints/apps/notes/shelves.ts`,
+  `packages/blueprints/apps/notes/format.ts`,
+  `packages/blueprints/apps/notes/powerbox.ts`,
+  `packages/blueprints/apps/notes/view-copy.ts`
+- Tasks — `packages/blueprints/apps/tasks/types.ts`,
+  `packages/blueprints/apps/tasks/shelves.ts`,
+  `packages/blueprints/apps/tasks/format.ts`,
+  `packages/blueprints/apps/tasks/logic.ts`,
+  `packages/blueprints/apps/tasks/scope-declaration.ts`,
+  `packages/blueprints/apps/tasks/scope-fanout.ts`,
+  `packages/blueprints/apps/tasks/view-copy.ts`
+
+Two backend deltas came with them. Notes gains the Journal place as a real
+query — `packages/blueprints/apps/notes/queries/journal.ts`, read-only and
+include-only over the same marker set the other three projections exclude
+— registered in `packages/blueprints/apps/notes/app.json` and
+`packages/blueprints/apps/notes/app-inline.tsx`. And Agenda's
+`packages/blueprints/apps/agenda/queries/upcoming.ts` and
+`packages/blueprints/apps/agenda/queries/search.ts` now decorate each row
+with `recurrence_summary` from `ctx.time.describeRecurrence` (absent, not
+raw, on an older gateway without the helper), with
+`packages/blueprints/apps/agenda/app.json`'s two descriptions saying so.
+`packages/blueprints/manifest.json` is NOT regenerated over these wave-1
+files — it still carries only the stage-0 regeneration — so the manifest
+gate is a wave-1 close-out item, recorded here rather than left to be
+discovered.
 
 ## Out of scope
 
-The rebuilt interfaces themselves. Agenda, Notes and Tasks stay in
+The FINISHED interfaces. The pure halves named above are committed, but
+no `app-root.tsx` renders them, no native screen imports them and no
+route dispatches `day-context`; Agenda, Notes and Tasks all stay in
 `handler-reachability.test.ts`'s `AWAITING_HANDOFF` and paint nothing on
-either surface; nothing dispatches `day-context` yet. A holiday source for
-the vault is not designed here — the field ships empty and honest. Notes'
-Journal place (the filter over the journal scheme that these excluded
-notes now depend on for their one home) is wave 1 work. The Things-shaped
-task vocabulary is not renamed.
+either surface. Mobile is untouched in this range. A holiday source for
+the vault is not designed here — the field ships empty and honest. The
+Things-shaped task vocabulary is not renamed. Nothing in `packages/vault`
+or in People's own journal projection is touched: the two pre-existing
+copies of the scheme URI stay where they are.
 
 ## Verification
 
-Handler and manifest gates, all green:
+The time engine, both new modules and the split properties file:
 
 ```sh
-bunx vitest run packages/blueprints/src/day-context-journal-queries.test.ts
-bunx vitest run packages/blueprints/src/query-handlers.test.ts \
-  packages/blueprints/src/handler-reachability.test.ts \
+bunx vitest run packages/core/src/time/
+```
+
+4 files, 86 passed — `recurrence.test.ts`,
+`recurrence-properties.test.ts`, the new
+`recurrence-lifecycle-properties.test.ts` and `timezone-properties.test.ts`.
+
+Handler, manifest and seat gates:
+
+```sh
+bunx vitest run packages/blueprints/src/day-context-journal-queries.test.ts \
+  packages/blueprints/src/query-handlers.test.ts
+bunx vitest run packages/blueprints/src/handler-reachability.test.ts \
   packages/blueprints/src/app-manifests.test.ts \
   packages/blueprints/src/blueprint-seats.test.ts
-bun run --cwd packages/blueprints typecheck
 bunx vitest run --config vitest.quality.config.ts -t "P3"
 ```
 
-`day-context-journal-queries.test.ts` — 9 passed. The four manifest /
-reachability / seats suites — 133 passed (`app-manifests.test.ts` needs
+The two handler suites — 22 passed (9 day-context/journal, 13
+query-handlers, the latter now building its `ctx.time` with
+`collapseMissedOccurrences`). The manifest / reachability / seats suites —
+133 passed at stage 0 (`app-manifests.test.ts` needs
 `bun run --cwd packages/server build` first; it imports
-`@centraid/server/engine` from `dist`). `packages/blueprints` typecheck —
-clean, both `tsconfig.test.json` and `tsconfig.apps.json`. The P3
+`@centraid/server/engine` from `dist`); they are re-run at the wave-1
+close-out, when `manifest.json` is regenerated over the new query. The P3
 boundedness gate passes with `tests/quality/unbounded-query-waivers.json`
 still empty.
+
+Typechecks, over each package this range touched:
+
+```sh
+bun run --cwd packages/core typecheck
+bun run --cwd packages/server typecheck
+bun run --cwd packages/blueprints typecheck
+```
+
+All three clean; `packages/blueprints` covers both `tsconfig.test.json`
+and `tsconfig.apps.json`, so the wave-1 modules typecheck as well as the
+queries.
 
 Demonstrated red, seeded and recorded: the library leg of the journal
 test failed twice before the handler was correct — first
@@ -178,16 +319,17 @@ Governance directives over the change:
 bash .governance/packs/governance-kit/foundation/directives/internal-doc-links/check.sh
 bash .governance/packs/governance-kit/foundation/directives/repo-hygiene/check.sh
 bunx oxlint -c oxlint.config.ts --disable-nested-config --deny-warnings \
-  packages/blueprints/apps/_shared/journal-scheme.ts \
-  packages/blueprints/apps/notes/queries packages/blueprints/apps/agenda \
-  packages/blueprints/src/day-context-journal-queries.test.ts
+  $(git diff --name-only e40f060e..HEAD | grep -E '\.(ts|tsx|mjs)$')
 ```
 
-`internal-doc-links` passes. `oxlint` is clean and every touched file is
-`oxfmt`-formatted. `repo-hygiene` reports one violation,
-`packages/core/src/time/recurrence-properties.test.ts` at 660 lines
-against the 625 limit — that file belongs to the recurrence-summariser
-slice, not to this one, and is fixed there.
+`internal-doc-links` passes. `repo-hygiene` passes: the 660-line
+`recurrence-properties.test.ts` violation reported at stage 0 is fixed in
+this same range by the lifecycle-properties split, and the file is now
+425 lines. `oxlint` over every source file this range commits exits 0, and
+every touched file is `oxfmt`-formatted.
+
+`bun run check:push` across the finished waves is still owed — the wave-1
+row above is unchecked, and this range is a builder snapshot.
 
 ## Audit
 
