@@ -93,7 +93,11 @@ async function runAppHandler(handlerFile: string): Promise<ResultMessage> {
 /** Run one handler through the real automation worker entry point. */
 async function runAutomationHandler(
   handlerFile: string,
-  sandbox?: { sandboxLane: string; sandboxReadRoots?: string[] }
+  sandbox?: {
+    sandboxLane?: string;
+    sandboxReadRoots?: string[];
+    sandboxRuntimeDir?: string;
+  }
 ): Promise<ResultMessage> {
   const worker = new Worker(AUTOMATION_RUNNER, {
     workerData: {
@@ -542,6 +546,41 @@ describe("an automation worker given no lane gets the strict floor", () => {
     expect(result.value).toStrictEqual({
       readEnvSecret: false,
       envKeys: 0,
+    });
+  });
+
+  test("the host-planted runtime dir survives the environment revocation", async () => {
+    /*
+     * The bug an independent audit of #846 P9 caught, and the reason
+     * `sandboxRuntimeDir` exists at all.
+     *
+     * Every lane sets `environment: "denied"`, and `install.ts` replaces
+     * `process.env` with a frozen empty object BEFORE the handler's graph
+     * loads. The five recognition bundles read
+     * `CENTRAID_AUTOMATION_RUNTIME_DIR` at module top level to locate their
+     * weights, so flipping the default silently killed that override and sent
+     * every one of them to a `runtime/` directory that exists only in the
+     * source tree — a first-fire failure in exactly the deployment shape the
+     * docs describe. A path is not a capability, so the host resolves it and
+     * plants it on `globalThis` before installing the sandbox.
+     */
+    const file = await handler(
+      "planted-runtime-dir.mjs",
+      `export default async () => ({
+         planted: globalThis.__centraidAutomationRuntimeDir,
+         envIsEmpty: Object.keys(process.env).length === 0,
+         envOverride: process.env.CENTRAID_AUTOMATION_RUNTIME_DIR ?? null,
+       });`
+    );
+    const result = await runAutomationHandler(file, {
+      sandboxRuntimeDir: "/opt/centraid-runtime",
+    });
+    expect(result.ok).toBe(true);
+    expect(result.value).toStrictEqual({
+      planted: "/opt/centraid-runtime",
+      // …while the environment itself is still gone.
+      envIsEmpty: true,
+      envOverride: null,
     });
   });
 });

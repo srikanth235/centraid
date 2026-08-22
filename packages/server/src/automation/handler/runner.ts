@@ -146,6 +146,8 @@ export interface RunHandlerOptions {
   sandboxLane?: "model-runtime" | "media-transcode";
   /** Absolute read roots for the two filesystem-granting lanes. */
   sandboxReadRoots?: readonly string[];
+  /** Resolved model-runtime directory; see the worker's field of the same name. */
+  sandboxRuntimeDir?: string;
   runId: string;
   /** ISO fire-start instant fixed by the caller; defaults to handler admission time. */
   now?: string;
@@ -799,6 +801,9 @@ export async function runHandler(
     ...(opts.sandboxLane ? { sandboxLane: opts.sandboxLane } : {}),
     ...(opts.sandboxReadRoots
       ? { sandboxReadRoots: [...opts.sandboxReadRoots] }
+      : {}),
+    ...(opts.sandboxRuntimeDir
+      ? { sandboxRuntimeDir: opts.sandboxRuntimeDir }
       : {}),
   };
 

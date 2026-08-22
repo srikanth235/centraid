@@ -1,199 +1,209 @@
 // Generated recognition automation. Source: packages/model-runtime/automation-handlers.
-import { existsSync as r } from "node:fs";
-import v from "node:path";
-import G from "node:path";
-var m = G.resolve(import.meta.dirname, ".."),
-  C = process.env.CENTRAID_AUTOMATION_RUNTIME_DIR
-    ? G.resolve(process.env.CENTRAID_AUTOMATION_RUNTIME_DIR)
-    : G.join(m, "runtime"),
-  O = G.join(C, "models");
-import { existsSync as P, readFileSync as g, statSync as p } from "node:fs";
-import w from "node:path";
-import { pathToFileURL as c } from "node:url";
-var U;
-class M extends Error {
-  constructor($, B) {
+import { existsSync as a } from "node:fs";
+import V from "node:path";
+import j from "node:path";
+var x = j.resolve(import.meta.dirname, ".."),
+  g = "__centraidAutomationRuntimeDir";
+function p() {
+  let $ = globalThis[g];
+  if (typeof $ === "string" && $.length > 0) return j.resolve($);
+  if (process.env?.CENTRAID_AUTOMATION_RUNTIME_DIR)
+    return j.resolve(process.env.CENTRAID_AUTOMATION_RUNTIME_DIR);
+  return j.join(x, "runtime");
+}
+var C = p(),
+  O = j.join(C, "models");
+import { existsSync as P, readFileSync as c, statSync as l } from "node:fs";
+import _ from "node:path";
+import { pathToFileURL as s } from "node:url";
+var w;
+class A extends Error {
+  constructor($, q) {
     super(
       `Automation model runtime dependency "${$}" is not installed. ` +
         'Run "bun run --cwd packages/model-runtime setup" first — it installs ' +
         "optional native recognition dependencies into packages/model-runtime/runtime/ and downloads the model weights those capabilities need.",
-      { cause: B }
+      { cause: q }
     );
     this.name = "RuntimeNotInstalledError";
   }
 }
-function D($, B = C) {
-  let Q = w.join(B, "node_modules");
-  if (!P(Q)) throw new M($);
-  let q = w.join(Q, ...$.split("/"));
+function N($, q = C) {
+  let v = _.join(q, "node_modules");
+  if (!P(v)) throw new A($);
+  let B = _.join(v, ...$.split("/"));
   try {
-    let Y = T(q);
-    if (Y === null) throw Error(`no entry point in ${q}`);
-    return Y;
-  } catch (Y) {
-    throw new M($, Y);
+    let Q = y(B);
+    if (Q === null) throw Error(`no entry point in ${B}`);
+    return Q;
+  } catch (Q) {
+    throw new A($, Q);
   }
 }
-function T($, B = 0) {
-  let Q = w.join($, "package.json"),
-    q = P(Q) ? JSON.parse(g(Q, "utf8")) : {},
-    Y = [
-      ...L(h(q.exports)),
-      ...(typeof q.main === "string" ? [q.main] : []),
+function y($, q = 0) {
+  let v = _.join($, "package.json"),
+    B = P(v) ? JSON.parse(c(v, "utf8")) : {},
+    Q = [
+      ...L(d(B.exports)),
+      ...(typeof B.main === "string" ? [B.main] : []),
       "index.js",
     ];
-  for (let J of Y) {
-    let W = l(w.resolve($, J), B);
-    if (W !== null) return W;
+  for (let Y of Q) {
+    let K = h(_.resolve($, Y), q);
+    if (K !== null) return K;
   }
   return null;
 }
-function l($, B) {
-  let Q = u($);
-  if (Q?.isFile()) return $;
-  if (Q?.isDirectory()) return B >= 4 ? null : T($, B + 1);
-  for (let q of [".js", ".json", ".node"]) {
-    let Y = `${$}${q}`;
-    if (u(Y)?.isFile()) return Y;
+function h($, q) {
+  let v = k($);
+  if (v?.isFile()) return $;
+  if (v?.isDirectory()) return q >= 4 ? null : y($, q + 1);
+  for (let B of [".js", ".json", ".node"]) {
+    let Q = `${$}${B}`;
+    if (k(Q)?.isFile()) return Q;
   }
   return null;
 }
-function u($) {
+function k($) {
   try {
-    return p($);
+    return l($);
   } catch {
     return null;
   }
 }
-function h($) {
+function d($) {
   if (typeof $ === "string") return $;
   if ($ === null || typeof $ !== "object") return;
-  let B = $;
-  return "." in B ? B["."] : B;
+  let q = $;
+  return "." in q ? q["."] : q;
 }
-function L($, B = 0) {
+function L($, q = 0) {
   if (typeof $ === "string") return [$];
-  if (B > 8 || $ === null || typeof $ !== "object") return [];
-  if (Array.isArray($)) return $.flatMap((Y) => L(Y, B + 1));
-  let Q = $,
-    q = [];
-  for (let Y of ["require", "node", "default"])
-    if (Y in Q) q.push(...L(Q[Y], B + 1));
-  return q;
+  if (q > 8 || $ === null || typeof $ !== "object") return [];
+  if (Array.isArray($)) return $.flatMap((Q) => L(Q, q + 1));
+  let v = $,
+    B = [];
+  for (let Q of ["require", "node", "default"])
+    if (Q in v) B.push(...L(v[Q], q + 1));
+  return B;
 }
-async function N() {
-  if (U) return U;
-  let $ = D("onnxruntime-node");
-  return ((U = await import(c($).href)), U);
+async function z() {
+  if (w) return w;
+  let $ = N("onnxruntime-node");
+  return ((w = await import(s($).href)), w);
 }
-var _;
-async function y($) {
-  _ ??= new Map();
-  let B = _.get($);
-  if (B) return B;
-  if (!P($)) throw new M($);
-  let Q = N().then((q) => q.InferenceSession.create($));
-  _.set($, Q);
+var U;
+async function T($) {
+  U ??= new Map();
+  let q = U.get($);
+  if (q) return q;
+  if (!P($)) throw new A($);
+  let v = z().then((B) => B.InferenceSession.create($));
+  U.set($, v);
   try {
-    return await Q;
-  } catch (q) {
-    throw (_.delete($), q);
+    return await v;
+  } catch (B) {
+    throw (U.delete($), B);
   }
 }
-import { pathToFileURL as s } from "node:url";
-var A;
-async function d() {
-  if (A) return A;
-  let $ = D("sharp");
-  return ((A = (await import(s($).href)).default), A);
+import { pathToFileURL as n } from "node:url";
+var M;
+async function o() {
+  if (M) return M;
+  let $ = N("sharp");
+  return ((M = (await import(n($).href)).default), M);
 }
-async function I($, B) {
-  let q = (await d())(Buffer.from($)),
-    { data: Y, info: J } = await q
-      .resize({ width: B, height: B, fit: "cover", position: "centre" })
+async function I($, q) {
+  let B = (await o())(Buffer.from($)),
+    { data: Q, info: Y } = await B.resize({
+      width: q,
+      height: q,
+      fit: "cover",
+      position: "centre",
+    })
       .removeAlpha()
       .raw()
       .toBuffer({ resolveWithObject: !0 });
   return {
-    data: new Uint8Array(Y.buffer, Y.byteOffset, Y.byteLength),
-    width: J.width,
-    height: J.height,
+    data: new Uint8Array(Q.buffer, Q.byteOffset, Q.byteLength),
+    width: Y.width,
+    height: Y.height,
   };
 }
-var n = [0.48145466, 0.4578275, 0.40821073],
-  o = [0.26862954, 0.26130258, 0.27577711];
+var r = [0.48145466, 0.4578275, 0.40821073],
+  i = [0.26862954, 0.26130258, 0.27577711];
 function E($) {
-  let { width: B, height: Q, data: q } = $,
-    Y = B * Q,
-    J = new Float32Array(Y * 3);
-  for (let W = 0; W < Y; W++)
-    for (let K = 0; K < 3; K++) {
-      let X = (q[W * 3 + K] ?? 0) / 255;
-      J[K * Y + W] = (X - n[K]) / o[K];
+  let { width: q, height: v, data: B } = $,
+    Q = q * v,
+    Y = new Float32Array(Q * 3);
+  for (let K = 0; K < Q; K++)
+    for (let J = 0; J < 3; J++) {
+      let X = (B[K * 3 + J] ?? 0) / 255;
+      Y[J * Q + K] = (X - r[J]) / i[J];
     }
-  return J;
+  return Y;
 }
-var S = "clip-vit-b-32@1",
-  F = v.join(O, "clip"),
-  i = v.join(F, "visual.onnx"),
-  C0 = v.join(F, "textual.onnx"),
-  O0 = v.join(F, "vocab.json"),
-  L0 = v.join(F, "merges.txt"),
-  z = 224;
-function R($ = O) {
-  let B = v.join($, "clip");
+var b = "clip-vit-b-32@1",
+  F = V.join(O, "clip"),
+  t = V.join(F, "visual.onnx"),
+  L0 = V.join(F, "textual.onnx"),
+  P0 = V.join(F, "vocab.json"),
+  N0 = V.join(F, "merges.txt"),
+  D = 224;
+function u($ = O) {
+  let q = V.join($, "clip");
   return ["visual.onnx", "textual.onnx", "vocab.json", "merges.txt"].every(
-    (Q) => r(v.join(B, Q))
+    (v) => a(V.join(q, v))
   );
 }
-function a($) {
-  let B = 0;
-  for (let q of $) B += q * q;
-  let Q = Math.sqrt(B);
-  if (Q === 0) return Array.from($);
-  return Array.from($, (q) => q / Q);
+function e($) {
+  let q = 0;
+  for (let B of $) q += B * B;
+  let v = Math.sqrt(q);
+  if (v === 0) return Array.from($);
+  return Array.from($, (B) => B / v);
 }
-function t($, B) {
-  let Q = B[0],
-    q = Q ? $[Q] : void 0;
-  if (!q || !(q.data instanceof Float32Array))
+function $0($, q) {
+  let v = q[0],
+    B = v ? $[v] : void 0;
+  if (!B || !(B.data instanceof Float32Array))
     throw Error("embed: expected a float32 tensor as the model's first output");
-  return q.data;
+  return B.data;
 }
 async function f($) {
   try {
-    let B = Buffer.from($.bytes, "base64"),
-      Q = await I(B, z),
-      q = E(Q),
-      Y = await N(),
-      J = await y(i),
-      K = {
-        [J.inputNames[0] ?? "pixel_values"]: new Y.Tensor("float32", q, [
+    let q = Buffer.from($.bytes, "base64"),
+      v = await I(q, D),
+      B = E(v),
+      Q = await z(),
+      Y = await T(t),
+      J = {
+        [Y.inputNames[0] ?? "pixel_values"]: new Q.Tensor("float32", B, [
           1,
           3,
-          z,
-          z,
+          D,
+          D,
         ]),
       },
-      X = await J.run(K),
-      V = a(t(X, J.outputNames));
-    return { id: $.id, vector: V };
-  } catch (B) {
-    return { id: $.id, error: B instanceof Error ? B.message : String(B) };
+      X = await Y.run(J),
+      W = e($0(X, Y.outputNames));
+    return { id: $.id, vector: W };
+  } catch (q) {
+    return { id: $.id, error: q instanceof Error ? q.message : String(q) };
   }
 }
-var k = 16,
+var R = 16,
   Z = "dpv:ServiceProvision",
-  b = f,
-  x = R;
-function N0($) {
-  ((b = $?.infer ?? f), (x = $?.weightsPresent ?? R));
+  S = f,
+  m = u;
+function u0($) {
+  ((S = $?.infer ?? f), (m = $?.weightsPresent ?? u));
 }
-function e() {
-  return x() ? S : null;
+function q0() {
+  return m() ? b : null;
 }
-async function $0($, B) {
-  let q = (
+async function B0($, q) {
+  let B = (
     await $.vault.read({
       entity: "media.asset",
       where: [
@@ -205,45 +215,45 @@ async function $0($, B) {
       purpose: Z,
     })
   ).rows?.[0];
-  if (!q) return "";
+  if (!B) return "";
   return (
     await $.vault.read({
       entity: "enrich.derivation",
       where: [
-        { column: "target_id", op: "eq", value: q.asset_id },
+        { column: "target_id", op: "eq", value: B.asset_id },
         { column: "variant", op: "eq", value: "embedding" },
       ],
       limit: 1,
       purpose: Z,
     })
-  ).rows?.[0]?.model === B
-    ? q.asset_id
+  ).rows?.[0]?.model === q
+    ? B.asset_id
     : "";
 }
-async function B0({ ctx: $, log: B }) {
-  let Q = e();
-  if (!Q)
+async function v0({ ctx: $, log: q }) {
+  let v = q0();
+  if (!v)
     return { summary: "image embedding skipped — model assets unavailable" };
-  let q = await $.state.get("model");
-  if (q !== Q)
-    (await $.state.set("cursor", q === void 0 ? await $0($, Q) : ""),
-      await $.state.set("model", Q));
-  let Y = (await $.state.get("cursor")) ?? "",
-    J = await $.vault.read({
+  let B = await $.state.get("model");
+  if (B !== v)
+    (await $.state.set("cursor", B === void 0 ? await B0($, v) : ""),
+      await $.state.set("model", v));
+  let Q = (await $.state.get("cursor")) ?? "",
+    Y = await $.vault.read({
       entity: "media.asset",
       where: [
-        { column: "asset_id", op: "gt", value: Y },
+        { column: "asset_id", op: "gt", value: Q },
         { column: "deleted_at", op: "is-null" },
       ],
       orderBy: { column: "asset_id", dir: "asc" },
-      limit: k,
+      limit: R,
       purpose: Z,
     }),
-    W = 0,
-    K = 0;
-  for (let V of J.rows ?? []) {
-    if (V.kind !== "photo" && V.kind !== "scan") {
-      K += 1;
+    K = 0,
+    J = 0;
+  for (let W of Y.rows ?? []) {
+    if (W.kind !== "photo" && W.kind !== "scan") {
+      J += 1;
       continue;
     }
     if (
@@ -251,57 +261,57 @@ async function B0({ ctx: $, log: B }) {
         await $.vault.read({
           entity: "enrich.derivation",
           where: [
-            { column: "target_id", op: "eq", value: V.asset_id },
+            { column: "target_id", op: "eq", value: W.asset_id },
             { column: "variant", op: "eq", value: "embedding" },
           ],
           limit: 1,
           purpose: Z,
         })
-      ).rows?.[0]?.model === Q
+      ).rows?.[0]?.model === v
     ) {
-      K += 1;
+      J += 1;
       continue;
     }
-    let j = await $.vault.content({
-      contentId: V.content_id,
+    let G = await $.vault.content({
+      contentId: W.content_id,
       variant: "preview",
       maxBytes: 4194304,
       purpose: Z,
     });
-    if (j?.status !== "ok" || j.kind !== "bytes")
-      throw Error(`asset ${V.asset_id}: preview is unavailable`);
-    let H = await b({
-      id: V.asset_id,
-      mediaType: j.mediaType,
-      bytes: j.base64,
+    if (G?.status !== "ok" || G.kind !== "bytes")
+      throw Error(`asset ${W.asset_id}: preview is unavailable`);
+    let H = await S({
+      id: W.asset_id,
+      mediaType: G.mediaType,
+      bytes: G.base64,
     });
     if (!H || H.error || !Array.isArray(H.vector)) {
-      ((K += 1), B.info(`asset ${V.asset_id}: no image vector`));
+      ((J += 1), q.info(`asset ${W.asset_id}: no image vector`));
       continue;
     }
     (await $.vault.invoke({
       command: "enrich.upsert_embedding",
       input: {
         entity_type: "media.asset",
-        entity_id: V.asset_id,
-        model: Q,
+        entity_id: W.asset_id,
+        model: v,
         vector: H.vector,
         capability: "embed-image",
       },
       purpose: Z,
     }),
-      (W += 1));
+      (K += 1));
   }
-  let X = J.rows?.at(-1)?.asset_id;
+  let X = Y.rows?.at(-1)?.asset_id;
   if (X) await $.state.set("cursor", X);
   return {
-    summary: `embedded ${W} images; skipped ${K}; bounded batch ${J.rows?.length ?? 0}/${k}`,
+    summary: `embedded ${K} images; skipped ${J}; bounded batch ${Y.rows?.length ?? 0}/${R}`,
     output: {
-      derived: W,
-      skipped: K,
-      model: Q,
-      rearm: (J.rows?.length ?? 0) === k,
+      derived: K,
+      skipped: J,
+      model: v,
+      rearm: (Y.rows?.length ?? 0) === R,
     },
   };
 }
-export { N0 as setEmbedImageRuntimeForTests, B0 as default };
+export { u0 as setEmbedImageRuntimeForTests, v0 as default };

@@ -56,6 +56,13 @@ interface WorkerRequest {
   sandboxLane?: SandboxLaneRequest;
   /** Absolute read roots for the two filesystem-granting lanes. */
   sandboxReadRoots?: string[];
+  /**
+   * Resolved model-runtime directory, planted on `globalThis` before the
+   * handler's graph loads. A sandboxed handler has no `process.env`, so this
+   * is how the `CENTRAID_AUTOMATION_RUNTIME_DIR` override still reaches it
+   * (#846 P9). A path, not a capability.
+   */
+  sandboxRuntimeDir?: string;
   /** Fire-start instant fixed by the parent; stable for the whole run. */
   now: string;
   /** The payload this run was invoked with — surfaced as `ctx.input`. */
@@ -507,6 +514,13 @@ function execute(request: WorkerRequest): void {
   void (async () => {
     try {
       {
+        // Planted BEFORE the sandbox installs, because installing it replaces
+        // `process.env` with a frozen empty object — see the field's doc.
+        if (request.sandboxRuntimeDir !== undefined) {
+          (globalThis as Record<string, unknown>)[
+            "__centraidAutomationRuntimeDir"
+          ] = request.sandboxRuntimeDir;
+        }
         // Unconditional (#846 P9). An absent lane is the strict floor, never
         // "no containment" — the one shape that used to make the whole plane
         // unsandboxed because a single lane could not be satisfied.

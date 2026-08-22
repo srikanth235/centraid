@@ -1,15 +1,21 @@
 // Generated recognition automation. Source: packages/model-runtime/automation-handlers.
-import { spawnSync as m } from "node:child_process";
-import { existsSync as u } from "node:fs";
+import { spawnSync as p } from "node:child_process";
+import { existsSync as l } from "node:fs";
 import N from "node:path";
-import X from "node:path";
-import { pathToFileURL as y } from "node:url";
-var T = X.resolve(import.meta.dirname, ".."),
-  C = process.env.CENTRAID_AUTOMATION_RUNTIME_DIR
-    ? X.resolve(process.env.CENTRAID_AUTOMATION_RUNTIME_DIR)
-    : X.join(T, "runtime"),
-  B = X.join(C, "models");
-import { existsSync as O, readFileSync as f, statSync as x } from "node:fs";
+import H from "node:path";
+import { pathToFileURL as D } from "node:url";
+var f = H.resolve(import.meta.dirname, ".."),
+  T = "__centraidAutomationRuntimeDir";
+function x() {
+  let z = globalThis[T];
+  if (typeof z === "string" && z.length > 0) return H.resolve(z);
+  if (process.env?.CENTRAID_AUTOMATION_RUNTIME_DIR)
+    return H.resolve(process.env.CENTRAID_AUTOMATION_RUNTIME_DIR);
+  return H.join(f, "runtime");
+}
+var C = x(),
+  B = H.join(C, "models");
+import { existsSync as O, readFileSync as g, statSync as h } from "node:fs";
 import w from "node:path";
 class k extends Error {
   constructor(z, G) {
@@ -22,36 +28,36 @@ class k extends Error {
     this.name = "RuntimeNotInstalledError";
   }
 }
-function A(z, G = C) {
+function L(z, G = C) {
   let J = w.join(G, "node_modules");
   if (!O(J)) throw new k(z);
   let K = w.join(J, ...z.split("/"));
   try {
-    let V = D(K);
+    let V = y(K);
     if (V === null) throw Error(`no entry point in ${K}`);
     return V;
   } catch (V) {
     throw new k(z, V);
   }
 }
-function D(z, G = 0) {
+function y(z, G = 0) {
   let J = w.join(z, "package.json"),
-    K = O(J) ? JSON.parse(f(J, "utf8")) : {},
+    K = O(J) ? JSON.parse(g(J, "utf8")) : {},
     V = [
-      ...L(h(K.exports)),
+      ...A(u(K.exports)),
       ...(typeof K.main === "string" ? [K.main] : []),
       "index.js",
     ];
   for (let $ of V) {
-    let Q = g(w.resolve(z, $), G);
-    if (Q !== null) return Q;
+    let q = m(w.resolve(z, $), G);
+    if (q !== null) return q;
   }
   return null;
 }
-function g(z, G) {
+function m(z, G) {
   let J = F(z);
   if (J?.isFile()) return z;
-  if (J?.isDirectory()) return G >= 4 ? null : D(z, G + 1);
+  if (J?.isDirectory()) return G >= 4 ? null : y(z, G + 1);
   for (let K of [".js", ".json", ".node"]) {
     let V = `${z}${K}`;
     if (F(V)?.isFile()) return V;
@@ -60,32 +66,32 @@ function g(z, G) {
 }
 function F(z) {
   try {
-    return x(z);
+    return h(z);
   } catch {
     return null;
   }
 }
-function h(z) {
+function u(z) {
   if (typeof z === "string") return z;
   if (z === null || typeof z !== "object") return;
   let G = z;
   return "." in G ? G["."] : G;
 }
-function L(z, G = 0) {
+function A(z, G = 0) {
   if (typeof z === "string") return [z];
   if (G > 8 || z === null || typeof z !== "object") return [];
-  if (Array.isArray(z)) return z.flatMap((V) => L(V, G + 1));
+  if (Array.isArray(z)) return z.flatMap((V) => A(V, G + 1));
   let J = z,
     K = [];
   for (let V of ["require", "node", "default"])
-    if (V in J) K.push(...L(J[V], G + 1));
+    if (V in J) K.push(...A(J[V], G + 1));
   return K;
 }
 var E = "whisper-tiny.en-q8@1",
-  p = N.join(B, "transcript"),
+  d = N.join(B, "transcript"),
   P = 600,
-  l = P * 16000 * Float32Array.BYTES_PER_ELEMENT,
-  d = [
+  c = P * 16000 * Float32Array.BYTES_PER_ELEMENT,
+  n = [
     "added_tokens.json",
     "config.json",
     "generation_config.json",
@@ -99,29 +105,29 @@ var E = "whisper-tiny.en-q8@1",
     "onnx/encoder_model_quantized.onnx",
     "onnx/decoder_model_merged_quantized.onnx",
   ],
-  j,
-  c = s,
-  n = (z, G, J) => m(z, G, J),
-  o = t;
-function U(z = B) {
+  X,
+  o = r,
+  i = (z, G, J) => p(z, G, J),
+  s = zz;
+function v(z = B) {
   let G = N.join(z, "transcript");
-  return d.every((J) => u(N.join(G, J)));
+  return n.every((J) => l(N.join(G, J)));
 }
-function i(z) {
+function a(z) {
   if (!z.startsWith("audio/") && !z.startsWith("video/"))
     throw Error(`transcript: unsupported media type ${z}`);
 }
-async function s() {
-  let z = A("@ffmpeg-installer/ffmpeg"),
-    G = await import(y(z).href),
+async function r() {
+  let z = L("@ffmpeg-installer/ffmpeg"),
+    G = await import(D(z).href),
     J = G.default?.path ?? G.path;
   if (typeof J !== "string" || !J)
     throw Error("transcript: the bundled FFmpeg executable is unavailable");
   return J;
 }
-async function a(z) {
-  let G = await c(),
-    J = n(
+async function t(z) {
+  let G = await o(),
+    J = i(
       G,
       [
         "-nostdin",
@@ -141,7 +147,7 @@ async function a(z) {
         "f32le",
         "pipe:1",
       ],
-      { input: z, maxBuffer: l + 1048576 }
+      { input: z, maxBuffer: c + 1048576 }
     );
   if (J.status !== 0) {
     let K = J.stderr?.toString("utf8").trim();
@@ -156,30 +162,30 @@ async function a(z) {
     J.stdout.byteLength / Float32Array.BYTES_PER_ELEMENT
   );
 }
-async function r() {
-  if (j) return j;
-  j = o();
+async function e() {
+  if (X) return X;
+  X = s();
   try {
-    return await j;
+    return await X;
   } catch (z) {
-    throw ((j = void 0), z);
+    throw ((X = void 0), z);
   }
 }
-async function t() {
-  let z = A("@huggingface/transformers"),
-    G = await import(y(z).href);
+async function zz() {
+  let z = L("@huggingface/transformers"),
+    G = await import(D(z).href);
   return (
     (G.env.allowLocalModels = !0),
     (G.env.allowRemoteModels = !1),
     (G.env.localModelPath = B),
     (G.env.useBrowserCache = !1),
-    G.pipeline("automatic-speech-recognition", p, {
+    G.pipeline("automatic-speech-recognition", d, {
       dtype: "q8",
       device: "cpu",
     })
   );
 }
-function e(z) {
+function Gz(z) {
   let G = Array.isArray(z)
     ? z
         .map((J) => (typeof J.text === "string" ? J.text.trim() : ""))
@@ -188,30 +194,30 @@ function e(z) {
     : z.text;
   return typeof G === "string" ? G.trim() : "";
 }
-async function M(z) {
+async function U(z) {
   try {
-    i(z.mediaType);
-    let G = await a(Buffer.from(z.bytes, "base64")),
+    a(z.mediaType);
+    let G = await t(Buffer.from(z.bytes, "base64")),
       K = await (
-        await r()
+        await e()
       )(G, { chunk_length_s: 30, stride_length_s: 5, return_timestamps: !1 });
-    return { id: z.id, text: e(K) };
+    return { id: z.id, text: Gz(K) };
   } catch (G) {
     return { id: z.id, error: G instanceof Error ? G.message : String(G) };
   }
 }
-var _ = 2,
-  q = "dpv:ServiceProvision",
+var M = 2,
+  Q = "dpv:ServiceProvision",
   S = 67108864,
-  R = M,
-  b = U;
-function Lz(z) {
-  ((R = z?.transcribe ?? M), (b = z?.weightsPresent ?? U));
+  b = U,
+  R = v;
+function Nz(z) {
+  ((b = z?.transcribe ?? U), (R = z?.weightsPresent ?? v));
 }
-function zz() {
-  return b() ? E : null;
+function Jz() {
+  return R() ? E : null;
 }
-async function Gz(z, G) {
+async function Kz(z, G) {
   let K = (
     await z.vault.read({
       entity: "media.asset",
@@ -221,7 +227,7 @@ async function Gz(z, G) {
       ],
       orderBy: { column: "asset_id", dir: "desc" },
       limit: 1,
-      purpose: q,
+      purpose: Q,
     })
   ).rows?.[0];
   if (!K) return "";
@@ -233,21 +239,21 @@ async function Gz(z, G) {
         { column: "variant", op: "eq", value: "transcript" },
       ],
       limit: 1,
-      purpose: q,
+      purpose: Q,
     })
   ).rows?.[0]?.model === G
     ? K.asset_id
     : "";
 }
-async function Jz({ ctx: z, log: G }) {
-  let J = zz();
+async function Vz({ ctx: z, log: G }) {
+  let J = Jz();
   if (!J)
     return {
       summary: "transcript skipped — automation model assets unavailable",
     };
   let K = await z.state.get("model");
   if (K !== J)
-    (await z.state.set("cursor", K === void 0 ? await Gz(z, J) : ""),
+    (await z.state.set("cursor", K === void 0 ? await Kz(z, J) : ""),
       await z.state.set("model", J));
   let V = (await z.state.get("cursor")) ?? "",
     $ = await z.vault.read({
@@ -258,10 +264,10 @@ async function Jz({ ctx: z, log: G }) {
         { column: "deleted_at", op: "is-null" },
       ],
       orderBy: { column: "asset_id", dir: "asc" },
-      limit: _,
-      purpose: q,
+      limit: M,
+      purpose: Q,
     }),
-    Q = 0,
+    q = 0,
     W = 0;
   for (let Z of $.rows ?? []) {
     if (
@@ -273,36 +279,36 @@ async function Jz({ ctx: z, log: G }) {
             { column: "variant", op: "eq", value: "transcript" },
           ],
           limit: 1,
-          purpose: q,
+          purpose: Q,
         })
       ).rows?.[0]?.model === J
     ) {
       W += 1;
       continue;
     }
-    let H = await z.vault.content({
+    let Y = await z.vault.content({
       contentId: Z.content_id,
       variant: "original",
       maxBytes: S,
-      purpose: q,
+      purpose: Q,
     });
-    if (H?.status === "too-large") {
+    if (Y?.status === "too-large") {
       ((W += 1),
         G.info(
           `asset ${Z.asset_id}: original exceeds the ${S}-byte transcription ceiling`
         ));
       continue;
     }
-    if (H?.status !== "ok" || H.kind !== "bytes")
+    if (Y?.status !== "ok" || Y.kind !== "bytes")
       throw Error(`asset ${Z.asset_id}: bounded original is unavailable`);
-    let Y = await R({
+    let j = await b({
       id: Z.content_id,
-      bytes: H.base64,
-      mediaType: H.mediaType,
+      bytes: Y.base64,
+      mediaType: Y.mediaType,
     });
-    if (!Y || Y.error)
-      throw Error(Y?.error ?? `asset ${Z.asset_id}: ASR returned no result`);
-    let I = typeof Y.text === "string" ? Y.text.trim() : "";
+    if (!j || j.error)
+      throw Error(j?.error ?? `asset ${Z.asset_id}: ASR returned no result`);
+    let I = typeof j.text === "string" ? j.text.trim() : "";
     if (!I) {
       ((W += 1), G.info(`asset ${Z.asset_id}: no speech detected`));
       continue;
@@ -316,20 +322,20 @@ async function Jz({ ctx: z, log: G }) {
         capability: "transcript",
         model: J,
       },
-      purpose: q,
+      purpose: Q,
     }),
-      (Q += 1));
+      (q += 1));
   }
-  let v = $.rows?.at(-1)?.asset_id;
-  if (v) await z.state.set("cursor", v);
+  let _ = $.rows?.at(-1)?.asset_id;
+  if (_) await z.state.set("cursor", _);
   return {
-    summary: `transcribed ${Q}; skipped ${W}; bounded batch ${$.rows?.length ?? 0}/${_}`,
+    summary: `transcribed ${q}; skipped ${W}; bounded batch ${$.rows?.length ?? 0}/${M}`,
     output: {
-      derived: Q,
+      derived: q,
       skipped: W,
       model: J,
-      rearm: ($.rows?.length ?? 0) === _,
+      rearm: ($.rows?.length ?? 0) === M,
     },
   };
 }
-export { Lz as setTranscriptRuntimeForTests, Jz as default };
+export { Nz as setTranscriptRuntimeForTests, Vz as default };

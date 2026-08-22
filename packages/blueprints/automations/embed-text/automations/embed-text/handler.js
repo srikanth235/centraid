@@ -1,17 +1,23 @@
 // Generated recognition automation. Source: packages/model-runtime/automation-handlers.
-import { existsSync as Kv } from "node:fs";
+import { existsSync as _v } from "node:fs";
 import { readFile as c } from "node:fs/promises";
-import H from "node:path";
 import w from "node:path";
-var s = w.resolve(import.meta.dirname, ".."),
-  P = process.env.CENTRAID_AUTOMATION_RUNTIME_DIR
-    ? w.resolve(process.env.CENTRAID_AUTOMATION_RUNTIME_DIR)
-    : w.join(s, "runtime"),
-  D = w.join(P, "models");
-import { existsSync as z, readFileSync as i, statSync as t } from "node:fs";
-import u from "node:path";
-import { pathToFileURL as a } from "node:url";
-var A;
+import H from "node:path";
+var d = H.resolve(import.meta.dirname, ".."),
+  i = "__centraidAutomationRuntimeDir";
+function t() {
+  let v = globalThis[i];
+  if (typeof v === "string" && v.length > 0) return H.resolve(v);
+  if (process.env?.CENTRAID_AUTOMATION_RUNTIME_DIR)
+    return H.resolve(process.env.CENTRAID_AUTOMATION_RUNTIME_DIR);
+  return H.join(d, "runtime");
+}
+var y = t(),
+  P = H.join(y, "models");
+import { existsSync as f, readFileSync as a, statSync as e } from "node:fs";
+import M from "node:path";
+import { pathToFileURL as vv } from "node:url";
+var u;
 class F extends Error {
   constructor(v, B) {
     super(
@@ -23,10 +29,10 @@ class F extends Error {
     this.name = "RuntimeNotInstalledError";
   }
 }
-function S(v, B = P) {
-  let q = u.join(B, "node_modules");
-  if (!z(q)) throw new F(v);
-  let J = u.join(q, ...v.split("/"));
+function S(v, B = y) {
+  let q = M.join(B, "node_modules");
+  if (!f(q)) throw new F(v);
+  let J = M.join(q, ...v.split("/"));
   try {
     let $ = b(J);
     if ($ === null) throw Error(`no entry point in ${J}`);
@@ -36,20 +42,20 @@ function S(v, B = P) {
   }
 }
 function b(v, B = 0) {
-  let q = u.join(v, "package.json"),
-    J = z(q) ? JSON.parse(i(q, "utf8")) : {},
+  let q = M.join(v, "package.json"),
+    J = f(q) ? JSON.parse(a(q, "utf8")) : {},
     $ = [
-      ...N(vv(J.exports)),
+      ...N($v(J.exports)),
       ...(typeof J.main === "string" ? [J.main] : []),
       "index.js",
     ];
-  for (let K of $) {
-    let V = e(u.resolve(v, K), B);
-    if (V !== null) return V;
+  for (let V of $) {
+    let W = qv(M.resolve(v, V), B);
+    if (W !== null) return W;
   }
   return null;
 }
-function e(v, B) {
+function qv(v, B) {
   let q = I(v);
   if (q?.isFile()) return v;
   if (q?.isDirectory()) return B >= 4 ? null : b(v, B + 1);
@@ -61,12 +67,12 @@ function e(v, B) {
 }
 function I(v) {
   try {
-    return t(v);
+    return e(v);
   } catch {
     return null;
   }
 }
-function vv(v) {
+function $v(v) {
   if (typeof v === "string") return v;
   if (v === null || typeof v !== "object") return;
   let B = v;
@@ -82,26 +88,26 @@ function N(v, B = 0) {
     if ($ in q) J.push(...N(q[$], B + 1));
   return J;
 }
-async function f() {
-  if (A) return A;
+async function z() {
+  if (u) return u;
   let v = S("onnxruntime-node");
-  return ((A = await import(a(v).href)), A);
+  return ((u = await import(vv(v).href)), u);
 }
-var M;
+var A;
 async function x(v) {
-  M ??= new Map();
-  let B = M.get(v);
+  A ??= new Map();
+  let B = A.get(v);
   if (B) return B;
-  if (!z(v)) throw new F(v);
-  let q = f().then((J) => J.InferenceSession.create(v));
-  M.set(v, q);
+  if (!f(v)) throw new F(v);
+  let q = z().then((J) => J.InferenceSession.create(v));
+  A.set(v, q);
   try {
     return await q;
   } catch (J) {
-    throw (M.delete(v), J);
+    throw (A.delete(v), J);
   }
 }
-function qv() {
+function Bv() {
   let v = [];
   for (let $ = "!".codePointAt(0); $ <= "~".codePointAt(0); $++) v.push($);
   for (let $ = "¡".codePointAt(0); $ <= "¬".codePointAt(0); $++) v.push($);
@@ -114,7 +120,7 @@ function qv() {
   for (let $ = 0; $ < v.length; $++) J.set(v[$], String.fromCodePoint(B[$]));
   return J;
 }
-function $v(v) {
+function Jv(v) {
   let B = new Map();
   return (
     v.forEach(([q, J], $) => {
@@ -123,7 +129,7 @@ function $v(v) {
     B
   );
 }
-function Bv(v, B) {
+function Qv(v, B) {
   if (v.length === 0) return [];
   if (v.length === 1) return [`${v}</w>`];
   let q = [...v.slice(0, -1), `${v.at(-1)}</w>`];
@@ -132,86 +138,86 @@ function Bv(v, B) {
       $ = Number.POSITIVE_INFINITY;
     for (let Q = 0; Q < q.length - 1; Q++) {
       let X = q[Q],
-        _ = q[Q + 1],
-        Y = B.get(`${X} ${_}`);
-      if (Y !== void 0 && Y < $) (($ = Y), (J = [X, _]));
+        K = q[Q + 1],
+        Y = B.get(`${X} ${K}`);
+      if (Y !== void 0 && Y < $) (($ = Y), (J = [X, K]));
     }
     if (!J) break;
-    let [K, V] = J,
+    let [V, W] = J,
       j = [],
-      W = 0;
-    while (W < q.length)
-      if (q[W] === K && q[W + 1] === V) (j.push(K + V), (W += 2));
-      else (j.push(q[W]), (W += 1));
+      _ = 0;
+    while (_ < q.length)
+      if (q[_] === V && q[_ + 1] === W) (j.push(V + W), (_ += 2));
+      else (j.push(q[_]), (_ += 1));
     q = j;
   }
   return q;
 }
-var Jv =
+var Yv =
   /<\|startoftext\|>|<\|endoftext\|>|'s|'t|'re|'ve|'m|'ll|'d|\p{L}+|\p{N}|[^\s\p{L}\p{N}]+/gu;
-function Qv(v) {
+function Kv(v) {
   return v.trim().replace(/\s+/gu, " ").toLowerCase();
 }
-function Yv(v) {
-  return Qv(v).match(Jv) ?? [];
+function Vv(v) {
+  return Kv(v).match(Yv) ?? [];
 }
-var _v = 77;
+var Wv = 77;
 function m(v) {
-  let B = qv(),
-    q = $v(v.merges),
+  let B = Bv(),
+    q = Jv(v.merges),
     J = new Map(),
     $ = v.vocab.get("<|startoftext|>"),
-    K = v.vocab.get("<|endoftext|>");
-  if ($ === void 0 || K === void 0)
+    V = v.vocab.get("<|endoftext|>");
+  if ($ === void 0 || V === void 0)
     throw Error(
       "createClipTokenizer: vocab is missing <|startoftext|> or <|endoftext|>"
     );
-  let V = $,
-    j = K;
-  function W(_) {
-    let Y = new TextEncoder().encode(_),
+  let W = $,
+    j = V;
+  function _(K) {
+    let Y = new TextEncoder().encode(K),
       Z = "";
     for (let U of Y) Z += B.get(U) ?? "";
     return Z;
   }
-  function Q(_) {
-    let Y = J.get(_);
+  function Q(K) {
+    let Y = J.get(K);
     if (Y) return Y;
-    let Z = Bv(_, q);
-    return (J.set(_, Z), Z);
+    let Z = Qv(K, q);
+    return (J.set(K, Z), Z);
   }
-  function X(_, Y = _v) {
-    let Z = Yv(_),
+  function X(K, Y = Wv) {
+    let Z = Vv(K),
       U = [];
     for (let r of Z) {
-      let o = W(r);
-      for (let d of Q(o)) {
-        let E = v.vocab.get(d);
+      let o = _(r);
+      for (let s of Q(o)) {
+        let E = v.vocab.get(s);
         if (E !== void 0) U.push(E);
       }
     }
     let h = Y - 2,
       n = U.slice(0, Math.max(0, h)),
-      L = [V, ...n, j];
+      L = [W, ...n, j];
     while (L.length < Y) L.push(0);
     return L;
   }
   return { encode: X };
 }
-var p = "clip-vit-b-32@1",
-  C = H.join(D, "clip"),
-  mv = H.join(C, "visual.onnx"),
-  Vv = H.join(C, "textual.onnx"),
-  Wv = H.join(C, "vocab.json"),
-  jv = H.join(C, "merges.txt");
-var Xv = 77;
-function y(v = D) {
-  let B = H.join(v, "clip");
+var g = "clip-vit-b-32@1",
+  O = w.join(P, "clip"),
+  gv = w.join(O, "visual.onnx"),
+  jv = w.join(O, "textual.onnx"),
+  Xv = w.join(O, "vocab.json"),
+  Zv = w.join(O, "merges.txt");
+var wv = 77;
+function D(v = P) {
+  let B = w.join(v, "clip");
   return ["visual.onnx", "textual.onnx", "vocab.json", "merges.txt"].every(
-    (q) => Kv(H.join(B, q))
+    (q) => _v(w.join(B, q))
   );
 }
-function Zv(v) {
+function Gv(v) {
   let B = [];
   for (let q of v.split(`
 `)) {
@@ -222,21 +228,21 @@ function Zv(v) {
   }
   return B;
 }
-var O;
+var C;
 async function Hv() {
-  if (O) return O;
-  let [v, B] = await Promise.all([c(Wv, "utf8"), c(jv, "utf8")]),
+  if (C) return C;
+  let [v, B] = await Promise.all([c(Xv, "utf8"), c(Zv, "utf8")]),
     q = JSON.parse(v);
-  return ((O = m({ vocab: new Map(Object.entries(q)), merges: Zv(B) })), O);
+  return ((C = m({ vocab: new Map(Object.entries(q)), merges: Gv(B) })), C);
 }
-function Gv(v) {
+function Uv(v) {
   let B = 0;
   for (let J of v) B += J * J;
   let q = Math.sqrt(B);
   if (q === 0) return Array.from(v);
   return Array.from(v, (J) => J / q);
 }
-function Uv(v, B) {
+function uv(v, B) {
   let q = B[0],
     J = q ? v[q] : void 0;
   if (!J || !(J.data instanceof Float32Array))
@@ -245,19 +251,19 @@ function Uv(v, B) {
 }
 async function R(v) {
   try {
-    let q = (await Hv()).encode(v.text, Xv),
-      J = await f(),
-      $ = await x(Vv),
-      V = {
+    let q = (await Hv()).encode(v.text, wv),
+      J = await z(),
+      $ = await x(jv),
+      W = {
         [$.inputNames[0] ?? "input_ids"]: new J.Tensor(
           "int64",
           BigInt64Array.from(q.map(BigInt)),
           [1, q.length]
         ),
       },
-      j = await $.run(V),
-      W = Gv(Uv(j, $.outputNames));
-    return { id: v.id, vector: W };
+      j = await $.run(W),
+      _ = Uv(uv(j, $.outputNames));
+    return { id: v.id, vector: _ };
   } catch (B) {
     return { id: v.id, error: B instanceof Error ? B.message : String(B) };
   }
@@ -265,12 +271,12 @@ async function R(v) {
 var k = 16,
   G = "dpv:ServiceProvision",
   T = R,
-  g = y;
-function gv(v) {
-  ((T = v?.infer ?? R), (g = v?.weightsPresent ?? y));
+  p = D;
+function hv(v) {
+  ((T = v?.infer ?? R), (p = v?.weightsPresent ?? D));
 }
-function wv() {
-  return g() ? p : null;
+function Av() {
+  return p() ? g : null;
 }
 function l(v, B, q) {
   let J =
@@ -279,7 +285,7 @@ function l(v, B, q) {
       : v?.source_version;
   return v?.model === B && J === q;
 }
-async function Av(v, B) {
+async function Mv(v, B) {
   let J = (
     await v.vault.read({
       entity: "core.content_derivative",
@@ -301,8 +307,8 @@ async function Av(v, B) {
   });
   return l($.rows?.[0], B, J.derivative_id) ? J.derivative_id : "";
 }
-async function Mv({ ctx: v, log: B }) {
-  let q = wv();
+async function Fv({ ctx: v, log: B }) {
+  let q = Av();
   if (!q)
     return { summary: "text embedding skipped — model assets unavailable" };
   if (typeof v.input?.query === "string") {
@@ -318,10 +324,10 @@ async function Mv({ ctx: v, log: B }) {
   }
   let J = await v.state.get("model");
   if (J !== q)
-    (await v.state.set("cursor", J === void 0 ? await Av(v, q) : ""),
+    (await v.state.set("cursor", J === void 0 ? await Mv(v, q) : ""),
       await v.state.set("model", q));
   let $ = (await v.state.get("cursor")) ?? "",
-    K = await v.vault.read({
+    V = await v.vault.read({
       entity: "core.content_derivative",
       where: [
         { column: "derivative_id", op: "gt", value: $ },
@@ -331,9 +337,9 @@ async function Mv({ ctx: v, log: B }) {
       limit: k,
       purpose: G,
     }),
-    V = 0,
+    W = 0,
     j = 0;
-  for (let Q of K.rows ?? []) {
+  for (let Q of V.rows ?? []) {
     let X = await v.vault.read({
       entity: "enrich.derivation",
       where: [
@@ -347,15 +353,15 @@ async function Mv({ ctx: v, log: B }) {
       j += 1;
       continue;
     }
-    let _ = await v.vault.content({
+    let K = await v.vault.content({
       contentId: Q.content_id,
       variant: Q.variant,
       maxBytes: 1048576,
       purpose: G,
     });
-    if (_?.status !== "ok" || _.kind !== "text")
+    if (K?.status !== "ok" || K.kind !== "text")
       throw Error(`content ${Q.content_id}: ${Q.variant} text is unavailable`);
-    let Y = await T({ id: Q.content_id, text: _.text });
+    let Y = await T({ id: Q.content_id, text: K.text });
     if (!Y || Y.error || !Array.isArray(Y.vector)) {
       ((j += 1), B.info(`content ${Q.content_id}: no text vector`));
       continue;
@@ -372,18 +378,18 @@ async function Mv({ ctx: v, log: B }) {
       },
       purpose: G,
     }),
-      (V += 1));
+      (W += 1));
   }
-  let W = K.rows?.at(-1)?.derivative_id;
-  if (W) await v.state.set("cursor", W);
+  let _ = V.rows?.at(-1)?.derivative_id;
+  if (_) await v.state.set("cursor", _);
   return {
-    summary: `embedded ${V} texts; skipped ${j}; bounded batch ${K.rows?.length ?? 0}/${k}`,
+    summary: `embedded ${W} texts; skipped ${j}; bounded batch ${V.rows?.length ?? 0}/${k}`,
     output: {
-      derived: V,
+      derived: W,
       skipped: j,
       model: q,
-      rearm: (K.rows?.length ?? 0) === k,
+      rearm: (V.rows?.length ?? 0) === k,
     },
   };
 }
-export { gv as setEmbedTextRuntimeForTests, Mv as default };
+export { hv as setEmbedTextRuntimeForTests, Fv as default };

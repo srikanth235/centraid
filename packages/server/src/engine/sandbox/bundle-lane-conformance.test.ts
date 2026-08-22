@@ -1,17 +1,18 @@
 /*
  * Which lane every SHIPPED automation bundle could actually run under (#846 P9).
  *
- * The automation plane's default is no lane at all, and the reason recorded in
- * `sandbox-escape.test.ts` was one builtin: the recognition bundles resolved
- * `runtime/node_modules` through `node:module`'s `createRequire`, which every
- * lane here refuses — correctly, since a `createRequire` in the graph resolves
- * through Node's own loader and skips the lane's hooks entirely. While that
- * was true, no recognition automation could run sandboxed, so nothing did.
+ * The automation plane's default USED to be no lane at all, and the reason was
+ * one builtin: the recognition bundles resolved `runtime/node_modules` through
+ * `node:module`'s `createRequire`, which every lane here refuses — correctly,
+ * since a `createRequire` in the graph resolves through Node's own loader and
+ * skips the lane's hooks entirely. While that was true, no recognition
+ * automation could run sandboxed, so nothing did.
  *
  * #846 P9 removed that dependency (`packages/model-runtime/src/onnx.ts` now
- * does its own entry resolution, pinned by `onnx.test.ts`). This suite is the
- * evidence for what that bought, measured against the bundles the product
- * actually executes rather than against the source they are built from:
+ * does its own entry resolution, pinned by `onnx.test.ts`) and the worker now
+ * installs the strict floor unconditionally. This suite is what keeps that
+ * safe, measured against the bundles the product actually executes rather than
+ * against the source they are built from:
  *
  *   - every non-recognition bundle imports NO node builtin at all, so the
  *     `automation-handler` lane admits it as-is;
@@ -21,6 +22,11 @@
  *     because it shells out to ffmpeg through `node:child_process`. That is a
  *     product fact, not an oversight, and it is asserted here so it cannot
  *     quietly become two.
+ *
+ * The load-bearing assertion is "every bundle is admitted by the lane its own
+ * manifest declares": with the floor unconditional, a bundle that grows a new
+ * builtin without declaring the lane for it breaks on its first fire in
+ * production, and this moves that failure to commit time.
  *
  * What this suite does NOT prove: that the native ONNX runtime loads and
  * infers correctly once inside the lane. `nativeAddons: true` means the addon

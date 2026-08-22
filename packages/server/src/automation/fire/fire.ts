@@ -277,13 +277,14 @@ export interface RunRecord {
  * Manifest lane → the worker's sandbox request (#846 P9).
  *
  * An absent block is an absent request, which the worker reads as the strict
- * `automation-handler` floor — never as "no sandbox". Only the two lanes that
- * grant a filesystem need roots, and they are derived the same way the bundled
- * handler derives its own `RUNTIME_DIR`: `<handler dir>/../runtime`, or the
- * `CENTRAID_AUTOMATION_RUNTIME_DIR` override. Deriving rather than importing
- * `@centraid/model-runtime` keeps `packages/server` free of a dependency on
- * the recognition package; `enricher-templates.test.ts` is where the two
- * spellings are checked against each other.
+ * `automation-handler` floor — never as "no sandbox".
+ *
+ * `sandboxRuntimeDir` is the load-bearing half. A sandboxed handler has no
+ * `process.env` (every lane replaces it with a frozen empty object), so the
+ * `CENTRAID_AUTOMATION_RUNTIME_DIR` override the docs describe would be
+ * silently dead inside one — and the five recognition bundles would fall back
+ * to a `runtime/` directory that only exists in the source tree. The parent
+ * resolves it here and the worker plants it before the handler's graph loads.
  */
 function sandboxRequest(
   sandbox: { lane: "model-runtime" | "media-transcode" } | undefined,
@@ -291,16 +292,29 @@ function sandboxRequest(
 ): {
   sandboxLane?: "model-runtime" | "media-transcode";
   sandboxReadRoots?: string[];
+  sandboxRuntimeDir?: string;
 } {
   if (!sandbox) return {};
   const override = process.env.CENTRAID_AUTOMATION_RUNTIME_DIR;
-  const roots = [
-    // The app directory: the handler's own bundle, its assets, and the
-    // sibling `runtime/` the recognition bundles resolve weights from.
-    path.resolve(automationDir, ".."),
-    ...(override ? [path.resolve(override)] : []),
-  ];
-  return { sandboxLane: sandbox.lane, sandboxReadRoots: roots };
+  // What the bundled handler resolves for itself when nothing is planted:
+  // `<handler dir>/../runtime`. Reproduced rather than imported so
+  // `packages/server` gains no dependency on the recognition package.
+  const runtimeDir = override
+    ? path.resolve(override)
+    : path.join(path.resolve(automationDir, ".."), "runtime");
+  return {
+    sandboxLane: sandbox.lane,
+    sandboxReadRoots: [
+      // The app's `automations/` directory: the handler's own bundle and its
+      // sibling `runtime/`. Wider than the single automation's folder because
+      // the weights are a per-app asset shared by every recognition handler
+      // in it, and narrower than anything above it.
+      path.resolve(automationDir, ".."),
+      // An override points outside that tree, so it is its own root.
+      ...(override ? [path.resolve(override)] : []),
+    ],
+    sandboxRuntimeDir: runtimeDir,
+  };
 }
 
 export async function runFire(
