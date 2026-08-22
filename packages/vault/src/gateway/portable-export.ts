@@ -166,6 +166,25 @@
 // arrive on existing files as migration rung three, whose backfill only reads
 // the commons tables and only writes the two new ones.
 
+// Schema/export audit #846 P1: `share_fulfillment` gains one column,
+// `delivered_at`, and it MUST be carried. It is the memory that lets a
+// revocation know a projection was ever handed to a peer — the whole of P1 is
+// that this fact is remembered rather than re-inferred from a live freshness
+// reading, because a host that merely lost reach for one pass drops a
+// `delivered` row back to `syncing`, and the old code read that as
+// never-delivered and settled `removed` while the audience vault still held
+// the projection. A restore that dropped the column would restore exactly that
+// defect, silently and only for restored vaults. No adapter and no content
+// bytes: it is a timestamp on control truth. Nothing else in the export
+// changes — `exportVault` walks `SELECT *` over every registered canonical
+// table, so a new column on an already-carried table rides along with no code
+// change here, which is precisely why the audit is pinned by a test rather
+// than by this comment: `portability.test.ts`'s "a delivered fulfillment's
+// delivery memory survives export and restore" fails if that walk ever becomes
+// a column list. The column arrives on existing files as migration rung four,
+// whose rebuild backfills `delivered_at` from `updated_at` for rows already at
+// `delivered` or `remove_sent`.
+
 import { createHash } from "node:crypto";
 
 import { sha256OfBytes } from "../blob/store.js";
