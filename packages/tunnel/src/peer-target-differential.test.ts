@@ -77,19 +77,29 @@ const utf8 = new TextEncoder();
  * `peer_target_allowed` transliterated from iroh_relay.rs, deliberately NOT
  * sharing a line with the TypeScript guard.
  *
- * The one axis where the two languages could genuinely part company is length:
- * Rust's `str::len()` counts UTF-8 BYTES while JS's `String#length` counts
- * UTF-16 code units, so this model measures bytes (`TextEncoder`) where the
- * product measures code units. Everything else follows the Rust text line for
- * line: `split(['?', '#']).next()`, `bytes().any(...)` over `%`, `\`, and
- * every byte at or below 0x20, then `split('/')` with no `.` or `..` segment.
+ * Two axes where the two languages could genuinely part company, both modelled
+ * here rather than assumed away:
+ *
+ *  - **length.** Rust's `str::len()` counts UTF-8 BYTES while JS's
+ *    `String#length` counts UTF-16 code units, so this model measures bytes
+ *    (`TextEncoder`) where the product measures code units. The two agree for
+ *    the extension test because the prefix is pure ASCII and any string that
+ *    extends it by one code unit also extends it by at least one byte.
+ *  - **representability.** A Rust `&str` cannot hold a lone surrogate, so a
+ *    target carrying one never reaches `peer_target_allowed` at all. That is
+ *    modelled as a refusal, which is what the JS guard now answers too
+ *    (#846 P7) — before the fix, JS silently judged the U+FFFD rewrite.
+ *
+ * Everything else follows the Rust text line for line: `split(['?', '#'])
+ * .next()`, the path-length extension test, `bytes().any(...)` over `%`, `\`,
+ * and every byte at or below 0x20, then `split('/')` with no `.` or `..`.
  */
 function rustModel(target: string): boolean {
-  const targetBytes = utf8.encode(target);
-  const prefixBytes = utf8.encode(PEER_PLANE_PREFIX);
-  if (targetBytes.length <= prefixBytes.length) return false;
+  if (!isWellFormedString(target)) return false;
   if (!target.startsWith(PEER_PLANE_PREFIX)) return false;
   const path = target.split(/[?#]/u)[0] ?? "";
+  if (utf8.encode(path).length <= utf8.encode(PEER_PLANE_PREFIX).length)
+    return false;
   for (const byte of utf8.encode(path)) {
     if (byte === 0x25 || byte === 0x5c || byte <= 0x20) return false;
   }
@@ -113,13 +123,18 @@ function routeLayerModel(target: string): boolean {
 
 /**
  * The rule the guards DOCUMENT, in both languages: "must extend the prefix (a
- * bare prefix names no resource)" plus the byte and dot-segment rules. The
- * difference from the product is one word — the extension test is applied to
- * the PATH here, and to the whole target there. See the `pins` block in
- * fixtures/peer-target-golden.json.
+ * bare prefix names no resource)" applied to the PATH, the byte and
+ * dot-segment rules, and — since the contract says "mirrored byte-for-byte in
+ * Rust" — representability as a Rust `&str`.
+ *
+ * Written independently of the product on purpose. It used to disagree with it
+ * on two classes, both pinned; #846 P6/P7 fixed the product to match the
+ * sentence, so the two now agree on every input and this stays as the
+ * independent restatement that keeps them agreeing.
  */
 function documentedIntent(target: unknown): boolean {
   if (typeof target !== "string") return false;
+  if (!isWellFormedString(target)) return false;
   if (!target.startsWith(PEER_PLANE_PREFIX)) return false;
   const path = target.split(/[?#]/u)[0] ?? "";
   if (path.length <= PEER_PLANE_PREFIX.length) return false;
@@ -335,14 +350,14 @@ describe("peer-plane target differential", () => {
     );
   });
 
-  test("the guard matches its documented intent off the bare-prefix boundary", () => {
+  test("the guard matches its documented intent on every input", () => {
     fc.assert(
       fc.property(adversarialTarget, (target) => {
-        // The pinned defect below is the ONLY class where product and intent
-        // part company. Everywhere else they must agree exactly, so a future
-        // edit to either side that widens the gap fails here.
-        const path = target.split(/[?#]/u)[0] ?? "";
-        if (path === PEER_PLANE_PREFIX) return;
+        // No carve-out. Until #846 P6 this property had to skip the
+        // bare-prefix-plus-separator class, because that was the one place the
+        // product and its own sentence parted company. The product moved, so
+        // the exemption goes with it: any future edit that reopens a gap
+        // between guard and sentence fails here on the first draw that hits it.
         expect(isPeerPlaneTarget(target)).toBe(documentedIntent(target));
       }),
       { numRuns: 800, seed: 84223 }
@@ -350,62 +365,51 @@ describe("peer-plane target differential", () => {
   });
 
   /*
-   * PINNED DEFECT (docs/decisions.md, ruling A-pinned) —
+   * REGRESSION LOCK for #846 P6, formerly the pin
    * `bare-prefix-admitted-by-query-or-fragment`.
    *
-   * Both guards document, in their own comments, "must EXTEND the prefix (a
-   * bare prefix names no resource)". Both then apply that test to the whole
-   * target rather than to the path, so appending a query or fragment
-   * separator is enough to get the BARE prefix admitted: `/centraid/_peer/?`
-   * is 17 bytes, so the length test passes, while the path it resolves to is
-   * exactly the prefix.
-   *
-   * Which side is right: the documented sentence. It is the stated intent in
-   * both languages, and the guard is the thing that must match it. This is
-   * not an escalation — the resolved pathname stays inside the plane and no
-   * peer-plane route matches the bare prefix, so the request dies as
-   * `not_found` one layer later — which is why it is pinned rather than
-   * fixed here. The fix is one word: test `path.length`, not `target.length`.
-   *
-   * This test asserts the WRONG behaviour on purpose. The day either guard
-   * moves, it goes red and the record is revisited deliberately.
+   * Both guards document "must EXTEND the prefix (a bare prefix names no
+   * resource)", and both used to apply that test to the whole target rather
+   * than to the path — so a lone `?` or `#` was enough to get the BARE prefix
+   * admitted: `/centraid/_peer/?` is 17 bytes, so the length test passed,
+   * while the path it resolves to is exactly the prefix. The fix was one
+   * word in each language: measure `path`, not `target`.
    */
-  test("PINNED: a bare prefix plus a query or fragment is wrongly admitted", () => {
+  test("a bare prefix plus a query or fragment is refused", () => {
     for (const target of [
       `${PEER_PLANE_PREFIX}?`,
       `${PEER_PLANE_PREFIX}#`,
       `${PEER_PLANE_PREFIX}?next=/centraid/_gateway/devices`,
       `${PEER_PLANE_PREFIX}#/../_gateway`,
     ]) {
-      expect(documentedIntent(target)).toBe(false);
-      // Product, all three implementations, disagree with the sentence above.
-      expect(isPeerPlaneTarget(target)).toBe(true);
-      expect(rustModel(target)).toBe(true);
-      expect(routeLayerModel(target)).toBe(true);
-      // Bounded: it still names no resource outside the plane.
+      // The path behind each of these IS the bare prefix.
       expect(resolvedPathname(target)).toBe(PEER_PLANE_PREFIX);
+      expect(documentedIntent(target)).toBe(false);
+      expect(isPeerPlaneTarget(target)).toBe(false);
+      expect(rustModel(target)).toBe(false);
+      expect(routeLayerModel(target)).toBe(false);
     }
-    // The bare prefix without a separator is still refused, so the defect is
-    // exactly the separator class and nothing wider.
+    // The bare prefix itself was always refused, and a real extension carrying
+    // a query or fragment is still admitted — the fix is exactly the
+    // separator-as-extension class and nothing wider.
     expect(isPeerPlaneTarget(PEER_PLANE_PREFIX)).toBe(false);
+    expect(isPeerPlaneTarget(`${PEER_PLANE_PREFIX}x?a=b`)).toBe(true);
+    expect(isPeerPlaneTarget(`${PEER_PLANE_PREFIX}x#frag`)).toBe(true);
   });
 
   /*
-   * PINNED DEFECT — `lone-surrogate-admitted-by-js-only`.
+   * REGRESSION LOCK for #846 P7, formerly the pin
+   * `lone-surrogate-admitted-by-js-only`.
    *
    * protocol.ts promises the rule is "mirrored byte-for-byte in Rust", but a
    * JS string can hold a lone surrogate and a Rust `&str` cannot: the JS
-   * guard's `Buffer.from(path, "utf8")` silently rewrites it to U+FFFD
-   * (EF BF BD) and then finds no forbidden byte, so the JS endpoint ADMITS a
-   * target the Rust lane can never carry — and forwards a target whose bytes
-   * are not the ones the peer sent.
-   *
-   * Which side is right: Rust. "Byte-for-byte mirrored" is the documented
-   * contract, and a guard that rewrites its own input before judging it has
-   * judged a different string. Non-escalating (U+FFFD is neither `%`, `\`,
-   * `.` nor `/`), so it is pinned, not fixed.
+   * guard's `Buffer.from(path, "utf8")` silently rewrote it to U+FFFD
+   * (EF BF BD), found no forbidden byte, and so ADMITTED a target the Rust
+   * lane can never carry — forwarding a target whose bytes are not the ones
+   * the peer sent. Rust was the right side of that disagreement: a guard that
+   * rewrites its own input before judging it has judged a different string.
    */
-  test("PINNED: the JS guard admits lone surrogates the Rust lane cannot hold", () => {
+  test("the JS guard refuses lone surrogates the Rust lane cannot hold", () => {
     for (const target of [
       `${PEER_PLANE_PREFIX}\uD800`,
       `${PEER_PLANE_PREFIX}\uDFFF/x`,
@@ -414,11 +418,16 @@ describe("peer-plane target differential", () => {
       // A lone surrogate: matched as its own code point, so a well-formed
       // astral pair never does.
       expect(/\p{Surrogate}/u.test(target)).toBe(true);
-      expect(isPeerPlaneTarget(target)).toBe(true);
-      // What the guard actually judged: the replacement, not the input.
+      // What the guard used to judge: the replacement, not the input.
       expect(Buffer.from(target, "utf8").toString("utf8")).not.toBe(target);
+      expect(isPeerPlaneTarget(target)).toBe(false);
+      expect(documentedIntent(target)).toBe(false);
+      expect(rustModel(target)).toBe(false);
+      expect(routeLayerModel(target)).toBe(false);
     }
-    // Well-formed astral text — a surrogate PAIR — is not part of the defect.
+    // Well-formed astral text — a surrogate PAIR — was never part of the
+    // defect and must stay admitted: this is a representability rule, not a
+    // ban on non-ASCII targets.
     expect(isPeerPlaneTarget(`${PEER_PLANE_PREFIX}𝕏`)).toBe(true);
   });
 
@@ -447,25 +456,19 @@ describe("peer-plane target differential", () => {
     expect(golden.prefix).toBe(PEER_PLANE_PREFIX);
     expect(golden.vectors.length).toBeGreaterThan(40);
     const seen = new Set<string>();
-    const pinned = new Set<string>();
     for (const vector of golden.vectors) {
       expect(seen.has(vector.name)).toBe(false);
       seen.add(vector.name);
       expect(isPeerPlaneTarget(vector.target)).toBe(vector.allowed);
       expect(rustModel(vector.target)).toBe(vector.allowed);
       expect(routeLayerModel(vector.target)).toBe(vector.allowed);
-      // A pinned vector is one where the corpus records the WRONG verdict on
-      // purpose; every other vector must also match the documented intent.
-      expect(documentedIntent(vector.target) === vector.allowed).toBe(
-        vector.pin === undefined
-      );
-      if (vector.pin !== undefined) pinned.add(vector.pin);
+      // Since #846 P6/P7 there is no pinned vector left: every recorded
+      // verdict is also the documented one. A vector that reintroduces a
+      // `pin` fails here rather than quietly re-establishing the carve-out.
+      expect(vector.pin).toBeUndefined();
+      expect(documentedIntent(vector.target)).toBe(vector.allowed);
     }
-    // Every pin id a vector claims is explained in the corpus `pins` block.
-    expect(
-      [...pinned].filter((id) => golden.pins[id] === undefined)
-    ).toStrictEqual([]);
-    expect(pinned.size).toBe(1);
+    expect(Object.keys(golden.pins)).toStrictEqual([]);
   });
 
   test("the corpus keeps its curated adversarial classes", () => {
@@ -483,7 +486,14 @@ describe("peer-plane target differential", () => {
     expect(hasClass((t) => t.includes("@") && t.includes(":8080"))).toBe(true); // authority
     expect(hasClass((t) => t === "")).toBe(true); // empty boundary
     expect(hasClass((t) => t === PEER_PLANE_PREFIX)).toBe(true); // prefix boundary
-    expect(golden.vectors.filter((v) => v.pin !== undefined)).toHaveLength(4);
+    // The four separator-as-extension vectors stay in the corpus as the
+    // regression lock for #846 P6 — fixed, so they now record `false`.
+    expect(golden.vectors.filter((v) => v.pin !== undefined)).toHaveLength(0);
+    expect(
+      golden.vectors.filter(
+        (v) => (v.target.split(/[?#]/u)[0] ?? "") === PEER_PLANE_PREFIX
+      ).length
+    ).toBeGreaterThanOrEqual(4);
   });
 
   test("the generated corpus is deterministic and matches the committed file", () => {
@@ -532,10 +542,12 @@ describe("peer-plane target differential", () => {
      */
     const relay = fs.readFileSync(RUST_RELAY, "utf8");
     expect(relay).toContain("fn peer_target_allowed(target: &str) -> bool");
-    expect(relay).toContain(
-      "if target.len() <= PEER_PLANE_PREFIX.len() || !target.starts_with(PEER_PLANE_PREFIX)"
-    );
+    expect(relay).toContain("if !target.starts_with(PEER_PLANE_PREFIX)");
     expect(relay).toContain(".split(['?', '#'])");
+    // #846 P6: the extension test measures the PATH. If this line ever reads
+    // `target.len()` again, the languages have parted company.
+    expect(relay).toContain("if path.len() <= PEER_PLANE_PREFIX.len()");
+    expect(relay).not.toContain("target.len() <= PEER_PLANE_PREFIX.len()");
     expect(relay).toContain(
       ".any(|byte| byte == b'%' || byte == b'\\\\' || byte <= 0x20)"
     );

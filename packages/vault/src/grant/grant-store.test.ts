@@ -215,6 +215,7 @@ describe("grant/grant-store", () => {
         state: "delivered",
         updatedAt: now,
         detail: null,
+        deliveredAt: now,
       },
     ]);
     // Wave 1 does not propagate removal — the delivery state is left alone.
@@ -354,14 +355,50 @@ describe("grant/grant-store", () => {
       state: "syncing",
       updatedAt: "2032-02-02T00:00:00.000Z",
       detail: "channel opened",
+      // Nothing has reached the peer yet, so there is nothing to remember.
+      deliveredAt: null,
     });
+    const delivered = setFulfillmentState(db, {
+      grantId: grant.grantId,
+      peerVaultId: "vault-pia",
+      state: "delivered",
+      updatedAt: "2032-03-03T00:00:00.000Z",
+    });
+    expect(delivered.detail).toBeNull();
+    expect(delivered.deliveredAt).toBe("2032-03-03T00:00:00.000Z");
+
+    // #846 P1: the delivery memory outlives the freshness reading. A pass that
+    // cannot reach the peer drops the row back to `syncing` — honestly, the
+    // audience copy may now be stale — but the peer still HOLDS the subject,
+    // and revocation reads this rather than the state.
+    expect(
+      setFulfillmentState(db, {
+        grantId: grant.grantId,
+        peerVaultId: "vault-pia",
+        state: "syncing",
+        updatedAt: "2032-04-04T00:00:00.000Z",
+        detail: "peer vault is not reachable from this host",
+      }).deliveredAt
+    ).toBe("2032-03-03T00:00:00.000Z");
+    // Re-delivery keeps the FIRST instant: the question is "has this peer ever
+    // held it", not "when was it last refreshed" (that is `updated_at`).
     expect(
       setFulfillmentState(db, {
         grantId: grant.grantId,
         peerVaultId: "vault-pia",
         state: "delivered",
-        updatedAt: "2032-03-03T00:00:00.000Z",
-      }).detail
+        updatedAt: "2032-05-05T00:00:00.000Z",
+      }).deliveredAt
+    ).toBe("2032-03-03T00:00:00.000Z");
+    // A settled removal is the one thing that clears it: the peer verifiably
+    // does not hold the subject any more.
+    expect(
+      setFulfillmentState(db, {
+        grantId: grant.grantId,
+        peerVaultId: "vault-pia",
+        state: "removed",
+        updatedAt: "2032-06-06T00:00:00.000Z",
+      }).deliveredAt
     ).toBeNull();
 
     ensureFulfillment(db, {

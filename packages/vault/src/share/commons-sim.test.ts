@@ -27,11 +27,11 @@ import {
  * While the defect is still open, move that seed out of this list into its own
  * `test.fails` case so the failure is recorded rather than tolerated.
  *
- * - 839_001 is the grant-plane seed below. It reaches DEFECT D1 (a revocation
+ * - 839_001 is the grant-plane seed below. It found DEFECT D1 (a revocation
  *   that settles `removed` while the audience keeps the projection, see
- *   `commons-sim-grant.test-fixtures.ts` `checkSeverance`); the defect itself
- *   is recorded by the `test.fails` case at the foot of this file, so the seed
- *   stays here as the schedule that found it.
+ *   `commons-sim-grant.test-fixtures.ts` `checkSeverance`), fixed by #846 P1.
+ *   The seed stays there as the schedule that found it, and now holds the
+ *   invariant outright rather than recording a break.
  *
  * Nothing else: these seeds plus a wider offline sweep (44 seeds, 3–5 seats,
  * 1–3 grants, up to 260 actions each) found no non-converging schedule.
@@ -188,33 +188,38 @@ describe("commons deterministic simulation", () => {
         // The audience diverged and a later pass overwrote it: "the origin is
         // the sole author" is an empty claim unless something contested it.
         "grant_tamper_healed",
+        // A delivered row degraded back to `syncing` because the host lost
+        // reach. This is the precondition of the revocation-severance defect
+        // (#846 P1), so a program that never hit it would hold G1 vacuously.
+        "reach_lost_after_delivery",
       ])
         expect(result.stats[leg] ?? 0, `${leg} never fired`).toBeGreaterThan(0);
-      // The one break this program is allowed to tolerate is defect D1, and
-      // it must be named as such rather than passing silently.
-      expect(
-        result.pinned.every((entry) => entry.includes("defect D1, issue #839")),
-        `unexpected pin:\n${result.pinned.join("\n")}`
-      ).toBe(true);
+      // Nothing is pinned any more. The simulator's one tolerated break was
+      // defect D1, fixed by #846 P1 and locked below.
+      expect(result.pinned, explain(result)).toStrictEqual([]);
     },
     SIM_TIMEOUT_MS
   );
 
   /**
-   * DEFECT D1 (issue #839), pinned, not tolerated. `fulfillShareGrant` drops
-   * a `delivered` fulfillment row back to `syncing` when the host merely
-   * cannot reach the peer for one pass, and `propagateShareGrantRevocation`
-   * then reads `syncing` as never-delivered: it settles `removed` — "nothing
-   * had been delivered; there was nothing to remove" — while the audience
-   * vault still holds the whole projection. The owner is told the share is
-   * gone and it is not.
+   * REGRESSION LOCK for #846 P1, formerly the `test.fails` pin on defect D1
+   * (issue #839) against ruling G-revoke.
    *
-   * This case asserts what MUST be true. It is `test.fails` because it is not
-   * true today; the day the engine remembers what it delivered, this case
-   * starts passing and turns red, which is the signal to delete the pin here
-   * and in `commons-sim-grant.test-fixtures.ts` `checkSeverance`.
+   * `fulfillShareGrant` drops a `delivered` fulfillment row back to `syncing`
+   * when the host merely cannot reach the peer for one pass — honest, because
+   * the audience copy may now be stale. `propagateShareGrantRevocation` then
+   * read that `syncing` as never-delivered and settled `removed` ("nothing had
+   * been delivered; there was nothing to remove") while the audience vault
+   * still held the whole projection. The owner was told the share was gone and
+   * it was not.
+   *
+   * G-revoke's sentence was right and is unchanged: revoke is honestly
+   * best-effort against a peer's disk. What was wrong was the engine, on a
+   * REACHABLE path, in the one direction the copy does not warn about. It now
+   * remembers what it delivered (`share_fulfillment.delivered_at`) instead of
+   * inferring it from a live freshness reading, so this probe severs.
    */
-  test.fails(
+  test(
     "a revocation severs a grant the host lost reach for mid-life",
     () => {
       const probe = runRevocationSeveranceProbe();

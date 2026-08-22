@@ -27,9 +27,10 @@
 //      following origin edits, erasing audience edits, and keeping one
 //      provenance row, because a pass re-projects rather than merges.
 //
-// One break is PINNED rather than failed on, and only one: defect D1, named
-// at `checkSeverance`. It is a real, still-open product hole this simulator
-// found; it is recorded in `world.pinned` so no run hides it.
+// Nothing here is pinned. `checkSeverance` carried the simulator's one
+// tolerated break — defect D1, a revocation settling `removed` while the
+// audience kept the projection — until #846 P1 fixed the engine; the pin went
+// with the fix, so every invariant below now simply fails.
 
 import {
   fulfillShareGrant,
@@ -152,8 +153,11 @@ function observe(world: World, slot: ShareSlot, label: string): void {
   }
   if (!LEGAL_TRANSITIONS[before]?.includes(next))
     fail(world, `${slot.key} ${label}: illegal edge ${before} -> ${next}`);
-  if (before === "delivered" && next === "syncing")
+  if (before === "delivered" && next === "syncing") {
     slot.reachLostAfterDelivery = true;
+    world.stats["reach_lost_after_delivery"] =
+      (world.stats["reach_lost_after_delivery"] ?? 0) + 1;
+  }
   slot.fulfillment = next;
 }
 
@@ -193,30 +197,27 @@ function checkProjection(world: World, slot: ShareSlot, label: string): void {
 }
 
 /**
- * G1, and the one pinned defect. A revocation that has SETTLED (`removed`)
- * must leave the audience holding nothing.
+ * G1. A revocation that has SETTLED (`removed`) must leave the audience
+ * holding nothing.
  *
- * DEFECT D1 (issue #839, packages/vault/src/grant/fulfillment.ts:320-334 and
- * :420-435). `fulfillShareGrant` overwrites a `delivered` row with `syncing`
- * when the host merely cannot reach the peer this pass, erasing the record
- * that the peer HOLDS the subject. `propagateShareGrantRevocation` then reads
- * `syncing` as never-delivered and finishes `removed` — "nothing had been
+ * This carried the simulator's one pinned break, defect D1 (#839), until #846
+ * P1 closed it: `fulfillShareGrant` overwrote a `delivered` row with `syncing`
+ * when the host merely could not reach the peer that pass, erasing the record
+ * that the peer HOLDS the subject, and `propagateShareGrantRevocation` then
+ * read `syncing` as never-delivered and finished `removed` — "nothing had been
  * delivered; there was nothing to remove" — without deleting the projection
- * and without even a `remove_sent`. The owner reads `removed`; the peer keeps
- * the copy. Pinned here, never softened: while it is open the oracle records
- * it, and `commons-sim.test.ts` carries a `test.fails` case that turns red the
- * day it is fixed.
+ * and without even a `remove_sent`. The owner read `removed`; the peer kept the
+ * copy. The engine now remembers delivery durably
+ * (`share_fulfillment.delivered_at`), so there is no reach-lost carve-out left
+ * here: every settled revocation is held to G1 alike.
  */
 function checkSeverance(world: World, slot: ShareSlot, label: string): void {
   if (slot.fulfillment !== "removed") return;
   if (projectedAlbumId(slot) === undefined) return;
-  const message = `${slot.key} ${label}: revocation settled 'removed' yet the audience still holds ${JSON.stringify(audienceTitles(slot))}`;
-  if (slot.reachLostAfterDelivery) {
-    world.pinned.push(`#${world.step} ${message} [defect D1, issue #839]`);
-    world.stats["pinned_d1"] = (world.stats["pinned_d1"] ?? 0) + 1;
-    return;
-  }
-  fail(world, message);
+  fail(
+    world,
+    `${slot.key} ${label}: revocation settled 'removed' yet the audience still holds ${JSON.stringify(audienceTitles(slot))}`
+  );
 }
 
 function createAction(world: World, rng: Rng): void {

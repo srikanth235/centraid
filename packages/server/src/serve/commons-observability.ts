@@ -559,9 +559,10 @@ export function commonsObservabilityForVault(input: {
 }
 
 /**
- * Diagnostics-bundle section. `buildDiagnosticsBundle` takes an opaque,
- * caller-assembled `config` object and redacts it — this slots straight in
+ * Diagnostics-bundle section. The bundle takes an opaque, caller-assembled
+ * `config` object and walks it through `scrubUnknown` — this slots straight in
  * there (or into a `_gateway/logs` line) without inventing a second surface.
+ * Assembled in `build-gateway.ts`'s `buildDiagnostics` closure.
  */
 export function commonsObservabilitySection(input: {
   vaults: readonly { vaultId: string; db?: VaultDb }[];

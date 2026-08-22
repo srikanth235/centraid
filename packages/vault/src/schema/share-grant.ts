@@ -15,6 +15,33 @@
 // is 'party', `social_circle.circle_id` when 'circle' — and carries no FK for
 // the same reason. `granted_by` is always an owner party, so that one is a
 // real reference.
+/**
+ * `share_fulfillment`'s columns, named once so the delivery-memory rung below
+ * can rebuild the table against exactly this shape.
+ *
+ * `delivered_at` is the DURABLE memory of delivery, and it is deliberately not
+ * derivable from `state`. `state` is a live freshness reading: a pass that
+ * cannot reach the peer drops a `delivered` row back to `syncing`, which is
+ * honest about the copy possibly being stale. Revocation asks a different
+ * question — "did this peer ever receive the subject?" — and reading the
+ * answer off `state` made a delivered-then-degraded grant settle `removed`
+ * ("nothing had been delivered") while the audience vault still held the whole
+ * projection: the owner was told a share was gone when it was not (#846 P1).
+ * Set once, on the first delivery, and cleared only by a removal that
+ * verifiably took the projection with it.
+ */
+const SHARE_FULFILLMENT_COLUMNS = `
+  grant_id      TEXT NOT NULL REFERENCES share_grant(grant_id) ON DELETE CASCADE,
+  peer_vault_id TEXT NOT NULL,
+  state         TEXT NOT NULL CHECK (state IN
+    ('awaiting_channel','syncing','delivered','remove_sent','removed')),
+  updated_at    TEXT NOT NULL,
+  -- Latest note: a refusal reason, a transport error, why a removal stalled.
+  detail        TEXT,
+  -- When the subject first reached this peer. NULL = never delivered.
+  delivered_at  TEXT,
+  PRIMARY KEY (grant_id, peer_vault_id)`;
+
 export const SHARE_GRANT_DDL = `
 CREATE TABLE IF NOT EXISTS share_grant (
   grant_id       TEXT PRIMARY KEY,
@@ -46,15 +73,7 @@ CREATE INDEX IF NOT EXISTS share_grant_granted_by
 -- Per-audience-vault delivery state for one grant. The FK's child column is
 -- the leftmost column of the primary key, which is the index cover
 -- schema/fk-index.test.ts requires.
-CREATE TABLE IF NOT EXISTS share_fulfillment (
-  grant_id      TEXT NOT NULL REFERENCES share_grant(grant_id) ON DELETE CASCADE,
-  peer_vault_id TEXT NOT NULL,
-  state         TEXT NOT NULL CHECK (state IN
-    ('awaiting_channel','syncing','delivered','remove_sent','removed')),
-  updated_at    TEXT NOT NULL,
-  -- Latest note: a refusal reason, a transport error, why a removal stalled.
-  detail        TEXT,
-  PRIMARY KEY (grant_id, peer_vault_id)
+CREATE TABLE IF NOT EXISTS share_fulfillment (${SHARE_FULFILLMENT_COLUMNS}
 ) STRICT;
 `;
 
@@ -202,4 +221,47 @@ WHERE pick = 1;
 
 DROP TABLE share_grant_seed;
 DROP TABLE share_grant_mint;
+`;
+
+// Rung (issue #846 P1): carry `share_fulfillment.delivered_at` to vaults
+// stamped before it. Editing the baseline above only reaches files created
+// after the edit — `migrate()` applies rungs past `PRAGMA user_version`, so a
+// file already at the grant-plane rung keeps the shape it was born with, and
+// every read of `delivered_at` would throw at SQLite.
+//
+// The standard table rebuild (SQLite docs, "Making Other Kinds Of Table Schema
+// Changes") rather than `ALTER TABLE ... ADD COLUMN`, for the same reason the
+// people_profile rung uses one: SQLite has no `ADD COLUMN IF NOT EXISTS`, and
+// this rung must also be walked by a FRESH file that just got the column from
+// the baseline. The copy names its source columns explicitly and does NOT read
+// `delivered_at`, so the same statement is correct against both shapes — an
+// upgrade for an old file, a faithful no-op re-creation for a new one.
+//
+// Backfill. `delivered` and `remove_sent` both mean the projection reached the
+// peer, so those rows are stamped with the only delivery instant the file
+// carries (`updated_at`). Everything else is left NULL: a `syncing` row that
+// was in fact delivered before this rung cannot be recovered from the file,
+// and inventing a timestamp for it would be worse than not knowing. That gap
+// is bounded in practice because the removal path also LOOKS inside a
+// reachable audience vault rather than trusting the row alone.
+//
+// Foreign keys: `defer_foreign_keys` is the in-transaction equivalent of the
+// `foreign_keys=off` SQLite's 12-step procedure wants — the pragma is a no-op
+// inside a transaction and every rung runs in one. Constraint enforcement
+// moves to COMMIT, so the intermediate DROP/RENAME cannot trip a check while a
+// real violation still aborts the rung. Nothing REFERENCES share_fulfillment,
+// so the drop orphans no children; its own FK to share_grant is re-declared
+// verbatim and the copied rows point at the same parents.
+export const SHARE_FULFILLMENT_DELIVERY_MEMORY_DDL = `
+PRAGMA defer_foreign_keys = ON;
+CREATE TABLE share_fulfillment_new (${SHARE_FULFILLMENT_COLUMNS}
+) STRICT;
+INSERT INTO share_fulfillment_new
+  (grant_id, peer_vault_id, state, updated_at, detail, delivered_at)
+SELECT
+  grant_id, peer_vault_id, state, updated_at, detail,
+  CASE WHEN state IN ('delivered','remove_sent') THEN updated_at END
+FROM share_fulfillment;
+DROP TABLE share_fulfillment;
+ALTER TABLE share_fulfillment_new RENAME TO share_fulfillment;
 `;

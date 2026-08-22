@@ -69,6 +69,16 @@ export interface ShareFulfillmentRecord {
   state: ShareFulfillmentState;
   updatedAt: string;
   detail: string | null;
+  /**
+   * When the subject first reached this peer; `null` while it never has.
+   *
+   * Not derivable from `state`, and that is the point (#846 P1). `state` is a
+   * live freshness reading — a pass that cannot reach the peer drops a
+   * `delivered` row back to `syncing` — while this is the durable fact
+   * revocation needs: a grant that was delivered and later degraded must still
+   * ask for removal rather than settling "there was nothing to remove".
+   */
+  deliveredAt: string | null;
 }
 
 export interface CreateShareGrantInput {
@@ -137,6 +147,7 @@ type ShareFulfillmentRow = {
   state: string;
   updated_at: string;
   detail: string | null;
+  delivered_at: string | null;
 };
 
 // CHECK constraints are what make the narrowing casts below sound: no row can
@@ -165,8 +176,13 @@ function toFulfillment(row: ShareFulfillmentRow): ShareFulfillmentRecord {
     state: row.state as ShareFulfillmentState,
     updatedAt: row.updated_at,
     detail: row.detail,
+    deliveredAt: row.delivered_at,
   };
 }
+
+/** Every column `toFulfillment` reads, in its order. */
+const FULFILLMENT_COLUMNS = `grant_id, peer_vault_id, state, updated_at,
+  detail, delivered_at`;
 
 const GRANT_COLUMNS = `grant_id, audience_kind, audience_id, subject_type,
   subject_id, capability, granted_at, revoked_at, granted_by, max_size_bytes`;
@@ -391,12 +407,21 @@ export function ensureFulfillment(
     updatedAt: string;
   }
 ): ShareFulfillmentRecord {
+  // A row opened directly AT `delivered` carries the memory from birth — the
+  // rule is that `delivered_at` is maintained wherever the state is written,
+  // never only on the transition path (#846 P1).
   db.prepare(
     `INSERT INTO share_fulfillment
-       (grant_id, peer_vault_id, state, updated_at, detail)
-     VALUES (?, ?, ?, ?, NULL)
+       (grant_id, peer_vault_id, state, updated_at, detail, delivered_at)
+     VALUES (?, ?, ?, ?, NULL, ?)
      ON CONFLICT (grant_id, peer_vault_id) DO NOTHING`
-  ).run(input.grantId, input.peerVaultId, input.state, input.updatedAt);
+  ).run(
+    input.grantId,
+    input.peerVaultId,
+    input.state,
+    input.updatedAt,
+    input.state === "delivered" ? input.updatedAt : null
+  );
   const row = readFulfillment(db, input.grantId, input.peerVaultId);
   if (!row) {
     throw new Error(
@@ -406,8 +431,27 @@ export function ensureFulfillment(
   return row;
 }
 
-/** Move one audience vault's delivery state. `detail` is replaced whenever it
- *  is supplied and cleared when it is explicitly null. */
+/**
+ * Move one audience vault's delivery state. `detail` is replaced whenever it
+ * is supplied and cleared when it is explicitly null.
+ *
+ * `delivered_at` is maintained here rather than by callers, because it is the
+ * one fact about a row nobody may forget to write (#846 P1):
+ *
+ *  - moving TO `delivered` stamps it if it is not already stamped. Later
+ *    re-deliveries keep the FIRST instant — the question it answers is "has
+ *    this peer ever held the subject", not "when was it last refreshed",
+ *    which is what `updated_at` is for;
+ *  - moving to `removed` clears it, because a removal that reached terminal
+ *    means the peer verifiably does not hold it any more;
+ *  - every other transition — `syncing` included — leaves it alone. That is
+ *    the whole fix: a reachability blip degrades the freshness reading
+ *    without erasing the delivery.
+ *
+ * There is deliberately no caller-supplied override: the state IS the input,
+ * so an escape hatch here would only be a way to write a memory that
+ * contradicts it.
+ */
 export function setFulfillmentState(
   db: DatabaseSync,
   input: {
@@ -419,15 +463,28 @@ export function setFulfillmentState(
   }
 ): ShareFulfillmentRecord {
   const detail = input.detail === undefined ? null : input.detail;
+  const clearDelivered = input.state === "removed";
+  const deliveredAt = input.state === "delivered" ? input.updatedAt : null;
   db.prepare(
     `INSERT INTO share_fulfillment
-       (grant_id, peer_vault_id, state, updated_at, detail)
-     VALUES (?, ?, ?, ?, ?)
+       (grant_id, peer_vault_id, state, updated_at, detail, delivered_at)
+     VALUES (?, ?, ?, ?, ?, ?)
      ON CONFLICT (grant_id, peer_vault_id) DO UPDATE SET
        state = excluded.state,
        updated_at = excluded.updated_at,
-       detail = excluded.detail`
-  ).run(input.grantId, input.peerVaultId, input.state, input.updatedAt, detail);
+       detail = excluded.detail,
+       delivered_at = CASE
+         WHEN ${clearDelivered ? 1 : 0} = 1 THEN NULL
+         ELSE COALESCE(share_fulfillment.delivered_at, excluded.delivered_at)
+       END`
+  ).run(
+    input.grantId,
+    input.peerVaultId,
+    input.state,
+    input.updatedAt,
+    detail,
+    deliveredAt
+  );
   const row = readFulfillment(db, input.grantId, input.peerVaultId);
   if (!row) {
     throw new Error(
@@ -444,7 +501,7 @@ export function readFulfillment(
 ): ShareFulfillmentRecord | undefined {
   const row = db
     .prepare(
-      `SELECT grant_id, peer_vault_id, state, updated_at, detail
+      `SELECT ${FULFILLMENT_COLUMNS}
          FROM share_fulfillment WHERE grant_id = ? AND peer_vault_id = ?`
     )
     .get(grantId, peerVaultId) as ShareFulfillmentRow | undefined;
@@ -458,7 +515,7 @@ export function listFulfillment(
   return (
     db
       .prepare(
-        `SELECT grant_id, peer_vault_id, state, updated_at, detail
+        `SELECT ${FULFILLMENT_COLUMNS}
            FROM share_fulfillment WHERE grant_id = ? ORDER BY peer_vault_id`
       )
       .all(grantId) as ShareFulfillmentRow[]

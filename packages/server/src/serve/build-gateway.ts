@@ -253,7 +253,13 @@ import {
 import { buildAssistantPrompt } from "../runs/assistant-prompt.js";
 import { RunEventBus } from "../runs/run-event-bus.js";
 import { makeUnifiedConversationRunner } from "../runs/unified-conversation-runner.js";
+import {
+  GATEWAY_MIN_PROTOCOL_VERSION,
+  GATEWAY_PROTOCOL_VERSION,
+  GATEWAY_VERSION,
+} from "../version.js";
 import { WorktreeStore } from "../worktree-store/index.js";
+import { readAnomalyLedger } from "./anomaly-ledger.js";
 import type { AssistOAuthConfig } from "./assist-oauth.js";
 import { pollProviderEventSource } from "./automation-event-sources.js";
 import { createBlobSweepHealthProbe } from "./blob-sweep-health.js";
@@ -270,7 +276,6 @@ import { recoverPendingVaultErases } from "./erase-recovery.js";
 import { resolveExperimentalFeatures } from "./experimental-features.js";
 import type { ExperimentalFeatureSet } from "./experimental-features.js";
 import { GatewayDatabase } from "./gateway-db.js";
-import { buildDiagnosticsBundle } from "./gateway-diagnostics.js";
 import { GatewayLogStore } from "./gateway-log-store.js";
 import { GatewayPerformanceMonitor } from "./gateway-performance.js";
 import { createGrantRefreshDoorbell } from "./grant-fulfillment.js";
@@ -330,6 +335,8 @@ import { findSequentially, forEachSequentially } from "./sequential.js";
 import { measureStorageLatency } from "./storage-latency.js";
 import { StorageLimitsStore, evaluateStorageLimit } from "./storage-limits.js";
 import { createStorageQuotaHealthProbe } from "./storage-quota-health.js";
+import { collectSupportBundleInput } from "./support-bundle-source.js";
+import { renderSupportBundle } from "./support-bundle.js";
 import {
   ingressElement,
   ingressRetentionGap,
@@ -4379,16 +4386,54 @@ export async function buildGateway(
   });
 
   // Diagnostics bundle assembly (issue #351): a closure so the route
-  // handler (`diagnostics-routes.ts`) stays thin wiring. `config` is
-  // whatever's useful for support — paths, the backup config, whether
-  // device access is enforced — and is redacted (secret-shaped keys,
-  // e.g. the remote backup provider's `apiKey`) inside
-  // `buildDiagnosticsBundle` before it ever reaches the response.
-  const buildDiagnostics = () =>
-    buildDiagnosticsBundle({
+  // handler (`diagnostics-routes.ts`) stays thin wiring.
+  //
+  // The document IS the shareable support bundle (#846 P8). It used to be a
+  // second, hand-assembled structure that redacted only `config`, by key
+  // name — so the owner-authored vault name rode out verbatim in
+  // `vaults[].name` and the log tail was embedded raw, in the one artifact
+  // this module's own header told a person to attach to a support request.
+  // `support-bundle.ts` is allowlist-by-construction: every field is emitted
+  // through a declared leaf policy, so a field nobody added on purpose is
+  // absent rather than copied, and the serialized text is swept for literals
+  // harvested from this running system. There is now one document instead of
+  // two, and it is the safe one.
+  //
+  // Level `standard` rather than the builder's `strict` default: this route
+  // is behind the host bearer gate and answers the owner, so a scrubbed
+  // message skeleton is worth keeping next to the digest. The redaction
+  // policy is the same either way.
+  //
+  // `config` is whatever is useful for support — paths, the backup config,
+  // whether device access is enforced, the Commons instrumentation — and
+  // goes through `scrubUnknown`, which drops secret-shaped keys by name and
+  // refuses any value whose shape it does not recognise.
+  const buildDiagnostics = async (): Promise<string> => {
+    const input = await collectSupportBundleInput({
       health,
       logs: logStore,
-      vaults: vaultRegistry,
+      // The on-disk mirror when the host gave us a logs directory, empty
+      // otherwise. Read at build time so a bundle taken after a crash loop
+      // carries the ledger the previous process left behind.
+      anomalies: {
+        snapshot: () => (paths.logsDir ? readAnomalyLedger(paths.logsDir) : []),
+      },
+      planes: vaultRegistry.planesList(),
+      gateway: {
+        version: GATEWAY_VERSION,
+        protocolVersion: GATEWAY_PROTOCOL_VERSION,
+        minSupportedProtocol: GATEWAY_MIN_PROTOCOL_VERSION,
+      },
+      runtime: {
+        platform: os.platform(),
+        arch: os.arch(),
+        nodeVersion: process.version,
+      },
+      generatedAtMs: Date.now(),
+      // One salt per bundle: identifiers stay correlatable inside a single
+      // document and are not comparable across two of them.
+      salt: crypto.randomUUID(),
+      level: "standard",
       config: {
         paths,
         backup: options.backup,
@@ -4404,6 +4449,8 @@ export async function buildGateway(
         }),
       },
     });
+    return renderSupportBundle(input).text;
+  };
 
   // ── Route chain ───────────────────────────────────────────────────────
   const routeEntries: RoutePrefixRegistration[] = [

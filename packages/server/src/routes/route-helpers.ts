@@ -158,6 +158,20 @@ export function sendJson(
   return sendJsonBytes(res, status, Buffer.from(JSON.stringify(body)));
 }
 
+/**
+ * {@link sendJson} for a body that is ALREADY serialized. Used where the
+ * document's bytes are the thing the producer guarantees — the diagnostics
+ * bundle's tripwire sweeps the serialized text, so re-serializing a parsed
+ * object here would discard the gate that made it safe (#846 P8).
+ */
+export function sendJsonText(
+  res: ServerResponse,
+  status: number,
+  text: string
+): true {
+  return sendJsonBytes(res, status, Buffer.from(text));
+}
+
 function sendJsonBytes(
   res: ServerResponse,
   status: number,

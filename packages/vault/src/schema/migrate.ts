@@ -65,7 +65,11 @@ import { OUTBOX_DDL } from "./outbox.js";
 import { REPLICA_DDL } from "./replica.js";
 import { SEED_DDL } from "./seed.js";
 import { SHARE_COMMONS_DDL } from "./share-commons.js";
-import { SHARE_GRANT_BACKFILL_DDL, SHARE_GRANT_DDL } from "./share-grant.js";
+import {
+  SHARE_FULFILLMENT_DELIVERY_MEMORY_DDL,
+  SHARE_GRANT_BACKFILL_DDL,
+  SHARE_GRANT_DDL,
+} from "./share-grant.js";
 import { SYNC_CREDENTIAL_DDL, SYNC_DDL } from "./sync.js";
 import { TIME_ORGANIZE_DDL } from "./time-organize.js";
 
@@ -162,6 +166,12 @@ export const VAULT_MIGRATIONS: readonly string[] = [
   // plus a backfill that selects from an empty `share_circle_grant`, and the
   // two paths land on the same shape and version.
   SHARE_GRANT_BACKFILL_DDL,
+  // Rung four (issue #846 P1): `share_fulfillment.delivered_at`, the durable
+  // memory of delivery that revocation reads instead of inferring it from the
+  // live `state`. A table rebuild rather than an ADD COLUMN so the rung is
+  // also a faithful no-op on a fresh file that got the column from the
+  // baseline; see the DDL for the backfill and foreign-key reasoning.
+  SHARE_FULFILLMENT_DELIVERY_MEMORY_DDL,
 ];
 
 export const JOURNAL_MIGRATIONS: readonly string[] = [JOURNAL_DDL];
