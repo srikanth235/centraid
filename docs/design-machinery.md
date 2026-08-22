@@ -12,6 +12,7 @@ Inventory and ownership map for the visual system across desktop, PWA, blueprint
 | Blueprint lowering | `toBlueprintCss()` | CSS custom properties for the system apps' scoped surfaces (`:where(.centraid-inline-scope)`) — scoping, not sandboxing: since #799 an app is shell code in the shell's own document |
 | Native lowering | `toNativeTheme()` | Concrete React Native values with no CSS parsing or runtime override layer |
 | Native adapter | `apps/mobile/src/kit/theme/native.ts` | Expo font-family names and `em` tracking converted to React Native points |
+| Public-site lowering | `scripts/site-tokens.mjs` | The SHELL lowering plus the bundled `@font-face` block and the app mark, emitted into a committed `centraid-tokens.css` for `centraid.dev` and `centraid.dev/docs/`. Not a fourth lowering — it re-serves `toCss()` verbatim and adds only a page-scale layer (reading measure, section rhythm, the one sanctioned display step) that composes from tokens above it |
 | Headless block layer | `packages/design/src/blocks` (`@centraid/design/blocks`) | The block vocabulary's logic with no renderer in it, shared by every kit |
 | Components | `packages/client/src/react/ui`, `packages/design/src/elements`, `apps/mobile/src/kit` | Renderer-specific primitives that consume roles; they do not own token values |
 | Enforcement | design contract tests, consumer lint, type/target floors, gallery | Proves the registry, lowerings, and consumers remain aligned |
@@ -55,6 +56,7 @@ The two React DOM rows remain the one composition follow-up: the shell and inlin
 | PWA | the same `packages/client` + `toCss()` | `apps/web/src/web.css` for host layout only | The same CSS gate roots and gallery contract as desktop |
 | Blueprint apps | `packages/design/src/elements/kit.css` + `toBlueprintCss()` | App-specific content/layout | CSS consumer gate plus scaffold/contract tests |
 | Expo | `toNativeTheme()` | `apps/mobile/src/kit/theme/native.ts` | Native consumer gate, native contract tests, target/type floor, hairline and logical-inset gates |
+| Public site (`centraid.dev`, `/docs/`) | the generated `centraid-tokens.css` — `toCss()` verbatim, plus `toFontFaceCss()` and the PWA mark | `scripts/home-site/public/index.html`'s inline sheet and `scripts/docs-site/public/assets/docs.css` | `lint:site-tokens` — emitter freshness by bytes, unresolvable `var()`s, literal font families, font-CDN references, retired theme names. **Not** `lint:design-tokens`: see [design-divergences.md](design-divergences.md#the-public-web-surfaces) |
 
 Desktop and PWA are one renderer from the design system's point of view. Pointer versus touch changes density, type, margin, and target values; host names and viewport width do not create more design modes.
 
@@ -76,6 +78,7 @@ Use repo scripts so the pinned toolchain and flags apply:
 ```sh
 bun run lint:design-consumers
 bun run lint:design-md
+bun run lint:site-tokens
 bun run design:gallery
 bun run --cwd packages/design test
 bun run --cwd apps/mobile test

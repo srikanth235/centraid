@@ -117,7 +117,7 @@
       <div class="mapcanvas" id="mapcanvas"></div>
     </div>
     <p class="mapstatus" id="mapstatus" aria-live="polite">Select a domain to trace its canonical dependencies.</p>
-    <p class="note" style="margin-top:14px"><span style="color:var(--gold)">Gold</span> mappings extend a core type (same identity, extra columns); <span style="color:var(--indigo-soft)">indigo</span> mappings reference one (foreign key into shared identity). Own entities carry no mapping — they exist only inside the domain.</p>
+    <p class="note" style="margin-top:14px"><span style="color:var(--ext-text)">Ochre</span> mappings extend a core type (same identity, extra columns); <span style="color:var(--core-text)">indigo</span> mappings reference one (foreign key into shared identity). Own entities carry no mapping — they exist only inside the domain.</p>
   </div>
 </section>
 
@@ -152,7 +152,7 @@
       <p style="margin-top:10px"><strong>Stance — version brokering waits for v1.</strong> Rows and commands stamp <span class="k">ontology_version</span> (now 1.3), but the gateway enforces EQUALITY, not R07's compatibility windows: pre-release there is no data to migrate and no third-party contract to keep rendering, so a mismatch means a stale registration. The windows return when v1 ships; until then the ladder itself is one rung — schema modules carry their final shape and a dev vault is recreated, not migrated.</p>
     </div>
 
-    <div class="physcard rv" style="border-left-color:var(--indigo)">
+    <div class="physcard rv" style="border-left-color:var(--core-text)">
       <h3>The gateway contract — everything SQLite cannot enforce, in one auditable choke point (elaborated in §10)</h3>
       <p>SQLite has no row-level security, no stored procedures and no server, so the gateway is the sole holder of connections — locally <em>and</em> hosted — and every request passes one pipeline: <strong>identity → consent → contract → execution → evidence</strong>. Identity: every caller authenticates as a row (<span class="k">consent.app.signing_key</span>, <span class="k">consent.agent</span>, <span class="k">consent.device</span>); no credential, no path to data. Consent: an active <span class="k">access_grant</span> must exist, its <span class="k">grant_scope</span> rows must cover the schema and verb, row filters and field masks are applied, declared purpose is checked against <span class="k">policy</span>, and command risk against the app’s <span class="k">risk_ceiling</span> — any step may deny, and a deny is a receipted outcome, not an exception. Contract: writes are never rows, only typed commands — payloads validated against JSON-Schema, preconditions evaluated as real queries and recorded as <span class="k">agent.invocation_check</span> rows <em>before</em> anything mutates, postconditions verified after. Execution: the gateway owns write ordering (journal invocation → vault rows → domain rows), the ACID boundary, idempotent replay off UUIDv7 keys and <span class="k">external_id</span> uniqueness, and everything declarative constraints cannot express — polymorphic refs (<span class="k">link</span>, <span class="k">attachment</span>), cross-file FKs, Σ-invariants. Evidence: every read and every command, allowed or denied, emits a <span class="k">consent.receipt</span>; every write stamps <span class="k">consent.provenance</span>; outcomes hang <span class="k">agent.evidence</span> and <span class="k">agent.explanation</span> — unskippable because there is no other door.</p>
       <p style="margin-top:10px"><strong>Standing duties</strong> (not request-shaped): compiling and clamping <span class="k">consent.app_view</span> definitions and refreshing materializations marked <span class="k">wasDerivedFrom</span>; parking high-risk invocations and routing owner confirmations (the pause between draft and send is gateway state); the revocation cascade — sessions killed, views invalidated, extension files detached, instantly; lifecycle sweeps (<span class="k">purge_at</span> deletions, retention policy, share and grant expiry, <span class="k">export_job</span> runs); polymorphic-ref cleanup — every <span class="k">(type,id)</span> pointer is enumerated once in the poly-ref registry (<span class="k">packages/vault/src/schema/poly-refs.ts</span>) with a per-ref end-date/delete/revoke policy the gateway applies on purge and on a Browse dependent-delete, so no orphan share, embedding or sync-map row survives its target; ingest discipline at the vault border (dedupe on <span class="k">external_id</span>, per-row provenance, handle→identity resolution); ontology version brokering per app (R07 compatibility windows); and file custody — attachments, WAL checkpoints, backups, <span class="k">appext</span> creation and deletion.</p>
@@ -221,13 +221,13 @@
 </section>
 
 <!-- ================= §08 OWNERSHIP MATRIX ================= -->
-<section id="matrix" class="dark" style="background:var(--night-2)">
+<section id="matrix" class="dark">
   <div class="wrap">
     <p class="eyebrow">§08 · Ownership matrix</p>
     <h2>Who owns which concept</h2>
     <p class="lede">The whole argument in one grid. Read a row: a concept is <strong>Canonical</strong> exactly once; domains may <strong>Extend</strong> it or <strong>Reference</strong> it, never re-declare it. If a cell tempts you to write “C” twice in a row, the model has forked and you are rebuilding silos.</p>
-    <div class="mxscroll" style="background:var(--night-3);border-color:var(--nline)">
-      <table class="mx" id="mxtable" style="color:var(--bone)"></table>
+    <div class="mxscroll">
+      <table class="mx" id="mxtable" style="color:var(--text)"></table>
     </div>
     <div class="mxlegend">
       <span><span class="mx mC" style="display:inline-block"><span>C</span></span> canonical — declared here</span>
@@ -245,7 +245,7 @@
     <h2>Watch one agent cross five silos that no longer exist</h2>
     <p class="lede">In the silo world each of these scenarios is a human copy-pasting between apps. Here the agent simply follows canonical references — and every hop shows the object in play, the grant that authorized it, and the receipt it left behind.</p>
     <div class="chiprow" id="scenarioChips" role="group" aria-label="Choose a scenario"></div>
-    <p class="note" id="scenarioIntro" style="color:var(--bone-soft)"></p>
+    <p class="note" id="scenarioIntro" style="color:var(--text-soft)"></p>
     <div class="flowsteps" id="flowsteps" aria-live="polite"></div>
   </div>
 </section>
@@ -304,7 +304,7 @@
       <article class="rule rv"><h3>One judgment, one mechanism</h3><p>Entity-scoped meaning goes through a universal join; surface-scoped state rides the domain row. Starred is a flags-scheme <span class="k">core.tag</span> on the canonical entity; an owner memo is a <span class="k">knowledge.annotation</span>; employment is a <span class="k">core.link</span>. A <span class="k">favorite</span> boolean on a domain table is a rejected review — it silently discards who judged and when, and re-imports the app-silo fragmentation the vault exists to dissolve.</p></article>
       <article class="rule rv"><h3>Every app rides the paved road</h3><p>Centraid is a superapp, not a platform: every app is first-party code shipped in the release (issue #799 retired the generated/served plane). The paved road stays exactly as strict anyway, because trusting your own code is how a model rots: a manifest becomes a grant (explicit <span class="k">risk_ceiling</span>), reads go through registered <span class="k">consent.app_view</span> definitions the gateway clamps to scope, writes go through existing typed commands, and custom data lives in <span class="k">core.attribute</span>/<span class="k">concept</span>/<span class="k">link</span> or a declared per-app <strong>ext band</strong> inside the vault (issue #286) that may point <em>into</em> the canonical model but is never referenced <em>by</em> it. Uninstall = revoke grant + retain-then-purge the band; projections stay disposable and the model stays everything.</p></article>
     </div>
-    <div class="cta rv" style="border-color:var(--gold)">
+    <div class="cta rv" style="border-color:var(--ext-text)">
       <h3>The domain admission checklist (issue #310 C6)</h3>
       <p>Locker and Tally shipped whole apps before anyone noticed the universal mechanisms had not come along — a second tag table, a private junction, an unindexed domain. New domains keep landing; drift is a process failure, not a modeling one. <strong>A PR that adds a vault domain answers all seven in review:</strong></p>
       <p style="margin-top:8px">
@@ -372,7 +372,7 @@
       <p><strong>Consent model: manifest-declared scopes with explicit owner approval.</strong> An app's <span class="k">app.json</span> <span class="k">vault</span> block is a request, never a grant; the owner approves it over <span class="k">POST /centraid/_vault/apps/&lt;id&gt;/grants</span>, and until then every call is a receipted deny.</p>
       <p><strong>Data planes: one file, two bands.</strong> The per-app <span class="k">data.sqlite</span> is deleted (issue #286); app extension tables ride inside <span class="k">vault.db</span> as the declared ext band, and the shipped blueprints declare zero of them — pure projections. The canon stays the consent-gated shared plane; the band boundary, not a separate file, is the silo line now.</p>
       <p>All six phases are implemented and tested: the vault plane mounts off <span class="k">GatewayPaths.vaultDir</span> (<span class="k">gateway/src/serve/vault-plane.ts</span>), live apps enroll and uninstalls cascade, <span class="k">ctx.vault</span> rides the worker RPC (<span class="k">app-engine/src/worker/runner.ts</span>), owner routes serve grants and parked confirmations, the automation compiler teaches cloned handlers this same surface (there is no user-facing build-an-app flow — #799 retired that plane, and the compiler survives because it is what turns an automation into a plan), and the sweep clock runs on the gateway lifecycle.</p>
-      <p><strong>And the §01 projection band ships as blueprints.</strong> Eight product surfaces are first-class templates in <span class="k">packages/blueprints/apps</span> — <span class="k">docs</span>, <span class="k">photos</span>, <span class="k">notes</span>, <span class="k">people</span>, <span class="k">locker</span>, <span class="k">tally</span>, <span class="k">agenda</span>, <span class="k">tasks</span> — each a pure projection: zero private tables, every row from <span class="k">ctx.vault</span>, every mutation a typed command, consent denial and the parked pause rendered as first-class UI states. Revoke a grant and the projection goes dark; the model, history and receipts remain. The same eight are documented from the user's side in <a href="../apps/" style="color:var(--indigo)">the Apps chapter</a>.</p>
+      <p><strong>And the §01 projection band ships as blueprints.</strong> Eight product surfaces are first-class templates in <span class="k">packages/blueprints/apps</span> — <span class="k">docs</span>, <span class="k">photos</span>, <span class="k">notes</span>, <span class="k">people</span>, <span class="k">locker</span>, <span class="k">tally</span>, <span class="k">agenda</span>, <span class="k">tasks</span> — each a pure projection: zero private tables, every row from <span class="k">ctx.vault</span>, every mutation a typed command, consent denial and the parked pause rendered as first-class UI states. Revoke a grant and the projection goes dark; the model, history and receipts remain. The same eight are documented from the user's side in <a href="../apps/" style="color:var(--core-text)">the Apps chapter</a>.</p>
     </div>
   </div>
 </section>
