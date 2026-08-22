@@ -1,13 +1,13 @@
 {
-  "approvedDeviation": "#836 re-pins the `tests/matrix.json` fingerprint in\n`tests/quality/classification-ratchet.json` after removing the spent\n`replacesMinimumTestsFlow` marker from `web-offline-pending-row`. That key\nwas a one-time rename claim checked against the merge base, and since #832\nmerged the rename and the marker together it could only report an unknown\npredecessor — so the ratchet was red on `main` itself. #834's own re-pin\nnote is superseded rather than contradicted: its four matrix notes are kept\nwhole and only the marker line leaves. No floor, quality, demonstratedRed or\nmatrixGovernanceFingerprint value moves. Prior: #834.",
-  "matrixGovernanceFingerprint": "8657a0b1943b8244ebf0632ca4c4f4ede4e22ee034662db59fc2f39058a34737",
+  "approvedDeviation": "The matrix-governance fingerprint and the two governed file fingerprints are re-pinned by #842: the seven qualities gained gates P4, R5 and L5 with their demonstrated-red evidence, five demonstratedRed commands were rewritten off `bunx` onto the `bun`/`node` forms the gate requires, and `tests/quality/fault-points.ts` gained the fault points W1.1's crash lane enumerates. No classification was weakened: no quality lost a gate and no gate lost its evidence.",
+  "matrixGovernanceFingerprint": "2f4acea8300a63b0fb407307840938bd29af4035239340a3addba62fc81e7b75",
   "fingerprints": {
     "packages/server/src/acp/backends/acp/vault-mcp-server.ts": "62893489b538f861feb46200dc69a53a7ce02b0809224b93f74e2f39fc32276d",
     "packages/server/src/automation/manifest/manifest.ts": "0e2b3c0a31d39907e2e2ae860bb3bdbf0c66e683e71dc59d20aaf14ff5ef220f",
     "packages/server/src/routes/route-security.ts": "c2fd8dcb6a9687552e4550e3496085b28c1498034472eb6f1173027b4300d82c",
     "packages/server/src/serve/health-registry.ts": "d1f3fc416ecbe43af2ab4b091fecf3b1041590e52f2002a242e5031c65c9fd04",
     "packages/vault/src/schema/sealed.ts": "40fba400b21048b193006c3e81d063e0fdfb79cfe1dd3b4b90b94bd44547ecc0",
-    "tests/quality/fault-points.ts": "805c9c9611cee6a209cba5ff3aa0365e70bb3a3bbbc6e2383cecdd07f50f570e",
-    "tests/matrix.json": "a8098d6b6e9a8845de029443180d0bcc0ea3663102a72d580339b61c29da48bd"
+    "tests/quality/fault-points.ts": "2b667efd1354071ab91043ab33f5ebd29cd79a11fcc4716edbe00aeada60f4bd",
+    "tests/matrix.json": "d32c34699004a4b9d2714d07c19e06b504ee51a170f7ae0ff38b9d218de99423"
   }
 }

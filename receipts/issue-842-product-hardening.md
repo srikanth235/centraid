@@ -812,6 +812,8 @@ but until now never actually enumerated here, which the independent audit caught
 
 ## Decisions
 
+- **Quality-knob re-pin (#842).** The matrix-governance fingerprint and the two governed file fingerprints are re-pinned by #842: the seven qualities gained gates P4, R5 and L5 with their demonstrated-red evidence, five demonstratedRed commands were rewritten off `bunx` onto the `bun`/`node` forms the gate requires, and `tests/quality/fault-points.ts` gained the fault points W1.1's crash lane enumerates. No classification was weakened: no quality lost a gate and no gate lost its evidence.
+
 - **SonarCloud is Autoscan for analysis, token-gated CI for config only.**
   Automatic Analysis stays on (SonarCloud rejects a CI scanner while it is), so
   the wired workflow applies project configuration on push-to-main/weekly/dispatch
