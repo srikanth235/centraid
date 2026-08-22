@@ -300,6 +300,21 @@ Two fixes that belong to no workstream, made while driving PR #845's CI to green
   whether the hook worked or not; that path stays owned by
   `sandbox-escape.test.ts` and its real worker threads. A vacuous test would
   have been worse than the gap.
+- **The suite wall-clock ceiling was measuring a suite that no longer exists.**
+  W0.1 wired `test:suite-wall-clock` into CI `verify`; this branch is the first
+  time the gate has ever run there, and it went red. The ceiling
+  (`tests/suite-wall-clock.json`, 1,620,000 ms) was seeded on 2026-07-31 from
+  849 files, and these two umbrellas take the suite to **1,332 files (+57%)** —
+  the fuzz runner and crasher replay, the join lane, the time zoo, network and
+  composition chaos, the kill lane, the archaeology and schema corpora, the
+  prompt-injection corpus, the hostile-peer harness and the sandbox suites.
+  Re-seeded to 1,825,000 ms by the file's own sanctioned route: a top-level
+  `approvedDeviation` stating what the extra time buys, measured 2026-08-22 at
+  1,587.1 s and set 15% above — the same method and margin the original seed
+  used. That margin is what absorbs a CI runner being slower than this host,
+  which is exactly how the old number came to be red (CI crossed 1,620 s while
+  the same tree measured 1,587 s locally). `--write` still only ever lowers the
+  number, so the next sustained measurement ratchets it back down.
 - **`apps/desktop/tests/e2e/onboarding-home.spec.ts` measured the runner, not
   the product.** The
   assistant-open budget polled with `requestAnimationFrame`, so the interval
