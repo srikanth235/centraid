@@ -304,8 +304,14 @@ function execute(req: WorkerRequest): void {
       // is the taint root; everything it pulls in inherits the confinement.
       const { loadSandbox } = await loadSandboxBoot();
       const sandboxApi = await loadSandbox();
+      // A seed reads the sample assets shipped beside it; a query or an action
+      // reads nothing. Choosing the lane from the handler file — rather than
+      // giving every handler the seed's grant — keeps the floor where it is.
+      const isSeed = /(?:^|[\\/])seed\.(?:m?js|tsx?)$/u.test(req.handlerFile);
       const sandbox = sandboxApi.installWorkerSandbox(
-        sandboxApi.appHandlerPolicy()
+        isSeed
+          ? sandboxApi.appSeedPolicy(path.dirname(req.handlerFile))
+          : sandboxApi.appHandlerPolicy()
       );
       sandbox.taint(pathToFileURL(req.handlerFile).href);
       const mod = (await import(pathToFileURL(req.handlerFile).href)) as {

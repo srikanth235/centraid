@@ -72,6 +72,7 @@ function sandboxModuleUrl(base: string): string {
 export interface SandboxBoot {
   installWorkerSandbox: (policy: SandboxPolicy) => SandboxHandle;
   appHandlerPolicy: () => SandboxPolicy;
+  appSeedPolicy: (appDir: string) => SandboxPolicy;
   automationHandlerPolicy: () => SandboxPolicy;
   modelRuntimePolicy: (readRoots: readonly string[]) => SandboxPolicy;
 }
@@ -89,12 +90,14 @@ export async function loadSandbox(): Promise<SandboxBoot> {
   };
   const policy = (await import(sandboxModuleUrl("policy"))) as {
     appHandlerPolicy: SandboxBoot["appHandlerPolicy"];
+    appSeedPolicy: SandboxBoot["appSeedPolicy"];
     automationHandlerPolicy: SandboxBoot["automationHandlerPolicy"];
     modelRuntimePolicy: SandboxBoot["modelRuntimePolicy"];
   };
   return {
     installWorkerSandbox: install.installWorkerSandbox,
     appHandlerPolicy: policy.appHandlerPolicy,
+    appSeedPolicy: policy.appSeedPolicy,
     automationHandlerPolicy: policy.automationHandlerPolicy,
     modelRuntimePolicy: policy.modelRuntimePolicy,
   };

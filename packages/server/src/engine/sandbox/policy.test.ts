@@ -11,6 +11,7 @@ import { describe, expect, test } from "vitest";
 
 import {
   appHandlerPolicy,
+  appSeedPolicy,
   automationHandlerPolicy,
   builtinDecision,
   builtinId,
@@ -94,6 +95,47 @@ describe("automation-handler lane", () => {
     expect(automation.allowedBuiltins).toStrictEqual(app.allowedBuiltins);
     // Separate lanes: widening one must never silently widen the other.
     expect(automation.lane).not.toBe(app.lane);
+  });
+});
+
+describe("app-seed lane", () => {
+  const appDir = path.resolve("/tmp/centraid-sandbox-roots/apps/photos");
+  const policy = appSeedPolicy(appDir);
+
+  // The regression this lane exists for: photos/seed.js reads its bundled
+  // sample images with readFileSync, and the app-handler lane refused `fs`
+  // outright, so demo seeding died with "lane app-handler has no filesystem
+  // grant". Revert the runner to appHandlerPolicy for seeds and this fails.
+  test("grants fs, confined to the seed's own app directory", () => {
+    expect(policy.filesystem).toStrictEqual({
+      mode: "read-confined",
+      readRoots: [appDir],
+    });
+    expect(builtinDecision(policy, "fs").kind).not.toBe("refused");
+    expect(builtinDecision(policy, "fs/promises").kind).not.toBe("refused");
+  });
+
+  test("is otherwise exactly the app-handler floor, and a separate lane", () => {
+    const app = appHandlerPolicy();
+    expect(policy.network).toBe("denied");
+    expect(policy.subprocess).toBe("denied");
+    expect(policy.environment).toBe("denied");
+    // No native addons: a seed reads files, it does not load binaries.
+    expect(policy.nativeAddons).toBe(false);
+    // The ONLY widening over the handler lane is the two fs ids.
+    expect([...policy.allowedBuiltins].sort()).toStrictEqual(
+      [...app.allowedBuiltins, "fs", "fs/promises"].sort()
+    );
+    // Separate lanes: restoring what a seed needs must never widen handlers.
+    expect(policy.lane).not.toBe(app.lane);
+    expect(app.filesystem).toBe("denied");
+  });
+
+  test("refuses a read outside the seed's own directory", () => {
+    const sibling = path.resolve("/tmp/centraid-sandbox-roots/apps/notes");
+    const grant = policy.filesystem as { readRoots: readonly string[] };
+    expect(grant.readRoots).not.toContain(sibling);
+    expect(grant.readRoots).toHaveLength(1);
   });
 });
 

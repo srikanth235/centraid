@@ -18,6 +18,7 @@ export {
 export type { SandboxDeniedCode } from "./denied.js";
 export {
   appHandlerPolicy,
+  appSeedPolicy,
   automationHandlerPolicy,
   builtinDecision,
   builtinId,

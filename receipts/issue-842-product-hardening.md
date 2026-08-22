@@ -254,6 +254,21 @@ floor 3) and `backup-restore-drill-grading` (correctness, unit, floor 8).
 
 Two fixes that belong to no workstream, made while driving PR #845's CI to green:
 
+- **W7.1 regression, found by the pre-push gate and fixed properly.** The
+  sandbox's app-handler lane refuses `fs` outright, on a survey that read the
+  `.ts` query/action handlers and concluded "every first-party handler imports
+  zero node builtins". It missed the `.js` SEED modules:
+  `packages/blueprints/apps/photos/seed.js` reads its bundled `sample/*` images
+  with `readFileSync`, so demo seeding died with `lane "app-handler" has no
+  filesystem grant` — a real product break this branch introduced. Fixed with a
+  new `appSeedPolicy` lane rather than by widening the handler lane: read-only,
+  confined to the seed's OWN app directory, no native addons, everything else
+  at the handler floor. `engine/worker/runner.ts` picks it from the handler
+  file. The widening is nominal — a seed can already `import` anything in that
+  directory — and every sibling app, the vault and the rest of the disk stay
+  refused. Three new cases in `policy.test.ts` pin it, including that the
+  handler lane still reads `filesystem: "denied"`. The stale premise in the
+  policy comment is corrected in place.
 - `oxfmt.config.ts` gains one entry in the existing generated-output exclusion
   list for `packages/tunnel/fixtures/peer-target-corpus.json`. Those bytes are
   the JS-side half of a cross-language interface and are byte-asserted by

@@ -21,6 +21,7 @@ import path from "node:path";
 
 export type SandboxLane =
   | "app-handler"
+  | "app-seed"
   | "automation-handler"
   | "model-runtime";
 
@@ -93,16 +94,56 @@ export const FS_BUILTIN = "fs";
 export const FS_PROMISES_BUILTIN = "fs/promises";
 
 /**
- * App handlers (queries / actions). Today every first-party handler in
+ * App handlers (queries / actions). Every first-party QUERY AND ACTION in
  * `packages/blueprints/apps/**` imports zero node builtins, so the
  * computational floor with no filesystem is not a theoretical tightening —
- * it is the shape the corpus already has.
+ * it is the shape that corpus already has.
+ *
+ * "Handler" here excludes seed modules, which do read their own bundled sample
+ * assets; they get `appSeedPolicy` below. The original survey behind this lane
+ * globbed the `.ts` handlers only and read the `.js` seeds as out of scope,
+ * which is how demo seeding came to be refused.
  */
 export function appHandlerPolicy(): SandboxPolicy {
   return {
     lane: "app-handler",
     allowedBuiltins: COMPUTATIONAL_BUILTINS,
     filesystem: "denied",
+    network: "denied",
+    subprocess: "denied",
+    nativeAddons: false,
+    environment: "denied",
+  };
+}
+
+/**
+ * Demo-scenario SEED modules (`packages/blueprints/apps/*\/seed.js`).
+ *
+ * A seed is dispatched through the same worker runner as a query or an action,
+ * but it is not the same kind of code: it ships sample assets beside itself and
+ * reads them off disk (`photos/seed.js` loads `sample/*` with `readFileSync`)
+ * to build a believable first-run library. The app-handler lane refuses `fs`
+ * outright, which is right for handlers and wrong for seeds — W7.1 landed that
+ * lane on a corpus survey that read the `.ts` handlers and missed the `.js`
+ * seeds, so demo seeding broke with `lane "app-handler" has no filesystem
+ * grant`. This lane is the correction, kept SEPARATE from `appHandlerPolicy`
+ * so restoring what seeds need never quietly hands it to every handler.
+ *
+ * The grant is the narrowest one that works: read-only, confined to the seed's
+ * OWN app directory. That is not a meaningful widening even in principle — a
+ * seed can already `import` anything in that directory, so being able to read
+ * those same bytes adds no authority. What it still refuses is every sibling
+ * app's directory, the vault, and the rest of the disk.
+ */
+export function appSeedPolicy(appDir: string): SandboxPolicy {
+  return {
+    lane: "app-seed",
+    allowedBuiltins: [
+      ...COMPUTATIONAL_BUILTINS,
+      FS_BUILTIN,
+      FS_PROMISES_BUILTIN,
+    ],
+    filesystem: { mode: "read-confined", readRoots: normalizeRoots([appDir]) },
     network: "denied",
     subprocess: "denied",
     nativeAddons: false,
