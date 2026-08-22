@@ -8,8 +8,8 @@ and [#842](https://github.com/srikanth235/centraid/issues/842) surfaced. None
 is a regression introduced by that work: they are pre-existing behaviours the
 new lanes were built to *find*.
 
-This receipt covers **Part 1 — pinned defects**. Eight of the ten are fixed
-here. Per the issue's working agreement and ruling **A-pinned**
+This receipt covers **Part 1 — pinned defects**. Nine of the ten are fixed
+here, and the tenth's named prerequisite is cleared. Per the issue's working agreement and ruling **A-pinned**
 ([docs/decisions.md](../docs/decisions.md)), fixing a Part 1 item means
 **deleting its pin in the same change** — a pin that survives its fix is a lie
 in the other direction. Every deleted pin left a regression lock in its place,
@@ -23,6 +23,8 @@ which is what the pin existed to buy.
 - [x] P8 — the diagnostics bundle emitted the vault name verbatim
 - [x] P1 — the owner is told a share is gone when it is not
 - [x] P2 — the DST fall-back fired the repeated wall minute twice
+- [x] P10 — three transport-boundary responses shipped without `nosniff`
+- [x] P9 — the ONNX resolver stops needing `createRequire`
 - [x] The record moved with the code
 
 One commit, not one per defect: `commit-issue-receipt-match` requires every
@@ -40,16 +42,15 @@ boundaries would otherwise have carried.
 | P6 bare peer-plane prefix admitted by a separator | **Fixed** — both languages |
 | P7 lone surrogate admitted JS-side | **Fixed** — representability rule |
 | P8 diagnostics bundle emits the vault name verbatim | **Fixed** — one bundle |
-| P9 unsandboxed automation worker | **Not fixed** — blocked, see below |
-| P10 three responses without `nosniff` | **Not fixed** — filed as #844 |
+| P9 unsandboxed automation worker | **Prerequisite cleared**; default flip still owed, see below |
+| P10 three responses without `nosniff` | **Fixed** — one transport-boundary writer |
 
-**P9 is left standing deliberately**, and its pin with it. The issue names the
-prerequisite and it is the real unit of work: the default cannot flip until
-`packages/model-runtime/src/onnx.ts` stops resolving `runtime/node_modules`
-through `node:module`'s `createRequire`, which every sandbox lane refuses. That
-resolver rework is not this change. **P10 is #844's**, listed on the umbrella
-for completeness only. Parts 2 (posture decisions), 3 (observations) and 4
-(blocked on an external actor) are untouched — a maintainer decision and an
+**P9's pin is narrowed, not deleted.** Its named prerequisite — the ONNX
+resolver's dependency on `createRequire` — is cleared here, and the consequence
+is proved against the shipped bundles. The default itself does not flip: see the
+P9 section below and [Out of scope](#out-of-scope) for the two decisions and the
+one dynamic proof still owed. Parts 2 (posture decisions), 3 (observations) and
+4 (blocked on an external actor) are untouched — a maintainer decision and an
 external actor are not things a PR supplies. The `desktop-e2e` assistant-open
 budget reported as P11 in the issue comments belongs to
 [#789](https://github.com/srikanth235/centraid/issues/789)'s owner: it is red on
@@ -248,6 +249,95 @@ oldest-first now, so the survivor is the **earlier** instant — which is what t
 policy has always said ("occurs once at the earlier instant") and what makes the
 cross-window suppression land on the right copy.
 
+### P10 — three transport-boundary responses shipped without `nosniff`
+
+`packages/server/src/engine/http/http-server.ts` writes three responses
+**itself**, before or instead of any route handler: `invalid_host` (the Host
+allowlist, ahead of everything), `unauthorized` (the bearer gate) and
+`internal_server_error` (the final catch). They exist precisely because no
+handler ran, so they never reach `http-utils.ts`'s `sendJson` — which is where
+`X-Content-Type-Options: nosniff` is set for every other JSON response on this
+server. All three were hand-rolled `res.end(JSON.stringify(...))` calls and all
+three shipped without the header.
+
+One writer (`endTransportJson`) replaces the three, so the next
+transport-boundary response cannot forget it either. `Connection: close` stays a
+parameter rather than becoming uniform: right for a refused Host and for a route
+that already threw, wrong for a 401, which is an ordinary answer on a connection
+the caller may reasonably retry on.
+
+This is the item the umbrella lists as already filed as
+[#844](https://github.com/srikanth235/centraid/issues/844). It is fixed here
+because it is a Part 1 defect on this issue and the fix is four lines.
+
+### P9 — the ONNX resolver stops needing `createRequire`
+
+**The named prerequisite is done. The default flip is not, and that is stated
+rather than implied.**
+
+`packages/model-runtime/src/onnx.ts` resolved `runtime/node_modules` through
+`node:module`'s `createRequire`. Every sandbox lane refuses `node:module`, and
+correctly so — a `createRequire` handed to the graph resolves through Node's own
+loader and skips the lane's hooks entirely, so that one builtin re-opens
+everything the lane closed. While it was there, **no recognition automation
+could run under any lane**, which is why the automation plane's default is no
+lane at all.
+
+Resolution was the only thing `createRequire` was doing; the loading is already
+a plain dynamic `import()` of an absolute file URL, which the hooks do see. So
+the resolution is now written out — a package directory under
+`runtime/node_modules`, then `exports["."]` (walking `require`/`node`/`default`),
+then `main`, then `index.js`, with every candidate checked on disk. Deliberately
+the narrow part of Node's algorithm the four packages `runtime/` installs need,
+and no more: no
+`node_modules` walk up the tree (the runtime dir is flat), no wider condition
+matrix. `resolveRuntimeEntry` is exported so hand-rolled resolution is **pinned**
+against real manifest shapes rather than trusted by inspection — including the
+shape `onnxruntime-node` publishes, a scoped specifier, a bare condition map,
+and an `exports` target the install did not produce.
+
+The five committed recognition bundles are rebuilt (`build:automations`), and
+`bundle-lane-conformance.test.ts` measures the consequence against the artifacts
+the worker actually executes rather than the source they came from:
+
+- no shipped bundle imports `node:module` any more — the blocker itself;
+- every non-recognition bundle imports **no** node builtin, so the
+  `automation-handler` lane admits it as-is;
+- all four ONNX recognition bundles import only `fs`, `fs/promises`, `path` and
+  `url` — all admitted by the `model-runtime` lane;
+- `transcript` is the **one** bundle no lane admits, and the refusal is exactly
+  `child_process` (it shells out to ffmpeg). Asserted, so the day a second
+  bundle shells out it is visible.
+
+What is **still owed** before the default can flip, both decisions rather than
+obstructions, and both recorded in the narrowed pin:
+
+1. `transcript`'s ffmpeg call. Admitting `child_process` into the
+   `model-runtime` lane would trade the whole subprocess denial for one
+   capability — the "never weaken policy to go green" line. Moving ffmpeg out of
+   the handler is the other direction, and it is a product call.
+2. Nothing in production chooses a lane per handler: `sandboxLane` is set only
+   by tests. Flipping the default means deciding where that choice lives (the
+   automation manifest is the obvious home) **and** proving the native ONNX load
+   still works inside the lane on a machine where
+   `bun run --cwd packages/model-runtime setup` has run. A static builtin
+   conformance proof is not that, and this container has no installed runtime to
+   produce the dynamic one.
+
+An independent fresh-context audit of this branch refuted the first draft of
+that resolution and was right to: `resolveFileTarget`'s directory test was a
+*content* heuristic ("does it hold a package.json or an index.js?") standing in
+for a stat, so a `main` naming a directory with neither was returned **as the
+entry file** — a directory handed to `import()`, with the valid `index.js`
+fallback beside it skipped, and an actionable `RuntimeNotInstalledError` turned
+into a confusing import failure. It is a `statSync().isDirectory()` now, a
+directory resolves through its own `package.json` before its `index.js`, and an
+extensionless `main` gets CommonJS's extension search. All three are tested, and
+the first is demonstrated red against the heuristic.
+
+The pin is therefore **narrowed, not deleted** — it now names what actually
+remains instead of a blocker that is gone.
+
 ### The record moved with the code
 
 Stale docs are bugs, so every claim the fixes falsified was rewritten in this
@@ -259,18 +349,14 @@ diagnostics-redaction row, `TESTING.md`'s fuzz-register paragraph,
 
 ## Out of scope
 
-**P9 — an automation worker with no parent-chosen sandbox lane is not sandboxed.**
-Left standing, pin included. The issue names the prerequisite and it is the real
-unit of work: the default cannot flip until `packages/model-runtime/src/onnx.ts`
-stops resolving `runtime/node_modules` through `node:module`'s `createRequire`,
-which every sandbox lane refuses. Flipping the default without that rework would
-break every lane that runs a model; deleting the pin without flipping the default
-would erase the record. Neither is an improvement.
-
-**P10 — three transport-boundary responses without `X-Content-Type-Options`.**
-Already filed as [#844](https://github.com/srikanth235/centraid/issues/844) and
-listed on this umbrella for completeness only. It has its own issue and its own
-receipt.
+**P9's default flip** — the *prerequisite* is done above; what is left is the
+two decisions named there (ffmpeg in `transcript`, and where a per-handler lane
+choice lives), plus a dynamic proof that the native ONNX load survives inside
+the lane. That proof needs a machine where
+`bun run --cwd packages/model-runtime setup` has run; this container has no
+installed runtime, and flipping a security default on a static proof alone would
+ship a change that could break every recognition automation, verified by
+nothing. The pin is narrowed to say exactly that rather than deleted.
 
 **P11 — the `desktop-e2e` assistant-open budget.** Reported in the issue's
 comment thread, and it belongs to [#789](https://github.com/srikanth235/centraid/issues/789)'s
@@ -377,6 +463,8 @@ Every fix is demonstrated red on the pre-fix engine, not merely green after it.
 | P3–P5 | the register's own crashers, which is why they were committed | replay asserts them clean; 2.4M further executions, 0 findings |
 | P6–P7 | the four golden vectors and the three surrogate targets the pins asserted | refused by all three implementations and by the Rust unit test |
 | P8 | the canary pin asserted the vault name was present | absent, with the tripwire counting nothing |
+| P10 | all three transport-boundary responses answered `null` for the header | all three answer `nosniff` |
+| P9 | *(prerequisite, not a defect assertion)* | `node:module` absent from every shipped bundle; 4/5 recognition bundles lane-admissible |
 
 Suites: `packages/vault` 181 files / 1384 tests green; `packages/server` 378 of
 380 files green; `packages/tunnel` green; `packages/backup` green;
@@ -422,6 +510,10 @@ bun run test:fuzz:smoke
 bun run test:qualities                   # diagnostics canary + schema-epoch corpus
 bun run --cwd packages/server test -- src/automation/fire/ src/serve/serve.test.ts
 
+# P9 / P10.
+bun run --cwd packages/model-runtime test          # incl. bundle rebuild-drift
+bun run --cwd packages/server test -- src/engine/sandbox/ src/engine/http/
+
 # The Rust half of the peer-target guard.
 cd packages/tunnel/data-plane && cargo test
 
@@ -444,6 +536,16 @@ bun run --cwd packages/vault test -- src/share/commons-sim.test.ts
 bun run --cwd packages/server test -- src/automation/fire/time-zoo-cron.test.ts
 #   → 3 failed: America/New_York, Europe/Dublin, Australia/Lord_Howe each
 #     "expected [ …, … ] to have a length of 1 but got 2"
+
+# P10 — drop the nosniff setHeader from endTransportJson:
+bun run --cwd packages/server test -- src/engine/http/http-server.test.ts -t nosniff
+#   → AssertionError: expected null to be 'nosniff'
+
+# P9 — restore the content heuristic in resolveFileTarget (existsSync of
+#      package.json/index.js) in place of statSync().isDirectory():
+bun run --cwd packages/model-runtime test -- src/onnx.test.ts
+#   → "falls back past a main naming a directory that holds no entry" fails:
+#     a DIRECTORY is returned as the entry file.
 ```
 
 ## Files changed
@@ -468,6 +570,16 @@ Product:
   — P1, `delivered_at` and migration rung four.
 - `packages/vault/src/grant/grant-store.ts` — P1, the memory is maintained here.
 - `packages/vault/src/grant/fulfillment.ts` — P1, revocation reads the memory.
+- `packages/server/src/engine/http/http-server.ts` — P10, one transport-boundary
+  writer that sets `nosniff`.
+- `packages/model-runtime/src/onnx.ts` — P9, entry resolution without
+  `createRequire`.
+- P9, rebuilt by `build:automations` so the shipped artifacts match the source:
+  `packages/blueprints/automations/photo-ocr/automations/photo-ocr/handler.js`,
+  `packages/blueprints/automations/embed-image/automations/embed-image/handler.js`,
+  `packages/blueprints/automations/embed-text/automations/embed-text/handler.js`,
+  `packages/blueprints/automations/faces/automations/faces/handler.js`,
+  `packages/blueprints/automations/transcript/automations/transcript/handler.js`.
 
 Tests and fixtures:
 
@@ -487,6 +599,14 @@ Tests and fixtures:
   `scripts/corpora/schema-epoch-census.json` — P1, rung four joins the ladder and
   the archaeology corpus.
 - `scripts/fuzz/known-findings.json` — P3/P4/P5 register entries deleted.
+- `packages/server/src/engine/http/http-server.test.ts` — P10 regression lock.
+- `packages/model-runtime/src/onnx.test.ts` — P9, the hand-rolled resolution
+  pinned against real manifest shapes, including the three cases an independent
+  audit of this branch found the first draft got wrong.
+- `packages/server/src/engine/sandbox/bundle-lane-conformance.test.ts` — P9,
+  new: which lane every shipped bundle could run under.
+- `packages/server/src/engine/sandbox/sandbox-escape.test.ts` — P9, the
+  characterisation pin narrowed to what actually remains.
 
 Docs: `docs/decisions.md`, `docs/cron-timezone.md`, `SECURITY.md`, `TESTING.md`,
 `CHANGELOG.md`, and this receipt.
@@ -497,24 +617,40 @@ Independent fresh-context audit against the diff (`git diff origin/main...HEAD`)
 
 **(1) '## What changed' faithfully describes the diff — PASS**
 
-Every one of the 36 non-receipt files in `git diff --stat origin/main...HEAD` is accounted for by the receipt's `## What changed` + `## Files changed` sections; no file is unmentioned, and no described change is absent from the diff.
+Every claim in `## What changed` was checked against the two commits' file diffs, and every one of the 47 non-receipt files in `git diff --stat origin/main...HEAD` is accounted for by `## What changed` + `## Files changed`. Nothing described is absent from the diff; nothing substantive in the diff is undescribed.
 
-- P3 — `packages/backup/src/wal-format.ts`: `parseWalCloserKey` now ends `return closer.endOffset > 0 ? closer : null`, i.e. the parser applies the positivity check, exactly as described; the formatter is untouched.
-- P4/P5 — `packages/client/src/replica/search.ts`: `replicaSearchTokens` replaces the `\p{L}\p{N}\p{M}` `flatMap` with `.filter((token) => /[\p{L}\p{N}]/u.test(token))`, which is character-for-character the gateway's filter in `packages/vault/src/gateway/search.ts` `ftsMatchExpression` (verified against the current source, whitespace split + `"` strip + `.slice(0, 16)` all identical). The punctuation split reappears in the new `tokenPhrase`, and `phraseIndex`/`replicaPendingSearchMatch` evaluate adjacency per field (`fields.some(({ words }) => phraseIndex(...))`), with the highlight spanning `first.start`→`last.end` — all as claimed.
-- P6/P7 — `protocol.ts` moves the length test to `path.length` and adds `isWellFormedTarget`; `iroh_relay.rs::peer_target_allowed` moves it to `path.len()` and gains the four separator cases in its unit test. The test-side claims check out: `rustModel` gained both the representability guard and the byte-measured path-length test, `documentedIntent` gained `isWellFormedString`, the `documented intent` property lost its `if (path === PEER_PLANE_PREFIX) return;` carve-out, and the Rust source-text pin asserts both `path.len() <= PEER_PLANE_PREFIX.len()` present and `target.len() <= PEER_PLANE_PREFIX.len()` absent. Golden: four vectors flipped to `false`, `"pins": {}`; corpus: exactly three rows flipped, all `/centraid/_peer/#…` (the P6 class).
-- P8 — `gateway-diagnostics.ts` and its test are deleted (448 lines, no replacement builder); `buildDiagnostics` in `build-gateway.ts` returns `renderSupportBundle(collectSupportBundleInput({… level: "standard" …})).text`; `diagnostics-routes.ts` takes `() => Promise<string>` and calls the new `sendJsonText`; `SupportBundleSourceOptions.anomalies` is relaxed to `{ snapshot: () => readonly AnomalyRecord[] }`. `serve.test.ts` and the canary assert the new shape, including `storage[0]` having no `name`.
-- P1 — `share-grant.ts` factors `SHARE_FULFILLMENT_COLUMNS` and adds `SHARE_FULFILLMENT_DELIVERY_MEMORY_DDL` (table rebuild, `defer_foreign_keys`, backfill stamping only `delivered`/`remove_sent` from `updated_at`); the copy's `SELECT` does not read `delivered_at`, as the receipt states. `migrate.ts` appends it as rung four; `grant-store.ts` maintains `delivered_at` in both `ensureFulfillment` (stamped when opened at `delivered`) and `setFulfillmentState` (`COALESCE` keeps the first instant, cleared on `removed`); `fulfillment.ts` switches the never-delivered branch from `row.state === "awaiting_channel" || row.state === "syncing"` to `row.deliveredAt === null`. The simulator's D1 carve-out is deleted from `checkSeverance` and `reach_lost_after_delivery` is asserted as a non-vacuity leg.
-- P2 — `cron-cursor.ts` collects matches then `matched.reverse()`s before deduping (oldest-first survivor), and `readCronCursor` calls the new `deliverableInstants`, which only re-walks `(from − 3h, from]` when `fellBackWithin` is true.
-- Docs/CHANGELOG/register — all five doc edits described are present, with the wording the receipt attributes to them.
+- **P10 — genuinely fixed, all three responses.** `packages/server/src/engine/http/http-server.ts:247` adds `endTransportJson`, which unconditionally sets `X-Content-Type-Options: nosniff` (`:255`). All three hand-rolled writers are gone and route through it: `invalid_host` at `:328` (400, `close = true`), `unauthorized` at `:377` (401, `close` omitted — the receipt's stated reason), `internal_server_error` at `:317` (500, `close = true`). A grep of the file leaves exactly one `res.end(JSON.stringify(...))`, the one inside `endTransportJson`; the only other `res.end()` is the 204 CORS preflight at `:344`, which carries no body. `http-server.test.ts` asserts the header on all three, and drives the 500 through a real throwing `extraHandlers` entry rather than mocking it.
+- **P9 — `createRequire` genuinely gone, source and artifacts.** `packages/model-runtime/src/onnx.ts` no longer imports `node:module`; the only surviving mentions of `createRequire` in the package are prose in comments (`onnx.ts:19,21,26`, `onnx.test.ts:78`). Across **all 29** committed bundles under `packages/blueprints/automations/*/automations/*/handler.js`, `grep -c 'node:module\|createRequire'` returns 0 — not just the five rebuilt ones. The four bullets in the P9 section were re-derived independently by scanning every bundle's `node:` specifiers: 24 non-recognition bundles import **zero** builtins; `embed-image` and `faces` import `fs`, `path`, `url`; `embed-text` and `photo-ocr` add `fs/promises`; `transcript` alone adds `child_process`. `bundle-lane-conformance.test.ts` asserts exactly that, with a non-vacuity guard (`ALL.length > 20`) and a `toContain("fs")` leg so the lane's read confinement is not satisfied trivially.
+- **P9 — the receipt does not overclaim.** The `## What changed` P9 section opens "**The named prerequisite is done. The default flip is not**", enumerates the two remaining decisions, and closes "The pin is therefore **narrowed, not deleted**." That matches the diff: `packages/server/src/engine/sandbox/sandbox-escape.test.ts:474` still holds the `CHARACTERIZATION` describe and its live `test("still reaches the filesystem, subprocesses and the environment")` at `:511` — the diff touches only the comment. `sandboxLane` is verified to have no production caller (`packages/server/src/automation/worker/runner.ts:49,502,505` are the only non-test hits), so the receipt's second remaining-decision is factually right. The disposition table says "Prerequisite cleared; default flip still owed"; nowhere in the receipt is P9 called fixed.
+- Commit-1 claims re-verified rather than inherited: P3 (`wal-format.ts` `parseWalCloserKey` now ends `return closer.endOffset > 0 ? closer : null`); P4/P5 (`replica/search.ts` `replicaSearchTokens` is now character-for-character `ftsMatchExpression` in `packages/vault/src/gateway/search.ts:31-37` — same `split(/\s+/u)`, same `replaceAll('"','')`, same `/[\p{L}\p{N}]/u` filter, same `.slice(0,16)` — and the punctuation split reappears in `tokenPhrase`/`phraseIndex`, evaluated per field); P6/P7 (`protocol.ts` moves the length test to `path.length` and adds `isWellFormedTarget`, correctly handling the `charCodeAt` → `NaN` case at end-of-string; `iroh_relay.rs::peer_target_allowed` moves it to `path.len()` and its unit test gains the four separator cases); P8 (`gateway-diagnostics.ts` is deleted from the tree with its test, `buildDiagnostics` returns `renderSupportBundle(...).text` at `level: "standard"`, `sendJsonText` added); P1 (`delivered_at` maintained in both `ensureFulfillment` and `setFulfillmentState`, `COALESCE` keeping the first instant and `removed` clearing it, revocation switched from `row.state === …` to `row.deliveredAt === null`, rung four appended in `migrate.ts`); P2 (`matched.reverse()` for the oldest-first survivor, and `deliverableInstants` re-walking the prior 3h only when `fellBackWithin` is true). Register emptied to `"classes": {}` with an `_empty` note; all five doc edits present as described.
 
-Two immaterial gaps, recorded rather than charged: `setFulfillmentState` also gained a `deliveredAt?: null` explicit-clear parameter that has no production caller and is not mentioned; and `peer-target-golden.json` carries an incidental `	` → `\t` escape normalisation. Neither changes behaviour or contradicts the narrative.
+**One defect, recorded rather than waived — outside `## What changed` but about it.** Two passages above the section were not updated by the second commit and now contradict it against the diff:
+
+- line 11, "**Eight** of the ten are fixed here" — nine are (P1–P8 and P10).
+- lines 48–52, "**P9 is left standing deliberately**, and its pin with it … That resolver rework **is not this change**. **P10 is #844's**, listed on the umbrella for completeness only." The resolver rework *is* this change (`onnx.ts`, five rebuilt bundles), and P10 *is* fixed here. Note also that P9's pin is not "left standing" untouched — it is narrowed.
+
+These are stale prose, not fabricated work, and `## What changed`, the disposition table and `## Files changed` are all correct — which is why the verdict on the section stands. They must still be rewritten before this receipt is read as the record.
 
 **(2) Every '- [x]' checklist item is realized in the diff — PASS**
 
-Each of the seven boxes maps onto code above: P3 (parser check), P4/P5 (mirror restated + phrase matcher), P6/P7 (both languages plus route-layer/differential models), P8 (endpoint serves the allowlist-built bundle, legacy builder deleted), P1 (`delivered_at`, rung four, revocation reads it, `test.fails` → passing test), P2 (cross-window derivation, pin `toHaveLength(2)` → `toHaveLength(1)` at the earlier instant), and the docs/register/CHANGELOG/receipt box (`docs/decisions.md` A-pinned rewritten, `docs/cron-timezone.md` divergence block replaced, `SECURITY.md` residual column rewritten, `TESTING.md` register described as empty, `scripts/fuzz/known-findings.json` `classes: {}` with `_empty`, five CHANGELOG entries). The claimed pin deletions are real deletions, each replaced by an assertion of the fixed behaviour rather than by removal — verified for all eight pins named.
+Nine boxes, each traced to code:
+
+- **P3** — `packages/backup/src/wal-format.ts:264-285`, parser positivity check; register entry `wal.closer-roundtrip-rejected` deleted.
+- **P4 / P5** — `packages/client/src/replica/search.ts`, `replicaSearchTokens` restated against the gateway plus `tokenPhrase`/`phraseIndex` per-field adjacency; both `fts-mirror.*` entries deleted.
+- **P6 / P7** — `packages/tunnel/src/protocol.ts` and `packages/tunnel/data-plane/src/iroh_relay.rs`, both `PINNED:` differential cases turned into locks, golden vectors flipped to `false`, `pins` emptied.
+- **P8** — `build-gateway.ts`/`diagnostics-routes.ts`/`route-helpers.ts` serve the allowlist-built bundle as bytes; the legacy builder is deleted, not parked; the canary asserts absence of the vault name.
+- **P1** — `share-grant.ts` + `migrate.ts` rung four, `grant-store.ts` maintains `delivered_at`, `fulfillment.ts` reads it, `commons-sim.test.ts` `test.fails` → passing test with the carve-out replaced by a non-vacuity witness.
+- **P2** — `cron-cursor.ts` `deliverableInstants` + oldest-first dedupe; `time-zoo-cron.test.ts` pin flipped from two fires to one.
+- **P10** — `endTransportJson` and its three call sites; the new test asserts `nosniff` on the 401, the 400 and the 500 (evidence under (1)).
+- **P9 — "the ONNX resolver stops needing `createRequire`"** — realized exactly as worded: `node:module` is gone from `onnx.ts` and from all 29 shipped bundles, `resolveRuntimeEntry` is exported and pinned by eight cases in `onnx.test.ts`, and `bundle-lane-conformance.test.ts` measures the consequence. The box claims the prerequisite, not the defect, and the prerequisite is delivered.
+- **The record moved with the code** — `docs/decisions.md` A-pinned rewritten (eight pins exited, one narrowed and named), `docs/cron-timezone.md`'s "Known divergence" block replaced, `SECURITY.md`'s diagnostics row rewritten to one bundle with a real residual, `TESTING.md`'s register paragraph rewritten as empty, `known-findings.json` emptied, six `#846` CHANGELOG entries.
+
+**A real defect in the hand-rolled resolver, found and reproduced.** `resolveRuntimeEntry` (`packages/model-runtime/src/onnx.ts:93`) decides "is this candidate a directory?" with `isDirectory` (`:118`), a *content* heuristic — true only if the target contains a `package.json` or an `index.js` — rather than a stat. So a `main` that names a directory holding neither returns **the directory itself** as the entry file, contradicting the function's own doc ("The absolute entry file … or `null`"). Reproduced: a package with `{"main":"./lib"}`, files `lib/main.js` and `index.js`, returns `<pkg>/lib`; `loadOnnxRuntime` would then `import()` a directory URL and fail with a confusing loader error instead of the actionable `RuntimeNotInstalledError`, and the perfectly good `<pkg>/index.js` fallback is never reached. Two narrower divergences from Node in the same function, both inside the scope the comments declare "the narrow part of Node's algorithm": an extensionless `main` (`{"main":"./lib/index"}` with `lib/index.js` on disk) resolves to `null` because no CommonJS extension search is done; and a `main` naming a directory that has a nested `package.json` but no `index.js` falls through to the root `index.js` instead of reading that manifest. None of the four specifiers actually resolved in production (`onnxruntime-node`, `sharp`, `@huggingface/transformers`, `@ffmpeg-installer/ffmpeg`) hits any of these today, so the checklist item is still realized — but `isDirectory` should be a `statSync(...).isDirectory()`, and the "these three packages" count in both the code comment and the receipt is four.
 
 **(3) The '## Checklist' mirrors the issue's checklist — PASS**
 
-The issue's Part 1 is P1–P10. The checklist covers P1–P8 as fixed and the disposition table lists all ten with P9 **Not fixed** (issue itself names the `onnx.ts`/`createRequire` prerequisite as "the real unit of work") and P10 **Not fixed — filed as #844** (the issue says "Already filed as #844; listed here for completeness"). No Part 1 item is claimed that the diff does not deliver, and none is silently dropped. Parts 2–4 are declared out of scope with the issue's own reasons (maintainer decision / Ed25519 key in the `release` environment / external actors), matching the issue text. P11 from the comment thread is addressed and correctly attributed to #789.
+The issue's Part 1 is P1–P10, and all ten appear in the receipt's disposition table with a disposition each. The checklist boxes claim P1–P8 and P10 fixed and P9's *prerequisite* cleared, which is what the diff delivers — no Part 1 item is claimed beyond the diff, and none is silently dropped. The working agreement ("fixing a Part 1 item means deleting its pin in the same change") is honoured item by item: eight pins deleted and replaced by locks, and P9's pin kept because P9 is not claimed fixed. P10 is fixed here despite the issue's "already filed as #844", and the receipt says so explicitly with its reason.
 
-One noted asymmetry, short of a refutation: the comment thread also carries **P12** (desktop first-run founding on Windows, root-caused to `gateway-secrets.ts` `shouldUseFileFallback`, lane parked `if: false` on #851), which the receipt never mentions even though it does address P11 from the same thread. P12 is neither a Part 1 pinned defect nor in this diff's scope, and it is handled on #851, so the checklist itself still mirrors the issue's Part 1 faithfully — but a line disclaiming it would close the gap.
+Parts 2–4 are declared out of scope with the issue's own grounds (a maintainer decision and an Ed25519 key for D1; observations needing a ruling first for Part 3; external actors for Part 4). Both items from the comment thread are addressed: **P11** (`desktop-e2e` assistant-open budget, red on the base branch) attributed to [#789](https://github.com/srikanth235/centraid/issues/789)'s owner, and **P12** (Windows first-run founding) root-caused to `gateway-secrets.ts` `shouldUseFileFallback()` and parked `if: false` on [#851](https://github.com/srikanth235/centraid/pull/851) — both matching the comments as written.
+
+The only mismatch is the stale count and the stale P9/P10 paragraph recorded under (1): the *checklist* mirrors the issue, but the prose immediately beneath it still describes the pre-P9/P10 state of this branch.

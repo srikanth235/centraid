@@ -136,6 +136,44 @@ describe("http-server", () => {
     expect(res.headers.get("access-control-allow-origin")).toBe("*");
   });
 
+  test("every transport-boundary response carries nosniff (#846 P10 / #844)", async () => {
+    // These three are written by http-server.ts ITSELF, before or instead of
+    // any route handler, so they never reach http-utils.ts's `sendJson` —
+    // which is where every other JSON response on this server gets the header.
+    // That is exactly how all three shipped without it.
+    const unauthorized = await fetch(`${server.url}/centraid/_apps`);
+    expect(unauthorized.status).toBe(401);
+    expect(unauthorized.headers.get("x-content-type-options")).toBe("nosniff");
+
+    const badHost = await rawRequest(server.url, "/centraid/_apps", {
+      host: "evil.example:9999",
+      headers: { Authorization: `Bearer ${server.token}` },
+    });
+    expect(badHost.status).toBe(400);
+    expect(badHost.headers["x-content-type-options"]).toBe("nosniff");
+
+    // The 500 is the final catch, so it needs a handler that throws.
+    const runtime = new Runtime({ appsDir: workspace });
+    const guarded = await startRuntimeHttpServer({
+      runtime,
+      extraHandlers: [
+        (req) => {
+          if (req.url === "/boom") throw new Error("boom");
+          return Promise.resolve(false);
+        },
+      ],
+    });
+    try {
+      const failed = await fetch(`${guarded.url}/boom`, {
+        headers: { Authorization: `Bearer ${guarded.token}` },
+      });
+      expect(failed.status).toBe(500);
+      expect(failed.headers.get("x-content-type-options")).toBe("nosniff");
+    } finally {
+      await guarded.close();
+    }
+  });
+
   test("refuses a non-allowlisted Host header before handlers (#504)", async () => {
     const bad = await rawRequest(server.url, "/centraid/_apps", {
       host: "evil.example:9999",

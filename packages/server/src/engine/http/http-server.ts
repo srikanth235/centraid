@@ -228,6 +228,36 @@ function resolveAllowedHosts(
 }
 
 /**
+ * The three responses this module writes ITSELF, before or instead of any
+ * route handler: `invalid_host` (the Host allowlist, ahead of everything),
+ * `unauthorized` (the bearer gate), and `internal_server_error` (the final
+ * catch at the transport boundary).
+ *
+ * They exist precisely because no handler ran, so they cannot reach
+ * `http-utils.ts`'s `sendJson` — which is where `X-Content-Type-Options:
+ * nosniff` was being set for every other JSON response on this server. Three
+ * hand-rolled `res.end(JSON.stringify(...))` calls therefore shipped without
+ * it (#846 P10, filed as #844). One writer instead of three, so the next
+ * transport-boundary response cannot forget the header either.
+ *
+ * `close` sets `Connection: close`: right for a refused Host and for a route
+ * that already threw, wrong for a 401, which is an ordinary answer on a
+ * connection the caller may reasonably retry on.
+ */
+function endTransportJson(
+  res: ServerResponse,
+  status: number,
+  body: unknown,
+  close = false
+): void {
+  res.statusCode = status;
+  res.setHeader("Content-Type", "application/json; charset=utf-8");
+  res.setHeader("X-Content-Type-Options", "nosniff");
+  if (close) res.setHeader("Connection", "close");
+  res.end(JSON.stringify(body));
+}
+
+/**
  * Spawn an HTTP server in front of a `Runtime`, suitable for use as the
  * in-process embedded runtime inside the Electron desktop app.
  *
@@ -284,10 +314,7 @@ export async function startRuntimeHttpServer(
         res.destroy();
         return;
       }
-      res.statusCode = 500;
-      res.setHeader("Content-Type", "application/json; charset=utf-8");
-      res.setHeader("Connection", "close");
-      res.end(JSON.stringify({ error: "internal_server_error" }));
+      endTransportJson(res, 500, { error: "internal_server_error" }, true);
     });
   });
   tuneGatewayHttpServer(server);
@@ -298,14 +325,11 @@ export async function startRuntimeHttpServer(
   ): Promise<void> {
     // Host check first — refuse DNS-rebinding before CORS, auth, or handlers.
     if (!isAllowedHostHeader(req.headers.host, allowedHosts)) {
-      res.statusCode = 400;
-      res.setHeader("Content-Type", "application/json; charset=utf-8");
-      res.setHeader("Connection", "close");
-      res.end(
-        JSON.stringify({
-          error: "invalid_host",
-          message: "Host header is not allowed.",
-        })
+      endTransportJson(
+        res,
+        400,
+        { error: "invalid_host", message: "Host header is not allowed." },
+        true
       );
       return;
     }
@@ -350,14 +374,10 @@ export async function startRuntimeHttpServer(
     };
     const authz = resolveAuthorization();
     if (!isPublic && !authz) {
-      res.statusCode = 401;
-      res.setHeader("Content-Type", "application/json; charset=utf-8");
-      res.end(
-        JSON.stringify({
-          error: "unauthorized",
-          message: "Invalid bearer token.",
-        })
-      );
+      endTransportJson(res, 401, {
+        error: "unauthorized",
+        message: "Invalid bearer token.",
+      });
       return;
     }
     // Stamped on public paths too: a handshake route stays reachable while

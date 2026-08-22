@@ -475,16 +475,38 @@ describe("CHARACTERIZATION: an automation worker with no parent-chosen lane", ()
   /*
    * NOT an assertion that this is correct. This pins the reach that remains
    * when `automation/worker/runner.ts` is handed no `sandboxLane`, which is
-   * today's default because the ONNX recognition bundles resolve
-   * `runtime/node_modules` through `node:module`'s `createRequire` — a
-   * builtin every lane here refuses. Until `packages/model-runtime/src/onnx.ts`
-   * stops needing it, automation handlers run with the reach recorded below.
+   * still today's default — `sandboxLane` has no production caller at all.
    *
    * This contradicts SECURITY.md's "app handlers are consent-scoped" framing
    * for the automation plane specifically: consent scopes the ctx rails, and
-   * an unsandboxed handler does not have to use them. Reported to root for a
-   * bug issue; do not delete this test to make the gap go away — delete it
-   * when the default flips, and replace it with the refusal assertions above.
+   * an unsandboxed handler does not have to use them.
+   *
+   * WHAT CHANGED, and what has not (#846 P9). The blocker this pin used to
+   * name is gone: the recognition bundles resolved `runtime/node_modules`
+   * through `node:module`'s `createRequire`, a builtin every lane here refuses
+   * because it resolves through Node's own loader and skips these hooks
+   * entirely. `packages/model-runtime/src/onnx.ts` now does its own entry
+   * resolution, and `bundle-lane-conformance.test.ts` proves the consequence
+   * against the bundles the product actually executes: every non-recognition
+   * bundle is admitted by the `automation-handler` lane, and all four ONNX
+   * recognition bundles by the `model-runtime` lane.
+   *
+   * Two things still stand between that and flipping the default, and both are
+   * decisions rather than oversights:
+   *
+   *   1. `transcript` shells out to ffmpeg through `node:child_process`, which
+   *      the `model-runtime` lane refuses. Widening the lane to admit it would
+   *      trade the whole subprocess denial for one capability; moving ffmpeg
+   *      out of the handler is the other direction. That is a product call.
+   *   2. Nothing in production chooses a lane per handler — `sandboxLane` is
+   *      set only by tests. Flipping the default means deciding where that
+   *      choice lives (the automation manifest is the obvious home) and
+   *      proving the native ONNX load still works INSIDE the lane on a machine
+   *      where `bun run --cwd packages/model-runtime setup` has run. A static
+   *      builtin conformance proof is not that.
+   *
+   * Do not delete this test to make the gap go away — delete it when the
+   * default flips, and replace it with the refusal assertions above.
    */
   test("still reaches the filesystem, subprocesses and the environment", async () => {
     const file = await handler(
