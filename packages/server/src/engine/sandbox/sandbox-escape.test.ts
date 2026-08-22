@@ -93,7 +93,11 @@ async function runAppHandler(handlerFile: string): Promise<ResultMessage> {
 /** Run one handler through the real automation worker entry point. */
 async function runAutomationHandler(
   handlerFile: string,
-  sandbox?: { sandboxLane: string; sandboxReadRoots?: string[] }
+  sandbox?: {
+    sandboxLane?: string;
+    sandboxReadRoots?: string[];
+    sandboxRuntimeDir?: string;
+  }
 ): Promise<ResultMessage> {
   const worker = new Worker(AUTOMATION_RUNNER, {
     workerData: {
@@ -471,38 +475,112 @@ describe("automation lane: model-runtime read confinement", () => {
   });
 });
 
-describe("CHARACTERIZATION: an automation worker with no parent-chosen lane", () => {
+describe("an automation worker given no lane gets the strict floor", () => {
   /*
-   * NOT an assertion that this is correct. This pins the reach that remains
-   * when `automation/worker/runner.ts` is handed no `sandboxLane`, which is
-   * today's default because the ONNX recognition bundles resolve
-   * `runtime/node_modules` through `node:module`'s `createRequire` — a
-   * builtin every lane here refuses. Until `packages/model-runtime/src/onnx.ts`
-   * stops needing it, automation handlers run with the reach recorded below.
+   * This replaces the CHARACTERIZATION block that stood here (#846 P9).
    *
-   * This contradicts SECURITY.md's "app handlers are consent-scoped" framing
-   * for the automation plane specifically: consent scopes the ctx rails, and
-   * an unsandboxed handler does not have to use them. Reported to root for a
-   * bug issue; do not delete this test to make the gap go away — delete it
-   * when the default flips, and replace it with the refusal assertions above.
+   * That block pinned what an automation worker could still reach when
+   * `automation/worker/runner.ts` was handed no `sandboxLane`: the filesystem
+   * outside any root, subprocesses, and the environment. It was today's
+   * default and it contradicted SECURITY.md's "app handlers are
+   * consent-scoped" framing for the automation plane — consent scopes the
+   * `ctx` rails, and an unsandboxed handler does not have to use them.
+   *
+   * The reason it stood was one builtin. The ONNX recognition bundles resolved
+   * `runtime/node_modules` through `node:module`'s `createRequire`, which every
+   * lane refuses (correctly — a `createRequire` in the graph resolves through
+   * Node's own loader and skips these hooks), so no recognition automation
+   * could run under any lane and the plane ran everything under none.
+   * `packages/model-runtime/src/onnx.ts` no longer needs it, so the floor now
+   * applies to every handler and one that needs more asks for it in its
+   * manifest, where the ask is reviewable.
+   *
+   * Deleting the pin without these assertions would have erased the record.
+   * These are the refusal assertions it promised in its place.
    */
-  test("still reaches the filesystem, subprocesses and the environment", async () => {
+  test("reads outside every root are refused with no lane requested", async () => {
     const file = await handler(
-      "unsandboxed.mjs",
+      "floor-fs.mjs",
       `import { readFileSync } from "node:fs";
-       import { execSync } from "node:child_process";
-       export default async () => ({
-         readOutsideAnyRoot: typeof readFileSync("/etc/hostname", "utf8") === "string",
-         spawnedSubprocess: execSync("echo ok").toString().trim() === "ok",
+       export default async () => {
+         try { return { leaked: readFileSync("/etc/hostname", "utf8") }; }
+         catch (error) { return { denied: error.code ?? error.message }; }
+       };`
+    );
+    // No sandboxLane, which is exactly the shape the pin characterised.
+    const result = await runAutomationHandler(file);
+    // Stronger than a caught error: the floor has no filesystem grant at all,
+    // so the STATIC `node:fs` import is refused while the module graph loads
+    // and the handler body never runs. Nothing is leaked because nothing ran.
+    expect(result.ok).toBe(false);
+    expect(result.value).toBeUndefined();
+    expect(String(result.error)).toMatch(/filesystem grant|node:fs/u);
+  });
+
+  test("subprocesses are refused with no lane requested", async () => {
+    const file = await handler(
+      "floor-spawn.mjs",
+      `export default async () => {
+         try {
+           const { execSync } = await import("node:child_process");
+           return { spawned: execSync("echo ok").toString().trim() };
+         } catch (error) { return { denied: error.code ?? error.message }; }
+       };`
+    );
+    const result = await runAutomationHandler(file);
+    const value = result.value as { spawned?: string; denied?: string };
+    expect(value.spawned).toBeUndefined();
+    expect(value.denied).toBeDefined();
+  });
+
+  test("the environment is empty with no lane requested", async () => {
+    const file = await handler(
+      "floor-env.mjs",
+      `export default async () => ({
          readEnvSecret: process.env.${CANARY_ENV} === ${JSON.stringify(CANARY_VALUE)},
+         envKeys: Object.keys(process.env).length,
        });`
     );
     const result = await runAutomationHandler(file);
     expect(result.ok).toBe(true);
     expect(result.value).toStrictEqual({
-      readOutsideAnyRoot: true,
-      spawnedSubprocess: true,
-      readEnvSecret: true,
+      readEnvSecret: false,
+      envKeys: 0,
+    });
+  });
+
+  test("the host-planted runtime dir survives the environment revocation", async () => {
+    /*
+     * The bug an independent audit of #846 P9 caught, and the reason
+     * `sandboxRuntimeDir` exists at all.
+     *
+     * Every lane sets `environment: "denied"`, and `install.ts` replaces
+     * `process.env` with a frozen empty object BEFORE the handler's graph
+     * loads. The five recognition bundles read
+     * `CENTRAID_AUTOMATION_RUNTIME_DIR` at module top level to locate their
+     * weights, so flipping the default silently killed that override and sent
+     * every one of them to a `runtime/` directory that exists only in the
+     * source tree — a first-fire failure in exactly the deployment shape the
+     * docs describe. A path is not a capability, so the host resolves it and
+     * plants it on `globalThis` before installing the sandbox.
+     */
+    const file = await handler(
+      "planted-runtime-dir.mjs",
+      `export default async () => ({
+         planted: globalThis.__centraidAutomationRuntimeDir,
+         envIsEmpty: Object.keys(process.env).length === 0,
+         envOverride: process.env.CENTRAID_AUTOMATION_RUNTIME_DIR ?? null,
+       });`
+    );
+    const result = await runAutomationHandler(file, {
+      sandboxRuntimeDir: "/opt/centraid-runtime",
+    });
+    expect(result.ok).toBe(true);
+    expect(result.value).toStrictEqual({
+      planted: "/opt/centraid-runtime",
+      // …while the environment itself is still gone.
+      envIsEmpty: true,
+      envOverride: null,
     });
   });
 });

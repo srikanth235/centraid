@@ -1,23 +1,5 @@
 {
   "_doc": "Register of fuzz findings that are known, reproduced, and awaiting a product decision (#839 G10). Keyed by the invariant class in scripts/fuzz/targets.mjs. A finding whose class is listed here is reported by `bun run test:fuzz` without failing the lane, because scripts/fuzz/replay.test.mjs pins its exact current behaviour: the day the product changes, that suite goes red and the entry must be revisited. A finding whose class is NOT listed fails the lane. Removing an entry is how a fix gets locked in — never add one to go green.",
-  "classes": {
-    "wal.closer-roundtrip-rejected": {
-      "issue": 839,
-      "status": "open",
-      "found": "scripts/fuzz/crashers/wal-keys/wal.closer-roundtrip-rejected.json",
-      "note": "packages/backup/src/wal-format.ts: CLOSER_KEY_RE (:252) admits `closed-000000000000`, but assertValidCloser (:306) requires endOffset > 0 — so parseWalCloserKey returns a WalGroupCloser that walGroupCloserKey then refuses to re-emit. The two halves of the codec disagree about what a legal closer is. A provider listing carrying that key is read as a closed group at offset 0 by wal-restore.ts:145 and backup-reconciliation.ts:133. Product fix (add the `\\d{12}` positivity check to the parser, or relax the formatter) is out of scope for the harness slice that found it."
-    },
-    "fts-mirror.decision": {
-      "issue": 839,
-      "status": "open",
-      "found": "scripts/fuzz/crashers/fts-mirror/fts-mirror.decision.json",
-      "note": "packages/client/src/replica/search.ts:49 documents itself as mirroring the canonical gateway, but its token regex admits \\p{M} (combining marks) while packages/vault/src/gateway/search.ts:35 requires \\p{L} or \\p{N}. A query of only combining marks is refused online and searched offline — the replica answers a question the gateway declines."
-    },
-    "fts-mirror.expression": {
-      "issue": 839,
-      "status": "open",
-      "found": "scripts/fuzz/crashers/fts-mirror/fts-mirror.expression.json",
-      "note": "Same mirror claim, different half: the gateway splits on whitespace only, so `don't` compiles to one prefix phrase, while the replica re-splits on Unicode word runs and compiles two. The 16-token bound is therefore applied to different token streams, so the two planes rank and truncate differently for any query containing punctuation."
-    }
-  }
+  "_empty": "The register is empty: the three classes it carried (wal.closer-roundtrip-rejected, fts-mirror.decision, fts-mirror.expression) were fixed under #846 P3/P4/P5 and their entries deleted with the fix. Their crashers stay committed under scripts/fuzz/crashers/ — replay.test.mjs now asserts each of those inputs runs clean, which is the regression lock the removal buys.",
+  "classes": {}
 }

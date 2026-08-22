@@ -1,5 +1,4 @@
-import { existsSync } from "node:fs";
-import { createRequire } from "node:module";
+import { existsSync, readFileSync, statSync } from "node:fs";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
 
@@ -16,10 +15,25 @@ import { RUNTIME_DIR } from "./config.js";
 // hasn't run yet is a clear, actionable error rather than a module-not-found
 // stack trace pointing at node_modules internals.
 //
-// `createRequire` rooted at runtime/package.json makes Node's own CommonJS
-// resolver do the path math (platform-specific native binding selection,
-// package.json "main" field, etc.) instead of us guessing onnxruntime-node's
-// internal layout by hand.
+// WHY the entry resolution below is written out by hand rather than handed to
+// `createRequire`, which is what it used to use: `node:module` is refused by
+// every sandbox lane in packages/server/src/engine/sandbox/policy.ts, and for
+// a good reason — a `createRequire` handed to the graph resolves modules
+// through Node's own loader, skipping the lane's hooks entirely, so one
+// builtin re-opens everything the lane closed. While this file needed it, an
+// automation worker that loads a recognition bundle could not run under ANY
+// lane, which is why the automation plane's default was no lane at all
+// (#846 P9). Resolution is the only thing `createRequire` was doing here; the
+// LOADING is already a plain dynamic `import()` of an absolute file URL, which
+// the lane's hooks do see.
+//
+// What is re-implemented is deliberately the narrow part of Node's algorithm
+// the four packages `runtime/` installs actually need — a directory under
+// `runtime/node_modules`, then `exports["."]`, then `main`, then `index.js`.
+// No `node_modules` walk up the tree (the runtime dir is flat and installed by
+// `bun run setup`), no conditional-export matrix beyond require/node/default.
+// `resolveRuntimeEntry` is exported so its behaviour is pinned by tests
+// against real package.json shapes rather than trusted by inspection.
 
 export type OrtModule = typeof import("onnxruntime-node");
 
@@ -48,17 +62,119 @@ export function resolveRuntimeModule(
   specifier: string,
   runtimeDir: string = RUNTIME_DIR
 ): string {
-  if (!existsSync(path.join(runtimeDir, "node_modules"))) {
+  const modulesDir = path.join(runtimeDir, "node_modules");
+  if (!existsSync(modulesDir)) {
     throw new RuntimeNotInstalledError(specifier);
   }
-  const requireFromRuntime = createRequire(
-    path.join(runtimeDir, "package.json")
-  );
+  // Scoped names (`@ffmpeg-installer/ffmpeg`) are two path segments; the split
+  // is on "/" rather than the platform separator because a bare specifier is
+  // always POSIX-shaped.
+  const packageDir = path.join(modulesDir, ...specifier.split("/"));
   try {
-    return requireFromRuntime.resolve(specifier);
+    const entry = resolveRuntimeEntry(packageDir);
+    if (entry === null) throw new Error(`no entry point in ${packageDir}`);
+    return entry;
   } catch (error) {
     throw new RuntimeNotInstalledError(specifier, error);
   }
+}
+
+/**
+ * The absolute entry file of an installed package directory, or `null` when
+ * the directory holds no resolvable entry.
+ *
+ * Precedence mirrors Node's: `exports["."]` wins when present (walking the
+ * `require` / `node` / `default` conditions, which is what a CommonJS native
+ * package publishes), then `main`, then `index.js`. A `main` that names a
+ * directory falls back to `index.js` inside it, as Node does. Every candidate
+ * is checked on disk, so a package.json that points at a file the install did
+ * not produce is a miss here rather than a module-not-found deeper in.
+ */
+export function resolveRuntimeEntry(
+  packageDir: string,
+  depth = 0
+): string | null {
+  const manifestFile = path.join(packageDir, "package.json");
+  const manifest = existsSync(manifestFile)
+    ? (JSON.parse(readFileSync(manifestFile, "utf8")) as {
+        exports?: unknown;
+        main?: unknown;
+      })
+    : {};
+  const candidates = [
+    ...conditionalTargets(readDotExport(manifest.exports)),
+    ...(typeof manifest.main === "string" ? [manifest.main] : []),
+    "index.js",
+  ];
+  for (const candidate of candidates) {
+    const hit = resolveFileTarget(path.resolve(packageDir, candidate), depth);
+    if (hit !== null) return hit;
+  }
+  return null;
+}
+
+/**
+ * One candidate path to the file it names, or `null` when it names nothing
+ * loadable. Three Node behaviours, in Node's order:
+ *
+ *  - a FILE is itself;
+ *  - a DIRECTORY resolves through its own `package.json`, then its `index.js`
+ *    — so `"main": "./lib"` works whether `lib/` carries a manifest or just an
+ *    index. Bounded, because a manifest can point at another directory;
+ *  - an EXTENSIONLESS path gets CommonJS's extension search, so
+ *    `"main": "./lib/index"` finds `lib/index.js`.
+ */
+function resolveFileTarget(target: string, depth: number): string | null {
+  const found = statOrNull(target);
+  if (found?.isFile()) return target;
+  if (found?.isDirectory())
+    return depth >= 4 ? null : resolveRuntimeEntry(target, depth + 1);
+  for (const extension of [".js", ".json", ".node"]) {
+    const withExtension = `${target}${extension}`;
+    if (statOrNull(withExtension)?.isFile()) return withExtension;
+  }
+  return null;
+}
+
+function statOrNull(target: string): ReturnType<typeof statSync> | null {
+  try {
+    return statSync(target);
+  } catch {
+    return null;
+  }
+}
+
+/** The `.` subpath of an `exports` field, in either of its two spellings. */
+function readDotExport(exportsField: unknown): unknown {
+  if (typeof exportsField === "string") return exportsField;
+  if (exportsField === null || typeof exportsField !== "object")
+    return undefined;
+  const record = exportsField as Record<string, unknown>;
+  // A bare condition map (`{ require: …, default: … }`) is itself the `.`
+  // target; a subpath map names it explicitly.
+  return "." in record ? record["."] : record;
+}
+
+/**
+ * Flatten a conditional-export target to the file paths worth trying, in
+ * preference order. Only the conditions this loader can honestly claim are
+ * walked — it loads through `import()`, but every package in `runtime/` is
+ * CommonJS, so `require` is the truthful condition and `node`/`default` are
+ * the fallbacks. Anything else (`browser`, `types`) is skipped rather than
+ * guessed at.
+ */
+function conditionalTargets(target: unknown, depth = 0): string[] {
+  if (typeof target === "string") return [target];
+  if (depth > 8 || target === null || typeof target !== "object") return [];
+  if (Array.isArray(target))
+    return target.flatMap((entry) => conditionalTargets(entry, depth + 1));
+  const record = target as Record<string, unknown>;
+  const out: string[] = [];
+  for (const condition of ["require", "node", "default"]) {
+    if (condition in record)
+      out.push(...conditionalTargets(record[condition], depth + 1));
+  }
+  return out;
 }
 
 /** Lazily imports onnxruntime-node from runtime/node_modules. Cached after first call. */

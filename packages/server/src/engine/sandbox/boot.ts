@@ -74,6 +74,7 @@ export interface SandboxBoot {
   appHandlerPolicy: () => SandboxPolicy;
   appSeedPolicy: (appDir: string) => SandboxPolicy;
   automationHandlerPolicy: () => SandboxPolicy;
+  mediaTranscodePolicy: (readRoots: readonly string[]) => SandboxPolicy;
   modelRuntimePolicy: (readRoots: readonly string[]) => SandboxPolicy;
 }
 
@@ -92,6 +93,7 @@ export async function loadSandbox(): Promise<SandboxBoot> {
     appHandlerPolicy: SandboxBoot["appHandlerPolicy"];
     appSeedPolicy: SandboxBoot["appSeedPolicy"];
     automationHandlerPolicy: SandboxBoot["automationHandlerPolicy"];
+    mediaTranscodePolicy: SandboxBoot["mediaTranscodePolicy"];
     modelRuntimePolicy: SandboxBoot["modelRuntimePolicy"];
   };
   return {
@@ -99,6 +101,7 @@ export async function loadSandbox(): Promise<SandboxBoot> {
     appHandlerPolicy: policy.appHandlerPolicy,
     appSeedPolicy: policy.appSeedPolicy,
     automationHandlerPolicy: policy.automationHandlerPolicy,
+    mediaTranscodePolicy: policy.mediaTranscodePolicy,
     modelRuntimePolicy: policy.modelRuntimePolicy,
   };
 }

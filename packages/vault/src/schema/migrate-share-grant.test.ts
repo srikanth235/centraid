@@ -222,7 +222,7 @@ describe("schema/migrate rung three (issue #825 grant plane)", () => {
     expect(
       (db.prepare("PRAGMA user_version").get() as { user_version: number })
         .user_version
-    ).toBe(3);
+    ).toBe(4);
 
     expect(grantShapes(db)).toStrictEqual([
       // The uniform named circle stays ONE circle-audience grant.

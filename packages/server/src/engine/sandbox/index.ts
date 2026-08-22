@@ -24,6 +24,7 @@ export {
   builtinId,
   COMPUTATIONAL_BUILTINS,
   isPathWithinRoots,
+  mediaTranscodePolicy,
   modelRuntimePolicy,
   normalizeRoots,
 } from "./policy.js";

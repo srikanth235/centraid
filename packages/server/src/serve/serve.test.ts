@@ -175,30 +175,45 @@ describe("serve scenarios", () => {
       headers: { Authorization: `Bearer ${handle.token}` },
     });
     expect(res.status).toBe(200);
+    // Since #846 P8 the endpoint serves the shareable support bundle: one
+    // document, allowlist-by-construction. `logs` is a grouped histogram
+    // rather than a raw tail, and `storage` replaces `vaults` — same facts,
+    // minus the owner-authored vault name, which no policy emits.
     const body = (await res.json()) as {
+      formatVersion: number;
+      sharing: string;
       gateway: { version: string; protocolVersion: number };
       runtime: { platform: string; arch: string; nodeVersion: string };
       health: { status: string };
-      logs: unknown[];
-      vaults: Array<{
-        vaultId: string;
-        name: string;
-        files: Record<string, number | null>;
-      }>;
+      logs: {
+        count: number;
+        byLevel: Record<string, number>;
+        groups: unknown[];
+      };
+      storage: Array<{ vaultId: string; vaultDbBytes: number }>;
       config: unknown;
+      redaction: { level: string };
     };
+    expect(body.formatVersion).toBeTypeOf("number");
+    expect(body.sharing).toBe("manual-owner-action");
     expect(body.gateway.version).toBeTypeOf("string");
     expect(body.gateway.protocolVersion).toBeTypeOf("number");
     expect(body.runtime.nodeVersion).toBe(process.version);
     expect(body.health.status).toStrictEqual(expect.any(String));
-    expect(Array.isArray(body.logs)).toBe(true);
+    expect(body.logs.count).toBeTypeOf("number");
+    expect(Array.isArray(body.logs.groups)).toBe(true);
+    expect(body.redaction.level).toBe("standard");
     // The auto-founded personal vault is mounted, sized off
     // vault.db/journal.db.
-    expect(body.vaults).toHaveLength(1);
-    expect(body.vaults[0]!.vaultId).toBe(
+    expect(body.storage).toHaveLength(1);
+    expect(body.storage[0]!.vaultDbBytes).toBeTypeOf("number");
+    // The vault is identified by a salted hash, correlatable inside this one
+    // document only — so it is a string, and it is NOT the raw id.
+    expect(body.storage[0]!.vaultId).toBeTypeOf("string");
+    expect(body.storage[0]!.vaultId).not.toBe(
       handle.vaults.planesList()[0]!.boot.vaultId
     );
-    expect(body.vaults[0]!.files.vaultDbBytes).toBeTypeOf("number");
+    expect(body.storage[0]).not.toHaveProperty("name");
   });
 
   test("diagnostics config never leaks a secret-shaped value from the bearer token itself", async () => {

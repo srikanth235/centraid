@@ -83,25 +83,55 @@ export const PEER_PROOF_HEADER = "x-centraid-peer-proof";
  * Is `target` confined to the peer plane?
  *
  * Constraints, mirrored byte-for-byte in Rust:
- *  - must extend `PEER_PLANE_PREFIX` (a bare prefix addresses no resource);
- *  - the path (everything before `?`/`#`) carries no percent escape, no
- *    backslash, and no byte at or below 0x20 — the peer plane's own routes
- *    never need them, and admitting them would mean re-implementing URL
- *    normalisation identically in two languages to stay safe;
+ *  - the target must be well-formed UTF-16, i.e. hold no lone surrogate. A
+ *    Rust `&str` cannot carry one at all, so a JS guard that judged the
+ *    UTF-8 re-encoding (which silently rewrites a lone surrogate to U+FFFD)
+ *    would be judging a different string than the one it forwards, and would
+ *    admit a target the Rust lane can never represent (#846 P7);
+ *  - the PATH — everything before `?`/`#` — must extend `PEER_PLANE_PREFIX`.
+ *    A bare prefix addresses no resource, and measuring the whole target
+ *    instead let a lone `?` or `#` stand in for that extension (#846 P6);
+ *  - the path carries no percent escape, no backslash, and no byte at or
+ *    below 0x20 — the peer plane's own routes never need them, and admitting
+ *    them would mean re-implementing URL normalisation identically in two
+ *    languages to stay safe;
  *  - no `.` or `..` segment, so the concatenated upstream URL cannot climb
  *    out of the plane.
  */
 export function isPeerPlaneTarget(target: unknown): target is string {
   if (typeof target !== "string") return false;
-  if (target.length <= PEER_PLANE_PREFIX.length) return false;
+  if (!isWellFormedTarget(target)) return false;
   if (!target.startsWith(PEER_PLANE_PREFIX)) return false;
   const path = target.split(/[?#]/u)[0] ?? "";
+  if (path.length <= PEER_PLANE_PREFIX.length) return false;
   for (const byte of Buffer.from(path, "utf8")) {
     if (byte === 0x25 || byte === 0x5c || byte <= 0x20) return false;
   }
   return path
     .split("/")
     .every((segment) => segment !== "." && segment !== "..");
+}
+
+/**
+ * Is `value` representable as a Rust `&str` — every high surrogate followed by
+ * a low one, and no low surrogate standing alone?
+ *
+ * Spelled out rather than calling `String#isWellFormed`: that is ES2024 and
+ * this module is compiled against an older lib for the mobile and desktop
+ * clients that import it.
+ */
+function isWellFormedTarget(value: string): boolean {
+  for (let index = 0; index < value.length; index += 1) {
+    const code = value.charCodeAt(index);
+    if (code >= 0xd8_00 && code <= 0xdb_ff) {
+      const next = value.charCodeAt(index + 1);
+      if (Number.isNaN(next) || next < 0xdc_00 || next > 0xdf_ff) return false;
+      index += 1;
+    } else if (code >= 0xdc_00 && code <= 0xdf_ff) {
+      return false;
+    }
+  }
+  return true;
 }
 
 /** QUIC close code for a tunnel connection from an endpoint not in the allowlist. */

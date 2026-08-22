@@ -329,7 +329,7 @@
   {"target":"/centraid/_peer/xé","jsVerdict":true},
   {"target":"Z+..&a\r\nh%%00","jsVerdict":false},
   {"target":".._GATEWAYG1q\\#frag","jsVerdict":false},
-  {"target":"/centraid/_peer/#","jsVerdict":true},
+  {"target":"/centraid/_peer/#","jsVerdict":false},
   {"target":" é4S%c0%af/\\{l*","jsVerdict":false},
   {"target":"/centraid/_peer/x_GATEWAY","jsVerdict":true},
   {"target":"http://evil.example/centraid/_peer//.K'JP.;/𝕏","jsVerdict":false},
@@ -345,7 +345,7 @@
   {"target":"/centraid/_gateway/\tj\"] \u001f","jsVerdict":false},
   {"target":"//centraid/_peer/V{)v","jsVerdict":false},
   {"target":"/b1X","jsVerdict":false},
-  {"target":"/centraid/_peer/#='o=..%2f(c$﻿r","jsVerdict":true},
+  {"target":"/centraid/_peer/#='o=..%2f(c$﻿r","jsVerdict":false},
   {"target":"http://evil.example/centraid/_peer/6'∕Dg?a=b","jsVerdict":false},
   {"target":"/centraid/_peerish/3{ ","jsVerdict":false},
   {"target":"/CENTRAID/_PEER///_Peer@S6~kC-","jsVerdict":false},
@@ -471,7 +471,7 @@
   {"target":"/centraid/_peer%2e7M","jsVerdict":false},
   {"target":"/CENTRAID/_PEER/_GATEWAYewO! 3O20qJ.","jsVerdict":false},
   {"target":"/centraid/_peer/s%5cU7O","jsVerdict":false},
-  {"target":"/centraid/_peer/#⁄2=4g","jsVerdict":true},
+  {"target":"/centraid/_peer/#⁄2=4g","jsVerdict":false},
   {"target":"/centraid/_gateway/\\#frag\\;(l(𝕏","jsVerdict":false},
   {"target":"/centraid/_peer/xi@?%252e","jsVerdict":true},
   {"target":"/centraid/_gateway/?a=b","jsVerdict":false},

@@ -55,18 +55,28 @@ impl Plane {
 /// function is a privilege escalation, not a relaxation.
 ///
 /// Byte-identical to `protocol.ts::isPeerPlaneTarget`:
-///   - must EXTEND the prefix (a bare prefix names no resource);
-///   - the path (before `?`/`#`) carries no `%`, no `\`, and no byte <= 0x20,
-///     so no normalisation step is needed to reason about it;
+///   - the PATH (before `?`/`#`) must EXTEND the prefix (a bare prefix names no
+///     resource). Measured on the path, not on the whole target: measuring the
+///     target let a lone `?` or `#` stand in for the extension, so
+///     `/centraid/_peer/?` was admitted while the path it resolves to is
+///     exactly the bare prefix (#846 P6);
+///   - the path carries no `%`, no `\`, and no byte <= 0x20, so no
+///     normalisation step is needed to reason about it;
 ///   - no `.` / `..` segment.
+///
+/// A `&str` is well-formed UTF-8 by construction, so the lone-surrogate rule
+/// the TypeScript guard states explicitly is enforced here by the type.
 fn peer_target_allowed(target: &str) -> bool {
-    if target.len() <= PEER_PLANE_PREFIX.len() || !target.starts_with(PEER_PLANE_PREFIX) {
+    if !target.starts_with(PEER_PLANE_PREFIX) {
         return false;
     }
     let path = target
         .split(['?', '#'])
         .next()
         .expect("split always yields a first element");
+    if path.len() <= PEER_PLANE_PREFIX.len() {
+        return false;
+    }
     if path
         .bytes()
         .any(|byte| byte == b'%' || byte == b'\\' || byte <= 0x20)
@@ -578,6 +588,12 @@ mod tests {
             "/centraid/_peer/a b",
             "//centraid/_peer/x",
             "",
+            // #846 P6: a separator is not an extension. The path behind each
+            // of these IS the bare prefix, which names no peer-plane route.
+            "/centraid/_peer/?",
+            "/centraid/_peer/#",
+            "/centraid/_peer/?next=/centraid/_gateway/devices",
+            "/centraid/_peer/#/../_gateway",
         ] {
             assert!(!peer_target_allowed(refused), "should refuse {refused:?}");
         }

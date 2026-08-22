@@ -16,9 +16,18 @@
     "purpose": "dpv:ServiceProvision",
     "why": "Reads size-bounded audio/video originals and stamps, and writes validated transcript derivatives.",
     "scopes": [
-      { "schema": "media", "verbs": "read" },
-      { "schema": "core", "verbs": "read+act" },
-      { "schema": "enrich", "verbs": "read" }
+      {
+        "schema": "media",
+        "verbs": "read"
+      },
+      {
+        "schema": "core",
+        "verbs": "read+act"
+      },
+      {
+        "schema": "enrich",
+        "verbs": "read"
+      }
     ]
   },
   "enrich": {
@@ -26,6 +35,16 @@
     "capability": "transcript",
     "lane": "gateway"
   },
-  "history": { "keep": { "count": 100 } },
-  "generated": { "by": "centraid-template", "at": "2026-08-10T00:00:00.000Z" }
+  "sandbox": {
+    "lane": "media-transcode"
+  },
+  "history": {
+    "keep": {
+      "count": 100
+    }
+  },
+  "generated": {
+    "by": "centraid-template",
+    "at": "2026-08-10T00:00:00.000Z"
+  }
 }

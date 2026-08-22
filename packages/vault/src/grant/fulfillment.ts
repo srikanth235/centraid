@@ -412,12 +412,18 @@ export function propagateShareGrantRevocation(
       steps.push({ peerVaultId: row.peerVaultId, state: "removed" });
       continue;
     }
-    // A row still parked at `awaiting_channel` or `syncing` never had the
-    // subject projected into it: there is nothing to remove and nothing was
-    // ever sent, so the honest terminal state is `removed` with a detail
-    // saying so — never a fabricated "removal sent" to a peer that received
-    // nothing.
-    if (row.state === "awaiting_channel" || row.state === "syncing") {
+    // A row that never had the subject projected into it: there is nothing to
+    // remove and nothing was ever sent, so the honest terminal state is
+    // `removed` with a detail saying so — never a fabricated "removal sent"
+    // to a peer that received nothing.
+    //
+    // The question is asked of `delivered_at`, the durable memory, NOT of the
+    // live state (#846 P1). Reading it off the state made a delivered grant
+    // whose peer the host merely lost reach for — `fulfillShareGrant` drops
+    // such a row back to `syncing`, honestly, about freshness — settle
+    // `removed` on the reachable path while the audience vault still held the
+    // whole projection. The owner was told the share was gone and it was not.
+    if (row.deliveredAt === null) {
       const detail = "nothing had been delivered; there was nothing to remove";
       setFulfillmentState(db, {
         grantId: grant.grantId,

@@ -268,7 +268,16 @@ describe("issue #679 user-facing quality gates", () => {
     expect(first.conversations * first.turnsPerConversation).toBeGreaterThan(0);
     expect(Object.keys(first.sealedSentinels).length).toBeGreaterThan(0);
     expect(first.parkedActions.length).toBeGreaterThan(0);
-    expect(year3FixtureCacheKey(second)).toBe(year3FixtureCacheKey(first));
+    expect(year3FixtureCacheKey(second, 4)).toBe(
+      year3FixtureCacheKey(first, 4)
+    );
+    // …and the schema the fixture was built under is part of its identity, so
+    // a rung landing invalidates the cache instead of handing a newer build a
+    // vault that predates one of its tables (the nightly restore lane failed
+    // exactly that way, with `no such table: main.enrich_policy_rule`).
+    expect(year3FixtureCacheKey(first, 4)).not.toBe(
+      year3FixtureCacheKey(first, 5)
+    );
     const db = await createTestVault();
     ensureConversationLedger(db.journal);
     seedYear3Vault(

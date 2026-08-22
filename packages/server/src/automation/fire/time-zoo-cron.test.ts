@@ -389,33 +389,26 @@ describe("cron DST zoo", () => {
 
   describe("a continuously-running gateway across a fall-back", () => {
     /**
-     * DEFECT (issue #839, gap G12) — behaviour below CONTRADICTS the
-     * documented law and is pinned, not endorsed.
+     * REGRESSION LOCK for #846 P2, formerly a pin against docs/cron-timezone.md
+     * § "DST policy", Overlap row: "fires once for that wall-clock minute".
      *
-     * docs/cron-timezone.md § "DST policy", Overlap row promises the
-     * automation "fires once for that wall-clock minute". The dedupe that
-     * delivers that promise lives in `dueInstants` (cron-cursor.ts): its
-     * `seen` set is LOCAL TO ONE CALL, and `readCronCursor` persists only the
-     * window position in milliseconds — never the wall-clock keys it already
-     * delivered.
-     *
-     * A gateway that is UP across the transition ticks once a minute
+     * The dedupe that delivers that promise lives in `dueInstants`
+     * (cron-cursor.ts), and its `seen` set is local to ONE call. A gateway that
+     * is UP across the transition ticks once a minute
      * (`setInterval(() => this.tick(), 60_000)`, cursor-engine.ts), so the two
-     * absolute minutes carrying the same wall clock land in two DIFFERENT
-     * one-minute windows. Each window dedupes perfectly against itself and
-     * fires. The automation therefore runs TWICE.
+     * absolute minutes carrying the same wall clock landed in two DIFFERENT
+     * one-minute windows. Each deduped perfectly against itself and fired, so
+     * the automation ran TWICE — "once" held only for a window wide enough to
+     * contain both copies, i.e. after downtime, which is exactly the shape
+     * `cron-cursor.test.ts` covers and why the gap went unseen.
      *
-     * The doc's "once" holds only for a single window wide enough to contain
-     * both copies — i.e. after downtime — which is exactly the shape
-     * `cron-cursor.test.ts` covers, and why the gap went unseen.
-     *
-     * These tests assert the CURRENT behaviour so the defect is visible and a
-     * fix has to change an expectation deliberately. When the reader learns a
-     * durable wall-clock watermark, `toHaveLength(2)` becomes `toHaveLength(1)`
-     * here and the doc stops lying.
+     * `readCronCursor` now looks back across windows for a wall-clock minute it
+     * has already covered, and only when a schedule's zone actually fell back.
+     * This suite is the continuous-tick shape the unit tests do not have, so it
+     * is where the fix is locked.
      */
     it.each(OVERLAP_ZONES.map((entry) => [entry.zone, entry] as const))(
-      "%s fires the repeated wall minute TWICE (pinned defect, #839)",
+      "%s fires the repeated wall minute ONCE across a continuous tick",
       (_zone, entry) => {
         const band = entry.overlap as Band;
         const expr = pinnedExpr(band, band.fromMinute);
@@ -434,14 +427,18 @@ describe("cron DST zoo", () => {
           }
         }
 
-        // DOCUMENTED LAW: 1. OBSERVED: 2. See the block comment above.
-        expect(fires).toHaveLength(2);
-        // Both fires carry the same zone wall clock, which is precisely the
-        // key the reader would have had to remember across ticks.
-        const keys = fires.map((fire) =>
-          wallClockMinuteKey(new Date(fire), entry.zone)
+        // DOCUMENTED LAW: 1. OBSERVED: 1.
+        expect(fires).toHaveLength(1);
+        // …and it is the EARLIER of the two absolute minutes sharing that wall
+        // clock, which is the instant the policy names: "an overlapping wall
+        // time occurs once at the earlier instant". The band is exactly one
+        // shift wide, so the earlier copy sits one shift before the offset
+        // change and the later copy sits on it — the later one is suppressed.
+        const shiftMs = (band.toMinute - band.fromMinute) * 60_000;
+        expect(fires[0]).toBe(centre - shiftMs);
+        expect(wallClockMinuteKey(new Date(fires[0]!), entry.zone)).toBe(
+          wallClockMinuteKey(new Date(centre), entry.zone)
         );
-        expect(new Set(keys).size).toBe(1);
       }
     );
 

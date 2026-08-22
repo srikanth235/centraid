@@ -25,7 +25,7 @@
 import { dbSizeBreakdown } from "@centraid/vault";
 import type { VaultDb } from "@centraid/vault";
 
-import type { AnomalyLedger } from "./anomaly-ledger.js";
+import type { AnomalyRecord } from "./anomaly-ledger.js";
 import type { RedactionLevel } from "./diagnostics-redaction.js";
 import type {
   SupportBundleInput,
@@ -67,7 +67,9 @@ export interface SupportBundlePlaneLike {
 export interface SupportBundleSourceOptions {
   readonly health: SupportBundleHealthLike;
   readonly logs: SupportBundleLogsLike;
-  readonly anomalies: AnomalyLedger;
+  /** Structural, like the two above: an `AnomalyLedger` satisfies it, and so
+   *  does a reader over the on-disk mirror `readAnomalyLedger` returns. */
+  readonly anomalies: { snapshot: () => readonly AnomalyRecord[] };
   readonly planes: readonly SupportBundlePlaneLike[];
   readonly gateway: SupportBundleInput["gateway"];
   readonly runtime: SupportBundleInput["runtime"];
