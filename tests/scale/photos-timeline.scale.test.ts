@@ -14,6 +14,7 @@ import {
   openVaultDb,
   sealAad,
   sealValue,
+  VAULT_MIGRATIONS,
 } from "@centraid/vault";
 
 import { ensureConversationLedger } from "../../packages/server/src/engine/stores/gateway-db.js";
@@ -96,7 +97,8 @@ describe("photos-timeline.scale", () => {
           seeded.close();
         }
       },
-      profile
+      profile,
+      VAULT_MIGRATIONS.length
     );
     const workingDir = await tempDir("photos-timeline-year3-working-");
     await cp(materialized.dir, workingDir, { recursive: true });

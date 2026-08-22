@@ -25,6 +25,7 @@ which is what the pin existed to buy.
 - [x] P10 — three transport-boundary responses shipped without `nosniff`
 - [x] P9 — an automation worker with no lane was not sandboxed
 - [x] The record moved with the code
+- [x] Three CI failures on `main`, rolled into this PR by request
 
 One commit, not one per defect: `commit-issue-receipt-match` requires every
 commit to carry this receipt, and the receipt is a single account of a single
@@ -336,6 +337,59 @@ rules on:
 - **no bundle declares a lane wider than it needs.** The grants are holes, and
   an unneeded one is a hole for nothing.
 
+### Three CI failures on `main`, rolled into this PR by request
+
+Not part of #846 — folded in on request while this branch was open. Each was
+reproduced from the run logs before being changed, and each is a real defect
+rather than a flake.
+
+**`security` → `rust supply-chain`, red at `main`'s current HEAD.** The job
+exited 1 in 15ms with `'toolchain' is a required input`, before installing
+anything. `dtolnay/rust-toolchain` reads its toolchain from its OWN ref, so
+`@stable` needs no input — but the repo pins every action to a 40-char SHA, and
+a SHA has no ref name to read. Rule (1) of `lint-workflow-pins.mjs` created
+this failure: pinning was right, and it silently turned a working step into a
+failing one. Four of the six call sites already passed `toolchain: stable`; the
+two that did not are `security.yml` (red on `main` since the pin landed) and
+`lane-release-gateway-npm.yml`, which carried the same shape into a
+release-only lane where nobody would have seen it until a release.
+
+Fixed at both sites, and the class is now mechanical: **rule (7)** in
+`lint-workflow-pins.mjs` requires a SHA-pinned `dtolnay/rust-toolchain` to
+declare `toolchain:`. Its forward scan handles both step shapes — `with:` is a
+CHILD of `uses:` in `- uses:` form and a SIBLING in `- name:` form, and a scan
+that stops at equal indent false-positives on the second, which is the shape
+the release lane uses. Four cases in `lint-workflow-pins.test.mjs` cover that,
+including the false-positive one.
+
+**`Companion e2e`, plus `e2e`'s `pairing-ticket-hygiene` and
+`pairing-lifecycle`.** All three died in ~150ms with `daemon exited 1 before
+ready`. The daemon's log says `Cannot find module
+'…/packages/gateway/dist/cli/cli.js'` — `packages/gateway` was folded into
+`packages/server` by [#801](https://github.com/srikanth235/centraid/issues/801)
+and this path was missed in that move. `docker-harness.mjs`, beside it, already
+spells the current path; the two now agree. **One path fixed three jobs**, and
+all three flows were run locally to prove it.
+
+**`e2e` → `restore-year3`.** Failed in 314ms with `no such table:
+main.enrich_policy_rule`, opening a **cached** year-3 fixture. The fixture is a
+materialized vault on disk, but `year3FixtureCacheKey` hashed only the fixture
+version and the profile — not the schema that produced it. So a fixture built
+before the rung that added `enrich_policy_rule` was restored from cache and
+opened by newer code. The schema version is part of the fixture's identity and
+is now part of its key; `test-kit` deliberately does not depend on
+`@centraid/vault`, so callers pass `VAULT_MIGRATIONS.length` rather than the
+package growing an import. A `READY.json` written without one records `-1`,
+which can never collide with a real ladder length.
+
+Three of `main`'s remaining reds are deliberately **not** touched, for reasons
+the issue itself states: `desktop-e2e`'s assistant-open budget is P11 and
+#789's owner's call; `quality-performance-scale`'s budget is the
+`perf-waterfall` ratio the issue's Part 3 records with "widening the ceiling is
+not the fix"; and the two mobile lanes need enrolled devices and emulators,
+which is Part 4's blocked-on-an-external-actor row. `test-health-report`
+cascades from those and clears when they do.
+
 ### The record moved with the code
 
 Stale docs are bugs, so every claim the fixes falsified was rewritten in this
@@ -534,6 +588,15 @@ bun run --cwd packages/server test -- src/automation/fire/ src/serve/serve.test.
 bun run --cwd packages/model-runtime test          # incl. bundle rebuild-drift
 bun run --cwd packages/server test -- src/engine/sandbox/ src/engine/http/
 
+# The three CI failures on `main`, each reproduced before being fixed.
+node scripts/lint-workflow-pins.mjs
+node --test scripts/lint-workflow-pins.test.mjs
+node tests/agent-e2e-pairing/flows/pairing-ticket-hygiene.mjs
+node tests/agent-e2e-pairing/flows/device-pairing-lifecycle.mjs
+CENTRAID_SCALE_RESTORE_GIB=1 CENTRAID_YEAR3_CACHE_DIR=/tmp/y3cache \
+  node node_modules/vitest/vitest.mjs run --config vitest.scale.config.ts \
+  tests/scale/restore-10gib.scale.test.ts
+
 # The Rust half of the peer-target guard.
 cd packages/tunnel/data-plane && cargo test
 
@@ -656,6 +719,21 @@ Tests and fixtures:
   `packages/blueprints/automations/faces/automations/faces/automation.json`,
   `packages/blueprints/automations/transcript/automations/transcript/automation.json`.
 
+CI fixes (not #846; folded in on request):
+
+- `.github/workflows/security.yml`,
+  `.github/workflows/lane-release-gateway-npm.yml` — the required `toolchain`
+  input.
+- `scripts/lint-workflow-pins.mjs`, `scripts/lint-workflow-pins.test.mjs` —
+  rule (7) and its cases.
+- `tests/agent-e2e-pairing/lib/harness.mjs` — the post-#801 CLI path.
+- `packages/test-kit/src/year3-vault.ts`,
+  `tests/scale/large-vault.scale.test.ts`,
+  `tests/scale/restore-10gib.scale.test.ts`,
+  `tests/scale/photos-timeline.scale.test.ts`,
+  `tests/quality/user-facing-qualities.test.ts` — the schema-versioned fixture
+  cache key.
+
 Docs: `docs/decisions.md`, `docs/cron-timezone.md`, `SECURITY.md`, `TESTING.md`,
 `CHANGELOG.md`, and this receipt.
 
@@ -706,3 +784,13 @@ The `CENTRAID_AUTOMATION_RUNTIME_DIR` break recorded under (1) does not unmake a
 The issue's Part 1 is P1–P10, and all ten appear in the receipt's disposition table, each marked **Fixed**, with a checklist box each (P4/P5 and P6/P7 paired as the issue pairs them). Nothing is claimed beyond the diff and nothing is silently dropped. The working agreement — "fixing a Part 1 item means deleting its pin in the same change" — is honoured item by item: nine pins raised by the #839/#842 lanes, nine deleted, each leaving a regression lock (the three fuzz register classes, the DST pin, the `test.fails` severance case, the two peer-target pins, the diagnostics canary pin, and the sandbox characterisation block). P10, which the issue lists as already filed as [#844](https://github.com/srikanth235/centraid/issues/844), is fixed here and the receipt says so with its reason.
 
 Parts 2–4 are declared out of scope on the issue's own grounds (a maintainer decision and an Ed25519 key for D1; observations that need a ruling first for Part 3; external actors for Part 4). Both comment-thread items are addressed as the comments leave them: **P11** attributed to [#789](https://github.com/srikanth235/centraid/issues/789)'s owner, and **P12** root-caused to `gateway-secrets.ts` `shouldUseFileFallback()` and parked `if: false` on [#851](https://github.com/srikanth235/centraid/pull/851). No comment raises an item the receipt leaves unmentioned.
+
+## Session
+
+<!-- Session identifiers are maintained by the agent-session-identity pre-commit hook. -->
+
+### Identifiers
+
+| date | harness | session |
+| --- | --- | --- |
+| 2026-08-23 | opencode | - |

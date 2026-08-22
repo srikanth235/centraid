@@ -4,6 +4,13 @@ import path from "node:path";
 import type { SQLInputValue } from "node:sqlite";
 
 export const YEAR3_FIXTURE_VERSION = 1;
+
+/**
+ * Stand-in for a caller that names no schema. Distinct from any real ladder
+ * length so a fixture cached without a schema can never be mistaken for one
+ * cached with a matching schema.
+ */
+const UNVERSIONED_SCHEMA = -1;
 export const YEAR3_DEFAULT_SEED = 679_003;
 
 export interface Year3VaultProfile {
@@ -252,9 +259,30 @@ export function year3VaultProfile(
   };
 }
 
-export function year3FixtureCacheKey(profile: Year3VaultProfile): string {
+/**
+ * Content address of a materialized fixture.
+ *
+ * `schemaVersion` is part of the identity, and has to be: the fixture IS a
+ * vault on disk, so the schema that produced it is as much of its content as
+ * the profile is. Without it a cached fixture built before a migration rung
+ * lands is reused afterwards and opened by newer code — which is how the
+ * nightly restore lane failed with `no such table: main.enrich_policy_rule`,
+ * a table a later rung added. Callers pass `VAULT_MIGRATIONS.length`;
+ * `test-kit` deliberately does not depend on `@centraid/vault`, so the number
+ * arrives as an argument rather than an import.
+ */
+export function year3FixtureCacheKey(
+  profile: Year3VaultProfile,
+  schemaVersion: number
+): string {
   return createHash("sha256")
-    .update(JSON.stringify({ version: YEAR3_FIXTURE_VERSION, ...profile }))
+    .update(
+      JSON.stringify({
+        version: YEAR3_FIXTURE_VERSION,
+        schemaVersion,
+        ...profile,
+      })
+    )
     .digest("hex");
 }
 
@@ -266,9 +294,10 @@ export function year3FixtureCacheKey(profile: Year3VaultProfile): string {
 export async function materializeYear3Fixture(
   cacheRoot: string,
   generate: (targetDir: string) => Promise<void>,
-  profile = year3VaultProfile()
+  profile = year3VaultProfile(),
+  schemaVersion: number = UNVERSIONED_SCHEMA
 ): Promise<{ dir: string; cacheHit: boolean }> {
-  const key = year3FixtureCacheKey(profile);
+  const key = year3FixtureCacheKey(profile, schemaVersion);
   const dir = path.join(cacheRoot, key);
   const ready = path.join(dir, "READY.json");
   try {
@@ -285,7 +314,7 @@ export async function materializeYear3Fixture(
     await generate(temporary);
     await writeFile(
       path.join(temporary, "READY.json"),
-      `${JSON.stringify({ key, version: YEAR3_FIXTURE_VERSION })}\n`,
+      `${JSON.stringify({ key, version: YEAR3_FIXTURE_VERSION, schemaVersion })}\n`,
       "utf8"
     );
     try {
