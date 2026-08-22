@@ -152,8 +152,8 @@ describe("sandbox filesystem confinement", () => {
       setConfinedReadRoots([root]);
       expect(String(confined.readFileSync(insideFile))).toBe("inside");
       expect(confined.existsSync(insideFile)).toBe(true);
-      expect(confined.statSync(insideFile).isFile()).toBe(true);
-      expect(confined.lstatSync(insideFile).isFile()).toBe(true);
+      expect(confined.statSync(insideFile)?.isFile()).toBe(true);
+      expect(confined.lstatSync(insideFile)?.isFile()).toBe(true);
       expect(confined.readdirSync(root)).toContain("readable.txt");
       expect(confined.realpathSync(insideFile)).toBe(insideFile);
       const fd = confined.openSync(insideFile, "r") as number;
@@ -243,8 +243,8 @@ describe("sandbox filesystem confinement", () => {
       expect(String(await confinedPromises.readFile(insideFile))).toBe(
         "inside"
       );
-      expect((await confinedPromises.stat(insideFile)).isFile()).toBe(true);
-      expect((await confinedPromises.lstat(insideFile)).isFile()).toBe(true);
+      expect((await confinedPromises.stat(insideFile))?.isFile()).toBe(true);
+      expect((await confinedPromises.lstat(insideFile))?.isFile()).toBe(true);
       await expect(confinedPromises.readdir(root)).resolves.toContain(
         "readable.txt"
       );

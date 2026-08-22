@@ -283,8 +283,9 @@ Two fixes that belong to no workstream, made while driving PR #845's CI to green
   the most security-critical code in the slice measured at **0%** and pulled
   the shared `packages/server/src/engine/**` scope from 84.08% to 80.33% —
   under its 84/73 floor. Fixed by covering it, not by moving the floor: three
-  new in-process suites (`confined-fs.test.ts`, `install.test.ts`,
-  `boot.test.ts`, 67 tests) take the sandbox subtree from 59.11% to **86.21%**
+  new in-process suites — `packages/server/src/engine/sandbox/confined-fs.test.ts`,
+  `packages/server/src/engine/sandbox/install.test.ts` and
+  `packages/server/src/engine/sandbox/boot.test.ts`, 67 tests — take the sandbox subtree from 59.11% to **86.21%**
   lines and `engine/**` back to **84.20/73.46**, above the untouched floor.
   Every test is a confinement claim rather than a line-count exercise: the
   prefix-sibling root (`/granted-evil` vs `/granted`), a symlink inside the
@@ -299,7 +300,8 @@ Two fixes that belong to no workstream, made while driving PR #845's CI to green
   whether the hook worked or not; that path stays owned by
   `sandbox-escape.test.ts` and its real worker threads. A vacuous test would
   have been worse than the gap.
-- **`onboarding-home.spec.ts` measured the runner, not the product.** The
+- **`apps/desktop/tests/e2e/onboarding-home.spec.ts` measured the runner, not
+  the product.** The
   assistant-open budget polled with `requestAnimationFrame`, so the interval
   ended when the RUNNER next scheduled a frame: 180.6 ms and 209.8 ms on macOS
   against a 100 ms ceiling, while the same build passed on Linux. Replaced with
