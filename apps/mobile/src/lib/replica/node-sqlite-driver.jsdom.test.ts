@@ -31,8 +31,14 @@ describe("node:sqlite driver under a jsdom docblock", () => {
     // null-prototype rows, which no object matcher treats as a plain object.
     const rows = driver.all<{ id: string; note: string }>("SELECT * FROM pin");
     expect(rows).toHaveLength(1);
-    expect(rows[0].id).toBe("restart");
-    expect(rows[0].note).toBe("collected");
+    // `toHaveLength` is a runtime check the type checker cannot see, and this
+    // package runs with `noUncheckedIndexedAccess`. Read the row through `?.`
+    // rather than `!`: a missing row then fails on the value assertion below,
+    // which the length assertion above has already reported honestly, instead
+    // of silencing the checker at the index.
+    const [row] = rows;
+    expect(row?.id).toBe("restart");
+    expect(row?.note).toBe("collected");
 
     driver.close();
   });

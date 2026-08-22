@@ -33,7 +33,7 @@
       "failure": "the replayed redemption mints a second link and leaves the ticket unburned"
     },
     "T7": {
-      "command": "bunx vitest run --config vitest.quality.config.ts tests/quality/diagnostics-redaction-canary.test.ts",
+      "command": "node node_modules/vitest/vitest.mjs run --config vitest.quality.config.ts tests/quality/diagnostics-redaction-canary.test.ts",
       "seed": "delete the `email` rule from PROSE_RULES in packages/server/src/serve/diagnostics-redaction.ts",
       "failure": "3 of 7 cases red — the standard bundle leaks priyanka.raghunathan@example.org, and the rule-attribution case reports that `email` never fired against the seeded corpus"
     },
@@ -53,7 +53,7 @@
       "failure": "exit 1 naming the unjustified site and the ledger overrun"
     },
     "T11": {
-      "command": "bunx vitest run src/main/update-signature-core.test.ts   # cwd apps/desktop",
+      "command": "node ../../node_modules/vitest/vitest.mjs run src/main/update-signature-core.test.ts   # cwd apps/desktop",
       "seed": "make the signature check unconditional: `if (verifySignature(...))` becomes `if (true)`",
       "failure": "4 red — the attacker-relabelled keyId, the signature over a different manifest, the mutated golden vector and the tampered manifest all admit"
     },
@@ -63,12 +63,12 @@
       "failure": "an unledgered dependency declaring postinstall passes, and a ledger entry for a dependency that no longer runs install-time code is never noticed"
     },
     "C2": {
-      "command": "bunx vitest run src/automation/fire/clock-adversity-cron.test.ts   # cwd packages/server",
+      "command": "node ../../node_modules/vitest/vitest.mjs run src/automation/fire/clock-adversity-cron.test.ts   # cwd packages/server",
       "seed": "clamp the inverted cron window in readCronCursor: if (from > to) from = to - 60_000",
       "failure": "5 red — the rewound clock and the skewed device pair re-deliver wall minutes already committed"
     },
     "F4": {
-      "command": "bunx vitest run --config vitest.quality.config.ts tests/quality/mobile-resource-evidence.test.ts",
+      "command": "node node_modules/vitest/vitest.mjs run --config vitest.quality.config.ts tests/quality/mobile-resource-evidence.test.ts",
       "seed": "drop a required lane from tests/mobile-resource-evidence.json, or move a derived row's value outside its recorded tolerance",
       "failure": "'lane ios/cold-start-ms has no row — a lane is measured or blocked-with-a-reason, never absent', or the recompute reports ledger v ±25% but measured n"
     },
@@ -88,7 +88,7 @@
       "failure": "descriptor ceiling: peaked at 80 open descriptors, ceiling 16"
     },
     "L4": {
-      "command": "bunx playwright test -c tests/e2e/playwright.config.ts renderer-leak.spec.ts   # cwd apps/web",
+      "command": "bun run --cwd apps/web e2e -- renderer-leak.spec.ts",
       "seed": "register one window listener (or one setInterval) per open/close cycle",
       "failure": "listener growth reads exactly 12 against a ceiling of 2 (or interval growth 12 against 0) — one per cycle, the residue argument showing its work"
     },

@@ -16,6 +16,7 @@ import { readFileSync } from "node:fs";
 import path from "node:path";
 
 import { describe, expect, test, vi } from "vitest";
+import type { Mock } from "vitest";
 
 import {
   canonicalJson,
@@ -79,7 +80,10 @@ const signatureText = JSON.stringify({
 });
 
 /** A fetcher backed by an explicit URL→body table; anything else 404s. */
-function fetcherFor(bodies: Record<string, string>): FetchText {
+// Returns the MOCK type, not the bare `FetchText` it satisfies: the assertions
+// below read `.mock.calls` to prove which URLs the gate asked for, and widening
+// the return type to the plain signature erases that surface.
+function fetcherFor(bodies: Record<string, string>): Mock<FetchText> {
   return vi.fn<FetchText>(async (url: string) => {
     const body = bodies[url];
     if (body === undefined)

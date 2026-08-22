@@ -259,7 +259,10 @@ test("REFUSAL: `--print-ledger` output does not self-approve", () => {
     },
   ];
   const generated = ledgerFor(observed);
-  assert.match(generated.fresh.reason, /TODO/u);
+  // The marker below is the assertion's SUBJECT — the generator's unreviewed
+  // placeholder — not a promise this file makes. A tracker ref would imply the
+  // placeholder is tracked work, so the per-line waiver is the honest form.
+  assert.match(generated.fresh.reason, /TODO/u); // governance: allow-no-orphan-todos asserts on the generator's placeholder text
   const result = auditLifecycle({
     observed,
     ledger: { packages: generated },
@@ -268,7 +271,7 @@ test("REFUSAL: `--print-ledger` output does not self-approve", () => {
   assert.equal(result.ok, false);
   assert.match(
     result.problems.join(" "),
-    /still carries the generated TODO reason/u
+    /still carries the generated TODO reason/u // governance: allow-no-orphan-todos matches the audit's own refusal message, not a deferred task
   );
 });
 
