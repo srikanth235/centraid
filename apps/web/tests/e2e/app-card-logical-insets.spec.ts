@@ -176,11 +176,12 @@ test("the home tile mirrors with the writing direction, not against it", async (
     const tile = pane.getByTestId("app-tile").first();
     return tile.evaluate((el) => {
       const box = el.getBoundingClientRect();
-      return (el.querySelector("div")?.getBoundingClientRect().left ?? 0) -
-        box.left;
+      return (
+        (el.querySelector("div")?.getBoundingClientRect().left ?? 0) - box.left
+      );
     });
   };
-  expect(await nameEdge(ltr)).toBeLessThanOrEqual(await nameEdge(rtl) + 0.5);
+  expect(await nameEdge(ltr)).toBeLessThanOrEqual((await nameEdge(rtl)) + 0.5);
 
   // The shipped metadata is what was photographed — not a fixture that could
   // drift away from the tiles the member actually sees.

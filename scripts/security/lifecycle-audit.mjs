@@ -227,7 +227,8 @@ export function auditLifecycle(input) {
     // the unreviewed placeholder `--print-ledger` stamps — not deferred work.
     // Linking a tracker would claim someone owns the placeholder; nobody does,
     // and the whole point is that it must be replaced before the gate passes.
-    else if (pinned.reason.includes("TODO")) // governance: allow-no-orphan-todos the refusal sentinel, not a deferred task
+    else if (pinned.reason.includes("TODO"))
+      // governance: allow-no-orphan-todos the refusal sentinel, not a deferred task
       problems.push(
         `${entry.name}: ledger entry still carries the generated TODO reason — \`--print-ledger\` writes the shape, a human writes the review` // governance: allow-no-orphan-todos names the sentinel in the refusal message
       );
