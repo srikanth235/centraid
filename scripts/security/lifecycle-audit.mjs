@@ -71,6 +71,15 @@ export const BEHAVIOUR_SIGNALS = [
   },
 ];
 
+/**
+ * The unreviewed-reason SENTINEL. `--print-ledger` stamps it, and the audit
+ * refuses while it survives — so it is a value this file is ABOUT, never a
+ * promise this file makes. Named once here so the branch and the message below
+ * carry no bare marker of their own.
+ */
+export const UNREVIEWED_MARKER = "TODO"; // governance: allow-no-orphan-todos
+export const UNREVIEWED_REASON = `${UNREVIEWED_MARKER}: why is install-time code acceptable here?`;
+
 const sha256 = (data) => createHash("sha256").update(data).digest("hex");
 
 /** Read a package-local script, or null when the path names no regular file. */
@@ -227,10 +236,10 @@ export function auditLifecycle(input) {
     // the unreviewed placeholder `--print-ledger` stamps — not deferred work.
     // Linking a tracker would claim someone owns the placeholder; nobody does,
     // and the whole point is that it must be replaced before the gate passes.
-    else if (pinned.reason.includes("TODO"))
-      // governance: allow-no-orphan-todos the refusal sentinel, not a deferred task
+    // governance: allow-no-orphan-todos the refusal sentinel, not a deferred task
+    else if (pinned.reason.includes(UNREVIEWED_MARKER))
       problems.push(
-        `${entry.name}: ledger entry still carries the generated TODO reason — \`--print-ledger\` writes the shape, a human writes the review` // governance: allow-no-orphan-todos names the sentinel in the refusal message
+        `${entry.name}: ledger entry still carries the generated ${UNREVIEWED_MARKER} reason — \`--print-ledger\` writes the shape, a human writes the review`
       );
   }
 
@@ -269,9 +278,7 @@ export function ledgerFor(observed, previous = {}) {
       digest: entry.digest,
       signals: entry.signals,
       executes: previous[entry.name]?.executes === true,
-      reason:
-        previous[entry.name]?.reason ??
-        "TODO: why is install-time code acceptable here?", // governance: allow-no-orphan-todos the generated placeholder a human must replace; the audit above refuses while it survives
+      reason: previous[entry.name]?.reason ?? UNREVIEWED_REASON,
     };
   return packages;
 }

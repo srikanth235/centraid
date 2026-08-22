@@ -269,6 +269,13 @@ Two fixes that belong to no workstream, made while driving PR #845's CI to green
   refused. Three new cases in `policy.test.ts` pin it, including that the
   handler lane still reads `filesystem: "denied"`. The stale premise in the
   policy comment is corrected in place.
+- `tests/quality/classification-ratchet.json` carries the re-pinned
+  matrix-governance fingerprint and the two governed file fingerprints, with
+  the paired `approvedDeviation` quoted under `## Decisions` below.
+  `scripts/security/lifecycle-audit.mjs` now names its refusal sentinel once
+  (`UNREVIEWED_MARKER`) instead of spelling the bare marker at three sites, so
+  the `no-orphan-todos` sweep sees one waived declaration rather than three
+  waived usages the formatter kept reflowing away from their waivers.
 - `oxfmt.config.ts` gains one entry in the existing generated-output exclusion
   list for `packages/tunnel/fixtures/peer-target-corpus.json`. Those bytes are
   the JS-side half of a cross-language interface and are byte-asserted by
