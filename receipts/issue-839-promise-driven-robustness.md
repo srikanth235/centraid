@@ -25,7 +25,8 @@ Wave 0 — encode the shape (G6, G7, G14, G16):
 Wave 1 — name the flows (G6, G7):
 
 - [x] App admission contract stated for all eight apps
-- [x] Every designed state has a named owner per seat, or a tracked gap
+- [x] Every designed state has a named owner per app, or a tracked gap (the
+  issue asked per SEAT; Grid D shipped without a seat axis — see Decisions)
 - [x] Tally rows grey-with-citation (#831), never silently absent
 
 Wave 2 — raise the adversaries (G4, G5, G9, G10):
@@ -66,7 +67,7 @@ and citation per entry. `packages/server/src/engine/registry/manifest.ts` gains
 canonical state sits in exactly one of designed/excluded.
 `packages/blueprints/scripts/build-manifest.mjs` folds the block into the
 gallery `manifest.json` beside seats. New suite
-`packages/blueprints/src/app-states.test.ts` (27 tests) round-trips every app
+`packages/blueprints/src/app-states.test.ts` (20 tests) round-trips every app
 through the real validator; `manifest.test.ts` gains ten cases.
 
 **W0-A — coverage floors (G14).** `tests/coverage-floors.json`: the blueprint
@@ -148,7 +149,9 @@ with skips, zero-grey contract proven unmoved.
 ### Wave 2 — raise the adversaries (landed so far)
 
 **W2-2 — scope-denial sweep, egress-dispatch law, policy-cascade properties.**
-`packages/server/src/serve/manifest-scope-denial.sweep.test.ts` (90 tests):
+`packages/server/src/serve/manifest-scope-denial.sweep.test.ts` (90 tests at
+#839's tip; #842 later split the file into 40 here plus 50 across two siblings,
+same cases):
 all 37 app.json manifests through the real validators into the real
 `evaluateConsent` under a deliberately maximal grant, asserting the closed
 six-class ConsentDeny grammar verbatim, with a clamp oracle biconditional
@@ -481,6 +484,34 @@ AppCard's rows-layout physical rules (`:341,346,357` under
   regression locks live in the nightly lane, and validate-nightly-wiring
   makes their presence structural.
 
+- **The checklist here is a 16-item consolidation of the issue's 29, and that
+  is a divergence, not a formatting choice.** The independent audit below
+  refuted the mirroring check and it is right to. Named plainly, what issue
+  #839 asked for that did NOT land: per-engine property suites for every engine
+  still missing one and model-based stateful command properties (the shipped
+  `engineRegistry` is 8 of 19 `propertyFlow` — the hole is visible in the grid,
+  which is the doctrine, but the promise is unmet); coverage-guided fuzzing
+  (jazzer.js) — what shipped is a dependency-light mutation fuzzer, weaker in
+  kind, not just in degree; the N−1 pinned client (recorded under Out of scope
+  above, since the protocol window is a single point today); backup-format
+  archaeology (landed under #842 W1.4, not here); per-app budgets; the
+  auto-file 24h-SLA line; and the Maestro roster reaching all eight apps —
+  five flows landed against a roster the issue sized at 12–14. The boxes above
+  are checked against the consolidated items, and each consolidated item is
+  true as written; the gap is between those items and the issue's own, and it
+  is recorded here rather than closed by rewording.
+- **Grid D has no seat axis.** Wave 1's promise was per-seat state ownership;
+  what shipped is 8 apps × 7 states with `{status, owner}` cells. The seat axis
+  exists on Grid B (app × seat) only. The checklist item is reworded to what
+  shipped rather than left claiming the stronger thing.
+- **Every gap cell cites #839, which GitHub now reports CLOSED.** Those cells
+  pass `validate-app-axes.mjs` only because `tests/matrix.json#trackingIssues`
+  still records the umbrella as open — a stale local claim, not a live check.
+  It is not currently red and is not repointed here, because moving 39 gap
+  cells onto the successor umbrella (#846) is a deliberate change with its own
+  blast radius; it is recorded as the first thing to settle after this branch
+  lands.
+
 ## Verification
 
 Filled per wave; the final gate run happens once after all waves:
@@ -510,7 +541,7 @@ reconstructing which slice happened to land it.
   `packages/blueprints/apps/*/app.json`; `CANONICAL_DESIGNED_STATES` and the
   closed-partition cross-check live in
   `packages/server/src/engine/registry/manifest.ts`; enforced by
-  `packages/blueprints/src/app-states.test.ts` (27 tests, every app through the
+  `packages/blueprints/src/app-states.test.ts` (20 tests, every app through the
   real validator) and ten added cases in `manifest.test.ts`, including the
   missing-`reason` exclusion rejection added by the Wave 0 fixer pass.
 - **Coverage floors: tasks/agenda/notes graduated out of the blueprint blend,
@@ -530,7 +561,8 @@ reconstructing which slice happened to land it.
 - **App admission contract stated for all eight apps** —
   `docs/blueprint-seats.md#app-admission-contract`, six named claims each citing
   its gate, delimited from TESTING.md's same-named evidence-ladder section.
-- **Every designed state has a named owner per seat, or a tracked gap** — Grid D
+- **Every designed state has a named owner per app, or a tracked gap (the
+  issue asked per SEAT; Grid D shipped without a seat axis — see Decisions)** — Grid D
   goes 5→19 owned against real app-boot suites, every refusal recorded with its
   reason; Tally's seven cells become `held` citing #831, a cell status the
   validator enforces against a registered issue.
@@ -542,7 +574,8 @@ reconstructing which slice happened to land it.
   notes and agenda `logic.ts` had none; every added floor PROVISIONAL-LOCAL at
   (local − 11) with the re-seed instruction in `tests/mutation-floors.json`.
 - **Scope-denial sweep generated from the 37 app.json manifests** —
-  `packages/server/src/serve/manifest-scope-denial.sweep.test.ts` (90 tests)
+  `packages/server/src/serve/manifest-scope-denial.sweep.test.ts` (90 tests, since
+  split by #842 across three files)
   through the real `evaluateConsent`, asserting the closed six-class
   `ConsentDeny` grammar with a clamp-oracle biconditional and 300-run fuzzing.
 - **Egress-dispatch law; policy-cascade property suite** —
@@ -589,8 +622,9 @@ reconstructing which slice happened to land it.
 
 ## File manifest
 
-The prose above narrates the work by gap; this is the complete surface it
-touched, grouped by area. It exists so a reviewer can tell at a glance that no
+Every file this umbrella touched that the narrative above does not already
+name, grouped by area. It is the REMAINDER, not the whole surface: a file the
+prose names is covered there and is not repeated here. It exists so a reviewer can tell at a glance that no
 file rode along unaccounted for — `receipt-per-issue` compares this list
 against `git diff --name-only` and fails on anything the receipt never names.
 Attribution is by the commit that introduced each file, so a file worked under

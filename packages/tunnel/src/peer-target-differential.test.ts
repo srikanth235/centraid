@@ -24,8 +24,11 @@
  * the Rust crate, so the Rust half is covered two ways — a transliteration of
  * `peer_target_allowed` on UTF-8 byte semantics (`rustModel`), pinned to the
  * Rust source text so a Rust edit cannot silently invalidate the model, and
- * fixtures/peer-target-golden.json, the shared verdict corpus a Rust test
- * reads unchanged (see the file's `_readme`).
+ * fixtures/peer-target-golden.json, the shared verdict corpus written so a
+ * Rust test CAN read it unchanged (see the file's `_readme`). That reader is
+ * not written yet, so the Rust half rests on the transliteration today — the
+ * corpus block below says so at length rather than implying a bridge that
+ * does not exist.
  *
  * Seeds are recorded inline and never randomised: a property suite whose
  * counterexamples cannot be reproduced is an anecdote.
@@ -228,10 +231,18 @@ const adversarialTarget = fc
  * `peer-target-golden.json` is the CURATED corpus — cases a human thought
  * worth naming, plus the pins. This second corpus is its MACHINE half: a
  * deterministically seeded draw off the same generator, each row carrying the
- * verdict the product guard gives, read UNCHANGED by
- * `data-plane/tests/peer_target_differential.rs`. The two languages then agree
- * on a shared, growing set of inputs neither author wrote down — the differ-
- * ential complement to alpn-parity.test.ts's source-text pin.
+ * verdict the product guard gives.
+ *
+ * WHAT THIS DOES AND DOES NOT PROVE TODAY. The Rust side of the bridge is the
+ * `rustModel` transliteration below, pinned to the Rust source text so an edit
+ * there cannot silently invalidate it. There is NO Rust test reading this file
+ * yet — `data-plane/tests/` holds only `golden.rs`, which reads a different
+ * fixture. So the corpus is currently a one-language artifact BUILT to be read
+ * by a Rust test: every row is representable as a `&str`, and the bytes are
+ * deterministic, which is exactly what a future reader needs. Until that
+ * reader exists, the cross-language claim rests on the transliteration, not on
+ * the compiled guard. Stated here rather than left to be inferred, because a
+ * corpus that looks like a bridge and is not one is worse than no corpus.
  *
  * Determinism is the whole point: `fc.sample` is a pure function of (seed,
  * count), so a regenerated corpus is byte-identical on any machine, and CI can

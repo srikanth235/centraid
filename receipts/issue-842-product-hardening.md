@@ -24,7 +24,10 @@ W0 — re-arm what's already built:
 W1 — the bytes survive:
 
 - [x] W1.1 Seeded crash-consistency lane over every registered fault point
-- [x] W1.2 `centraid doctor` (CLI verb + surface) + scheduled scrub
+- [ ] W1.2 `centraid doctor` (CLI verb + surface) + scheduled scrub — **PARTIAL,
+  unchecked deliberately.** The check library and the CLI verb landed; the
+  scheduled background scrub did not, and `integrity-checks.ts` says so in its
+  own header. Not externally blocked, just unbuilt, so it is not claimed done.
 - [x] W1.3 Automated restore drill (in-product + CI)
 - [x] W1.4 Backup-format archaeology corpus
 - [x] W1.5 Schema-migration corpus
@@ -154,9 +157,16 @@ differential (`packages/tunnel/src/peer-target-differential.test.ts`) draws
 adversarial targets (percent-escapes, dot-segments, confusables, null bytes,
 overlong encodings) and asserts the JS `isPeerPlaneTarget`, the route-layer
 composite, and a byte-faithful model of the Rust `peer_target_allowed` return the
-same verdict; a committed golden + a byte-deterministic generated corpus bridge to
-a Rust test that reads the same file (verified against the compiled function, 48
-vectors, 0 mismatches). Two disagreements found and **pinned** (never fixed here,
+same verdict; a committed golden + a byte-deterministic generated corpus are
+written so a Rust test can read them unchanged — every row is representable as a
+`&str` and the bytes are reproducible from (seed, count). **That Rust reader does
+not exist yet**, and an earlier draft of this paragraph claimed it did, with a
+"48 vectors, 0 mismatches" verification that was never run; the independent audit
+below caught it. `data-plane/tests/` holds only `golden.rs`, which reads a
+different fixture, and `git diff --stat -- '*.rs'` is empty for this branch. So
+the Rust half rests on the source-text-pinned transliteration (`rustModel`), not
+on the compiled guard — a real but weaker claim, now stated as such in the test
+file's own header. Two disagreements found and **pinned** (never fixed here,
 per A-pinned): a bare peer-plane prefix plus a query/fragment is wrongly admitted
 (the length test measures the whole target, not the path), and a lone surrogate is
 admitted JS-side but unrepresentable in a Rust `&str`. No target the guard admits
@@ -188,7 +198,21 @@ the closed-grammar file. TESTING.md, docs/decisions.md (A-pinned += the two W2.1
 pins), docs/toolchain.md, the e2e README/AGENTS, and knip.json updated to current
 state.
 
-### Wave C — chaos and load (W3–W4), supply chain (W6–W7), field (W8)
+### Wave B — durability (W1), hostile input (W2.3–W2.4), compatibility (W5)
+
+The Wave B and Wave C slices landed their code, their matrix flows and their
+floors; what they did not land is narrative prose here, one paragraph per
+workstream, in the shape Wave A got. W1.3 below is the only one written. The
+independent audit refuted the "faithfully describes the diff" check partly on
+that basis and is right to: 25 of 34 items are evidenced only by the
+`### Checklist crosswalk` under `## Verification`, which names the owning file,
+the matrix flow and the declared-test floor for each but does not explain the
+design choices behind them. That is a real thinness in this receipt, recorded
+rather than papered over — the crosswalk is accurate (the audit verified every
+floor against `tests/matrix.json`), it is simply less than the narrative these
+slices deserved.
+
+### Wave C — W1.3, the restore drill
 
 **W1.3 — the restore drill learns to judge the restored vault usable.** The
 in-product drill already existed (`BackupService.runRestoreVerify`, #408 G9): it
@@ -225,6 +249,36 @@ drill, and nothing pre-existing, caught it. Only CI can sabotage a real vault an
 demand the alarm, so both red lanes live there; the in-product drill only ever meets
 a healthy store. Registered as `backup-restore-drill` (durability, integration,
 floor 3) and `backup-restore-drill-grading` (correctness, unit, floor 8).
+
+### Getting the branch green
+
+Two fixes that belong to no workstream, made while driving PR #845's CI to green:
+
+- `oxfmt.config.ts` gains one entry in the existing generated-output exclusion
+  list for `packages/tunnel/fixtures/peer-target-corpus.json`. Those bytes are
+  the JS-side half of a cross-language interface and are byte-asserted by
+  `peer-target-differential.test.ts`; letting the formatter restyle the braces
+  made that assertion fail on every regeneration while proving nothing about
+  style. The corpus was regenerated afterwards — 480 rows, semantically
+  identical to what oxfmt had produced.
+- `packages/blueprints/apps/notes/view-copy.ts` and
+  `apps/mobile/src/apps/tasks/TasksHome.tsx` carried the two `lint:types`
+  diagnostics that fail the `static` job on pristine `origin/main` (run
+  32490167745, step 14) — neither file is otherwise in this diff. The switch in
+  `shelfCopy` now matches its `null` union member by name, because
+  `switch-exhaustiveness-check` counts members rather than reachability and a
+  `default:` arm does not discharge one; and Tasks' `onRefresh` now takes a
+  memoized void-returning wrapper instead of the async handler, so a rejected
+  refresh is discarded deliberately rather than silently (RefreshControl
+  neither awaits nor catches).
+- `packages/vault/src/commands/organize-domains.test.ts` expected
+  `Every month, 3 times`. #834/#840 humanised the shared summariser in
+  `packages/core/src/time/recurrence-summary.ts` onto the copy rulebook's
+  separator and left this expectation behind. It is red on pristine
+  `origin/main` too — verified in a clean worktree — and surfaced here only
+  because this branch touches `@centraid/vault`, which makes it an affected
+  package for the first time. The stale expectation is corrected to the shipped
+  copy; the product was never wrong.
 
 ## Out of scope
 
@@ -297,17 +351,24 @@ enforced in-band by a census test and said so below.
   `tests/quality/crash-schedule.ts`, `tests/quality/fault-points.ts` and the
   out-of-process victim `tests/quality/fixtures/kill-mid-write-child.ts`; the
   schedule is seeded, so a SIGKILL that breaks an invariant replays.
-- **W1.2 `centraid doctor` (CLI verb + surface) + scheduled scrub** —
+- **W1.2 — PARTIAL, box unchecked.** What landed:
   `packages/server/src/doctor/integrity-checks.ts` (the reusable invariant
   checks and `runIntegrityScrub`), the `doctor` verb in
   `packages/server/src/cli/doctor.ts`, and the barrel
   `packages/server/src/doctor/index.ts` trimmed to exactly what callers import;
-  covered by `integrity-checks.test.ts` and `cli/doctor.test.ts`.
+  covered by `integrity-checks.test.ts` and `cli/doctor.test.ts`. What did NOT
+  land: the scheduled background scrub, and any surface beyond the CLI —
+  `runIntegrityScrub` has exactly one non-test consumer. The independent audit
+  caught this claimed as done; the box is now unchecked rather than reworded,
+  because the missing half is unbuilt work, not an external block.
 - **W1.3 Automated restore drill (in-product + CI)** — `restore-drill.ts`'s two
   laws spliced into `BackupService.doRunRestoreVerify`; flows
   `backup-restore-drill` (floor 3) and `backup-restore-drill-grading` (floor 8).
   Both red lanes are demonstrated: without `drillErrors` two provably broken
-  vaults restore-verify green.
+  vaults restore-verify green. Scope note the audit is right to press on: the
+  CI half drives `startFakeProviderServer` — a real HTTP provider server, but
+  not a real remote target — and no workflow invokes the drill by name; it runs
+  as part of the `@centraid/server` suite.
 - **W1.4 Backup-format archaeology corpus** — `tests/quality/backup-archaeology.test.ts`
   (flow `backup-format-archaeology`, floor 3) against
   `scripts/corpora/backup-format-census.json`.
@@ -420,8 +481,11 @@ enforced in-band by a census test and said so below.
 
 ## File manifest
 
-The complete surface this umbrella touched, grouped by area, as the companion
-to the workstream narrative above. `receipt-per-issue` compares it against
+Every file this umbrella touched that the narrative above does not already
+name, grouped by area. It is the REMAINDER, not the whole surface — files the
+prose names (`restore-drill.ts`, `collection-tripwire.mjs`,
+`send-to-first-token.mjs`, `sonarcloud.yml` and the rest) are covered there and
+are deliberately not repeated here. `receipt-per-issue` compares it against
 `git diff --name-only`; anything the receipt never names is reported as scope
 creep. Attribution is by the commit that introduced each file, so a file worked
 under both umbrellas appears in this manifest and in #839's.
@@ -700,6 +764,51 @@ in this environment; the code side lands, the external half is named here.
 - **`desktop`/`web` `sendToFirstToken` (needs a rig).** The route + client half
   of the measured gateway metric needs the e2e mock gateway to serve a
   fixed-delay SSE turn plus a client-side first-token marker. Left `unmeasured`.
+
+The two entries above are rig gaps, not external blocks. The genuinely
+externally-blocked items — asserted in the preamble and under `## Out of scope`,
+but until now never actually enumerated here, which the independent audit caught:
+
+- **Apple notarization (W6.1) needs a paid Developer Program enrollment and real
+  signing secrets.** The code side is complete and *refuses*: the shipping
+  `TRUSTED_RELEASE_KEYS` value is asserted by
+  `update-signature-core.test.ts` to deny an update in a packaged build today.
+  Unblock: enrollment plus `APPLE_*` secrets in the release environment, then
+  the trust anchor is seeded and the same tests assert admission. The lane is
+  not vacuous in the meantime — a missing anchor is a REFUSAL, not a skip.
+- **WebKit and Firefox coverage (W5.1) needs browser bundles the base container
+  does not ship.** `/opt/pw-browsers` is Chromium-only. The projects are declared
+  conditionally and the result is UNMEASURED rather than green; `--list`
+  enumerates the specs without launching a browser so the roster cannot silently
+  shrink. Unblock: a CI job running `playwright install --with-deps webkit
+  firefox`.
+- **`cargo-audit` / `cargo-deny` (W7.2) are not installed in this container.**
+  The lane is a guarded skip that prints "This lane is NOT a pass. It ran zero
+  checks." and exits 0 only with that citation; CI passes `--require`, which
+  turns the skip into a red build. Unblock: install both in the Rust toolchain
+  image.
+- **Real device and OS runners (W5.2, W4/G8).** The Windows and macOS desktop
+  e2e jobs exist and run on GitHub-hosted runners, but Electron cannot launch in
+  this container (no dbus) and Maestro's device-only claims — biometrics,
+  notification delivery, share sheet, granted/limited camera-roll permission —
+  need physical devices. Named in the mobile e2e README as device-only gaps
+  nothing owns yet.
+- **The four-hour weekly soak (W3.4) needs wall-clock nobody has spent yet.**
+  `soak-weekly.yml` is wired and scheduled; `declaredSoakMinutes` stays at 10
+  because ten minutes is the longest run the growth ceilings were derived from.
+  Unblock: the first green Saturday run, whose samples raise the declaration.
+- **`egress-policy: block` (W6.3) needs one audit run's endpoint list.**
+  `soak-weekly.yml` runs `audit`, which is what produces the allowlist; the
+  fifteen other workflows are pinned as ledgered debt with priorities. Unblock:
+  read the first run's report, then flip with `allowed-endpoints`.
+- **A paid external review and a formal model (W8.3) need money and weeks.**
+  `docs/external-review-scope.md` states the scope, the reviewer hand-off, and
+  what a model would and would not settle. That document is the input to the
+  engagement, not a substitute for it.
+- **Released-binary skew (W5.3) needs real published artifacts.** The lane and
+  its `lib/skew.mjs` helpers are unit-covered, but a true N−1 assertion needs a
+  pinned prior release to download; the protocol window is a single point today
+  (v3 = min 3), so there is nothing to pin against yet.
 
 ## Decisions
 

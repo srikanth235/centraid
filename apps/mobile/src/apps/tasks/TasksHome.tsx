@@ -155,6 +155,14 @@ export default function TasksHome({
     await board.refresh();
   }, [board]);
 
+  // `onRefresh` is a void-returning prop. Handing it the async function
+  // directly makes its rejection unobservable — RefreshControl neither awaits
+  // nor catches it — so the discard is explicit here, matching `void write(…)`
+  // below, rather than left for the caller to notice.
+  const onRefresh = useCallback((): void => {
+    void handleRefresh();
+  }, [handleRefresh]);
+
   const moveAllToToday = useCallback(
     (rows: readonly Task[]) => {
       for (const row of rows) {
@@ -347,7 +355,7 @@ export default function TasksHome({
         }
         contentContainerStyle={styles.listContent}
         refreshing={board.loading}
-        onRefresh={handleRefresh}
+        onRefresh={onRefresh}
       />
     );
   })();
