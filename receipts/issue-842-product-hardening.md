@@ -276,6 +276,40 @@ Two fixes that belong to no workstream, made while driving PR #845's CI to green
   (`UNREVIEWED_MARKER`) instead of spelling the bare marker at three sites, so
   the `no-orphan-todos` sweep sees one waived declaration rather than three
   waived usages the formatter kept reflowing away from their waivers.
+- **The W7.1 sandbox was dragging `engine/**` below its coverage floor, and
+  that is why CI's `verify` was red.** `fs-guard.ts`, `confined-fs.ts`,
+  `confined-fs-promises.ts`, `boot.ts` and `install.ts` only ever execute
+  inside worker threads, which V8 coverage does not instrument, so 203 lines of
+  the most security-critical code in the slice measured at **0%** and pulled
+  the shared `packages/server/src/engine/**` scope from 84.08% to 80.33% —
+  under its 84/73 floor. Fixed by covering it, not by moving the floor: three
+  new in-process suites (`confined-fs.test.ts`, `install.test.ts`,
+  `boot.test.ts`, 67 tests) take the sandbox subtree from 59.11% to **86.21%**
+  lines and `engine/**` back to **84.20/73.46**, above the untouched floor.
+  Every test is a confinement claim rather than a line-count exercise: the
+  prefix-sibling root (`/granted-evil` vs `/granted`), a symlink inside the
+  root pointing out of it, the missing-file ancestor walk, `existsSync`
+  refusing rather than answering `false` (which would be a disk-mapping side
+  channel), `openSync` refusing every write mode on a file the lane may read,
+  the `process.getBuiltinModule` loader bypass re-filtered through the same
+  allowlist, and the frozen `process.env`. Two of those found gaps the original
+  suite had no assertion for at all. The resolve hook's own body stays
+  uncovered here and says so in the file header — Vitest routes `import()`
+  through its own module runner, so an assertion written against it would pass
+  whether the hook worked or not; that path stays owned by
+  `sandbox-escape.test.ts` and its real worker threads. A vacuous test would
+  have been worse than the gap.
+- **`onboarding-home.spec.ts` measured the runner, not the product.** The
+  assistant-open budget polled with `requestAnimationFrame`, so the interval
+  ended when the RUNNER next scheduled a frame: 180.6 ms and 209.8 ms on macOS
+  against a 100 ms ceiling, while the same build passed on Linux. Replaced with
+  a `MutationObserver` armed before the click, so the interval ends when the
+  dialog enters the DOM — the work the gesture actually causes, and what #785's
+  claim is about. **The ceiling is unchanged at 100 ms**; this is a measurement
+  correction, not a widening. Owner-approved after the alternative (leaving it
+  red) was found to be incompatible with a green build, since the assertion
+  sits inside a 36-expect functional journey test and cannot be excluded
+  without losing that test on two platforms.
 - `oxfmt.config.ts` gains one entry in the existing generated-output exclusion
   list for `packages/tunnel/fixtures/peer-target-corpus.json`. Those bytes are
   the JS-side half of a cross-language interface and are byte-asserted by
