@@ -1,8 +1,9 @@
 {
-  "_comment": "Suite wall-clock ceilings (#656 Layer 5). Tighten-only, ratcheted alongside the perf budgets in scripts/test-report/ratchet-floors.mjs. `budgetMs` is the sum of per-file durations in artifacts/test-results/vitest.json, not the run's elapsed time — elapsed varies with host load and --concurrency, while the sum is the work the suite actually asked for, which is what an added test increases. Seeded 2026-07-31 from a full `bun run coverage` on this branch: 849 files, 1,408.3s measured, ceiling set 15% above at 1,620,000ms. Widening this number needs a top-level `approvedDeviation` saying what the extra time buys; `bun run test:suite-wall-clock -- --write` only ever lowers it.",
+  "_comment": "Suite wall-clock ceilings (#656 Layer 5). Tighten-only, ratcheted alongside the perf budgets in scripts/test-report/ratchet-floors.mjs. `budgetMs` is the sum of per-file durations in artifacts/test-results/vitest.json, not the run's elapsed time — elapsed varies with host load and --concurrency, while the sum is the work the suite actually asked for, which is what an added test increases. Reseeded 2026-08-22 from CI verify run 32567610776 (#845 / HEAD 255be5deb): 1332 files, 2,018.1s measured, ceiling set 15% above at 2,321,000ms. Prior seed 2026-07-31: 849 files, 1,408.3s, 1,620,000ms. Widening this number needs a top-level `approvedDeviation` saying what the extra time buys; `bun run test:suite-wall-clock -- --write` only ever lowers it.",
+  "approvedDeviation": "#850 reseed after #839/#842 merged as #845: CI verify run 32567610776 measured 2018.1s across 1332 files vs the 2026-07-31 849-file / 1408.3s seed (1620.0s ceiling, +398.1s). The extra time is the promise-driven robustness and product-hardening suites now in the PR vitest lane (quality/chaos, time-zoo, grant-plane sim, sandbox-escape, hostile-peer, join-lane, restore-drill) — not runner variance. Ceiling set 15% above that CI measurement at 2,321,000ms. Mere presence of this field does not waive a later widen (#781).",
   "lanes": {
     "pr-vitest": {
-      "budgetMs": 1620000
+      "budgetMs": 2321000
     }
   }
 }

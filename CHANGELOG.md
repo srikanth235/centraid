@@ -79,6 +79,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Fixed
 
+- `main` CI after the #839/#842 quality land: the PR vitest wall-clock ceiling is reseeded from CI verify run 32567610776 (1,332 files, 2,018.1s measured, 15% headroom → 2,321,000ms) with a changed `approvedDeviation` naming what those suites bought; advisory `desktop-e2e-windows` is parked behind unset `vars.CENTRAID_DESKTOP_E2E_WINDOWS` until [#846](https://github.com/srikanth235/centraid/issues/846) P12 Windows founding/keychain is attributed ([#850](https://github.com/srikanth235/centraid/issues/850)).
 - Grant-plane CI: Places' native map tests wait for the lazily-imported basemap instead of two microticks, persist the mode store mock, and `setMapMode` no longer lets a late first hydrate snap the switch back to the default ([#825](https://github.com/srikanth235/centraid/issues/825)).
 - Grant-plane CI: keep `window.centraid.grants` off the signed-in Home warm shell (lazy `grant-wire`) and clear the inline bridge on Home so a leftover install cannot hang goHome; `maxWarmToColdByteRatio` stays 0.15 ([#825](https://github.com/srikanth235/centraid/issues/825)).
 - Grant-plane CI: re-pin the `route-security.ts` quality-knob fingerprint, name every changed path in the #825 receipt, and split the native grant sheet, its web test suite, and People's app-root at existing seams so none of them sits over the file-size limit ([#825](https://github.com/srikanth235/centraid/issues/825)).
