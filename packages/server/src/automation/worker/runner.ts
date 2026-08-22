@@ -1,12 +1,54 @@
 /** Automation worker: isolates crashes/timeouts, not trusted app code. `ctx.delegate`
  * is the only billed rail; every `ctx.*` call is an ordered parent RPC barrier. */
 
+import { existsSync } from "node:fs";
+import path from "node:path";
 import { pathToFileURL } from "node:url";
 import { parentPort, workerData } from "node:worker_threads";
+
+/**
+ * Load the sandbox bootstrap by absolute path — a plain relative `.js`
+ * specifier does not resolve when this worker runs from `src/` under native
+ * type stripping. See the header of `engine/sandbox/boot.ts`.
+ */
+async function loadSandboxBoot(): Promise<
+  typeof import("../../engine/sandbox/boot.js")
+> {
+  const dir = path.join(import.meta.dirname, "..", "..", "engine", "sandbox");
+  const js = path.join(dir, "boot.js");
+  const file = existsSync(js) ? js : path.join(dir, "boot.ts");
+  return (await import(
+    pathToFileURL(file).href
+  )) as typeof import("../../engine/sandbox/boot.js");
+}
+
+/**
+ * Which containment lane the PARENT chose for this run (issue #842 W7.1).
+ * Handler-chosen containment would be no containment, so this is never read
+ * from the handler bundle or its manifest — only from the parent's request.
+ *
+ *   `"automation-handler"` — strict: no filesystem, no sockets, no
+ *     subprocess, no native addons, empty environment. This is what a
+ *     self-contained recognition bundle (e.g. `place-names`, which documents
+ *     itself as touching neither disk nor socket) actually needs.
+ *   `"model-runtime"` — read-confined filesystem plus native addons, for the
+ *     ONNX-backed bundles. See policy.ts for why that lane is a named hole.
+ *   absent — NO sandbox is installed. This is the current default and it is
+ *     deliberate, not an oversight: the ONNX bundles reach `node:module`'s
+ *     `createRequire` to resolve `runtime/node_modules`, which every lane
+ *     here refuses, so flipping the default requires reworking
+ *     `packages/model-runtime/src/onnx.ts` first. `sandbox-escape.test.ts`
+ *     pins exactly what an unsandboxed automation worker can still reach.
+ */
+type SandboxLaneRequest = "automation-handler" | "model-runtime";
 
 interface WorkerRequest {
   handlerFile: string;
   args: unknown;
+  /** Parent-chosen containment lane; absent means none (see above). */
+  sandboxLane?: SandboxLaneRequest;
+  /** Absolute read roots for the `model-runtime` lane. */
+  sandboxReadRoots?: string[];
   /** Fire-start instant fixed by the parent; stable for the whole run. */
   now: string;
   /** The payload this run was invoked with — surfaced as `ctx.input`. */
@@ -457,6 +499,15 @@ function execute(request: WorkerRequest): void {
   ctx.input = request.input;
   void (async () => {
     try {
+      if (request.sandboxLane !== undefined) {
+        const sandboxApi = await (await loadSandboxBoot()).loadSandbox();
+        const policy =
+          request.sandboxLane === "model-runtime"
+            ? sandboxApi.modelRuntimePolicy(request.sandboxReadRoots ?? [])
+            : sandboxApi.automationHandlerPolicy();
+        const sandbox = sandboxApi.installWorkerSandbox(policy);
+        sandbox.taint(pathToFileURL(req.handlerFile).href);
+      }
       const mod = (await import(pathToFileURL(req.handlerFile).href)) as {
         default?: ((args: unknown) => Promise<unknown>) | PullSpec;
       };

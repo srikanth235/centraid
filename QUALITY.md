@@ -2,6 +2,45 @@
 
 ## Open
 
+- **`countDeclaredTests` counts prose.** The regex in
+  `scripts/test-report/matrix-grades.mjs` is `\b(?:test|it)(?:\.\w+)*\s*\(`,
+  which matches the ordinary English `it (` inside a comment — #842 W3.1 had a
+  comment reading "…a per-test cap under it (TESTING.md)" counted as a fifth
+  test declaration. The slice reworded its comment, but the consequence is
+  general: any `minimumTests` floor seeded from a file whose comments contain
+  `it (` or `test (` is inflated by that much, and the floor then reads as
+  satisfied by tests that do not exist. Not pinned — no invariant is violated
+  and no current floor is known to be wrong — but a floor derived from a
+  miscount is a floor that cannot bite. Fixing it means either excluding
+  comments from the scan or requiring the match to start a statement.
+
+- **Cheap gateway reads are starved by app-engine worker spawns under
+  composition.** With sync, search, writes, blob ingest, turns and automations
+  running together on a 4-vCPU host (`WORKER_MAX_CONCURRENT` = 2),
+  `GET /centraid/_vault/atlas/browse/ref-search` goes from ~5 ms p95 solo to
+  217–444 ms p95 — ×27–66 — while the heavier lanes degrade only ×3–5. Nothing
+  is refused and every result is correct, so this is a fairness observation
+  rather than a defect against any current ruling:
+  `tests/scale/composite-load.scale.test.ts` publishes the per-lane factors and
+  deliberately gates only the aggregate throughput factor and an absolute
+  worst-lane p95, because a ratio over a ~5 ms denominator fences scheduler
+  noise rather than the product. Worth an issue if in-gateway reads should get
+  priority over worker-backed handler work (#842 W4.1).
+
+- **The desktop crash log is correct as a local file and wrong the moment
+  anything shares it.** `apps/desktop/src/main/crash-log-core.ts`'s
+  `toCrashRecord` writes the raw error message and the full stack — absolute
+  paths, and therefore the OS username — into `<userData>/crash.log`. That is
+  the right shape for a sovereign local file nobody uploads, and it is the
+  wrong shape for anything a person attaches to a support request. #842 W8.1
+  built the redacted-at-write-time alternative
+  (`packages/server/src/serve/anomaly-ledger.ts`) but did not migrate the
+  desktop crash log onto it: the two have different lifecycles (one is written
+  by the main process before a vault may even be mounted) and merging them is
+  a design question, not a rename. Recorded as an observation rather than
+  pinned — nothing today copies `crash.log` into a shareable artifact, so no
+  invariant is violated. It becomes a defect the day something does.
+
 - **A parallel wave leaves repo-wide gates unrun, and only the sweep finds
   out.** The three #834 wave slices each verified their own tree (per-tree
   `oxlint` over changed files, per-package typecheck, per-app suites) and
@@ -28,16 +67,6 @@
   receiver's own info panel would phrase that photograph relative to somebody
   else's Home — a wrong statement, not merely a leak. Needs a vault-side read
   of how place rows travel with a scope.
-
-- **`apps/mobile/src/apps/tally/PendingRestartJourney.test.tsx` cannot load**:
-  `Cannot bundle Node.js built-in "node:sqlite" imported from
-  "src/lib/replica/node-sqlite-driver.ts"`. The whole file fails to collect, so
-  its journey assertions have not run for some time — a silently absent test,
-  not a flake. Reproduced on the base tree with all working changes stashed
-  while #805 was in flight, so it predates that branch and is unrelated to it.
-  The driver imports the Node builtin directly and mobile's vitest client
-  environment refuses to externalize it; the fix is a config or driver-seam
-  change, not a copy change, so #805 left it alone.
 
 - **Two container-hermeticity defects found by an attempted in-container full
   coverage run** (13,203 green / 3 red, all environmental): (1)
@@ -164,7 +193,39 @@
   React flip; appearance-prefs, profile view-models, insights formatters, and
   near-duplicate `relativeTime` still need consolidation / floors — #545 D5/B8).
 
+- **Expired `peer_link_tickets` rows are filtered, never purged.** Observed
+  while building the hostile-peer lane (#842 W2.3). `hasPending` and `claim`
+  both exclude rows by `expires_at`, so the *logical* reclaim is correct and
+  tested — the door closes on time and an expired ticket cannot be claimed.
+  But nothing physically deletes the row, so an abandoned-ticket workload
+  grows the table without bound. This mirrors the pairing `tickets` table
+  exactly, which is documented as "short-lived by design", so it is recorded
+  as a longevity observation rather than a defect: the two tables should
+  either both gain a purge or the design note should say why unbounded growth
+  is acceptable. Not pinned — no invariant is currently violated.
+
 ## Resolved
+
+- #842 — The `node:sqlite` bundling defect that made
+  `apps/mobile/src/apps/tally/PendingRestartJourney.test.tsx` uncollectable is
+  fixed at the harness, and the class of failure is now gated. Root cause: the
+  externalization plugin in `packages/test-kit/src/vitest.ts` shipped on the
+  jsdom preset only, while a `// @vitest-environment jsdom` docblock inside a
+  *node* project sends that one file through the same Vite client environment —
+  environments are chosen per file, plugins per project, so the file was
+  transformed with `noExternal: true` and no way to hand `node:sqlite` back to
+  Node. The plugin now ships on both presets, and
+  `apps/mobile/src/lib/replica/node-sqlite-driver.jsdom.test.ts` pins the seam
+  (remove the plugin from the node preset and that file stops collecting). The
+  journey file itself is not restored: it asserted a Tally native cover that
+  #831/#832 removed whole pending a ground-up redesign, and it was deleted with
+  the interface it covered. It owned no `tests/matrix.json` row, so no floor
+  moved with it — what the rebuild owes back is a re-authored pending-restart
+  journey against the new cover. `scripts/ci/collection-tripwire.mjs` is the
+  backstop: it reads `artifacts/test-results/vitest.json` and fails on any file
+  that reports `failed` with zero assertion results, so a suite that errors
+  before collecting a single test can no longer read as absent to every
+  counting gate (matrix floors, skip budget, quarantine ledger).
 
 - #816 — Removed `react-native-maps`. Nothing had imported it since Places
   moved to the shared `place-map.ts` projection, and #816 rules the phone's map

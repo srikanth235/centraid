@@ -156,6 +156,7 @@ export {
 // #286 phase 2: no `_sql` builtins, no live-schema reads).
 export {
   APP_MANIFEST_FILE,
+  CANONICAL_DESIGNED_STATES,
   MANIFEST_VERSION,
   MANIFEST_JSON_SCHEMA,
   RESERVED_HANDLER_PREFIX,
@@ -176,6 +177,9 @@ export {
   type ManifestVaultBlock,
   type ManifestVaultScope,
   type ManifestSeatsBlock,
+  type ManifestStatesBlock,
+  type ManifestStateExclusion,
+  type ManifestDesignedState,
   type HandlerConfirmation,
   type JsonSchema,
   type ManifestValidationCode as AppManifestValidationCode,

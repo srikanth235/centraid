@@ -10,6 +10,7 @@ import { writeFile } from "node:fs/promises";
 // the shared production default (8 concurrent + 16 queued) so the cap is
 // cheap to exercise without spinning up dozens of real worker threads.
 import path from "node:path";
+import { pathToFileURL } from "node:url";
 
 import { beforeEach, describe, expect, test } from "vitest";
 
@@ -30,14 +31,20 @@ describe("handler-runner", () => {
     // in-flight, short enough to keep the test fast.
     // Park on a shared file gate (written by the test after slots fill) so the
     // handlers genuinely overlap without a fixed wall-clock sleep.
+    //
+    // The gate is probed with `import()`, not `fs.access` (issue #842 W7.1):
+    // the app-handler sandbox refuses `node:fs/promises` to every handler
+    // graph, and a fixture that needs a capability no real handler has would
+    // be testing the wrong worker. Module resolution is not the filesystem
+    // API — a missing module rejects and is not cached, so retrying until the
+    // test writes the file is the same causal gate with no privilege.
     await writeFile(
       handlerFile,
-      `import { access } from 'node:fs/promises';
-     const gate = ${JSON.stringify(path.join(appDir, "release.gate"))};
+      `const gate = ${JSON.stringify(pathToFileURL(path.join(appDir, "release.gate.mjs")).href)};
      export default async ({ body }) => {
        const deadline = Date.now() + 5_000;
        while (Date.now() < deadline) {
-         try { await access(gate); break; } catch { await new Promise((r) => setImmediate(r)); }
+         try { await import(gate); break; } catch { await new Promise((r) => setImmediate(r)); }
        }
        return { seq: body.seq, finishedAt: Date.now() };
      };`
@@ -81,7 +88,7 @@ describe("handler-runner", () => {
     expect(fifth.error).toMatch(/busy/iu);
 
     // Release the gate once the busy refusal is proven so the admitted four finish.
-    await writeFile(path.join(appDir, "release.gate"), "go");
+    await writeFile(path.join(appDir, "release.gate.mjs"), "export default 1;");
     const admitted = await admittedPromise;
     for (const outcome of admitted) expect(outcome.ok).toBe(true);
     const seqs = admitted
@@ -120,7 +127,7 @@ describe("handler-runner", () => {
     // Only 1 concurrent slot — every later call queues behind the first.
     // Gate is open so handlers finish promptly; ordering is still forced by
     // the single admission slot.
-    await writeFile(path.join(appDir, "release.gate"), "go");
+    await writeFile(path.join(appDir, "release.gate.mjs"), "export default 1;");
     const admission = new WorkerAdmission(1, 3, 5_000);
     const calls = [1, 2, 3, 4].map((seq) => run(admission, seq));
     const outcomes = await Promise.all(calls);
@@ -143,7 +150,7 @@ describe("handler-runner", () => {
     expect(outcome.ok).toBe(false);
     expect(outcome.busy).toBe(true);
     expect(outcome.error).toMatch(/timed out/iu);
-    await writeFile(path.join(appDir, "release.gate"), "go");
+    await writeFile(path.join(appDir, "release.gate.mjs"), "export default 1;");
     await holder; // let the first handler finish and release its slot
   });
 });

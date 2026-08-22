@@ -26,7 +26,6 @@
       "ignoreDependencies": [
         "@stryker-mutator/core",
         "@stryker-mutator/vitest-runner",
-        "@stryker-mutator/api",
         "fake-indexeddb",
         "@playwright/test"
       ]

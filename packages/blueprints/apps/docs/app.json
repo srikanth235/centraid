@@ -514,5 +514,17 @@
     "originActs": ["scanner"],
     "disabledOn": [],
     "northStar": "google-drive"
+  },
+  "states": {
+    "designed": [
+      "dayone",
+      "pending",
+      "offline",
+      "stale",
+      "conflict",
+      "parked",
+      "denied"
+    ],
+    "excluded": []
   }
 }

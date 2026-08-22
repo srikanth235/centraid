@@ -2,71 +2,15 @@ import path from "node:path";
 
 import { describe, expect, test } from "vitest";
 
+import { baseMatrix } from "./matrix-fixture.mjs";
 import { fireRevisitTrigger, validateMatrix } from "./validate-matrix.mjs";
-
-function baseMatrix(overrides = {}) {
-  const appEngines = {
-    seatDoctrine: "docs/blueprint-seats.md#engine-contracts",
-    engines: [{ id: "core", label: "Core", flow: "vault-core-flow" }],
-    apps: [
-      "agenda",
-      "docs",
-      "locker",
-      "notes",
-      "people",
-      "photos",
-      "tally",
-      "tasks",
-    ].map((id) => ({
-      id,
-      engines: { core: { status: "pass", flow: "vault-core-flow" } },
-    })),
-  };
-  return {
-    version: 1,
-    legend: { solid: "s", partial: "p", gap: "g", skip: "k" },
-    notes: {
-      "vault.skipdim": "deliberate skip note",
-    },
-    dimensions: [
-      { id: "correctness", label: "Correctness", lane: "unit" },
-      { id: "skipdim", label: "Skip dim", lane: "unit" },
-    ],
-    surfaces: [
-      {
-        id: "vault",
-        label: "Vault",
-        assessment: { correctness: "solid", skipdim: "skip" },
-      },
-    ],
-    cellOwners: {
-      "vault.correctness": {
-        owner: "packages/vault/package.json",
-        tier: "unit",
-      },
-      "vault.skipdim": null,
-    },
-    flows: [
-      {
-        id: "vault-core-flow",
-        name: "Vault core",
-        surface: "vault",
-        dimension: "correctness",
-        tier: "unit",
-        owner: "packages/vault/package.json",
-        minimumTests: 0,
-      },
-    ],
-    appEngines,
-    ...overrides,
-  };
-}
 
 describe("validateMatrix", () => {
   test("accepts a minimal well-formed matrix", async () => {
     const { errors } = await validateMatrix(baseMatrix(), {
       checkEnvGates: false,
       checkWorkspaceCompleteness: false,
+      checkReportRegistries: false,
     });
     expect(errors).toEqual([]);
   });
@@ -168,6 +112,7 @@ describe("validateMatrix", () => {
     matrix.surfaces[0].assessment.correctness = "partial";
     matrix.notes["vault.correctness"] = "Missing the negative cases (#470).";
     matrix.trackingIssues = {
+      ...matrix.trackingIssues,
       470: { url: "https://example.test/470", state: "closed" },
     };
     const { errors } = await validateMatrix(matrix, {

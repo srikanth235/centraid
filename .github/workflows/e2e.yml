@@ -12,7 +12,7 @@ on:
     inputs:
       # #496 C3 — re-run one broken lane without the full ~70-min graph.
       suite:
-        description: "Which suite to run (all | desktop | web | mobile | mobile-android | pairing | report | mutation)"
+        description: "Which suite to run (all | desktop | web | mobile | mobile-android | pairing | report | mutation | fuzz | join)"
         required: false
         default: "all"
         type: choice
@@ -25,6 +25,8 @@ on:
           - pairing
           - report
           - mutation
+          - fuzz
+          - join
 
 # #496 C3 — overlapping schedule + dispatch must not double-run macOS.
 concurrency:
@@ -138,6 +140,42 @@ jobs:
           path: artifacts/
           retention-days: 7
 
+  # #842 W5.1 — the same web journeys on the two engines the base image does not
+  # ship. WebKit's service-worker lifecycle and Cache-Storage quota, and Gecko's
+  # divergence from Blink, are the whole point: a PWA that only works on Chromium
+  # is not a PWA. The projects are declared in playwright.config.ts but appended
+  # only when CENTRAID_WEB_CROSS_BROWSER=1, so the default `bun run e2e` stays
+  # Chromium-only and does not fail on a missing browser download.
+  #
+  # DELIBERATELY NOT in test-health-report's needs: this lane has never run, so
+  # its first green run is the measurement, not a regression baseline. Promote it
+  # into the report (and the nightly tracking issue) once it has one.
+  web-e2e-cross-browser:
+    if: >
+      github.event_name != 'workflow_dispatch' || github.event.inputs.suite == 'all' || github.event.inputs.suite == 'web'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: ./.github/actions/setup
+        with:
+          turbo-cache: "true"
+      # webkit and firefox, not chromium — the point is the engines web-e2e
+      # cannot reach.
+      - run: bunx playwright install --with-deps webkit firefox
+        working-directory: apps/web
+      - run: bun run build
+      - run: bun run e2e
+        working-directory: apps/web
+        env:
+          CENTRAID_WEB_CROSS_BROWSER: "1"
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        if: failure()
+        with:
+          name: web-e2e-cross-browser-traces
+          path: apps/web/test-results/
+          retention-days: 7
+
   mobile-e2e-ios:
     if: >
       github.event_name != 'workflow_dispatch' || github.event.inputs.suite == 'all' || github.event.inputs.suite == 'mobile'
@@ -149,8 +187,9 @@ jobs:
     # Cold macOS native build + serialized journeys exceed 60 on a cache miss;
     # cancelled counts as red (#557), so the backstop must sit above the
     # budget. Raised from 60 under #781 after the 08-03/04/06/13 nightlies
-    # were cancelled at exactly this ceiling.
-    timeout-minutes: 90
+    # were cancelled at exactly this ceiling. Raised again to 105 under #839
+    # when the home-apps suite (10-minute aggregate ceiling) joined the run.
+    timeout-minutes: 105
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: ./.github/actions/setup
@@ -386,6 +425,10 @@ jobs:
           node tests/agent-e2e-mobile/flows/scroll-frames.mjs || ec=$?
           node tests/agent-e2e-mobile/run-photos-suite.mjs || ec=$?
           node tests/agent-e2e-mobile/flows/places-seat.mjs || ec=$?
+          # #839 G8 — the five home-app journeys that are not Photos. One
+          # fresh pairing, four reuses; budget in flows/home-apps-budget.md.
+          # Tally has no journey (held under #831).
+          node tests/agent-e2e-mobile/run-home-apps-suite.mjs || ec=$?
           exit "$ec"
       - name: Remove sensitive pairing diagnostics
         if: always()
@@ -716,6 +759,80 @@ jobs:
           path: artifacts/
           retention-days: 14
 
+  # #839 G10 — mutation-based fuzzing of the parsers that eat bytes somebody
+  # else chose: the gateway handshake, the tunnel wire, the CBSF blob
+  # directory, WAL object keys, and the two FTS MATCH compilers. No fuzzing
+  # dependency exists in this repo and none may be added, so the engine is
+  # `scripts/fuzz/` itself: a seeded PRNG, a mutation table, and per-target
+  # invariants. Its own job (restore-year3 pattern) because a full lane is
+  # millions of executions that must not compete with the 30-minute
+  # quality-performance-scale budget, and because it must never touch the PR
+  # lane — the PR-path guard is `test:fuzz:replay`, which replays only the
+  # committed crashers and finishes in a second.
+  fuzz-parsers:
+    if: >
+      github.event_name != 'workflow_dispatch' || github.event.inputs.suite == 'all' || github.event.inputs.suite == 'report' || github.event.inputs.suite == 'fuzz'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: ./.github/actions/setup
+        with:
+          turbo-cache: "true"
+      # Five of the six targets are imported from each package's built dist,
+      # the same way scripts/design-gallery.mjs reads packages/design/dist.
+      - run: bun run build
+      # Fails on any finding whose class is not registered in
+      # scripts/fuzz/known-findings.json — registered ones are recorded defects
+      # pinned byte-for-byte by the replay suite below.
+      - name: Fuzz protocol, tunnel, blob, WAL, and search parsers
+        run: bun run test:fuzz
+      # Runs even when the search above found something new: the committed
+      # crasher corpus must keep replaying exactly as recorded.
+      - name: Replay committed crashers
+        if: always()
+        run: bun run test:fuzz:replay
+      # Upload `artifacts/` (not `artifacts/fuzz/`) so merge-multiple download
+      # into the report job keeps `fuzz/summary.json` — same reason as the
+      # mutation lane.
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        if: always()
+        with:
+          name: nightly-evidence-fuzz
+          path: artifacts/
+          retention-days: 14
+
+  # #842 W2.4 — dynamic scan of the BOOTED gateway, as opposed to the static
+  # route-security enumeration the PR lane already runs. Nightly rather than
+  # per-PR because it boots a real server, and it needs `bun run build` for the
+  # same reason the fuzz lane does: it drives packages/server/dist and
+  # packages/core/dist, and reads the ROUTES table rather than a hardcoded list.
+  dast-scan:
+    if: >
+      github.event_name != 'workflow_dispatch' || github.event.inputs.suite == 'all' || github.event.inputs.suite == 'report' || github.event.inputs.suite == 'dast'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: ./.github/actions/setup
+        with:
+          turbo-cache: "true"
+      - run: bun run build
+      # Fails on any finding whose key is not registered in
+      # scripts/security/dast-known-findings.json. Registered ones are recorded
+      # defects whose current behaviour is pinned by the unit judges — removing
+      # an entry is how a fix gets locked in, never adding one to go green.
+      - name: Dynamic scan of the booted gateway HTTP surface
+        run: node scripts/security/dast-scan.mjs --out artifacts/dast/summary.json
+      # Upload `artifacts/` (not `artifacts/dast/`) so merge-multiple download
+      # into the report job keeps `dast/summary.json` — same reason as fuzz.
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        if: always()
+        with:
+          name: nightly-evidence-dast
+          path: artifacts/
+          retention-days: 14
+
   # #587 C1 — performance and scale are an independent parallel lane. New
   # rigs cannot consume the report job's 35-minute budget or prevent coverage
   # and report rendering from starting when this lane is red.
@@ -768,6 +885,13 @@ jobs:
         env:
           CENTRAID_YEAR3_CACHE_DIR: artifacts/year3-cache
         run: bun run test:scale
+      # #842 W3.1/W3.2 — the seeded chaos lanes run on every PR in `cover` mode
+      # (every fault exactly once, ~18 s). Here they run in `sample` mode, so
+      # the nightly draws ~5 times per fault against a different part of the
+      # seeded space. ~68 s.
+      - id: chaos
+        continue-on-error: true
+        run: bun run test:chaos:sweep
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         if: always()
         with:
@@ -779,9 +903,11 @@ jobs:
         run: |
           echo "perf=${{ steps.perf.outcome }}"
           echo "scale=${{ steps.scale.outcome }}"
+          echo "chaos=${{ steps.chaos.outcome }}"
           if [ "${{ steps.perf.outcome }}" != "success" ] || \
-             [ "${{ steps.scale.outcome }}" != "success" ]; then
-            echo "::error::Nightly performance/scale lane failed"
+             [ "${{ steps.scale.outcome }}" != "success" ] || \
+             [ "${{ steps.chaos.outcome }}" != "success" ]; then
+            echo "::error::Nightly performance/scale/chaos lane failed"
             exit 1
           fi
 
@@ -824,6 +950,49 @@ jobs:
           path: artifacts/
           retention-days: 14
 
+  # #839 G11/G12 — the protocol JOIN lane. Every other suite that exercises two
+  # vaults talking to each other calls the vault package directly; nothing puts
+  # N seats on ONE gateway and makes them speak the real wire. This job runs
+  # `packages/server/src/serve/protocol-join-lane.test.ts` at WIDTH
+  # (CENTRAID_JOIN_SEATS), where each case boots a real `serve()` daemon, mounts
+  # N vaults, and opens one iroh tunnel client per seat.
+  #
+  # Its own job (restore-year3 pattern) for three reasons: N real iroh endpoints
+  # per case must not compete with the 30-minute quality-performance-scale
+  # budget protected by #587 C1; a correctness rig has no volume/duration
+  # descriptor, so tests/scale + quality-rig-budgets.json would mis-file it; and
+  # real QUIC transport is the one dependency here that can be environment
+  # sensitive, so a red join lane must not be able to mask coverage and report
+  # rendering. The suite still runs on the PR path at its 3-seat floor — this
+  # job widens it, it does not own it.
+  protocol-join:
+    if: >
+      github.event_name != 'workflow_dispatch' || github.event.inputs.suite == 'all' || github.event.inputs.suite == 'report' || github.event.inputs.suite == 'join'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: ./.github/actions/setup
+        with:
+          turbo-cache: "true"
+      - run: bun run build
+      # Five seats = one gateway with five mounted vaults and five live tunnel
+      # clients per case. The vitest JSON report IS the evidence: per-test
+      # durations for the join laws are what a widening seat count moves.
+      - name: Join lane — grant delivery, revocation severance, parked lifecycle, version skew
+        env:
+          CENTRAID_JOIN_SEATS: "5"
+        run: node node_modules/vitest/vitest.mjs run --project @centraid/server --reporter=default --reporter=json --outputFile=artifacts/join/summary.json protocol-join-lane
+      # Upload `artifacts/` (not `artifacts/join/`) so merge-multiple download
+      # into the report job keeps `join/summary.json` — same reason as the
+      # mutation and fuzz lanes.
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        if: always()
+        with:
+          name: nightly-evidence-join
+          path: artifacts/
+          retention-days: 14
+
   test-health-report:
     needs:
       [
@@ -835,8 +1004,11 @@ jobs:
         pairing-ticket-hygiene,
         pairing-cross-network-relay,
         mutation-testing,
+        fuzz-parsers,
+        dast-scan,
         quality-performance-scale,
         restore-year3,
+        protocol-join,
       ]
     if: >
       always() && (
@@ -1083,8 +1255,11 @@ jobs:
         pairing-ticket-hygiene,
         pairing-cross-network-relay,
         mutation-testing,
+        fuzz-parsers,
+        dast-scan,
         quality-performance-scale,
         restore-year3,
+        protocol-join,
         test-health-report,
       ]
     # #557 — `cancelled` counts as red. A runner that dies or a job aborted

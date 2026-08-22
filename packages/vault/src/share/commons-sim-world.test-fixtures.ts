@@ -31,6 +31,7 @@ import {
 } from "./commons-bootstrap.js";
 import { readCommonsCursor } from "./commons-cursor.js";
 import { signCommonsIntent } from "./commons-signature.js";
+import type { GrantPlane } from "./commons-sim-grant-world.test-fixtures.js";
 import type { CommonsCapability, CommonsMemberInput } from "./commons.js";
 import {
   compileCommons,
@@ -83,6 +84,15 @@ export interface Seat {
   credential: Credential;
   sealKey: Buffer;
   identitySeed: Buffer;
+  /** `dpv:ServiceProvision`, the purpose every seeded consent grant names. */
+  purposeConceptId: string;
+  /**
+   * Commands this seat has marked loud-on-purpose (issue #839). Registration
+   * REWRITES `agent_capability.requires_confirmation` from the definition, so
+   * a crash-restart re-registers the tally pack and would silently disarm the
+   * gate; `attach` re-arms from this list instead.
+   */
+  confirmGated: string[];
 }
 
 export interface ExpenseFact {
@@ -120,8 +130,17 @@ export interface World {
   parked: ParkedIntent[];
   trace: string[];
   failures: string[];
+  /**
+   * Invariant breaks the oracle has PINNED to a named, still-open product
+   * defect (issue #839) instead of failing on. Every entry names the defect;
+   * an unpinned break is always a failure. The list is printed with the
+   * report so a run never hides what it tolerated.
+   */
+  pinned: string[];
   stats: Record<string, number>;
   step: number;
+  /** The share-grant plane (issue #839), when this program asked for one. */
+  plane?: GrantPlane;
 }
 
 export interface SimOptions {
@@ -129,12 +148,19 @@ export interface SimOptions {
   actions: number;
   seats: number;
   grants: number;
+  /**
+   * Build the share-grant plane and admit its verbs into the schedule (issue
+   * #839). Off by default so the #731 seeds keep their exact programs.
+   */
+  grantPlane?: boolean;
 }
 
 export interface SimReport {
   seed: number;
   trace: string[];
   failures: string[];
+  /** See `World.pinned` — tolerated breaks, each naming its open defect. */
+  pinned: string[];
   stats: Record<string, number>;
 }
 
@@ -170,7 +196,21 @@ function openSeat(root: string, index: number): Seat {
     },
     sealKey: Buffer.from(db.sealKey),
     identitySeed: Buffer.from(db.identitySeed),
+    purposeConceptId: boot.concepts["dpv:ServiceProvision"] as string,
+    confirmGated: [],
   };
+}
+
+/** Mark one command Tier 3/4 at this seat: a non-owner caller parks on it. */
+export function armConfirmGate(seat: Seat, commandName: string): void {
+  if (!seat.confirmGated.includes(commandName))
+    seat.confirmGated.push(commandName);
+  seat.db.vault
+    .prepare(
+      `UPDATE agent_capability SET requires_confirmation = 1
+        WHERE command_id = (SELECT command_id FROM agent_command WHERE name = ?)`
+    )
+    .run(commandName);
 }
 
 function attach(seat: Seat): void {
@@ -181,6 +221,8 @@ function attach(seat: Seat): void {
   });
   seat.gateway = createGateway(seat.db);
   registerTallyCommands(seat.gateway);
+  for (const commandName of seat.confirmGated)
+    armConfirmGate(seat, commandName);
 }
 
 /** Crash-restart: drop the SQLite handles mid-program and come back from the
@@ -317,6 +359,7 @@ export function createWorld(options: SimOptions): World {
     parked: [],
     trace: [],
     failures: [],
+    pinned: [],
     stats: {},
     step: 0,
   };

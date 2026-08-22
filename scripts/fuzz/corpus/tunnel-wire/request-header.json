@@ -1,0 +1,5 @@
+{
+  "method": "GET",
+  "target": "/centraid/notes/",
+  "headers": { "accept": "text/html", "transfer-encoding": "chunked" }
+}

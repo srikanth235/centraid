@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import { readdirSync } from "node:fs";
 import path from "node:path";
 
 import { ConversationStore } from "../../../packages/server/src/engine/conversation/store.js";
@@ -22,11 +23,38 @@ ensureConversationLedger(db.journal);
 
 const conversationId = `quality-${faultPoint}`;
 
+// Cross-cutting durability invariant: after a clean restart no durable-write
+// path may leave a `.tmp` behind. The WAL-shipper state write, the CAS blob
+// landing, and every write-then-rename seam stage through a `.tmp` sibling
+// and rename it into place; a crash that fsynced the tmp but died before the
+// rename (or whose catch never ran) would strand one. The ingress spool is
+// `<session>.part` under os.tmpdir(), not `.tmp` under the vault root, so it
+// is not a false positive here.
+function collectStrayTemps(dir: string): string[] {
+  const out: string[] = [];
+  const walk = (current: string): void => {
+    let entries;
+    try {
+      entries = readdirSync(current, { withFileTypes: true });
+    } catch {
+      return;
+    }
+    for (const entry of entries) {
+      const full = path.join(current, entry.name);
+      if (entry.isDirectory()) walk(full);
+      else if (entry.name.endsWith(".tmp")) out.push(full);
+    }
+  };
+  walk(dir);
+  return out;
+}
+
 if (mode === "recover") {
   const integrity = {
     vault: db.vault.prepare("PRAGMA integrity_check").get(),
     journal: db.journal.prepare("PRAGMA integrity_check").get(),
   };
+  const strayTemps = collectStrayTemps(root);
   let observation: unknown;
   if (faultPoint === "journal-after-append") {
     observation = db.journal
@@ -66,7 +94,7 @@ if (mode === "recover") {
     };
   }
   process.stdout.write(
-    `QUALITY_RECOVERY ${JSON.stringify({ integrity, observation })}\n`
+    `QUALITY_RECOVERY ${JSON.stringify({ integrity, observation, strayTemps })}\n`
   );
   await gateway.stop();
   process.exit(0);

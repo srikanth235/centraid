@@ -1,0 +1,10 @@
+{
+  "target": "wal-keys",
+  "class": "wal.closer-roundtrip-rejected",
+  "kind": "invariant",
+  "message": "the parser accepted \"wal/vault/0123456789abcdef0123456789abcdef/00000042/closed-000000000000\" but the formatter refuses the address it produced: Error: invalid wal closer end 0",
+  "seed": 839001,
+  "strategy": "corpus",
+  "inputBase64": "d2FsL3ZhdWx0LzAxMjM0NTY3ODlhYmNkZWYwMTIzNDU2Nzg5YWJjZGVmLzAwMDAwMDQyL2Nsb3NlZC0wMDAwMDAwMDAwMDA=",
+  "inputDigest": "caaf7aba57df62b5"
+}

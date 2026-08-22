@@ -1,0 +1,116 @@
+name: soak-weekly
+
+# #842 W3.4 — the long-run soak's real duration.
+#
+# `tests/scale/long-run-soak.scale.test.ts` runs on every nightly at its 0.75
+# minute default, where it gates the always-true invariants (no refusals, no
+# transport errors, descriptors bounded). What it CANNOT do there is judge
+# growth: at 45 seconds the per-cycle RSS slope reads ~58x higher than it does
+# over ten minutes, because warm-up has not yet amortized. That is why the
+# growth ceilings only assert at `>= declaredSoakMinutes`, and why this lane
+# exists — a multi-hour run is the only thing that turns those ceilings into a
+# real distribution rather than a single sample.
+#
+# `declaredSoakMinutes` is 10, not 240: ten minutes is the longest run the
+# ceilings were actually derived from, and stating a ceiling at a duration
+# nobody has measured is the guess this rig exists to replace. Raise it once
+# this lane has samples.
+
+on:
+  schedule:
+    # Saturday 03:40 UTC — well clear of the 04:00 Sunday security lane and the
+    # 06:00 nightly e2e, so a red soak never competes for attention with either.
+    - cron: "40 3 * * 6"
+  workflow_dispatch:
+
+concurrency:
+  group: soak-weekly-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  long-run-soak:
+    runs-on: ubuntu-latest
+    timeout-minutes: 300
+    steps:
+      # #842 W6.3 — the first workflow in this repo to constrain its own egress.
+      # `audit` rather than `block` because the allowlist has not been learned
+      # yet: a four-hour job that dies on an unlisted endpoint would cost a week
+      # to notice. The audit run is what produces the endpoint list; flip to
+      # `block` with `allowed-endpoints` once one green run has reported it.
+      # Every other workflow's debt is pinned, with priorities, in
+      # scripts/security/egress-ledger.json.
+      - uses: step-security/harden-runner@05e31511f85b41b11d1cf0ef85d0992719546e2c # v2.21.0
+        with:
+          egress-policy: audit
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: ./.github/actions/setup
+        with:
+          turbo-cache: "true"
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: artifacts/scale
+          key: quality-history-soak-${{ runner.os }}-${{ github.run_id }}
+          restore-keys: quality-history-soak-${{ runner.os }}-
+      - run: bun run build
+      # Four hours is the whole point of this lane. The nightly scale job runs
+      # the same file at its 0.75-minute default; a weekly job that quietly fell
+      # back to that default would repeat the nightly and prove nothing, which
+      # is why validate-nightly-wiring.mjs checks for this literal.
+      - name: Four-hour household soak
+        env:
+          CENTRAID_SOAK_MINUTES: "240"
+        run: node node_modules/vitest/vitest.mjs run --config vitest.scale.config.ts tests/scale/long-run-soak.scale.test.ts
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        if: always()
+        with:
+          name: soak-weekly-evidence
+          path: artifacts/
+          retention-days: 14
+      - name: Save evidence for the nightly health report
+        if: always()
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: artifacts/scale/
+          key: soak-weekly-${{ runner.os }}-${{ github.run_id }}
+
+  soak-failure-issue:
+    needs: [long-run-soak]
+    if: >
+      always() && github.event_name == 'schedule' && github.ref == 'refs/heads/main' && (
+        contains(join(needs.*.result, ','), 'failure') ||
+        contains(join(needs.*.result, ','), 'cancelled')
+      )
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      issues: write
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Open or update tracking issue
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RESULT: ${{ needs.long-run-soak.result }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          set -euo pipefail
+          cat > /tmp/body.md <<EOF
+          Weekly four-hour soak went red.
+
+          - Run: ${RUN_URL}
+          - Workflow: soak-weekly / long-run-soak
+          - Result: \`${RESULT}\`
+
+          Expected response: triage, fix, or document a temporary waiver within 24 hours or before the next scheduled run, whichever comes first. The latest artifact is retained for 14 days and the next nightly health report renders it with the weekly lane's eight-day freshness window.
+
+          _Auto-filed by soak-weekly.yml. Prefer updating this issue over opening duplicates._
+          EOF
+          node scripts/ci/file-tracking-issue.mjs \
+            --title '[soak] weekly four-hour soak red' \
+            --search '[soak] weekly four-hour soak red' \
+            --body-file /tmp/body.md \
+            --label tech-debt \
+            --run-url "$RUN_URL"

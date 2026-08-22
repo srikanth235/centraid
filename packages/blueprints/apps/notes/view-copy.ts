@@ -230,6 +230,12 @@ export function shelfCopy(shelf: ShelfId, notebookName?: string): ShelfCopy {
       return { title: "Capture", unit: "notes" };
     case VOICE:
       return { title: "Voice", unit: "notes" };
+    // `null` is the library route — the shelf-less default. Matched by name
+    // rather than swept into `default:` because
+    // `typescript(switch-exhaustiveness-check)` counts union members, not
+    // reachability, and a `default:` arm does not discharge a named member.
+    case null:
+      return { title: "Notes", unit: "notes" };
     default:
       return { title: "Notes", unit: "notes" };
   }

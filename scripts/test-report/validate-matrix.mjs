@@ -4,6 +4,7 @@ import path from "node:path";
 import { countDeclaredTests, gradeMatrix } from "./matrix-grades.mjs";
 import { detectDefaultCiEnvGate } from "./report-signals.mjs";
 import { discoverSkipSites, validateSkipInventory } from "./skip-inventory.mjs";
+import { validateAppAxes } from "./validate-app-axes.mjs";
 
 const root = path.resolve(import.meta.dirname, "../..");
 const allowedStatuses = new Set(["solid", "partial", "gap", "skip"]);
@@ -511,6 +512,8 @@ export async function validateMatrix(matrix, options = {}) {
       }
     }
   }
+
+  errors.push(...(await validateAppAxes(matrix, options, flowIds)));
 
   if (
     options.checkWorkspaceCompleteness !== false &&

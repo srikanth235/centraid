@@ -26,6 +26,10 @@ import {
 } from "./update-check.js";
 import type { WatchedStat } from "./update-check.js";
 import { admitUpdate } from "./update-rollout.js";
+import {
+  admitDownloadedUpdate,
+  artifactFromUpdateInfo,
+} from "./update-signature-gate.js";
 
 const POLL_MS = 10_000;
 /** Packaged feed re-check interval (I4). */
@@ -262,6 +266,18 @@ export function startPackagedUpdateChecker(): void {
             typeof release.version === "string"
               ? release.version
               : app.getVersion();
+          // W6.1 (#842): custody gate. A downloaded payload becomes
+          // installable only when a detached release signature vouches for its
+          // digest under a key this build pins. Refusal leaves
+          // packagedDownloadReady false, so relaunchToUpdate() falls back to a
+          // plain relaunch and never calls quitAndInstall on those bytes.
+          const trusted = await admitDownloadedUpdate({
+            packaged: app.isPackaged,
+            version,
+            artifact: artifactFromUpdateInfo(info),
+            fetchText: (url) => fetch(url),
+          });
+          if (!trusted) return;
           packagedDownloadReady = true;
           const parsed =
             typeof release.releaseDate === "string"

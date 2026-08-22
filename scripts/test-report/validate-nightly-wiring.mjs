@@ -16,11 +16,16 @@ const enrichmentLivePath = path.join(
   root,
   ".github/workflows/enrichment-live-weekly.yml"
 );
+const soakWeeklyPath = path.join(root, ".github/workflows/soak-weekly.yml");
 
 const requiredFlowScripts = [
   "tests/agent-e2e-pairing/flows/device-pairing-lifecycle.mjs",
   "tests/agent-e2e-pairing/flows/pairing-ticket-hygiene.mjs",
   "tests/agent-e2e-pairing/flows/cross-network-relay.mjs",
+  // #839 G8 — a committed Maestro suite that e2e.yml never invokes is a roster
+  // that silently stopped running; the mobile jobs must call both suites.
+  "tests/agent-e2e-mobile/run-photos-suite.mjs",
+  "tests/agent-e2e-mobile/run-home-apps-suite.mjs",
 ];
 
 const requiredJobs = [
@@ -29,6 +34,17 @@ const requiredJobs = [
   "pairing-cross-network-relay:",
   // #532 — mutation scores must reach the report job via nightly-evidence-*.
   "mutation-testing:",
+  // #839 G10 — the fuzz lane is nightly-only and owns its own job; its summary
+  // reaches the report through the same nightly-evidence-* channel.
+  "fuzz-parsers:",
+  // #842 W2.4 — the DAST lane boots a real gateway and scans it, so it is
+  // nightly-only and owns its own job; its summary reaches the report through
+  // the same nightly-evidence-* channel.
+  "dast-scan:",
+  // #839 G11/G12 — the protocol join lane (one gateway, N mounted vaults, one
+  // iroh client per seat) runs at width here; the PR path runs the same file at
+  // its 3-seat floor.
+  "protocol-join:",
 ];
 
 const requiredArtifactNames = [
@@ -36,6 +52,9 @@ const requiredArtifactNames = [
   "nightly-evidence-pairing-ticket-hygiene",
   "nightly-evidence-pairing-cross-network-relay",
   "nightly-evidence-mutation",
+  "nightly-evidence-fuzz",
+  "nightly-evidence-dast",
+  "nightly-evidence-join",
 ];
 
 const errors = [];
@@ -61,7 +80,10 @@ for (const script of requiredFlowScripts) {
 }
 
 for (const name of requiredArtifactNames) {
-  if (!e2eCode.includes(name))
+  // Boundary-anchored, not includes(): a superstring rename (say,
+  // nightly-evidence-joinery) must fail, or the report job's merge-multiple
+  // download silently loses the evidence while this gate stays green.
+  if (!new RegExp(`${name}(?![\\w-])`, "u").test(e2eCode))
     errors.push(`e2e.yml missing artifact name ${name}`);
 }
 
@@ -80,6 +102,9 @@ if (reportIdx === -1) {
     "pairing-ticket-hygiene",
     "pairing-cross-network-relay",
     "mutation-testing",
+    "fuzz-parsers",
+    "dast-scan",
+    "protocol-join",
   ]) {
     if (!reportChunk.includes(need)) {
       errors.push(`test-health-report needs must include ${need}`);
@@ -124,6 +149,119 @@ if (mutationJobIdx === -1) {
   }
 }
 
+// #839 G10 — the fuzz lane is only worth having if its evidence and its
+// regression memory both survive. The summary must land at
+// artifacts/fuzz/summary.json after the report job's merge-multiple download
+// (same `path: artifacts/` rule as the mutation lane), and the job must replay
+// the committed crasher corpus even when the search itself went red — a
+// crasher that stops reproducing is news, not a reason to skip the check.
+const fuzzJobIdx = e2eCode.indexOf("fuzz-parsers:");
+if (fuzzJobIdx === -1) {
+  errors.push("e2e.yml missing fuzz-parsers job");
+} else {
+  const fuzzChunk = e2eCode.slice(fuzzJobIdx, fuzzJobIdx + 1_800);
+  if (!fuzzChunk.includes("bun run test:fuzz\n")) {
+    errors.push(
+      "fuzz-parsers job must run the full lane via bun run test:fuzz"
+    );
+  }
+  if (!fuzzChunk.includes("bun run test:fuzz:replay")) {
+    errors.push(
+      "fuzz-parsers job must replay the committed crasher corpus via bun run test:fuzz:replay"
+    );
+  }
+  if (/path:\s*artifacts\/fuzz\/?/u.test(fuzzChunk)) {
+    errors.push(
+      "fuzz-parsers must upload path: artifacts/ (not artifacts/fuzz/) so the summary stays at artifacts/fuzz/summary.json after merge-multiple download"
+    );
+  }
+  if (
+    !/name:\s*nightly-evidence-fuzz[\s\S]{0,200}?path:\s*artifacts\/?/u.test(
+      fuzzChunk
+    )
+  ) {
+    errors.push(
+      "fuzz-parsers must upload path: artifacts/ next to nightly-evidence-fuzz (preserves fuzz/ prefix for the report lane)"
+    );
+  }
+}
+
+// #842 W2.4 — same `path: artifacts/` rule as the fuzz and mutation lanes: the
+// scanner writes artifacts/dast/summary.json, and uploading the subdir alone
+// would flatten it to artifacts/summary.json after merge-multiple download.
+const dastJobIdx = e2eCode.indexOf("dast-scan:");
+if (dastJobIdx === -1) {
+  errors.push("e2e.yml missing dast-scan job");
+} else {
+  const dastChunk = e2eCode.slice(dastJobIdx, dastJobIdx + 1_800);
+  if (!dastChunk.includes("node scripts/security/dast-scan.mjs")) {
+    errors.push(
+      "dast-scan job must run the lane via node scripts/security/dast-scan.mjs"
+    );
+  }
+  if (/path:\s*artifacts\/dast\/?/u.test(dastChunk)) {
+    errors.push(
+      "dast-scan must upload path: artifacts/ (not artifacts/dast/) so the summary stays at artifacts/dast/summary.json after merge-multiple download"
+    );
+  }
+  if (
+    !/name:\s*nightly-evidence-dast[\s\S]{0,200}?path:\s*artifacts\/?/u.test(
+      dastChunk
+    )
+  ) {
+    errors.push(
+      "dast-scan must upload path: artifacts/ next to nightly-evidence-dast (preserves dast/ prefix for the report lane)"
+    );
+  }
+}
+
+// #839 G11/G12 — the protocol JOIN lane. What makes this lane worth a job is
+// exactly what a well-meaning edit would drop first: it must run the join file
+// at WIDTH (a seat count the PR path does not pay for), and its per-test
+// durations must survive to the report as evidence. A job that ran the same
+// three-seat floor the PR lane already runs would be a duplicate, and a job
+// whose JSON report never reached artifacts/join/summary.json would be a lane
+// nobody can read afterwards.
+const joinJobIdx = e2eCode.indexOf("protocol-join:");
+if (joinJobIdx === -1) {
+  errors.push("e2e.yml missing protocol-join job");
+} else {
+  const joinChunk = e2eCode.slice(joinJobIdx, joinJobIdx + 1_800);
+  if (!joinChunk.includes("protocol-join-lane")) {
+    errors.push(
+      "protocol-join job must run packages/server/src/serve/protocol-join-lane.test.ts (filter: protocol-join-lane)"
+    );
+  }
+  if (
+    !/CENTRAID_JOIN_SEATS:\s*"[3-9]|CENTRAID_JOIN_SEATS:\s*"\d{2}/u.test(
+      joinChunk
+    )
+  ) {
+    errors.push(
+      "protocol-join job must set CENTRAID_JOIN_SEATS to at least 3 — a nightly join lane that does not widen the seat count only repeats the PR run"
+    );
+  }
+  if (!joinChunk.includes("--outputFile=artifacts/join/summary.json")) {
+    errors.push(
+      "protocol-join job must write its vitest JSON report to artifacts/join/summary.json (the lane's evidence)"
+    );
+  }
+  if (/path:\s*artifacts\/join\/?/u.test(joinChunk)) {
+    errors.push(
+      "protocol-join must upload path: artifacts/ (not artifacts/join/) so the summary stays at artifacts/join/summary.json after merge-multiple download"
+    );
+  }
+  if (
+    !/name:\s*nightly-evidence-join[\s\S]{0,200}?path:\s*artifacts\/?/u.test(
+      joinChunk
+    )
+  ) {
+    errors.push(
+      "protocol-join must upload path: artifacts/ next to nightly-evidence-join (preserves join/ prefix for the report lane)"
+    );
+  }
+}
+
 // Executable shell cross-workflow fetch — ban the retired pairing satellite.
 const shellBans = [
   /gh\s+run\s+list[^\n]*pairing-relay-e2e/u,
@@ -159,6 +297,26 @@ for (const required of [
   if (!enrichmentLive.includes(required))
     errors.push(`enrichment-live-weekly.yml missing ${required}`);
 }
+// #842 W3.4 — the four-hour soak. The nightly scale lane already runs this
+// rig at its 0.75-minute default, so the ONLY thing that makes the weekly lane
+// worth a 300-minute runner is the duration override: a weekly job that
+// silently fell back to the nightly default would repeat the nightly and prove
+// nothing. That is why the literal is checked, exactly as the join lane's
+// CENTRAID_JOIN_SEATS floor is.
+const soakWeekly = await readFile(soakWeeklyPath, "utf8").catch(() => "");
+for (const required of [
+  "schedule:",
+  "workflow_dispatch:",
+  "tests/scale/long-run-soak.scale.test.ts",
+  'CENTRAID_SOAK_MINUTES: "240"',
+  "scripts/ci/file-tracking-issue.mjs",
+  "[soak] weekly four-hour soak red",
+  "within 24 hours or before the next scheduled run",
+]) {
+  if (!soakWeekly.includes(required))
+    errors.push(`soak-weekly.yml missing ${required}`);
+}
+
 for (const required of [
   "Restore latest weekly real-model evidence",
   [
@@ -281,6 +439,6 @@ if (errors.length) {
   process.exitCode = 1;
 } else {
   console.log(
-    "nightly-wiring: e2e.yml owns pairing lifecycle, ticket-hygiene, cross-network-relay, and mutation-testing; standalone pairing-relay-e2e removed"
+    "nightly-wiring: e2e.yml owns pairing lifecycle, ticket-hygiene, cross-network-relay, mutation-testing, fuzz-parsers, dast-scan, and protocol-join; weekly enrichment-live and soak lanes wired; standalone pairing-relay-e2e removed"
   );
 }

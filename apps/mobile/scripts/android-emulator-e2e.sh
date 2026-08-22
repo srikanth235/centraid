@@ -85,5 +85,8 @@ MAESTRO_PLATFORM=android node tests/agent-e2e-mobile/flows/cold-start.mjs || ec=
 MAESTRO_PLATFORM=android node tests/agent-e2e-mobile/flows/scroll-frames.mjs || ec=$?
 MAESTRO_PLATFORM=android node tests/agent-e2e-mobile/run-photos-suite.mjs || ec=$?
 MAESTRO_PLATFORM=android node tests/agent-e2e-mobile/flows/places-seat.mjs || ec=$?
+# #839 G8 — the five home-app journeys that are not Photos (see
+# flows/home-apps-budget.md; Tally is held under #831).
+MAESTRO_PLATFORM=android node tests/agent-e2e-mobile/run-home-apps-suite.mjs || ec=$?
 set -e
 exit "$ec"

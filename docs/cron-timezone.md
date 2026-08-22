@@ -40,7 +40,19 @@ Pinned transition dates used in tests (America/New_York):
 - Spring-forward 2026-03-08 (02:00 → 03:00)
 - Fall-back 2026-11-01 (02:00 → 01:00)
 
+**Known divergence (Overlap, [#839](https://github.com/srikanth235/centraid/issues/839)).** A gateway that stays **up** across a fall-back fires the repeated wall-clock minute **twice**. The dedupe that delivers the Overlap row lives inside a single `dueInstants` call — its `seen` set is local to that call — while the persisted cursor carries only the window position in milliseconds, never the wall-clock keys already delivered. A running scheduler ticks once a minute, so the two absolute minutes sharing that wall clock land in two different windows, each of which dedupes perfectly against itself and fires. "Once" therefore holds only for a window wide enough to contain both copies, which is the shape that follows downtime.
+
+The Gap row is unaffected: a minute that exists in no window cannot be delivered by any number of windows.
+
+The law above stands as written — it is the intended behaviour, and the fix is a durable wall-clock watermark in the cursor reader, not a doc edit. The current behaviour is pinned in `packages/server/src/automation/fire/time-zoo-cron.test.ts` so it cannot drift unnoticed; when the reader learns that watermark, the pinned expectation flips from two fires to one and this note goes with it.
+
 Missed fires during gateway downtime are still not backfilled (#149). DST policy only governs whether a wall-clock minute is due while the scheduler is running.
+
+## Multiple devices, one schedule
+
+Devices sharing a vault share one cursor row, so the schedule is owned by whichever device's clock is furthest ahead. A device running behind reads a window whose start has already been committed past — an inverted window, which reads as "nothing due" — so it neither re-delivers a minute the leading device already fired nor delivers one of its own. That is what keeps the no-double-fire law true across devices without any coordination between them, and it is the reason a lagging device looks idle rather than broken.
+
+The cost is the other half of the same coin: a device far enough behind never fires at all while a leading device is present. This is characterised (not pinned — it contradicts no ruling) in `packages/server/src/automation/fire/clock-adversity-cron.test.ts`, so a future change that lets a lagging device sweep its own window turns that exact configuration into a visible double fire rather than a silent one.
 
 ## Code pointers
 

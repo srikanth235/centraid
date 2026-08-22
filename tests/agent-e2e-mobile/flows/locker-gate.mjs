@@ -1,0 +1,90 @@
+// The Locker seat on the phone (home-journey roster, issue #839 G8).
+//
+// What only a device can falsify here: the SEAL. Locker is the one app Home is
+// forbidden to read — `useSpringboardTiles` leaves its count undefined on
+// purpose so a sealed Locker never votes the vault empty — and the phone must
+// arrive on the unlock gate and nothing else. Neither half is falsifiable below
+// the device: a component test renders whichever state it was handed, and the
+// process-restart half needs a real OS process to kill.
+//
+// Locker ships NO demo scenario (packages/blueprints/apps/locker has no
+// seed.js), which is why this flow seeds Docs instead — not for content, but
+// because Home draws the launcher grid only once some tile has content
+// (screens/home/springboard-policy.ts); on a wholly empty vault Home renders the
+// day-one treatment and there is no Locker tile to tap.
+//
+// Four claims, in order:
+//   1. HOME WITHHOLDS THE COUNT: the tile speaks "Open Locker, locked" — the
+//      withheld-count label, never "0 locked".
+//   2. THE COVER STATES ITS CUSTODY: "Secrets stay online-only".
+//   3. THE GATE REFUSES AT REST: the first-run gate is drawn and its own
+//      control is disabled, because an empty field is under the 12-character
+//      floor.
+//   4. THE SEAL SURVIVES THE PROCESS: after a stopApp + relaunch, the same gate.
+//
+// Every assertion is on copy or an accessibilityLabel only the asserted screen
+// publishes (issue #483's non-vacuous rules; this file is listed in
+// scripts/lint-e2e-flows.mjs).
+
+import { retryableTapCommands } from "../lib/first-run.mjs";
+import {
+  FIRST_LAUNCH_TIMEOUT_MS,
+  HOME_READY_MARKER,
+  runFlow,
+} from "../lib/harness.mjs";
+
+/** The gate as Maestro sees it: the first-run heading, the floor it states, and
+ *  the control that refuses while the field is empty. Asserted twice — once on
+ *  arrival and once after the process restart — so the two chunks cannot drift. */
+const GATE_ASSERTIONS = `- assertVisible: "Create a primary passphrase of at least 12 characters.*"
+- assertVisible:
+    text: "Create passphrase"
+    enabled: false`;
+
+await runFlow("locker-gate", async (ctx) => {
+  // Not locker's own scenario — locker has none. See the header.
+  await ctx.ensureDemo("docs");
+  await ctx.configureGateway();
+  await ctx.run(
+    `appId: ${ctx.state.appId}
+---
+# The withheld count, spoken. "Open Locker, 0 locked" would mean Home had begun
+# reading the one app it must not.
+- assertVisible: "Open Locker, locked"
+${retryableTapCommands("Open Locker.*")}
+- extendedWaitUntil:
+    visible: "Protect Locker"
+    timeout: ${FIRST_LAUNCH_TIMEOUT_MS}
+- assertVisible: "Secrets stay online-only"
+${GATE_ASSERTIONS}
+- takeScreenshot: locker-gate
+`,
+    "sealed-on-arrival"
+  );
+
+  await ctx.restart();
+
+  await ctx.run(
+    `appId: ${ctx.state.appId}
+---
+- extendedWaitUntil:
+    visible: "${HOME_READY_MARKER}"
+    timeout: ${FIRST_LAUNCH_TIMEOUT_MS}
+${retryableTapCommands("Open Locker.*")}
+- extendedWaitUntil:
+    visible: "Protect Locker"
+    timeout: 30000
+${GATE_ASSERTIONS}
+- takeScreenshot: locker-gate-after-restart
+`,
+    "sealed-after-restart"
+  );
+  ctx.note(
+    "Home never published a Locker count; the cover opened on its gate before and after an OS process restart"
+  );
+  return {
+    pass: true,
+    notes:
+      "Locker stayed sealed: withheld count on Home, refusing first-run gate, unchanged across a process restart",
+  };
+});

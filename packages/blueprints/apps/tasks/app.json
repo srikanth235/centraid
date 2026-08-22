@@ -659,5 +659,17 @@
     "originActs": [],
     "disabledOn": [],
     "northStar": "todoist"
+  },
+  "states": {
+    "designed": [
+      "dayone",
+      "pending",
+      "offline",
+      "stale",
+      "conflict",
+      "parked",
+      "denied"
+    ],
+    "excluded": []
   }
 }

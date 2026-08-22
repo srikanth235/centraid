@@ -704,5 +704,17 @@
     "originActs": ["camera"],
     "disabledOn": [],
     "northStar": "google-photos"
+  },
+  "states": {
+    "designed": [
+      "dayone",
+      "pending",
+      "offline",
+      "stale",
+      "conflict",
+      "parked",
+      "denied"
+    ],
+    "excluded": []
   }
 }

@@ -1,0 +1,39 @@
+{
+  "numTotalTestSuites": 1,
+  "numPassedTestSuites": 0,
+  "numFailedTestSuites": 1,
+  "numPendingTestSuites": 0,
+  "numTotalTests": 0,
+  "numPassedTests": 0,
+  "numFailedTests": 0,
+  "numPendingTests": 0,
+  "numTodoTests": 0,
+  "snapshot": {
+    "added": 0,
+    "failure": false,
+    "filesAdded": 0,
+    "filesRemoved": 0,
+    "filesRemovedList": [],
+    "filesUnmatched": 0,
+    "filesUpdated": 0,
+    "matched": 0,
+    "total": 0,
+    "unchecked": 0,
+    "uncheckedKeysByFile": [],
+    "unmatched": 0,
+    "updated": 0,
+    "didUpdate": false
+  },
+  "startTime": 1787327225183,
+  "success": false,
+  "testResults": [
+    {
+      "assertionResults": [],
+      "startTime": 1787327225183,
+      "endTime": 1787327225183,
+      "status": "failed",
+      "message": "Cannot bundle Node.js built-in \"node:sqlite\" imported from \"src/lib/replica/node-sqlite-driver.ts\". Consider disabling environments.client.noExternal or remove the built-in dependency.\n\nStack backtrace:\n   0: <unknown>\n   1: <unknown>\n   2: <unknown>\n   3: <unknown>\n   4: <unknown>\n   5: <unknown>\n   6: <unknown>\n   7: <unknown>\n   8: <unknown>\n   9: <unknown>\n  10: start_thread\n             at ./nptl/pthread_create.c:447:8\n  11: clone3\n             at ./misc/../sysdeps/unix/sysv/linux/x86_64/clone3.S:78:0",
+      "name": "apps/mobile/src/lib/replica/node-sqlite-driver.jsdom.test.ts"
+    }
+  ]
+}

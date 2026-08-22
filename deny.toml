@@ -1,0 +1,65 @@
+# cargo-deny policy for Centraid's first-party Rust crates (issue #842 W7.2).
+#
+# One shared policy at the repo root rather than a copy beside each of
+# packages/tunnel/data-plane, packages/tunnel/native and apps/web/iroh-wasm —
+# three files would drift, and a per-crate relaxation would be invisible.
+# `scripts/security/rust-supply-chain.mjs` passes this file to every crate via
+# `--config`.
+#
+# Tighten-only, like every other gate knob in this repo: an exception belongs
+# in the explicit `[licenses].exceptions` or `[bans].skip` list, where it is
+# one greppable line naming the crate, not a loosened global setting.
+
+[graph]
+all-features = true
+
+[advisories]
+# The advisory database is authoritative; unmaintained and unsound crates are
+# findings, not notes. `cargo audit` covers the same database from the other
+# side — both are kept because `deny` also sees the yanked-crate signal.
+yanked = "deny"
+ignore = []
+
+[licenses]
+# The product ships these binaries. Copyleft obligations are a shipping
+# decision, not a build-time one, so the allowlist is permissive-only and any
+# addition is a deliberate review.
+allow = [
+  "Apache-2.0",
+  "Apache-2.0 WITH LLVM-exception",
+  "BSD-2-Clause",
+  "BSD-3-Clause",
+  "BSL-1.0",
+  "CC0-1.0",
+  "ISC",
+  "MIT",
+  "MIT-0",
+  "MPL-2.0",
+  "OpenSSL",
+  "Unicode-3.0",
+  "Unlicense",
+  "Zlib",
+]
+confidence-threshold = 0.9
+exceptions = []
+
+[bans]
+# Duplicate major versions of one crate are a warning, not a failure: the
+# iroh/reqwest graph legitimately carries a few, and failing on them would
+# turn this gate into something people route around. Banned crates and
+# wildcard version requirements are failures, because both are how an
+# unreviewed dependency actually arrives.
+multiple-versions = "warn"
+wildcards = "deny"
+allow-wildcard-paths = true
+deny = []
+skip = []
+
+[sources]
+# Anything not from crates.io is a supply-chain decision that must be visible
+# in this file. `unknown-git = "deny"` is the rule that stops a transitive
+# `git = "..."` dependency from entering the build unnoticed.
+unknown-registry = "deny"
+unknown-git = "deny"
+allow-registry = ["https://github.com/rust-lang/crates.io-index"]
+allow-git = []

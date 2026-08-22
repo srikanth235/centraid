@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   APP_MANIFEST_FILE,
+  CANONICAL_DESIGNED_STATES,
   MANIFEST_VERSION,
   ManifestError,
   compileSchema,
@@ -253,6 +254,201 @@ describe(validateManifest, () => {
       seats: { byteBearing: true, originActs: [], disabledOn: [] },
     };
     expect(() => validateManifest(m)).toThrow(ManifestError);
+  });
+
+  // The designed-state partition (issue #839 G7). The block is optional so the
+  // UI-less automation manifests keep validating; when it IS present it must be
+  // a CLOSED partition, because a forgotten state would otherwise read as a
+  // deliberate non-goal.
+  it("treats the states block as optional", () => {
+    const out = validateManifest(baseManifest());
+    expect(out.states).toBeUndefined();
+  });
+
+  it("round-trips a complete designed/excluded partition", () => {
+    const m = {
+      ...baseManifest(),
+      states: {
+        designed: ["dayone", "pending", "offline", "stale", "parked", "denied"],
+        excluded: [
+          {
+            state: "conflict",
+            reason: "single-writer surface; no second writer can revise a row",
+            citation: "docs/blueprint-seats.md#engine-contracts",
+          },
+        ],
+      },
+    };
+    const out = validateManifest(m);
+    expect(out.states).toStrictEqual({
+      designed: ["dayone", "pending", "offline", "stale", "parked", "denied"],
+      excluded: [
+        {
+          state: "conflict",
+          reason: "single-writer surface; no second writer can revise a row",
+          citation: "docs/blueprint-seats.md#engine-contracts",
+        },
+      ],
+    });
+  });
+
+  it("accepts a partition that designs every canonical state", () => {
+    const out = validateManifest({
+      ...baseManifest(),
+      states: {
+        designed: [...CANONICAL_DESIGNED_STATES],
+        excluded: [],
+      },
+    });
+    expect(out.states?.designed).toStrictEqual([...CANONICAL_DESIGNED_STATES]);
+  });
+
+  it("rejects a partition that omits a canonical state", () => {
+    const err = thrownBy(() =>
+      validateManifest({
+        ...baseManifest(),
+        states: {
+          designed: CANONICAL_DESIGNED_STATES.filter(
+            (state) => state !== "conflict"
+          ),
+          excluded: [],
+        },
+      })
+    );
+    expect(err).toBeInstanceOf(ManifestError);
+    expect((err as ManifestError).code).toBe("invalid_field");
+    expect((err as ManifestError).message).toContain("conflict");
+  });
+
+  it("rejects a state claimed by both sides", () => {
+    const err = thrownBy(() =>
+      validateManifest({
+        ...baseManifest(),
+        states: {
+          designed: [...CANONICAL_DESIGNED_STATES],
+          excluded: [
+            {
+              state: "denied",
+              reason: "duplicated on purpose",
+              citation: "docs/blueprint-seats.md#engine-contracts",
+            },
+          ],
+        },
+      })
+    );
+    expect(err).toBeInstanceOf(ManifestError);
+    expect((err as ManifestError).code).toBe("invalid_field");
+    expect((err as ManifestError).message).toContain("denied");
+  });
+
+  it("rejects a state listed twice under designed", () => {
+    const err = thrownBy(() =>
+      validateManifest({
+        ...baseManifest(),
+        states: {
+          designed: [...CANONICAL_DESIGNED_STATES, "denied"],
+          excluded: [],
+        },
+      })
+    );
+    expect(err).toBeInstanceOf(ManifestError);
+  });
+
+  it("rejects an unknown state name", () => {
+    expect(() =>
+      validateManifest({
+        ...baseManifest(),
+        states: {
+          designed: [...CANONICAL_DESIGNED_STATES, "loading"],
+          excluded: [],
+        },
+      })
+    ).toThrow(ManifestError);
+  });
+
+  it("rejects an excluded entry with no citation", () => {
+    expect(() =>
+      validateManifest({
+        ...baseManifest(),
+        states: {
+          designed: CANONICAL_DESIGNED_STATES.filter(
+            (state) => state !== "stale"
+          ),
+          excluded: [{ state: "stale", reason: "no replica here" }],
+        },
+      })
+    ).toThrow(ManifestError);
+  });
+
+  it("rejects an excluded entry with no reason", () => {
+    expect(() =>
+      validateManifest({
+        ...baseManifest(),
+        states: {
+          designed: CANONICAL_DESIGNED_STATES.filter(
+            (state) => state !== "stale"
+          ),
+          excluded: [
+            {
+              state: "stale",
+              citation: "docs/blueprint-seats.md#engine-contracts",
+            },
+          ],
+        },
+      })
+    ).toThrow(ManifestError);
+  });
+
+  // An empty string is the cheapest way to satisfy "has a reason"; the schema's
+  // minLength: 1 is what keeps a blank from buying a structural exclusion.
+  it("rejects an excluded entry whose reason is empty", () => {
+    expect(() =>
+      validateManifest({
+        ...baseManifest(),
+        states: {
+          designed: CANONICAL_DESIGNED_STATES.filter(
+            (state) => state !== "stale"
+          ),
+          excluded: [
+            {
+              state: "stale",
+              reason: "",
+              citation: "docs/blueprint-seats.md#engine-contracts",
+            },
+          ],
+        },
+      })
+    ).toThrow(ManifestError);
+  });
+
+  it("rejects an excluded entry carrying an unknown field", () => {
+    expect(() =>
+      validateManifest({
+        ...baseManifest(),
+        states: {
+          designed: CANONICAL_DESIGNED_STATES.filter(
+            (state) => state !== "stale"
+          ),
+          excluded: [
+            {
+              state: "stale",
+              reason: "no replica here",
+              citation: "docs/blueprint-seats.md#engine-contracts",
+              todo: "revisit",
+            },
+          ],
+        },
+      })
+    ).toThrow(ManifestError);
+  });
+
+  it("rejects a states block missing the excluded side entirely", () => {
+    expect(() =>
+      validateManifest({
+        ...baseManifest(),
+        states: { designed: [...CANONICAL_DESIGNED_STATES] },
+      })
+    ).toThrow(ManifestError);
   });
 });
 

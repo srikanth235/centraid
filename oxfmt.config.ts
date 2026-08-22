@@ -67,5 +67,11 @@ export default defineConfig({
     "scripts/*-site/public/assets/centraid-tokens.css",
     "scripts/docs-site/src/content/**",
     "packages/blueprints/manifest.json",
+    // The peer-target differential corpus (#842 W2.1) is emitted by
+    // `serializeCorpus` and read UNCHANGED by a Rust test, so its bytes are the
+    // interface between the two languages. `peer-target-differential.test.ts`
+    // asserts them exactly; letting oxfmt restyle the braces makes that
+    // assertion fail on every regeneration while proving nothing about style.
+    "packages/tunnel/fixtures/peer-target-corpus.json",
   ],
 });

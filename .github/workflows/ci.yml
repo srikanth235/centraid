@@ -385,7 +385,42 @@ jobs:
             echo "A green job here is a **second-attempt** pass, not a clean one."
           } >> "$GITHUB_STEP_SUMMARY"
           bun run test:perf:pr
+      # #842 W0.5 — send → first token, the product's most-felt latency, which
+      # had no rig at all until now. Times a real `runAcpTurn` against the
+      # scripted fake ACP harness, so the provider is held constant and the
+      # number is dead time this repo owns. ~3 s for 35 turns, and it needs the
+      # `bun run build` above for @centraid/server's dist, which is why it
+      # rides here. The ceiling it reads is tighten-only; see the entry's
+      # `probe` field for exactly which half of the interval is fenced.
+      - name: Send-to-first-token ceiling
+        run: bun run perf:send-to-first-token
       - run: bun run coverage
+      # #656 Layer 5 / #842 W0.1 — the PR lane's total wall clock against the
+      # tighten-only ceiling in tests/suite-wall-clock.json. The ceiling shipped
+      # with #656 but no lane ever ran the gate, so the one budget that pushes
+      # BACK on test-flooding had never fenced a PR. It scores the vitest JSON
+      # report `bun run coverage` just wrote — the only place it can see one.
+      # The existence check is load-bearing: the script exits 0 with "not
+      # measured" when the artifact is absent, which is right on a laptop and
+      # wrong in the lane that enforces it — a missing report here means the
+      # wiring rotted, not that the suite met its budget.
+      - name: Suite wall-clock ceiling
+        run: |
+          set -euo pipefail
+          if [ ! -f artifacts/test-results/vitest.json ]; then
+            echo "::error title=Suite wall-clock unmeasured::artifacts/test-results/vitest.json is missing after \`bun run coverage\`; the wall-clock ceiling cannot be enforced, so this lane fails rather than passing silently."
+            exit 1
+          fi
+          bun run test:suite-wall-clock
+      # #842 W0.3 — no file may report zero collected tests. A suite that throws
+      # while LOADING registers no test at all, so every counting gate here —
+      # matrix minimumTests floors, the skip budget, the quarantine ledger, the
+      # coverage floors — sees a smaller universe rather than a violated one, and
+      # the suite reads as absent instead of red. It scores the same vitest JSON
+      # report `bun run coverage` just wrote; `--require-report` makes a missing
+      # artifact fail this lane rather than pass as "not measured".
+      - name: No test file failed to collect
+        run: bun run test:collection-tripwire -- --require-report
       # #532 — changed-line coverage vs origin/main must be ≥80% (or approvedDeviation).
       - name: Fetch origin/main for diff coverage
         run: git fetch --no-tags origin main 2>/dev/null || true
@@ -840,6 +875,61 @@ jobs:
         with:
           name: design-gallery-actual
           path: artifacts/design-gallery/actual/
+          retention-days: 7
+
+  # #842 W5.2 — the desktop journey on the two OSes CI has never launched. Both
+  # are path-gated on `desktop` and DELIBERATELY ABSENT from `check`'s needs, so
+  # they are non-required: per the twice-burned promotion rule recorded in
+  # lane-client-e2e.yml, full OS coverage stays advisory until an OS-specific
+  # area burns us twice. Neither needs the Linux job's xvfb + gnome-keyring
+  # bootstrap: Electron safeStorage uses DPAPI on Windows and the login Keychain
+  # (already unlocked in the runner's user session) on macOS.
+  #
+  # These launch the desktop journey, NOT a signed packaged build. Booting the
+  # signed installer's own journey is the deeper W5.2 goal and stays coupled to
+  # lane-release-desktop.yml, where the Azure/Apple secrets live.
+  desktop-e2e-windows:
+    needs: changes
+    if: needs.changes.outputs.desktop == 'true' || needs.changes.outputs.all == 'true'
+    runs-on: windows-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: ./.github/actions/setup
+        with:
+          turbo-cache: "true"
+      - run: bunx playwright install --with-deps chromium
+        working-directory: apps/desktop
+      - run: bun run build
+      - run: bun run test:e2e
+        working-directory: apps/desktop
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        if: failure()
+        with:
+          name: desktop-e2e-windows-traces
+          path: apps/desktop/test-results/
+          retention-days: 7
+
+  desktop-e2e-macos:
+    needs: changes
+    if: needs.changes.outputs.desktop == 'true' || needs.changes.outputs.all == 'true'
+    runs-on: macos-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: ./.github/actions/setup
+        with:
+          turbo-cache: "true"
+      - run: bunx playwright install --with-deps chromium
+        working-directory: apps/desktop
+      - run: bun run build
+      - run: bun run test:e2e
+        working-directory: apps/desktop
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        if: failure()
+        with:
+          name: desktop-e2e-macos-traces
+          path: apps/desktop/test-results/
           retention-days: 7
 
   check:

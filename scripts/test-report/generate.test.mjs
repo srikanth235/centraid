@@ -1,147 +1,29 @@
-import { spawnSync } from "node:child_process";
-import { cpSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { writeFileSync } from "node:fs";
 import path from "node:path";
 
 import { describe, expect, test } from "vitest";
 
-import { tempDirSync } from "@centraid/test-kit/temp-dir";
+import {
+  appAxesFor,
+  baseMatrix,
+  CAPTURED_AT,
+  CAPTURED_MS,
+  CELL_ID,
+  FRESH_WINDOW_HOURS,
+  makeFixtureRoot,
+  OWNER,
+  runGenerate,
+  STALE_AT,
+  vitestReport,
+  writeJson,
+} from "./report-fixture-root.mjs";
 
 /**
  * Honesty-contract tests for the test-health report generator (issue #656
- * Layer 1F).
- *
- * `generate.mjs` is a top-level side-effecting main with no exported seam, and
- * it derives the repo root from `import.meta.dirname`. Each case therefore
- * copies `scripts/test-report/` into a **synthetic root** and drives the real
- * script as a subprocess against fixture evidence. Nothing reads the live
- * matrix, floors, or artifacts, so a sibling agent editing those files cannot
- * change these results.
- *
- * Determinism: every timestamp below is a literal, and freshness is pinned by
- * `--max-age-hours` rather than by the wall clock. `FRESH_WINDOW_HOURS` is a
- * century-wide window (so a literal timestamp is never aged out) and
- * `STALE_AT` is far enough in the past that the default 36-hour rule always
- * classifies it stale.
+ * Layer 1F). Every case drives the real `generate.mjs` as a subprocess against
+ * a synthetic repo root; the harness and its fixtures live in
+ * `report-fixture-root.mjs`.
  */
-
-const realRoot = path.resolve(import.meta.dirname, "../..");
-/** Wide enough that a literal timestamp never ages out of the window. */
-const FRESH_WINDOW_HOURS = "1000000";
-/** Long past — always older than the 36-hour default evidence window. */
-const STALE_AT = "2020-03-01T00:00:00.000Z";
-const CAPTURED_AT = "2026-01-01T00:00:00.000Z";
-const CAPTURED_MS = Date.parse(CAPTURED_AT);
-
-const OWNER = "owners/unit-owner.mjs";
-const CELL_ID = "vault:correctness";
-
-function baseMatrix() {
-  return {
-    version: 1,
-    notes: {},
-    workspaceSurfaces: {},
-    dimensions: [{ id: "correctness", label: "Correctness", lane: "unit" }],
-    surfaces: [
-      { id: "vault", label: "Vault", assessment: { correctness: "solid" } },
-    ],
-    cellOwners: { "vault.correctness": { owner: OWNER, tier: "unit" } },
-    flows: [],
-    appEngines: {
-      engines: [],
-      apps: [],
-      seatDoctrine: "docs/blueprint-seats.md#engine-contracts",
-    },
-  };
-}
-
-/**
- * Build a synthetic repo root containing a copy of the generator and the
- * root-relative files it reads directly (floors are read from `root/tests/`).
- * @param {{ matrix?: object }} [options] Fixture overrides.
- */
-function makeFixtureRoot(options = {}) {
-  const root = tempDirSync("centraid-test-report-");
-  cpSync(
-    path.join(realRoot, "scripts/test-report"),
-    path.join(root, "scripts/test-report"),
-    { recursive: true }
-  );
-  writeFileSync(
-    path.join(root, "package.json"),
-    `${JSON.stringify({ name: "report-fixture", workspaces: { packages: [] } }, null, 2)}\n`
-  );
-  mkdirSync(path.join(root, "tests"), { recursive: true });
-  writeFileSync(path.join(root, "tests/coverage-floors.json"), "{}\n");
-  writeFileSync(path.join(root, "tests/mutation-floors.json"), "{}\n");
-  mkdirSync(path.join(root, "owners"), { recursive: true });
-  writeFileSync(path.join(root, OWNER), "test('owned behaviour', () => {});\n");
-  mkdirSync(path.join(root, "docs"), { recursive: true });
-  writeFileSync(
-    path.join(root, "docs/blueprint-seats.md"),
-    "## Engine contracts\n"
-  );
-  const fixtureMatrix = options.matrix ?? baseMatrix();
-  for (const app of fixtureMatrix.appEngines?.apps ?? []) {
-    const appRoot = path.join(root, "packages/blueprints/apps", app.id);
-    mkdirSync(appRoot, { recursive: true });
-    writeFileSync(path.join(appRoot, "app.json"), "{}\n");
-  }
-  writeFileSync(
-    path.join(root, "matrix.json"),
-    `${JSON.stringify(fixtureMatrix, null, 2)}\n`
-  );
-  return root;
-}
-
-/** Write a JSON fixture under the synthetic root and return its path. */
-function writeJson(root, relative, value) {
-  const target = path.join(root, relative);
-  mkdirSync(path.dirname(target), { recursive: true });
-  writeFileSync(target, `${JSON.stringify(value, null, 2)}\n`);
-  return target;
-}
-
-/** A single passing vitest file result for OWNER, captured at `atMs`. */
-function vitestReport(atMs = CAPTURED_MS, status = "passed") {
-  return {
-    startTime: atMs,
-    testResults: [
-      {
-        name: OWNER,
-        status,
-        startTime: atMs,
-        endTime: atMs,
-        assertionResults: [],
-      },
-    ],
-  };
-}
-
-/**
- * Run the copied generator against the synthetic root.
- * @param {string} root Synthetic repo root.
- * @param {string[]} [args] extra flags appended after the fixed fixture flags
- */
-function runGenerate(root, args = []) {
-  const result = spawnSync(
-    process.execPath,
-    [
-      path.join(root, "scripts/test-report/generate.mjs"),
-      "--matrix",
-      path.join(root, "matrix.json"),
-      "--output",
-      path.join(root, "dist/index.html"),
-      ...args,
-    ],
-    { cwd: root, encoding: "utf8", env: { ...process.env } }
-  );
-  const summaryPath = path.join(root, "dist/summary.json");
-  return {
-    ...result,
-    summary: JSON.parse(readFileSync(summaryPath, "utf8")),
-    html: readFileSync(path.join(root, "dist/index.html"), "utf8"),
-  };
-}
 
 describe("evidence freshness", () => {
   test("counts recent evidence as passed and proves the owning cell", () => {
@@ -253,6 +135,17 @@ describe("apps × engines grid", () => {
     const root = makeFixtureRoot({
       matrix: {
         ...baseMatrix(),
+        ...appAxesFor(["locker"]),
+        engineRegistry: [
+          {
+            id: "consent",
+            label: "Consent",
+            source: [OWNER],
+            propertyFlow: null,
+            mutationSeed: null,
+            appEngineColumn: true,
+          },
+        ],
         appEngines: {
           seatDoctrine: "docs/blueprint-seats.md#engine-contracts",
           engines: [
@@ -566,10 +459,3 @@ describe("perf and scale trends", () => {
     expect(result.html).toContain("Perf and scale results are missing");
   });
 });
-
-/**
- * #781 — the 15 `*:accessibility` cells have a declared owner with no
- * evidence lane at all (a per-PR node --test gate). Registered cells become a
- * NAMED, budgeted absence on nightly instead of unfixable red noise — and the
- * exemption voids itself the night the accessibility lane first runs.
- */

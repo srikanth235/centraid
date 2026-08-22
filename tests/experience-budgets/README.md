@@ -77,6 +77,7 @@ Numbers other #659 agents produced on real runs, cited rather than re-derived:
 | **5-vault page-cache reservation** | **32,768,000 B** (was 163,840,000 B per-file) | `tests/scale/multi-vault-footprint.scale.test.ts` (2026-07-31) |
 | …RSS per additional mounted vault, idle | 10.1 MB | same rig, same run |
 | Mobile `expo export` shipped weight | 11.60 MB iOS / 11.60 MB Android (Hermes bundle 6.36 MB) | `scripts/perf/app-weight.mjs --surface mobile` (2026-07-31) |
+| **Gateway send → first token, dead time only** | **p95 123 ms** contended / 53 ms idle (median 48–70 ms) | `scripts/perf/send-to-first-token.mjs` (2026-08-21, linux x64) — spawn + ACP handshake + prompt dispatch only; excludes the HTTP/SSE route, every client, and the provider's own time. A **lower bound** on the owner's interval, not the whole of it |
 
 ## Changing a number
 

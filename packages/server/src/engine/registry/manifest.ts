@@ -201,6 +201,63 @@ export interface ManifestSeatsBlock {
   readonly northStar: string;
 }
 
+/**
+ * The seven canonical designed states every product surface has to be able to
+ * be in (issue #839 G7). They are facts about the vault/replica plane, not
+ * per-app inventions:
+ *
+ *  * `dayone`   — first run: the app holds nothing at all yet.
+ *  * `pending`  — a local write is projected but not settled
+ *                 (`apps/_shared/pending-overlay.ts`).
+ *  * `offline`  — the gateway is out of reach (the reachability contract,
+ *                 `libraryReachability` / `data-gateway-status`).
+ *  * `stale`    — a replica answered but is behind the vault.
+ *  * `conflict` — the edited row changed under an offline intent.
+ *  * `parked`   — the write waits on an owner's or steward's approval.
+ *  * `denied`   — the vault refused the read or the write.
+ *
+ * Order is the issue's own; it is the order the manifests declare and the
+ * order a report renders, so keep it stable.
+ */
+export const CANONICAL_DESIGNED_STATES = [
+  "dayone",
+  "pending",
+  "offline",
+  "stale",
+  "conflict",
+  "parked",
+  "denied",
+] as const;
+
+export type ManifestDesignedState = (typeof CANONICAL_DESIGNED_STATES)[number];
+
+/**
+ * One canonical state this app structurally cannot be in. `reason` says why the
+ * case is unrepresentable (not "unbuilt" — an unbuilt designed state is a gap,
+ * and a gap belongs in `designed`); `citation` points at the doc anchor that
+ * settles it, the same evidence discipline the engine contracts use.
+ */
+export interface ManifestStateExclusion {
+  readonly state: ManifestDesignedState;
+  readonly reason: string;
+  readonly citation: string;
+}
+
+/**
+ * The designed-state partition (issue #839 G7). Machine-readable so a harness
+ * never has to re-derive "which states does this app owe a member" from copy
+ * tables and component names.
+ *
+ * The partition is CLOSED: every one of `CANONICAL_DESIGNED_STATES` appears in
+ * exactly one of `designed` / `excluded`, so silence about a state is
+ * unexpressible — a manifest that simply forgets `conflict` fails validation
+ * rather than reading as "conflict does not apply here".
+ */
+export interface ManifestStatesBlock {
+  readonly designed: readonly ManifestDesignedState[];
+  readonly excluded: readonly ManifestStateExclusion[];
+}
+
 export interface Manifest {
   readonly manifestVersion: number;
   readonly id: string;
@@ -230,6 +287,10 @@ export interface Manifest {
    *  every bundled blueprint declares one — see the blueprints package's
    *  `blueprint-seats.test.ts`. */
   readonly seats?: ManifestSeatsBlock;
+  /** Designed-state partition (issue #839 G7). Optional at the schema level so
+   *  UI-less automation manifests keep validating without one; every bundled
+   *  blueprint declares one — see `packages/blueprints/src/app-states.test.ts`. */
+  readonly states?: ManifestStatesBlock;
 }
 
 // ----------------------------------------------------------------------------
@@ -384,6 +445,31 @@ export const MANIFEST_JSON_SCHEMA: Record<string, unknown> = {
         originActs: { type: "array", items: { type: "string" } },
         disabledOn: { type: "array", items: { type: "string" } },
         northStar: { type: "string", minLength: 1 },
+      },
+    },
+    states: {
+      type: "object",
+      required: ["designed", "excluded"],
+      additionalProperties: false,
+      properties: {
+        designed: {
+          type: "array",
+          uniqueItems: true,
+          items: { type: "string", enum: [...CANONICAL_DESIGNED_STATES] },
+        },
+        excluded: {
+          type: "array",
+          items: {
+            type: "object",
+            additionalProperties: false,
+            required: ["state", "reason", "citation"],
+            properties: {
+              state: { type: "string", enum: [...CANONICAL_DESIGNED_STATES] },
+              reason: { type: "string", minLength: 1 },
+              citation: { type: "string", minLength: 1 },
+            },
+          },
+        },
       },
     },
     knobs: {
@@ -566,6 +652,41 @@ export function validateManifest(raw: unknown): Manifest {
     seenQueries.add(q.name);
   }
 
+  // Cross-cut: the designed-state partition is CLOSED. Ajv can say each entry
+  // is one of the seven; only this pass can say each of the seven is claimed
+  // exactly once. Without it a manifest could designate `denied` twice and
+  // never mention `conflict`, and the silence would read as a non-goal.
+  const states = r.states as ManifestStatesBlock | undefined;
+  if (states && typeof states === "object") {
+    const claimed = new Map<ManifestDesignedState, "designed" | "excluded">();
+    const claim = (
+      state: ManifestDesignedState,
+      side: "designed" | "excluded"
+    ): void => {
+      const prior = claimed.get(state);
+      if (prior !== undefined) {
+        throw new ManifestError(
+          "invalid_field",
+          `states declares "${state}" twice (${prior}, then ${side}); each canonical state belongs to exactly one side`,
+          `states.${side}`
+        );
+      }
+      claimed.set(state, side);
+    };
+    for (const state of states.designed) claim(state, "designed");
+    for (const entry of states.excluded) claim(entry.state, "excluded");
+    const missing = CANONICAL_DESIGNED_STATES.filter(
+      (state) => !claimed.has(state)
+    );
+    if (missing.length > 0) {
+      throw new ManifestError(
+        "invalid_field",
+        `states omits ${missing.join(", ")}; list every canonical state under "designed", or under "excluded" with a reason and a citation`,
+        "states"
+      );
+    }
+  }
+
   return {
     manifestVersion: MANIFEST_VERSION,
     id: r.id as string,
@@ -590,6 +711,7 @@ export function validateManifest(raw: unknown): Manifest {
     ...(r.seats && typeof r.seats === "object"
       ? { seats: r.seats as ManifestSeatsBlock }
       : {}),
+    ...(states ? { states } : {}),
   };
 }
 

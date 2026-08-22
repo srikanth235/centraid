@@ -945,5 +945,17 @@
     "originActs": ["capture", "voice"],
     "disabledOn": [],
     "northStar": "apple-notes"
+  },
+  "states": {
+    "designed": [
+      "dayone",
+      "pending",
+      "offline",
+      "stale",
+      "conflict",
+      "parked",
+      "denied"
+    ],
+    "excluded": []
   }
 }

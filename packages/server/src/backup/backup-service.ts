@@ -86,6 +86,13 @@ import {
 import type { BackupTargetState } from "./backup-state.js";
 import { RecoveryKitStateStore } from "./recovery-kit-state.js";
 import type { RecoveryKitState } from "./recovery-kit-state.js";
+import {
+  drillErrors,
+  drillWarnings,
+  runRestoreDrill,
+  spineCensus,
+} from "./restore-drill.js";
+import type { SpineCensus } from "./restore-drill.js";
 import { warmPreviewTinies } from "./restore-warm.js";
 import type { PreviewsWarmResult } from "./restore-warm.js";
 import { snapshotReferencedBlobShas } from "./snapshot-blob-roots.js";
@@ -1452,6 +1459,20 @@ export class BackupService {
           `journal: ${report.journal.foreignKeyViolations} fk violation(s)`
         );
       }
+      // Depth half of the drill (#842 W1.3). Everything above proves the two
+      // files OPEN; these prove the restored vault is USABLE — no content
+      // spine that restored empty out of a source that holds rows, and no
+      // surviving row pointing at bytes this restore cannot produce. Both are
+      // states every structural check above passes with a clean bill.
+      const drill = runRestoreDrill({
+        vaultId,
+        destDir,
+        seed: `${vaultId}:${result.seq}`,
+        sourceCensus: this.liveSpineCensus(vaultId),
+        skippedBlobs: result.skippedBlobs,
+      });
+      problems.push(...drillErrors(drill));
+      const drillDegrades = drillWarnings(drill);
       if (result.walReplay) {
         const { damaged, coordinatedCutMs, expectedCutMs } = result.walReplay;
         if (damaged.length > 0)
@@ -1502,12 +1523,16 @@ export class BackupService {
           ? `, wal tip ${result.walReplay.perDb.vault.lastTickMs}`
           : ", /1 snapshot") +
         ")";
-      if (dangling > 0) {
-        this.health.reportDegraded(
-          "backups",
-          `${ran}: ${dangling} receipt(s) reference absent vault rows — ` +
-            "hard-deletes explain this; anything else needs eyes"
-        );
+      if (dangling > 0 || drillDegrades.length > 0) {
+        const reasons: string[] = [];
+        if (dangling > 0) {
+          reasons.push(
+            `${dangling} receipt(s) reference absent vault rows — ` +
+              "hard-deletes explain this; anything else needs eyes"
+          );
+        }
+        reasons.push(...drillDegrades);
+        this.health.reportDegraded("backups", `${ran}: ${reasons.join("; ")}`);
       } else {
         this.health.reportOk("backups", `${ran}: ok`);
       }
@@ -1529,6 +1554,19 @@ export class BackupService {
         .rm(destDir, { recursive: true, force: true })
         .catch(() => undefined);
     }
+  }
+
+  /**
+   * The live source pair's content-spine census, for the drill's empty-shell
+   * comparison (#842 W1.3). `undefined` when the vault's plane is not mounted
+   * — the drill then WARNS that it could not compare rather than passing.
+   */
+  private liveSpineCensus(vaultId: string): SpineCensus | undefined {
+    const plane = this.vaults
+      .planesList()
+      .find((candidate) => candidate.boot.vaultId === vaultId);
+    if (!plane) return undefined;
+    return spineCensus(plane.db.vault, plane.db.journal);
   }
 
   // ── WAL segment drain (issue #408) ───────────────────────────────────

@@ -1,0 +1,29 @@
+{
+  "note": "W6.3 (#842) dependency-BEHAVIOUR ledger. Every dependency that declares preinstall/install/postinstall is pinned here with a digest over its command strings AND the bytes of the local scripts it invokes, so a republished tarball that changes install behaviour under the same version fails the gate. Tighten-only: entries are removed when the dependency stops declaring a hook, never added to make a run green. Regenerate the shape with `node scripts/security/lifecycle-audit.mjs --print-ledger`, then WRITE A REAL REASON for each entry — a generated TODO reason fails the audit. `executes: true` is reserved for packages listed in the root package.json `trustedDependencies`; today none are, so none of this code runs at install time.",
+  "packages": {
+    "electron-winstaller": {
+      "version": "5.4.0",
+      "hooks": ["install"],
+      "digest": "c739b3887eade929895fcb96b9a61852bdc7e26be6da8ae497fde65f858d1313",
+      "signals": [],
+      "executes": false,
+      "reason": "script/select-7z-arch.js only copies the vendored 7z binary for the host arch out of the package's own vendor/ directory. No network, no spawn. Reviewed 2026-08 for #842 W6.3."
+    },
+    "esbuild": {
+      "version": "0.28.1",
+      "hooks": ["postinstall"],
+      "digest": "57205e7f193692f0b90396710715630e9b9695e1244ecef86582cc025b38aa95",
+      "signals": ["network-fetch", "network-tool", "process-spawn"],
+      "executes": false,
+      "reason": "install.js downloads the platform-native esbuild binary over https (falling back to `npm install` of the platform package). This is the canonical native-binary-fetch shape and is exactly why the package is NOT in trustedDependencies: Bun resolves the optional platform package from the lockfile instead, so the script never runs. Reviewed 2026-08 for #842 W6.3."
+    },
+    "workerd": {
+      "version": "1.20260722.1",
+      "hooks": ["postinstall"],
+      "digest": "7894344d183f2d5310dc076eaa6b486f0acaf5ed606d2e815909a83db59cc786",
+      "signals": ["network-fetch", "network-tool", "process-spawn"],
+      "executes": false,
+      "reason": "Same esbuild-derived installer, fetching the workerd native binary (wrangler's runtime). Not in trustedDependencies, so the script never runs; the platform package comes from the lockfile. Reviewed 2026-08 for #842 W6.3."
+    }
+  }
+}

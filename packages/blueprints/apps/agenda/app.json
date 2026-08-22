@@ -547,5 +547,17 @@
     "originActs": [],
     "disabledOn": [],
     "northStar": "google-calendar"
+  },
+  "states": {
+    "designed": [
+      "dayone",
+      "pending",
+      "offline",
+      "stale",
+      "conflict",
+      "parked",
+      "denied"
+    ],
+    "excluded": []
   }
 }

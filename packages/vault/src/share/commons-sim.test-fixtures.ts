@@ -13,6 +13,14 @@ import {
   removeCommonsMember,
   upsertCommonsMember,
 } from "./commons-lifecycle.js";
+import type { GrantActionName } from "./commons-sim-grant.test-fixtures.js";
+import {
+  GRANT_ACTION_WEIGHTS,
+  buildPlaneFor,
+  checkGrantInvariants,
+  quiesceGrantPlane,
+  runGrantAction,
+} from "./commons-sim-grant.test-fixtures.js";
 import type {
   Decision,
   Grant,
@@ -64,18 +72,25 @@ export const ACTION_WEIGHTS = {
   stale_restore: 3,
 } as const;
 
-type ActionName = keyof typeof ACTION_WEIGHTS;
+type CommonsActionName = keyof typeof ACTION_WEIGHTS;
 
-const ACTION_NAMES = Object.keys(ACTION_WEIGHTS) as ActionName[];
-const TOTAL_WEIGHT = ACTION_NAMES.reduce(
-  (sum, name) => sum + ACTION_WEIGHTS[name],
-  0
-);
+type ActionName = CommonsActionName | GrantActionName;
 
-function pickAction(rng: Rng): ActionName {
-  let ticket = rng.int(TOTAL_WEIGHT);
-  for (const name of ACTION_NAMES) {
-    ticket -= ACTION_WEIGHTS[name];
+type Weights = Partial<Record<ActionName, number>>;
+
+/** The #839 grant verbs ride the same picker, appended so a program WITHOUT
+ *  the plane draws the exact #731 schedule its seed always drew. */
+const PLANE_WEIGHTS: Weights = { ...ACTION_WEIGHTS, ...GRANT_ACTION_WEIGHTS };
+
+function isGrantAction(name: ActionName): name is GrantActionName {
+  return name in GRANT_ACTION_WEIGHTS;
+}
+
+function pickAction(rng: Rng, weights: Weights): ActionName {
+  const names = Object.keys(weights) as ActionName[];
+  let ticket = rng.int(names.reduce((sum, name) => sum + weights[name]!, 0));
+  for (const name of names) {
+    ticket -= weights[name]!;
     if (ticket < 0) return name;
   }
   return "member_pull";
@@ -290,10 +305,9 @@ function restoreSteward(world: World, grant: Grant): void {
   world.trace.push(`#${world.step} steward_restored ${grant.key}`);
 }
 
-function runAction(world: World, rng: Rng, name: ActionName): void {
+function runAction(world: World, rng: Rng, name: CommonsActionName): void {
   const grant = rng.pick(world.grants);
   if (!grant) return;
-  world.stats[name] = (world.stats[name] ?? 0) + 1;
   switch (name) {
     case "member_intent": {
       const actor = rng.pick(grant.cast);
@@ -389,6 +403,7 @@ function retryParked(world: World): void {
 function quiesce(world: World): void {
   for (const grant of world.grants)
     if (grant.awayFor > 0) restoreSteward(world, grant);
+  if (world.plane) quiesceGrantPlane(world);
   retryParked(world);
   for (const grant of world.grants)
     compileCommons({
@@ -556,6 +571,7 @@ function checkInvariants(world: World): void {
   }
   checkIntentsSettled(world);
   checkNonVacuous(world);
+  if (world.plane) checkGrantInvariants(world);
 }
 
 /** Run one seeded program end to end. Never throws for a domain failure — the
@@ -565,6 +581,10 @@ export function runCommonsSimulation(options: SimOptions): SimReport {
   const rng = rngFor(options.seed);
   const world = createWorld(options);
   try {
+    // Two albums per ordered steward pair: four slots over two stewards, so
+    // one grant can end standing and another severed in the same program.
+    if (options.grantPlane === true) buildPlaneFor(world, 2);
+    const weights = world.plane ? PLANE_WEIGHTS : ACTION_WEIGHTS;
     for (let step = 0; step < options.actions; step += 1) {
       world.step = step;
       for (const grant of world.grants)
@@ -572,9 +592,11 @@ export function runCommonsSimulation(options: SimOptions): SimReport {
           grant.awayFor -= 1;
           if (grant.awayFor === 0) restoreSteward(world, grant);
         }
-      const name = pickAction(rng);
+      const name = pickAction(rng, weights);
+      world.stats[name] = (world.stats[name] ?? 0) + 1;
       try {
-        runAction(world, rng, name);
+        if (isGrantAction(name)) runGrantAction(world, rng, name);
+        else runAction(world, rng, name);
       } catch (error) {
         // A throw is data, not control flow: the schedule keeps running so the
         // trace shows what the vault did next, and the report names the step.
@@ -594,6 +616,7 @@ export function runCommonsSimulation(options: SimOptions): SimReport {
     seed: options.seed,
     trace: world.trace,
     failures: world.failures,
+    pinned: world.pinned,
     stats: world.stats,
   };
 }

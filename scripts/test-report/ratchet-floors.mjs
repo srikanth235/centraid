@@ -58,6 +58,13 @@ export const PERF_BUDGET_SOURCES = [
   { path: "tests/experience-budgets/desktop.json" },
   { path: "tests/experience-budgets/mobile.json" },
   { path: "tests/experience-budgets/gateway.json" },
+  // #842 W3.5 — the renderer-leak ceilings. Same tighten-only posture as every
+  // budget above: a ceiling may drop freely, and widening one must be a
+  // reviewed edit. These are load-bearing in a way a perf number is not — the
+  // lane's whole argument is that each ceiling sits strictly BELOW the cycle
+  // count, so a per-cycle residue cannot hide under it. Widening one past the
+  // cycle count silently converts a leak detector into a leak tolerator.
+  { path: "apps/web/tests/e2e/leak-budgets.ts", exportName: "leakBudgets" },
 ];
 
 /**
