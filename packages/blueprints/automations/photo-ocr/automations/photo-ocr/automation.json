@@ -16,9 +16,18 @@
     "purpose": "dpv:ServiceProvision",
     "why": "Reads photograph previews and derivation stamps, then writes validated searchable text.",
     "scopes": [
-      { "schema": "media", "verbs": "read" },
-      { "schema": "core", "verbs": "read+act" },
-      { "schema": "enrich", "verbs": "read" }
+      {
+        "schema": "media",
+        "verbs": "read"
+      },
+      {
+        "schema": "core",
+        "verbs": "read+act"
+      },
+      {
+        "schema": "enrich",
+        "verbs": "read"
+      }
     ]
   },
   "enrich": {
@@ -32,6 +41,16 @@
       "consequence": "Changing variant re-derives eligible photographs; delegate steps are billed."
     }
   },
-  "history": { "keep": { "count": 100 } },
-  "generated": { "by": "centraid-template", "at": "2026-08-10T00:00:00.000Z" }
+  "sandbox": {
+    "lane": "model-runtime"
+  },
+  "history": {
+    "keep": {
+      "count": 100
+    }
+  },
+  "generated": {
+    "by": "centraid-template",
+    "at": "2026-08-10T00:00:00.000Z"
+  }
 }

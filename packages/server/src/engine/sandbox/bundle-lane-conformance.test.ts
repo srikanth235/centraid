@@ -37,6 +37,7 @@ import { describe, expect, test } from "vitest";
 import {
   automationHandlerPolicy,
   builtinDecision,
+  mediaTranscodePolicy,
   modelRuntimePolicy,
 } from "./policy.ts";
 
@@ -59,6 +60,8 @@ const SHELLS_OUT = new Set(["transcript"]);
 interface Bundle {
   readonly id: string;
   readonly builtins: readonly string[];
+  /** `manifest.sandbox.lane`, or undefined for the strict floor. */
+  readonly declared: "model-runtime" | "media-transcode" | undefined;
 }
 
 /**
@@ -93,7 +96,25 @@ function bundles(): Bundle[] {
           )
         ),
       ].sort();
-      return [{ id, builtins }];
+      let declared: Bundle["declared"];
+      try {
+        const manifest = JSON.parse(
+          readFileSync(
+            path.join(
+              AUTOMATIONS_DIR,
+              id,
+              "automations",
+              id,
+              "automation.json"
+            ),
+            "utf8"
+          )
+        ) as { sandbox?: { lane?: Bundle["declared"] } };
+        declared = manifest.sandbox?.lane;
+      } catch {
+        declared = undefined;
+      }
+      return [{ id, builtins, declared }];
     });
 }
 
@@ -107,6 +128,17 @@ function refusals(
   return bundle.builtins.filter(
     (id) => builtinDecision(policy, id).kind === "deny"
   );
+}
+
+/** The policy a bundle actually runs under, given what its manifest declares. */
+function declaredPolicy(
+  bundle: Bundle
+): ReturnType<typeof automationHandlerPolicy> {
+  if (bundle.declared === "model-runtime")
+    return modelRuntimePolicy(["/roots"]);
+  if (bundle.declared === "media-transcode")
+    return mediaTranscodePolicy(["/roots"]);
+  return automationHandlerPolicy();
 }
 
 describe("shipped automation bundles against the sandbox lanes", () => {
@@ -138,7 +170,9 @@ describe("shipped automation bundles against the sandbox lanes", () => {
     expect(blocked).toStrictEqual([]);
   });
 
-  test("every ONNX recognition bundle is admitted by the model-runtime lane", () => {
+  test("every ONNX recognition bundle declares, and is admitted by, the model-runtime lane", () => {
+    for (const bundle of ALL.filter((entry) => RECOGNITION.has(entry.id)))
+      expect(bundle.declared).toBe("model-runtime");
     const policy = modelRuntimePolicy(["/models"]);
     const blocked = ALL.filter((bundle) => RECOGNITION.has(bundle.id))
       .map((bundle) => ({ id: bundle.id, denied: refusals(bundle, policy) }))
@@ -150,20 +184,60 @@ describe("shipped automation bundles against the sandbox lanes", () => {
       expect(bundle.builtins).toContain("fs");
   });
 
-  test("transcript is the ONE bundle no lane admits, and the reason is ffmpeg", () => {
+  test("every bundle is admitted by the lane its own manifest declares", () => {
+    /*
+     * The load-bearing one (#846 P9). Since the automation worker installs the
+     * strict floor for a handler whose manifest declares nothing, a bundle that
+     * grows a `node:fs` import without declaring `model-runtime` stops working
+     * at RUN time, in production, on the first fire. This is that failure moved
+     * to commit time, and it is checked against the built artifact rather than
+     * the source, because the artifact is what the loader hook rules on.
+     */
+    const blocked = ALL.map((bundle) => ({
+      id: bundle.id,
+      declared: bundle.declared ?? "automation-handler (floor)",
+      denied: refusals(bundle, declaredPolicy(bundle)),
+    })).filter((entry) => entry.denied.length > 0);
+    expect(blocked).toStrictEqual([]);
+  });
+
+  test("no bundle declares a lane wider than it needs", () => {
+    // The grants are holes — an unneeded one is a hole for nothing. A bundle
+    // that would run under the floor must not ask for a filesystem, and one
+    // that would run under `model-runtime` must not ask for a subprocess.
+    const overreaching = ALL.filter(
+      (bundle) =>
+        bundle.declared !== undefined &&
+        refusals(bundle, automationHandlerPolicy()).length === 0
+    ).map((bundle) => bundle.id);
+    expect(overreaching).toStrictEqual([]);
+
+    const needlessSubprocess = ALL.filter(
+      (bundle) =>
+        bundle.declared === "media-transcode" &&
+        refusals(bundle, modelRuntimePolicy(["/roots"])).length === 0
+    ).map((bundle) => bundle.id);
+    expect(needlessSubprocess).toStrictEqual([]);
+  });
+
+  test("transcript is the ONE bundle that needs a subprocess, and it declares it", () => {
     // Asserted rather than tolerated: the day a second bundle shells out, or
     // the day this one stops, that is a deliberate change to how much of the
     // automation plane can be sandboxed and it should be visible here.
-    const stillBlocked = ALL.filter(
+    const needsSubprocess = ALL.filter(
       (bundle) =>
         refusals(bundle, automationHandlerPolicy()).length > 0 &&
         refusals(bundle, modelRuntimePolicy(["/models"])).length > 0
     ).map((bundle) => bundle.id);
-    expect(stillBlocked).toStrictEqual(["transcript"]);
+    expect(needsSubprocess).toStrictEqual(["transcript"]);
 
     const transcript = ALL.find((bundle) => bundle.id === "transcript")!;
     expect(refusals(transcript, modelRuntimePolicy(["/models"]))).toStrictEqual(
       ["child_process"]
     );
+    expect(transcript.declared).toBe("media-transcode");
+    expect(
+      refusals(transcript, mediaTranscodePolicy(["/models"]))
+    ).toStrictEqual([]);
   });
 });

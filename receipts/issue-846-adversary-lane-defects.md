@@ -8,8 +8,7 @@ and [#842](https://github.com/srikanth235/centraid/issues/842) surfaced. None
 is a regression introduced by that work: they are pre-existing behaviours the
 new lanes were built to *find*.
 
-This receipt covers **Part 1 — pinned defects**. Nine of the ten are fixed
-here, and the tenth's named prerequisite is cleared. Per the issue's working agreement and ruling **A-pinned**
+This receipt covers **Part 1 — pinned defects**. **All ten are fixed here.** Per the issue's working agreement and ruling **A-pinned**
 ([docs/decisions.md](../docs/decisions.md)), fixing a Part 1 item means
 **deleting its pin in the same change** — a pin that survives its fix is a lie
 in the other direction. Every deleted pin left a regression lock in its place,
@@ -24,7 +23,7 @@ which is what the pin existed to buy.
 - [x] P1 — the owner is told a share is gone when it is not
 - [x] P2 — the DST fall-back fired the repeated wall minute twice
 - [x] P10 — three transport-boundary responses shipped without `nosniff`
-- [x] P9 — the ONNX resolver stops needing `createRequire`
+- [x] P9 — an automation worker with no lane was not sandboxed
 - [x] The record moved with the code
 
 One commit, not one per defect: `commit-issue-receipt-match` requires every
@@ -42,16 +41,12 @@ boundaries would otherwise have carried.
 | P6 bare peer-plane prefix admitted by a separator | **Fixed** — both languages |
 | P7 lone surrogate admitted JS-side | **Fixed** — representability rule |
 | P8 diagnostics bundle emits the vault name verbatim | **Fixed** — one bundle |
-| P9 unsandboxed automation worker | **Prerequisite cleared**; default flip still owed, see below |
+| P9 unsandboxed automation worker | **Fixed** — the floor is unconditional |
 | P10 three responses without `nosniff` | **Fixed** — one transport-boundary writer |
 
-**P9's pin is narrowed, not deleted.** Its named prerequisite — the ONNX
-resolver's dependency on `createRequire` — is cleared here, and the consequence
-is proved against the shipped bundles. The default itself does not flip: see the
-P9 section below and [Out of scope](#out-of-scope) for the two decisions and the
-one dynamic proof still owed. Parts 2 (posture decisions), 3 (observations) and
-4 (blocked on an external actor) are untouched — a maintainer decision and an
-external actor are not things a PR supplies. The `desktop-e2e` assistant-open
+Parts 2 (posture decisions), 3 (observations) and 4 (blocked on an external
+actor) are untouched — a maintainer decision and an external actor are not
+things a PR supplies. The `desktop-e2e` assistant-open
 budget reported as P11 in the issue comments belongs to
 [#789](https://github.com/srikanth235/centraid/issues/789)'s owner: it is red on
 the base branch, and raising someone else's perf budget to go green is the move
@@ -270,10 +265,7 @@ This is the item the umbrella lists as already filed as
 [#844](https://github.com/srikanth235/centraid/issues/844). It is fixed here
 because it is a Part 1 defect on this issue and the fix is four lines.
 
-### P9 — the ONNX resolver stops needing `createRequire`
-
-**The named prerequisite is done. The default flip is not, and that is stated
-rather than implied.**
+### P9 — an automation worker with no lane was not sandboxed
 
 `packages/model-runtime/src/onnx.ts` resolved `runtime/node_modules` through
 `node:module`'s `createRequire`. Every sandbox lane refuses `node:module`, and
@@ -309,34 +301,40 @@ the worker actually executes rather than the source they came from:
   `child_process` (it shells out to ffmpeg). Asserted, so the day a second
   bundle shells out it is visible.
 
-What is **still owed** before the default can flip, both decisions rather than
-obstructions, and both recorded in the narrowed pin:
+**The default is flipped.** `automation/worker/runner.ts` now installs a
+sandbox unconditionally: a request naming no lane gets the strict
+`automation-handler` floor — no filesystem, no sockets, no subprocess, no
+native addons, empty environment — where it used to get *nothing*. There is no
+no-sandbox path left in the plane.
 
-1. `transcript`'s ffmpeg call. Admitting `child_process` into the
-   `model-runtime` lane would trade the whole subprocess denial for one
-   capability — the "never weaken policy to go green" line. Moving ffmpeg out of
-   the handler is the other direction, and it is a product call.
-2. Nothing in production chooses a lane per handler: `sandboxLane` is set only
-   by tests. Flipping the default means deciding where that choice lives (the
-   automation manifest is the obvious home) **and** proving the native ONNX load
-   still works inside the lane on a machine where
-   `bun run --cwd packages/model-runtime setup` has run. A static builtin
-   conformance proof is not that, and this container has no installed runtime to
-   produce the dynamic one.
+A handler that needs more asks for it where the ask is reviewable: a new
+`sandbox.lane` block in `automation.json`, validated like every other manifest
+field and **fail-closed** — absent reads as the floor, and an unknown lane is a
+hard error rather than a silent fallback in either direction. `fire.ts` derives
+the read roots the same way the bundled handler derives its own `RUNTIME_DIR`
+(`<handler dir>/../runtime`, or the `CENTRAID_AUTOMATION_RUNTIME_DIR`
+override), so `packages/server` gains no dependency on the recognition package.
 
-An independent fresh-context audit of this branch refuted the first draft of
-that resolution and was right to: `resolveFileTarget`'s directory test was a
-*content* heuristic ("does it hold a package.json or an index.js?") standing in
-for a stat, so a `main` naming a directory with neither was returned **as the
-entry file** — a directory handed to `import()`, with the valid `index.js`
-fallback beside it skipped, and an actionable `RuntimeNotInstalledError` turned
-into a confusing import failure. It is a `statSync().isDirectory()` now, a
-directory resolves through its own `package.json` before its `index.js`, and an
-extensionless `main` gets CommonJS's extension search. All three are tested, and
-the first is demonstrated red against the heuristic.
+The five bundles that need more declare it: `model-runtime` for the four ONNX
+ones, and **`media-transcode`** — a new lane — for `transcript`. That lane is
+`model-runtime` plus a subprocess grant, kept SEPARATE rather than added to
+`modelRuntimePolicy`, for the same reason `appSeedPolicy` is separate from
+`appHandlerPolicy`: widening a lane to fit one tenant widens it for every other
+tenant, and four ONNX bundles run under `model-runtime` that have no business
+spawning anything. Its header names the hole plainly — a spawned child is not
+in the sandbox, so nothing constrains it — and records that retiring the lane
+means moving media decoding out of the handler, not widening it further.
 
-The pin is therefore **narrowed, not deleted** — it now names what actually
-remains instead of a blocker that is gone.
+Two conformance assertions keep the declarations honest, both against the built
+artifact rather than the source, because the artifact is what the loader hook
+rules on:
+
+- **every bundle is admitted by the lane its own manifest declares.** This is
+  the load-bearing one: a bundle that grows a `node:fs` import without
+  declaring `model-runtime` would now stop working at RUN time, on the first
+  fire, in production. This moves that failure to commit time.
+- **no bundle declares a lane wider than it needs.** The grants are holes, and
+  an unneeded one is a hole for nothing.
 
 ### The record moved with the code
 
@@ -348,15 +346,6 @@ diagnostics-redaction row, `TESTING.md`'s fuzz-register paragraph,
 [Docs](#docs) below.
 
 ## Out of scope
-
-**P9's default flip** — the *prerequisite* is done above; what is left is the
-two decisions named there (ffmpeg in `transcript`, and where a per-handler lane
-choice lives), plus a dynamic proof that the native ONNX load survives inside
-the lane. That proof needs a machine where
-`bun run --cwd packages/model-runtime setup` has run; this container has no
-installed runtime, and flipping a security default on a static proof alone would
-ship a change that could break every recognition automation, verified by
-nothing. The pin is narrowed to say exactly that rather than deleted.
 
 **P11 — the `desktop-e2e` assistant-open budget.** Reported in the issue's
 comment thread, and it belongs to [#789](https://github.com/srikanth235/centraid/issues/789)'s
@@ -443,6 +432,29 @@ runner, and three external security engagements. None is a code change.
   would have been the cheaper edit and the wrong one.
 - **P7: Rust won.** "Mirrored byte-for-byte" is the contract, and a guard that
   rewrites its own input before judging it has judged a different string.
+- **P9: a separate `media-transcode` lane, not `child_process` added to
+  `model-runtime`.** Widening the lane to fit `transcript` would have widened
+  it for the four ONNX bundles that have no business spawning anything —
+  "never weaken policy to go green" applies to a lane as much as to a budget.
+  The separate-lane shape is the repo's own precedent (`appSeedPolicy` beside
+  `appHandlerPolicy`).
+- **P9: the lane is declared in the manifest, not inferred from the handler.**
+  Inferring it (say, from the presence of an `enrich` block, or by scanning
+  imports at fire time) would make a security grant a derived property that
+  nobody reviews. A manifest field is the ask made explicit, and it validates
+  fail-closed both ways: absent is the floor, unknown is an error.
+- **P9: read roots are derived, not imported.** `fire.ts` reproduces the same
+  `<handler dir>/../runtime` path the bundled handler resolves rather than
+  importing `RUNTIME_DIR`, because `packages/server` does not depend on
+  `@centraid/model-runtime` and should not start.
+- **P9: the ONNX lanes' runtime behaviour is not proved here.** The 544
+  automation tests that fire handlers through the worker prove the floor
+  dynamically. The native ONNX load inside `model-runtime` is proved
+  statically (builtin admissibility) and by the recognition lane on a machine
+  where `bun run --cwd packages/model-runtime setup` has run; this container
+  has no installed runtime. The failure mode if a lane is too narrow is a loud,
+  specific refusal naming the builtin — not a silent escape — and the
+  conformance test is what stops that reaching a release.
 - **One commit rather than one per defect.** `commit-issue-receipt-match`
   requires every commit to touch this receipt, and the receipt is one account of
   one umbrella slice.
@@ -464,7 +476,7 @@ Every fix is demonstrated red on the pre-fix engine, not merely green after it.
 | P6–P7 | the four golden vectors and the three surrogate targets the pins asserted | refused by all three implementations and by the Rust unit test |
 | P8 | the canary pin asserted the vault name was present | absent, with the tripwire counting nothing |
 | P10 | all three transport-boundary responses answered `null` for the header | all three answer `nosniff` |
-| P9 | *(prerequisite, not a defect assertion)* | `node:module` absent from every shipped bundle; 4/5 recognition bundles lane-admissible |
+| P9 | the characterisation pin asserted an unsandboxed worker reads `/etc/hostname`, spawns, and reads env | the same worker is refused at graph load; 544 automation tests fire handlers through the sandbox |
 
 Suites: `packages/vault` 181 files / 1384 tests green; `packages/server` 378 of
 380 files green; `packages/tunnel` green; `packages/backup` green;
@@ -546,6 +558,11 @@ bun run --cwd packages/server test -- src/engine/http/http-server.test.ts -t nos
 bun run --cwd packages/model-runtime test -- src/onnx.test.ts
 #   → "falls back past a main naming a directory that holds no entry" fails:
 #     a DIRECTORY is returned as the entry file.
+
+# P9 — delete the `sandbox` block from photo-ocr's automation.json:
+bun run --cwd packages/server test -- src/engine/sandbox/bundle-lane-conformance.test.ts
+#   → "every bundle is admitted by the lane its own manifest declares" fails
+#     with photo-ocr denied `fs` — the production failure, at commit time.
 ```
 
 ## Files changed
@@ -606,7 +623,27 @@ Tests and fixtures:
 - `packages/server/src/engine/sandbox/bundle-lane-conformance.test.ts` — P9,
   new: which lane every shipped bundle could run under.
 - `packages/server/src/engine/sandbox/sandbox-escape.test.ts` — P9, the
-  characterisation pin narrowed to what actually remains.
+  characterisation pin **deleted**, replaced by the refusal assertions it
+  always promised (reads outside every root, subprocesses, and the
+  environment, all with no lane requested).
+- `packages/server/src/engine/sandbox/policy.ts` — P9, the `media-transcode`
+  lane and the widened `subprocess` field.
+- `packages/server/src/engine/sandbox/boot.ts`,
+  `packages/server/src/engine/sandbox/index.ts` — P9, the new lane across the
+  worker's load seam.
+- `packages/server/src/automation/worker/runner.ts` — P9, the sandbox is
+  installed unconditionally.
+- `packages/server/src/automation/handler/runner.ts`,
+  `packages/server/src/automation/fire/fire.ts` — P9, manifest lane and read
+  roots threaded to the worker.
+- `packages/server/src/automation/manifest/manifest.ts` — P9, the `sandbox`
+  block and its fail-closed validation.
+- P9, lanes declared by the five bundles that need more than the floor:
+  `packages/blueprints/automations/photo-ocr/automations/photo-ocr/automation.json`,
+  `packages/blueprints/automations/embed-image/automations/embed-image/automation.json`,
+  `packages/blueprints/automations/embed-text/automations/embed-text/automation.json`,
+  `packages/blueprints/automations/faces/automations/faces/automation.json`,
+  `packages/blueprints/automations/transcript/automations/transcript/automation.json`.
 
 Docs: `docs/decisions.md`, `docs/cron-timezone.md`, `SECURITY.md`, `TESTING.md`,
 `CHANGELOG.md`, and this receipt.

@@ -138,6 +138,14 @@ export interface RunHandlerOptions {
   automationDir: string;
   /** Absolute path to the generated `handler.js`. */
   handlerFile: string;
+  /**
+   * Containment lane from the automation's manifest (#846 P9). Absent is the
+   * strict `automation-handler` floor, which is what the worker installs when
+   * this is not set — never "no sandbox".
+   */
+  sandboxLane?: "model-runtime" | "media-transcode";
+  /** Absolute read roots for the two filesystem-granting lanes. */
+  sandboxReadRoots?: readonly string[];
   runId: string;
   /** ISO fire-start instant fixed by the caller; defaults to handler admission time. */
   now?: string;
@@ -788,6 +796,10 @@ export async function runHandler(
     args: { automation: { id: opts.automationId } },
     now: new Date(startedAt).toISOString(),
     input: opts.input,
+    ...(opts.sandboxLane ? { sandboxLane: opts.sandboxLane } : {}),
+    ...(opts.sandboxReadRoots
+      ? { sandboxReadRoots: [...opts.sandboxReadRoots] }
+      : {}),
   };
 
   let timeoutHandle: NodeJS.Timeout | undefined;

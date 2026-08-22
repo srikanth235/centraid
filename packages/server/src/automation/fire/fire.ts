@@ -21,6 +21,7 @@
  */
 
 import { randomUUID } from "node:crypto";
+import path from "node:path";
 
 import {
   ConversationStore,
@@ -272,6 +273,36 @@ export interface RunRecord {
  * and returns the run record + handler outcome. A missing automation app
  * throws; a handler failure surfaces in `outcome.ok === false`.
  */
+/**
+ * Manifest lane → the worker's sandbox request (#846 P9).
+ *
+ * An absent block is an absent request, which the worker reads as the strict
+ * `automation-handler` floor — never as "no sandbox". Only the two lanes that
+ * grant a filesystem need roots, and they are derived the same way the bundled
+ * handler derives its own `RUNTIME_DIR`: `<handler dir>/../runtime`, or the
+ * `CENTRAID_AUTOMATION_RUNTIME_DIR` override. Deriving rather than importing
+ * `@centraid/model-runtime` keeps `packages/server` free of a dependency on
+ * the recognition package; `enricher-templates.test.ts` is where the two
+ * spellings are checked against each other.
+ */
+function sandboxRequest(
+  sandbox: { lane: "model-runtime" | "media-transcode" } | undefined,
+  automationDir: string
+): {
+  sandboxLane?: "model-runtime" | "media-transcode";
+  sandboxReadRoots?: string[];
+} {
+  if (!sandbox) return {};
+  const override = process.env.CENTRAID_AUTOMATION_RUNTIME_DIR;
+  const roots = [
+    // The app directory: the handler's own bundle, its assets, and the
+    // sibling `runtime/` the recognition bundles resolve weights from.
+    path.resolve(automationDir, ".."),
+    ...(override ? [path.resolve(override)] : []),
+  ];
+  return { sandboxLane: sandbox.lane, sandboxReadRoots: roots };
+}
+
 export async function runFire(
   opts: RunFireOptions,
   deps: { openDispatch: OpenDispatch }
@@ -673,6 +704,7 @@ export async function runFire(
       automationName: row.name,
       automationDir: row.dir,
       handlerFile: handlerPath(row.dir),
+      ...sandboxRequest(row.manifest.sandbox, row.dir),
       runId,
       now: new Date(startedAt).toISOString(),
       delegateDispatcher,

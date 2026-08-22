@@ -85,6 +85,28 @@ export interface ManifestRequires {
  * tier for `domain` and refuses the fire when the tier does not allow this
  * enricher's lane.
  */
+/**
+ * The containment lane this automation's handler runs under (#846 P9).
+ *
+ * A DECLARATION, and one that only ever asks for MORE than the floor: the
+ * floor is `automation-handler` (no filesystem, no sockets, no subprocess, no
+ * native addons, empty environment) and an absent block reads as exactly that.
+ * Fail-closed on purpose, the same reasoning `enrich.lane` states — a manifest
+ * is harness-writable, so an omitted lane must never be the permissive one.
+ *
+ * Before this existed there was no way for a handler to say it needed more, so
+ * the automation plane simply ran every handler with no sandbox at all.
+ */
+export interface ManifestSandbox {
+  /**
+   * `model-runtime` — read-confined filesystem plus native addons, for the
+   * ONNX-backed recognition bundles.
+   * `media-transcode` — the same plus a subprocess grant, for a handler that
+   * decodes media by shelling out. See policy.ts for why each is a named hole.
+   */
+  readonly lane: "model-runtime" | "media-transcode";
+}
+
 export interface ManifestEnrich {
   /** Which `enrich_policy` row governs this automation. */
   readonly domain: EnrichDomain;
@@ -521,6 +543,11 @@ export interface Manifest {
    * tier. Present = every fire passes the tier gate in `runFire`.
    */
   readonly enrich?: ManifestEnrich;
+  /**
+   * Containment lane for this automation's handler. Absent = the strict
+   * `automation-handler` floor; see {@link ManifestSandbox}.
+   */
+  readonly sandbox?: ManifestSandbox;
   /** App ids this automation is associated with. */
   readonly apps?: readonly string[];
   readonly costEstimate?: CostEstimate;
@@ -1241,6 +1268,33 @@ function validateVault(raw: unknown): ManifestVault | undefined {
  * to the EXPENSIVE reading (`gateway`) — a manifest is harness-writable, so an
  * omitted lane must never be the one that escapes the gate.
  */
+/**
+ * The `sandbox` block. Absent is the strict floor, so this only ever validates
+ * a request for MORE — which is why an unknown lane is a hard error rather
+ * than a fallback: silently reading a typo as the floor would break a handler
+ * that genuinely needs the grant, and silently reading it as a grant would
+ * hand out one nobody named.
+ */
+function validateSandbox(raw: unknown): ManifestSandbox | undefined {
+  if (raw === undefined) return undefined;
+  if (raw === null || typeof raw !== "object" || Array.isArray(raw)) {
+    throw new ManifestError(
+      "invalid_field",
+      "manifest.sandbox must be an object",
+      "sandbox"
+    );
+  }
+  const lane = (raw as Record<string, unknown>).lane;
+  if (lane !== "model-runtime" && lane !== "media-transcode") {
+    throw new ManifestError(
+      "invalid_field",
+      "manifest.sandbox.lane must be one of model-runtime, media-transcode",
+      "sandbox.lane"
+    );
+  }
+  return { lane };
+}
+
 function validateEnrich(raw: unknown): ManifestEnrich | undefined {
   if (raw === undefined) return undefined;
   if (raw === null || typeof raw !== "object" || Array.isArray(raw)) {
@@ -1416,6 +1470,7 @@ export function validateManifest(raw: unknown): Manifest {
   const connections = validateConnectionBindings(r.connections);
   const vault = validateVault(r.vault);
   const enrich = validateEnrich(r.enrich);
+  const sandbox = validateSandbox(r.sandbox);
   // A connector's whole job is writing staged rows into the vault — a
   // connector manifest without a vault block can never do anything.
   if (connector && !vault) {
@@ -1493,6 +1548,7 @@ export function validateManifest(raw: unknown): Manifest {
     ...(connections === undefined ? {} : { connections }),
     ...(vault ? { vault } : {}),
     ...(enrich ? { enrich } : {}),
+    ...(sandbox ? { sandbox } : {}),
     ...(apps ? { apps } : {}),
     ...(costEstimate ? { costEstimate } : {}),
     ...(outputSchema ? { outputSchema } : {}),

@@ -471,60 +471,77 @@ describe("automation lane: model-runtime read confinement", () => {
   });
 });
 
-describe("CHARACTERIZATION: an automation worker with no parent-chosen lane", () => {
+describe("an automation worker given no lane gets the strict floor", () => {
   /*
-   * NOT an assertion that this is correct. This pins the reach that remains
-   * when `automation/worker/runner.ts` is handed no `sandboxLane`, which is
-   * still today's default — `sandboxLane` has no production caller at all.
+   * This replaces the CHARACTERIZATION block that stood here (#846 P9).
    *
-   * This contradicts SECURITY.md's "app handlers are consent-scoped" framing
-   * for the automation plane specifically: consent scopes the ctx rails, and
-   * an unsandboxed handler does not have to use them.
+   * That block pinned what an automation worker could still reach when
+   * `automation/worker/runner.ts` was handed no `sandboxLane`: the filesystem
+   * outside any root, subprocesses, and the environment. It was today's
+   * default and it contradicted SECURITY.md's "app handlers are
+   * consent-scoped" framing for the automation plane — consent scopes the
+   * `ctx` rails, and an unsandboxed handler does not have to use them.
    *
-   * WHAT CHANGED, and what has not (#846 P9). The blocker this pin used to
-   * name is gone: the recognition bundles resolved `runtime/node_modules`
-   * through `node:module`'s `createRequire`, a builtin every lane here refuses
-   * because it resolves through Node's own loader and skips these hooks
-   * entirely. `packages/model-runtime/src/onnx.ts` now does its own entry
-   * resolution, and `bundle-lane-conformance.test.ts` proves the consequence
-   * against the bundles the product actually executes: every non-recognition
-   * bundle is admitted by the `automation-handler` lane, and all four ONNX
-   * recognition bundles by the `model-runtime` lane.
+   * The reason it stood was one builtin. The ONNX recognition bundles resolved
+   * `runtime/node_modules` through `node:module`'s `createRequire`, which every
+   * lane refuses (correctly — a `createRequire` in the graph resolves through
+   * Node's own loader and skips these hooks), so no recognition automation
+   * could run under any lane and the plane ran everything under none.
+   * `packages/model-runtime/src/onnx.ts` no longer needs it, so the floor now
+   * applies to every handler and one that needs more asks for it in its
+   * manifest, where the ask is reviewable.
    *
-   * Two things still stand between that and flipping the default, and both are
-   * decisions rather than oversights:
-   *
-   *   1. `transcript` shells out to ffmpeg through `node:child_process`, which
-   *      the `model-runtime` lane refuses. Widening the lane to admit it would
-   *      trade the whole subprocess denial for one capability; moving ffmpeg
-   *      out of the handler is the other direction. That is a product call.
-   *   2. Nothing in production chooses a lane per handler — `sandboxLane` is
-   *      set only by tests. Flipping the default means deciding where that
-   *      choice lives (the automation manifest is the obvious home) and
-   *      proving the native ONNX load still works INSIDE the lane on a machine
-   *      where `bun run --cwd packages/model-runtime setup` has run. A static
-   *      builtin conformance proof is not that.
-   *
-   * Do not delete this test to make the gap go away — delete it when the
-   * default flips, and replace it with the refusal assertions above.
+   * Deleting the pin without these assertions would have erased the record.
+   * These are the refusal assertions it promised in its place.
    */
-  test("still reaches the filesystem, subprocesses and the environment", async () => {
+  test("reads outside every root are refused with no lane requested", async () => {
     const file = await handler(
-      "unsandboxed.mjs",
+      "floor-fs.mjs",
       `import { readFileSync } from "node:fs";
-       import { execSync } from "node:child_process";
-       export default async () => ({
-         readOutsideAnyRoot: typeof readFileSync("/etc/hostname", "utf8") === "string",
-         spawnedSubprocess: execSync("echo ok").toString().trim() === "ok",
+       export default async () => {
+         try { return { leaked: readFileSync("/etc/hostname", "utf8") }; }
+         catch (error) { return { denied: error.code ?? error.message }; }
+       };`
+    );
+    // No sandboxLane, which is exactly the shape the pin characterised.
+    const result = await runAutomationHandler(file);
+    // Stronger than a caught error: the floor has no filesystem grant at all,
+    // so the STATIC `node:fs` import is refused while the module graph loads
+    // and the handler body never runs. Nothing is leaked because nothing ran.
+    expect(result.ok).toBe(false);
+    expect(result.value).toBeUndefined();
+    expect(String(result.error)).toMatch(/filesystem grant|node:fs/u);
+  });
+
+  test("subprocesses are refused with no lane requested", async () => {
+    const file = await handler(
+      "floor-spawn.mjs",
+      `export default async () => {
+         try {
+           const { execSync } = await import("node:child_process");
+           return { spawned: execSync("echo ok").toString().trim() };
+         } catch (error) { return { denied: error.code ?? error.message }; }
+       };`
+    );
+    const result = await runAutomationHandler(file);
+    const value = result.value as { spawned?: string; denied?: string };
+    expect(value.spawned).toBeUndefined();
+    expect(value.denied).toBeDefined();
+  });
+
+  test("the environment is empty with no lane requested", async () => {
+    const file = await handler(
+      "floor-env.mjs",
+      `export default async () => ({
          readEnvSecret: process.env.${CANARY_ENV} === ${JSON.stringify(CANARY_VALUE)},
+         envKeys: Object.keys(process.env).length,
        });`
     );
     const result = await runAutomationHandler(file);
     expect(result.ok).toBe(true);
     expect(result.value).toStrictEqual({
-      readOutsideAnyRoot: true,
-      spawnedSubprocess: true,
-      readEnvSecret: true,
+      readEnvSecret: false,
+      envKeys: 0,
     });
   });
 });
