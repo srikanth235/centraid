@@ -3297,6 +3297,17 @@
       "flow": "commons-grant-plane-simulation",
       "seats": ["origin", "custodian", "viewer"],
       "statement": "Grant create / fulfil / origin-edit operations interleaved with commons traffic on one seeded schedule still converge to one domain state."
+    },
+    {
+      "id": "sim-revocation-severance",
+      "label": "Revocation severs a grant the host lost reach for",
+      "kind": "simulation",
+      "lane": "per-pr",
+      "owner": "packages/vault/src/share/commons-sim.test.ts",
+      "testName": "a revocation severs a grant the host lost reach for mid-life",
+      "flow": "commons-grant-plane-simulation",
+      "seats": ["origin", "custodian", "viewer"],
+      "statement": "A grant whose delivered fulfillment degraded to syncing because the host lost reach is still severed by a revocation, rather than settled as removed while the audience keeps the projection."
     }
   ],
   "journeys": {

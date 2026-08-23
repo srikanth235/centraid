@@ -261,17 +261,28 @@ export function parseWalSegmentKey(key: string): WalSegmentAddress | null {
   return addr.endOffset > addr.startOffset ? addr : null;
 }
 
-/** Parse a group-closer key. Returns null for keys that are not closers. */
+/**
+ * Parse a group-closer key. Returns null for keys that are not closers.
+ *
+ * `CLOSER_KEY_RE` alone admits `closed-000000000000`, which `walGroupCloserKey`
+ * then refuses to re-emit (`assertValidCloser` requires a positive end offset —
+ * a group closed at offset 0 closes nothing). The two halves of the codec must
+ * agree on what a legal closer is, so the positivity check lives here too:
+ * without it a provider listing carrying that key reads as a closed group at
+ * offset 0 in `wal-restore.ts` and `backup-reconciliation.ts`. Same shape as
+ * `parseWalSegmentKey`'s forward-range check one function up (#846 P3).
+ */
 export function parseWalCloserKey(key: string): WalGroupCloser | null {
   const m = CLOSER_KEY_RE.exec(key);
   if (!m) return null;
   const g = m.groups!;
-  return {
+  const closer: WalGroupCloser = {
     db: g.db as WalDbName,
     generation: g.generation!,
     group: Math.trunc(Number(g.group!)),
     endOffset: Math.trunc(Number(g.endOffset!)),
   };
+  return closer.endOffset > 0 ? closer : null;
 }
 
 function assertValidAddress(addr: WalSegmentAddress): void {

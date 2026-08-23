@@ -106,7 +106,9 @@ const MAX_KEYS = 128;
 /** Key names that mark a value secret-shaped, matched case-insensitively at
  *  any depth. Deliberately broad and naming-convention based: a false
  *  positive redacts a harmless field, a false negative mails a credential
- *  to a stranger. Superset of the pattern `gateway-diagnostics.ts` uses. */
+ *  to a stranger. Superset of the key-name filter the retired
+ *  `gateway-diagnostics.ts` used before #846 P8 folded that endpoint into
+ *  this policy. */
 export const SECRET_KEY_PATTERN =
   /token|secret|password|passwd|passphrase|credential|api[-_]?key|private[-_]?key|seal[-_]?key|bearer|authorization|cookie|mnemonic|otp|seed|cvv|\bpin\b|signature|session[-_]?id/iu;
 

@@ -16,6 +16,7 @@ import {
   judgeHostVerdict,
   judgeJsonNosniff,
   judgeMethodVerdict,
+  loadPinRegister,
   summarize,
 } from "./dast-scan.mjs";
 
@@ -212,4 +213,22 @@ test("summarize: pinned failures do not turn the lane red; unpinned ones do", ()
     pinRegister
   );
   assert.equal(allPinned.green, true);
+});
+
+test("the live DAST register no longer pins boundary-response-nosniff (#844)", () => {
+  const pinRegister = loadPinRegister();
+  assert.equal(pinRegister["header.boundary-response-nosniff"], undefined);
+  assert.deepEqual(pinRegister, {});
+  const missingHeader = summarize(
+    [
+      {
+        pinKey: "header.boundary-response-nosniff",
+        verdict: "fail",
+        category: "header",
+      },
+    ],
+    pinRegister
+  );
+  assert.equal(missingHeader.green, false);
+  assert.equal(missingHeader.totals.failed, 1);
 });

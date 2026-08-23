@@ -5,6 +5,7 @@ import { ReplicaRebootstrapRequiredError } from "./errors.js";
 import {
   fetchReplicaChanges,
   fetchReplicaIntentOutcomes,
+  ReplicaTransportError,
 } from "./shell-transport.js";
 import type { ReplicaFetcher } from "./shell-transport.js";
 
@@ -93,6 +94,25 @@ describe(fetchReplicaChanges, () => {
         fetcher
       )
     ).rejects.toBeInstanceOf(ReplicaRebootstrapRequiredError);
+  });
+
+  it("does not treat a non-JSON 409 as a replica wipe", async () => {
+    const fetcher = vi.fn<ReplicaFetcher>().mockResolvedValue(
+      new Response("<html>offline</html>", {
+        status: 409,
+        headers: { "content-type": "text/html" },
+      })
+    );
+
+    await expect(
+      fetchReplicaChanges(
+        gatewayAuth,
+        { epoch: "epoch-a", seq: 4 },
+        new AbortController().signal,
+        ["shape-a"],
+        fetcher
+      )
+    ).rejects.toBeInstanceOf(ReplicaTransportError);
   });
 });
 

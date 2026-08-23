@@ -33,6 +33,16 @@
  *      Exception: `pull_request: types: [closed]` only — post-merge housekeeping
  *      (e.g. cache cleanup) that never participates in open-PR required checks.
  *
+ *   7. A SHA-pinned `dtolnay/rust-toolchain` step declares `toolchain:`. The
+ *      action reads the toolchain from its OWN ref, so `@stable` needs no
+ *      input — but a SHA has no ref name to read, and the action then exits 1
+ *      with "'toolchain' is a required input" before installing anything. This
+ *      is rule (1) creating rule (7): pinning is right, and it silently turned
+ *      two working steps into failing ones. `security.yml`'s rust job failed on
+ *      `main` this way, and `lane-release-gateway-npm.yml` carried the same
+ *      shape into a release-only lane where nobody would have seen it until a
+ *      release.
+ *
  *   6. `release.yml` is the ONLY workflow that may listen on `push: tags`. Same
  *      shape, different trigger: four workflows watched the release tags
  *      independently, so cutting one tag produced four unrelated runs and no
@@ -168,6 +178,34 @@ export function lintWorkflowSource(name, source) {
             `${name}:${lineNo} uses a floating ref \`${ref}\` — pin to a 40-char SHA with a trailing \`# vX.Y.Z\` comment`
           );
         }
+      }
+    }
+
+    // (7) A SHA-pinned rust-toolchain needs the input its ref used to supply.
+    if (
+      /^\s*(?:-\s*)?uses:\s*dtolnay\/rust-toolchain@[0-9a-f]{40}/u.test(line)
+    ) {
+      // `with:` is a SIBLING of `uses:` (same indent) when the step is written
+      // `- name:` / `uses:` / `with:`, and a CHILD when written `- uses:`. So
+      // scan forward while the line is more-indented OR an equally-indented
+      // sibling key, and stop at the next list item or a dedent.
+      const indent = line.length - line.trimStart().length;
+      let declared = false;
+      for (let ahead = index + 1; ahead < lines.length; ahead += 1) {
+        const next = lines[ahead];
+        if (next.trim() === "") continue;
+        const nextIndent = next.length - next.trimStart().length;
+        if (nextIndent < indent) break;
+        if (nextIndent === indent && next.trimStart().startsWith("- ")) break;
+        if (/^\s*toolchain:\s*\S/u.test(next)) {
+          declared = true;
+          break;
+        }
+      }
+      if (!declared) {
+        found.push(
+          `${name}:${lineNo} pins dtolnay/rust-toolchain by SHA without \`with: toolchain: …\` — the action reads its toolchain from its own ref, and a SHA has none, so it exits 1 before installing`
+        );
       }
     }
 

@@ -839,7 +839,7 @@ export function Root({
             closeOverlay();
             void act("add", {
               title,
-              ...(openProjectId ? {} : {}),
+              // add_task does not take project_id; membership is organize-task.
               ...(shelf === null ? { due_at: dayKey(now) } : {}),
             });
           }}

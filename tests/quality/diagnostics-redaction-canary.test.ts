@@ -32,7 +32,6 @@ import { afterAll, describe, expect, test } from "vitest";
 import { ensureConversationLedger } from "@centraid/server/engine";
 
 import { AnomalyLedger } from "../../packages/server/src/serve/anomaly-ledger.js";
-import { buildDiagnosticsBundle } from "../../packages/server/src/serve/gateway-diagnostics.js";
 import { GatewayLogStore } from "../../packages/server/src/serve/gateway-log-store.js";
 import { HealthRegistry } from "../../packages/server/src/serve/health-registry.js";
 import { collectSupportBundleInput } from "../../packages/server/src/serve/support-bundle-source.js";
@@ -400,20 +399,24 @@ describe("W8.1 diagnostics leak canary", () => {
   });
 
   /*
-   * PINNED DEFECT (#842 W8.1 / A-pinned). `docs/logs.md` points support at
-   * `GET /centraid/_gateway/diagnostics`, and `gateway-diagnostics.ts`
-   * redacts ONLY the `config` object, by key name. The owner-authored
-   * vault name rides out verbatim in `vaults[].name`, and the log tail is
-   * embedded raw. That is owner-facing today, which is why it is a defect
-   * rather than a breach — but it is the document a person is asked to
-   * attach to a support request. This test asserts the CURRENT, wrong
-   * behaviour so the day it is fixed the pin goes red and this record is
-   * revisited deliberately rather than deleted quietly. The shareable
-   * artifact is `support-bundle.ts`; the fix for this endpoint is to route
-   * it through the same builder.
+   * REGRESSION LOCK for #846 P8, formerly the pin
+   * "the legacy owner-facing diagnostics bundle still emits the vault name
+   * verbatim".
+   *
+   * `GET /centraid/_gateway/diagnostics` used to be assembled by a second
+   * builder (`gateway-diagnostics.ts`) that redacted only the `config`
+   * object, by key name: the owner-authored vault name rode out verbatim in
+   * `vaults[].name` and the log tail was embedded raw — in the one artifact
+   * that module's own header told a person to attach to a support request.
+   * That builder is retired; the endpoint now serves THIS bundle, which is
+   * allowlist-by-construction.
+   *
+   * The composition below is `build-gateway.ts`'s `buildDiagnostics` closure
+   * over a real vault plane, level and all. If the endpoint is ever rewired
+   * back to a hand-assembled structure, this goes red.
    */
-  test("PINNED: the legacy owner-facing diagnostics bundle still emits the vault name verbatim", async () => {
-    const dir = await tempDir("quality-w8-legacy-");
+  test("the diagnostics endpoint document carries no owner-authored name", async () => {
+    const dir = await tempDir("quality-w8-endpoint-");
     const plane = openVaultPlane({
       bootstrap: true,
       dir,
@@ -426,18 +429,44 @@ describe("W8.1 diagnostics leak canary", () => {
       },
       enableWalShipper: false,
     });
+    const logs = new GatewayLogStore();
     try {
-      const legacy = await buildDiagnosticsBundle({
+      const input = await collectSupportBundleInput({
         health: new HealthRegistry({ now: () => CLOCK_START }),
-        logs: new GatewayLogStore(),
-        vaults: { planesList: () => [plane] } as never,
+        logs,
+        anomalies: { snapshot: () => [] },
+        planes: [plane],
+        gateway: {
+          version: "0.0.0-test",
+          protocolVersion: 1,
+          minSupportedProtocol: 1,
+        },
+        runtime: { platform: "linux", arch: "x64", nodeVersion: "v24.0.0" },
+        generatedAtMs: CLOCK_START,
+        salt: seededHex("endpoint-salt", 32),
+        level: "standard",
         config: { accessToken: SENTINELS["bearer-token"] },
       });
-      const text = JSON.stringify(legacy);
-      // The existing key-name redaction does work, on config only.
+      const text = renderSupportBundle(input).text;
+      // The key-name redaction that always worked, still working.
       expect(text).not.toContain(SENTINELS["bearer-token"]);
-      // …and the owner-authored vault name is right there next to it.
-      expect(text).toContain(SENTINELS["vault-name"]);
+      // The half that did not: owner-authored names are gone from the
+      // document this endpoint hands out.
+      expect(text).not.toContain(SENTINELS["vault-name"]);
+      expect(text).not.toContain(SENTINELS["person-name"]);
+      assertNoLeak(text);
+      // Still useful: the bundle names the vault it describes and its
+      // storage sizing, it just does not name it in the owner's words.
+      const parsed = JSON.parse(text) as {
+        storage: { vaultId: unknown; name?: unknown }[];
+        redaction: { level: string };
+      };
+      expect(parsed.storage).toHaveLength(1);
+      expect(parsed.storage[0]?.vaultId).toBeTypeOf("string");
+      // `name` is carried in the INPUT so the tripwire can refuse it, and is
+      // emitted by no policy.
+      expect(parsed.storage[0]).not.toHaveProperty("name");
+      expect(parsed.redaction.level).toBe("standard");
     } finally {
       plane.stop();
     }

@@ -265,19 +265,23 @@ class VaultFeed {
           response.status === 409 ||
           response.status === 410
         ) {
-          let detail: unknown = {
-            code:
-              response.status === 401 || response.status === 403
-                ? "replica_device_not_enrolled"
-                : "rebootstrap_required",
-            status: response.status,
-          };
+          let detail: unknown;
           try {
             detail = await response.json();
           } catch {
-            /* Keep the typed fallback detail when the body is empty/malformed. */
+            // Chromium `setOffline` and captive portals surface as empty/HTML
+            // 4xx rather than a thrown fetch. That is a disconnect, not a
+            // lost replica: retry the stream instead of wiping durable state.
+            throw new Error(
+              `vault change stream failed (HTTP ${response.status})`
+            );
           }
           if (!this.isCurrent(controller, generation)) return;
+          if (detail === null || typeof detail !== "object") {
+            throw new Error(
+              `vault change stream failed (HTTP ${response.status})`
+            );
+          }
           this.rebootstrapRequired = true;
           this.emit({ type: "centraid:vault-rebootstrap", detail });
           return;

@@ -785,6 +785,88 @@ describe(ReplicaCoordinator, () => {
     await replica.close();
   });
 
+  test("a bootstrapped replica survives a change-stream pull disconnect without wipe", async () => {
+    const worker = new StateWorker();
+    const { client } = await ReplicaWorkerClient.connect(
+      {
+        dbName: "/centraid-replica-feed-disconnect.sqlite3",
+        vaultId: "vault",
+        remember: false,
+      },
+      () => worker
+    );
+    const feed = createFeed();
+    const onRebootstrapRequired =
+      vi.fn<NonNullable<ReplicaCoordinatorOptions["onRebootstrapRequired"]>>();
+    const replica = new ReplicaCoordinator(
+      client,
+      new IntentQueue(new MemoryIntentStore()),
+      {
+        changeFeed: feed,
+        feedRetryDelayMs: 0,
+        pullChanges: async () => {
+          throw new Error("Failed to fetch");
+        },
+        onRebootstrapRequired,
+      }
+    );
+    await replica.bootstrap(snapshot);
+
+    feed.emit({
+      type: "centraid:vault-cursor",
+      cursor: { epoch: "epoch", seq: 1 },
+    });
+    await flushMacrotasks();
+    await flushMacrotasks();
+
+    expect(onRebootstrapRequired).not.toHaveBeenCalled();
+    expect((await client.status()).cursor).toStrictEqual({
+      epoch: "epoch",
+      seq: 0,
+    });
+    await replica.close();
+  });
+
+  test("a sentinel rebootstrap frame resumes the feed instead of wiping", async () => {
+    const worker = new StateWorker();
+    const { client } = await ReplicaWorkerClient.connect(
+      {
+        dbName: "/centraid-replica-sentinel-rebootstrap.sqlite3",
+        vaultId: "vault",
+        remember: false,
+      },
+      () => worker
+    );
+    const feed = createFeed();
+    const onRebootstrapRequired =
+      vi.fn<NonNullable<ReplicaCoordinatorOptions["onRebootstrapRequired"]>>();
+    const replica = new ReplicaCoordinator(
+      client,
+      new IntentQueue(new MemoryIntentStore()),
+      {
+        changeFeed: feed,
+        pullChanges: async () => undefined,
+        onRebootstrapRequired,
+      }
+    );
+    await replica.bootstrap(snapshot);
+    expect(feed.resumed).toStrictEqual({ epoch: "epoch", seq: 0 });
+
+    feed.emit({
+      type: "centraid:vault-rebootstrap",
+      detail: { error: "replica_rebootstrap_required", reason: "initial" },
+    });
+    await flushMacrotasks();
+
+    expect(onRebootstrapRequired).not.toHaveBeenCalled();
+    expect((await client.status()).cursor).toStrictEqual({
+      epoch: "epoch",
+      seq: 0,
+    });
+    expect(feed.resumed).toStrictEqual({ epoch: "epoch", seq: 0 });
+    await replica.close();
+  });
+
   /**
    * Boot regression: the gateway answers a not-yet-bootstrapped replica with a
    * `rebootstrap` frame, which lands while the shell is already walking a
@@ -831,6 +913,42 @@ describe(ReplicaCoordinator, () => {
       reason: "schema-mismatch",
     });
     expect((await store.status()).cursor).toBeNull();
+  });
+
+  test("an initial sentinel during a windowed bootstrap does not wipe after commit", async () => {
+    const store = promisedStore(
+      new ReplicaSqliteStore(new NodeSqliteDriver(), "vault-a", "memory")
+    );
+    const feed = createFeed();
+    const onRebootstrapRequired = vi.fn<(detail: unknown) => void>();
+    const replica = new ReplicaCoordinator(
+      store,
+      new IntentQueue(new MemoryIntentStore()),
+      {
+        changeFeed: feed,
+        pullChanges: async () => {
+          throw new Error("the walk must not pull changes");
+        },
+        onRebootstrapRequired,
+      }
+    );
+    const header = windowedHeader();
+    const cursor: ReplicaCursor = { epoch: "replica-1", seq: 2 };
+
+    await replica.bootstrapBegin(header);
+    feed.emit({
+      type: "centraid:vault-rebootstrap",
+      detail: { error: "replica_rebootstrap_required", reason: "initial" },
+    });
+    await flushMacrotasks();
+    await replica.bootstrapPage([]);
+    await expect(
+      replica.bootstrapCommit(cursor, header)
+    ).resolves.toStrictEqual(cursor);
+
+    expect(onRebootstrapRequired).not.toHaveBeenCalled();
+    expect((await store.status()).cursor).toStrictEqual(cursor);
+    await replica.close();
   });
 
   // `syncNow` is the pull-on-demand inverse of the push-driven feed above: a

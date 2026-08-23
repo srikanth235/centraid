@@ -20,13 +20,14 @@ import {
   year3VaultProfile,
 } from "@centraid/test-kit/year3-vault";
 import {
-  FsBlobStore,
-  bootstrapVault,
-  openVaultDb,
-  sha256OfBytes,
   blobUriFor,
+  bootstrapVault,
+  FsBlobStore,
+  openVaultDb,
   sealAad,
   sealValue,
+  sha256OfBytes,
+  VAULT_MIGRATIONS,
 } from "@centraid/vault";
 
 import { ensureConversationLedger } from "../../packages/server/src/engine/stores/gateway-db.js";
@@ -147,7 +148,8 @@ describe("restore-10gib.scale", () => {
             seeded.close();
           }
         },
-        YEAR3
+        YEAR3,
+        VAULT_MIGRATIONS.length
       );
       await cp(materialized.dir, sourceDir, { recursive: true });
       const db = openVaultDb({ dir: sourceDir, sealKey: YEAR3_SEAL_KEY });

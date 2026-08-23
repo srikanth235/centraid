@@ -256,3 +256,46 @@ jobs:
     []
   );
 });
+
+const RUST_SHA = "2c7215f132e9ebf062739d9130488b56d53c060c";
+
+test("a SHA-pinned rust-toolchain without `toolchain:` is rejected", () => {
+  // The exact shape that failed `security.yml` on main: rule (1) says pin by
+  // SHA, and pinning removes the ref the action read its toolchain from.
+  const source = clean.replace(
+    "      - run: bun test\n",
+    `      - uses: dtolnay/rust-toolchain@${RUST_SHA} # stable\n      - run: cargo build\n`
+  );
+  const found = lintWorkflowSource("w.yml", source);
+  assert.equal(found.length, 1);
+  assert.match(found[0], /rust-toolchain by SHA without/u);
+});
+
+test("a SHA-pinned rust-toolchain with `toolchain:` as a child key is clean", () => {
+  const source = clean.replace(
+    "      - run: bun test\n",
+    `      - uses: dtolnay/rust-toolchain@${RUST_SHA} # stable\n        with:\n          toolchain: stable\n      - run: cargo build\n`
+  );
+  assert.deepEqual(lintWorkflowSource("w.yml", source), []);
+});
+
+test("`toolchain:` is found in the `- name:` step form too, where `with:` is a sibling of `uses:`", () => {
+  // `- name:` / `uses:` / `with:` puts `with:` at the SAME indent as `uses:`,
+  // not deeper — the shape `lane-release-gateway-npm.yml` uses. A scan that
+  // stops at equal indent reports a false positive here.
+  const source = clean.replace(
+    "      - run: bun test\n",
+    `      - name: Install Rust toolchain\n        uses: dtolnay/rust-toolchain@${RUST_SHA} # stable\n        with:\n          toolchain: stable\n      - run: cargo build\n`
+  );
+  assert.deepEqual(lintWorkflowSource("w.yml", source), []);
+});
+
+test("a following step's keys are not mistaken for this step's toolchain", () => {
+  const source = clean.replace(
+    "      - run: bun test\n",
+    `      - uses: dtolnay/rust-toolchain@${RUST_SHA} # stable\n      - uses: some/other@11bd71901bbe5b1630ceea73d27597364c9af683 # v1\n        with:\n          toolchain: stable\n`
+  );
+  const found = lintWorkflowSource("w.yml", source);
+  assert.equal(found.length, 1);
+  assert.match(found[0], /rust-toolchain by SHA without/u);
+});

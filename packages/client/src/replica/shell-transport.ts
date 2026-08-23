@@ -357,13 +357,20 @@ async function readReplicaJson<T>(
   operation: string
 ): Promise<T> {
   let body: unknown;
+  let parsed = false;
   try {
     body = await response.json();
+    parsed = true;
   } catch {
     if (response.ok)
       throw new ReplicaProtocolError(`${operation} returned malformed JSON`);
   }
-  if (response.status === 409 || response.status === 410) {
+  if (
+    parsed &&
+    body !== null &&
+    typeof body === "object" &&
+    (response.status === 409 || response.status === 410)
+  ) {
     throw new ReplicaRebootstrapRequiredError(rebootstrapReason(body));
   }
   const serverCode =
@@ -383,8 +390,9 @@ async function readReplicaJson<T>(
         })
       : {};
   if (
-    response.status === 401 ||
-    (response.status === 403 && serverCode === "replica_device_not_enrolled")
+    parsed &&
+    (response.status === 401 ||
+      (response.status === 403 && serverCode === "replica_device_not_enrolled"))
   ) {
     throw new GatewayClientError(
       "auth_required",

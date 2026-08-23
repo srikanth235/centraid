@@ -7,6 +7,7 @@ import type { BootstrapResult } from "../bootstrap.js";
 import { registerScheduleCommands } from "../commands/schedule.js";
 import { openVaultDb } from "../db.js";
 import type { VaultDb } from "../db.js";
+import { createShareGrant, setFulfillmentState } from "../grant/grant-store.js";
 import { sha256Hex, uuidv7 } from "../ids.js";
 import {
   acknowledgeCommonsSeatCursor,
@@ -274,6 +275,72 @@ describe("portability", () => {
         entity
       ).toBeGreaterThan(0);
     }
+    restored.close();
+  });
+
+  /*
+   * The schema/export audit for the column #846 P1 added.
+   *
+   * `share_fulfillment.delivered_at` is the memory that lets a revocation know
+   * a projection was ever handed over — the whole fix is that this fact is
+   * REMEMBERED rather than re-inferred from a live freshness reading. A
+   * restore that dropped the column would restore exactly the pre-fix defect,
+   * silently and only for restored vaults: a fulfillment whose state had since
+   * degraded to `syncing` would settle `removed` while the audience vault kept
+   * the projection, and the owner would be told a share was gone when it was
+   * not.
+   *
+   * `exportVault` walks `SELECT *` over every registered canonical table, so
+   * the column rides along with no code change. That is exactly why it is
+   * asserted rather than assumed: nothing else would notice if the walk ever
+   * became a column list.
+   */
+  test("a delivered fulfillment's delivery memory survives export and restore", () => {
+    const deliveredAt = "2026-08-11T09:30:00.000Z";
+    const subjectId = uuidv7();
+    const created = createShareGrant(db.vault, {
+      audience: { kind: "party", id: boot.ownerPartyId },
+      subjectType: "core.document",
+      subjectId,
+      capability: "view",
+      grantedAt: deliveredAt,
+      grantedBy: boot.ownerPartyId,
+    });
+    assert(created.outcome === "created");
+    setFulfillmentState(db.vault, {
+      grantId: created.grant.grantId,
+      peerVaultId: "portable-audience-vault",
+      state: "delivered",
+      updatedAt: deliveredAt,
+    });
+    // …and then reach is lost, which is the state the defect read as
+    // never-delivered. The memory must outlive both the degrade and the
+    // restore.
+    setFulfillmentState(db.vault, {
+      grantId: created.grant.grantId,
+      peerVaultId: "portable-audience-vault",
+      state: "syncing",
+      updatedAt: "2026-08-11T10:00:00.000Z",
+    });
+
+    const { artifact } = gw.exportVault(owner);
+    expect(artifact.tables["share.fulfillment"]).toContainEqual(
+      expect.objectContaining({
+        state: "syncing",
+        delivered_at: deliveredAt,
+      })
+    );
+
+    const restored = openVaultDb();
+    importVaultExport(restored, artifact);
+    expect(
+      restored.vault
+        .prepare(
+          `SELECT state, delivered_at FROM share_fulfillment
+             WHERE grant_id = ? AND peer_vault_id = 'portable-audience-vault'`
+        )
+        .get(created.grant.grantId)
+    ).toMatchObject({ state: "syncing", delivered_at: deliveredAt });
     restored.close();
   });
 

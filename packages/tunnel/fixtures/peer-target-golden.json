@@ -15,28 +15,20 @@
     "packages/tunnel/src/peer-target-differential.test.ts, which also drives a",
     "seeded fast-check generator whose nastiest finds are curated back here.",
     "",
-    "Vectors marked `pin` record a verdict that is currently WRONG against the",
-    "guards' own documented intent (see `pins` below). They are pinned, not",
-    "tolerated: the day the product moves, the pin goes red and the record is",
-    "revisited deliberately (docs/decisions.md, ruling A-pinned).",
+    "`pins` is empty and the schema keeps it. It once carried",
+    "`bare-prefix-admitted-by-query-or-fragment`, the class where both guards",
+    "applied their 'must extend the prefix' test to the whole target instead of",
+    "to the path; #846 P6 fixed both languages, so those four vectors now record",
+    "`false` and stay here as the regression lock. A vector may still be pinned",
+    "in future (docs/decisions.md, ruling A-pinned) — it must name an id",
+    "explained below.",
     "",
     "Every `target` here is representable as a Rust `&str` (well-formed UTF-8,",
     "no lone surrogates) so the corpus can be read by a Rust test unchanged."
   ],
   "version": 1,
   "prefix": "/centraid/_peer/",
-  "pins": {
-    "bare-prefix-admitted-by-query-or-fragment": [
-      "Both guards document 'must EXTEND the prefix (a bare prefix names no",
-      "resource)', but both apply that length test to the WHOLE target rather",
-      "than to the path. `/centraid/_peer/?` and `/centraid/_peer/#x` are",
-      "longer than the prefix while their path IS the bare prefix, so both",
-      "implementations answer `true` where the documented rule says `false`.",
-      "Not an escalation — the resolved pathname stays inside the plane and no",
-      "peer-plane route matches it — but the documented sentence is false on a",
-      "reachable input. Minimal case: `/centraid/_peer/?`."
-    ]
-  },
+  "pins": {},
   "vectors": [
     {
       "name": "linkRedeem",
@@ -286,7 +278,7 @@
     },
     {
       "name": "tab",
-      "target": "/centraid/_peer/a\u0009b",
+      "target": "/centraid/_peer/a\tb",
       "allowed": false,
       "note": "Control byte."
     },
@@ -305,30 +297,26 @@
     {
       "name": "barePrefixWithQuery",
       "target": "/centraid/_peer/?",
-      "allowed": true,
-      "pin": "bare-prefix-admitted-by-query-or-fragment",
-      "note": "PINNED DEFECT. Documented intent says false; both guards answer true. Minimal case."
+      "allowed": false,
+      "note": "REGRESSION LOCK (#846 P6). The path behind this target is the bare prefix, which names no peer-plane route; every implementation refuses it. Was pinned as `bare-prefix-admitted-by-query-or-fragment` until the extension test moved from the whole target onto the path."
     },
     {
       "name": "barePrefixWithFragment",
       "target": "/centraid/_peer/#",
-      "allowed": true,
-      "pin": "bare-prefix-admitted-by-query-or-fragment",
-      "note": "PINNED DEFECT. Same class, fragment separator."
+      "allowed": false,
+      "note": "REGRESSION LOCK (#846 P6). The path behind this target is the bare prefix, which names no peer-plane route; every implementation refuses it. Was pinned as `bare-prefix-admitted-by-query-or-fragment` until the extension test moved from the whole target onto the path."
     },
     {
       "name": "barePrefixWithQueryPayload",
       "target": "/centraid/_peer/?next=/centraid/_gateway/devices",
-      "allowed": true,
-      "pin": "bare-prefix-admitted-by-query-or-fragment",
-      "note": "PINNED DEFECT. The payload climbs nothing — the resolved path is still the bare prefix — which is why this is a broken sentence and not an escalation."
+      "allowed": false,
+      "note": "REGRESSION LOCK (#846 P6). The path behind this target is the bare prefix, which names no peer-plane route; every implementation refuses it. Was pinned as `bare-prefix-admitted-by-query-or-fragment` until the extension test moved from the whole target onto the path."
     },
     {
       "name": "barePrefixWithFragmentTraversal",
       "target": "/centraid/_peer/#/../_gateway",
-      "allowed": true,
-      "pin": "bare-prefix-admitted-by-query-or-fragment",
-      "note": "PINNED DEFECT. Dot segments after '#' are never part of the path."
+      "allowed": false,
+      "note": "REGRESSION LOCK (#846 P6). The path behind this target is the bare prefix, which names no peer-plane route; every implementation refuses it. Was pinned as `bare-prefix-admitted-by-query-or-fragment` until the extension test moved from the whole target onto the path."
     }
   ]
 }

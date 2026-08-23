@@ -32,10 +32,14 @@ import {
 
 const __dirname = import.meta.dirname;
 const REPO_ROOT = path.resolve(__dirname, "..", "..", "..");
+// `packages/gateway` was folded into `packages/server` by #801; this path was
+// missed in that move, so the daemon has exited MODULE_NOT_FOUND in 150ms ever
+// since and the companion lane has been red on `main`. `docker-harness.mjs`
+// beside this file already spells the current path — they now agree.
 const GATEWAY_CLI = path.join(
   REPO_ROOT,
   "packages",
-  "gateway",
+  "server",
   "dist",
   "cli",
   "cli.js"

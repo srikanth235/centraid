@@ -28,27 +28,41 @@ async function loadSandboxBoot(): Promise<
  * from the handler bundle or its manifest — only from the parent's request.
  *
  *   `"automation-handler"` — strict: no filesystem, no sockets, no
- *     subprocess, no native addons, empty environment. This is what a
- *     self-contained recognition bundle (e.g. `place-names`, which documents
- *     itself as touching neither disk nor socket) actually needs.
+ *     subprocess, no native addons, empty environment. This is the DEFAULT and
+ *     the floor: a request that names no lane gets this one.
  *   `"model-runtime"` — read-confined filesystem plus native addons, for the
  *     ONNX-backed bundles. See policy.ts for why that lane is a named hole.
- *   absent — NO sandbox is installed. This is the current default and it is
- *     deliberate, not an oversight: the ONNX bundles reach `node:module`'s
- *     `createRequire` to resolve `runtime/node_modules`, which every lane
- *     here refuses, so flipping the default requires reworking
- *     `packages/model-runtime/src/onnx.ts` first. `sandbox-escape.test.ts`
- *     pins exactly what an unsandboxed automation worker can still reach.
+ *   `"media-transcode"` — the same plus a subprocess grant, for the one bundle
+ *     that decodes media by shelling out to ffmpeg. A larger hole, named as
+ *     one in policy.ts.
+ *
+ * There is no "no sandbox" option any more (#846 P9). It used to be the
+ * default, and deliberately so: the ONNX bundles reached `node:module`'s
+ * `createRequire` to resolve `runtime/node_modules`, which every lane refuses,
+ * so nothing could run sandboxed until `packages/model-runtime/src/onnx.ts`
+ * stopped needing it. It has, so the floor applies to everyone and a handler
+ * that needs more says so in its manifest — where the ask is reviewable —
+ * rather than every handler getting everything because one needed more.
  */
-type SandboxLaneRequest = "automation-handler" | "model-runtime";
+type SandboxLaneRequest =
+  | "automation-handler"
+  | "media-transcode"
+  | "model-runtime";
 
 interface WorkerRequest {
   handlerFile: string;
   args: unknown;
-  /** Parent-chosen containment lane; absent means none (see above). */
+  /** Containment lane; absent means the `automation-handler` floor. */
   sandboxLane?: SandboxLaneRequest;
-  /** Absolute read roots for the `model-runtime` lane. */
+  /** Absolute read roots for the two filesystem-granting lanes. */
   sandboxReadRoots?: string[];
+  /**
+   * Resolved model-runtime directory, planted on `globalThis` before the
+   * handler's graph loads. A sandboxed handler has no `process.env`, so this
+   * is how the `CENTRAID_AUTOMATION_RUNTIME_DIR` override still reaches it
+   * (#846 P9). A path, not a capability.
+   */
+  sandboxRuntimeDir?: string;
   /** Fire-start instant fixed by the parent; stable for the whole run. */
   now: string;
   /** The payload this run was invoked with — surfaced as `ctx.input`. */
@@ -499,12 +513,25 @@ function execute(request: WorkerRequest): void {
   ctx.input = request.input;
   void (async () => {
     try {
-      if (request.sandboxLane !== undefined) {
+      {
+        // Planted BEFORE the sandbox installs, because installing it replaces
+        // `process.env` with a frozen empty object — see the field's doc.
+        if (request.sandboxRuntimeDir !== undefined) {
+          (globalThis as Record<string, unknown>)[
+            "__centraidAutomationRuntimeDir"
+          ] = request.sandboxRuntimeDir;
+        }
+        // Unconditional (#846 P9). An absent lane is the strict floor, never
+        // "no containment" — the one shape that used to make the whole plane
+        // unsandboxed because a single lane could not be satisfied.
         const sandboxApi = await (await loadSandboxBoot()).loadSandbox();
+        const roots = request.sandboxReadRoots ?? [];
         const policy =
           request.sandboxLane === "model-runtime"
-            ? sandboxApi.modelRuntimePolicy(request.sandboxReadRoots ?? [])
-            : sandboxApi.automationHandlerPolicy();
+            ? sandboxApi.modelRuntimePolicy(roots)
+            : request.sandboxLane === "media-transcode"
+              ? sandboxApi.mediaTranscodePolicy(roots)
+              : sandboxApi.automationHandlerPolicy();
         const sandbox = sandboxApi.installWorkerSandbox(policy);
         sandbox.taint(pathToFileURL(req.handlerFile).href);
       }

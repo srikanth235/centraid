@@ -182,7 +182,10 @@ describe("vault-change-feed", () => {
       } as unknown as Response);
       await flush();
 
-      expect(core.doFetch).toHaveBeenCalledTimes(2);
+      expect(core.doFetch.mock.calls.map((call) => call[1])).toStrictEqual([
+        "/centraid/_vault/changes?since=0%3A0&stream=1",
+        "/centraid/_vault/changes?since=0%3A0&stream=1&shapeIds=shape-current",
+      ]);
       expect(messages).toStrictEqual([]);
       off();
     });
@@ -204,10 +207,9 @@ describe("vault-change-feed", () => {
       );
       await flush();
 
-      expect(core.doFetch).toHaveBeenCalledOnce();
-      expect(core.doFetch.mock.calls[0]?.[1]).toBe(
-        "/centraid/_vault/changes?since=0%3A0&stream=1"
-      );
+      expect(core.doFetch.mock.calls.map((call) => call[1])).toStrictEqual([
+        "/centraid/_vault/changes?since=0%3A0&stream=1",
+      ]);
       stream.enqueue('event: cursor\ndata: {"epoch":"epoch-a","seq":5}\n\n');
       stream.enqueue(
         'event: change\ndata: {"changes":[{"epoch":"epoch-a","seq":6,"entity":"task","rowId":"task-1","op":"update","changedAt":"2026-07-15T08:00:00.000Z"}],"next":{"epoch":"epoch-a","seq":6}}\n\n'
@@ -258,12 +260,14 @@ describe("vault-change-feed", () => {
       first.close();
       await clock.advance(0);
 
-      expect(core.doFetch).toHaveBeenCalledOnce();
+      expect(core.doFetch.mock.calls.map((call) => call[1])).toStrictEqual([
+        "/centraid/_vault/changes?since=0%3A0&stream=1",
+      ]);
       await clock.advance(1_000);
-      expect(core.doFetch).toHaveBeenCalledTimes(2);
-      expect(core.doFetch.mock.calls[1]?.[1]).toBe(
-        "/centraid/_vault/changes?since=epoch-r%3A12&stream=1"
-      );
+      expect(core.doFetch.mock.calls.map((call) => call[1])).toStrictEqual([
+        "/centraid/_vault/changes?since=0%3A0&stream=1",
+        "/centraid/_vault/changes?since=epoch-r%3A12&stream=1",
+      ]);
 
       off();
     });
@@ -297,14 +301,16 @@ describe("vault-change-feed", () => {
         { type: "centraid:vault-rebootstrap", detail: { reason: "retention" } },
       ]);
       await clock.advance(30_000);
-      expect(core.doFetch).toHaveBeenCalledOnce();
+      expect(core.doFetch.mock.calls.map((call) => call[1])).toStrictEqual([
+        "/centraid/_vault/changes?since=0%3A0&stream=1",
+      ]);
 
       await feedModule.resumeVaultChanges({ epoch: "epoch-b", seq: 40 });
       await clock.advance(0);
-      expect(core.doFetch).toHaveBeenCalledTimes(2);
-      expect(core.doFetch.mock.calls[1]?.[1]).toBe(
-        "/centraid/_vault/changes?since=epoch-b%3A40&stream=1"
-      );
+      expect(core.doFetch.mock.calls.map((call) => call[1])).toStrictEqual([
+        "/centraid/_vault/changes?since=0%3A0&stream=1",
+        "/centraid/_vault/changes?since=epoch-b%3A40&stream=1",
+      ]);
 
       off();
     });
@@ -330,7 +336,120 @@ describe("vault-change-feed", () => {
         },
       ]);
       await clock.advance(30_000);
-      expect(core.doFetch).toHaveBeenCalledOnce();
+      expect(core.doFetch.mock.calls.map((call) => call[1])).toStrictEqual([
+        "/centraid/_vault/changes?since=0%3A0&stream=1",
+      ]);
+
+      off();
+    });
+
+    it("reconnects a failed fetch without wiping a bootstrapped replica", async () => {
+      const clock = useFakeClock();
+      vi.spyOn(Math, "random").mockReturnValue(0.5);
+      const resumed = controlledBody();
+      core.doFetch
+        .mockRejectedValueOnce(new TypeError("Failed to fetch"))
+        .mockResolvedValueOnce({
+          ok: true,
+          status: 200,
+          body: resumed.body,
+        } as unknown as Response);
+      const messages: TypeImport_lkae3t.VaultChangeMessage[] = [];
+      const off = feedModule.subscribeVaultChanges((message) =>
+        messages.push(message)
+      );
+      await clock.advance(0);
+      expect(messages).toStrictEqual([]);
+
+      await clock.advance(1_000);
+      resumed.enqueue('event: cursor\ndata: "epoch-a:4"\n\n');
+      await clock.advance(0);
+      expect(messages).toMatchObject([
+        { type: "centraid:vault-cursor", cursor: { epoch: "epoch-a", seq: 4 } },
+      ]);
+
+      off();
+    });
+
+    it("reconnects an empty 403/409 instead of treating Chromium-offline as a wipe", async () => {
+      const clock = useFakeClock();
+      vi.spyOn(Math, "random").mockReturnValue(0.5);
+      const resumed = controlledBody();
+      core.doFetch
+        .mockResolvedValueOnce({
+          ok: false,
+          status: 403,
+          body: null,
+          json: async () => {
+            throw new SyntaxError("Unexpected token < in JSON");
+          },
+        } as unknown as Response)
+        .mockResolvedValueOnce({
+          ok: false,
+          status: 409,
+          body: null,
+          json: async () => {
+            throw new SyntaxError("Unexpected end of JSON input");
+          },
+        } as unknown as Response)
+        .mockResolvedValueOnce({
+          ok: true,
+          status: 200,
+          body: resumed.body,
+        } as unknown as Response);
+      const messages: TypeImport_lkae3t.VaultChangeMessage[] = [];
+      const off = feedModule.subscribeVaultChanges((message) =>
+        messages.push(message)
+      );
+      await clock.advance(0);
+      expect(messages).toStrictEqual([]);
+      await clock.advance(1_000);
+      expect(messages).toStrictEqual([]);
+      await clock.advance(2_000);
+      resumed.enqueue('event: cursor\ndata: "epoch-a:4"\n\n');
+      await clock.advance(0);
+      expect(messages).toMatchObject([
+        { type: "centraid:vault-cursor", cursor: { epoch: "epoch-a", seq: 4 } },
+      ]);
+
+      off();
+    });
+
+    it("reconnects a closed SSE body without emitting a wipe", async () => {
+      const clock = useFakeClock();
+      vi.spyOn(Math, "random").mockReturnValue(0.5);
+      const first = controlledBody();
+      const second = controlledBody();
+      core.doFetch
+        .mockResolvedValueOnce({
+          ok: true,
+          status: 200,
+          body: first.body,
+        } as unknown as Response)
+        .mockResolvedValueOnce({
+          ok: true,
+          status: 200,
+          body: second.body,
+        } as unknown as Response);
+      const messages: TypeImport_lkae3t.VaultChangeMessage[] = [];
+      const off = feedModule.subscribeVaultChanges((message) =>
+        messages.push(message)
+      );
+      await clock.advance(0);
+      first.enqueue('event: cursor\ndata: "epoch-a:4"\n\n');
+      first.close();
+      await clock.advance(0);
+
+      expect(messages).toMatchObject([
+        { type: "centraid:vault-cursor", cursor: { epoch: "epoch-a", seq: 4 } },
+      ]);
+      await clock.advance(1_000);
+      second.enqueue('event: cursor\ndata: "epoch-a:5"\n\n');
+      await clock.advance(0);
+      expect(messages).toMatchObject([
+        { type: "centraid:vault-cursor", cursor: { epoch: "epoch-a", seq: 4 } },
+        { type: "centraid:vault-cursor", cursor: { epoch: "epoch-a", seq: 5 } },
+      ]);
 
       off();
     });

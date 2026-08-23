@@ -23,6 +23,7 @@ export type SandboxLane =
   | "app-handler"
   | "app-seed"
   | "automation-handler"
+  | "media-transcode"
   | "model-runtime";
 
 /** Read-only, root-confined filesystem grant. Writes are never granted. */
@@ -43,8 +44,12 @@ export interface SandboxPolicy {
   readonly filesystem: "denied" | FilesystemGrant;
   /** `"denied"` revokes global fetch/WebSocket and the socket builtins. */
   readonly network: "denied";
-  /** `"denied"` revokes `child_process`, `process.binding`. */
-  readonly subprocess: "denied";
+  /**
+   * `"denied"` revokes `child_process` and `process.binding`. `"allowed"` is
+   * an explicit hole — the child is not in the sandbox, so nothing here
+   * constrains it. Only `mediaTranscodePolicy` grants it; see its header.
+   */
+  readonly subprocess: "denied" | "allowed";
   /** `process.dlopen`. `true` is an explicit hole — see install.ts limits. */
   readonly nativeAddons: boolean;
   /** `"denied"` replaces `process.env` with a frozen empty object. */
@@ -196,6 +201,40 @@ export function modelRuntimePolicy(
     subprocess: "denied",
     nativeAddons: true,
     environment: "denied",
+  };
+}
+
+/**
+ * The `model-runtime` lane plus a subprocess grant, for the one shipped bundle
+ * that decodes media by shelling out to ffmpeg (`transcript`).
+ *
+ * A SEPARATE lane rather than a `subprocess` grant added to
+ * `modelRuntimePolicy`, for the same reason `appSeedPolicy` is separate from
+ * `appHandlerPolicy`: widening a lane to fit one tenant silently widens it for
+ * every other tenant too, and four ONNX bundles run under `model-runtime` that
+ * have no business spawning anything. Keeping them apart means the subprocess
+ * grant is visible in the one place it applies, and `bundle-lane-conformance
+ * .test.ts` asserts that exactly one bundle needs it.
+ *
+ * HONEST LIMIT, and it is a large one. `subprocess: "allowed"` means this lane
+ * can start a process that no loader hook, no confined-fs mirror and no global
+ * revocation in this file constrains — the child inherits nothing from the
+ * sandbox because it is not in it. That is strictly worse containment than
+ * `model-runtime`, and strictly better than the no-lane default it replaces
+ * (#846 P9): the handler JavaScript around the spawn is still read-confined,
+ * write-refused, socket-refused and environment-empty, so what it can hand the
+ * child and what it can do with the result are both bounded. Retiring this lane
+ * means moving media decoding out of the handler, not widening it further.
+ */
+export function mediaTranscodePolicy(
+  readRoots: readonly string[]
+): SandboxPolicy {
+  const base = modelRuntimePolicy(readRoots);
+  return {
+    ...base,
+    lane: "media-transcode",
+    allowedBuiltins: [...base.allowedBuiltins, "child_process"],
+    subprocess: "allowed",
   };
 }
 

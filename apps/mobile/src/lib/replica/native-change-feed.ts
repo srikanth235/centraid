@@ -150,19 +150,27 @@ export class NativeVaultChangeFeed implements ReplicaChangeFeedAdapter {
         signal: abort.signal,
       });
       if (!this.isCurrent(abort, generation)) return;
-      if (response.status === 401 || response.status === 403) {
-        this.emit({
-          type: "centraid:vault-rebootstrap",
-          detail: { status: response.status },
-        });
-        this.#rebootstrapRequired = true;
-        return;
-      }
-      if (response.status === 409 || response.status === 410) {
-        this.emit({
-          type: "centraid:vault-rebootstrap",
-          detail: { status: response.status },
-        });
+      if (
+        response.status === 401 ||
+        response.status === 403 ||
+        response.status === 409 ||
+        response.status === 410
+      ) {
+        let detail: unknown;
+        try {
+          detail = await response.json();
+        } catch {
+          throw new Error(
+            `vault change stream failed (HTTP ${response.status})`
+          );
+        }
+        if (!this.isCurrent(abort, generation)) return;
+        if (detail === null || typeof detail !== "object") {
+          throw new Error(
+            `vault change stream failed (HTTP ${response.status})`
+          );
+        }
+        this.emit({ type: "centraid:vault-rebootstrap", detail });
         this.#rebootstrapRequired = true;
         return;
       }

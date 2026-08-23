@@ -16,8 +16,14 @@
     "purpose": "dpv:ServiceProvision",
     "why": "Reads image previews and writes vectors through the dedicated validated vector command.",
     "scopes": [
-      { "schema": "media", "verbs": "read" },
-      { "schema": "enrich", "verbs": "read+act" }
+      {
+        "schema": "media",
+        "verbs": "read"
+      },
+      {
+        "schema": "enrich",
+        "verbs": "read+act"
+      }
     ]
   },
   "enrich": {
@@ -25,6 +31,16 @@
     "capability": "embed-image",
     "lane": "gateway"
   },
-  "history": { "keep": { "count": 100 } },
-  "generated": { "by": "centraid-template", "at": "2026-08-10T00:00:00.000Z" }
+  "sandbox": {
+    "lane": "model-runtime"
+  },
+  "history": {
+    "keep": {
+      "count": 100
+    }
+  },
+  "generated": {
+    "by": "centraid-template",
+    "at": "2026-08-10T00:00:00.000Z"
+  }
 }
