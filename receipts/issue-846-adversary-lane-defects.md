@@ -532,7 +532,8 @@ generation opened, whether it retried). That dropped `toHaveBeenCalled*`
 801 → 788, and `tests/hygiene-budgets.json` ratchets to 788 — the gate
 is down-only and will not take a raise. A 789 ceiling against a still-795
 count was the previous miss: converting the *new* reconnect tests only
-undid the +6, it did not chip the pre-existing sites.
+undid the +6, it did not chip the pre-existing sites. Path lists use
+`toStrictEqual` (`jest/prefer-strict-equal`); `toEqual` trips `static`.
 
 ### The record moved with the code
 

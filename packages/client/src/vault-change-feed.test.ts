@@ -182,7 +182,7 @@ describe("vault-change-feed", () => {
       } as unknown as Response);
       await flush();
 
-      expect(core.doFetch.mock.calls.map((call) => call[1])).toEqual([
+      expect(core.doFetch.mock.calls.map((call) => call[1])).toStrictEqual([
         "/centraid/_vault/changes?since=0%3A0&stream=1",
         "/centraid/_vault/changes?since=0%3A0&stream=1&shapeIds=shape-current",
       ]);
@@ -207,7 +207,7 @@ describe("vault-change-feed", () => {
       );
       await flush();
 
-      expect(core.doFetch.mock.calls.map((call) => call[1])).toEqual([
+      expect(core.doFetch.mock.calls.map((call) => call[1])).toStrictEqual([
         "/centraid/_vault/changes?since=0%3A0&stream=1",
       ]);
       stream.enqueue('event: cursor\ndata: {"epoch":"epoch-a","seq":5}\n\n');
@@ -260,11 +260,11 @@ describe("vault-change-feed", () => {
       first.close();
       await clock.advance(0);
 
-      expect(core.doFetch.mock.calls.map((call) => call[1])).toEqual([
+      expect(core.doFetch.mock.calls.map((call) => call[1])).toStrictEqual([
         "/centraid/_vault/changes?since=0%3A0&stream=1",
       ]);
       await clock.advance(1_000);
-      expect(core.doFetch.mock.calls.map((call) => call[1])).toEqual([
+      expect(core.doFetch.mock.calls.map((call) => call[1])).toStrictEqual([
         "/centraid/_vault/changes?since=0%3A0&stream=1",
         "/centraid/_vault/changes?since=epoch-r%3A12&stream=1",
       ]);
@@ -301,13 +301,13 @@ describe("vault-change-feed", () => {
         { type: "centraid:vault-rebootstrap", detail: { reason: "retention" } },
       ]);
       await clock.advance(30_000);
-      expect(core.doFetch.mock.calls.map((call) => call[1])).toEqual([
+      expect(core.doFetch.mock.calls.map((call) => call[1])).toStrictEqual([
         "/centraid/_vault/changes?since=0%3A0&stream=1",
       ]);
 
       await feedModule.resumeVaultChanges({ epoch: "epoch-b", seq: 40 });
       await clock.advance(0);
-      expect(core.doFetch.mock.calls.map((call) => call[1])).toEqual([
+      expect(core.doFetch.mock.calls.map((call) => call[1])).toStrictEqual([
         "/centraid/_vault/changes?since=0%3A0&stream=1",
         "/centraid/_vault/changes?since=epoch-b%3A40&stream=1",
       ]);
@@ -336,7 +336,7 @@ describe("vault-change-feed", () => {
         },
       ]);
       await clock.advance(30_000);
-      expect(core.doFetch.mock.calls.map((call) => call[1])).toEqual([
+      expect(core.doFetch.mock.calls.map((call) => call[1])).toStrictEqual([
         "/centraid/_vault/changes?since=0%3A0&stream=1",
       ]);
 
