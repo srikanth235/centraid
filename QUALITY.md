@@ -2,6 +2,20 @@
 
 ## Open
 
+- **A second offline write never settles its promise.** With the gateway
+  severed, the first `window.centraid.write` of a session resolves `queued` as
+  it should; every write issued after it in the same session queues, applies
+  its optimistic row, paints the pending chip — and never resolves or rejects.
+  Measured in `apps/web/tests/e2e/offline-search.spec.ts` (#846) with two
+  offline renames raced against a 30s timer, both orders round: the second one
+  reports `never-settled` whichever row it is, so it follows the ORDER, not the
+  row or its values. Nothing is lost — the outbox is correct and the reconnect
+  drain settles both — but a caller that awaits its own write hangs forever,
+  and any app that disables a control until the write returns strands it. That
+  spec routes around it by taking the pending rows from the UI instead of from
+  the promise. Not pinned: the durable behaviour is right and #846 is a search
+  fix, so this wants an issue of its own against the write rail.
+
 - **`countDeclaredTests` counts prose.** The regex in
   `scripts/test-report/matrix-grades.mjs` is `\b(?:test|it)(?:\.\w+)*\s*\(`,
   which matches the ordinary English `it (` inside a comment — #842 W3.1 had a

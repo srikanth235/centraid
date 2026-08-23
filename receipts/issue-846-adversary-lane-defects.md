@@ -444,7 +444,53 @@ diagnostics-redaction row, `TESTING.md`'s fuzz-register paragraph,
 `scripts/fuzz/known-findings.json` itself, and `CHANGELOG.md` — enumerated under
 [Docs](#docs) below.
 
+## User impact
+
+One of the ten defects is visible to a member rather than only to a test: P4/P5
+changes what **offline search in Docs returns and how it marks the hit**. The
+other nine are refusals, headers, timers and control truth with no pixel of
+their own.
+
+What a member sees, on the Docs Search shelf with the gateway unreachable:
+
+- **Fewer wrong rows.** A query holding punctuation used to be split into
+  independent terms, so `don't` matched any row carrying a word starting `don`
+  and, anywhere else in the row, a word starting `t`. Those rows are gone. The
+  same query online never returned them, so this is offline search agreeing with
+  the vault rather than search becoming stricter.
+- **A whole highlight.** The marks span the entire phrase — `don't` — instead of
+  stopping after `don` and leaving `'t` unmarked outside the mark.
+
+First-run: nothing to migrate, opt into, or re-index. The replica's own FTS
+index and outbox are untouched — this is the query compiler and the pending
+matcher reading the same rows differently — so the first offline search after
+updating is already the corrected one, with no rebuild pass and no first-run
+cost.
+
+Pinned by `apps/web/tests/e2e/offline-search.spec.ts`, a new web e2e journey
+that uploads two documents online, severs the gateway, renames both to titles
+chosen so the divergence is the difference between them (`don't lose this.txt`
+against the decoy `don is on the t list.txt`), then searches `don't` from the
+shelf's own field:
+
+![Offline Docs search over two pending rows: one result, the decoy excluded, and `don't` marked whole](../artifacts/e2e/ui-impact/offline-search-pending-phrase.png)
+
+The bar reads **1 result**, the decoy is absent, the surviving row's snippet
+marks `don't` rather than `don`, and its chip still says `queued` — so this is
+search over the OUTBOX, not over a settled row that happens to be readable.
+
 ## Out of scope
+
+**A second offline write never settles its promise.** Found while building the
+journey above and filed in [QUALITY.md](../QUALITY.md): with the gateway severed
+the first `window.centraid.write` resolves `queued`, and every write after it in
+the same session queues, paints and never settles. Confirmed ordinal — raced
+against a 30s timer both orders round, it is always the second one. The durable
+behaviour is correct (the outbox is right and reconnect drains both), so nothing
+is lost, but a caller that awaits its own write hangs. It belongs to the write
+rail, not to a search fix, so it is recorded rather than fixed here; the spec
+routes around it by reading the pending rows from the UI instead of from the
+promise, which is what a member sees anyway.
 
 **P11 — the `desktop-e2e` assistant-open budget.** Reported in the issue's
 comment thread, and it belongs to [#789](https://github.com/srikanth235/centraid/issues/789)'s
@@ -804,9 +850,13 @@ Gates this branch's own changes turned red (second push):
   rather than a claim.
 - `tests/schema-export-fingerprint.json` — the schema fingerprint re-pinned
   with the audit as its `approvedDeviation`.
+- `apps/web/tests/e2e/offline-search.spec.ts` — the P4/P5 fix through the
+  production UI: two pending rows, the Docs Search shelf, its own snippet
+  marks, and the screenshot this receipt shows under **User impact**.
 
 Docs: `docs/decisions.md`, `docs/cron-timezone.md`, `SECURITY.md`, `TESTING.md`,
-`CHANGELOG.md`, and this receipt.
+`CHANGELOG.md`, `QUALITY.md` (the never-settling second offline write, met
+while building that journey and left unfixed on purpose), and this receipt.
 
 ## Audit
 
