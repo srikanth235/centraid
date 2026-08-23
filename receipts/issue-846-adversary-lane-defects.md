@@ -393,6 +393,17 @@ is now part of its key; `test-kit` deliberately does not depend on
 package growing an import. A `READY.json` written without one records `-1`,
 which can never collide with a real ladder length.
 
+**SonarCloud on `main` — Reliability Rating on New Code C (required ≥ A).**
+The only new bug in the leak period was `typescript:S3923` at
+`packages/blueprints/apps/tasks/app-root.tsx:842`:
+`...(openProjectId ? {} : {})` — both branches empty. Tasks quick-add shows
+the open project's name as `place`, but `schedule.add_task` does not take
+`project_id` (membership is `organize-task` from the editor), so the spread
+was a no-op leftover from the #834 rebuild. Deleted. Demonstrated red: Sonar
+quality gate on `main` at `1bd265cc` (check run 97032644664). The PR's own
+Autoscan stayed green because this line is not in this branch's new-code
+window.
+
 Three of `main`'s remaining reds are deliberately **not** touched, for reasons
 the issue itself states: `desktop-e2e`'s assistant-open budget is P11 and
 #789's owner's call; `quality-performance-scale`'s budget is the
@@ -848,6 +859,8 @@ Product:
 - `packages/vault/src/grant/fulfillment.ts` — P1, revocation reads the memory.
 - `packages/server/src/engine/http/http-server.ts` — P10, one transport-boundary
   writer that sets `nosniff`.
+- `packages/blueprints/apps/tasks/app-root.tsx` — Sonar on `main`: delete the
+  identical-branch `openProjectId ? {} : {}` spread on Tasks quick-add.
 - `packages/model-runtime/src/onnx.ts` — P9, entry resolution without
   `createRequire`.
 - P9, rebuilt by `build:automations` so the shipped artifacts match the source:
