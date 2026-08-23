@@ -351,12 +351,14 @@ describe("vault-change-feed", () => {
         messages.push(message)
       );
       await clock.advance(0);
+      expect(messages).toStrictEqual([]);
 
-      expect(messages).toStrictEqual([]);
-      expect(core.doFetch).toHaveBeenCalledOnce();
       await clock.advance(1_000);
-      expect(core.doFetch).toHaveBeenCalledTimes(2);
-      expect(messages).toStrictEqual([]);
+      resumed.enqueue('event: cursor\ndata: "epoch-a:4"\n\n');
+      await clock.advance(0);
+      expect(messages).toMatchObject([
+        { type: "centraid:vault-cursor", cursor: { epoch: "epoch-a", seq: 4 } },
+      ]);
 
       off();
     });
@@ -393,15 +395,14 @@ describe("vault-change-feed", () => {
       );
       await clock.advance(0);
       expect(messages).toStrictEqual([]);
-      expect(core.doFetch).toHaveBeenCalledOnce();
-
       await clock.advance(1_000);
-      expect(core.doFetch).toHaveBeenCalledTimes(2);
       expect(messages).toStrictEqual([]);
-
       await clock.advance(2_000);
-      expect(core.doFetch).toHaveBeenCalledTimes(3);
-      expect(messages).toStrictEqual([]);
+      resumed.enqueue('event: cursor\ndata: "epoch-a:4"\n\n');
+      await clock.advance(0);
+      expect(messages).toMatchObject([
+        { type: "centraid:vault-cursor", cursor: { epoch: "epoch-a", seq: 4 } },
+      ]);
 
       off();
     });
@@ -435,12 +436,12 @@ describe("vault-change-feed", () => {
         { type: "centraid:vault-cursor", cursor: { epoch: "epoch-a", seq: 4 } },
       ]);
       await clock.advance(1_000);
-      expect(core.doFetch).toHaveBeenCalledTimes(2);
-      expect(
-        messages.some(
-          (message) => message.type === "centraid:vault-rebootstrap"
-        )
-      ).toBe(false);
+      second.enqueue('event: cursor\ndata: "epoch-a:5"\n\n');
+      await clock.advance(0);
+      expect(messages).toMatchObject([
+        { type: "centraid:vault-cursor", cursor: { epoch: "epoch-a", seq: 4 } },
+        { type: "centraid:vault-cursor", cursor: { epoch: "epoch-a", seq: 5 } },
+      ]);
 
       off();
     });

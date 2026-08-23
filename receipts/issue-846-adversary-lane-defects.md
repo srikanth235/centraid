@@ -524,6 +524,10 @@ The overlay/reload assertions in the desktop spec are unchanged. Locks:
 `packages/client/src/vault-change-feed.test.ts`,
 `packages/client/src/replica/shell-transport.test.ts`,
 `packages/client/src/replica/coordinator.test.ts`.
+The feed reconnect cases assert that a cursor arrives on the *resumed*
+stream (the observable), not that `doFetch` ran N times. That dropped
+`toHaveBeenCalled*` 801 → 789, and `tests/hygiene-budgets.json` ratchets
+to 789 — the gate is down-only and will not take a raise.
 
 ### The record moved with the code
 
