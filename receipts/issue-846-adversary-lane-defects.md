@@ -26,6 +26,7 @@ which is what the pin existed to buy.
 - [x] P9 — an automation worker with no lane was not sandboxed
 - [x] The record moved with the code
 - [x] Three CI failures on `main`, rolled into this PR by request
+- [x] `desktop-e2e` pending-overlay: going offline must not wipe a bootstrapped replica
 
 One commit, not one per defect: `commit-issue-receipt-match` requires every
 commit to carry this receipt, and the receipt is a single account of a single
@@ -44,14 +45,19 @@ boundaries would otherwise have carried.
 | P8 diagnostics bundle emits the vault name verbatim | **Fixed** — one bundle |
 | P9 unsandboxed automation worker | **Fixed** — the floor is unconditional |
 | P10 three responses without `nosniff` | **Fixed** — one transport-boundary writer |
+| Offline disconnect wiping a bootstrapped replica | **Fixed** — empty/HTML 4xx and `initial` sentinel are disconnects |
 
 Parts 2 (posture decisions), 3 (observations) and 4 (blocked on an external
 actor) are untouched — a maintainer decision and an external actor are not
 things a PR supplies. The `desktop-e2e` assistant-open
 budget reported as P11 in the issue comments belongs to
-[#789](https://github.com/srikanth235/centraid/issues/789)'s owner: it is red on
-the base branch, and raising someone else's perf budget to go green is the move
-the constitution forbids.
+[#789](https://github.com/srikanth235/centraid/issues/789)'s owner and is **not**
+the required check that is red on this PR. Raising someone else's perf budget
+to go green is the move the constitution forbids. The Linux `desktop-e2e` lane
+that actually fails is `pending-overlay.spec.ts`: after
+`page.context().setOffline(true)` the replica is wiped and Docs paints
+`ReplicaRebootstrapRequiredError (not-bootstrapped)` instead of the queued
+rename. That is a product wipe-on-disconnect bug, not a budget.
 
 ## What changed
 
@@ -450,6 +456,64 @@ writes fire-and-forget (rejections swallowed; the never-settled second write is
 the QUALITY.md defect) and the journey waits on its existing UI outcome polls.
 36 sites against a budget of 36.
 
+### `client-e2e / desktop-e2e` — pending overlay wiped on Chromium-offline
+
+The required Linux xvfb lane (`desktop-e2e`) is red on this PR after SHA
+`24c8151` (green). `desktop-e2e-macos` is green on the same SHAs. The failure
+is `apps/desktop/tests/e2e/pending-overlay.spec.ts` — "a production Docs row
+queued offline survives an Electron reload". After founding, opening Docs, a
+write-rail probe, uploading `quarterly-review.txt`, `page.context().setOffline(true)`,
+and a `window.centraid.write` rename, the locator
+`Select quarterly-review-offline.txt` times out. The page is Docs chrome
+("4 documents") plus the consent banner:
+
+> No vault access yet. Replica must be bootstrapped again (not-bootstrapped)
+
+That string is `ReplicaRebootstrapRequiredError`. The write `page.evaluate`
+returned, so this is not the QUALITY.md hanging-await; replica meta is gone.
+CI artifacts: `desktop-e2e-pr-traces` on runs 32646707809 and 32614297028.
+Pageerrors in the same test include `cursor-gap` (the default reason
+`readReplicaJson` used for any 409/410) and then `not-bootstrapped` after the
+wipe.
+
+This was mis-attributed to P11's assistant-open budget. It is not a budget
+and not a flake to skip. Chromium `setOffline` on Linux xvfb often completes
+the change-stream `fetch` with an empty or HTML 403/409 rather than
+rejecting; the feed treated *any* of those statuses as
+`centraid:vault-rebootstrap` even when `json()` failed, and
+`requireRebootstrap` wiped the store. A `since=0:0` reconnect also gets an
+SSE `initial` sentinel, which the coordinator honoured as a wipe — including
+when it landed during a windowed bootstrap and was replayed after commit.
+
+**Demonstrated red** (then fixed in the same change):
+
+- `vault-change-feed.test.ts` — empty/HTML 403 then 409 emitted
+  `centraid:vault-rebootstrap` with a synthesized
+  `replica_device_not_enrolled` detail instead of reconnecting.
+- `shell-transport.test.ts` — a 409 HTML body threw
+  `ReplicaRebootstrapRequiredError` (`cursor-gap`) instead of a transport
+  error.
+- `coordinator.test.ts` — an `initial` sentinel after bootstrap (and during
+  a windowed walk) wiped the cursor.
+
+**Fix.** `desktop-e2e` pending-overlay: going offline must not wipe a
+bootstrapped replica. A 401/403/409/410 change-stream response is a wipe
+only when the body parses as a JSON object — the gateway's real
+enrollment/rebootstrap answers. Empty, HTML, and rejected fetches reconnect.
+`packages/client/src/vault-change-feed.ts` and
+`apps/mobile/src/lib/replica/native-change-feed.ts` share that classification.
+Pull `packages/client/src/replica/shell-transport.ts` `readReplicaJson` only
+raises `ReplicaRebootstrapRequiredError` on a parsed JSON 409/410; a
+non-JSON 4xx is `ReplicaTransportError`.
+`packages/client/src/replica/coordinator.ts` `requireRebootstrap` ignores
+`reason: "initial"`: if a cursor exists it resumes the feed there; it never
+wipes a healthy store for the bootstrap sentinel. JSON
+`replica_device_not_enrolled` / `replica_rebootstrap_required` still wipe.
+The overlay/reload assertions in the desktop spec are unchanged. Locks:
+`packages/client/src/vault-change-feed.test.ts`,
+`packages/client/src/replica/shell-transport.test.ts`,
+`packages/client/src/replica/coordinator.test.ts`.
+
 ### The record moved with the code
 
 Stale docs are bugs, so every claim the fixes falsified was rewritten in this
@@ -509,11 +573,11 @@ promise, which is what a member sees anyway.
 
 **P11 — the `desktop-e2e` assistant-open budget.** Reported in the issue's
 comment thread, and it belongs to [#789](https://github.com/srikanth235/centraid/issues/789)'s
-owner. It is red on the base branch, it predates this branch, and raising
-someone else's perf budget to go green is precisely the move the constitution
-forbids. Its honest fix — measure the thing the assertion claims to measure, or
-re-seed the ceiling from a real distribution — is a deliberate call for the
-owner of the surface, not a side effect of this change.
+owner. Raising someone else's perf budget to go green is precisely the move
+the constitution forbids. It is **not** the required check that is red on this
+PR: Linux `desktop-e2e` fails `pending-overlay.spec.ts` because Chromium-offline
+was classified as a replica wipe (see the section above). The assistant-open
+budget remains #789's call.
 
 **P12 — desktop first-run founding never completes on Windows.** Raised in the
 issue's comment thread after this work began, root-caused there to
@@ -748,12 +812,22 @@ bun run --cwd packages/model-runtime test -- src/onnx.test.ts
 bun run --cwd packages/server test -- src/engine/sandbox/bundle-lane-conformance.test.ts
 #   → "every bundle is admitted by the lane its own manifest declares" fails
 #     with photo-ocr denied `fs` — the production failure, at commit time.
+
+# desktop-e2e pending-overlay: going offline must not wipe a bootstrapped replica
+bun run --cwd packages/client test -- src/vault-change-feed.test.ts \
+  src/replica/shell-transport.test.ts src/replica/coordinator.test.ts
+#   Before the fix: empty 403/409 emitted vault-rebootstrap; HTML 409 threw
+#   ReplicaRebootstrapRequiredError; an `initial` sentinel wiped the cursor.
 ```
 
 ## Files changed
 
 Product:
 
+- `packages/client/src/vault-change-feed.ts` — empty/HTML 4xx reconnects; JSON 401/403/409/410 still wipes.
+- `packages/client/src/replica/shell-transport.ts` — non-JSON 409/410 is a transport error, not a wipe.
+- `packages/client/src/replica/coordinator.ts` — `initial` sentinel resumes the feed instead of wiping.
+- `apps/mobile/src/lib/replica/native-change-feed.ts` — same 4xx JSON requirement as the browser feed.
 - `packages/backup/src/wal-format.ts` — P3, the closer parser's positivity check.
 - `packages/client/src/replica/search.ts` — P4/P5, the mirror and the phrase matcher.
 - `packages/tunnel/src/protocol.ts` — P6/P7, path-length test and representability.
@@ -785,6 +859,9 @@ Product:
 
 Tests and fixtures:
 
+- `packages/client/src/vault-change-feed.test.ts` — failed fetch, empty 403/409, closed SSE: no wipe.
+- `packages/client/src/replica/shell-transport.test.ts` — HTML 409 is not `ReplicaRebootstrapRequiredError`.
+- `packages/client/src/replica/coordinator.test.ts` — pull disconnect and `initial` sentinel keep the cursor.
 - `packages/tunnel/src/peer-target-differential.test.ts`,
   `packages/tunnel/fixtures/peer-target-golden.json`,
   `packages/tunnel/fixtures/peer-target-corpus.json` — P6/P7 pins → locks.

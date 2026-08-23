@@ -677,6 +677,13 @@ export class ReplicaCoordinator {
   }
 
   private async requireRebootstrap(detail: unknown): Promise<void> {
+    if (isBootstrapSentinelRebootstrap(detail)) {
+      // `since=0:0` answers `reason: "initial"` — resume, do not wipe.
+      this.resetFeedGeneration();
+      const status = await this.worker.status();
+      if (status.cursor) await this.#feed?.resume(status.cursor);
+      return;
+    }
     this.resetFeedGeneration();
     if (this.#bootstrapOpen) {
       // A windowed walk already owns the store. Wiping under it would delete
@@ -738,4 +745,12 @@ export class ReplicaCoordinator {
 
 function cursorAfter(left: ReplicaCursor, right: ReplicaCursor): boolean {
   return left.epoch !== right.epoch || left.seq > right.seq;
+}
+
+function isBootstrapSentinelRebootstrap(detail: unknown): boolean {
+  return (
+    typeof detail === "object" &&
+    detail !== null &&
+    (detail as { reason?: unknown }).reason === "initial"
+  );
 }

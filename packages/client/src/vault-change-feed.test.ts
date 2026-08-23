@@ -334,5 +334,115 @@ describe("vault-change-feed", () => {
 
       off();
     });
+
+    it("reconnects a failed fetch without wiping a bootstrapped replica", async () => {
+      const clock = useFakeClock();
+      vi.spyOn(Math, "random").mockReturnValue(0.5);
+      const resumed = controlledBody();
+      core.doFetch
+        .mockRejectedValueOnce(new TypeError("Failed to fetch"))
+        .mockResolvedValueOnce({
+          ok: true,
+          status: 200,
+          body: resumed.body,
+        } as unknown as Response);
+      const messages: TypeImport_lkae3t.VaultChangeMessage[] = [];
+      const off = feedModule.subscribeVaultChanges((message) =>
+        messages.push(message)
+      );
+      await clock.advance(0);
+
+      expect(messages).toStrictEqual([]);
+      expect(core.doFetch).toHaveBeenCalledOnce();
+      await clock.advance(1_000);
+      expect(core.doFetch).toHaveBeenCalledTimes(2);
+      expect(messages).toStrictEqual([]);
+
+      off();
+    });
+
+    it("reconnects an empty 403/409 instead of treating Chromium-offline as a wipe", async () => {
+      const clock = useFakeClock();
+      vi.spyOn(Math, "random").mockReturnValue(0.5);
+      const resumed = controlledBody();
+      core.doFetch
+        .mockResolvedValueOnce({
+          ok: false,
+          status: 403,
+          body: null,
+          json: async () => {
+            throw new SyntaxError("Unexpected token < in JSON");
+          },
+        } as unknown as Response)
+        .mockResolvedValueOnce({
+          ok: false,
+          status: 409,
+          body: null,
+          json: async () => {
+            throw new SyntaxError("Unexpected end of JSON input");
+          },
+        } as unknown as Response)
+        .mockResolvedValueOnce({
+          ok: true,
+          status: 200,
+          body: resumed.body,
+        } as unknown as Response);
+      const messages: TypeImport_lkae3t.VaultChangeMessage[] = [];
+      const off = feedModule.subscribeVaultChanges((message) =>
+        messages.push(message)
+      );
+      await clock.advance(0);
+      expect(messages).toStrictEqual([]);
+      expect(core.doFetch).toHaveBeenCalledOnce();
+
+      await clock.advance(1_000);
+      expect(core.doFetch).toHaveBeenCalledTimes(2);
+      expect(messages).toStrictEqual([]);
+
+      await clock.advance(2_000);
+      expect(core.doFetch).toHaveBeenCalledTimes(3);
+      expect(messages).toStrictEqual([]);
+
+      off();
+    });
+
+    it("reconnects a closed SSE body without emitting a wipe", async () => {
+      const clock = useFakeClock();
+      vi.spyOn(Math, "random").mockReturnValue(0.5);
+      const first = controlledBody();
+      const second = controlledBody();
+      core.doFetch
+        .mockResolvedValueOnce({
+          ok: true,
+          status: 200,
+          body: first.body,
+        } as unknown as Response)
+        .mockResolvedValueOnce({
+          ok: true,
+          status: 200,
+          body: second.body,
+        } as unknown as Response);
+      const messages: TypeImport_lkae3t.VaultChangeMessage[] = [];
+      const off = feedModule.subscribeVaultChanges((message) =>
+        messages.push(message)
+      );
+      await clock.advance(0);
+      first.enqueue('event: cursor\ndata: "epoch-a:4"\n\n');
+      first.close();
+      await clock.advance(0);
+
+      expect(messages).toMatchObject([
+        { type: "centraid:vault-cursor", cursor: { epoch: "epoch-a", seq: 4 } },
+      ]);
+      await clock.advance(1_000);
+      expect(core.doFetch).toHaveBeenCalledTimes(2);
+      expect(
+        messages.some(
+          (message) => message.type === "centraid:vault-rebootstrap"
+        )
+      ).toBe(false);
+
+      off();
+    });
   });
 });
