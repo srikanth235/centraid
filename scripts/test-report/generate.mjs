@@ -50,6 +50,7 @@ import {
   summarizeCellStates,
   worstEvidenceByOwner,
 } from "./report-signals.mjs";
+import { designSystemCss, REPORT_CSS } from "./report-theme.mjs";
 import {
   attentionQueueForIssue,
   buildAttentionQueue,
@@ -1445,7 +1446,7 @@ function render(modelLocal) {
   const honestyBanners = [];
   if (modelLocal.reportScope === "main") {
     honestyBanners.push(
-      `<p class="lede" style="border-left:3px solid var(--blue);padding-left:12px">This is the <strong>per-push / main</strong> slot (CI after merge). It does not include nightly desktop/web/mobile/pairing e2e, perf, or scale. Full product lanes: <a href="../nightly/" style="color:var(--blue)">/test-report/nightly/</a>.</p>`
+      `<p class="lede scope">This is the <strong>per-push / main</strong> slot (CI after merge). It does not include nightly desktop/web/mobile/pairing e2e, perf, or scale. Full product lanes: <a href="../nightly/">/test-report/nightly/</a>.</p>`
     );
   }
   if (
@@ -1453,12 +1454,12 @@ function render(modelLocal) {
     modelLocal.summary.jobReconciliation
   ) {
     honestyBanners.push(
-      `<p class="lede" style="color:var(--red)">${escapeHtml(modelLocal.summary.jobReconciliation)}</p>`
+      `<p class="lede urgent">${escapeHtml(modelLocal.summary.jobReconciliation)}</p>`
     );
   }
   if (modelLocal.summary.unmappedEvidence) {
     honestyBanners.push(
-      `<p class="lede" style="color:var(--amber)">Unmapped e2e evidence: ${modelLocal.summary.unmappedEvidence}${
+      `<p class="lede attention">Unmapped e2e evidence: ${modelLocal.summary.unmappedEvidence}${
         (modelLocal.summary.unmappedFailed ?? []).length
           ? ` (${(modelLocal.summary.unmappedFailed ?? []).length} failed: ${escapeHtml((modelLocal.summary.unmappedFailed ?? []).join(", "))})`
           : ""
@@ -1467,17 +1468,17 @@ function render(modelLocal) {
   }
   if (modelLocal.summary.cellsMissingRose) {
     honestyBanners.push(
-      `<p class="lede" style="color:var(--amber)">cellsMissing rose vs prior durable history: ${modelLocal.summary.cellsMissingPrior} → ${modelLocal.summary.cellsMissing} (Δ+${modelLocal.summary.cellsMissingDelta})</p>`
+      `<p class="lede attention">cellsMissing rose vs prior durable history: ${modelLocal.summary.cellsMissingPrior} → ${modelLocal.summary.cellsMissing} (Δ+${modelLocal.summary.cellsMissingDelta})</p>`
     );
   }
   if ((modelLocal.summary.floorRatchetCandidates ?? []).length) {
     honestyBanners.push(
-      `<p class="lede" style="color:var(--amber)">Sustained floor ratchet due: ${escapeHtml(modelLocal.summary.floorRatchetCandidates.map((row) => `${row.key} ${row.floor}→${row.candidate}`).join(", "))}</p>`
+      `<p class="lede attention">Sustained floor ratchet due: ${escapeHtml(modelLocal.summary.floorRatchetCandidates.map((row) => `${row.key} ${row.floor}→${row.candidate}`).join(", "))}</p>`
     );
   }
   if ((modelLocal.summary.agedInfraMismatchCellIds ?? []).length) {
     honestyBanners.push(
-      `<p class="lede" style="color:var(--red)">Infrastructure mismatch exceeded its three-run maximum age: ${escapeHtml(modelLocal.summary.agedInfraMismatchCellIds.join(", "))}</p>`
+      `<p class="lede urgent">Infrastructure mismatch exceeded its three-run maximum age: ${escapeHtml(modelLocal.summary.agedInfraMismatchCellIds.join(", "))}</p>`
     );
   }
   if ((modelLocal.summary.expectedGreyCellIds ?? []).length) {
@@ -1485,9 +1486,9 @@ function render(modelLocal) {
       (cell) => cell.state === "expected-grey"
     )?.expectedGrey;
     honestyBanners.push(
-      `<p class="lede" style="color:var(--grey)">Named absences (#781 — no evidence lane exists yet): ${modelLocal.summary.expectedGreyCellIds.length} cell(s)${
+      `<p class="lede absent">Named absences (#781 — no evidence lane exists yet): ${modelLocal.summary.expectedGreyCellIds.length} cell(s)${
         registration?.issue
-          ? ` · <a href="${escapeHtml(registration.issue)}" style="color:var(--blue)">tracking issue</a>`
+          ? ` · <a href="${escapeHtml(registration.issue)}">tracking issue</a>`
           : ""
       }. These go red the night their lane first runs.</p>`
     );
@@ -1496,13 +1497,13 @@ function render(modelLocal) {
   return `<!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Centraid test health</title><style>
-:root{color-scheme:dark;--text:#ecf3ee;--text-soft:#8f9f98;--panel:#111713;--line:#273129;--bg:#090d0b;--green:#5bd697;--red:#ff766f;--amber:#e9b95c;--blue:#72a9ff;--violet:#b39cff;--cyan:#69d8d0;--grey:#738079;--sans:Inter,ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}*{box-sizing:border-box}body{margin:0;background:radial-gradient(circle at 90% -10%,#173126 0,transparent 35%),var(--bg);color:var(--text);font:14px/1.5 var(--sans)}main{width:min(1480px,calc(100% - 40px));margin:auto;padding:56px 0 80px}.eyebrow{color:var(--green);font-size:11px;font-weight:800;letter-spacing:.16em;text-transform:uppercase}h1{font-size:clamp(34px,5vw,66px);letter-spacing:-.055em;line-height:.95;margin:14px 0 16px;max-width:780px}.lede{color:#afbbb5;font-size:16px;max-width:720px;margin:0}.hero{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:44px;align-items:end;margin-bottom:42px}.summary{display:grid;grid-template-columns:repeat(3,92px);gap:8px}.stat{background:#101612;border:1px solid var(--line);border-radius:4px;padding:15px 12px}.stat b{display:block;font-size:25px}.stat small,.muted,small{color:var(--text-soft)}.matrix-shell,.card{background:color-mix(in srgb,var(--panel) 94%,transparent);border:1px solid var(--line);border-radius:6px}.matrix-head{display:flex;justify-content:space-between;gap:24px;align-items:center;padding:18px 20px;border-bottom:1px solid var(--line)}.matrix-head h2,.card h2{font-size:15px;margin:0;letter-spacing:-.01em}.legend{display:flex;gap:14px;flex-wrap:wrap;color:var(--text-soft);font-size:12px}.dot{display:inline-block;width:7px;height:7px;border-radius:50%;margin-right:5px}.dot.passed{background:var(--green)}.dot.partial{background:var(--cyan)}.dot.failed,.dot.infra-mismatch{background:var(--red)}.dot.flaky{background:var(--violet)}.dot.skipped{background:var(--amber)}.dot.gap{background:#ff9e64}.dot.evidence-unmatched{background:#ff8a65}.dot.owner-silent{background:#ffcb6b}.dot.lane-did-not-run,.dot.stale,.dot.expected-grey{background:var(--grey)}.matrix-scroll{overflow:auto;padding:10px}table{border-collapse:separate;border-spacing:4px;width:100%}.heatmap th{font-size:11px;color:var(--text-soft);font-weight:650;text-align:left;min-width:68px}.heatmap thead th:not(:first-child){height:98px;vertical-align:bottom}.heatmap thead th span{display:block;writing-mode:vertical-rl;transform:rotate(180deg);height:74px}.heatmap thead th small{display:none}.heatmap tbody th{min-width:230px;color:#bdc9c3}.cell{width:100%;min-width:52px;height:40px;border:1px solid transparent;border-radius:3px;color:#07110c;display:flex;justify-content:space-between;align-items:center;padding:0 9px;font:700 13px var(--sans);cursor:pointer;transition:transform .16s,border-color .16s,filter .16s;animation:rise .34s both;animation-delay:calc(var(--row)*28ms)}.cell small{color:inherit;opacity:.65}.cell:hover,.cell:focus-visible{transform:translateY(-2px);filter:brightness(1.12);outline:none;border-color:#fff8}.cell.passed{background:var(--green)}.cell.passed.assessment-partial{background:var(--cyan)}.cell.failed,.cell.infra-mismatch{background:var(--red)}.cell.flaky{background:var(--violet)}.cell.skipped{background:var(--amber)}.cell.gap{background:#ff9e64}.cell.evidence-unmatched{background:#ff8a65}.cell.owner-silent{background:#ffcb6b}.cell.missing,.cell.stale,.cell.lane-did-not-run{background:#46534c;color:#f0f4f1}.cell.expected-grey{background:#39423d;color:#cfd8d2;border:1px dashed #738079}.inspector{display:grid;grid-template-columns:220px minmax(0,1fr);gap:22px;padding:20px;border-top:1px solid var(--line);min-height:126px}.inspector .kicker{color:var(--text-soft);font-size:12px}.inspector h3{margin:4px 0 0;font-size:18px}.flow-list{display:grid;gap:8px}.flow{display:grid;grid-template-columns:minmax(150px,.45fr) 78px 84px 84px minmax(230px,1fr);gap:12px;align-items:center;padding:8px 0;border-bottom:1px solid #202923}.flow:last-child{border-bottom:0}.tier{color:var(--blue);font-size:11px;text-transform:uppercase;letter-spacing:.08em}.result{font-size:11px;font-weight:750;text-transform:uppercase}.result.passed{color:var(--green)}.result.failed,.result.infra-mismatch{color:var(--red)}.result.flaky{color:var(--violet)}.result.skipped{color:var(--amber)}.result.evidence-unmatched{color:#ff8a65}.result.missing,.result.stale,.result.owner-silent,.result.lane-did-not-run,.result.expected-grey{color:var(--text-soft)}.path{color:#a8b7af;font:12px/1.4 ui-monospace,SFMono-Regular,Menlo,monospace;overflow-wrap:anywhere}.grid{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-top:14px}.card{padding:20px;overflow:auto}.card h2{margin-bottom:14px}.data{border-spacing:0;width:100%}.data th,.data td{text-align:left;border-bottom:1px solid #202923;padding:8px 7px;font-size:12px}.data th{color:var(--text-soft);font-weight:650}.metric.passed{color:var(--green)}.metric.failed{color:var(--red)}.metric.missing{color:var(--text-soft)}.metric.axis-declared{color:var(--blue)}.metric.axis-unowned{color:var(--grey)}.metric.axis-skipped{color:var(--amber)}.metric small{margin-left:4px;opacity:.7}.axis-note{font-size:12px;margin:0 0 12px}.wide{grid-column:1/-1}.trend-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:8px}.trend{display:flex;justify-content:space-between;gap:12px;align-items:center;background:#0c110e;border:1px solid #202923;padding:12px}.trend strong,.trend small{display:block}.spark{width:120px;height:40px}.spark polyline{fill:none;stroke:var(--green);stroke-width:2;vector-effect:non-scaling-stroke}.empty{color:var(--text-soft);border:1px dashed #334038;padding:24px;margin:0}.foot{margin-top:20px;color:var(--text-soft);font-size:12px}@keyframes rise{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}@media(max-width:900px){main{width:min(100% - 22px,1480px);padding-top:30px}.hero{grid-template-columns:1fr}.summary{grid-template-columns:repeat(3,1fr)}.grid{grid-template-columns:1fr}.wide{grid-column:auto}.inspector{grid-template-columns:1fr}.flow{grid-template-columns:1fr}.matrix-head{align-items:flex-start;flex-direction:column}}@media(prefers-reduced-motion:reduce){*,*::before,*::after{animation:none!important;transition:none!important}}
-.qualities-shell{margin-bottom:14px;padding:14px 20px;background:color-mix(in srgb,var(--panel) 94%,transparent);border:1px solid var(--line);border-radius:6px}.qualities-shell h2{font-size:15px;margin:0 0 10px}.quality-row{border-top:1px solid var(--line)}.quality-row summary{display:grid;grid-template-columns:14px 180px minmax(0,1fr) 72px;gap:10px;align-items:center;padding:11px 0;cursor:pointer}.quality-row summary b{text-align:right}.quality-light{width:9px;height:9px;border-radius:50%;background:var(--grey)}.quality-light.passed{background:var(--green)}.quality-light.partial{background:var(--cyan)}.quality-light.failed{background:var(--red)}.quality-gates{padding:0 0 10px 24px}.quality-gates>div{display:grid;grid-template-columns:12px minmax(180px,.7fr) minmax(260px,1fr);gap:8px;align-items:center;padding:5px 0}.quality-gates code{color:var(--text-soft);overflow-wrap:anywhere}.quality-debt{color:var(--text-soft);font-size:12px;margin:10px 0 0}@media(max-width:900px){.quality-row summary,.quality-gates>div{grid-template-columns:14px 1fr}.quality-row summary span:nth-of-type(2),.quality-row summary b,.quality-gates code{grid-column:2}}
+${designSystemCss()}
+${REPORT_CSS}
 ${BRIEFING_CSS}
 </style></head><body><main>
 <header class="hero"><div><div class="eyebrow">Centraid · test intelligence</div><h1>Product health, with the gaps left visible.</h1><p class="lede">One view across per-PR correctness and nightly journey, performance, and scale evidence. Every absence is classified: wiring, a silent owner, or a lane that did not run.</p>${honestyBanners.join("")}${
     modelLocal.summary.unhandledErrors
-      ? `<p class="lede" style="color:var(--red)">Unhandled Vitest errors: ${modelLocal.summary.unhandledErrors} — ${escapeHtml(
+      ? `<p class="lede urgent">Unhandled Vitest errors: ${modelLocal.summary.unhandledErrors} — ${escapeHtml(
           (modelLocal.summary.unhandledErrorMessages ?? [])
             .join(" · ")
             .slice(0, 400)

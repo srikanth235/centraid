@@ -65,8 +65,32 @@ const SURFACES = [
   path.join(ROOT, "scripts/docs-site/public/assets"),
 ];
 
+/**
+ * The third public surface, and the one that cannot take an `assets/`
+ * directory: the nightly test report (issue #853).
+ *
+ * `scripts/test-report/generate.mjs` emits ONE self-contained HTML file, and
+ * `prepare-pages-site.mjs` publishes the same bytes to two depths — the
+ * mutable `test-report/nightly/` alias and the immutable
+ * `test-report/nightly/runs/<slug>/` archive beside it. No relative `url()`
+ * resolves from both, a root-absolute one would bake in the `/centraid/`
+ * Pages base path and break `file://` reading, and an archived run has to keep
+ * rendering years after the run that produced it. So this surface gets the
+ * whole design system as ONE file with the faces inlined as `data:` URIs,
+ * which the node-side generator reads and drops into its `<style>`.
+ */
+const REPORT_SHEET = path.join(ROOT, "scripts/test-report/report-tokens.css");
+
 /** Relative to the emitted sheet, which lives in `assets/`. */
 const FONT_SUBDIR = "fonts";
+
+/**
+ * Where `toFontFaceCss` is pointed before the report's bytes are inlined.
+ * Nothing ever resolves it: every `url()` built from it is substituted in
+ * `facesInline`, and a survivor throws there rather than becoming a request
+ * that fails silently in a reader's browser.
+ */
+const FACE_BASE = "centraid-face";
 
 /** The emitter's own output, exempt from the authored-source checks below. */
 const EMITTED_SHEET = "centraid-tokens.css";
@@ -133,6 +157,152 @@ const SITE_LAYER = `
   );
 }
 `;
+
+/**
+ * The report layer — the matrix status ramp, and nothing else.
+ *
+ * The nightly report is a heat map: fifteen product surfaces by eleven quality
+ * dimensions, and a cell's whole job is to say which of eleven states it is in
+ * at a glance. It had answered that with a palette of its own — `--green`,
+ * `--red`, `--amber`, `--blue`, `--violet`, `--cyan`, `--grey` over a
+ * near-black ground, in Inter — so the page carried a second design system on
+ * the same origin as the two sites #841 had just unified.
+ *
+ * Every rung below now resolves from a product token. The ramp introduces no
+ * colour, no face and no scale of its own; what it introduces is NAMES, one
+ * per state, so a rule says which state it is painting rather than which hue.
+ *
+ * The pairs are deliberate. A state is painted twice — as a FILL under ink on
+ * the matrix cell and the legend dot, and as TYPE on the page ground in the
+ * evidence inspector and the grid tables — and the two do not always want the
+ * same rung: the `--c-*` identity hues carry a solved `-text` sibling for
+ * exactly this, while the semantic roles are already solved against the
+ * surfaces they land on. One name per state per role means a rule never has to
+ * know which of the two cases it is in.
+ *
+ * The departure this takes from DESIGN.md — a hue and three system-signal
+ * tones (`--attention`, `--seam`, `--warning`) used as a FILL, on a mark that
+ * is also a focusable target — is registered with what bounds it in
+ * docs/design-divergences.md, under "The nightly test report".
+ */
+const REPORT_LAYER = `
+/* ---------------------------------------------------------------------------
+   Report layer — the matrix status ramp. One name per state, per role; every
+   value resolves from a product token above. See
+   docs/design-divergences.md#the-nightly-test-report for the fill departure
+   and its bound.
+   --------------------------------------------------------------------------- */
+
+:root {
+  /* Fills: the matrix cell, the legend dot, the verdict rule. */
+  --st-solid: var(--success);
+  --st-partial: var(--c-teal);
+  --st-failed: var(--danger);
+  --st-flaky: var(--c-violet);
+  --st-na: var(--c-slate);
+  --st-gap: var(--seam);
+  --st-unmatched: var(--c-amber);
+  --st-silent: var(--attention);
+  --st-missing: var(--text-faint);
+  --st-absent: var(--text-ghost);
+
+  /* The ink a fill carries. \`--text-inv\` is the PAGE colour rather than
+     white, and it inverts with the theme exactly as the ramp under it does:
+     the identity hues sit at oklch L .50 in light and L .72 in dark, so the
+     ink on them has to move the other way or every cell loses its label at
+     one theme or the other. */
+  --st-on-fill: var(--text-inv);
+
+  /* Type: the same states named on the page ground. The three hue states take
+     their solved \`-text\` sibling; the semantic roles are already solved
+     against the hardest surface they land on and alias straight through. */
+  --st-solid-text: var(--success);
+  --st-partial-text: var(--c-teal-text);
+  --st-failed-text: var(--danger);
+  --st-flaky-text: var(--c-violet-text);
+  --st-na-text: var(--c-slate-text);
+  --st-gap-text: var(--seam);
+  --st-unmatched-text: var(--c-amber-text);
+  --st-silent-text: var(--attention);
+  --st-missing-text: var(--text-faint);
+  --st-absent-text: var(--text-ghost);
+
+  /* The attention queue's severity bands, worst first. A ladder rather than a
+     set: S1 is the consequence tone, S2 the "not yet, and not wrong" tone, S3
+     the middle system signal, and S4 recedes into the ink ramp because the
+     bottom band's job is to be present without competing. */
+  --st-s1: var(--danger);
+  --st-s2: var(--seam);
+  --st-s3: var(--attention);
+  --st-s4: var(--text-soft);
+
+  /* A finding a person pinned, which is not a state the run measured — so it
+     takes a content marker rather than any of the semantic roles. */
+  --st-pinned: var(--c-indigo-text);
+
+  /* The verdict's middle rung, and the only place \`--warning\` belongs on this
+     page: a reading that is DEGRADED. "n/a by design" is not degraded — it is
+     an exclusion the app's own manifest declares — which is why it took a
+     content marker above instead of sharing this one. In dark the general
+     \`--warning\` rung and \`--attention\` land within a hair of each other
+     (#d9a75b against #D8A64E), so two states sharing them would be one state
+     to any reader. */
+  --st-degraded: var(--warning);
+  --st-degraded-text: var(--warning);
+}
+`;
+
+/**
+ * The bundled faces with their bytes inlined, for the one surface that cannot
+ * link them. The RULES still come from \`@centraid/design\` — the weights, the
+ * subsets, the \`unicode-range\` split and \`font-display: swap\` are the
+ * emitter's, not re-typed here — and only the \`src\` target is rewritten.
+ */
+function facesInline() {
+  let css = toFontFaceCss(FACE_BASE);
+  for (const file of FONT_FILES) {
+    const from = `url(${FACE_BASE}/${file.fileName})`;
+    if (!css.includes(from)) {
+      throw new Error(
+        `site tokens: ${file.fileName} is not in the emitted @font-face block`
+      );
+    }
+    const bytes = readFileSync(path.join(FONTS_SRC, file.fileName)).toString(
+      "base64"
+    );
+    css = css.replaceAll(from, `url(data:font/woff2;base64,${bytes})`);
+  }
+  if (css.includes(FACE_BASE)) {
+    throw new Error(
+      "site tokens: a face URL survived inlining — the report would fetch a path that does not exist"
+    );
+  }
+  return css;
+}
+
+/** The report's sheet: the same tokens and the same site layer the two sites
+ *  take, with the faces inlined and the status ramp composed over them. */
+function reportSheet() {
+  return [
+    "/* Centraid — the product design system, lowered onto the nightly test report.",
+    " *",
+    " * GENERATED by scripts/site-tokens.mjs from @centraid/design. Do not edit",
+    " * by hand: `bun run lint:site-tokens` fails on any drift from the emitter,",
+    " * and `bun run site:tokens` is the only sanctioned way to change it.",
+    " *",
+    " * The faces are inlined because `generate.mjs` emits ONE self-contained",
+    " * file that is published at two depths and archived per run; see the",
+    " * REPORT_SHEET comment in the emitter for why no href serves both.",
+    " */",
+    "",
+    facesInline().trimEnd(),
+    "",
+    toCss().trimEnd(),
+    SITE_LAYER.trimEnd(),
+    REPORT_LAYER.trimEnd(),
+    "",
+  ].join("\n");
+}
 
 /** The emitted sheet, in the order a browser needs it: faces, then tokens,
  *  then the site layer that composes over them. */
@@ -209,6 +379,33 @@ const FORBIDDEN = [
   },
 ];
 
+/**
+ * What the report may not carry, on top of the three above.
+ *
+ * The colour rule is report-only rather than shared. The two sites paint some
+ * of their marks in inline SVG inside `index.html`, where a `fill` has to name
+ * a colour literally because a social card is rasterized by a renderer with no
+ * stylesheet; the report draws no artwork at all — its one SVG is a sparkline
+ * whose stroke is a token — so here a literal is always the defect it looks
+ * like. Six and eight digits only: `#839` in this tree is an issue number, and
+ * a gate that reds on every citation is a gate someone turns off.
+ */
+const REPORT_FORBIDDEN = [
+  ...FORBIDDEN,
+  {
+    label: "a colour literal",
+    pattern: /#[0-9a-fA-F]{6}(?:[0-9a-fA-F]{2})?\b/gu,
+    hint: "name a token: a status takes a --st-* rung, everything else takes the role it means",
+  },
+  {
+    // The face the report shipped for two years, and the one name that proves
+    // this migration did not half-land.
+    label: "a withdrawn face",
+    pattern: /\bInter\b\s*,/gu,
+    hint: "the one bundled face is Instrument Sans, reached through var(--font-sans)",
+  },
+];
+
 /** Files whose faces and hues the sites author. `.svg` is excluded: a social
  *  card is rasterized by a renderer that has no stylesheet and no webfont, so
  *  it must name a family literally. `.woff2` and the generated sheet are the
@@ -218,6 +415,7 @@ const SITE_ROOTS = [
   path.join(ROOT, "scripts/home-site"),
   path.join(ROOT, "scripts/docs-site"),
 ];
+const REPORT_DIR = path.dirname(REPORT_SHEET);
 
 function authoredFiles(dir, out = []) {
   for (const entry of readdirSync(dir, { withFileTypes: true })) {
@@ -279,9 +477,32 @@ for (const dir of SURFACES) {
   }
 }
 
+// The report's single file, on the same terms: written by `--write`, and
+// otherwise compared by bytes like every other emitted artifact.
+{
+  const bytes = Buffer.from(reportSheet(), "utf8");
+  if (write) {
+    writeFileSync(REPORT_SHEET, bytes);
+  } else {
+    let actual;
+    try {
+      actual = readFileSync(REPORT_SHEET);
+    } catch {
+      actual = undefined;
+    }
+    if (actual === undefined) {
+      stale.push(`${path.relative(ROOT, REPORT_SHEET)}: missing`);
+    } else if (!actual.equals(bytes)) {
+      stale.push(
+        `${path.relative(ROOT, REPORT_SHEET)}: differs from the emitter`
+      );
+    }
+  }
+}
+
 if (write) {
   console.log(
-    `site tokens: emitted ${SURFACES.length} surfaces from @centraid/design`
+    `site tokens: emitted ${SURFACES.length} surfaces and the report sheet from @centraid/design`
   );
   process.exit(0);
 }
@@ -315,32 +536,60 @@ function resolvableProps() {
   return names;
 }
 
-const resolvable = resolvableProps();
+/**
+ * Every custom property the report can resolve. Its whole vocabulary is the
+ * emitted sheet — it authors no stylesheet of its own — plus the one knob the
+ * markup sets per element: `--row` staggers a matrix row's entry animation and
+ * is written as an inline `style` on the cell, so it is declared where it is
+ * used rather than in the sheet.
+ */
+function reportResolvableProps() {
+  return new Set([
+    ...declaredCustomProps(stripCssComments(reportSheet())),
+    "--row",
+  ]);
+}
+
 let scanned = 0;
-for (const root of SITE_ROOTS) {
-  for (const file of authoredFiles(root)) {
-    scanned += 1;
-    // Comments name what a rule replaced ("was Fraunces"), which is not a
-    // live declaration — strip them the way lint-design-tokens.mjs does.
-    const text = readFileSync(file, "utf8")
-      .replace(/\/\*[\s\S]*?\*\//gu, "")
-      .replace(/^\s*\/\/.*$/gmu, "")
-      .replace(/<!--[\s\S]*?-->/gu, "");
-    for (const name of unresolvedVarRefs(stripCssComments(text), resolvable)) {
+
+/** Read a file the way lint-design-tokens.mjs does — comments name what a rule
+ *  replaced ("was Inter"), which is not a live declaration — and record every
+ *  unresolvable reference and every forbidden construct it still carries. */
+function scan(file, rules, resolvable) {
+  scanned += 1;
+  const text = readFileSync(file, "utf8")
+    .replace(/\/\*[\s\S]*?\*\//gu, "")
+    .replace(/^\s*\/\/.*$/gmu, "")
+    .replace(/<!--[\s\S]*?-->/gu, "");
+  for (const name of unresolvedVarRefs(stripCssComments(text), resolvable)) {
+    stale.push(
+      `${path.relative(ROOT, file)}: ${name} resolves to nothing\n      the declaration is silently dropped — name a token the emitted sheet declares`
+    );
+  }
+  for (const rule of rules) {
+    for (const hit of text.matchAll(rule.pattern)) {
+      if (rule.allow?.(hit.groups?.value ?? "")) continue;
       stale.push(
-        `${path.relative(ROOT, file)}: ${name} resolves to nothing\n      the declaration is silently dropped — name a token the emitted sheet declares`
+        `${path.relative(ROOT, file)}: ${rule.label} — ${hit[0].trim().slice(0, 70)}\n      ${rule.hint}`
       );
-    }
-    for (const rule of FORBIDDEN) {
-      for (const hit of text.matchAll(rule.pattern)) {
-        if (rule.allow?.(hit.groups?.value ?? "")) continue;
-        stale.push(
-          `${path.relative(ROOT, file)}: ${rule.label} — ${hit[0].trim().slice(0, 70)}\n      ${rule.hint}`
-        );
-      }
     }
   }
 }
+
+const resolvable = resolvableProps();
+for (const root of SITE_ROOTS) {
+  for (const file of authoredFiles(root)) scan(file, FORBIDDEN, resolvable);
+}
+
+// The report authors its CSS inside `.mjs` template literals rather than in a
+// stylesheet, so the scan is pointed at the modules that carry it. Tests are
+// excluded: a test asserting that a literal is REJECTED has to spell one.
+const reportResolvable = reportResolvableProps();
+for (const name of readdirSync(REPORT_DIR)) {
+  if (!name.endsWith(".mjs") || name.endsWith(".test.mjs")) continue;
+  scan(path.join(REPORT_DIR, name), REPORT_FORBIDDEN, reportResolvable);
+}
+
 // A gate that silently scans nothing passes forever; following
 // scripts/lint-types.sh, a no-op is a failure.
 if (scanned === 0) {
@@ -357,4 +606,6 @@ if (stale.length > 0) {
   process.exit(1);
 }
 
-console.log("site tokens: home + docs match the @centraid/design emitters");
+console.log(
+  "site tokens: home + docs + the nightly report match the @centraid/design emitters"
+);

@@ -28,6 +28,8 @@ import {
 } from "node:fs/promises";
 import path from "node:path";
 
+import { designSystemCss } from "./report-theme.mjs";
+
 const root = path.resolve(import.meta.dirname, "../..");
 const flags = parseFlags(process.argv.slice(2));
 const reportDir = path.resolve(
@@ -255,17 +257,21 @@ function renderLanding(
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Centraid test health reports</title>
   <style>
-    body { font: 16px/1.5 system-ui, sans-serif; max-width: 44rem; margin: 2rem auto; padding: 0 1rem; color: #111; }
-    h1 { font-size: 1.35rem; }
-    h2 { font-size: 1.05rem; margin: 1.6rem 0 0.4rem; }
-    h3 { font-size: 0.85rem; text-transform: uppercase; letter-spacing: 0.04em; color: #555; margin: 1rem 0 0.3rem; }
-    a { color: #0b57d0; }
-    .meta { color: #555; font-size: 0.9rem; }
-    ul { margin: 0.3rem 0; padding-left: 1.2rem; }
-    li { margin: 0.15rem 0; }
-    .tag { font-size: 0.8rem; border-radius: 999px; padding: 0 0.45rem; margin-left: 0.35rem; }
-    .ok { background: #e6f4ea; color: #137333; }
-    .bad { background: #fce8e6; color: #a50e0e; }
+${designSystemCss()}
+    body { font: var(--t-reading); max-width: 44rem; margin: var(--sp-6) auto; padding: 0 var(--page-margin); background: var(--bg); color: var(--text); }
+    h1 { font: var(--t-title); letter-spacing: var(--t-title-tracking); }
+    h2 { font: var(--t-small-strong); margin: var(--sp-5) 0 var(--sp-1); }
+    h3 { font: var(--t-eyebrow); text-transform: var(--t-eyebrow-transform); letter-spacing: var(--t-eyebrow-tracking); color: var(--text-soft); margin: var(--sp-4) 0 var(--sp-1); }
+    a { color: var(--link); }
+    .meta { color: var(--text-soft); font: var(--t-annot-label); }
+    ul { margin: var(--sp-1) 0; padding-left: var(--sp-5); }
+    li { margin: 2px 0; }
+    /* A run's outcome. The --st-* rung names the state; the tag is a chip, so
+       the tone is a border and a label rather than the filled ground a status
+       colour is never allowed to become. */
+    .tag { font: var(--t-control); border-radius: var(--r-pill); border: 1px solid currentcolor; padding: 0 var(--sp-2); margin-left: var(--sp-1); }
+    .ok { color: var(--st-solid-text); }
+    .bad { color: var(--st-failed-text); }
   </style>
 </head>
 <body>
@@ -386,7 +392,7 @@ async function ensureMainScopeBanner(indexPath) {
   }
   if (html.includes("/test-report/nightly/") && html.includes("per-push"))
     return;
-  const banner = `<p class="lede" style="border-left:3px solid var(--blue);padding-left:12px">This is the <strong>per-push / main</strong> slot (CI after merge). It does not include nightly desktop/web/mobile/pairing e2e, perf, or scale. Full product lanes: <a href="../nightly/" style="color:var(--blue)">/test-report/nightly/</a>.</p>`;
+  const banner = `<p class="lede scope">This is the <strong>per-push / main</strong> slot (CI after merge). It does not include nightly desktop/web/mobile/pairing e2e, perf, or scale. Full product lanes: <a href="../nightly/">/test-report/nightly/</a>.</p>`;
   // Prefer after the primary lede paragraph.
   const next = html.includes('<p class="lede">')
     ? html.replace('<p class="lede">', `${banner}<p class="lede">`)

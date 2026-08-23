@@ -65,6 +65,11 @@ export default defineConfig({
     // The public site's token sheet is lowered from @centraid/design by
     // scripts/site-tokens.mjs; `lint:site-tokens` asserts it byte-for-byte.
     "scripts/*-site/public/assets/centraid-tokens.css",
+    // The nightly report's sheet (#853) is the same lowering from the same
+    // emitter, gated the same way — one file rather than a per-surface
+    // `assets/` copy, because the report is published at two depths and
+    // inlines its faces. See docs/design-divergences.md#the-nightly-test-report.
+    "scripts/test-report/report-tokens.css",
     "scripts/docs-site/src/content/**",
     "packages/blueprints/manifest.json",
     // The peer-target differential corpus (#842 W2.1) is emitted by
