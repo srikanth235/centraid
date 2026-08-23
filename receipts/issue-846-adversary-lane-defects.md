@@ -264,7 +264,12 @@ the caller may reasonably retry on.
 
 This is the item the umbrella lists as already filed as
 [#844](https://github.com/srikanth235/centraid/issues/844). It is fixed here
-because it is a Part 1 defect on this issue and the fix is four lines.
+because it is a Part 1 defect on this issue and the fix is four lines. The
+product writer landed earlier in this branch; A-pinned still required the
+pin to leave in the same change, and `scripts/security/dast-known-findings.json`
+still carried `header.boundary-response-nosniff`. That entry is deleted, the
+register is empty, and a DAST-judge test asserts an unpinned missing header
+fails the lane — which is the lock #844 asked for.
 
 ### P9 — an automation worker with no lane was not sandboxed
 
@@ -796,6 +801,10 @@ Tests and fixtures:
   `scripts/corpora/schema-epoch-census.json` — P1, rung four joins the ladder and
   the archaeology corpus.
 - `scripts/fuzz/known-findings.json` — P3/P4/P5 register entries deleted.
+- `scripts/security/dast-known-findings.json` — P10 / #844 pin deleted; empty `keys`.
+- `scripts/security/dast-scan.test.mjs` — P10 / #844 lock: the live register
+  no longer pins `header.boundary-response-nosniff`, and an unpinned miss
+  fails the lane.
 - `packages/server/src/engine/http/http-server.test.ts` — P10 regression lock.
 - `packages/model-runtime/src/onnx.test.ts` — P9, the hand-rolled resolution
   pinned against real manifest shapes, including the three cases an independent
@@ -904,7 +913,7 @@ Nine boxes, each traced to code:
 - **P8** — `build-gateway.ts` / `diagnostics-routes.ts` / `route-helpers.ts`; `packages/server/src/serve/gateway-diagnostics.ts` is absent from the tree.
 - **P1** — `share-grant.ts` + `migrate.ts` rung four, `grant-store.ts`, `fulfillment.ts:420-426`; no `test.fails` remains in `commons-sim.test.ts`, replaced by the `REGRESSION LOCK` at `:205`.
 - **P2** — `cron-cursor.ts`; `time-zoo-cron.test.ts` carries no pin.
-- **P10** — `endTransportJson` and its three call sites.
+- **P10** — `endTransportJson` and its three call sites; `dast-known-findings.json` no longer pins `header.boundary-response-nosniff`.
 - **P9** — realized as claimed: the sandbox install is unconditional, the characterisation pin is deleted and replaced by refusal assertions, the manifest→worker chain is unbroken (traced under (1)), `media-transcode` is a separate lane, and `bundle-lane-conformance.test.ts` holds each bundle to its declared lane with a non-vacuity guard (`ALL.length > 20`) and a `toContain("fs")` leg. The box says the worker "was not sandboxed"; it now always is. That is delivered.
 - **The record moved with the code** — `docs/decisions.md` A-pinned rewritten to "No pin stands"; `SECURITY.md` handler-sandbox row rewritten to "installed **unconditionally**… there is no no-sandbox path left", with `mediaTranscodePolicy`'s subprocess hole named in the honest-limits paragraph; `docs/cron-timezone.md`, `TESTING.md`, `known-findings.json` and seven `#846` CHANGELOG entries all present.
 
@@ -912,7 +921,7 @@ The `CENTRAID_AUTOMATION_RUNTIME_DIR` break recorded under (1) does not unmake a
 
 **(3) The '## Checklist' mirrors the issue's checklist — PASS**
 
-The issue's Part 1 is P1–P10, and all ten appear in the receipt's disposition table, each marked **Fixed**, with a checklist box each (P4/P5 and P6/P7 paired as the issue pairs them). Nothing is claimed beyond the diff and nothing is silently dropped. The working agreement — "fixing a Part 1 item means deleting its pin in the same change" — is honoured item by item: nine pins raised by the #839/#842 lanes, nine deleted, each leaving a regression lock (the three fuzz register classes, the DST pin, the `test.fails` severance case, the two peer-target pins, the diagnostics canary pin, and the sandbox characterisation block). P10, which the issue lists as already filed as [#844](https://github.com/srikanth235/centraid/issues/844), is fixed here and the receipt says so with its reason.
+The issue's Part 1 is P1–P10, and all ten appear in the receipt's disposition table, each marked **Fixed**, with a checklist box each (P4/P5 and P6/P7 paired as the issue pairs them). Nothing is claimed beyond the diff and nothing is silently dropped. The working agreement — "fixing a Part 1 item means deleting its pin in the same change" — is honoured item by item: ten pins raised by the #839/#842 lanes, ten deleted, each leaving a regression lock (the three fuzz register classes, the DST pin, the `test.fails` severance case, the two peer-target pins, the diagnostics canary pin, the sandbox characterisation block, and the DAST `header.boundary-response-nosniff` pin). P10, which the issue lists as already filed as [#844](https://github.com/srikanth235/centraid/issues/844), is fixed here, and deleting that DAST entry is what closes #844.
 
 Parts 2–4 are declared out of scope on the issue's own grounds (a maintainer decision and an Ed25519 key for D1; observations that need a ruling first for Part 3; external actors for Part 4). Both comment-thread items are addressed as the comments leave them: **P11** attributed to [#789](https://github.com/srikanth235/centraid/issues/789)'s owner, and **P12** root-caused to `gateway-secrets.ts` `shouldUseFileFallback()` and parked `if: false` on [#851](https://github.com/srikanth235/centraid/pull/851). No comment raises an item the receipt leaves unmentioned.
 
