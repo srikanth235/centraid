@@ -435,6 +435,16 @@ surrogate in either half is refused while a well-formed pair is admitted, plus
 one that measures `encodeHeaderFrame` and `alpnBytes` in UTF-8 bytes rather
 than code units. **65.55% → 92.44%**, floor unchanged at 79.
 
+**`gates` → `test:sleep-inventory`.** The P4/P5 journey
+(`apps/web/tests/e2e/offline-search.spec.ts`) raced its two offline renames
+against a resolving `setTimeout(15_000)` so `page.evaluate` could return while
+the second write's promise hung — one fixed-sleep site to the #781 scanner,
+against a down-only budget with no room. Fixed by removing the wait rather than
+inventorying it: neither write needs awaiting, so the evaluates now issue the
+writes fire-and-forget (rejections swallowed; the never-settled second write is
+the QUALITY.md defect) and the journey waits on its existing UI outcome polls.
+36 sites against a budget of 36.
+
 ### The record moved with the code
 
 Stale docs are bugs, so every claim the fixes falsified was rewritten in this

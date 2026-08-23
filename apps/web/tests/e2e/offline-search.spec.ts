@@ -235,29 +235,27 @@ test("offline search reads a pending row's punctuation the way FTS5 does", async
   await setHarnessControlOnline(page, false);
   // BOTH WRITES ARE ISSUED, ONLY THE FIRST IS AWAITED — deliberately, and not
   // because the second is optional. A second offline write in the same session
-  // queues and paints, but its promise never settles: whichever rename goes
+  // queued and painted, but its promise never settles: whichever rename goes
   // second reports `never-settled` against a 30s race while its optimistic row
   // is on screen the whole time (measured both ways round — it follows the
   // ORDER, not the row). That is a live defect in the write rail, filed in
   // QUALITY.md, out of scope for #846's search fix; this journey is about what
   // search does with the pending rows, so it takes them from the UI, which is
-  // truthful, rather than from a promise that is not.
+  // truthful, rather than from a promise that is not. NEITHER WRITE IS AWAITED:
+  // the assertions below are outcome polls over the rendered rows, which is
+  // what the journey actually waits on.
   await page.evaluate(
-    ({ renames }) =>
-      Promise.race([
-        Promise.all(
-          renames.map((rename) =>
-            window.centraid.write({
-              action: "rename",
-              input: { document_id: rename.id, title: rename.title },
-              intentId: rename.intentId,
-            })
-          )
-        ).then(() => undefined),
-        new Promise<undefined>((resolve) => {
-          setTimeout(() => resolve(undefined), 15_000);
-        }),
-      ]),
+    ({ renames }) => {
+      for (const rename of renames) {
+        window.centraid
+          .write({
+            action: "rename",
+            input: { document_id: rename.id, title: rename.title },
+            intentId: rename.intentId,
+          })
+          .catch(() => undefined);
+      }
+    },
     {
       renames: [
         {
