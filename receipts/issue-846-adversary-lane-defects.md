@@ -525,9 +525,14 @@ The overlay/reload assertions in the desktop spec are unchanged. Locks:
 `packages/client/src/replica/shell-transport.test.ts`,
 `packages/client/src/replica/coordinator.test.ts`.
 The feed reconnect cases assert that a cursor arrives on the *resumed*
-stream (the observable), not that `doFetch` ran N times. That dropped
-`toHaveBeenCalled*` 801 → 789, and `tests/hygiene-budgets.json` ratchets
-to 789 — the gate is down-only and will not take a raise.
+stream (the observable), not that `doFetch` ran N times. Remaining
+`toHaveBeenCalledOnce` / `toHaveBeenCalledTimes` sites in this file were
+the same mock-call counts: they now assert the stream path list (which
+generation opened, whether it retried). That dropped `toHaveBeenCalled*`
+801 → 788, and `tests/hygiene-budgets.json` ratchets to 788 — the gate
+is down-only and will not take a raise. A 789 ceiling against a still-795
+count was the previous miss: converting the *new* reconnect tests only
+undid the +6, it did not chip the pre-existing sites.
 
 ### The record moved with the code
 
