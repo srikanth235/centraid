@@ -85,8 +85,12 @@ describe("the generated design-system sheet", () => {
   test("declares both themes, and follows the system when neither is pinned", () => {
     const css = designSystemCss();
     expect(css).toContain("@media (prefers-color-scheme: dark)");
-    expect(css).toContain('[data-theme="dark"]');
-    expect(css).toContain('[data-theme="light"]');
+    // Quote-agnostic: which quote an attribute selector wears is the
+    // formatter's business, not this contract's, and pinning one spelling
+    // makes the test pass or fail on whether oxfmt happened to touch the
+    // generated sheet rather than on whether the theme is declared.
+    expect(css).toMatch(/\[data-theme=['"]dark['"]\]/u);
+    expect(css).toMatch(/\[data-theme=['"]light['"]\]/u);
     expect(css).toContain(":root:not([data-theme])");
   });
 });
