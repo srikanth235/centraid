@@ -159,7 +159,7 @@ describe("the layers the report authors", () => {
     }
     // Two pairs deliberately share a treatment, and each is named here rather
     // than absorbed by a loose count: `infra-mismatch` rides the consequence
-    // tone with `failed` and is told apart by its glyph, and `lane-did-not-run`
+    // tone with `failed` and is told apart by its word, and `lane-did-not-run`
     // is the same absence as `stale` — the legend says "lane did not run /
     // stale" as one entry. Both halves of each pair must still MATCH, so a
     // future edit cannot silently split one of them either.

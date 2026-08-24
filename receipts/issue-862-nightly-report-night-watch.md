@@ -166,6 +166,18 @@ own id. It also gains the test that pins the deliverable: the nine section ids
 in document order, every one reachable from the sticky table of contents, and
 `#inspector` outside `</main>` as the fixed sheet.
 
+`scripts/test-report/report-state-words.test.mjs` is new, and closes the gap
+the register's two collapses depend on. The theme suite proves the twelve
+states keep distinct treatments and lets two pairs share one deliberately —
+`infra-mismatch` rides `failed`'s tone, `lane-did-not-run` is the same absence
+as `stale` — with the word as the only tell. Nothing asserted a cell emits its
+word at all, so cells could have shipped blank or transposed with every gate
+green. One real nightly-scoped render reaches all twelve states; the literal
+words are pinned so a transposition fails and not merely an empty one, the
+`aria-label` must name the same word the eye sees, and the two collapsed pairs
+must differ. Stubbing `stateWord` to a constant fails three of the four tests,
+and swapping two words fails the first.
+
 `scripts/test-report/report-theme.test.mjs` dropped its `--row` allowance. The
 inline per-cell stagger is gone with the old animation, so the two
 token-resolution tests were carrying an escape hatch that would have accepted a
