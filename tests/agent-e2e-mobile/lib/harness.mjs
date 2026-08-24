@@ -29,6 +29,7 @@ import {
   retryableTapCommands,
 } from "./first-run.mjs";
 import {
+  DEV_LAUNCHER_LINK,
   METRO_ORIGIN,
   METRO_PORT,
   prewarmMetroBundle,
@@ -77,6 +78,17 @@ export const FIRST_LAUNCH_TIMEOUT_MS = 120_000;
 // stable, but it is a render signal, not a settled signal: it appears when
 // the band mounts, which may precede tile settlement.
 export const HOME_READY_MARKER = "All apps and places";
+// iOS Simulator's `openLink` (simctl openurl) raises a system
+// `Open in "Centraid"?` confirmation for custom-scheme links a moment AFTER
+// the openLink directive returns; Android fires the VIEW intent directly.
+// `optional: true` absorbs the no-dialog case (Android, or an already-open
+// session); `^Open$` anchors the tap so it cannot land on the dialog's own
+// title text, which also contains "Open".
+export const CONFIRM_SYSTEM_OPEN = `# iOS system confirmation for a custom-scheme openLink — see CONFIRM_SYSTEM_OPEN.
+- tapOn:
+    text: "^Open$"
+    optional: true
+`;
 // An individual chunk owns one coherent user interaction. Fresh pairing is the
 // slowest legitimate chunk (~4 minutes on the reviewed CI runner); 12 minutes
 // leaves ample network/render headroom while still terminating a wedged
@@ -479,7 +491,11 @@ export async function runFlow(slug, fn) {
 ---
 - launchApp:
     clearState: true
-- extendedWaitUntil:
+# clearState wiped the dev client's stored "last opened" URL, so the plain
+# launch lands on the launcher's empty server picker. Hand it the bundle URL
+# explicitly (DEV_LAUNCHER_LINK in lib/metro.mjs has the full story).
+- openLink: "${DEV_LAUNCHER_LINK}"
+${CONFIRM_SYSTEM_OPEN}- extendedWaitUntil:
     visible:
       text: "Connect your gateway."
     timeout: ${FIRST_LAUNCH_TIMEOUT_MS}

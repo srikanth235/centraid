@@ -229,10 +229,12 @@ PODS:
     - SDWebImageWebPCoder
   - ExpoKeepAwake (57.0.1):
     - ExpoModulesCore
-  - ExpoLinking (57.0.5):
+  - ExpoLinking (57.0.4):
     - ExpoModulesCore
   - ExpoLogBox (57.0.2):
     - React-Core
+  - ExpoMaps (57.0.1):
+    - ExpoModulesCore
   - ExpoMediaLibrary (57.0.3):
     - ExpoModulesCore
     - React-Core
@@ -344,7 +346,29 @@ PODS:
   - libwebp/sharpyuv (1.5.0)
   - libwebp/webp (1.5.0):
     - libwebp/sharpyuv
-  - NitroModules (0.36.5):
+  - MapLibreReactNative (11.3.6):
+    - hermes-engine
+    - RCTRequired
+    - RCTTypeSafety
+    - React-Core
+    - React-Core-prebuilt
+    - React-debug
+    - React-Fabric
+    - React-featureflags
+    - React-graphics
+    - React-ImageManager
+    - React-jsi
+    - React-NativeModulesApple
+    - React-RCTFabric
+    - React-renderercss
+    - React-rendererdebug
+    - React-utils
+    - ReactCodegen
+    - ReactCommon/turbomodule/bridging
+    - ReactCommon/turbomodule/core
+    - ReactNativeDependencies
+    - Yoga
+  - NitroModules (0.36.1):
     - hermes-engine
     - RCTRequired
     - RCTTypeSafety
@@ -1839,53 +1863,6 @@ PODS:
     - ReactCommon/turbomodule/core
     - ReactNativeDependencies
     - Yoga
-  - react-native-maps (1.27.2):
-    - react-native-maps/Maps (= 1.27.2)
-  - react-native-maps/Generated (1.27.2):
-    - hermes-engine
-    - RCTRequired
-    - RCTTypeSafety
-    - React-Core
-    - React-Core-prebuilt
-    - React-debug
-    - React-Fabric
-    - React-featureflags
-    - React-graphics
-    - React-ImageManager
-    - React-jsi
-    - React-NativeModulesApple
-    - React-RCTFabric
-    - React-renderercss
-    - React-rendererdebug
-    - React-utils
-    - ReactCodegen
-    - ReactCommon/turbomodule/bridging
-    - ReactCommon/turbomodule/core
-    - ReactNativeDependencies
-    - Yoga
-  - react-native-maps/Maps (1.27.2):
-    - hermes-engine
-    - RCTRequired
-    - RCTTypeSafety
-    - React-Core
-    - React-Core-prebuilt
-    - React-debug
-    - React-Fabric
-    - React-featureflags
-    - React-graphics
-    - React-ImageManager
-    - React-jsi
-    - react-native-maps/Generated
-    - React-NativeModulesApple
-    - React-RCTFabric
-    - React-renderercss
-    - React-rendererdebug
-    - React-utils
-    - ReactCodegen
-    - ReactCommon/turbomodule/bridging
-    - ReactCommon/turbomodule/core
-    - ReactNativeDependencies
-    - Yoga
   - react-native-quick-base64 (3.0.1):
     - hermes-engine
     - RCTRequired
@@ -2775,6 +2752,7 @@ DEPENDENCIES:
   - ExpoKeepAwake (from `../../../node_modules/expo-keep-awake/ios`)
   - ExpoLinking (from `../../../node_modules/expo-linking/ios`)
   - "ExpoLogBox (from `../../../node_modules/@expo/log-box`)"
+  - ExpoMaps (from `../../../node_modules/expo-maps/ios`)
   - ExpoMediaLibrary (from `../../../node_modules/expo-media-library/ios`)
   - ExpoModulesCore (from `../../../node_modules/expo-modules-core`)
   - ExpoModulesJSI (from `../../../node_modules/expo-modules-jsi/apple`)
@@ -2795,6 +2773,7 @@ DEPENDENCIES:
   - EXUpdatesInterface (from `../../../node_modules/expo-updates-interface/ios`)
   - FBLazyVector (from `../../../node_modules/react-native/Libraries/FBLazyVector`)
   - hermes-engine (from `../../../node_modules/react-native/sdks/hermes-engine/hermes-engine.podspec`)
+  - "MapLibreReactNative (from `../../../node_modules/@maplibre/maplibre-react-native`)"
   - NitroModules (from `../../../node_modules/react-native-nitro-modules`)
   - "op-sqlite (from `../../../node_modules/@op-engineering/op-sqlite`)"
   - QuickCrypto (from `../../../node_modules/react-native-quick-crypto`)
@@ -2836,7 +2815,6 @@ DEPENDENCIES:
   - React-Mapbuffer (from `../../../node_modules/react-native/ReactCommon`)
   - React-microtasksnativemodule (from `../../../node_modules/react-native/ReactCommon/react/nativemodule/microtasks`)
   - React-mutationobservernativemodule (from `../../../node_modules/react-native/ReactCommon/react/nativemodule/mutationobserver`)
-  - react-native-maps (from `../../../node_modules/react-native-maps`)
   - react-native-quick-base64 (from `../../../node_modules/react-native-quick-base64`)
   - react-native-safe-area-context (from `../../../node_modules/react-native-safe-area-context`)
   - react-native-webview (from `../../../node_modules/react-native-webview`)
@@ -2961,6 +2939,8 @@ EXTERNAL SOURCES:
     :path: "../../../node_modules/expo-linking/ios"
   ExpoLogBox:
     :path: "../../../node_modules/@expo/log-box"
+  ExpoMaps:
+    :path: "../../../node_modules/expo-maps/ios"
   ExpoMediaLibrary:
     :path: "../../../node_modules/expo-media-library/ios"
   ExpoModulesCore:
@@ -3002,6 +2982,8 @@ EXTERNAL SOURCES:
   hermes-engine:
     :podspec: "../../../node_modules/react-native/sdks/hermes-engine/hermes-engine.podspec"
     :tag: hermes-v250829098.0.16
+  MapLibreReactNative:
+    :path: "../../../node_modules/@maplibre/maplibre-react-native"
   NitroModules:
     :path: "../../../node_modules/react-native-nitro-modules"
   op-sqlite:
@@ -3082,8 +3064,6 @@ EXTERNAL SOURCES:
     :path: "../../../node_modules/react-native/ReactCommon/react/nativemodule/microtasks"
   React-mutationobservernativemodule:
     :path: "../../../node_modules/react-native/ReactCommon/react/nativemodule/mutationobserver"
-  react-native-maps:
-    :path: "../../../node_modules/react-native-maps"
   react-native-quick-base64:
     :path: "../../../node_modules/react-native-quick-base64"
   react-native-safe-area-context:
@@ -3209,8 +3189,9 @@ SPEC CHECKSUMS:
   ExpoImage: d66c5e5be02228cdfed42ebcb31acf2dd594b8e7
   ExpoImageManipulator: 4a8023286eb7c83dfcc6616b5c5cd63170c8b615
   ExpoKeepAwake: c26f14275017370cc8a4b7b43a0e23361f2053a5
-  ExpoLinking: a516e12e2cb5af6eaeea32809c6a6ede1a7da8bb
+  ExpoLinking: 5a796f9284535c0349537a844dd40680229b7fcb
   ExpoLogBox: 6bb73c341aca22e699bd4da6cc61afc844e1a648
+  ExpoMaps: 8762d166c08c4db08277c68561cdfab5bda0a2f4
   ExpoMediaLibrary: e0829ae4fe90dc8bcd5ec13250ba6503aebbbc94
   ExpoModulesCore: 4e357ccc58fec60fc18a570f95f9909d0036f42d
   ExpoModulesJSI: b20fefa4cdd9097e7e6b715466d1900b8c5d4711
@@ -3230,11 +3211,12 @@ SPEC CHECKSUMS:
   EXUpdates: 1031df0a408343d85e9d92595b102e9d65518656
   EXUpdatesInterface: 92d2aa5194b6fb93ca8ab749db75665cb28b2e60
   FBLazyVector: 3c3be9a019176b5699455f7f66c5444b78a411c6
-  hermes-engine: c0d4fd747d681eb3b34d6fa328b4d084201bfda3
+  hermes-engine: f6795bae85f4a8b2e50fb56afdfd156231a7d927
   libavif: 5f8e715bea24debec477006f21ef9e95432e254d
   libdav1d: 23581a4d8ec811ff171ed5e2e05cd27bad64c39f
   libwebp: 02b23773aedb6ff1fd38cec7a77b81414c6842a8
-  NitroModules: 452230d9b63c6c3f59dd97eeaa27ec3449271d4a
+  MapLibreReactNative: 9f1f16d5f5f522309ad1f2afc483a34cfc56fe6e
+  NitroModules: b4174dd303728e16ad1afb79f64c1a5c69a3b373
   op-sqlite: e6bc72c52279ca4b6ed2fe235427848ce47a19c9
   OpenSSL-Universal: ecee7b138fa75a74ecf00d7ffd248fb584739b9e
   QuickCrypto: 45cde9545e593271dc32418ecbe91b7ec920702f
@@ -3276,7 +3258,6 @@ SPEC CHECKSUMS:
   React-Mapbuffer: 44dd007f917e2396afa0e70bbd70273237d93fde
   React-microtasksnativemodule: f413ee411341fb3c34d20e85e9f6f524921fab15
   React-mutationobservernativemodule: 58f6d2adf7d98e72b241608dfa2ddce414d2a4e7
-  react-native-maps: cb32168a32e30f83beb08198325ff96b70dd5c9f
   react-native-quick-base64: 5c829c9016276132ac03c4d598c8d256b964e6ac
   react-native-safe-area-context: 6b4966397ada0f7dd481e4486a2ef936834861a1
   react-native-webview: 2da09bdea1aeb6c46e27dd94632e21059cade6c1
@@ -3330,6 +3311,6 @@ SPEC CHECKSUMS:
   Yoga: 9891cfb1c680f64de9c41b09e7453dea33454d2b
   ZXingObjC: 8898711ab495761b2dbbdec76d90164a6d7e14c5
 
-PODFILE CHECKSUM: 6555bd8c49fb25c3ac4fb8570eeffaeea45040b1
+PODFILE CHECKSUM: d32ccd2848b2114b0bdb4b8ebaaa597d8a3b66e9
 
 COCOAPODS: 1.16.2

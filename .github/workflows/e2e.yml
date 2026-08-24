@@ -160,9 +160,13 @@ jobs:
       - uses: ./.github/actions/setup
         with:
           turbo-cache: "true"
-      # webkit and firefox, not chromium — the point is the engines web-e2e
-      # cannot reach.
-      - run: bunx playwright install --with-deps webkit firefox
+      # webkit and firefox are the point — the engines web-e2e cannot reach —
+      # but the cross-browser matrix still RUNS its chromium project too
+      # (CENTRAID_WEB_CROSS_BROWSER widens the default set), and Playwright ≥1.49
+      # heads chromium at a separate headless-shell binary that `webkit firefox`
+      # does not pull in. Omitting it reds every chromium spec in ~2ms with
+      # "Executable doesn't exist … chrome-headless-shell".
+      - run: bunx playwright install --with-deps chromium webkit firefox
         working-directory: apps/web
       - run: bun run build
       - run: bun run e2e
