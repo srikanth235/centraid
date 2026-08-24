@@ -9,7 +9,7 @@
 // band carries the same six destinations, and drawing both would put Trash in
 // a horizontal strip that scrolls out of sight while the band says the same
 // thing better. `bandOwned` is the app's own answer to "did my band claim get
-// honoured", so the strip disappears for exactly the surface that replaced it.
+// honoured", so the strip disappears for exactly the surface that supplants it.
 //
 // This replaces the sidebar's `SmartNav` (All / Recent / Starred). Two
 // navigations for one set of shelves is what the restructure retires: the

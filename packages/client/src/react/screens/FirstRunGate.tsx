@@ -8,9 +8,9 @@ import type {
   OnboardingPath,
 } from "./OnboardingScreen.js";
 
-// The chooser is step ZERO of onboarding, so it wears onboarding's sheet. It
-// used to borrow RecoverScreen's module, which is how the product's first
-// screen and its second screen ended up looking like two different apps.
+// The chooser is step ZERO of onboarding, so it wears onboarding's sheet.
+// Borrowing RecoverScreen's module instead is how the product's first screen
+// and its second screen end up looking like two different apps.
 import styles from "./OnboardingScreen.module.css";
 
 /**

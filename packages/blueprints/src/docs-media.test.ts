@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-// eslint-disable-next-line typescript-eslint/ban-ts-comment -- browser fixture intentionally uses DOM-shaped PDF.js objects; governance: allow-no-unjustified-suppressions JS fixture boundary (#414)
+// oxlint-disable-next-line typescript-eslint/ban-ts-comment -- browser fixture intentionally uses DOM-shaped PDF.js objects; governance: allow-no-unjustified-suppressions JS fixture boundary (#414)
 // @ts-nocheck -- imported blueprint app code has no declarations; governance: allow-no-unjustified-suppressions JS fixture boundary (#414)
 import path from "node:path";
 import { pathToFileURL } from "node:url";

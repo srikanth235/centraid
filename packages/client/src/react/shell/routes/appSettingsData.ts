@@ -48,9 +48,9 @@ export interface AppKnobsManifest {
 /**
  * Fetch the app's own `app.json` (next to its index.html), or null. Read
  * straight off the gateway with the renderer's own credential (issue #799):
- * the per-app browser session that used to front this read retired with the
- * iframe host, and the manifest is the source for the appearance knobs and
- * the vault consent block the settings popover renders.
+ * no per-app browser session fronts this read, and the manifest is the source
+ * for the appearance knobs and the vault consent block the settings popover
+ * renders.
  */
 export async function fetchAppManifestRaw(
   appId: string

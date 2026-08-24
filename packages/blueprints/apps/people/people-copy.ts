@@ -135,11 +135,10 @@ export const LINK = {
     `${capability} · since ${when.toLowerCase()}`,
 } as const;
 
-// CONTAINER_WORDS/CONTAINER_FALLBACK are gone (#825): they worded a
-// commons-era container whose only reader was the retired `shared_with_them`
-// projection. A grant's subject is named by the placement registry through
+// A grant's subject is named by the placement registry through
 // `grant-dashboard.ts`'s `grantNoun`, which is the same noun the app that owns
-// the subject already uses.
+// the subject already uses (#825). There is no container vocabulary of this
+// app's own to word it with.
 
 /** The kinds a logged touch can be. The vault stores the word. */
 export const LOG_KINDS = ["Message", "Call", "Met up", "Note"] as const;

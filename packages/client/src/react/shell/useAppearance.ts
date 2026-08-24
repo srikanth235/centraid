@@ -17,11 +17,11 @@ export interface AppearanceController {
   setPrefs: (patch: Partial<AppearancePrefs>) => void;
 }
 
-// The local cache key. Bumped for #608 group P: the previous shape persisted
-// `bgL: 5` and `accent: 'teal'` on every save, which are exactly the two
-// inline overrides that used to outrank the active theme. A cached blob in
-// the old shape cannot be told apart from an owner who deliberately moved
-// those knobs, so the honest read is to start the new shape clean — the
+// The local cache key. Bumped for #608 group P: the previous cache shape
+// carries `bgL: 5` and `accent: 'teal'` on every save, the two inline
+// overrides that outrank the active theme. A cached blob in that shape cannot
+// be told apart from an owner who deliberately moved those knobs, so the
+// honest read is to start the new shape clean — the
 // gateway-backed prefs reconcile right after first paint either way.
 const CACHE_KEY = "appearance.v2";
 

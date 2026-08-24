@@ -1,8 +1,7 @@
 // HTTP surface for the gateway-owned template catalog (issue #141).
 //
-// The desktop used to resolve the bundled @centraid/blueprints catalog
-// in the main process and hand the renderer a stripped metadata list over
-// IPC. Under the thin-client pivot the gateway owns the catalog: it
+// The gateway owns the bundled @centraid/blueprints catalog, not the
+// desktop main process: it
 // resolves bundle-or-cache (preferring the higher semver) and serves the
 // same metadata at `GET /centraid/_templates`, so local and remote
 // gateways expose templates identically and the renderer reads them

@@ -95,7 +95,7 @@ const CAPABILITIES: ProviderCapabilities = {
   },
 };
 
-/* eslint-disable max-classes-per-file -- (#354) the read-only wrapper is a small
+/* oxlint-disable max-classes-per-file -- (#354) the read-only wrapper is a small
    adapter colocated with the provider it serves (#247 convention). */
 /** Read-only wrapper: `put`/`delete` refused, everything else passes through. */
 class ReadOnlyObjectStore implements ObjectStore {

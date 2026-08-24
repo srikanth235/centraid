@@ -139,8 +139,8 @@ export function VaultStep({
             </p>
           ) : (
             // Nothing to pick, nothing to create (issue #603 D10) — an
-            // enrollment that grants no vault used to render as a blank list
-            // with "Continue" still live. `canCommitConnectFlow` now says no;
+            // enrollment that grants no vault must not render as a blank list
+            // with "Continue" still live. `canCommitConnectFlow` says no;
             // this says why.
             <p className={styles.hint}>
               This gateway shared no vault with this device — ask its host for a

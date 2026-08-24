@@ -247,7 +247,7 @@ export function Root({
     [frame, refresh]
   );
 
-  // ---- first read, live changes, focus recovery, width ----------------------
+  // ──── first read, live changes, focus recovery, width ──────────────────────
 
   useEffect(() => {
     void refresh();
@@ -276,7 +276,7 @@ export function Root({
     [rootRef]
   );
 
-  // ---- what the room knows about itself ------------------------------------
+  // ──── what the room knows about itself ────────────────────────────────────
 
   const reach = libraryReachability({
     hostStatus: rootElRef.current?.dataset.gatewayStatus ?? null,
@@ -321,7 +321,7 @@ export function Root({
 
   const away = absence(data.open, now);
 
-  // ---- navigation -----------------------------------------------------------
+  // ──── navigation ───────────────────────────────────────────────────────────
 
   const go = useCallback((next: ShelfId) => {
     setShelf(next);
@@ -352,7 +352,7 @@ export function Root({
     bump();
   }, []);
 
-  // ---- the acts -------------------------------------------------------------
+  // ──── the acts ─────────────────────────────────────────────────────────────
 
   const complete = useCallback(
     (task: Task) => {
@@ -475,7 +475,7 @@ export function Root({
     []
   );
 
-  // ---- the keyboard map (§7) ------------------------------------------------
+  // ──── the keyboard map (§7) ────────────────────────────────────────────────
 
   useEffect(() => {
     const rows = (): Task[] => dataRef.current.open.filter(isOpen);
@@ -539,7 +539,7 @@ export function Root({
     return () => window.removeEventListener("keydown", onKey);
   }, [act, closeOverlay, complete, moveToToday, openQuickAdd, openSearch]);
 
-  // ---- the rows this route paints ------------------------------------------
+  // ──── the rows this route paints ──────────────────────────────────────────
 
   const rowCtx: RowContext = {
     now,
@@ -801,7 +801,7 @@ export function Root({
     return boardBody;
   })();
 
-  // ---- the overlays ---------------------------------------------------------
+  // ──── the overlays ─────────────────────────────────────────────────────────
 
   const overlay: Overlay | null = state.overlay;
   const writeTarget = state.landsIn ?? own;
@@ -866,7 +866,7 @@ export function Root({
     return null;
   })();
 
-  // ---- what Tasks contributes to the FRAME ---------------------------------
+  // ──── what Tasks contributes to the FRAME ─────────────────────────────────
 
   const handedOff = compact || narrow;
   const barCountValue = showsBoard(shelf)

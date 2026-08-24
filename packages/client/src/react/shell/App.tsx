@@ -514,8 +514,8 @@ export default function App({
     document.addEventListener("keydown", onKey);
 
     // The delegated builder (window.openBuilder) reaches back through
-    // window.Centraid for nav actions (optional-chained). React owns routing
-    // now, so publish a nav-backed shim in place of the retired vanilla app.ts.
+    // window.Centraid for nav actions (optional-chained). React owns routing,
+    // so this publishes a nav-backed shim for it to reach.
     const go = (route: ShellRoute) => (): void =>
       void navRef.current?.navigate(route);
     (window as unknown as { Centraid: unknown }).Centraid = {
@@ -824,8 +824,8 @@ export default function App({
   // app bar is a display-face title over a mono meta line, and on Home the
   // title names the vault — so the name you would press to change is already
   // standing there at the size the brief gives it. A separate identity row
-  // under the bar was a second answer to the question the title had already
-  // asked.
+  // under the bar would be a second answer to the question the title has
+  // already asked.
   const openVaultSwitcher = useCallback(
     (anchor: DOMRect): void => {
       const activeGatewayId = ownerScopes.gatewayId ?? "";
@@ -879,10 +879,9 @@ export default function App({
       const button = switcherButtonRef.current;
       if (button) openVaultSwitcher(button.getBoundingClientRect());
     };
-    // This effect OWNS the ref. It used to be re-armed as a side effect of
-    // rendering the identity row, which healed itself on every paint; an
-    // effect that runs only when the switcher changes does not, so nothing
-    // else may null it out from a cleanup of its own.
+    // This effect OWNS the ref. It runs only when the switcher changes, so it
+    // does not heal itself on every paint the way a re-arm during render
+    // would — nothing else may null it out from a cleanup of its own.
     return () => {
       switcherActionRef.current = null;
     };
@@ -894,10 +893,10 @@ export default function App({
     : (ownerScopes.gatewayKind === "local"
         ? "This Mac"
         : ownerScopes.gatewayLabel) || "This Mac";
-  // The assistant's conversation ledger. It was the sidebar's Recents zone
-  // until #707; the stem holds the launcher and nothing else, so the ledger
-  // moved into the assistant surface as app content and this is where its data
-  // is shaped. Rows carry their vault only when it is NOT the owner's own — a
+  // The assistant's conversation ledger. The stem holds the launcher and
+  // nothing else (#707), so the ledger lives in the assistant surface as app
+  // content and this is where its data is shaped. Rows carry their vault only
+  // when it is NOT the owner's own — a
   // conversation belongs to one vault for life (#599), and saying so on every
   // row would drown the useful case.
   const assistantLedger = useMemo<AssistantConversationEntry[]>(() => {
@@ -946,9 +945,8 @@ export default function App({
     [blockingCount, notificationsCounts.hasUnreadNotices, gatewayStatus]
   );
 
-  // A newer build on disk used to be a pill pinned above the account row. It
-  // is news, not a place, so it says so once on the line and offers the one
-  // bounded action that acts on it.
+  // A newer build on disk is news, not a place, so it says so once on the line
+  // and offers the one bounded action that acts on it.
   useEffect(() => {
     if (!updateStatus?.available) return;
     const line = `${updatePillTitle(updateStatus)} · v${updateStatus.version}`;

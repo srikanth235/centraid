@@ -1,12 +1,10 @@
 // THE GATEWAY'S CUSTODY ROLLUP, AS THE PHONE READS IT (issue #712, B3).
 //
-// The mobile Backup screen used to read `GET /centraid/_gateway/storage/status`
-// and print two numbers off it — `replicated.count` and `backlog.count`, both
-// derived from `blob_custody_state`. The web Storage screen read a DIFFERENT
-// projection for the same question: `blob.custody_rollup`, which is the only
-// thing in this repo that can say what may safely be released. Two clients, two
-// arithmetics, one question. The route now carries the rollup itself, and this
-// module is where the phone folds it.
+// `blob.custody_rollup` is the only projection in this repo that can say what
+// may safely be released, so it is the one BOTH clients read:
+// `GET /centraid/_gateway/storage/status` carries the rollup itself, and this
+// module is where the phone folds it. A client deriving its own two numbers
+// off `blob_custody_state` is how one question gets two arithmetics.
 //
 // NOTHING HERE INVENTS A NUMBER — the rule `packages/blueprints/apps/photos/
 // storage-model.ts` states for web, restated for the phone because a member

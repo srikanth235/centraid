@@ -176,10 +176,11 @@ export default function GatewayRoute({
     refreshHealth();
     return res;
   }, [refreshHealth]);
-  // A DRILL-IN IS A HISTORY ENTRY. System's pages used to be local state with a
-  // "‹ System · Back" row drawn at the top of each one — a second back control
-  // sitting under the frame's own back arrow and pointing at the same place.
-  // Routing them means the arrow already works, and a page can be deep-linked.
+  // A DRILL-IN IS A HISTORY ENTRY. System's pages are ROUTES, not local state
+  // under a "‹ System · Back" row drawn at the top of each one — that row is a
+  // second back control sitting under the frame's own back arrow and pointing
+  // at the same place. Routed, the arrow already works and a page can be
+  // deep-linked.
   // `routeKey` keys gateway routes by tab, so each is a distinct entry rather
   // than a repeat of the one before it.
   const openTab = useCallback(

@@ -8,11 +8,11 @@ import styles from "./StartupErrorScreen.module.css";
 /**
  * The shell could not READ its settings at startup.
  *
- * This screen exists because the alternative was worse than a blank window.
- * `boot.tsx` used to swallow a failed settings read into `{}`, which has no
+ * This screen exists because the alternative is worse than a blank window.
+ * Swallowing a failed settings read into `{}` yields an object with no
  * `onboardingCompletedAt`, which is indistinguishable from a fresh install —
- * so a member whose gateway simply could not be assessed (device-key custody
- * mismatch, a lock the daemon never answered) was shown the first-run
+ * so a member whose gateway simply cannot be assessed (device-key custody
+ * mismatch, a lock the daemon never answered) is shown the first-run
  * "Start fresh on this Mac" chooser over a full, populated vault. Being
  * invited to start over is the single most alarming thing this app can say to
  * someone whose data is fine.

@@ -187,7 +187,7 @@ describe("automation-lifecycle-over-http scenarios", () => {
     expect(manifest.enabled).toBe(true);
   });
 
-  // ---- create-route WIRING (#656 1D) --------------------------------------
+  // ──── create-route WIRING (#656 1D) ──────────────────────────────────────
   // Which trigger shapes are legal is the manifest validator's law, owned by
   // `packages/server/src/automation/manifest/manifest.test.ts`. The tests below prove
   // only what the route itself does: the kind pre-check, the cron default, the

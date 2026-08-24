@@ -66,8 +66,8 @@ function foldRedeemResult(
 }
 
 /**
- * Redeem a pairing ticket — the only way to add a gateway (issue #505 phase 7,
- * which retired manual URL adds). The ceremony enrolls this device's iroh
+ * Redeem a pairing ticket — the only way to add a gateway (issue #505 phase 7;
+ * there is no manual URL add). The ceremony enrolls this device's iroh
  * identity and switches the active gateway + vault as a side effect. Never
  * throws — the `redeemGatewayPairing` IPC already resolves failures as
  * `{ok:false}`.

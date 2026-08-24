@@ -118,8 +118,7 @@ export interface SaveEditDeps {
  * The commit's sentence also promises "with this one recorded as its source",
  * and `source_asset_id` is what makes that true: forwarded through
  * `DeviceMediaInput` to the `photos / upload` action, which has carried the
- * field since issue #711 (see the header above for why this file did not send
- * it until #724).
+ * field since issue #711 (#724).
  */
 export async function saveEditAsNewPhotograph(
   deps: SaveEditDeps,

@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-// eslint-disable-next-line typescript-eslint/ban-ts-comment -- issue #711: browser-DOM fixture is intentionally checked by jsdom, while the blueprint TS config excludes DOM globals (see photos-media.test.ts's own note)
+// oxlint-disable-next-line typescript-eslint/ban-ts-comment -- issue #711: browser-DOM fixture is intentionally checked by jsdom, while the blueprint TS config excludes DOM globals (see photos-media.test.ts's own note)
 // @ts-nocheck
 // A READ-ONLY ALBUM (v4 handoff §14 `Read-only`, README.md:233, proto 4789):
 // "Writing controls are the disabled outline WITH THE REASON, and never fire."

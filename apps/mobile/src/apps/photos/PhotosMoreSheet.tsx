@@ -36,13 +36,11 @@ export interface PhotosMoreSheetProps {
 /*
  * NO META MAP HERE ANY MORE.
  *
- * This file used to derive live counts for five rows — favourites, trash,
- * duplicate clusters, places, shared — by reading the timeline, the place
- * table and the share target, so each row could carry the mono figure the
- * prototype puts beside it. All five of those rows are sections of
- * Collections now, where the same counts are stated beside the same shelves,
- * over the shelf's own covers. Deriving them twice meant two places that had
- * to agree about what a duplicate cluster is.
+ * This file derives no live counts. Favourites, trash, duplicate clusters,
+ * places and shared are sections of Collections, where the counts are stated
+ * beside the same shelves, over the shelf's own covers. Reading the timeline,
+ * the place table and the share target here to repeat those mono figures would
+ * be two places that have to agree about what a duplicate cluster is.
  *
  * Backup, the one row left, deliberately carries no meta: the figure it would
  * show comes from a network round trip and a durable-queue read this sheet has

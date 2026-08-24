@@ -7,7 +7,6 @@
  * and publishes — all over HTTP against the active gateway (local or
  * remote, identical wire protocol).
  *
- * Same thin-client + cached-auth shape as `user-prefs-client.ts`.
  * `resetAppsStoreAuthCache()` is called from settings-save when the
  * gateway URL/token may have flipped.
  */

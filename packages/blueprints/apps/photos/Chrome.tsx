@@ -1,12 +1,12 @@
 // The Photos chrome as JSX — a ROUTE INSIDE THE FRAME, not a standalone app
 // (v4 handoff §3).
 //
-// WHAT RETIRED HERE, and why each one had to go:
+// WHAT THIS CHROME DOES NOT DRAW, and why each one stays out:
 //
 //  * the hamburger and the sidebar/drawer — the frame owns navigation (the
 //    240px stem on desktop, the claimed band on the phone). A drawer inside
-//    the content pane was a second navigation for the same destinations.
-//  * the in-pane search field — search is a SHELF now (§9), reached from the
+//    the content pane is a second navigation for the same destinations.
+//  * the in-pane search field — search is a SHELF (§9), reached from the
 //    band and the frame, not a field this app draws in a header of its own.
 //  * the zoom in/out pair — tile size is a four-rung member preference in the
 //    toolbar row (§4.2), not two unlabelled buttons walking a pixel value.
@@ -30,11 +30,11 @@
 // they live INSIDE the app pane and are re-scoped to `position:absolute`
 // against `.shell` so they never overlay the shell chrome (#505 trap 7).
 //
-// SELECTION HAS NO OVERLAY OF ITS OWN (v4 §6). It used to get a second React
-// root on a floating `#selectionBar` pill — two roots fighting over what "the
-// selection bar" means. Now there is one decision, made where the toolbar row
+// SELECTION HAS NO OVERLAY OF ITS OWN (v4 §6): no second React root on a
+// floating `#selectionBar` pill, which would be two roots fighting over what
+// "the selection bar" means. There is ONE decision, made where the toolbar row
 // already lives (`#toolbarMount`, selection.tsx): `selectMode ? <SelectionBar>
-// : <ToolbarView>`. `#selectionBottomBar` is new and different — the PHONE's
+// : <ToolbarView>`. `#selectionBottomBar` is a different thing — the PHONE's
 // five-target action bar (§6, §15), which is never the toolbar row (the row
 // carries nothing there while selecting; the count/Select all/Done move to
 // the frame's head) and never a second band (it claims no destinations and

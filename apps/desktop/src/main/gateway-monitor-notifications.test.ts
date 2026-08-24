@@ -71,8 +71,8 @@ vi.mock(import("./gateway-outage-log.js"), () => ({
   },
 }));
 // A settled install (`onboardingCompletedAt` present, so alerting is live) with
-// an active vault and a reachable gateway URL — precisely the configuration the
-// retired projection required, so its absence here is a real signal.
+// an active vault and a reachable gateway URL — precisely the configuration a
+// Notifications projection would require, so its absence here is a real signal.
 vi.mock(import("./settings.js"), () => ({
   loadSettings: async () => ({
     activeGatewayId: "local",
@@ -123,7 +123,7 @@ describe("gateway monitor: health does not project into the Notifications", () =
     expect(snapshot.alertHistory.map((e) => e.kind)).toStrictEqual(["down"]);
 
     // Half two: no Notifications write, by any spelling. The probe itself is mocked
-    // out, so any surviving fetch would be the retired projection.
+    // out, so any fetch at all would be a Notifications projection.
     expect(fixture.fetched).toStrictEqual([]);
   });
 });

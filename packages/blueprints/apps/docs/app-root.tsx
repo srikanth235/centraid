@@ -339,8 +339,8 @@ export function Root({
         // A THROW IS NOT AN EMPTY RESULT SET. The index lives on the gateway;
         // if it could not be asked, the shelf says that and offers a retry
         // rather than printing "nothing matches", which would be a claim
-        // nobody verified. This used to fall through to `rows = []` and the
-        // two outcomes were indistinguishable on screen.
+        // nobody verified. Falling through to `rows = []` would make the two
+        // outcomes indistinguishable on screen.
         reached = false;
       }
       if (seq !== state.searchSeq) return;
@@ -409,15 +409,14 @@ export function Root({
     startCreateFolder: handleStartCreateFolder,
     triggerUpload: handleTriggerUpload,
   } = nav;
-  // OPENING A ROW OPENS THE STAGE (§1.8, §7). It used to be a fork: text left
-  // the drive for a reading SCREEN of its own, and every other kind opened on
-  // the stage. §1.8's rule is about the SHEET, not about the screen — "text
+  // OPENING A ROW OPENS THE STAGE (§1.8, §7). Not a fork where text leaves the
+  // drive for a reading SCREEN of its own and every other kind opens on the
+  // stage. §1.8's rule is about the SHEET, not about the screen — "text
   // renders on paper, capped at a 34em measure" — and the stage keeps that
-  // rule literally: `QuickLookText` stands paper on the theater ground. What
-  // the fork cost was everything around the sheet: text was the one kind a
-  // member could not step through with the arrows, could not see the
-  // properties of without going somewhere else, and had to back out of rather
-  // than close.
+  // rule literally: `QuickLookText` stands paper on the theater ground. What a
+  // fork costs is everything around the sheet: text becomes the one kind a
+  // member cannot step through with the arrows, cannot see the properties of
+  // without going somewhere else, and has to back out of rather than close.
   const handleOpenQuick = useCallback(
     (id: string) => core.nav.openQuick(id),
     [core]
@@ -449,10 +448,8 @@ export function Root({
       // off it. `currentRows` answers with the vault's flat FTS matches
       // whenever `state.search` is set, on whatever shelf is open — so a query
       // left behind would make Starred, Trash and every folder show the same
-      // search results under the wrong breadcrumb. It used to be impossible to
-      // leave one behind, because the field was chrome the member could see
-      // from anywhere; now that the field lives on one shelf, leaving is what
-      // clears it.
+      // search results under the wrong breadcrumb. The field lives on one
+      // shelf, so leaving that shelf is what clears the query.
       if (shelf !== SEARCH && state.search) {
         if (searchInputRef.current) searchInputRef.current.value = "";
         state.searchSeq += 1;
@@ -476,8 +473,7 @@ export function Root({
    * The way IN to search, from the app bar's Search control (frame.tsx) and
    * from the compact band's Search tab. Both land on the shelf and put the
    * caret in its field — Photos' `onSearch: () => navigateTo(SEARCH)` plus the
-   * focus the band used to do by hand, now that there is a field to focus that
-   * is not chrome.
+   * focus, now that there is a field to focus that is not chrome.
    *
    * The focus is deferred one frame because the field does not exist until
    * this navigation has rendered.
@@ -542,9 +538,9 @@ export function Root({
               // the state as well as setting it, so it is never a list of five
               // things one of which mysteriously already happened.
               //
-              // TRAILING, AND A TICK. It was a leading accent dot, which put
-              // the mark on the edge every label starts from and pushed the
-              // other four rows' text past it. The handoff's sort menu hangs
+              // TRAILING, AND A TICK. Not a leading accent dot: that puts the
+              // mark on the edge every label starts from and pushes the other
+              // four rows' text past it. The handoff's sort menu hangs
               // its `key` — `'✓'` on the chosen order — off the far edge
               // instead (`keyCss: 'flex:none;font:var(--section)'`), so the
               // labels keep one edge and "which one is on" is answered at the
@@ -679,7 +675,7 @@ export function Root({
     }
   };
 
-  // ---- chrome wiring: doorbell, focus, width, keys, drag/drop ----
+  // ──── chrome wiring: doorbell, focus, width, keys, drag/drop ────
   useEffect(() => {
     const stopDoorbell = onDataChange(CHANGE_TABLES, () => void core.refresh());
     const stopFocus = onFocusRefresh(() => void core.refresh());
@@ -773,7 +769,7 @@ export function Root({
       stopFocus();
       stopWidth();
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- mount-once wiring, stable deps via refs (#505)
+    // oxlint-disable-next-line react-hooks/exhaustive-deps -- mount-once wiring, stable deps via refs (#505)
   }, []);
 
   // Boot skeleton, then the real empty state — both driven with the same kit
@@ -783,7 +779,7 @@ export function Root({
     if (!loaded && skeletonRef.current) showSkeleton(skeletonRef.current, 6);
   }, [loaded]);
 
-  // ---- derive the render (app.tsx's render()/renderSidebar/renderToolbar/… ) ----
+  // ──── derive the render (app.tsx's render()/renderSidebar/renderToolbar/… ) ────
 
   // A FOLDER CAN VANISH UNDER US (deleted in another window). The member is
   // NOT dropped silently on All any more: `shelfAfterRead` falls them back to
@@ -885,11 +881,11 @@ export function Root({
 
   // The compact button's label. The words are the column heads' own, so the
   // two controls name the same four orders rather than inventing two dialects.
-  // ---- what the view may SAY about itself (view-state.ts, §4.6, §11) ----
+  // ──── what the view may SAY about itself (view-state.ts, §4.6, §11) ────
   //
   // "Nothing is empty until a read has landed" and "offline is a state the app
-  // READS, never one it invents" are both rules this file used to get wrong by
-  // expressing them inline. Both are now one call each.
+  // READS, never one it invents" are both rules this file expresses as one
+  // call each, never inline.
   const offline =
     libraryReachability({
       hostStatus: rootElRef.current?.dataset.gatewayStatus ?? null,
@@ -999,7 +995,7 @@ export function Root({
       }
     : null;
 
-  // ---- slots ----
+  // ──── slots ────
 
   const folderList = (
     <FolderList
@@ -1128,10 +1124,10 @@ export function Root({
   // `barNormal: !sel, selOn: !!sel` (prototype, verbatim): the selection row
   // and the arrangement row are the same slot, and picking something SWAPS
   // what the row carries rather than raising a second bar somewhere else. The
-  // selection bar used to be a floating accent pill below the shelf strip:
-  // two bars on screen at once, the drive's own controls still sitting above
-  // a row that had taken the drive over, and the picked count announced in a
-  // place nothing else on the screen speaks from.
+  // selection bar is not a floating accent pill below the shelf strip: that
+  // is two bars on screen at once, the drive's own controls still sitting
+  // above a row that has taken the drive over, and the picked count announced
+  // in a place nothing else on the screen speaks from.
   //
   // AN EMPTY BAND IS CHROME (Photos' `toolbarCarriesSomething`), so the row is
   // null where neither state would carry anything — off the drive there are no
@@ -1181,7 +1177,7 @@ export function Root({
       </>
     ) : null);
 
-  // ---- the route switch ----
+  // ──── the route switch ────
   //
   // ONE BRANCH PER ROUTE, and each branch's BODY lives in its own component
   // (components/DriveRoute, FoldersRoute, StorageRoute). The orchestrator decides
@@ -1466,19 +1462,19 @@ export function Root({
     </>
   );
 
-  // ---- what Docs contributes to the FRAME (frame.tsx, spec §1.4, §11) ----
+  // ──── what Docs contributes to the FRAME (frame.tsx, spec §1.4, §11) ────
   //
   // Called from EFFECTS, never during render: the bar and the band render
   // ABOVE this app in the tree, so a contribution made while rendering would
   // be updating a component that is already painting.
   //
-  // THE BAR NOW CARRIES THE VERB, because on this seat nothing else could.
-  // `onPrimary` used to be withheld on the grounds that "Docs' own '+ New' is
-  // still a dropdown anchored in the sidebar, and a second filled control in
-  // the bar would be two answers to one question". That sidebar is
+  // THE BAR CARRIES THE VERB, because on this seat nothing else can.
+  // Withholding `onPrimary` on the grounds that "Docs' own '+ New' is a
+  // dropdown anchored in the sidebar, and a second filled control in the bar
+  // would be two answers to one question" does not hold here: that sidebar is
   // `display: none` inline (Chrome.module.css: navigation belongs to the host
-  // stem), so there was no first answer either — a member on the web seat had
-  // no way to bring a document in at all.
+  // stem), so there is no first answer either — a member on the web seat would
+  // have no way to bring a document in at all.
   //
   // The verb is the SHELF'S, named by `primaryLabel` and doing exactly what it
   // says: "New folder" on the Folders shelf opens the inline folder editor,
@@ -1550,8 +1546,7 @@ export function Root({
         (segment) => {
           // Search IS a screen now — the shelf plus its own field
           // (components/SearchField.tsx) — so the band's Search tab navigates
-          // to it like every other destination. It used to reach sideways and
-          // focus the topbar field instead, because there was nowhere to go.
+          // to it like every other destination.
           if (segment === "search") {
             openSearch();
             return;

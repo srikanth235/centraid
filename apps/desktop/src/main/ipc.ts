@@ -61,8 +61,8 @@ import {
 /**
  * Status read for the auto-publish queue (issue #137: there is no
  * queue anymore — every publish is synchronous via PUBLISH IPC). Kept
- * as a stable renderer surface so `builder.ts` doesn't need to change;
- * always returns "not in flight". The `PUBLISH_EVENT` channel is
+ * as a stable `CentraidApi` surface (the web host declares the same
+ * pair); always returns "not in flight". The `PUBLISH_EVENT` channel is
  * similarly never fired post-#137 — the renderer's onPublishEvent
  * subscription just stays quiet.
  */
@@ -125,7 +125,7 @@ export function registerIpcHandlers(): void {
     }
   };
 
-  // ----- Settings -----
+  // ─── Settings ───────
   // The bearer token reaches the renderer only through `getGatewayAuth()`
   // (the single bridge crossing post thin-client pivot), so the broad
   // settings payload no longer carries `gatewayToken` — nothing in the
@@ -151,7 +151,7 @@ export function registerIpcHandlers(): void {
       return next;
     }
   );
-  // ----- Gateways (issue #109) -----
+  // ─── Gateways (issue #109) ───────
   // The local gateway is always present and can't be removed; remote
   // gateways are added/removed/renamed through the Settings → Gateways
   // panel. Tokens never cross the bridge — `add` accepts plaintext
@@ -161,9 +161,9 @@ export function registerIpcHandlers(): void {
     async (): Promise<GatewayProfile[]> => listGateways()
   );
 
-  // Issue #505 phase 7 retired the renderer's manual "add gateway by URL +
-  // token" IPC — every gateway is now added through the pairing ceremony
-  // (`redeemGatewayPairing`), which calls `addGateway` in-process itself.
+  // There is no manual "add gateway by URL + token" IPC (#505): every gateway
+  // is added through the pairing ceremony (`redeemGatewayPairing`), which
+  // calls `addGateway` in-process itself.
 
   ipcMain.handle(
     Channel.GATEWAYS_UPDATE_METADATA,
@@ -403,7 +403,7 @@ export function registerIpcHandlers(): void {
     }
   });
 
-  // ----- User identity + prefs (gateway-backed) -----
+  // ─── User identity + prefs (gateway-backed) ───────
   // USER_ID_GET / USER_PREFS_GET / USER_PREFS_SAVE moved to the renderer's
   // direct HTTP client (renderer/gateway-client.ts) under the thin-client
   // pivot.
@@ -415,7 +415,7 @@ export function registerIpcHandlers(): void {
   // reads them over HTTP via `renderer/gateway-client-conversation.ts` — a remote
   // gateway reports its own host's agents.
 
-  // ----- Apps (issue #137: git-store backend; #141: thin client) -----
+  // ─── Apps (issue #137: git-store backend; #141: thin client) ───────
   // App lifecycle (delete/update-meta/clone) moved to the renderer's direct
   // HTTP client (renderer/gateway-client.ts) under the thin-client pivot: the
   // renderer opens its own editing session per app (same `desktop-<id>` id the
@@ -453,7 +453,7 @@ export function registerIpcHandlers(): void {
       getPublishStatus(input.id)
   );
 
-  // ----- Publish + versions (issue #137; #141: thin client) -----
+  // ─── Publish + versions (issue #137; #141: thin client) ───────
   // PUBLISH moved to the renderer's direct HTTP client
   // (renderer/gateway-client.ts): the renderer holds the editing session and
   // POSTs `…/publish` directly. VERSIONS_LIST / VERSIONS_ACTIVATE moved there
@@ -623,7 +623,7 @@ export function registerIpcHandlers(): void {
   // state. APP_LIVE_URL / APP_SCHEMA / APP_TABLE_ROWS / APP_QUERY /
   // APP_LOGS / APPS_DEREGISTER moved there too.
 
-  // ----- Phone link (issue #263) -----
+  // ─── Phone link (issue #263) ───────
   // The tunnel endpoint + device allowlist live in main (they hold the
   // persistent endpoint key and must outlive renderer reloads); the
   // Settings → Phone panel drives them through these four handlers and the
@@ -642,7 +642,7 @@ export function registerIpcHandlers(): void {
     }
   );
 
-  // ----- Relaunch to update -----
+  // ─── Relaunch to update ───────
   // Status snapshot for windows that mount after the UPDATE_AVAILABLE
   // broadcast; relaunch restarts the process so it loads the new dist.
   ipcMain.handle(Channel.UPDATE_STATUS, async () => getUpdateStatus());
@@ -661,7 +661,7 @@ export function registerIpcHandlers(): void {
     return { ok: true as const };
   });
 
-  // ----- Keychain pre-write note (issue #603) -----
+  // ─── Keychain pre-write note (issue #603) ───────
   // Answers "will starting the local gateway pop an OS credential prompt?"
   // so the first-run chooser can warn BEFORE the dialog appears instead of
   // leaving the user to guess what asked for their password. Policy lives in
@@ -674,17 +674,17 @@ export function registerIpcHandlers(): void {
     })
   );
 
-  // ----- "What's new" changelog -----
+  // ─── "What's new" changelog ───────
   ipcMain.handle(Channel.CHANGELOG_GET, async () => getChangelog());
 
-  // ----- Templates -----
+  // ─── Templates ───────
   // TEMPLATES_LIST + TEMPLATES_CLONE moved to the renderer's direct HTTP
   // client (renderer/gateway-client.ts) under the thin-client pivot — the
   // gateway owns the catalog (`GET /centraid/_templates`) and the clone
   // orchestration (`POST /centraid/_apps/_clone`: scaffold + webhook mint +
   // stage + publish). The remote gateway never needs the desktop catalog.
 
-  // ----- Automations (issue #98; #141: thin client) -----
+  // ─── Automations (issue #98; #141: thin client) ───────
   // Automation create/enable/delete + the read/run/analytics surface moved
   // to the renderer's direct HTTP client (renderer/gateway-client.ts): the
   // gateway owns scaffold + webhook mint + stage + publish

@@ -40,7 +40,7 @@ export interface GatewayInfo {
    * handshake before it holds anything, but the auth-gated fields below
    * (`endpointTicket`) are then silently absent for an anonymous caller.
    * Without this flag a bearer mismatch is indistinguishable from "the iroh
-   * endpoint is not ready yet", which is the exact lie the CLI used to tell.
+   * endpoint is not ready yet".
    */
   authenticated?: boolean;
   /** COMPAT(#555): stable gateway transport identity, independent of its address. */

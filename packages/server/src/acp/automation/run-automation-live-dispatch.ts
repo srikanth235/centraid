@@ -10,10 +10,8 @@
  * the same injected, accounted TurnPlane seam as chat. Pinning
  * `harness.automations` to any kind actually drives that harness.
  *
- * Issue #484 — the `ctx.tool` rail was removed. It used to dispatch tool
- * batches to a persistent mock-LLM session that puppeted the claude/codex
- * CLIs; that mock HTTP server started eagerly per fire even when unused. It
- * is gone. A fire whose handler never calls `ctx.delegate` now starts ZERO child
+ * Issue #484 — there is no `ctx.tool` rail and no per-fire mock-LLM HTTP
+ * server. A fire whose handler never calls `ctx.delegate` starts ZERO child
  * processes and ZERO HTTP servers: the deterministic rails (`ctx.vault`,
  * `ctx.fetch`, `ctx.state`, `ctx.runs`) are serviced in-process, parent-side.
  * The only thing this surface allocates lazily is a scratch dir — and only

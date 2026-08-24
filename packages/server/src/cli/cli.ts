@@ -213,8 +213,8 @@ async function commandServe(args: string[]): Promise<void> {
   // door). It is NOT per-boot: `landlordBearerForEndpointSecret` derives it
   // from the KeyStore-custodied endpoint key, so it is stable for the life of
   // that identity and is never rotated — that stability is what lets the CLI
-  // and the desktop reach a daemon they did not spawn. The retired `token.bin`
-  // shared bearer plane is gone. A parent that DOES spawn this daemon (the
+  // and the desktop reach a daemon they did not spawn. A parent that DOES
+  // spawn this daemon (the
   // desktop's detached gateway) may pin a per-launch value via
   // `CENTRAID_GATEWAY_TOKEN`.
   const dataPlaneSecret = process.env.CENTRAID_DATA_PLANE_SECRET;

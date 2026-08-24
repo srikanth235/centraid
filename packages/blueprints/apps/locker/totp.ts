@@ -140,7 +140,7 @@ export function useTotp(seed: string | null | undefined): {
   return { code, offset: totpOffset() };
 }
 
-// ---------- Strength + generator (also real crypto: getRandomValues) ----------
+// ────────── Strength + generator (also real crypto: getRandomValues) ──────────
 
 export interface Strength {
   ratio: number;

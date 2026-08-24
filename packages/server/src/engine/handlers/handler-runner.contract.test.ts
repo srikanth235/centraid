@@ -1,8 +1,8 @@
 import { writeFile } from "node:fs/promises";
 // Worker-spawn admission control (issue #351 Tier 4 hygiene): `runHandler`
-// used to spawn one 256MB-capped worker thread per request with no cap at
-// all — a request burst could spawn unboundedly and OOM the host. These pin
-// the fix: a fixed number of concurrent slots, a short FIFO queue for the
+// spawns one 256MB-capped worker thread per request, and ungated that has no
+// cap at all — a request burst could spawn unboundedly and OOM the host. These
+// pin the gate: a fixed number of concurrent slots, a short FIFO queue for the
 // rest, and a fast "busy" failure once both are exhausted — never a hang,
 // never an unbounded pile of workers.
 //

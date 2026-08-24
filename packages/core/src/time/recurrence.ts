@@ -58,7 +58,7 @@ export interface NextOccurrenceInput {
 function positiveInteger(value: string | undefined): number | undefined {
   if (value === undefined) return undefined;
   const parsed = Math.trunc(Number(value));
-  // COUNT=0 is invalid ICS (and previously clamped to 1). Treat non-positive
+  // COUNT=0 is invalid ICS. Treat non-positive
   // bounds as a single occurrence rather than unbounded expansion.
   if (!Number.isFinite(parsed)) return undefined;
   return parsed > 0 ? parsed : 1;

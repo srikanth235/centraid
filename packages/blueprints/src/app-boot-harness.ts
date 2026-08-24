@@ -30,8 +30,7 @@ import {
 
 // Boots a blueprint app the way the v0 client does: its query-free `Root`,
 // the real kit, the workspace React runtime, and a mocked `window.centraid`
-// vault. The retired served adapter and its vendored React copy are not part
-// of this path.
+// vault. No served adapter and no vendored React copy is part of this path.
 //
 // Typechecking and root lint cover these modules, but neither executes their
 // browser startup. Without this behavioral harness, a rendering crash reaches
@@ -330,9 +329,9 @@ const BOOT_TEST_TIMEOUT_MS = 60_000;
 
 // The inline chrome (Chrome.tsx) mounts its consent notice — a `.kit-banner`
 // carrying `id="consentBanner"` — when the vault denies a read, and unmounts it
-// when the vault grants again. (The retired served islands kept a persistent
-// element and toggled `hidden`; the inline tree mounts/unmounts instead, so
-// "shown" is "present and not hidden".)
+// when the vault grants again. (The inline tree mounts and unmounts rather
+// than keeping a persistent element and toggling `hidden`, so "shown" is
+// "present and not hidden".)
 function consentBannerShown(): boolean {
   const banner = document.querySelector<HTMLElement>("#consentBanner");
   return banner !== null && banner.hidden === false;

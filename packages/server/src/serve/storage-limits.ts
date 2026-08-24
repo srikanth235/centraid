@@ -24,7 +24,7 @@
  * before the owner sets one.
  */
 
-/* eslint-disable max-classes-per-file -- the typed refusal error is colocated with the store that throws it (#247) */
+/* oxlint-disable max-classes-per-file -- the typed refusal error is colocated with the store that throws it (#247) */
 
 import { GatewayDatabase } from "./gateway-db.js";
 

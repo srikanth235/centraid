@@ -31,7 +31,7 @@ describe(capturedAtIso, () => {
 
   it("is undefined, never 1970, when neither timestamp is recorded", () => {
     // The defect this guards: `new Date(null ?? null ?? 0).toISOString()`
-    // used to file the photo under 1970-01-01, an invented capture date.
+    // files the photo under 1970-01-01, an invented capture date.
     expect(
       capturedAtIso({ creationTime: null, modificationTime: null })
     ).toBeUndefined();

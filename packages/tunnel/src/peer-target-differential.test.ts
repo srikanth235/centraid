@@ -127,10 +127,9 @@ function routeLayerModel(target: string): boolean {
  * dot-segment rules, and — since the contract says "mirrored byte-for-byte in
  * Rust" — representability as a Rust `&str`.
  *
- * Written independently of the product on purpose. It used to disagree with it
- * on two classes, both pinned; #846 P6/P7 fixed the product to match the
- * sentence, so the two now agree on every input and this stays as the
- * independent restatement that keeps them agreeing.
+ * Written independently of the product on purpose: it agrees with the product
+ * on every input (#846 P6/P7), and it is the independent restatement that
+ * keeps them agreeing.
  */
 function documentedIntent(target: unknown): boolean {
   if (typeof target !== "string") return false;
@@ -365,15 +364,14 @@ describe("peer-plane target differential", () => {
   });
 
   /*
-   * REGRESSION LOCK for #846 P6, formerly the pin
-   * `bare-prefix-admitted-by-query-or-fragment`.
+   * REGRESSION LOCK for #846 P6.
    *
    * Both guards document "must EXTEND the prefix (a bare prefix names no
-   * resource)", and both used to apply that test to the whole target rather
-   * than to the path — so a lone `?` or `#` was enough to get the BARE prefix
-   * admitted: `/centraid/_peer/?` is 17 bytes, so the length test passed,
-   * while the path it resolves to is exactly the prefix. The fix was one
-   * word in each language: measure `path`, not `target`.
+   * resource)", and both apply that test to the PATH, never to the whole
+   * target: a lone `?` or `#` is otherwise enough to get the BARE prefix
+   * admitted, because `/centraid/_peer/?` is 17 bytes and passes a length
+   * test over `target` while the path it resolves to is exactly the prefix.
+   * One word in each language: measure `path`, not `target`.
    */
   test("a bare prefix plus a query or fragment is refused", () => {
     for (const target of [
@@ -418,7 +416,8 @@ describe("peer-plane target differential", () => {
       // A lone surrogate: matched as its own code point, so a well-formed
       // astral pair never does.
       expect(/\p{Surrogate}/u.test(target)).toBe(true);
-      // What the guard used to judge: the replacement, not the input.
+      // The utf8 round-trip is a different string: a guard that judged the
+      // replacement rather than the input would admit these.
       expect(Buffer.from(target, "utf8").toString("utf8")).not.toBe(target);
       expect(isPeerPlaneTarget(target)).toBe(false);
       expect(documentedIntent(target)).toBe(false);

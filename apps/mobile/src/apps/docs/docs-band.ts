@@ -115,10 +115,10 @@ export function resolveDocsBand(owner: BandOwner): ResolvedDocsBand {
   };
 }
 
-// ---------------------------------------------------------------------------
+// ───────────────────────────────────────────────────────────────────────────
 // The More sheet (handoff Part 2 §"The band": "The sheet lists: Recently
 // changed, Starred, Trash, Storage, What Docs may read, Add to Docs.")
-// ---------------------------------------------------------------------------
+// ───────────────────────────────────────────────────────────────────────────
 
 /** Every key the sheet carries — a closed union so `resolveDocsMoreRoute`
  *  switches exhaustively; a new row fails to typecheck before it can dangle. */

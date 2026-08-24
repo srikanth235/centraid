@@ -1,9 +1,8 @@
 // THE FRAME'S TRANSFER POLICY — one record, every byte-bearing app (#711, S4).
 //
-// This used to be `Rules` inside `apps/photos/BackupHealth.tsx`, with a second
-// private copy of the same interface inside `lib/upload/native-policy.ts`. That
-// was two owners for one member decision, and it was wrong the moment a second
-// app wanted to move bytes: Google asks "back up this device?" ONCE per
+// ONE owner for one member decision. A private second copy of this interface
+// inside an app or inside `lib/upload/native-policy.ts` is wrong the moment a
+// second app wants to move bytes: Google asks "back up this device?" ONCE per
 // account, not once per app, and blueprint-seats.md §Shared engines settles the
 // same shape for us — Docs' scans and Notes' attachments drain under this
 // record, not under one of their own.

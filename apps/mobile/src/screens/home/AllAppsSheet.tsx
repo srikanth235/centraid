@@ -7,8 +7,7 @@
 // can lift an app to the front without a cap and without anything being
 // pushed off the screen.
 //
-// The "and places" half is now the full eleven-row table in ./places, not the
-// two-item stand-in (Assistant, Settings) this used to carry: every place a
+// The "and places" half is the full eleven-row table in ./places: every place a
 // 44px row with its mark, its `what` line, and a pin switch — except Home,
 // which is pinned by law and shows "by law" instead (Home cannot be unpinned,
 // the way a browser cannot unpin its own back button). The Assistant is NOT

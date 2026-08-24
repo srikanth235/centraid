@@ -333,9 +333,9 @@ function assertValidPairAddress(addr: WalPairMarkerAddress): void {
   }
 }
 
-// ---------------------------------------------------------------------------
+// ───────────────────────────────────────────────────────────────────────────
 // WAL frame-boundary math (SQLite WAL file format, sqlite.org/walformat.html)
-// ---------------------------------------------------------------------------
+// ───────────────────────────────────────────────────────────────────────────
 // #532 property/mutation ownership is the addressing surface above (keys +
 // parsers). Frame math, seal/open, and replay planning keep unit/contract
 // coverage via wal-format.test.ts — not the property mutate set.
@@ -509,9 +509,9 @@ export function validateCommittedWal(bytes: Uint8Array): WalPrefixScan {
   return scan;
 }
 
-// ---------------------------------------------------------------------------
+// ───────────────────────────────────────────────────────────────────────────
 // Sealing — deterministic nonce + full-address AAD (FORMAT.md § Encryption).
-// ---------------------------------------------------------------------------
+// ───────────────────────────────────────────────────────────────────────────
 
 function nonceInfo(addr: WalSegmentAddress): string {
   // Derived from the FULL address — every field of the object key, tickMs
@@ -731,9 +731,9 @@ export function openWalPairMarker(
   return marker;
 }
 
-// ---------------------------------------------------------------------------
+// ───────────────────────────────────────────────────────────────────────────
 // Replay planning
-// ---------------------------------------------------------------------------
+// ───────────────────────────────────────────────────────────────────────────
 
 export interface WalReplayPlan {
   /** Segments in replay order (group asc, offset asc), already cut. */

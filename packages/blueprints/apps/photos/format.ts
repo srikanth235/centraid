@@ -144,10 +144,10 @@ export function exifRows(asset: Asset): ExifRow[] {
     // NO Location row, and no coordinate. Where a photograph was taken is a
     // phrase, not a fact in a details grid — `place-phrase.ts` resolves it and
     // the info panel renders it, with the digits behind an explicit "exact
-    // location" action. This row used to print "37.44190, -122.14300" as a link
-    // to a public map host, which handed a third party the exact coordinates of
-    // somebody's photographs to answer a question the app can answer on the
-    // device.
+    // location" action. This row must never print "37.44190, -122.14300" as a
+    // link to a public map host, which hands a third party the exact
+    // coordinates of somebody's photographs to answer a question the app can
+    // answer on the device.
   }
   if (asset.width && asset.height) {
     rows.push({

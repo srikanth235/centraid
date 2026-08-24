@@ -4,7 +4,7 @@
 // raw SQL for either. Kept in their own leaf module (custody.ts is at the
 // governance line-cap): the machinery lives here, custody.ts stays the facade.
 
-/* eslint-disable max-classes-per-file -- (#405) ReplicaIndex + AccessIndex are the two durable-table helpers of one cache-index module (blob_replica + blob_access), paired by design */
+/* oxlint-disable max-classes-per-file -- (#405) ReplicaIndex + AccessIndex are the two durable-table helpers of one cache-index module (blob_replica + blob_access), paired by design */
 
 import type { DatabaseSync } from "node:sqlite";
 

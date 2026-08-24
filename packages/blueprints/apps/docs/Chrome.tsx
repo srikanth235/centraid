@@ -21,16 +21,16 @@
 // sitting in the corner of the same window. Classes come from Chrome.module.css (scoped
 // chrome) + the global kit-* vocabulary (kit.css, loaded once by the host).
 //
-// TRAP #5 IS CLOSED HERE. This root used to stamp a GLOBAL `docs` /
-// `is-narrow` / `side-open` class trio alongside the module-scoped
-// `.shell`/`.isNarrow`/`.sideOpen`, purely so that three sibling
-// `components/*.module.css` files could reach across a module boundary with
+// TRAP #5 IS CLOSED HERE. This root stamps NO global `docs` / `is-narrow` /
+// `side-open` class trio alongside the module-scoped
+// `.shell`/`.isNarrow`/`.sideOpen`, and must not grow one so that sibling
+// `components/*.module.css` files can reach across a module boundary with
 // `:global(.docs.is-narrow) …` overrides. That is a seam: any app that
-// happened to stamp `docs` anywhere in the document would have restyled these
-// components, and the coupling was invisible from either end. The three
-// stylesheets now carry their own `data-narrow` attribute on their own
-// elements (List/Editor/QuickLook take a `narrow` prop), the trio is deleted,
-// and this file's classes are all module-scoped again.
+// happened to stamp `docs` anywhere in the document would restyle these
+// components, and the coupling is invisible from either end. The three
+// stylesheets carry their own `data-narrow` attribute on their own elements
+// (List/Editor/QuickLook take a `narrow` prop), and this file's classes are
+// all module-scoped.
 //
 // EVERYTHING VARIABLE ARRIVES AS A SLOT (`ChromeSlots`), the same shape
 // `photos/Chrome.tsx` uses. The chrome owns geometry; what stands in each
@@ -51,7 +51,6 @@ export interface ChromeSlots {
    * pair while nothing is picked, the selection bar's count and verbs while
    * something is. The caller decides which; this row only draws it.
    *
-   * The selection bar used to have a region of its own below the shelf strip.
    * Null wherever the row would carry nothing. AN EMPTY BAND IS CHROME:
    * Photos' own toolbar returns null rather than draw a rule with nothing in
    * it (`toolbarCarriesSomething`).
@@ -120,8 +119,8 @@ export function Chrome(props: ChromeProps): ReactNode {
   // render"), so they are destructured into plain locals here (#573).
   const { uploadRef } = props;
 
-  // Module-scoped only. The global `docs`/`is-narrow`/`side-open` trio that
-  // used to be mirrored here is gone (see the trap #5 note at the top).
+  // Module-scoped only: no global `docs`/`is-narrow`/`side-open` trio is
+  // mirrored here (see the trap #5 note at the top).
   const shellClass = [
     styles.shell,
     props.narrow ? styles.isNarrow : "",

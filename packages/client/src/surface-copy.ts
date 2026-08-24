@@ -17,9 +17,9 @@ export const READING_HEALTH = "Reading from the gateway";
 /**
  * The status line when there is nothing to attend to.
  *
- * ONE CLAUSE (DESIGN.md → Copy). It used to carry a second — "· nothing needs
- * you here right now" — which says the first clause again in the register of a
- * product reassuring itself. Empty is the healthy state for a consent surface
+ * ONE CLAUSE (DESIGN.md → Copy). A second — "· nothing needs you here right
+ * now" — says the first clause again in the register of a product reassuring
+ * itself. Empty is the healthy state for a consent surface
  * and the four words say so.
  */
 export const EMPTY_HEALTH = "Nothing to attend to";

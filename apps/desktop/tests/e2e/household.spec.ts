@@ -22,7 +22,7 @@ import type { MockGateway, TestEnv } from "./fixtures";
  * §2.12–2.13 — Household as the "Where it lives" half of Vault (v11).
  *
  * Atlas and Household both label "Vault" and land on one custody surface;
- * Household is retired as a launcher destination. The mock still mirrors the
+ * Household is not a launcher destination. The mock mirrors the
  * real roster/owner-scope/sharing handlers (`owners-routes.ts`,
  * `devices-routes.ts`, `scopes-routes.ts`, `vault-links-routes.ts`,
  * `edges-routes.ts`, `commons-recovery-routes.ts`), so these journeys
@@ -115,8 +115,9 @@ test.beforeEach(async () => {
     scopeRowRecord({ vaultId: "v-shared", label: "Shared" }),
   ];
   // The sharing surface: one approved link to Priya, and one commons whose
-  // steward is absent. There is no parked incoming ask to seed — copy-as-share
-  // retired (#825, ruling G-copy), so nothing arrives for an owner to answer.
+  // steward is absent. There is no parked incoming ask to seed: copy-as-share
+  // does not exist (#825, ruling G-copy), so nothing arrives for an owner to
+  // answer.
   gateway.state.links = [
     gatewayLinkRecord({
       linkId: "link-priya",

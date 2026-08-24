@@ -104,10 +104,10 @@ export const STORAGE_ROWS: readonly { state: string; label: string }[] = [
   { state: "missing", label: "Missing — needs attention" },
 ];
 
-// ---------------------------------------------------------------------------
+// ───────────────────────────────────────────────────────────────────────────
 // One document's screens (the document-level slice of issue #821) — appended
 // by the sibling agent, additively, per INTEGRATION-NOTES.md.
-// ---------------------------------------------------------------------------
+// ───────────────────────────────────────────────────────────────────────────
 
 /** §7's status, verbatim: the facts panel's one standing sentence. */
 export const FACTS_STATUS =

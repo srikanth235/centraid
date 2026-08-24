@@ -60,13 +60,14 @@ import YouSection from "./settings/YouSection";
 // tunnel, no URLs or tokens. The manual URL/token fields under Advanced remain a
 // dev fallback for simulators pointing at a token-less local gateway.
 //
-// BOTH pairing branches offer BOTH roads. The paste field used to render only in
-// the unpaired branch, so a phone that had already paired once could add a second
-// gateway by camera alone — and a camera is exactly what the two cases that need
-// a ticket do not have: a simulator, and a headless VPS whose QR lives in a
-// terminal on the same machine you are typing on. The only way back to the paste
-// field was to unpair (or reinstall), which throws away a working link to add
-// one. Adding a vault must never cost the vault you already have.
+// BOTH pairing branches offer BOTH roads. A paste field rendered only in the
+// unpaired branch leaves a phone that has already paired once able to add a
+// second gateway by camera alone — and a camera is exactly what the two cases
+// that need a ticket do not have: a simulator, and a headless VPS whose QR
+// lives in a terminal on the same machine you are typing on. The only way back
+// to the paste field would be to unpair (or reinstall), which throws away a
+// working link to add one. Adding a vault must never cost the vault you
+// already have.
 
 interface TicketPasteProps {
   value: string;

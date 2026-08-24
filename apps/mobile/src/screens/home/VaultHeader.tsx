@@ -5,10 +5,10 @@
 // tabs and none of them can carry a two-line lockup — so they live at the head
 // of Home, which is the one screen every route returns to.
 //
-// This replaces the time-of-day greeting that used to sit here. A greeting is
-// true for about four hours and says nothing about where you are; a member with
-// two vaults on two gateways could not tell from the old header which one they
-// were looking at, on the screen whose whole job is to show them what they own.
+// There is no time-of-day greeting here. A greeting is true for about four
+// hours and says nothing about where you are; a member with two vaults on two
+// gateways cannot tell from one which they are looking at, on the screen whose
+// whole job is to show them what they own.
 // The vault mark doubles as the vault SWITCH, so identity and "change identity"
 // are one control rather than two.
 //
@@ -224,7 +224,7 @@ const makeStyles = (colors: ThemeColors) =>
       flexDirection: "row",
       // `mobileLockupStyle`, :5529 — ONE `gap: R.gap.m` (12) across all four
       // children of the lockup row, not the three-number fake (lockup gap +
-      // paddingEnd + action marginStart) this used to be.
+      // paddingEnd + action marginStart).
       gap: 12,
       // `mobileLockupStyle`, :5529-5530 — `padding: 12px 18px 8px`.
       paddingBottom: 8,

@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-// eslint-disable-next-line typescript-eslint/ban-ts-comment -- issue #711: browser-DOM fixture is intentionally checked by jsdom, while the blueprint TS config excludes DOM globals (see photos-media.test.ts's own note)
+// oxlint-disable-next-line typescript-eslint/ban-ts-comment -- issue #711: browser-DOM fixture is intentionally checked by jsdom, while the blueprint TS config excludes DOM globals (see photos-media.test.ts's own note)
 // @ts-nocheck
 // The People shelf's own conformance fixes (issue #711, v4 handoff §5, proto
 // :4432-:4433):

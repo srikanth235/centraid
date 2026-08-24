@@ -104,8 +104,8 @@ function useStableEvent<T extends (...args: never[]) => unknown>(
 }
 
 /**
- * Turns fetched per request (issue #659 G5). The gateway used to materialize an
- * entire thread — every turn, every item, every attachment — to render the last
+ * Turns fetched per request (issue #659 G5) — the gateway never materializes
+ * an entire thread, every turn and item and attachment, to render the last
  * screenful. This is the page; "Show earlier messages" walks backwards from
  * `oldestSeq` one page at a time, and the screen renders a smaller window still.
  */
@@ -250,9 +250,9 @@ export default function AssistantRoute({
     }
     m.current.pendingAttachments = [];
   };
-  // A streamed turn fires an event per token, and each one used to re-project
-  // the whole transcript and re-render synchronously — hundreds of times more
-  // often than the display can paint (issue #659). Coalesce to one projection
+  // A streamed turn fires an event per token, and re-projecting the whole
+  // transcript per event would re-render synchronously — hundreds of times
+  // more often than the display can paint (issue #659). Coalesce to one projection
   // per frame; the batched callback reads the live model when it runs, so the
   // latest state always wins and nothing is dropped.
   const pushNow = (): void => updateRef.current?.(buildSnapshot());

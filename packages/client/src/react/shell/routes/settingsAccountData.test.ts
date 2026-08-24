@@ -53,8 +53,8 @@ describe("settingsAccountData", () => {
     });
 
     it("omits what this build cannot answer for rather than inventing it", async () => {
-      // The stamp replaced a hard-coded `v0.5.2`, which was a number the build
-      // could not vouch for. A host with no changelog bridge states the host.
+      // The stamp never carries a hard-coded version — that is a number the
+      // build cannot vouch for. A host with no changelog bridge states the host.
       window.CentraidApi.getChangelog = undefined;
       window.CentraidApi.getGatewayAuth = () =>
         Promise.reject(new Error("no gateway"));

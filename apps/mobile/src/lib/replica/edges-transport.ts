@@ -3,11 +3,10 @@
 // `links-transport.ts`'s shape. Mobile's own People/Sharing screen data
 // source, independent of any one app mount.
 //
-// An edge is a copy between two vaults ONE PERSON owns. The D9 ask surface
-// this module also carried — `GET …/edges/pending`, `POST …/edges/:id/answer`
-// — retired with copy-as-share (#825, ruling G-copy) along with the routes
-// that served it; sharing with another person is a standing grant, read and
-// written through `src/kit/share/grants-transport.ts`.
+// An edge is a copy between two vaults ONE PERSON owns. There is no D9 ask
+// surface here — no `GET …/edges/pending`, no `POST …/edges/:id/answer`
+// (#825, ruling G-copy); sharing with another person is a standing grant, read
+// and written through `src/kit/share/grants-transport.ts`.
 import { ROUTES } from "@centraid/core/protocol";
 
 import { authHeader } from "../gateway";

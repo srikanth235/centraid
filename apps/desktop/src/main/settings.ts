@@ -249,9 +249,9 @@ async function writePersisted(next: PersistedSettings): Promise<void> {
  * Starting the local gateway — embedded or detached — reads/mints this
  * device's wrapping key and loopback token through `safeStorage`
  * (`gateway-secrets.ts`). On macOS that is an OS keychain access, and on a
- * fresh install it used to happen at `app.whenReady()` before the user had
- * seen a single word of UI: the very first thing Centraid did was spook the
- * user with a system keychain prompt.
+ * fresh install it would land at `app.whenReady()` before the user has
+ * seen a single word of UI: the very first thing Centraid does would be a
+ * system keychain prompt.
  *
  * So on a **true first run** — persisted settings with no
  * `onboardingCompletedAt` — `resolveEffective` returns the settings with an

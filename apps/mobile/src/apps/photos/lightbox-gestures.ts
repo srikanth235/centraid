@@ -43,8 +43,8 @@ function clamp(value: number, extent: number): number {
  * clamped to 1×–5× and to the scaled photograph's own bounds.
  *
  * THE PAN IS NOT DECORATION: the readout promises `240% · drag to pan`, and
- * for the whole of v3 that was a lie — the transform was scale-only, so a
- * magnified photograph could only ever show its own middle. A promise printed
+ * a scale-only transform makes that a lie — a magnified photograph could then
+ * only ever show its own middle. A promise printed
  * in the status line is a contract, so either the drag moves the photograph or
  * the words come off the screen.
  *

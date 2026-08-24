@@ -56,8 +56,8 @@ describe("paletteData", () => {
       ).toStrictEqual(["Todos"]);
       // No nav target matches "todo", so that group is dropped.
       expect(groups.find((g) => g.group === "Go to")).toBeUndefined();
-      // The served-app plane retired with the builder that produced apps for
-      // it: no query resurrects a "Build a new app…" row.
+      // There is no served-app plane, and no builder producing apps for one
+      // (#799): no query offers a "Build a new app…" row.
       expect(groups.find((g) => g.group === "Create")).toBeUndefined();
       expect(
         buildPaletteGroups("budget tracker", deps()).find(

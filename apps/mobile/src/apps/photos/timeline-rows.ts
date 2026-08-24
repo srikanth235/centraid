@@ -10,12 +10,11 @@ import type { JustifiedTile } from "./justify";
 import type { PhotoAsset, PhotoSection } from "./timeline-model";
 
 // NO COUNTS ON THE TIMELINE (issue 712 iOS parity). The month and day headers
-// used to carry `86 photographs · 4 videos` and a bare `12`. They are gone:
-// iOS' own Library states neither, and the reason holds here — the tally of a
-// month is not what a member scrolls a timeline to find out, and printing it
-// on every header puts a number in the reading path of every single row. The
-// counts still exist where a count IS the question: the period cards of the
-// Years and Months grains (`photos-zoom.ts`, which still calls
+// state no tally: iOS' own Library states neither, and the reason holds here —
+// the tally of a month is not what a member scrolls a timeline to find out,
+// and printing it on every header puts a number in the reading path of every
+// single row. The counts still exist where a count IS the question: the period
+// cards of the Years and Months grains (`buildPeriods`, the one caller of
 // `describeCounts` below) summarise a period the member cannot see the whole
 // of, and the Collections shelves state their own sizes.
 //

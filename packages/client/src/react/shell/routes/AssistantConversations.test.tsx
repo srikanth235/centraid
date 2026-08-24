@@ -1,7 +1,6 @@
-// The conversation ledger's behaviours, carried over from the shell sidebar it
-// used to live in (issue #707, Phase 4). Every case here was a Recents case in
-// Sidebar.test.tsx before the ledger became app content owned by the assistant
-// route; the coverage moved with the component.
+// The conversation ledger's behaviours (issue #707, Phase 4). The ledger is
+// app content owned by the assistant route, so its coverage lives here beside
+// the component rather than with the shell's navigation column.
 import { act } from "react";
 import { createRoot } from "react-dom/client";
 import type { Root } from "react-dom/client";

@@ -21,11 +21,11 @@ describe("element stylesheet contract", () => {
   });
 
   it("styles only the Ask surface that still exists", () => {
-    // #799 retired the served assistant plane. The inline panel
-    // (`packages/client/src/react/blueprints/kit-ask-inline.ts`) is the last
-    // Ask surface kit.css dresses, and it emits exactly these classes — the
-    // overlay, model picker, history drawer, suggestion chips and proposed-
-    // action cards are gone, so the sheet must not carry rules for them.
+    // There is no served assistant plane (#799). The inline panel
+    // (`packages/client/src/react/blueprints/kit-ask-inline.ts`) is the only
+    // Ask surface kit.css dresses, and it emits exactly these classes — there
+    // is no overlay, model picker, history drawer, suggestion chip or
+    // proposed-action card, so the sheet must not carry rules for them.
     for (const live of [
       ".kit-ask-btn",
       ".kit-ask-panel",

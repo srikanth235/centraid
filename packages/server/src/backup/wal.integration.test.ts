@@ -1280,10 +1280,9 @@ describe("wal", () => {
     await f.service.runBackup(f.vaultId);
 
     // Every terminal report the service pushes for this component, in order —
-    // the bug being pinned down was a degrade followed by an unconditional ok,
-    // which is invisible in the final status alone once a probe re-runs.
-    // Record the ORDER of health pushes: the bug this guards was a reportDegraded
-    // immediately overwritten by a reportOk, so only the sequence exposes it.
+    // a degrade followed by an unconditional ok is invisible in the final
+    // status alone once a probe re-runs, so only the ORDER of health pushes
+    // exposes a reportDegraded immediately overwritten by a reportOk.
     // The three report methods have different signatures (`reportOk`'s detail is
     // optional, the other two require it), so they are wrapped individually —
     // one shared generic wrapper cannot be typed against all three.

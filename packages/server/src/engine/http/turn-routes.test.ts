@@ -709,7 +709,7 @@ describe("turn-routes", () => {
     expect(seenPrompt).not.toMatch(/manifest unavailable/u);
   });
 
-  // ---------- Ask-model picker (GET/PUT /centraid/<appId>/_turn/model) ----------
+  // ────────── Ask-model picker (GET/PUT /centraid/<appId>/_turn/model) ──────────
 
   /** An in-memory `AskModelPrefs` fake — mirrors the gateway's prefs-store + catalog wiring. */
   function fakeAskModel(opts?: {

@@ -4,9 +4,9 @@
  * same questions could only be asked through a route, a database and a
  * transport, which is why four files could disagree about them.
  *
- * The one surviving transport's behaviour over these transitions is pinned by
- * `edges-routes.test.ts`; the peer transport retired with copy-as-share
- * (#825, ruling G-copy), and with it the four peer answer signals.
+ * The one transport's behaviour over these transitions is pinned by
+ * `edges-routes.test.ts`; there is no peer transport and no peer answer
+ * signals (#825, ruling G-copy).
  */
 
 import { describe, expect, test } from "vitest";

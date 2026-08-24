@@ -19,8 +19,7 @@
  *                        chat window, automation, or builder session.
  *                        `kind` (chat|automation|build) lives here — a
  *                        thread is single-kind. `app_id` scopes a thread
- *                        to its app INSIDE the shared per-vault file (the
- *                        per-app scoping used to be the file itself);
+ *                        to its app INSIDE the shared per-vault file;
  *                        `user_id` carries the vault owner's party id.
  *                        A conversation binds to its vault at creation —
  *                        it lives in that vault's file, so a mid-thread
@@ -481,17 +480,17 @@ export const CONVERSATION_LEDGER_DDL = `
 
 /*
  * run_summary is a VIEW, not a table: one row per FINISHED run, every
- * kind — the Insights/Executions source. It used to be a denormalized
- * table maintained by a best-effort dual write at finishTurn, justified
- * when the rollup lived in a different file (central analytics.sqlite,
+ * kind — the Insights/Executions source. A denormalized table maintained by
+ * a best-effort dual write at finishTurn is justified only while the rollup
+ * lives in a different file (central analytics.sqlite,
  * #280); with the ledger and the rollup in ONE file there is no boundary
  * left to denormalize across, so the ledger tables above are simply THE
  * source and the view is the lens (no write path, no drift).
  * automation_ref/app_id derivation and the dominant-model / dominant-
- * harness picks mirror the old write-through exactly.
+ * harness picks are computed by the view itself.
  *
- * RECREATED ONLY WHEN THE DEFINITION CHANGES (issue #659 G11). This used to be
- * an unconditional DROP+CREATE on every journal open, which is a schema write —
+ * RECREATED ONLY WHEN THE DEFINITION CHANGES (issue #659 G11). An
+ * unconditional DROP+CREATE on every journal open is a schema write —
  * a transaction, a schema-version bump, and an invalidation of every prepared
  * statement in the process — paid on every gateway start and every worker that
  * touches the file, to produce a view identical to the one already there.
@@ -604,14 +603,14 @@ export const CONVERSATION_FTS_DDL = `
     END;
 
     /*
-     * Item insert is INCREMENTAL (issue #659 G4). It used to delete the row and
-     * re-derive body by joining items↔turns and group_concat-ing the WHOLE
+     * Item insert is INCREMENTAL (issue #659 G4). Deleting the row and
+     * re-deriving body by joining items↔turns and group_concat-ing the WHOLE
      * conversation — inside the streaming write transaction, on every
-     * text-bearing item. That is O(conversation) per insert, so indexing a
-     * thread cost O(n²) and the cost grew with the thread the user was actively
-     * using. Appending the one new item's text is O(text) and produces exactly
-     * the same body string, because the old derivation was itself an
-     * insertion-ordered group_concat with the same ' ' separator.
+     * text-bearing item — is O(conversation) per insert, so indexing a
+     * thread costs O(n²) and the cost grows with the thread the user is
+     * actively using. Appending the one new item's text is O(text) and
+     * produces exactly the same body string, because that derivation is
+     * itself an insertion-ordered group_concat with the same ' ' separator.
      *
      * Rows exist only for 'chat'/'build' conversations (see conv_ai and the
      * backfill), so the UPDATE self-selects the same conversations the old
@@ -859,13 +858,13 @@ export function openJournalDb(dbPath: string): DatabaseSync {
   //
   // The value is a STALL BUDGET, not a patience setting (issue #659 G11). This
   // driver is `node:sqlite`'s SYNCHRONOUS one, so the wait is a blocked event
-  // loop: at the old 30s a single contended write could freeze every request,
+  // loop: at 30s a single contended write can freeze every request,
   // SSE heartbeat, and health probe on the gateway for half a minute — a
   // hard-down gateway presented as a slow one. 10s still dwarfs any real
   // contention on this file (a WAL checkpoint by the shipper, a worker's
-  // insert), so nothing that used to succeed now fails; it only bounds how long
-  // a genuinely stuck lock can hold the process hostage before the write
-  // surfaces SQLITE_BUSY to its caller.
+  // insert), so it fails nothing that would otherwise succeed; it only bounds
+  // how long a genuinely stuck lock can hold the process hostage before the
+  // write surfaces SQLITE_BUSY to its caller.
   //
   // wal_autocheckpoint=0: the vault's WAL shipper (issue #408) is the sole
   // checkpointer of journal.db — its backup segments are raw WAL byte

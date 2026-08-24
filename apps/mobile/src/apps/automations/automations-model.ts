@@ -234,8 +234,8 @@ export function automationSub(row: AutomationRow, context: RunContext): string {
 /**
  * One automation, worded.
  *
- * The manifest description that used to sit under the name is deliberately not
- * here: the row's second line is what fires it and how it last went (spec §3),
+ * The manifest description is deliberately NOT under the name: the row's
+ * second line is what fires it and how it last went (spec §3),
  * and the description is the automation's own prose, which belongs where the
  * automation is opened rather than repeated eleven times down a list.
  */

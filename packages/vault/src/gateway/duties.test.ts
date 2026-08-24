@@ -39,7 +39,7 @@ describe("duties", () => {
     };
   });
 
-  // ---- file custody (needs a file-backed vault) ----
+  // ──── file custody (needs a file-backed vault) ────
 
   let custodyDir: string;
   let fileDb: VaultDb | null = null;
@@ -569,7 +569,7 @@ describe("duties", () => {
     expectPolyDependentsCleaned(deps, "media.asset", "poly-a");
   });
 
-  // ---- edit lineage vs the sweep (issue #711 decision S8) ----
+  // ──── edit lineage vs the sweep (issue #711 decision S8) ────
 
   const PAST = "2020-01-01T00:00:00Z";
 

@@ -1,9 +1,9 @@
 // Conformance between the DECLARED commons routing table and the REAL
 // registered command schemas (issue #750). The defect this test exists for:
-// routing used to be decided by string heuristics over the command name and a
-// hand-maintained list of container-id keys, so renaming an input key made a
-// command silently bypass the commons rail — the write landed private and the
-// next compile reverted it. Here the table is data, and this test walks the
+// routing decided by string heuristics over the command name and a
+// hand-maintained list of container-id keys lets a renamed input key silently
+// bypass the commons rail — the write lands private and the next compile
+// reverts it. Here the table is data, and this test walks the
 // command registry every command pack actually installs.
 
 import { afterEach, describe, expect, test } from "vitest";

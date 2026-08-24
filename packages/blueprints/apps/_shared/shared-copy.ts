@@ -16,11 +16,10 @@
 /**
  * Retaining a shared item into your own vault, done.
  *
- * A toast is a fragment (DESIGN.md → Copy). It used to be "Saved to my vault.
- * This copy survives if the share ends." — a sentence about custody arriving
- * after the decision, where it cannot change one. Docs' viewer had drifted to
- * "This copy stays if the share ends", which is what two homes for one string
- * produces.
+ * A toast is a fragment (DESIGN.md → Copy) — never "Saved to my vault. This
+ * copy survives if the share ends.", a sentence about custody arriving after
+ * the decision, where it cannot change one. One home for the string is what
+ * stops Docs' viewer and the share sheet drifting to two wordings of it.
  */
 export const SAVED_TO_MY_VAULT = "Saved to my vault";
 

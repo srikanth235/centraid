@@ -9,9 +9,9 @@
  * itself with global kit.css classes. The shell composer is a *controlled*
  * React textarea authed by a bearer token through `searchVaultEntities`, styled
  * with CSS modules. Per the Wave-0 audit, a React reimplementation over the
- * same endpoints was the right call, and #799 retired the imperative one
- * outright with the served plane; the genuinely shareable bits are these tiny
- * pure functions (token detection + the `@[label](ref:type/id)` splice). The
+ * same endpoints is the right call (#799); the genuinely shareable bits are
+ * these tiny pure functions (token detection + the `@[label](ref:type/id)`
+ * splice). The
  * emitted ref string exactly matches what the shared renderer parses
  * (assistant-rich's ref regex).
  */

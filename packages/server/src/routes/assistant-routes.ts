@@ -224,8 +224,8 @@ export function makeAssistantRouteHandler(
         additionalDirectories = additionalDirectories.filter(
           (directory) => directory !== workspaceDirectory
         );
-        // Every turn used to rewrite this row even when nothing changed. The
-        // selection is per conversation and rarely moves, so compare first.
+        // The selection is per conversation and rarely moves, so compare
+        // first rather than rewriting this row on every turn.
         const selectionUnchanged =
           savedWorkspace?.primaryKind === workspaceKind &&
           savedWorkspace.additionalDirectories.length ===

@@ -17,7 +17,7 @@ import { updateBlobStoreSettings } from "../host.js";
 import { MULTIPART_THRESHOLD_BYTES, S3BlobStore } from "./s3.js";
 import { sha256OfBytes } from "./store.js";
 
-// ---------- the fake S3 endpoint ----------
+// ────────── the fake S3 endpoint ──────────
 
 interface FakeRequest {
   method: string;
@@ -169,7 +169,7 @@ describe("s3", () => {
     await fake.close();
   });
 
-  // ---------- issue #405 §6: storage class ----------
+  // ────────── issue #405 §6: storage class ──────────
 
   test("storage class: PUT carries a signed x-amz-storage-class when configured", async () => {
     const store = new S3BlobStore({
@@ -231,7 +231,7 @@ describe("s3", () => {
     for (const part of parts) expect(part.storageClass).toBeNull();
   });
 
-  // ---------- issue #405 §4: retry / backoff ----------
+  // ────────── issue #405 §4: retry / backoff ──────────
 
   test("retry: two 503s then 200 ⇒ the PUT succeeds after exactly 3 requests", async () => {
     fake.failNext = 2;
@@ -317,7 +317,7 @@ describe("s3", () => {
     expect(fake.requests.filter((r) => r.method === "PUT")).toHaveLength(3);
   });
 
-  // ---------- settings passthrough: blob_store.storageClass → remoteTier → driver ----------
+  // ────────── settings passthrough: blob_store.storageClass → remoteTier → driver ──────────
 
   test("settings: storageClass flows through and stale encrypt:false still writes mandatory CBSF", async () => {
     const db = openVaultDb({ s3Credentials: CREDS });

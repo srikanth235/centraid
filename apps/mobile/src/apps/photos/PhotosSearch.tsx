@@ -6,13 +6,13 @@
 // People, so the band stays up with Search current and the frame's Home capsule
 // stays reachable — proto:4953-4954's `appBandOn` excludes only the viewer,
 // zoom, video, slideshow and the editor, and Search is none of those. The
-// pushed route this file used to be had a back chevron and no band, which broke
-// that rule and made Search feel like leaving Photos.
+// pushed route with a back chevron and no band would break that rule and make
+// Search feel like leaving Photos.
 //
 // The surface itself is ONE query box (proto:4257) over the shelf's four
-// states. There is no chip rail and there are no date fields: the handoff never
-// had them, and the ones this file used to draw cycled blindly through every
-// person / place / album row per tap, which is a control that cannot be aimed.
+// states. There is no chip rail and there are no date fields: the handoff has
+// none, and a chip that cycles blindly through every person / place / album row
+// per tap is a control that cannot be aimed.
 //
 //   nothing typed  a panel naming what is searched, plus the five REAL example
 //                  queries as mono chips that fill the field on tap
@@ -124,10 +124,9 @@ interface SemanticHit {
 type Nav = PhotosScreenProps<"PhotosHome">["navigation"];
 
 /**
- * The route this file used to be is still registered (`App.tsx`) so nothing in
- * the navigator dangles, but the band now renders the view in place and no
- * caller pushes it. It is dead registration awaiting removal by whoever owns
- * the navigator.
+ * This route stays registered (`App.tsx`) so nothing in the navigator dangles,
+ * but the band renders the view in place and no caller pushes it. It is dead
+ * registration awaiting removal by whoever owns the navigator.
  */
 export default function PhotosSearch({
   navigation,

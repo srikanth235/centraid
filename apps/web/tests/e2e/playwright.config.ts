@@ -4,13 +4,13 @@ import { defineConfig, devices } from "@playwright/test";
 
 const here = import.meta.dirname;
 
-// W5.1 (#842) — cross-browser matrix. The suite used to declare no `projects`,
-// which Playwright treats as a single implicit Chromium project: every PWA and
-// offline journey was only ever measured on one engine. Service-worker
-// registration, Cache Storage eviction, and IndexedDB durability all diverge in
+// W5.1 (#842) — cross-browser matrix. A suite that declares no `projects` is a
+// single implicit Chromium project to Playwright, measuring every PWA and
+// offline journey on one engine. Service-worker registration, Cache Storage
+// eviction, and IndexedDB durability all diverge in
 // WebKit (Safari's SW lifecycle and 7-day storage cap) and, less sharply, in
 // Firefox — precisely the surfaces web-pwa / web-pwa-cache / offline-reconnect
-// assert. So this file now declares the engines explicitly.
+// assert. So this file declares the engines explicitly.
 //
 // The base container ships Chromium only (`/opt/pw-browsers` has no webkit or
 // firefox bundle). Declaring webkit/firefox unconditionally would make the

@@ -51,9 +51,9 @@ import styles from "./SettingsRoute.module.css";
 // Pairing a phone is NOT a
 // page here: it is a one-off act, so it lives in the account menu as
 // PairDeviceModal. Component health
-// and logs used to live here as a "Gateway" section — they now live on the
-// sidebar's Gateway page itself, as tabs (GatewayScreen.tsx), so the two
-// "Gateway" surfaces stop being unrelated pages that share a name.
+// and logs are NOT a "Gateway" section here — they live on the sidebar's
+// Gateway page itself, as tabs (GatewayScreen.tsx), so the two "Gateway"
+// surfaces are never unrelated pages that share a name.
 
 export type SettingsPageId =
   | "appearance"
@@ -76,10 +76,11 @@ interface PageDef {
 /*
  * Marks. Four rules, in the order they bite:
  *
- * 1. No two rows share a glyph. `Agents` and `Enrichment` both wore `Sparkle`,
- *    so half the rail was a coin flip. `Sparkle` is the ASK/assistant mark
- *    (`ICON_CONCEPTS.ask`), which is what enrichment is — a machine reading
- *    your data for you — so it stays there and Agents moves.
+ * 1. No two rows share a glyph. `Agents` and `Enrichment` both wearing
+ *    `Sparkle` makes half the rail a coin flip. `Sparkle` is the ASK/assistant
+ *    mark (`ICON_CONCEPTS.ask`), which is what enrichment is — a machine
+ *    reading your data for you — so it belongs to Enrichment, and Agents
+ *    wears something else.
  * 2. A row wears the glyph its subject already wears elsewhere. Harnesses are
  *    marked `Cpu` where they are picked (AutomationEditorHarnessPicker), and
  *    the frame's Vault destination is `DESTINATION_MARKS.data` = `Database`.

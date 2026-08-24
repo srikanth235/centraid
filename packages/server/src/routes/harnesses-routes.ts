@@ -1,7 +1,7 @@
 // HTTP surface for gateway-owned harness detection.
 //
-// The desktop main process used to probe the on-machine state itself and
-// hand the renderer a snapshot over IPC. But the harness runs wherever the
+// Detection runs on the GATEWAY, not in the desktop main process: the
+// harness runs wherever the
 // GATEWAY runs, and Centraid is agnostic to how each harness authenticates —
 // every harness owns its own auth. So detection asks one question only: is
 // the CLI runnable on the gateway host? We run `<bin> --version` for each
@@ -19,10 +19,10 @@
 // warm). `modelsStatus` carries the load tri-state so the client shows a
 // loading placeholder and polls.
 //
-// The per-harness TOOLS listing that used to ride this route (`codexTools`,
-// `?refreshTools=1`, …) is gone — Connections is where the user reasons about
-// what a harness can reach. Host-tool enumeration itself is untouched: it still
-// feeds the builder's grounding block (`src/skills/`), read off the same
+// This route carries no per-harness TOOLS listing (no `codexTools`, no
+// `?refreshTools=1`) — Connections is where the user reasons about
+// what a harness can reach. Host-tool enumeration feeds the builder's
+// grounding block (`src/skills/`), read off the same
 // catalog by `makeUnifiedConversationRunner`.
 //
 // Mounted via `startRuntimeHttpServer`'s `extraHandlers` seam, after the

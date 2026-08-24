@@ -7,8 +7,8 @@
  *
  * SAME-OWNER ONLY since #825. Placing between the vaults one person holds
  * (Work→Personal) is what this route is for; giving a copy to ANOTHER
- * person's vault retired with copy-as-share (ruling G-copy) and is refused
- * here with the grant plane named in the copy. Whether a pair may be crossed
+ * person's vault is refused here (ruling G-copy), with the grant plane named
+ * in the copy. Whether a pair may be crossed
  * at all is still not decided here: `serve/link-crossing.ts` is the one
  * answerer (D3), and an unauthorized pair answers `not_found` — topology
  * hiding, you learn nothing about a vault you cannot reach.
@@ -22,7 +22,7 @@
  * owner's, so every device of one owner sees the same edges.
  * `createdByDevice` remains on the wire as provenance.
  *
- * The retired live/lend mode is intentionally not accepted here (#731).
+ * A live/lend mode is intentionally not accepted here (#731).
  */
 
 import type { IncomingMessage } from "node:http";

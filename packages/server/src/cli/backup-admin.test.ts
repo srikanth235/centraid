@@ -4,7 +4,7 @@ import crypto from "node:crypto";
  * run, list, verify, restore, kit — constructed from the same `--config`
  * resolution `serve` uses. Exercises the real `LocalBackupProvider` and a
  * real explicitly-created vault dir, so this is closer to an integration test
- * than the unit-level `backup-service.test.ts`.
+ * than the unit-level `backup-service.contract.test.ts`.
  */
 import { promises as fs, existsSync } from "node:fs";
 import path from "node:path";

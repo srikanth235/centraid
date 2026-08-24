@@ -351,7 +351,7 @@ describe("POST/GET /centraid/_gateway/edges", () => {
       },
     });
     // Not `not_found`: the link is real and approved, so hiding the pair would
-    // be a lie. The verb itself is gone, and the copy says what replaced it.
+    // be a lie. The verb is not served, and the copy names the grant plane.
     expect(refused.status).toBe(400);
     expect(refused.body.error).toBe("cross_owner_give_retired");
     expect(refused.body.message).toBe(

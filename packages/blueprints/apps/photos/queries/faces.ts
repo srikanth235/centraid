@@ -5,10 +5,10 @@
  * the confirm picker. A consent denial is a first-class outcome the UI
  * renders as the ask-for-access state.
  *
- * ANSWERED REGIONS NEVER COME BACK (issue #712). A rejection used to DELETE
- * the row, so "gone from this list" and "gone from the vault" were the same
- * thing; now the row survives carrying its answer, and it is this filter that
- * keeps the lightbox's mini-loop from re-offering a face the owner already
+ * ANSWERED REGIONS NEVER COME BACK (issue #712). A rejection does not DELETE
+ * the row — that would make "gone from this list" and "gone from the vault"
+ * the same thing. The row survives carrying its answer, and it is this filter
+ * that keeps the lightbox's mini-loop from re-offering a face the owner already
  * rejected or deliberately left unnamed. The lightbox's own progress line
  * (`N of M reviewed`) counts what is left here, so it must not count them
  * either.

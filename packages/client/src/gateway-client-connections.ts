@@ -43,7 +43,7 @@ import {
   withClientSession,
 } from "./gateway-client-core.js";
 
-// ---- Connection health list (GET /_vault/connections) ----
+// ─── Connection health list (GET /_vault/connections) ─────
 
 /** Raw wire shape of one row — verbatim SQL column names, see the gateway route. */
 interface ConnectionWireRow {
@@ -131,7 +131,7 @@ export async function oauthCallbackUri(): Promise<string> {
   return `${baseUrl.replace(/\/$/u, "")}${ROUTES.vaultOAuthCallback}`;
 }
 
-// ---- BYO-client wizard presets (GET /_vault/connections/providers) ----
+// ─── BYO-client wizard presets (GET /_vault/connections/providers) ─────
 
 /** One bundled connector template a provider preset unlocks. */
 export interface ConnectionProviderConnector {
@@ -222,7 +222,7 @@ export async function listConnectionProviders(): Promise<
   return (await loadConnectionProviderCatalog()).providers;
 }
 
-// ---- Configure / detach a credential (POST /_vault/connections) ----
+// ─── Configure / detach a credential (POST /_vault/connections) ─────
 
 /** Attach (or, with `credKind: 'none'`, detach) a credential on a connection,
  *  identified by `(kind, label)` — the same pair the connector manifest
@@ -307,7 +307,7 @@ export async function configureConnection(
   };
 }
 
-// ---- Pause / resume (PATCH /_vault/connections/<id>) ----
+// ─── Pause / resume (PATCH /_vault/connections/<id>) ─────
 
 export async function setConnectionStatus(input: {
   connectionId: string;
@@ -335,7 +335,7 @@ export async function setConnectionStatus(input: {
   return { connectionId: out.connection_id, status: out.status };
 }
 
-// ---- Remove entirely (DELETE /_vault/connections/<id>) ----
+// ─── Remove entirely (DELETE /_vault/connections/<id>) ─────
 
 /**
  * The route answers a real, structured `{ok:false, error}` body on refusal
@@ -395,7 +395,7 @@ export async function removeConnection(
   return { connectionId: out.connection_id };
 }
 
-// ---- Begin the PKCE consent ceremony (POST /_vault/connections/<id>/authorize) ----
+// ─── Begin the PKCE consent ceremony (POST /_vault/connections/<id>/authorize) ─────
 
 export interface BeginConnectionAuthorization {
   authUrl: string;

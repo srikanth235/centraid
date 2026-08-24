@@ -12,10 +12,10 @@ import crypto from "node:crypto";
  *   - automation create mints a webhook secret (returned once) and the
  *     toggled/deleted automation flows through publish.
  *
- * The blank-app scaffold route (`POST /centraid/_apps`) retired with the
- * served-app plane in #799, so the shared session/publish laws below are
- * driven through the automation create that still rides the same
- * `prepareLifecycleSession` + `stageAndMaybePublish` path.
+ * There is no blank-app scaffold route (`POST /centraid/_apps`) (#799), so
+ * the shared session/publish laws below are driven through the automation
+ * create that rides the same `prepareLifecycleSession` +
+ * `stageAndMaybePublish` path.
  */
 import { promises as fs } from "node:fs";
 import path from "node:path";

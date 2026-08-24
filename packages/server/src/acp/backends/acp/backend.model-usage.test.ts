@@ -12,7 +12,7 @@ import { tempDir } from "@centraid/test-kit/temp-dir";
 import { notices, runFake, usageOf } from "./test-fixtures.js";
 
 describe("backend.model-usage suite", () => {
-  // ---- model pinning via session config options ----------------------------
+  // ──── model pinning via session config options ────────────────────────────
 
   test("a pinned model is selected through session/set_config_option", async () => {
     const dir = await tempDir("acp-model-");
@@ -62,7 +62,7 @@ describe("backend.model-usage suite", () => {
     expect(notices(events)).toContain("model_not_offered");
   });
 
-  // ---- usage ---------------------------------------------------------------
+  // ──── usage ───────────────────────────────────────────────────────────────
 
   test("usage comes from the prompt result and is stamped with model + harness", async () => {
     const { events } = await runFake({
@@ -114,7 +114,7 @@ describe("backend.model-usage suite", () => {
     expect(usageOf(events)?.model).toBeUndefined();
   });
 
-  // ---- mid-turn config_option_update ---------------------------------------
+  // ──── mid-turn config_option_update ───────────────────────────────────────
 
   test("a mid-turn model switch is what the usage event is stamped with", async () => {
     // The harness switched models after the pin, and said so on the wire. Booking

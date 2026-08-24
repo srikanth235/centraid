@@ -302,10 +302,10 @@ export class Runtime {
   private readonly conversationWorkspaceRoots?: RuntimeOptions["conversationWorkspaceRoots"];
   /**
    * Per-runtime (and therefore per-gateway) chat-session lock map for the
-   * `(appId, conversationId)` chat serialization. Was a module-level map in
-   * `chat-routes.ts` until issue #113 — moved here so two gateways that
-   * happen to share an `appId` (same template installed in two profiles)
-   * don't collide on the same lock key.
+   * `(appId, conversationId)` chat serialization. Per-runtime and not
+   * module-level (issue #113) so two gateways that happen to share an
+   * `appId` (same template installed in two profiles) don't collide on the
+   * same lock key.
    */
   private readonly conversationLocks = new Map<string, Promise<void>>();
 

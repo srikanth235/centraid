@@ -381,12 +381,11 @@ export async function runUpload(
     );
     // One bad file never sinks the batch — count it and keep going.
     if (outcome?.status === "executed") {
-      // A DEDUPE IS NOT AN ADDITION. It used to be counted as one AND as a
-      // dedupe, so a run of four files that were all already here said "Added
-      // 4 photographs (4 already in the library)" — two numbers describing the
-      // same four files, one of them untrue. The branches are exclusive now,
-      // and the pending-offsite question does not arise for bytes the library
-      // already had.
+      // A DEDUPE IS NOT AN ADDITION. Counting it as both makes a run of four
+      // files that are all already here say "Added 4 photographs (4 already in
+      // the library)" — two numbers describing the same four files, one of
+      // them untrue. The branches are exclusive, and the pending-offsite
+      // question does not arise for bytes the library already had.
       if (outcome.output?.deduped) {
         dedupedIds.push(String(outcome.output.asset_id ?? ""));
       } else if (isPendingOffsite(staged)) pendingOffsite += 1;

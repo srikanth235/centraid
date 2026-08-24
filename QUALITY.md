@@ -2,6 +2,17 @@
 
 ## Open
 
+- **Banner-heavy modules are a size smell, not a comment smell.** The files
+  that need many section banners to stay navigable —
+  `packages/server/src/engine/handlers/dispatcher.ts`,
+  `packages/server/src/engine/conversation/store.ts`,
+  `packages/server/src/serve/build-gateway.ts`,
+  `packages/server/src/doctor/integrity-checks.ts`, and the `acp/` cluster —
+  are using comments to draw module boundaries the file layout doesn't.
+  The #861 sweep normalized the banner style but deliberately did not touch
+  the shape (settled Q4 on the issue): whether these modules should split is a
+  code-ownership question that wants its own proposal, not a comment fix.
+
 - **A second offline write never settles its promise.** With the gateway
   severed, the first `window.centraid.write` of a session resolves `queued` as
   it should; every write issued after it in the same session queues, applies

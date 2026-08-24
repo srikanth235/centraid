@@ -1,8 +1,7 @@
 // The DECLARED command→container routing table for the Commons plane
 // (issue #750). This file is the single source of truth `commonsGrantForCommand`
-// consults; it replaces the string heuristics (`command.includes("folder")`)
-// and the hand-maintained `CONTAINER_ID_KEYS` list that used to decide routing
-// by shape rather than by declaration.
+// consults; routing is decided by DECLARATION here, never by the shape of a
+// command name (`command.includes("folder")`) or of its input keys.
 //
 // Why data and not code: a command that writes into a shared container but
 // does not reach the commons rail lands as a PRIVATE local mutation, and the

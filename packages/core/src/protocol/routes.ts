@@ -10,8 +10,8 @@
  * App RPC is NOT a plane: a handler invocation is addressed under the app's
  * own prefix — `POST /centraid/<appId>/actions/<action>` (an action) and
  * `POST /centraid/<appId>/queries/<query>` (a query), with the declared
- * handlers discoverable at `GET /centraid/<appId>/_describe` (issue #505,
- * which retired the `/centraid/_tool/centraid_*` shim). Those paths are
+ * handlers discoverable at `GET /centraid/<appId>/_describe` (issue #505).
+ * Those paths are
  * per-app and parametric, so they are minted by the helpers below rather
  * than living in the flat `ROUTES` table.
  *

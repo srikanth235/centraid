@@ -32,7 +32,7 @@ function fakeConfig(
   };
 }
 
-// ---- happy path -----------------------------------------------------------
+// ──── happy path ───────────────────────────────────────────────────────────
 
 describe("enumerate-models", () => {
   test("maps the harness’s advertised model options to HarnessModel[]", async () => {
@@ -45,7 +45,7 @@ describe("enumerate-models", () => {
     ]);
   });
 
-  // ---- best-effort empties --------------------------------------------------
+  // ──── best-effort empties ──────────────────────────────────────────────────
 
   test("a harness with no model option enumerates []", async () => {
     const models = await enumerateAcpModels(
@@ -69,7 +69,7 @@ describe("enumerate-models", () => {
     expect(models).toStrictEqual([]);
   });
 
-  // ---- teardown -------------------------------------------------------------
+  // ──── teardown ─────────────────────────────────────────────────────────────
 
   test("the child process is dead once enumeration resolves", async () => {
     const dir = await tempDir("acp-enum-pid-");
@@ -86,7 +86,7 @@ describe("enumerate-models", () => {
     expect(() => process.kill(pid, 0)).toThrow(/ESRCH/u);
   });
 
-  // ---- mapping unit ---------------------------------------------------------
+  // ──── mapping unit ─────────────────────────────────────────────────────────
 
   test("mapOfferedModels dedupes by id, drops blanks, and flags the current value", () => {
     const models = mapOfferedModels(

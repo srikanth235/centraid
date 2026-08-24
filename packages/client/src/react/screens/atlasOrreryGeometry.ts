@@ -429,7 +429,7 @@ const r1 = (n: number): string => n.toFixed(1);
  * handled by the caller (bow 1 = straight radial); for everything else the bow
  * deepens with angular separation. Two neighbours on the same ring get a
  * near-straight chord — a fixed bow there folds the short chord into a hairpin
- * loop (the "scribble" artifact the sync island used to draw); two kinds on
+ * loop (the "scribble" artifact); two kinds on
  * opposite sides arc well clear of the plate.
  */
 export function edgeBow(fromDeg: number, toDeg: number): number {

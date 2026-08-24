@@ -18,7 +18,7 @@
 // interface below is a GLOBAL — visible unqualified from every app/handler,
 // and `interface Window` merges into the DOM lib's global Window.
 
-// ---------- Typed-command outcome ----------
+// ────────── Typed-command outcome ──────────
 
 /** Terminal states a vault write settles into (the element layer's `outcomeMessage`). */
 type VaultOutcomeStatus =
@@ -47,7 +47,7 @@ interface VaultOutcome {
   code?: string;
 }
 
-// ---------- ctx.vault (handler side) ----------
+// ────────── ctx.vault (handler side) ──────────
 
 /** A single `where` clause for a `ctx.vault.read`. `value` is omitted for the
  *  valueless operators (`is-null` / `not-null`), hence optional. */
@@ -226,7 +226,7 @@ interface HandlerArgs {
   params?: Record<string, string>;
 }
 
-// ---------- window.centraid (page side) ----------
+// ────────── window.centraid (page side) ──────────
 
 /**
  * A change-feed event (the element layer's `onDataChange`). A non-empty `tables` list must

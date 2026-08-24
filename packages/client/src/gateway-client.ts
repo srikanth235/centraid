@@ -11,11 +11,9 @@
  * remote gateway answers on its URL — identical wire protocol either way
  * (the local server now emits CORS for the `file://` renderer origin).
  *
- * This module ports the pure `fetch` methods that previously lived in the
- * desktop's `main/*-client.ts` modules and its old builder gateway client.
- * It covers the app read surface (logs / settings / deregister — the
- * schema/table-rows/query trio died with the per-app data.sqlite, issue
- * #286 phase 2), version history (list / activate), the
+ * This module carries the pure `fetch` methods for the app read surface
+ * (logs / settings / deregister — there is no schema/table-rows/query trio,
+ * issue #286 phase 2), version history (list / activate), the
  * `/_centraid-user` identity + prefs surface, and the automation
  * read/run/analytics + insights surface. The shared fetch infrastructure
  * lives in `gateway-client-core.ts`; the app-editing + lifecycle surface
@@ -184,9 +182,9 @@ export interface TemplateVaultScope {
 
 /** A template's requested vault access (issue #434). Read from the app-kind
  *  template's `app.json`; automations omit it. `why` is the owner-facing
- *  sentence; `scopes` are what it will touch. The install/consent sheet that
- *  rendered it retired with Discover (#708) — the standing surface for the same
- *  question is now the Privacy grants ledger, which can also revoke. */
+ *  sentence; `scopes` are what it will touch. No install/consent sheet renders
+ *  it (#708) — the standing surface for the same question is the Privacy grants
+ *  ledger, which can also revoke. */
 export interface TemplateVaultDTO {
   purpose?: string;
   why?: string;
@@ -269,7 +267,7 @@ export async function getDailyBrief(now = new Date()): Promise<DailyBrief> {
   return readJson<DailyBrief>(res, "fetch daily brief");
 }
 
-// ---- Versions (git-store tag history) ----
+// ─── Versions (git-store tag history) ─────
 
 /** Raw tag-driven version entry from the git store, newest-first. */
 interface GitVersion {
@@ -348,7 +346,7 @@ export async function activateVersion(input: {
   return { activeVersion: input.versionId };
 }
 
-// ---- User identity + global prefs (`/_centraid-user`) ----
+// ─── User identity + global prefs (`/_centraid-user`) ─────
 
 /** Stable user UUID, generated gateway-side on first read. */
 export async function getUserId(): Promise<string> {
@@ -401,7 +399,7 @@ export async function saveUserPrefs(
   return out.prefs ?? {};
 }
 
-// ---- Automations + insights (`/centraid/_automations`, `/centraid/_insights`) ----
+// ─── Automations + insights (`/centraid/_automations`, `/centraid/_insights`) ─────
 // Read/run/analytics proxies. Code (manifests) resolves gateway-side from
 // the materialized `main`; run ledgers + analytics from the gateway's data
 // dir. A turn-now fires on the gateway host with ITS harness + provider key.
@@ -905,8 +903,8 @@ export {
 // The link ceremony (#726 P2/P3) and the placement/commons surface (#726
 // P2/P4) — the People panel's own data plane. Same barrel so
 // `SharingCard.tsx` reads it beside the devices/owners surfaces above. D9's
-// per-link receive setting is NOT here: it governed gives arriving from
-// another person's vault, and copy-as-share retired (#825, ruling G-copy).
+// per-link receive setting is NOT here: it would govern gives arriving from
+// another person's vault, and there is no copy-as-share (#825, ruling G-copy).
 export {
   listGatewayLinks,
   proposeGatewayLink,

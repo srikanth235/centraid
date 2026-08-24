@@ -2,8 +2,8 @@
  * Unified chat runner (issue #141, Phase 3 — "the big one").
  *
  * One chat surface, both jobs. "Builder chat" (tweak the app's code) and
- * "app chat" (operate its data) used to be two call sites on the same
- * engine; this harness merges them. A turn now runs with:
+ * "app chat" (operate its data) are one call site on the same
+ * engine, merged by this harness. A turn runs with:
  *
  *   - cwd = the app's OPEN draft session worktree (`worktrees/sessions/
  *     <sessionId>/apps/<appId>/`), so the harness's native file edits stage in

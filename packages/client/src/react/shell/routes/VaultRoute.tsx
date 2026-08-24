@@ -18,7 +18,7 @@ import HouseholdRoute from "./HouseholdRoute.js";
 
 import styles from "./VaultRoute.module.css";
 
-// Vault — the custody surface (v11). ONE page for what used to be two.
+// Vault — the custody surface (v11). ONE page for what would otherwise be two.
 //
 // Data answered "what is in here" and Copies answered "which machines hold it",
 // and a member with a question about their own data had to know which of those

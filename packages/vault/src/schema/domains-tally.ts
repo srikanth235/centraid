@@ -28,7 +28,7 @@
 // matching Docs/Photos/Locker. tally.delete_expense is a reversible grace-window
 // trash now (not an instant hard delete), and the lifecycle sweep is what finally
 // purges the row, cascades its splits, and cleans its polymorphic references
-// (the expense memo annotation among them — previously leaked on hard delete).
+// (the expense memo annotation among them).
 // Two tables stay HARD-delete, by design, not oversight:
 //   - tally_friend is a bare enrolment marker (a party "is a friend in Tally"),
 //     an identity decoration with no content of its own — un-enrolling is not

@@ -1,5 +1,5 @@
 /*! Browser-JS fixtures intentionally lack TypeScript declarations. (#408) */
-// eslint-disable-next-line typescript/ban-ts-comment -- (#408) these browser-JS fixture imports have no TypeScript declarations
+// oxlint-disable-next-line typescript/ban-ts-comment -- (#408) these browser-JS fixture imports have no TypeScript declarations
 // @ts-nocheck -- the imported browser fixtures intentionally lack declarations
 // Directly exercises a few blueprint query handlers (browser ES modules under
 // apps/*/queries) with a mocked `ctx.vault`, the way the runtime invokes them

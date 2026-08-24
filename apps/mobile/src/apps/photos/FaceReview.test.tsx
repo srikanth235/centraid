@@ -5,9 +5,9 @@
 //
 //   1. CONFIDENCE IS NEVER A PERCENTAGE (README.md:285). The old screen said
 //      `{pct}% confidence`; nothing rendered here may contain a `%`.
-//   2. ONE FACE AT A TIME (v4 3967). The old screen was a FlatList over every
-//      unconfirmed region; exactly one "Is this someone you know?" panel is
-//      ever on screen.
+//   2. ONE FACE AT A TIME (v4 3967). Never a FlatList over every unconfirmed
+//      region: exactly one "Is this someone you know?" panel is ever on
+//      screen.
 //   3. AN UNMATCHED FACE HAS A FORWARD ACTION. The old screen rendered
 //      Confirm only when `party_id` was already set, so a proposal with no
 //      match — the PRIMARY case a face detector produces — was reject-only.

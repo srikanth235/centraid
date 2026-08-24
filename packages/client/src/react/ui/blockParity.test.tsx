@@ -13,8 +13,7 @@ import { afterEach, describe, expect, it } from "vitest";
 // native destructive border looks like.
 //
 // A failure here means one seat quietly lost a distinction the other still
-// makes. That is exactly how the row `hint` and the panel's forced fill went
-// unnoticed until #765 wrote both halves down.
+// makes (#765).
 import {
   BUTTON_FIXTURE,
   CHIPS_FIXTURE,

@@ -4,19 +4,18 @@ import { Pressable, ScrollView, View } from "react-native";
 // THE ENRICHMENT CONSENT SURFACE, NATIVE (v4 handoff §8, prototype
 // `s==='enrich'`).
 //
-// What this replaced, and why it was a privacy defect rather than a styling
-// gap: Library carried an `Enrichment` row whose meta read `N consent
-// policies · request faces, places and metadata`, and whose ONE TAP fired
-// `request-enrichment` immediately. A member could start the work without
-// ever being told where it would run, what would leave the device, what would
-// be written, or how to undo it — and the cloud-helper option, the only place
-// the product says photographs can leave the device at all, did not exist on
-// this client.
+// WHY A SURFACE AND NOT A ROW, and why that is a privacy question rather than
+// a styling one: an `Enrichment` row whose meta reads `N consent policies ·
+// request faces, places and metadata` and whose ONE TAP fires
+// `request-enrichment` lets a member start the work without ever being told
+// where it will run, what will leave the device, what will be written, or how
+// to undo it — and the cloud-helper option is the only place the product says
+// photographs can leave the device at all.
 //
-// Now: a header (back chevron, title, status line) around the shared §8 gate
+// So: a header (back chevron, title, status line) around the shared §8 gate
 // (`kit/components/ConsentGate.tsx`, issue #712 C1) — the panels/facts/
-// actions used to be inline here, and moved so Docs' capture-time OCR consent
-// (the second instance of this product law) can read the same renderer. This
+// actions live in the gate so Docs' capture-time OCR consent (the second
+// instance of this product law) reads the same renderer. This
 // file supplies only Photos' own chrome and copy — literally the same copy
 // module the web client renders
 // (`@centraid/blueprints/apps/photos/enrichment-consent`), so the two clients

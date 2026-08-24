@@ -407,7 +407,7 @@ export function Root({ rootRef }: InlineAppProps): ReactNode {
     [rootRef]
   );
 
-  // ---- Edit / new / lock plumbing (verbatim from app.tsx, render → bump) ----
+  // ──── Edit / new / lock plumbing (verbatim from app.tsx, render → bump) ────
   const openNew = useCallback(() => {
     const state = stateRef.current;
     state.edit = {
@@ -489,7 +489,7 @@ export function Root({ rootRef }: InlineAppProps): ReactNode {
     return () => cancelAnimationFrame(id);
   }, []);
 
-  // ---- chrome wiring: doorbell, focus refresh, layered Escape, width ----
+  // ──── chrome wiring: doorbell, focus refresh, layered Escape, width ────
   useEffect(() => {
     const stopDoorbell = onDataChange(CHANGE_TABLES, refresh);
     const stopFocus = onFocusRefresh(refresh);
@@ -582,7 +582,7 @@ export function Root({ rootRef }: InlineAppProps): ReactNode {
       stopFocus();
       stopWidth();
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- mount-once wiring, stable deps via refs (#505)
+    // oxlint-disable-next-line react-hooks/exhaustive-deps -- mount-once wiring, stable deps via refs (#505)
   }, [authenticate, closeEdit, refresh]);
 
   // A live Locker session lasts at most five inactive minutes. Any background

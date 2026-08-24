@@ -241,7 +241,7 @@ export function conversationMatchExpression(query: string): string | null {
  * not a substitute.
  */
 /**
- * Hard ceilings on the two unbounded ORDER BYs the request path used to run
+ * Hard ceilings on the request path's two otherwise-unbounded ORDER BYs
  * (issue #659 G11). Neither is a page size — they are the point past which a
  * single response stops being renderable at all, so raising them is a product
  * decision and not a tuning knob. Real pagination for transcripts is tracked as

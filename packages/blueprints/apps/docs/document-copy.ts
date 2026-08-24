@@ -14,9 +14,9 @@
 // the stage's paper sheet, so both screens are gone and their words with
 // them.
 
-// ---------------------------------------------------------------------------
+// ───────────────────────────────────────────────────────────────────────────
 // Versions (§6.2) and the details rail (§8)
-// ---------------------------------------------------------------------------
+// ───────────────────────────────────────────────────────────────────────────
 
 /** §6.2 folds Activity INTO the version history, and says so. */
 export const VERSIONS_ACTIVITY_HEAD = "Activity";
@@ -86,9 +86,9 @@ export function cannotRenderFact(kindName: string): string {
   return `Docs cannot render ${kindName}`;
 }
 
-// ---------------------------------------------------------------------------
+// ───────────────────────────────────────────────────────────────────────────
 // The stage (§7's `docsStage`)
-// ---------------------------------------------------------------------------
+// ───────────────────────────────────────────────────────────────────────────
 
 /**
  * The stage's action names, in the handoff's own order: Star, Download,

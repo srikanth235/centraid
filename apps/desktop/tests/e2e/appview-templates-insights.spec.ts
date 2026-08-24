@@ -50,9 +50,8 @@ async function openApp(
 
 // ─────────────────────────── §7 the inline app route ───────────────────────────
 //
-// §7.2–7.4 drove the per-app copilot inside the sandboxed app iframe. Both the
-// iframe host and that panel retired with the served-app plane (#799), so the
-// cases went with the surface rather than staying as permanent skips.
+// There is no sandboxed app iframe and no per-app copilot panel (#799), so
+// this section has no §7.2–7.4 cases.
 
 test("7.1 — opening a system app renders inline; back returns home", async () => {
   gateway.state.apps = [appEntry({ id: "notes", name: "Notes" })];
@@ -76,11 +75,10 @@ test("7.1 — opening a system app renders inline; back returns home", async () 
 
 // ───────────────────────── §10 Automation templates ─────────────────────────
 //
-// Discover retired with #708 — every first-party app ships installed, so the
-// only catalogue left is the automation gallery, reached from Automations →
-// Browse templates. Its cases (10.1 "renders template cards", 10.4 "empty
-// Discover") went with the page; adoption is covered by 10.2 below. Case 10.3
-// (independent builder drafts) went with the builder itself (#799).
+// There is no Discover page (#708) — every first-party app ships installed, so
+// the only catalogue is the automation gallery, reached from Automations →
+// Browse templates. This section therefore carries no 10.1, 10.3 or 10.4;
+// adoption is covered by 10.2 below.
 
 test("10.2 — an automation template clone survives a fresh gateway instance and Electron process", async () => {
   gateway.state.templates = [
@@ -135,9 +133,7 @@ test("10.2 — an automation template clone survives a fresh gateway instance an
     await expect.poll(() => gateway.state.automations).toHaveLength(1);
 
     // Cloning must NOT consume the source template — it stays adoptable in the
-    // gallery until the user publishes (the invariant the retired agent-e2e
-    // flows owned: "template tile disappeared after clone — expected templates
-    // to remain available until publish"). Adopt navigates to the new thread,
+    // gallery until the user publishes. Adopt navigates to the new thread,
     // so return to the gallery and assert the Daily Digest card is still listed.
     await gotoNav(launched.page, "Automations");
     // The clone left one automation behind, so the page is no longer empty and
@@ -238,10 +234,10 @@ test("11.1 — Analytics renders the runs chart and what it cost", async () => {
   try {
     await waitForHome(page);
     await gotoNav(page, "Analytics");
-    // v9 (#765) retired the KPI strip; #775 restored the two things going
-    // with it that the page could not do without — the promoted spend figure
-    // and the categorical breakdowns the gateway was already computing. The
-    // chart is one image with a sentence, and it draws SPEND per day.
+    // There is no KPI strip (#765). The page keeps the two figures it cannot
+    // do without (#775) — the promoted spend figure and the categorical
+    // breakdowns the gateway computes. The chart is one image with a
+    // sentence, and it draws SPEND per day.
     await expect(
       page.getByRole("img", { name: "Spend per day over the last 30 days" })
     ).toBeVisible();

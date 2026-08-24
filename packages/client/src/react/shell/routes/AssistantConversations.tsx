@@ -9,11 +9,10 @@ import css from "./AssistantConversations.module.css";
 // The conversation ledger — "Recents" — as APP CONTENT owned by the assistant
 // route (issue #707, Phase 4).
 //
-// It used to be the bottom two thirds of the shell sidebar, which made the
-// shell's navigation column responsible for one app's data model: pinning,
-// archiving, per-row rename/delete menus. The Binding Layer's stem holds the
-// product mark, Search and the launcher and nothing else, so the ledger came
-// here, beside the transcript it addresses.
+// The Binding Layer's stem holds the product mark, Search and the launcher and
+// nothing else, so the ledger lives here, beside the transcript it addresses.
+// A shell navigation column has no business owning one app's data model:
+// pinning, archiving, per-row rename/delete menus.
 //
 // Presentational on purpose: it owns grouping, the cap, and the two disclosure
 // states, and NOTHING about fetching, sorting, or mutating conversations. The

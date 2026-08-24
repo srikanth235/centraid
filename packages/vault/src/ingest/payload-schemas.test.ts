@@ -1,6 +1,6 @@
 // Runtime schema gate for ingest publisher payloads (issue #374 Tier 3).
-// publishers.ts/enrich-publishers.ts used to trust a staged payload's shape
-// on nothing but a compile-time `as unknown as X` cast. csv.ts happens to
+// `publishers.ts`/`enrich-publishers.ts` cannot trust a staged payload's
+// shape on a compile-time `as unknown as X` cast. csv.ts happens to
 // hand off real JS numbers today, so this seam is dormant — these tests
 // hand-craft StageCandidates the way a FUTURE connector could (a decimal
 // STRING amount, a payload missing a required field) to prove

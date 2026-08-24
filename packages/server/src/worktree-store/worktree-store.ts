@@ -2,9 +2,8 @@
 // Gateway-owned git store for centraid editing sessions — a session
 // worktree is the harness's single directory holding the app code it edits.
 // Full design in receipt #137; this header sketches the layout +
-// invariants. (The branched draft data.sqlite that used to live beside the
-// code died with the per-app silo — issue #286 phase 2; draft DATA now
-// lives in the vault's ext draft band.)
+// invariants. (Draft DATA lives in the vault's ext draft band, not in a
+// branched data.sqlite beside the code — issue #286 phase 2.)
 //
 // Layout: `apps.git/` (bare repo, pushed to GitHub),
 // `worktrees/main/<sha>/` (read-only materialization, swapped on

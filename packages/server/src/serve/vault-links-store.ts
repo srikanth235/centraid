@@ -208,8 +208,7 @@ export class VaultLinksStore {
      * Both vaults are on THIS gateway (unlike the remote ceremony's
      * self-declared label), so their display names are already known and
      * are recorded immediately — #726 P6 gap 3: a same-machine link must not
-     * sit unlabeled forever the way it did before (`propose()` used to write
-     * neither label at all).
+     * sit unlabeled forever.
      */
     fromLabel?: string;
     toLabel?: string;

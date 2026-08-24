@@ -4,9 +4,9 @@
 // WHAT THIS SEAT IS. `handler-reachability.test.ts` files Notes under
 // `WEBVIEW_APPS`, which means its handler dispatch is answered by the WEB
 // source: the phone is not expected to re-dispatch every note command. The
-// WebView cover that name once described was retired in #799 (there is no
-// WebView host anywhere in this app any more — `screens/home/catalog.ts`
-// says so), so what stands here is a native cover over the SAME replica the
+// name predates #799: there is no WebView host anywhere in this app
+// (`screens/home/catalog.ts` says so), so what stands here is a native cover
+// over the SAME replica the
 // web app reads, drawn to the same spec and sharing its pure logic:
 // `promote` is imported from the blueprint, not re-derived, so first-line
 // promotion cannot mean two things on two seats.

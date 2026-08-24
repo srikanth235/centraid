@@ -4,7 +4,8 @@
  * A worker runner cannot simply `import { installWorkerSandbox } from
  * "../sandbox/install.js"`. Worker threads here boot under Node's native type
  * stripping, which loads a `.ts` file handed to it directly but does NOT map a
- * `./sibling.js` specifier onto `./sibling.ts` the way the compiled build does.
+ * `./sibling.js` specifier onto its `.ts` source the way the compiled build
+ * does.
  * Under `dist/` the `.js` files exist and the plain specifier resolves; running
  * from `src/` it does not, and the runner dies at import — which is exactly how
  * this file came to exist.
@@ -29,7 +30,7 @@ const SANDBOX_DIR = import.meta.dirname;
 
 let siblingFallbackInstalled = false;
 
-/** Map an unresolvable `./x.js` onto `./x.ts` when running from source. */
+/** Map an unresolvable `./x.js` onto its `.ts` source when running from source. */
 function enableTsSiblingResolution(): void {
   if (siblingFallbackInstalled) return;
   siblingFallbackInstalled = true;

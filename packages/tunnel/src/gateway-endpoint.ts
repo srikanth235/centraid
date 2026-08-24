@@ -94,8 +94,6 @@ export interface GatewayPairRequest {
    * There is deliberately NO owner OR vault field here. Both are baked into
    * the server-minted invitation and read back from `tickets` at redemption;
    * a joining device never gets to name its own principal or its own reach.
-   * A `trust?` field used to sit here — never read by the host, but it read
-   * as if the client could pick.
    */
   /** Optional module capability profile for a constrained companion device. */
   grantProfile?: string[];

@@ -181,10 +181,9 @@ export interface EnrichPolicyResolution {
  *
  * It is deliberately NOT the whole profile: the fire path has no business
  * knowing a profile's label or its computed egress class (the gate already
- * decided on that, from `egressForProfile`). What it needs is the one fact
- * `manifest.enrich.delegateStep` used to hard-code — is this capability being
- * computed by the bundled engine or by a harness, and if a harness, which
- * model/pins the member bound it to.
+ * decided on that, from `egressForProfile`). What it needs is one fact: is
+ * this capability being computed by the bundled engine or by a harness, and
+ * if a harness, which model/pins the member bound it to.
  */
 export interface ResolvedEngineBinding {
   readonly kind: "built-in" | "delegate";

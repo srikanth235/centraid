@@ -61,9 +61,9 @@ export const DCAPS: readonly Capability[] = [
     writes: "a link to a People record, with the quoted passage",
   },
   {
-    // THE SHELF THIS ONE WOULD HAVE FILLED IS GONE; the capability is not.
-    // What it writes is an Agenda event — Agenda owns it — so what Docs lost
-    // was a second place to look at somebody else's records, not the offer
+    // THERE IS NO SHELF FOR THIS ONE; the capability stands anyway. What it
+    // writes is an Agenda event — Agenda owns it — so what Docs does without
+    // is a second place to look at somebody else's records, not the offer
     // itself. The consent still stands on its own on this screen.
     id: "due",
     name: "Find dates that fall due",

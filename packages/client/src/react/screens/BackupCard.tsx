@@ -36,10 +36,10 @@ import gwStyles from "./GatewayScreen.module.css";
 // Gateway → Backups: the owner surface over the offsite backup engine. This
 // card now renders EXACTLY the five metrics of the §6 contract (issue #436)
 // via `BackupHealthMetrics` — Freshness, Recovery window, Privacy, Cost, Exit —
-// computed ONCE from `computeStorageMetrics`. Everything that used to sit on
-// the primary surface but isn't one of the five (the raw custody clocks, the
-// manual back-up/verify triggers, per-vault policy + the provider inventory)
-// now lives behind the collapsed "Diagnostics" disclosure. The recovery-kit
+// computed ONCE from `computeStorageMetrics`. Everything that is not one of
+// the five (the raw custody clocks, the manual back-up/verify triggers,
+// per-vault policy + the provider inventory) lives behind the collapsed
+// "Diagnostics" disclosure. The recovery-kit
 // gate stays on the primary surface: it is Privacy/Exit-adjacent and blocking-
 // critical — losing the seal key makes every offsite byte unrecoverable.
 

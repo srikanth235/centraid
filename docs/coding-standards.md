@@ -166,6 +166,29 @@ A perf rig seeded with the same fixtures the unit tests use measures nothing —
 - The volume table lives **with the rig**, in its README, next to the numbers it produces — so a reviewer can see what "at scale" meant on the day the baseline was captured and challenge it, rather than inferring it from seed code.
 - When a budget moves, the measured value and the volume it was measured at move together. A ceiling with no stated volume is not a budget.
 
+## Comments describe now
+
+Code comments are the State layer (AGENTS.md: "code-level facts live in code comments next to the invariant"), so the current-state rule settled for docs in [#767](https://github.com/srikanth235/centraid/issues/767) applies to them unmodified: **every sentence in a comment must be true of the running system, now** ([#861](https://github.com/srikanth235/centraid/issues/861)). History lives in issues, receipts, and `git log` — cite it by bare issue link, never by narration.
+
+**The tense test.** A sentence about the past — _was, used to, until #N, replaced, retired, previously_ — either restates a fact about the present system (rewrite it in present tense) or it doesn't (delete it, keeping at most a bare `(#N)` on a surviving present-tense sentence).
+
+| Bad | Good |
+| --- | --- |
+| `// This replaces toast.ts and undoToast.ts.` | _(delete — git log and the issue carry it)_ |
+| `// It was teal with a white orbit until #707.` | _(delete, or `// Monochrome mark (#707).` if the fact constrains edits)_ |
+| `// used to run a full export per chunk; now batched` | `// One export per batch (#N): per-chunk export is O(vault) per tick.` |
+| `// moved here from chat-routes.ts until issue #113` | _(delete the provenance; state only what the code here does now)_ |
+
+**File references must be live; prefer symbols.** Name another file in a comment only if it exists; prefer the exported _symbol_ (greppable, visible to rename tooling) over the filename. A comment asserting a call relationship ("X calls this") names the actual current caller or asserts nothing. `bun scripts/lint-comment-file-refs.mjs` (warn-only) finds dangling references; `bun scripts/lint-comment-narration.mjs` (warn-only, fuzzy) flags narration for review.
+
+**Long invariant blocks use capitalized headings** — `// WHY THE HEAD IS NOT JUST THE OLDEST.` — one heading per named invariant, prose under it. Models: `packages/design/src/elements/attachments.ts`, `packages/vault/src/schema/fts.ts`, `packages/server/src/enrich/semantic-search.ts`.
+
+**Section banners** use the box-drawing form `// ─── name ─────` (one style repo-wide). No new banners are required anywhere; a file that needs many is usually a module-size smell.
+
+**Suppression comments** carry the toolchain's real name (`oxlint-disable…`, never `eslint-disable…`) and a `-- reason` clause.
+
+Deliberate non-goals of this rule: comment **density is not regulated** — rationale prose on types- and constants-only modules is the documentation strategy working, not a defect; and **no JSDoc tag vocabulary** — prose JSDoc is house style (`@param`/`@returns` restating types is noise).
+
 ## Small invariants
 
 - Behaviour-preserving refactors keep tests green without rewriting assertions to match new private helpers ([TESTING.md](../TESTING.md)).

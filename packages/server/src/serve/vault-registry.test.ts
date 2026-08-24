@@ -439,11 +439,9 @@ describe("vault-registry scenarios", () => {
     expect(registry.list()).toHaveLength(2);
   });
 
-  // Issue #351: a corrupt vault used to vanish silently — `scannedDirs` marked
-  // it as handled BEFORE the mount attempt, so a directory that failed to
-  // open was never retried until process restart. These pin the fix: the
-  // failure is recorded, retried (with backoff) on a later `scan()`, and
-  // cleared once the directory becomes mountable.
+  // Issue #351: a corrupt vault must not vanish silently. These pin the
+  // behaviour: the failure is recorded, retried (with backoff) on a later
+  // `scan()`, and cleared once the directory becomes mountable.
   test("a directory that fails to mount is recorded in failedMounts, retried on a later scan (past backoff), and cleared once mountable", async () => {
     const clock = useFakeClock();
     try {

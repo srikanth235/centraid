@@ -13,9 +13,9 @@
  * picked by extension) and short-circuits; every other URL falls through to
  * the default loader. `resolve` fills the two gaps Node's ESM resolver leaves
  * for a TS graph: an extensionless sibling import (`./util`) and the TS
- * convention of importing a sibling by its emitted `.js` name while the source
- * on disk is `.ts` (`./util.js` → `./util.ts`). A plain existing `.js` import
- * resolves natively and never reaches the fallback.
+ * convention of importing a sibling by its emitted `.js` name (`./util.js`)
+ * while the source on disk carries the `.ts` extension. A plain existing
+ * `.js` import resolves natively and never reaches the fallback.
  *
  * This file is a `.ts` source compiled to `dist/worker/ts-loader-hooks.js`;
  * the registration URL in runner.ts resolves the `.js` under dist and the

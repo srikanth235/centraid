@@ -29,9 +29,8 @@
 //   DELETE /centraid/_apps/<appId>                   remove app from main
 //
 // Publish validates the manifest against the *session worktree* before
-// the merge — the validation that used to run client-side in
-// the harness publish path now runs gateway-side, since the
-// gateway owns the data.
+// the merge — gateway-side, not in the harness publish path
+// client-side, since the gateway owns the data.
 
 import { promises as fs } from "node:fs";
 import type { IncomingMessage, ServerResponse } from "node:http";
@@ -119,7 +118,7 @@ export function makeAppsStoreRouteHandler(
     const method = (req.method ?? "GET").toUpperCase();
 
     try {
-      // ---- collection-level: GET /_apps (list with metadata) ----
+      // ──── collection-level: GET /_apps (list with metadata) ────
       // Shadows app-engine's legacy registry-list route and returns
       // the same flat-array shape, extended with `name`, `description`,
       // and the app.json tile identity (`iconKey`/`colorKey`, issue #263)
@@ -140,7 +139,7 @@ export function makeAppsStoreRouteHandler(
         return sendJsonConditional(req, res, 200, apps);
       }
 
-      // ---- session lifecycle: /_apps/_sessions[/<id>] ----
+      // ──── session lifecycle: /_apps/_sessions[/<id>] ────
       if (segments[1] === "_sessions") {
         return await handleSessions(
           store,
@@ -164,7 +163,7 @@ export function makeAppsStoreRouteHandler(
         return true;
       }
 
-      // ---- per-app collection-level: DELETE /_apps/<appId> ----
+      // ──── per-app collection-level: DELETE /_apps/<appId> ────
       if (segments.length === 2 && method === "DELETE") {
         // Delete is idempotent. `store.deleteApp` throws `no_changes` when
         // there's no code subtree on `main` to drop — which is the normal
@@ -486,7 +485,7 @@ async function handleFiles(
   return false;
 }
 
-// ---- apps-store-specific error mapping (delegates to shared sendJson) ----
+// ──── apps-store-specific error mapping (delegates to shared sendJson) ────
 
 function sendStoreError(res: ServerResponse, err: unknown): true {
   if (err instanceof WorktreeStoreError) {

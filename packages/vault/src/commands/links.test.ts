@@ -334,7 +334,7 @@ describe("links", () => {
     expect(n.n).toBe(2);
   });
 
-  // ---------- Standoff anchors (issue #282) ----------
+  // ────────── Standoff anchors (issue #282) ──────────
 
   const SELECTOR = {
     exact: "Priya Menon",

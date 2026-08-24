@@ -167,7 +167,7 @@ export async function handleAppChanges(
           /* swallow */
         }
       }
-      // eslint-disable-next-line promise/no-multiple-resolved -- `done` guard ensures single resolution (#247)
+      // oxlint-disable-next-line promise/no-multiple-resolved -- `done` guard ensures single resolution (#247)
       resolve();
     };
     req.on("close", cleanup);

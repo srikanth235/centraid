@@ -217,7 +217,7 @@ export async function runAcpTurn(
     },
   });
 
-  // ---- Warm reuse ---------------------------------------------------------
+  // ──── Warm reuse ─────────────────────────────────────────────────────────
   if (input.prevSessionId) {
     const warm = takeWarmSlot(
       config.kind,

@@ -21,10 +21,9 @@
 // the same square rather than collapsing — the same contract the tile holds
 // (§14).
 //
-// THE CONSENT GATE, RE-HOMED (issue #712 C2). The face-detection consent
-// question used to open from a toolbar icon + `<dialog>`
-// (components/Enrichment.tsx, retired) — built, correct, and nearly
-// unreachable. A member who opens People and finds it empty has exactly the
+// THE CONSENT GATE LIVES HERE (issue #712 C2), not behind a toolbar icon and
+// a `<dialog>` a member would have to go looking for. A member who opens
+// People and finds it empty has exactly the
 // question the gate answers, so while the roster (and its proposals) are
 // empty AND the question is still open this session, `gate` renders in place
 // of the grid/note — the empty shelf IS the gate's body. `app-root.tsx`

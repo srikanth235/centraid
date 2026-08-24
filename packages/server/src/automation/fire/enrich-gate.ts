@@ -3,17 +3,15 @@
  *
  * The vault carries a per-domain enrichment tier (`enrich_policy`, mirrored
  * from the owner's settings bag): `off | device | gateway` — ONE axis, three
- * points, ordered by how far the work is allowed to run. Nothing on the
- * execution path used to read that tier, so a client's on-device promise was
- * copy, not behaviour. This module is the rule; `runFire` is the choke point
- * that applies it, and a host supplies the tier through
- * `RunFireOptions.resolveEnrichPolicy`.
+ * points, ordered by how far the work is allowed to run. This module is the
+ * rule; `runFire` is the choke point that applies it, and a host supplies the
+ * tier through `RunFireOptions.resolveEnrichPolicy`.
  *
- * THE LINE THIS RUNTIME ACTUALLY DRAWS — and the one it got wrong before.
+ * THE LINE THIS RUNTIME ACTUALLY DRAWS.
  *
- * The tier used to be read as "does this leave the device", with the
- * gateway itself folded into "leaves" on the theory that it is the thing
- * that performs egress. That conflated two different facts: WHERE a process
+ * The tier is NOT read as "does this leave the device", with the gateway
+ * itself folded into "leaves" on the theory that it is the thing that
+ * performs egress. That conflates two different facts: WHERE a process
  * runs, and WHETHER it talks to a third party. The gateway is the member's
  * own infrastructure — part of their trust domain, same as their phone —
  * and running *on* it is not by itself egress. What IS egress is a harness

@@ -31,7 +31,7 @@ import { asVaultDiskFullError } from "../errors.js";
 import { assertSha, resolveRange } from "./store.js";
 import type { BlobRange, BlobStat, BlobStore } from "./store.js";
 
-/* eslint-disable max-classes-per-file -- (#296) FsBlobStore + MemoryBlobStore are the two tiers of one LocalBlobStore contract (file-backed + in-memory, identical semantics), paired by design */
+/* oxlint-disable max-classes-per-file -- (#296) FsBlobStore + MemoryBlobStore are the two tiers of one LocalBlobStore contract (file-backed + in-memory, identical semantics), paired by design */
 
 /**
  * What `linkFromSync` did (issue #599 decision 11):

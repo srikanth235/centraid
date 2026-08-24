@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
-// The four v4 shelves that used to lead nowhere, plus the routing that reaches
-// them (v4 handoff §5, §9, §12, §13).
+// The four v4 shelves and the routing that reaches them (v4 handoff §5, §9,
+// §12, §13).
 //
 // Places, People, Storage and the permission screen are the last of the app's
 // advertised destinations to land, and each one is asserted on the thing that
@@ -253,8 +253,8 @@ describe("Storage reports what the rows say and nothing else", () => {
   });
 
   it("says nothing about custody when the sweep has not answered", () => {
-    // Custody is no longer inferred from the loaded rows at all (issue #711):
-    // the whole-library rollup replaced that window-sized answer. With no
+    // Custody is never inferred from the loaded rows (issue #711): the
+    // whole-library rollup is the answer, not a window-sized one. With no
     // rollup the screen says so, and prints no custody section.
     const facts = storageFacts([{ asset_id: "a", byte_size: 1 }], [], false);
     const html = renderToStaticMarkup(
@@ -418,10 +418,10 @@ describe("permission is a screen, not an error", () => {
   });
 });
 
-// ---------------------------------------------------------------------------
+// ───────────────────────────────────────────────────────────────────────────
 // Search's four states (§9), the status line's determinate meter (§14), and
-// the one member preference the duplicates shelf used to opt out of (§4.2).
-// ---------------------------------------------------------------------------
+// the one member preference the duplicates shelf honours too (§4.2).
+// ───────────────────────────────────────────────────────────────────────────
 
 interface SearchProps {
   query: string;

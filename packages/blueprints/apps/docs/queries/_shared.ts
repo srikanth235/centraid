@@ -146,9 +146,9 @@ export async function readCustodyByContent({
   );
 }
 
-// ---------------------------------------------------------------------------
+// ───────────────────────────────────────────────────────────────────────────
 // Who a document is shared with (issue #821)
-// ---------------------------------------------------------------------------
+// ───────────────────────────────────────────────────────────────────────────
 //
 // GRACEFUL DENIAL is why this read is a seam of its own. Docs' `share.*` and
 // `core.party` scopes are newer than the app, and on an EXISTING vault a newly

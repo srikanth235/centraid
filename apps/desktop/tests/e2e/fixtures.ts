@@ -145,9 +145,8 @@ export interface MockState {
   /** GET /centraid/_gateway/links → `{links}` (vault-links-routes.ts `linkDto`). */
   links: Array<Record<string, unknown>>;
   /** GET /centraid/_gateway/edges → `{edges}` (edges-routes.ts `edgeWire`).
-   *  Same-owner placements only — copy-as-share retired (#825, ruling
-   *  G-copy), and with it the D9 receive setting and the parked-ask surface
-   *  this fixture used to serve. */
+   *  Same-owner placements only — there is no copy-as-share (#825, ruling
+   *  G-copy), so no D9 receive setting and no parked-ask surface. */
   edges: Array<Record<string, unknown>>;
   /** GET /centraid/_gateway/commons/invitations?actorVaultId= → `{invitations}`
    *  (commons-routes.ts / `listCommonsInvitations`), filtered to the asking
@@ -377,7 +376,7 @@ async function route(
     });
   }
 
-  // ---- editing/session lifecycle (match specific before /:id) ----
+  // ─── editing/session lifecycle (match specific before /:id) ─────
   if (p === "/centraid/_apps/_sessions" && method === "POST") {
     const sid = (() => {
       try {
@@ -411,7 +410,7 @@ async function route(
     return json(res, 200, result);
   }
 
-  // ---- apps collection ----
+  // ─── apps collection ─────
   if (p === "/centraid/_apps") {
     if (method === "GET") return json(res, 200, s.apps);
     if (method === "POST") {
@@ -432,7 +431,7 @@ async function route(
     }
   }
 
-  // ---- single app: /centraid/_apps/:id[/...] ----
+  // ─── single app: /centraid/_apps/:id[/...] ─────
   if (seg[0] === "centraid" && seg[1] === "_apps" && seg[2]) {
     const id = decodeURIComponent(seg[2]);
     const sub = seg[3];
@@ -486,11 +485,11 @@ async function route(
       return json(res, 200, { id, sha: "rollback-sha" });
   }
 
-  // ---- templates ----
+  // ─── templates ─────
   if (p === "/centraid/_templates" && method === "GET")
     return json(res, 200, s.templates);
 
-  // ---- user identity + prefs ----
+  // ─── user identity + prefs ─────
   if (p === "/_centraid-user/id" && method === "GET")
     return json(res, 200, { id: "user-test" });
   if (p === "/_centraid-user/prefs") {
@@ -502,7 +501,7 @@ async function route(
     }
   }
 
-  // ---- automations ----
+  // ─── automations ─────
   if (p === "/centraid/_automations") {
     if (method === "GET") {
       if (s.automationsStatus !== 200)
@@ -605,27 +604,27 @@ async function route(
     return json(res, 200, { ok: true });
   }
 
-  // ---- insights ----
+  // ─── insights ─────
   if (p === "/centraid/_insights/summary" && method === "GET")
     return json(res, 200, s.insights);
 
-  // ---- home daily brief (canonical plane: /centraid/_brief/today) ----
+  // ─── home daily brief (canonical plane: /centraid/_brief/today) ─────
   if (
     (p === "/centraid/_brief/today" || p === "/centraid/_brief/daily") &&
     method === "GET"
   )
     return json(res, 200, s.dailyBrief);
 
-  // ---- harness / agents ----
+  // ─── harness / agents ─────
   if (p === "/centraid/_turn/harness-status" && method === "GET")
     return json(res, 200, s.harnessStatus);
   if (p === "/centraid/_harnesses/status" && method === "GET")
     return json(res, 200, s.harnessesStatus);
 
-  // ---- vault atlas (v11 Vault embeds the census) ----
-  // The absorb fallback is `{}`. AtlasScreen used to treat that as a census
-  // and crash on `stats.packs` — the client now refuses a non-census 200,
-  // and the mock serves a valid empty census so household e2e is deterministic.
+  // ─── vault atlas (v11 Vault embeds the census) ─────
+  // The absorb fallback is `{}`. `AtlasScreen` refuses a non-census 200 rather
+  // than treating it as a census and crashing on `stats.packs`, and the mock
+  // serves a valid empty census so household e2e is deterministic.
   if (p === "/centraid/_vault/atlas/stats" && method === "GET") {
     return json(res, 200, {
       generatedAt: "2026-08-01T00:00:00.000Z",
@@ -658,7 +657,7 @@ async function route(
     });
   }
 
-  // ---- enrichment policy + engine profiles (issue #807) ----
+  // ─── enrichment policy + engine profiles (issue #807) ─────
   // Tiers, rules and answers are vault state; profiles are gateway prefs, and
   // the two paths stay separate here exactly as they are in the product.
   if (p === "/centraid/_enrich/profiles" && method === "GET")
@@ -693,7 +692,7 @@ async function route(
   if (p === "/centraid/_vault/enrich/consent" && method === "GET")
     return json(res, 200, { consent: s.enrichConsent });
 
-  // ---- vault consent context used by the current automation fleet/thread ----
+  // ─── vault consent context used by the current automation fleet/thread ─────
   // NOT part of the agent→harness rename: `_vault/agents` lists *enrolled
   // automation agents* (the consent-grant identity), not harnesses, and
   // `vault-routes.ts` still answers `{ agents }`. Renaming the key here made
@@ -711,7 +710,7 @@ async function route(
   if (p === "/centraid/_vault/outbox-grants" && method === "GET")
     return json(res, 200, { grants: [] });
 
-  // ---- Household / sharing plane (#781) ----
+  // ─── Household / sharing plane (#781) ─────
   // Serves the roster and owner-scope reads the Household journey renders
   // from. Each handler mirrors the real route's response shape (cited inline);
   // the desktop bearer is the host-custody caller, so visibility is "all of
@@ -771,10 +770,10 @@ async function route(
     }
   }
 
-  // edges-routes.ts GET (`{edges}`). The pending/answer verbs retired with
-  // copy-as-share (#825, ruling G-copy) and are deliberately NOT served here:
-  // a fixture that answered a route the gateway 404s would let a journey pass
-  // against a fiction.
+  // edges-routes.ts GET (`{edges}`). There are no pending/answer verbs —
+  // copy-as-share does not exist (#825, ruling G-copy) — and they are
+  // deliberately NOT served here: a fixture that answered a route the gateway
+  // 404s would let a journey pass against a fiction.
   if (p === "/centraid/_gateway/edges" && method === "GET")
     return json(res, 200, { edges: s.edges });
 
@@ -826,13 +825,13 @@ async function route(
     });
   }
 
-  // ---- unified chat turn (SSE) ----
+  // ─── unified chat turn (SSE) ─────
   if (seg[0] === "centraid" && seg[2] === "_turn" && method === "POST") {
     void writeSse(res, s.turnFrames);
     return;
   }
 
-  // ---- conversations ----
+  // ─── conversations ─────
   if (
     seg[0] === "_centraid-conversations" &&
     seg[1] === "apps" &&
@@ -1403,7 +1402,7 @@ export async function openCommandPalette(page: Page): Promise<void> {
 }
 
 /**
- * The shell's one status line (#707) replaced toasts. Notes from `showToast` /
+ * The shell has one status line and no toasts (#707). Notes from `showToast` /
  * `postStatus` land here as polite live-region text.
  */
 export function statusLine(page: Page) {
@@ -1439,10 +1438,10 @@ const CLOSE_TIMEOUT_MS = 8_000;
  * app's single-instance lock. Tests that immediately relaunch must wait for the
  * process boundary, otherwise the replacement process exits without a window.
  *
- * The close is BOUNDED. A hung teardown used to surface as "Test timeout of
- * 60000ms exceeded" pointing at the test body, even though every assertion had
- * already passed — the trace showed a `close()` with no matching `after`. That
- * is maximally misleading: a shutdown bug gets reported as a product bug. So we
+ * The close is BOUNDED. Left unbounded, a hung teardown surfaces as "Test
+ * timeout of 60000ms exceeded" pointing at the test body even though every
+ * assertion passed, with a trace showing a `close()` and no matching `after`.
+ * That is maximally misleading: a shutdown bug reported as a product bug. So we
  * cap the wait, SIGKILL the Electron process if it overruns, and shout about it
  * on stderr. The test still passes (its assertions did pass), but the force-kill
  * is loud enough to be findable in CI logs instead of silently absorbed.

@@ -61,9 +61,9 @@ export function createUploads({
       failures.push(`Skipped ${skipped.length} files over 512 MB.`);
 
     state.uploading = true;
-    // THE QUEUE IS DRAWN, not narrated. It used to exist only as the string
-    // "Uploading 3 of 12…" replacing itself in a notice bar: a member with one
-    // refusal in twelve files learned that three failed and never which three.
+    // THE QUEUE IS DRAWN, not narrated. A single string "Uploading 3 of 12…"
+    // replacing itself in a notice bar tells a member with one refusal in
+    // twelve files that three failed and never which three.
     // Seeded with every file this call accepted plus every one it refused
     // outright for size, so the panel accounts for what was handed to it.
     state.uploadQueue = [

@@ -325,7 +325,7 @@ export function Root({
     void logic.createNote();
   }, [logic]);
 
-  // ---- mount wiring: the doorbell, focus, width and the keyboard map ----
+  // ──── mount wiring: the doorbell, focus, width and the keyboard map ────
   useEffect(() => {
     const stopDoorbell = onDataChange(CHANGE_TABLES, () => void core.refresh());
     const stopFocus = onFocusRefresh(() => void core.refresh());
@@ -381,10 +381,10 @@ export function Root({
       stopFocus();
       stopWidth();
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- mount-once wiring, stable deps via refs (#505)
+    // oxlint-disable-next-line react-hooks/exhaustive-deps -- mount-once wiring, stable deps via refs (#505)
   }, []);
 
-  // ---- derive the render ----
+  // ──── derive the render ────
 
   const shelf = state.shelf;
   const openNotebookId = notebookIdFrom(shelf);
@@ -484,7 +484,7 @@ export function Root({
     void core.refresh();
   }, [core, state]);
 
-  // ---- the route switch ----
+  // ──── the route switch ────
 
   let routeBody: ReactNode;
   if (!loaded) {
@@ -796,7 +796,7 @@ export function Root({
     </>
   );
 
-  // ---- what Notes contributes to the FRAME ----
+  // ──── what Notes contributes to the FRAME ────
 
   const barCountValue =
     shelf === NOTE || shelf === CAPTURE || shelf === VOICE ? null : rows.length;

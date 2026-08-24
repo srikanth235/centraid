@@ -566,7 +566,7 @@ export default function ApprovalsRoute(): JSX.Element {
           } else if (typeof appId === "string") {
             navigate({ kind: "app", id: appId });
           } else if (notice.kind === "outbox") {
-            // We are already ON Notifications, so navigating here was a no-op. The
+            // We are already ON Notifications, so navigating here is a no-op. The
             // gateway ships the staged item's id (outbox-executor.ts) — use
             // it to put that decision in front of the owner instead.
             const itemId = notice.detail.itemId;

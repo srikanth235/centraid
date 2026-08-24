@@ -43,13 +43,12 @@ export function loadConnection(): WebConnection {
 }
 
 /**
- * The connection is ALWAYS durable. It used to follow `rememberDevice`, which
- * put the enrollment in sessionStorage by default — so closing the browser
- * silently unpaired a device that had already been paired, and the only route
- * back was minting a fresh ticket. `rememberDevice` now governs the offline
- * copy (replica, queued changes, cached previews) and nothing else; dropping
- * this device is an explicit act (`removeGateway`), not a side effect of
- * quitting the browser.
+ * The connection is ALWAYS durable — it does NOT follow `rememberDevice`.
+ * Putting the enrollment in sessionStorage would silently unpair an
+ * already-paired device on browser close, with a fresh ticket the only route
+ * back. `rememberDevice` governs the offline copy (replica, queued changes,
+ * cached previews) and nothing else; dropping this device is an explicit act
+ * (`removeGateway`), not a side effect of quitting the browser.
  */
 export function saveConnection(patch: Partial<WebConnection>): WebConnection {
   const next = { ...loadConnection(), ...patch };

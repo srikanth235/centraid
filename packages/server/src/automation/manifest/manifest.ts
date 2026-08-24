@@ -898,11 +898,10 @@ const DEFAULT_HISTORY_KEEP_COUNT = 100;
 /*
  * Retention ceilings (issue #659 L9).
  *
- * `keep: "all"` was a legal manifest value meaning "never prune this
- * automation's run history". A per-minute automation writes ~500k turns a year
- * into the vault's journal, each with its items, and `applyRetention` returned
- * without doing anything — so the one declaration that most needed a bound was
- * the one that removed every bound. It is now REJECTED rather than coerced: a
+ * `keep: "all"` — "never prune this automation's run history" — is REJECTED
+ * rather than coerced. A per-minute automation writes ~500k turns a year
+ * into the vault's journal, each with its items, so the one declaration that
+ * most needs a bound is the one that would remove every bound: a
  * manifest that asks for unbounded growth is asking for something the runtime
  * will not do, and silently rewriting it to `{count: 100}` would let an author
  * keep believing their history is complete. v0 carries no back-compat

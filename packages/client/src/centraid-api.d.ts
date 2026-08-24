@@ -621,7 +621,7 @@ export interface CentraidTemplateMeta {
    * the Automations gallery). Defaults to 'app' when absent.
    */
   kind?: "app" | "automation";
-  // ----- automation-only display fields ('automation' kind) -----
+  // ─── automation-only display fields ('automation' kind) ───────
   /** Emoji on the gallery card (e.g. '🌤'). */
   emoji?: string;
   /** Gallery section header (e.g. 'Daily rhythm'). */
@@ -717,10 +717,10 @@ interface CentraidApi {
   // local-only reveal-in-Finder stays on IPC.
   openAppFolder: (input: { id: string }) => Promise<{ ok: true }>;
 
-  // The in-process authoring IPC surface retired with the unified conversation
-  // (issue #141, Phase 3): the renderer streams `/centraid/<id>/_turn` SSE
-  // directly (renderer/gateway-client-conversation.ts), so there are no
-  // main-side turn lifecycle IPC methods.
+  // There is no in-process authoring IPC surface (issue #141, Phase 3): the
+  // renderer streams `/centraid/<id>/_turn` SSE directly
+  // (gateway-client-conversation.ts), so there are no main-side turn lifecycle
+  // IPC methods.
 
   // appLogs / deregisterApp / listVersions / activateVersion moved to the
   // renderer's direct HTTP client too (pure git-store reads, no main-side
@@ -752,7 +752,7 @@ interface CentraidApi {
     }) => void
   ) => () => void;
 
-  // ----- Gateways (issue #109) -----
+  // ─── Gateways (issue #109) ───────
   /** List every gateway profile (local + remote). Sorted local-first. */
   listGateways: () => Promise<CentraidGatewayProfile[]>;
   /** Register an iroh connection by stable EndpointId. */
@@ -944,7 +944,7 @@ interface CentraidApi {
    * wrong for a same-vault rename.
    */
   notifyVaultMetadataChanged: () => Promise<void>;
-  // ----- Phone link (issue #263) -----
+  // ─── Phone link (issue #263) ───────
   /** Tunnel status + the paired-device allowlist. */
   getPhoneLinkStatus: () => Promise<CentraidPhoneLinkStatus>;
   /** Mint a fresh one-time pairing code; returns the QR as a data URL. */
@@ -959,7 +959,7 @@ interface CentraidApi {
     cb: (msg: { device: CentraidPhoneDevice }) => void
   ) => () => void;
 
-  // ----- Relaunch to update -----
+  // ─── Relaunch to update ───────
   /**
    * Snapshot of the dist watcher: whether a newer build than the running
    * one is on disk, and the version a relaunch would load. Optional so
@@ -1003,7 +1003,7 @@ interface CentraidApi {
    */
   keychainPromptExpected?: () => Promise<boolean>;
 
-  // ----- "What's new" changelog -----
+  // ─── "What's new" changelog ───────
   /**
    * Fetch the project's GitHub release notes (main-side, cached) plus the
    * running build version. Optional so test harnesses can mock a partial
@@ -1416,10 +1416,10 @@ export interface CentraidHarnessModel {
  */
 export type CentraidSurfaceStatus = "loading" | "ready" | "empty";
 
-// The per-harness host-tool listing (`CentraidHostTool`) retired with the
+// There is no per-harness host-tool listing (`CentraidHostTool`) and no
 // Settings → Agents tools drawer — Connections is where the user reasons about
-// what a harness can reach. Host tools are still enumerated gateway-side; they
-// just feed the builder's grounding block now, never a client surface.
+// what a harness can reach. Host tools are enumerated gateway-side and feed the
+// builder's grounding block, never a client surface.
 
 /** Preflight snapshot returned by `getHarnessStatus`. */
 export interface CentraidHarnessStatus {

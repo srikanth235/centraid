@@ -156,8 +156,8 @@ test("a first-party blueprint has no WCAG A/AA violations in its real renderer",
     page.getByRole("heading", { name: "Docs" }).first()
   ).toBeVisible();
 
-  // Apps render as inline routes in the shell document (#799 retired the
-  // served-app iframe), so a plain page scan reaches the actual Docs tree
+  // Apps render as inline routes in the shell document, with no served-app
+  // iframe (#799), so a plain page scan reaches the actual Docs tree
   // alongside its hosting shell — no frame traversal, and nothing to exclude.
   const results = await new AxeBuilder({ page }).withTags(WCAG_TAGS).analyze();
   expect(

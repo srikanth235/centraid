@@ -27,8 +27,7 @@ export function isWebHost(): boolean {
  * only on request), so the seat resolves from the same first-paint host
  * marker `isWebHost()` reads above — `window.CentraidIroh`, installed by
  * the web host and never by the Electron preload. Mobile's `origin` seat
- * lives in its own bundle (`apps/mobile/src/lib/seat.ts`) since that runtime
- * never shares this module.
+ * lives in its own bundle, since that runtime never shares this module.
  *
  * Presentation only, same caveat as `isWebHost()` — never branch custody
  * logic, auth, or security on the result. The one exception this repo

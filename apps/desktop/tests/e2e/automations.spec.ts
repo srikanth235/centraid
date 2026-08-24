@@ -48,8 +48,8 @@ async function openAutomations(page: TypeImport_11i4z7t.Page): Promise<void> {
 /**
  * Open one automation from the overview.
  *
- * The v9 revamp (issue #765) replaced the clickable tile grid with the shared
- * row block: a row is not a control, its trailing action is, and every one of
+ * The overview is the shared row block, not a clickable tile grid (issue
+ * #765): a row is not a control, its trailing action is, and every one of
  * those reads "Open". The `title` is what distinguishes them — it is a title
  * rather than an `aria-label` because the button already renders visible text
  * (aria-label discipline, issue #708 B.4).
@@ -132,10 +132,10 @@ test('8.3 — "New automation" opens the editor; the draft is posted on Save', a
     // "New automation" is the page's one filled commit and it lives in the app
     // bar (#765) — the empty state's own verb is "Browse templates".
     await page.getByRole("button", { name: "New automation" }).first().click();
-    // Realignment: this test used to expect the draft POST on open. Draft
-    // creation is deliberately deferred to Save — AutomationEditorRoute calls
-    // createAutomation() only from its onSave handler — so opening the editor
-    // posts nothing. Both halves are asserted rather than dropping either.
+    // Draft creation is deliberately deferred to Save — AutomationEditorRoute
+    // calls createAutomation() only from its onSave handler — so opening the
+    // editor posts nothing. Both halves are asserted rather than dropping
+    // either.
     await expect(page.getByTestId("automation-editor")).toBeVisible();
     expect(
       gateway.calls.some(

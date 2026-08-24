@@ -172,11 +172,11 @@ export function contrastRatio(foreground: string, background: string): number {
 
 // ── Solved rungs ───────────────────────────────────────────────────────────
 //
-// The Binding Layer retired the multi-accent machinery: there is no accent hue
-// to derive a ramp from, because the accent IS the ink. What survives is the
-// solver — the walk that moves a colour along its OWN hue until it clears a
-// floor — because the palette-text rungs and the semantic states still need
-// it, and hand-picking them is how `--danger` shipped at 3.74:1 once already.
+// There is no multi-accent machinery and no accent hue to derive a ramp from,
+// because the accent IS the ink. The solver stays — the walk that moves a
+// colour along its OWN hue until it clears a floor — because the palette-text
+// rungs and the semantic states need it, and hand-picking them is how a rung
+// silently lands under its floor (`--danger` at 3.74:1).
 
 /** Walk `base` along its own hue in 1-point lightness steps — `step` picks the
  *  direction — and return the FIRST shade whose `score` clears `floor`, i.e.

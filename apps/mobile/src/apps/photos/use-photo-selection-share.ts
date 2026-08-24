@@ -1,5 +1,4 @@
-// *Share*, as ONE selection-bar handler (issue #825 — replaces the commons
-// `use-copy-to-vault.ts`).
+// *Share*, as ONE selection-bar handler (issue #825).
 //
 // Four Photos shelves carry the same third target — the library's state views,
 // an album, the duplicates shelf and its review — and wiring them one at a

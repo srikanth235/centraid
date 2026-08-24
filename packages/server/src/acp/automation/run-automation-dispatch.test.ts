@@ -120,7 +120,7 @@ describe("run-automation-dispatch suite", () => {
     abortSignal: new AbortController().signal,
   };
 
-  // ---- zero-spawn seam ------------------------------------------------------
+  // ──── zero-spawn seam ──────────────────────────────────────────────────────
 
   test("the dispatch surface exposes only ctx.delegate — no tool dispatcher, nothing eager", async () => {
     // The seam itself is the assertion: a vault-/state-only fire never touches
@@ -165,7 +165,7 @@ describe("run-automation-dispatch suite", () => {
     expect(stub.calls).toHaveLength(0);
   });
 
-  // ---- ctx.delegate -----------------------------------------------------------
+  // ──── ctx.delegate ───────────────────────────────────────────────────────────
 
   test.each(ACP_KINDS)(
     "ctx.delegate on %s drives the registered harness",
@@ -451,8 +451,8 @@ describe("run-automation-dispatch suite", () => {
     });
   });
 
-  // Issue #479 retired the bespoke `codex exec` / claude-SDK arms: every kind
-  // now enters the same registry seam, so nothing spawns a CLI from this file.
+  // One integration path (issue #479): every kind enters the same registry
+  // seam, so nothing spawns a CLI from this file.
   test.each(["codex", "claude-code"] as const)(
     "ctx.delegate on %s routes through the registry like every other kind",
     async (kind) => {

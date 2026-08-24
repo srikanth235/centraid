@@ -338,7 +338,7 @@ describe("lifecycle-automation-routes scenarios", () => {
     expect(json.error).toBe("not_found");
   });
 
-  // ---- update-route WIRING (#656 1D) --------------------------------------
+  // ──── update-route WIRING (#656 1D) ──────────────────────────────────────
   // Trigger legality is the manifest validator's law
   // (`packages/server/src/automation/manifest/manifest.test.ts`). The two tests below
   // prove only that the update handler runs its own kind pre-check and that a

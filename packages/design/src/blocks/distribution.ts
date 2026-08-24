@@ -8,9 +8,8 @@
 //   * the share is measured against the SUM, not against the biggest row. A
 //     bar drawn against the maximum makes the top row full-width whatever it
 //     actually took, which reads as "all of it" on a window where it took a
-//     third. The retired Analytics screen drew both ways in the same view —
-//     harness against the max, model against the total — which is how one page
-//     told two different stories about the same dollars.
+//     third. Two rows drawn on different denominators in one view tell two
+//     different stories about the same dollars.
 //   * a row that measured something is never drawn as nothing. A day of
 //     sub-percent spend rounds to 0% and vanishes, so a positive weight keeps a
 //     one-percent floor; the FIGURE beside it stays exact.

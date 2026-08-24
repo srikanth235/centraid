@@ -122,8 +122,8 @@ export function searchMissTitle(query: string): string {
  * The library's paragraph is §14's load-bearing sentence: an empty library is
  * the one moment a member is deciding whether to hand this app their
  * photographs, and it is the moment the app owes them where the bytes go. It
- * used to say "your library starts with the first import", which describes the
- * mechanism and answers nothing.
+ * must not say something like "your library starts with the first import",
+ * which describes the mechanism and answers nothing.
  */
 export function emptyCopy(
   id: ShelfId,
@@ -242,9 +242,9 @@ export function personEmptyCopy(name: string): string {
 /**
  * OFFLINE (§14, proto 4867-4873, 4919). The gateway being out of reach is a
  * STATE the product is designed for, not a failure it apologises for once in a
- * status line — which is what this app used to do, with an invented sentence
- * ("Couldn't reach your library — retrying when you come back") that named
- * neither what still works nor why the grid looks the way it does.
+ * status line with an invented sentence ("Couldn't reach your library —
+ * retrying when you come back") that names neither what still works nor why
+ * the grid looks the way it does.
  *
  * `README.md` §14 is explicit: "A grey mosaic with no explanation is a bug."
  * So the banner says what is still true (all the meaning is here) and what is

@@ -14,8 +14,8 @@ import { enforceTiming, perfBudgets } from "./perf-budgets.js";
 // costs off the SHELL PAGE's own performance timeline: the shell bundle (cold,
 // then warm through the SW/HTTP caches) and an app open (cold, then warm).
 //
-// The app open is an INLINE REACT ROUTE. Issue #799 retired the served-app
-// plane, so there is no app iframe and no second window to read a timeline
+// The app open is an INLINE REACT ROUTE. There is no served-app plane
+// (issue #799), so no app iframe and no second window to read a timeline
 // from: opening a bundled app is a dynamic `import()` of that app's own lazy
 // chunk (packages/client/src/react/shell/routes/inlineApps.ts) rendered by
 // InlineAppRoute inside the live document. The cost of an open is therefore
@@ -430,7 +430,7 @@ async function goHome(page: Page): Promise<void> {
 test("app-open waterfall — shell + inline app route, cold vs warm", async ({
   page,
 }) => {
-  // ---- Shell: COLD load ----------------------------------------------------
+  // ─── Shell: COLD load ─────────────────────────────────────────────────────
   // First visit against an empty cache — this is the shell bundle cost (the
   // ~700KB boot chunk dominates), the number the bundling workstream targets.
   await page.goto("/");
@@ -438,7 +438,7 @@ test("app-open waterfall — shell + inline app route, cold vs warm", async ({
   await waitForShellBundle(page);
   const shellCold = await collect(page, origin);
 
-  // ---- Shell: WARM load ----------------------------------------------------
+  // ─── Shell: WARM load ─────────────────────────────────────────────────────
   // establishSession() reloads into a booted, signed-in shell; the SW shell
   // cache + browser HTTP cache should serve the same bundle for ~0 bytes.
   await establishSession(page);
@@ -447,15 +447,13 @@ test("app-open waterfall — shell + inline app route, cold vs warm", async ({
     ? shellWarm.sameOriginTransferBytes / shellCold.sameOriginTransferBytes
     : 0;
 
-  // ---- Inline app route: cold then warm open -------------------------------
+  // ─── Inline app route: cold then warm open ────────────────────────────────
   // COLD is the first open of this app in this page: the route's lazy chunk
   // (and whatever it pulls in) is fetched over the network. WARM is a second
   // open after returning Home: the module registry already holds the
-  // descriptor, so a healthy warm open downloads nothing at all. That is a
-  // stronger result than the retired iframe path could give — its app document
-  // was `no-store`, so its warm/cold ratio sat at ~1.0 by construction — and it
-  // is why the ratio ceiling is a regression fence here, not a cache proof:
-  // what it catches is a change that makes re-opening an app re-download it.
+  // descriptor, so a healthy warm open downloads nothing at all. The ratio
+  // ceiling is therefore a regression fence, not a cache proof: what it
+  // catches is a change that makes re-opening an app re-download it.
   const cold = await openAppAndMeasure(page);
   await goHome(page);
   const warm = await openAppAndMeasure(page);
@@ -549,7 +547,7 @@ test("app-open waterfall — shell + inline app route, cold vs warm", async ({
   );
   console.log("======================================================\n");
 
-  // ---- Hard budgets (request count + bytes) --------------------------------
+  // ─── Hard budgets (request count + bytes) ─────────────────────────────────
   // Cold shell is the headline cost. Assert we actually measured a cold load
   // (non-zero bytes) so a silent regression to "measured warm" can't pass.
   expect(
@@ -618,7 +616,7 @@ test("app-open waterfall — shell + inline app route, cold vs warm", async ({
     perfBudgets.appOpen.maxWarmToColdByteRatio
   );
 
-  // ---- Soft timing (log-only unless enforceTiming) -------------------------
+  // ─── Soft timing (log-only unless enforceTiming) ──────────────────────────
   for (const [phase, elapsed, ceiling] of [
     ["cold", cold.elapsedMs, perfBudgets.timing.coldOpenMsSoftCeiling],
     ["warm", warm.elapsedMs, perfBudgets.timing.warmOpenMsSoftCeiling],
@@ -631,12 +629,12 @@ test("app-open waterfall — shell + inline app route, cold vs warm", async ({
   }
 });
 
-// ---------------------------------------------------------------------------
+// ───────────────────────────────────────────────────────────────────────────
 // Test B — service-worker TUNNEL cache. The page plays the tunnel-bridge role
 // (as web-pwa-cache.spec.ts does) so this runs without the Iroh WASM. A warm
 // re-open must be served from the SW cache: bridge round trips and
 // tunnel-fetched bytes both collapse, proving the wave-1 SW-caching win.
-// ---------------------------------------------------------------------------
+// ───────────────────────────────────────────────────────────────────────────
 test("sw tunnel cache — warm re-open collapses relay round trips and bytes", async ({
   page,
 }) => {
@@ -792,7 +790,7 @@ test("sw tunnel cache — warm re-open collapses relay round trips and bytes", a
   );
 });
 
-// ---------------------------------------------------------------------------
+// ───────────────────────────────────────────────────────────────────────────
 // Test C — QUIC connection pool instrumentation. Proves the transport reuses
 // one endpoint CONNECT across many request STREAMS via globalThis
 // .__centraidIrohStats. A live proof needs a real iroh endpoint (WebTransport
@@ -800,7 +798,7 @@ test("sw tunnel cache — warm re-open collapses relay round trips and bytes", a
 // instrumentation CONTRACT is present so a regression that drops the counters
 // is caught. Run against a FRESH `vite build` (the committed dist is gitignored
 // and may predate this instrumentation).
-// ---------------------------------------------------------------------------
+// ───────────────────────────────────────────────────────────────────────────
 test("iroh pool — connects stay far below streams (or contract is present)", async ({
   page,
 }) => {
@@ -883,7 +881,7 @@ test("iroh pool — connects stay far below streams (or contract is present)", a
   }
 });
 
-// ---------------------------------------------------------------------------
+// ───────────────────────────────────────────────────────────────────────────
 // Test D — WEB VITALS (issue #659 R3a). Until this landed, the only thing the
 // PWA rig measured was BYTES: request counts and transfer sizes, which are
 // machine cost. A shell can move its whole bundle behind a lazy chunk, satisfy
@@ -900,7 +898,7 @@ test("iroh pool — connects stay far below streams (or contract is present)", a
 // thresholds — see that file's _provenance for why they are standard-derived
 // and not fixture-derived). The report is published for the nightly perf lane
 // at artifacts/perf-input/web-vitals-report.json.
-// ---------------------------------------------------------------------------
+// ───────────────────────────────────────────────────────────────────────────
 
 const VITALS_REPORT_PATH = path.resolve(
   here,
@@ -1052,11 +1050,11 @@ test("web vitals — LCP / INP / CLS on a cold shell load", async ({ page }) => 
 
   await installVitalsObservers(page);
 
-  // ---- Cold shell, empty cache ---------------------------------------------
+  // ─── Cold shell, empty cache ──────────────────────────────────────────────
   await page.goto("/");
   await waitForShellBundle(page);
 
-  // ---- One deliberate interaction so INP exists at all ---------------------
+  // ─── One deliberate interaction so INP exists at all ──────────────────────
   // INP is undefined without an interaction; a test that reported "INP: null,
   // passed" would be the vacuous green this rig exists to prevent, so drive a
   // real click on whatever interactive control the cold shell offers and record

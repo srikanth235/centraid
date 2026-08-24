@@ -8,9 +8,9 @@
  *   - kernel-backed gateway.db lock inspection (H3/H4)
  *   - minting the per-launch loopback token, handing it to the spawned daemon
  *     via `CENTRAID_GATEWAY_TOKEN`, and polling `/centraid/_gateway/info` until
- *     ready (issue #505 phase 7 retired the daemon's persistent `token.bin`;
- *     the desktop is the loopback token's landlord now, persisting it only in
- *     device safeStorage so no non-daemon writer touches the data dir)
+ *     ready (the daemon persists no token of its own; the desktop is the
+ *     loopback token's landlord (issue #505), persisting it only in device
+ *     safeStorage so no non-daemon writer touches the data dir)
  *   - stopping only processes we own
  *
  * Lifecycle verbs (start/stop/status/service) all invoke the same CLI
@@ -252,8 +252,7 @@ function signalGatewayGroup(pid: number, signal: NodeJS.Signals): void {
  * short final wait. Callers MUST await this before rebinding the port (else the
  * fresh child races the old listener → EADDRINUSE, swallowed by stdio:'ignore')
  * or before re-reading the ownership stamp (else `ensureDetachedGateway` adopts
- * the still-dying pid and never respawns). This is exactly the restart-crash
- * footgun: the old stop was a fire-and-forget SIGTERM with no wait.
+ * the still-dying pid and never respawns).
  */
 async function terminateDetachedGateway(
   pid: number,
@@ -401,7 +400,7 @@ const LOCK_STATUS_TIMEOUT_MS = 5_000;
  *
  * `spawnSync` reports a timeout as `error.code === 'ETIMEDOUT'` after killing
  * the child — the ONLY way to tell "the CLI blocked on the holder's SQLite
- * lock" apart from "the CLI failed fast", and previously discarded.
+ * lock" apart from "the CLI failed fast".
  */
 function probeLockStatus(
   dataDir: string,

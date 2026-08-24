@@ -276,9 +276,9 @@ describe("renderer gateway automation contracts", () => {
   });
 
   it("fails a client that calls a path the gateway does not serve", () => {
-    // The retired `run.*` surface is the concrete regression this guards: a
-    // renamed or misspelled path must break the suite, not fall through to a
-    // permissive `{ ok: true }`.
+    // A path the gateway does not serve is the concrete regression this
+    // guards: a renamed or misspelled path must break the suite, not fall
+    // through to a permissive `{ ok: true }`.
     expect(() =>
       fetch("https://gateway.test/centraid/_automations/runs?ref=daily/daily")
     ).toThrow(/unrouted gateway path: GET \/centraid\/_automations\/runs/u);

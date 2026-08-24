@@ -559,9 +559,9 @@ describe("video playback is honest, not double-transported", () => {
     const videoTags = [...html.matchAll(/<video\b[^>]*>/gu)];
     expect(videoTags).toHaveLength(1);
     expect(videoTags[0]?.[0]).toContain("controls");
-    // No hand-rolled second transport riding along beside it — the play
-    // button and the determinate `<progress>` track this file used to draw
-    // over the native scrubber, both gone for video specifically.
+    // No hand-rolled second transport riding along beside it — no play
+    // button and no determinate `<progress>` track over the native
+    // scrubber, for video specifically.
     expect(html).not.toContain('aria-label="Play"');
     expect(html).not.toContain("<progress");
     // The kind label still reaches the member, composed from the record.

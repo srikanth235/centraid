@@ -175,14 +175,14 @@ export async function vaultAtlasPulse(): Promise<AtlasPulsePayload> {
   return readJson<AtlasPulsePayload>(res, "read atlas pulse");
 }
 
-// ---------------------------------------------------------------------------
+// ─────────────────────────────────────────────────────────────────────────
 // The Vault Atlas Browse tab (issue #441 Part B, B3): a vault-aware table
 // editor. Reads are owner-trust census over the ontology; writes ride the
 // journalled command pipeline gateway-side (atlas.* commands) and record
 // operator provenance, so a hand-edit ships in the replica log like any app
 // write. Sealed columns read as a placeholder and refuse writes; machinery
 // bands are read-only unless `unlockMachinery` is set.
-// ---------------------------------------------------------------------------
+// ─────────────────────────────────────────────────────────────────────────
 
 /** One table row of the Browse picker. */
 export interface BrowseTableEntry {

@@ -56,7 +56,7 @@ const STRAIGHTEN_STEP = 1;
 const STRAIGHTEN_LIMIT = 15;
 
 /** The rectangle `Crop` starts from: centred, inset a tenth on every side, so
- *  there is something to drag before a drag has happened. Cropping used to be
+ *  there is something to drag before a drag has happened. Cropping is not
  *  reachable ONLY by dragging across the canvas, which is no control at all on
  *  a keyboard — the handoff lists `Crop` among the tool row's buttons
  *  (proto 4621), and this is what pressing it does. */

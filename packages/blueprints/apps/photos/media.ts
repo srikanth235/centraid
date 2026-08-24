@@ -195,7 +195,7 @@ export function fillTileMedia(
   }
   // ONE retry against the original before the tile gives up (#708).
   //
-  // Two real failures land here and both used to paint a permanent grey box:
+  // Two real failures land here, and either would paint a permanent grey box:
   //
   //  1. The derivative does not exist YET. `?variant=thumb` answers
   //     `no-variant` → 404 for every photo between import and the gateway's

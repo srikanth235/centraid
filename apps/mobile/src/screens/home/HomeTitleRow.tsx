@@ -7,15 +7,15 @@
 // and Home's own name is chrome, the same weight class the app bar draws every
 // other route's name in.
 //
-// It carries NO controls. It used to hold two — a filled "Search everything"
-// and an outlined "All apps" — and both were the second copy of a control the
-// frame already offers: Search is the magnifier in the vault lockup directly
-// above this row (VaultHeader.tsx), and All apps is the band's **More** tab
-// directly below it (HomeBand.tsx). Two chips spanning the width of the screen
-// bought nothing but a shorter first preview, on the one screen whose whole
-// argument is that you see your things before you see the apps holding them.
+// It carries NO controls. A filled "Search everything" and an outlined "All
+// apps" here would each be the second copy of a control the frame already
+// offers: Search is the magnifier in the vault lockup directly above this row
+// (VaultHeader.tsx), and All apps is the band's **More** tab directly below it
+// (HomeBand.tsx). Two chips spanning the width of the screen buy nothing but a
+// shorter first preview, on the one screen whose whole argument is that you
+// see your things before you see the apps holding them.
 //
-// So the filled-ink budget this row used to spend is now unspent on Home. That
+// So this row's filled-ink budget stays unspent on Home. That
 // is deliberate: on a screen made of previews, the loudest thing should be a
 // member's own photograph, not a word.
 

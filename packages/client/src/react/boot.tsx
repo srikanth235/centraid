@@ -36,12 +36,12 @@ void import("../replica/shell-session.js")
 // Opted-in paired devices contribute PDF text and video posters only while
 // charging + unmetered. THE FETCH WAITS, not just the work (issue #838).
 //
-// This was a bare `void import(…)` under a comment claiming the dynamic import
-// kept PDF.js off the shell's startup path. Dynamic and immediate are
-// different things: the request went out during boot, so the worker chunk and
-// the `pdf.worker.min` asset it pulls were on the cold-load waterfall of every
-// seat — two same-origin requests the shell's own budget was paying for work
-// that had not started and, on most seats, never would.
+// Dynamic and immediate are different things, and a dynamic import does NOT by
+// itself keep PDF.js off the shell's startup path: a bare `void import(…)` at
+// module scope sends the request during boot, putting the worker chunk and the
+// `pdf.worker.min` asset it pulls on the cold-load waterfall of every seat —
+// two same-origin requests the shell's own budget pays for work that has not
+// started and, on most seats, never will.
 //
 // A BACKGROUND CONTRIBUTOR DOES NOT TOUCH THE NETWORK IN THE FIRST MINUTE OF A
 // SESSION. That is the rule the delay expresses, and it is the feature's own
@@ -117,18 +117,18 @@ window.addEventListener("hashchange", sync);
 sync();
 
 // ── Reading the settings, and admitting when we couldn't ─────────────────
-// A settings READ that fails is not a fresh install. It used to be treated as
-// one: `getSettings().catch(() => ({}))` produced an object with no
-// `onboardingCompletedAt`, and the gate below cannot tell "this member has
-// never onboarded" from "we have no idea whether they have". Live, on a
-// fully-set-up Mac whose gateway could not be assessed (device-key custody
-// mismatch; a lock the daemon never answered), that rendered the first-run
-// "Start fresh on this Mac" chooser over a real, populated vault — an invitation
-// to start over shown to someone whose data was fine the whole time.
+// A settings READ that fails is not a fresh install. Treating it as one —
+// `getSettings().catch(() => ({}))` yields an object with no
+// `onboardingCompletedAt` — leaves the gate below unable to tell "this member
+// has never onboarded" from "we have no idea whether they have". On a
+// fully-set-up Mac whose gateway cannot be assessed (device-key custody
+// mismatch; a lock the daemon never answered), that renders the first-run
+// "Start fresh on this Mac" chooser over a real, populated vault — an
+// invitation to start over shown to someone whose data is fine.
 //
-// So the read is now three-valued at the call site: it either succeeded (and
-// the stamp decides), or it failed (and we say so). There is no fourth
-// behaviour where a failure quietly wears the shape of a success.
+// So the read is three-valued at the call site: it either succeeded (and the
+// stamp decides), or it failed (and we say so). There is no fourth behaviour
+// where a failure quietly wears the shape of a success.
 type SettingsRead =
   | {
       ok: true;
@@ -160,8 +160,7 @@ async function readSettings(): Promise<SettingsRead> {
 
 // ── The shell (#325 flip) ────────────────────────────────────────────────
 // React owns #root: one root on #root renders either the first-run gate or
-// the App shell, replacing the retired vanilla app.ts IIFE. First paint no
-// longer probes the gateway (issue #603 deleted the founding plane): the gate
+// the App shell. First paint does not probe the gateway (issue #603): the gate
 // decides on platform + the persisted onboarding stamp alone.
 void (async (): Promise<void> => {
   const shell = document.querySelector<HTMLElement>(SHELL_SELECTOR);
@@ -213,7 +212,7 @@ void (async (): Promise<void> => {
   // fails on this desktop because the local gateway would not start, and after
   // a few failures the host's supervisor gives up: from then on every read
   // fails INSTANTLY with the same message, whatever the member has since
-  // fixed. So re-reading alone was a button that could never work — verified
+  // fixed. So re-reading alone is a button that could never work — verified
   // by removing the cause completely (killing the process holding gateway.db;
   // restoring the device credential file) and pressing it.
   //
@@ -254,8 +253,8 @@ void (async (): Promise<void> => {
   };
   await start();
   // After the first paint, never before it — an assist handoff error opens a
-  // blocking dialog, and a modal over an unpainted window is how the desktop
-  // used to strand people with nothing to look at.
+  // blocking dialog, and a modal over an unpainted window strands people on
+  // the desktop with nothing to look at.
   void assistHandoffPromise.then((assistHandoff) => {
     if (assistHandoff.status === "error") window.alert(assistHandoff.message);
   });

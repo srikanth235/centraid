@@ -218,10 +218,10 @@ export function MediaPage({
   networkType: string | undefined;
   /**
    * The member asked for the original — from the stage's status line, which is
-   * the ONE place that offer lives (proto 4645). This page used to carry a
-   * second `Load the original` chip of its own, so the same fetch was offered
-   * twice on one screen, with two different labels and two different states.
-   * The screen owns the ask now; this page owns what to do about it.
+   * the ONE place that offer lives (proto 4645). This page carries no second
+   * `Load the original` chip of its own: the same fetch offered twice on one
+   * screen is two labels and two states for one thing. The screen owns the
+   * ask; this page owns what to do about it.
    */
   originalRequested?: boolean;
   /**

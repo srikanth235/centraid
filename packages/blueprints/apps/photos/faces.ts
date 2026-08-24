@@ -6,14 +6,14 @@
 // job is only to not repeat, at photograph scale, the two mistakes that
 // surface exists to fix — see #711's review:
 //
-//  1. CONFIDENCE IS NEVER A PERCENTAGE (README.md:285). This file used to
-//     print `Math.round(region.confidence * 100)}%`, the enricher's raw
-//     similarity score. It now counts MATCHES instead: how many OTHER
+//  1. CONFIDENCE IS NEVER A PERCENTAGE (README.md:285). This file never
+//     prints `Math.round(region.confidence * 100)}%`, the enricher's raw
+//     similarity score. It counts MATCHES instead: how many OTHER
 //     `media_face_region` rows (on any asset, confirmed or not) propose the
 //     SAME `party_id`, deduped by photograph — the same derivation
 //     queries/face-queue.ts uses for the full surface's `confidence` fact.
-//  2. ONE FACE AT A TIME (v4 3967). This file used to render every
-//     unconfirmed region on the open photograph as a list. It now shows
+//  2. ONE FACE AT A TIME (v4 3967). This file does not render every
+//     unconfirmed region on the open photograph as a list. It shows
 //     exactly one — the current index is kept on the host element itself
 //     (`data-face-index`) so it survives the answer re-render this function
 //     calls itself, without adding React state to a function that stays

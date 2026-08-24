@@ -3,10 +3,10 @@
 // Harness regression pin (#842). This file exists for its DOCBLOCK, not for its
 // coverage: it is the only mobile suite that asks a node project to transform
 // one file through Vite's `client` environment while that file reaches
-// `node:sqlite`. That combination is what silently killed
-// `src/apps/tally/PendingRestartJourney.test.tsx` — Vite refused to bundle the
-// builtin, the file died at transform, and a suite that collects zero tests
-// looks like no suite at all rather than a red one.
+// `node:sqlite`. Without externalization that combination kills a suite
+// silently — Vite refuses to bundle the builtin, the file dies at transform,
+// and a suite that collects zero tests looks like no suite at all rather than
+// a red one.
 //
 // The externalization plugin now ships on both test-kit presets
 // (`packages/test-kit/src/vitest.ts`); drop it from the node preset and this

@@ -2,9 +2,9 @@
 // of `PhotosCollectionsView` (which now serves Albums only) because People
 // stopped being a shelf on that screen.
 //
-// People is OFF THE BAND (issue #712): it used to be a band destination
-// `PhotosHome` rendered inline, which cost the band a fifth slot for a shelf
-// most visits never open. It is now a pushed route like `PlacesView` and
+// People is OFF THE BAND (issue #712): a band destination `PhotosHome` renders
+// inline costs the band a fifth slot for a shelf most visits never open. This
+// is a pushed route like `PlacesView` and
 // `FaceReview` — reached from Collections' own People section heading
 // (`PhotosCollectionsView.tsx`'s `open()`) and from the Library shelf list's
 // People row alongside `FaceReview` — so it draws its own band via
@@ -22,8 +22,9 @@
 //      a person card is a browsable identity, and the two are not the same
 //      destination even though both start from `media.face_region`.
 //   3. THE CONSENT GATE (issue #712 C2). The face-detection consent moment
-//      used to sit behind a "Face detection" row + modal on PhotosLibrary —
-//      built, correct, and nearly unreachable. An empty People shelf IS the
+//      does not sit behind a "Face detection" row + modal on PhotosLibrary,
+//      which would be built, correct and nearly unreachable. An empty
+//      People shelf IS the
 //      gate's natural body: a member who opens People and sees nothing has
 //      exactly the question "why is this empty, and can I do something about
 //      it" the gate answers. So when the roster is empty AND the question
@@ -99,7 +100,7 @@ export default function PhotosPeopleView({
     useMemo(() => ({ entity: "enrich.policy" }), [])
   );
 
-  // ---- the consent question, re-homed from PhotosLibrary's footer row ----
+  // ──── the consent question, re-homed from PhotosLibrary's footer row ────
   const [enrichBusy, setEnrichBusy] = useState(false);
   const [enrichAnswered, setEnrichAnswered] = useState<
     "device" | "declined" | null
@@ -170,11 +171,9 @@ export default function PhotosPeopleView({
     shelf.people.length === 0 && shelf.unnamed.length === 0 && !enrichAnswered;
 
   return (
-    // The band, via the shell (issue #712). This screen used to be rendered
-    // inline by `PhotosHome` with People marked current on the band itself;
-    // now that People is off the band, it draws the shell like every other
-    // pushed shelf, `current="more"` — same call `PlacesView` and
-    // `PhotoStateView`'s "person" mode already make.
+    // The band, via the shell (issue #712). People is off the band, so this
+    // screen draws the shell like every other pushed shelf, `current="more"`
+    // — the same call `PlacesView` and `PhotoStateView`'s "person" mode make.
     <PhotosScreen current="more">
       <View style={styles.header}>
         {/* No back chevron, same reasoning as `PlacesView`'s: the band below

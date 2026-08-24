@@ -6,8 +6,9 @@
 // package is deliberately NOT a dependency of this workspace package (see
 // runtime/package.json + src/onnx.ts) — it lives only in
 // packages/model-runtime/runtime/node_modules, installed by `bun run
-// setup`, and is loaded there via a runtime `import()` resolved with
-// `createRequire`. TypeScript has no way to see that installation from this
+// setup`, and is loaded there via a runtime `import()` whose specifier comes
+// from `resolveRuntimeModule`. TypeScript has no way to see that installation
+// from this
 // package's own module graph, so `tsc -p tsconfig.json` (run WITHOUT setup
 // ever having executed) would fail to resolve `"onnxruntime-node"` at all.
 // This file declares the module ambiently so the calling code in
@@ -16,7 +17,7 @@
 // resolvable from here. It is intentionally NOT a full port of
 // onnxruntime-node's .d.ts: extend it only when a new capability needs a
 // field this subset doesn't cover yet.
-/* eslint-disable max-classes-per-file -- #724: Tensor + InferenceSession are the two classes onnxruntime-node's real API actually exports; this ambient module mirrors that shape 1:1, so splitting them into two files would just fragment one module declaration for no reason. */
+/* oxlint-disable max-classes-per-file -- #724: Tensor + InferenceSession are the two classes onnxruntime-node's real API actually exports; this ambient module mirrors that shape 1:1, so splitting them into two files would just fragment one module declaration for no reason. */
 declare module "onnxruntime-node" {
   export type TypedTensorData =
     | Float32Array

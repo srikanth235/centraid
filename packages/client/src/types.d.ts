@@ -122,8 +122,8 @@ declare global {
    * Where the home/sidebar context menu should anchor. `point` is a raw
    * cursor location (right-click); `rect` is a trigger element's bounding
    * box (the hover-revealed `•••` button) so the menu drops below it with
-   * predictable edge-flipping. Shared across `app.ts` and `chrome.ts` so
-   * the sidebar can hand the right-click event off to the home shell.
+   * predictable edge-flipping. Mirrored by `ShellMenuAnchor` (shell) and
+   * `HomeMenuAnchor` (screen contracts), which carry the same two shapes.
    */
   type MenuAnchor =
     | { kind: "point"; x: number; y: number }

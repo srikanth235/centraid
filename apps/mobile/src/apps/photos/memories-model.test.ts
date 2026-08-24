@@ -57,9 +57,8 @@ function memberRow(
   return { memory_id: memoryId, asset_id: assetId, ordinal };
 }
 
-/** A place map of names only, the way this file used to pass one — a trip's
- *  title now needs the whole row (issue #816), so the shorthand keeps the
- *  older cases readable. */
+/** A place map of names only. A trip's title needs the whole row (issue #816),
+ *  so this shorthand keeps the cases that do not need one readable. */
 const namedPlaces = (
   entries: readonly (readonly [string, string])[]
 ): Map<string, MemoryPlace> =>

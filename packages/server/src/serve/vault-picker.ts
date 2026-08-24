@@ -81,8 +81,8 @@ export function pickAnchors(
 ): { anchors: AnchorPickerHit[] } {
   const term = request.term?.trim().toLowerCase() ?? "";
   const limit = Math.min(Math.max(request.limit ?? 8, 1), 25);
-  // Receipted owner read, like every other door this picker drives — the old
-  // raw `db.vault` JOIN was a second, unaudited read path (issue #541 review).
+  // Receipted owner read, like every other door this picker drives — a raw
+  // `db.vault` JOIN is a second, unaudited read path (issue #541 review).
   const rows = gateway.read(cred, {
     entity: AUTOMATION_ANCHOR_ENTITY,
     orderBy: { column: "created_at", dir: "desc" },

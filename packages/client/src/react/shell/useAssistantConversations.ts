@@ -10,9 +10,9 @@ export interface AssistantConversationsController {
   refresh: () => Promise<void>;
   /**
    * Rename / pin / archive, applied to the sidebar row before the wire call
-   * (issue #659). These used to await the PATCH and then refetch the whole
-   * list, so a rename took a round trip to appear and a pin rebuilt the
-   * sidebar. A rejected commit restores the list exactly and rethrows.
+   * (issue #659). Awaiting the PATCH and refetching the whole list would make
+   * a rename cost a round trip to appear and a pin rebuild the sidebar. A
+   * rejected commit restores the list exactly and rethrows.
    */
   mutate: (
     apply: (

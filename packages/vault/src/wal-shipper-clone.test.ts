@@ -9,8 +9,8 @@ import { randomBytes } from "node:crypto";
  * shipping WAL segments in the first place.
  *
  * This is not a hypothetical. `copyFileSync(..., COPYFILE_FICLONE)` — the
- * obvious one-liner, and what this code used to do — is SILENTLY a byte copy on
- * macOS: libuv implements FICLONE via `ioctl` on Linux only, and Darwin accepts
+ * obvious one-liner — is SILENTLY a byte copy on macOS: libuv implements
+ * FICLONE via `ioctl` on Linux only, and Darwin accepts
  * the flag and ignores it. It cost ~10 GiB of writes per day on a 10 GiB vault
  * and nobody would have noticed, because nothing about it fails.
  *

@@ -833,7 +833,7 @@ describe("AssistantScreen suite", () => {
         await Promise.resolve();
       });
       await flush();
-      // A rejected switch used to leave every picker disabled for good.
+      // A rejected switch must not leave every picker disabled for good.
       expect(props.onSetHarness).toHaveBeenCalledWith("copilot");
       expect(
         el.querySelector<HTMLSelectElement>(

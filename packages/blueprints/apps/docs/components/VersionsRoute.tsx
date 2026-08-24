@@ -1,15 +1,15 @@
 // Version history (Docs spec §6.2) — screen `versions`.
 //
-// A ROUTE, NOT AN OVERLAY. It used to be a disclosure inside the details
-// drawer, which made a document's spine something you could only see while
-// standing in a sheet over the drive. §6.2 gives it a breadcrumb of its own
+// A ROUTE, NOT AN OVERLAY. A disclosure inside the details drawer would make a
+// document's spine something you could only see while standing in a sheet over
+// the drive. §6.2 gives it a breadcrumb of its own
 // (`Docs → <title> → History`), which is only meaningful for a screen.
 //
 // AND IT FOLDS ACTIVITY IN. "Cut: Activity as its own screen. What happened to
 // a document and which version it produced are one spine. The third column
 // records whether a member, an app or a machine did it." (§6.2/§14, verbatim.)
-// So the two reads that used to be two panels in a drawer are one screen here,
-// in that order, with the sentence that explains the fold printed under them.
+// So the two reads are one screen here, not two panels in a drawer, in that
+// order, with the sentence that explains the fold printed under them.
 import type { ReactNode } from "react";
 
 import { displayText } from "../../_shared/untrusted.ts";

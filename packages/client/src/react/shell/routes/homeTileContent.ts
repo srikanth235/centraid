@@ -48,12 +48,11 @@ export interface HomeTileReader {
 // a SHAPE SELECTOR. `ReplicaShellSession.resolveShapeId` filters the catalog by
 // `shape.purpose === purpose`, so a value the catalog has never heard of
 // matches no shape and the read throws `No offline shape for <app>/<entity>`.
-// This module used to pass "home-springboard", describing why the shell was
-// reading, and every one of the seven reads below threw — silently, because
-// each is `.catch()`-ed so one app's missing grant cannot blank the other
-// tiles. The visible result was a Home that stayed empty no matter how much
-// content the vault held: Agenda and the tally figure survived only because
-// they come from the brief instead.
+// Passing a descriptive value like "home-springboard" makes every one of the
+// seven reads below throw — silently, because each is `.catch()`-ed so one
+// app's missing grant cannot blank the other tiles. The visible result is a
+// Home that stays empty no matter how much content the vault holds: Agenda and
+// the tally figure survive only because they come from the brief instead.
 //
 // Omitting it lets the session apply `DEFAULT_REPLICA_PURPOSE`, which is what
 // the shapes are actually registered under and what the palette (the other
@@ -386,7 +385,7 @@ async function newestDoc(
   if (!newest) return { total: rows.length };
   // The document's prose lives in its content item's bytes
   // (`current_content_id`), not in a column — this is the read that closes the
-  // seam the tile used to record here in prose. Settled independently: a
+  // seam between a document's title and its prose. Settled independently: a
   // missing shape, a binary media type or a refused blob fetch must degrade to
   // the title-only body, never blank the tile.
   const excerpt = clipToExcerpt(

@@ -24,9 +24,8 @@ export interface BarsBlockProps {
   /**
    * The marks along the axis, oldest → newest, spread across the plot.
    *
-   * TWO OR MORE, and the count is the caller's (#775). It was a fixed triple
-   * while the only marks it carried were the relative words "30 days ago /
-   * halfway / today" — words a fold into real dates has no use for.
+   * TWO OR MORE, and the count is the caller's (#775): a fold into real dates
+   * has no use for a fixed triple of relative words.
    */
   axis: readonly string[];
   /**

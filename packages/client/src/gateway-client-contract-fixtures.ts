@@ -12,7 +12,7 @@ import type { Mock } from "vitest";
 // Annotated rather than inferred. Under vitest 4 the inferred `vi.fn()` type
 // names `@vitest/spy` through its install path, which declaration emit rejects
 // as non-portable (TS2742) — `tsc --noEmit` never sees it, so this only breaks
-// the package build. Naming `Mock` from 'vitest' keeps the emitted `.d.ts`
+// the package build. Naming `Mock` from 'vitest' keeps the emitted declaration
 // pointing at a real specifier, and sourcing both signatures from what they
 // stand in for keeps them honest.
 export const getGatewayAuth: Mock<typeof window.CentraidApi.getGatewayAuth> =

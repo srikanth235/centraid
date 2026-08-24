@@ -207,9 +207,9 @@ export function EditModal({
         ))}
 
         {type === "login" ? (
-          // The title/hint used to be wrapped in a <span> flex item; they are
-          // direct children of the label now (the label is a two-column grid,
-          // see EditModal.module.css) so the label's own text is its accessible
+          // The title/hint are direct children of the label, not wrapped in a
+          // <span> flex item (the label is a two-column grid, see
+          // EditModal.module.css), so the label's own text is its accessible
           // name rather than sitting two elements deep (issue #573).
           <label className={styles.matchPolicy}>
             <input

@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-// eslint-disable-next-line typescript-eslint/ban-ts-comment -- browser-DOM fixture is intentionally checked by jsdom, while the blueprint TS config excludes DOM globals (#406)
+// oxlint-disable-next-line typescript-eslint/ban-ts-comment -- browser-DOM fixture is intentionally checked by jsdom, while the blueprint TS config excludes DOM globals (#406)
 // @ts-nocheck
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 

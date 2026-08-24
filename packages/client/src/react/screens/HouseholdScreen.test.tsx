@@ -402,9 +402,9 @@ describe("HouseholdScreen suite", () => {
         onOpenStorage,
         vaults: [scope(), scope({ id: "v2", label: "Family" })],
       });
-      // Capacity is one fact about the gateway. It used to be a button inside
-      // each vault's own detail, which drew the same door once per vault and
-      // implied it was a per-vault fact.
+      // Capacity is one fact about the gateway. A button inside each vault's
+      // own detail would draw the same door once per vault and imply it is a
+      // per-vault fact.
       expect(el.textContent?.match(/Storage on this gateway/gu)).toHaveLength(
         1
       );

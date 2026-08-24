@@ -3,7 +3,7 @@
 // regions, expressed as one React tree so `app-root.tsx` renders one tree
 // instead of a dozen imperative roots.
 //
-// THERE IS NO TOPBAR AND NO SIDEBAR NAVIGATION HERE. The retired global
+// THERE IS NO TOPBAR AND NO SIDEBAR NAVIGATION HERE. The global
 // ag-prefixed shell/side/topbar trio is permanently banned, and the ban is
 // enforced by substring over this whole tree (shared-css.test.ts), so the dead
 // selectors are not spelled out even in a comment: navigation is the shell's

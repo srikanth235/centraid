@@ -7,11 +7,9 @@
 //  - a party with no display_name still shows, as "Unnamed" — never dropped
 //    from the grid (README:217, proto:3760)
 //  - tapping a person card opens THAT PERSON'S PHOTOGRAPHS
-//    (`PhotoStateView`, mode "person"), never `FaceReview` — the previous
-//    `PhotosCollectionsView` behaviour this screen replaced always opened
-//    Face review regardless of which person card was tapped, which is
-//    exactly the "labelled destination opens something else" bug this issue
-//    is about
+//    (`PhotoStateView`, mode "person"), never `FaceReview` — opening Face
+//    review regardless of which person card was tapped is exactly the
+//    "labelled destination opens something else" bug this issue is about
 //  - the face-detection consent gate now lives in THIS view's empty state
 //    (moved off PhotosLibrary's footer row + modal), and only while the
 //    question is still open — an empty-and-answered roster falls back to the

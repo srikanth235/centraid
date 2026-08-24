@@ -5,8 +5,8 @@ import path from "node:path";
  * metered-egress cost estimate, exercised at the SERVICE layer (where the
  * future `recover()` verb inherits the defaulting). A real `VaultRegistry` +
  * `LocalBackupProvider` over temp dirs, with the same injected `assembleEntries`
- * seam `backup-service.test.ts` uses. Kept in its own file (not appended to
- * that one) purely to stay under the repo-hygiene line cap.
+ * seam `backup-service.contract.test.ts` uses. Kept in its own file purely to
+ * stay under the repo-hygiene line cap.
  */
 
 import { afterEach, describe, expect, test } from "vitest";

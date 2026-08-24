@@ -35,7 +35,7 @@ export interface OpenGatewayDatabaseOptions {
   networkFileSystem?: boolean;
 }
 
-/* eslint-disable max-classes-per-file -- the typed lock refusal and the database handle form one gateway.db boundary (#555) */
+/* oxlint-disable max-classes-per-file -- the typed lock refusal and the database handle form one gateway.db boundary (#555) */
 export class GatewayDatabase {
   readonly file: string;
   readonly db: DatabaseSync;
@@ -210,12 +210,11 @@ const DARWIN_NETWORK_FS_TYPES = new Set([
  * `f_type` index, not a Linux magic number. The filesystem NAME lives in
  * `statfs.f_fstypename`, which `/sbin/mount` prints per mount point.
  *
- * The previous attempt shelled out to `/usr/bin/stat -f '%T'` — but BSD
- * `stat -f` takes a FORMAT STRING and `%T` is the `ls -F` type indicator
- * (`@`, `/`, empty), never a filesystem type. It exited 0 with a value the
- * regex could not match, and that success also short-circuited the Linux
- * `statfsSync` fallback, so darwin detection was a guaranteed `false`
- * (issue #568 item I).
+ * `/usr/bin/stat -f '%T'` is not an alternative: BSD `stat -f` takes a FORMAT
+ * STRING and `%T` is the `ls -F` type indicator (`@`, `/`, empty), never a
+ * filesystem type. It exits 0 with a value the regex cannot match, and that
+ * success also short-circuits the Linux `statfsSync` fallback, making darwin
+ * detection a guaranteed `false` (issue #568 item I).
  */
 export function parseDarwinFileSystemType(
   mountOutput: string,

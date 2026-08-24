@@ -1,14 +1,14 @@
 /*
  * An edge's SCOPE, parsed rather than asserted (issue #750 abstraction 5).
  *
- * `scope_json` used to reach the reconcilers and the receipt writer as
- * `JSON.parse(row.scope_json ?? "[]") as string[]` — a cast, in four places,
- * over a column that a receipt then records as durable audit. A row whose
- * scope was `null`, `{}`, `[1, 2]` or `[""]` produced an empty or nonsense
+ * `scope_json` reaches the reconcilers and the receipt writer through this
+ * module and never through a `JSON.parse(row.scope_json ?? "[]") as string[]`
+ * cast, because a receipt records that column as durable audit: a row whose
+ * scope is `null`, `{}`, `[1, 2]` or `[""]` would produce an empty or nonsense
  * receipt SILENTLY, which is precisely the failure a durable access audit
  * exists to prevent.
  *
- * This module is the total parser that replaces the cast. Malformed input is
+ * This module is the total parser. Malformed input is
  * refused loudly (a thrown `ShareScopeError`, which the edge plane turns into
  * a parked edge with a reason) rather than degraded into an empty set.
  *

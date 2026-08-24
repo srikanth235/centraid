@@ -1,8 +1,9 @@
 /*
  * Concurrency admission for app-handler worker spawns (issue #351 Tier 4
- * hygiene). `runHandler` (`handler-runner.ts`) used to spawn one
- * 256MB-capped worker thread per request with no cap at all — a request
- * burst could spawn unboundedly and OOM the host process. This gates
+ * hygiene). `runHandler` (`handler-runner.ts`) spawns one
+ * 256MB-capped worker thread per request, and ungated that has no cap at
+ * all — a request burst could spawn unboundedly and OOM the host process.
+ * This gates
  * worker creation: at most `maxConcurrent` workers running, a short FIFO
  * queue for the rest bounded by both length and wait time — beyond that
  * the caller gets a fast "gateway busy" failure instead of a request that

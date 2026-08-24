@@ -16,9 +16,6 @@ export const APPROVALS_EMPTY_TITLE = "Nothing is waiting on you";
 
 /**
  * The empty body — one sentence, one action beside it (DESIGN.md → Copy).
- *
- * It used to close with "This page is empty most of the time, and that is the
- * healthy state", a healthy-state essay under a title that already said so.
  */
 export const APPROVALS_EMPTY_BODY =
   "Staged writes, lapsed connections and access requests land here.";
@@ -90,9 +87,7 @@ export const APPROVALS_OLD_GATEWAY_TITLE =
 export const APPROVALS_OLD_GATEWAY_BODY =
   "It cannot say which questions were answered.";
 
-/** The error plate: what failed, and the verb beside it. The body used to add
- *  "Nothing has been approved or denied in the meantime, and nothing expired"
- *  — two clauses of reassurance in front of a member who wants the verb. */
+/** The error plate: what failed, and the verb beside it. */
 export const APPROVALS_ERROR_TITLE = "Could not reach the consent store";
 export const APPROVALS_ERROR_BODY =
   "The gateway answered; the queue that holds staged writes did not.";

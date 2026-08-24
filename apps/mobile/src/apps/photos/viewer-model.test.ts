@@ -232,8 +232,8 @@ describe("zoom", () => {
   });
 
   test("every way in lands on ONE rung", () => {
-    // The double tap used to go to 2.5 while the chip went to 2.4, so the same
-    // photograph read 250% or 240% depending on which control you used.
+    // A double tap at 2.5 and a chip at 2.4 make the same photograph read
+    // 250% or 240% depending on which control you used.
     expect(zoomIn(ZOOM_FIT)).toBe(ZOOM_RUNG);
     expect(zoomReadout(zoomIn(ZOOM_FIT)).label).toBe("250% · drag to pan");
   });

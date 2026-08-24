@@ -70,9 +70,9 @@ export async function runConnectivityTest(
  * `vaults[]` so the vault step's rendering stays method-agnostic.
  *
  * The catch is a typed translation, not a swallow (issue #603 W4): an
- * unreachable gateway used to fold into an empty list, which the vault step
- * then rendered as "this gateway has no vaults" and the onboarding host
- * auto-committed a create against. The caller now sees WHY the list is empty.
+ * unreachable gateway must not fold into an empty list, which the vault step
+ * would render as "this gateway has no vaults" and the onboarding host would
+ * auto-commit a create against. The caller sees WHY the list is empty.
  */
 export async function loadLocalVaults(): Promise<LocalVaultsResult> {
   try {

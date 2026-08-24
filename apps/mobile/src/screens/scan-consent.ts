@@ -3,11 +3,11 @@
 // `kit/transfer/transfer-consent.ts`'s BACKUP latch: asked once per device,
 // remembered, revocable.
 //
-// Scan.tsx used to call `extract()` unconditionally the moment a photograph
-// was captured or chosen — device `recognizeText` first, then, silently on
-// failure, a gateway HTTP fallback. No consent moment existed: a member
-// never chose whether their scan's bytes could leave the phone. This latch
-// closes that gap. `undefined` (never asked) refuses extraction exactly as
+// `Scan.tsx` must not call `extract()` unconditionally when a photograph is
+// captured or chosen — device `recognizeText` first, then, silently on
+// failure, a gateway HTTP fallback — because that leaves a member no moment to
+// choose whether their scan's bytes may leave the phone. This latch IS that
+// moment. `undefined` (never asked) refuses extraction exactly as
 // `"not-now"` does — an unanswered question is not a yes, the same rule
 // `automaticTransferAllowed` holds for backup.
 //

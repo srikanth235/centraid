@@ -73,7 +73,7 @@ export function photoAccessState(
  *     DEVICE; it says nothing about photographs that arrived through the
  *     replica, which need no operating-system permission and are already on
  *     the phone. Refusing the OS prompt on a phone holding a seeded or synced
- *     library used to blank the whole grid — the member's own vault
+ *     library must not blank the whole grid — the member's own vault
  *     photographs, the shelves, and the route into face review with them —
  *     behind a panel explaining a permission none of that content needs. That
  *     is the same defect the `limited` branch already names one line up: the
@@ -125,8 +125,8 @@ export interface PhotoAccessRow {
  * reason the availability lives in this table rather than in JSX.
  */
 // WHY THERE IS NO "CHOOSE MORE PHOTOGRAPHS" ACTION. iOS has a system modal for
-// widening a limited selection, and `expo-media-library` used to expose it as
-// `presentPermissionsPickerAsync`. The Next API this app moved to (#573) keeps
+// widening a limited selection, and `expo-media-library` names it
+// `presentPermissionsPickerAsync`. The Next API this app is on (#573) keeps
 // the symbol only to throw `errorOnLegacyMethodUse` — there is no working call
 // behind it. A filled control that raises an exception is worse than no control,
 // so the limited state routes to Settings, where iOS's own "Edit Selected

@@ -52,10 +52,10 @@ export const BAND_TAB_MIN_HEIGHT = 52;
  * say it identically or the Binding Layer's one-band promise is only true of
  * the plate.
  *
- * It is now the ONLY visual carrier of selection besides ink colour. Both bands
+ * It is the ONLY visual carrier of selection besides ink colour. Both bands
  * draw their labels from the `control` role, which is weight 500 throughout, so
- * the 400→500 flip that used to mark the active tab is gone — see either band's
- * `label` style for why the role is not negotiable.
+ * weight cannot mark the active tab — see either band's `label` style for why
+ * the role is not negotiable.
  */
 export const BAND_ACTIVE_RULE = 2;
 /** How far the active rule is held off each side of its tab (:4974 —
@@ -70,9 +70,9 @@ export const BAND_ACTIVE_RULE_INSET = 14;
  * reserve — no scroll surface subtracts it any more. A band is a FLEX SIBLING
  * of the content slot (handoff `appBandStyle` :4955 — `flex:none` below the
  * scroll region), so the viewport is short by the band's real measured height
- * and nothing can pass under it. The predecessor of that rule was a reserve
- * padded onto every scroll surface, which cleared only the END of the content:
- * mid-scroll, day headers and captions still ran under the bar.
+ * and nothing can pass under it. A reserve padded onto every scroll surface
+ * would clear only the END of the content: mid-scroll, day headers and
+ * captions would still run under the bar.
  */
 export const BAND_HEIGHT =
   BAND_TOP_GAP + BAND_TAB_MIN_HEIGHT + 2 * BAND_BORDER + BAND_INSET;

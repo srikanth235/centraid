@@ -8,9 +8,8 @@ import { DEFAULT_GATEWAY_CAPABILITIES } from "@centraid/core/protocol";
 import type * as TypeImport_1mc1xey from "./App.js";
 
 // The `app` route resolves to the inline route for any registered inline id;
-// an id with no inline loader has nowhere left to render now that the
-// served-app plane is retired (issue #799), and must say so rather than open a
-// blank frame. Mock the route component to an identifiable marker and the
+// an id with no inline loader has nowhere to render (issue #799), and must say
+// so rather than open a blank frame. Mock the route component to a marker and the
 // registry so the branch decision is observable without mounting the real
 // inline machinery.
 vi.mock(import("./routes/InlineAppRoute.js"), () => ({

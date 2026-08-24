@@ -284,13 +284,13 @@ function renderMap(): void {
 }
 
 /** Render and let the real map's lazily-imported provider resolve. Real maps
- *  are the default, so this is the ordinary path. Two microticks used to be
- *  enough on an idle worker; a coverage run compiling the provider for the
+ *  are the default, so this is the ordinary path. Two microticks are enough
+ *  only on an idle worker; a coverage run compiling the provider for the
  *  first time is not idle, so wait for the recorder the SDK mock is. */
 async function renderRealMap(): Promise<void> {
   renderMap();
   // Same module `PlacesRealMap` lazy-loads. Awaiting it inside `act` is what
-  // two microticks used to stand in for — coverage compiling that graph is
+  // two microticks only stand in for — coverage compiling that graph is
   // not two ticks.
   await act(async () => {
     await import("./places-map-libre");

@@ -368,8 +368,7 @@ export class ConversationHistoryStore {
     if (!meta) return undefined;
 
     // Three queries for the page (issue #659 G5): turns, then its items, then
-    // its attachments. It used to be 1 + turns + one attachment query per
-    // rendered message — and it read the whole thread regardless.
+    // its attachments.
     const page = store.listTurnWindow(id, window);
     const turns = page.turns;
     // Scope the two batched reads to the SAME seq range as the turns, so a
@@ -1206,8 +1205,8 @@ function windowMerged(
 
 /**
  * Attachment rows → the wire payload. One mapper for both sources — live rows
- * and rehydrated archive rows — so the two can never drift; extracted when
- * #659 G5 replaced the per-item lookup with one batched read per conversation.
+ * and rehydrated archive rows — so the two can never drift over the one
+ * batched read per conversation (#659 G5).
  */
 function attachmentPayloads(
   appId: string,

@@ -147,7 +147,7 @@ export async function runHandler(
       ...(opts.timeModuleUrl ? { timeModuleUrl: opts.timeModuleUrl } : {}),
     },
   };
-  // eslint-disable-next-line unicorn/require-post-message-target-origin -- node:worker_threads postMessage has no targetOrigin (#252)
+  // oxlint-disable-next-line unicorn/require-post-message-target-origin -- node:worker_threads postMessage has no targetOrigin (#252)
   worker.postMessage(runMessage);
 
   const handlerName = path
@@ -181,7 +181,7 @@ export async function runHandler(
         void appendLogs(opts.app.dir, persistedEntries);
       }
       // The `resolved` guard above makes this safe across multiple finish() callers
-      // eslint-disable-next-line promise/no-multiple-resolved -- grandfathered pre-existing suppression (#247)
+      // oxlint-disable-next-line promise/no-multiple-resolved -- grandfathered pre-existing suppression (#247)
       resolve(outcome);
     };
 
@@ -224,7 +224,7 @@ export async function runHandler(
                 code: "VAULT_UNAVAILABLE",
                 error: "no vault plane is mounted on this gateway",
               };
-          // eslint-disable-next-line unicorn/require-post-message-target-origin -- node:worker_threads postMessage has no targetOrigin (#252)
+          // oxlint-disable-next-line unicorn/require-post-message-target-origin -- node:worker_threads postMessage has no targetOrigin (#252)
           worker.postMessage({ type: "vault-reply", id: call.id, ...reply });
         })();
       } else if (msg.type === "log") {

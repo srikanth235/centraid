@@ -1,6 +1,6 @@
 /**
- * Missed-automation-run ledger (issue #351 tier 2) — the honest record a
- * downtime used to leave nothing behind for.
+ * Missed-automation-run ledger (issue #351 tier 2) — the honest record of what
+ * downtime skipped.
  *
  * The in-process cron scheduler (`in-process-scheduler.ts`) fires enabled
  * cron automations only while it runs; minutes the timer slept through are

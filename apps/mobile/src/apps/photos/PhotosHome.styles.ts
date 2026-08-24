@@ -4,7 +4,7 @@
 // data and routing" and lists the seven modules already pulled out of it on
 // exactly that principle. The sheet was the one piece still in the file that
 // is neither state, data nor a route — so it follows the same rule, into the
-// `.styles.ts` sibling this directory keeps for PhotoLightbox, PhotosLibrary,
+// `*.styles.ts` sibling this directory keeps for PhotoLightbox, PhotosLibrary,
 // PhotoEditor, FaceReview and AlbumDetail.
 //
 // Colour-taking (a factory over `ThemeColors`, memoised at the call site)
@@ -114,12 +114,10 @@ export const makeStyles = (colors: ThemeColors) =>
       color: colors.text,
       fontFamily: family.sansMedium,
     },
-    // The title starts at the page margin now that no ☰ occupies the leading
-    // slot; `header`'s own `paddingHorizontal: pageMargin` is that margin, so
-    // the title needs no margin of its own — it used to add `spacing[2]` on
-    // top of a header padding that was only an approximation (`10`) of the
-    // page margin, which happened to sum to 18; now that `header` carries the
-    // real token, adding `spacing[2]` again would push the title past it.
+    // The title starts at the page margin: no ☰ occupies the leading slot, and
+    // `header`'s own `paddingHorizontal: pageMargin` is that margin, so the
+    // title needs no margin of its own — `header` carries the real token, and
+    // adding `spacing[2]` on top of it would push the title past the margin.
     title: { ...t("title"), color: colors.text },
     uploadFill: { borderRadius: radii.pill, height: "100%" },
     uploadProgress: { gap: 5, paddingHorizontal: 16, paddingVertical: 8 },

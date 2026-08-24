@@ -2,8 +2,8 @@
 /*
  * Prepared-statement block + raw-row mappers for `ConversationStore`.
  *
- * Split out of `conversation-store.ts` to keep that file under the repo's
- * 500-line cap. The SQL targets the per-app runtime DB's conversation ledger
+ * Kept out of `store.ts` so both stay under the repo's 500-line cap. The SQL
+ * targets the per-app runtime DB's conversation ledger
  * (`conversations`, `turns`, `items`, `attachments`, `automation_state` — see
  * `gateway-db.ts` RUNTIME_MIGRATIONS).
  *
@@ -606,8 +606,8 @@ export function prepare(db: DatabaseSync): PreparedStatements {
       SELECT * FROM items WHERE turn_id = ? ORDER BY ordinal ASC, started_at ASC
     `),
     // Every item of a conversation — or of one WINDOW of it — in ONE query
-    // (issue #659 G5). Rendering a transcript used to run one listItems per
-    // turn, so a 200-turn thread cost 200 round trips through the
+    // (issue #659 G5). Without it, rendering a transcript runs one listItems
+    // per turn, so a 200-turn thread costs 200 round trips through the
     // prepared-statement + row-mapping path. The optional seq bounds let the
     // batching and the windowing compose instead of fight: a page reads one
     // page's rows, not the conversation's. The ordering matches listItems

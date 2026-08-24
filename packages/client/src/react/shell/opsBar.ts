@@ -101,8 +101,8 @@ const DEFS: Record<OpsPage, OpsBarDef> = {
     title: "Connectors",
     tone: "net",
   },
-  // The retired Copies route. Same surface, same words — the id survives only
-  // because pin sets are persisted (`destinations.ts`).
+  // The `household` id maps onto the Vault surface — same surface, same
+  // words. It exists only because pin sets are persisted (`destinations.ts`).
   household: { ...VAULT, page: "household" },
   insights: {
     // No commit, as above: Analytics counts what already happened.

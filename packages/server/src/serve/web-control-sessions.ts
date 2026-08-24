@@ -6,12 +6,9 @@
  * gateway call through `/centraid/_web/control?path=…`. This module owns that
  * ceremony: establish, authorize + rewrite, logout, and expiry sweeping.
  *
- * It used to own a second plane as well — per-APP browser sessions
- * (`__centraid_app_*` cookies minted at `/centraid/_apps/<id>/web-session`)
- * that let a sandboxed app iframe talk to the gateway on its own narrow path
- * grant. That plane retired with the served-app plane it existed for (issue
- * #799): every app is now an inline route inside this same shell, so its
- * gateway traffic IS the shell's traffic and rides the control session.
+ * There is no second, per-APP session plane (issue #799): every app is an
+ * inline route inside this same shell, so its gateway traffic IS the shell's
+ * traffic and rides the control session.
  */
 
 import crypto from "node:crypto";

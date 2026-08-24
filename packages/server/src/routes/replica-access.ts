@@ -22,10 +22,8 @@ export type ReplicaAccessResolution =
  *
  * The `?app=` selector names which replica SHAPE the caller wants, nothing
  * more: the caller's authority is its device enrollment, which covers the
- * whole vault either way. It used to be cross-checked against the app a
- * per-app browser session was scoped to — that plane retired with the
- * served-app plane (issue #799), so there is no narrower identity left to
- * contradict the selector.
+ * whole vault either way. There is no narrower per-app identity to contradict
+ * the selector (issue #799).
  */
 export function resolveReplicaAccess(
   url: URL,

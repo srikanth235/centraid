@@ -1,10 +1,9 @@
 // The shell's one feedback channel (issue #707, invariant 5).
 //
-// This replaces `toast.ts` and `undoToast.ts`. A toast is a message that
-// appears somewhere else, covers something, and then leaves before it can be
-// re-read; the Binding Layer bans it outright. Everything the shell has to say
-// now lands on ONE persistent line at the bottom of the frame, which updates
-// in place.
+// A toast is a message that appears somewhere else, covers something, and then
+// leaves before it can be re-read; the Binding Layer bans it outright.
+// Everything the shell has to say lands on ONE persistent line at the bottom of
+// the frame, which updates in place.
 //
 // The module is imperative on purpose — the callers are `.catch()` handlers
 // and IPC callbacks, not components — and it is a plain pub/sub store rather

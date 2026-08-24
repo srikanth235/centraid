@@ -34,11 +34,11 @@
 // require the native dependency this issue's brief forbids adding.
 
 // The commit and its explanation, imported from the one module that owns them.
-// They used to be re-declared here: `viewer.ts` reaches its neighbours through
-// `.ts`-suffixed specifiers, which the Expo tsconfig rejects, so importing THAT
-// module turns 0 type errors into 13. The fix this file's old note asked for
-// landed in #805 — the strings moved down into `shared-copy.ts`, the
-// import-free leaf both packages can read, and `viewer.ts` re-exports them.
+// Not re-declared here, and not read from `viewer.ts`: that module reaches its
+// neighbours through `.ts`-suffixed specifiers, which the Expo tsconfig
+// rejects, so importing it turns 0 type errors into 13. The strings live in
+// `shared-copy.ts`, the import-free leaf both packages can read, and
+// `viewer.ts` re-exports them (#805).
 export {
   PHOTOS_SAVE_AS_NEW as SAVE_AS_NEW,
   PHOTOS_SAVE_AS_NEW_EXPLANATION as SAVE_AS_NEW_EXPLANATION,
@@ -67,9 +67,9 @@ export function editorMeta(capturedAt?: string): string {
   })}`;
 }
 
-// ---------------------------------------------------------------------------
+// ───────────────────────────────────────────────────────────────────────────
 // Rotation
-// ---------------------------------------------------------------------------
+// ───────────────────────────────────────────────────────────────────────────
 
 /** How far one press of Straighten turns the frame, and how far it may go.
  *  Matched to the web editor's constants: this control is for levelling a
@@ -136,9 +136,9 @@ export function rotatedFrameRatio(assetRatio: number, degrees: number): number {
   return box.height > 0 ? box.width / box.height : assetRatio;
 }
 
-// ---------------------------------------------------------------------------
+// ───────────────────────────────────────────────────────────────────────────
 // The crop rectangle
-// ---------------------------------------------------------------------------
+// ───────────────────────────────────────────────────────────────────────────
 
 /** In FRACTIONS of the current (rotated) frame, so it survives a resize and
  *  means the same thing on the stage and in the saved pixels. */
@@ -233,9 +233,9 @@ export function cropPixels(
   };
 }
 
-// ---------------------------------------------------------------------------
+// ───────────────────────────────────────────────────────────────────────────
 // What the editor is about to do, in one sentence
-// ---------------------------------------------------------------------------
+// ───────────────────────────────────────────────────────────────────────────
 
 /** Horizontal is the mirror a member actually wants (a selfie shot the way it
  *  faced the lens); vertical is offered for parity with the manipulator's own

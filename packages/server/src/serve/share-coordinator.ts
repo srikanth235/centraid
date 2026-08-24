@@ -11,13 +11,12 @@
  * and `share-effect-executor.ts` is the only thing that runs the effects it
  * emits.
  *
- * ONE LOCALITY REMAINS (#825, ruling G-copy). Copy-as-share retired with the
- * grant plane: `POST /centraid/_gateway/edges` refuses a cross-owner pair, so
- * every edge this reducer can still see is a same-owner placement between two
- * vaults open in this process. The peer delivery arm, the cross-owner closure
- * gate and the four peer answer signals (`give-served`, `give-asked`,
- * `give-denied`, `give-parked`) left with the transport that produced them —
- * a `delivery` discriminator over a single transport would state a choice
+ * ONE LOCALITY (#825, ruling G-copy). `POST /centraid/_gateway/edges` refuses
+ * a cross-owner pair, so every edge this reducer can see is a same-owner
+ * placement between two vaults open in this process. There is no peer
+ * delivery arm, no cross-owner closure gate and no peer answer signal
+ * (`give-served`, `give-asked`, `give-denied`, `give-parked`) — a `delivery`
+ * discriminator over a single transport would state a choice
  * nothing makes. Sharing WITH ANOTHER PERSON is a standing grant, and the
  * grant plane's own fulfillment engine carries it.
  */
@@ -75,7 +74,7 @@ export interface ShareEffect {
 export interface EdgeOutcome {
   state: EdgeState;
   effects: ShareEffect[];
-  /** False when the signal was a legal no-op (replay, or a terminal edge). */
+  /** False when the signal is a legal no-op (replay, or a terminal edge). */
   changed: boolean;
 }
 

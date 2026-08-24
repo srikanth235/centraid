@@ -90,10 +90,9 @@ export async function validateManifestAt(
       : await lintAutomationHandlersAt(appDir);
     if (handlerError) return handlerError;
   }
-  // The design-token contract check that used to run last here retired with
-  // the served-app plane (issue #799): a code-store app ships no stylesheet
-  // for a gateway to serve, and the eight bundled apps' CSS is checked in this
-  // repo by the design gates instead.
+  // No design-token contract check runs here (issue #799): a code-store app
+  // ships no stylesheet for a gateway to serve, and the eight bundled apps'
+  // CSS is checked in this repo by the design gates instead.
   return undefined;
 }
 

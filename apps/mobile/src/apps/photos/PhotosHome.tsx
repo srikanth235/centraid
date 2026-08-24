@@ -241,11 +241,10 @@ export default function PhotosHome({
   // View Options rows (photos-library-menu.ts) — the same store the pinch
   // gesture on the grid moves, so the two can never disagree.
   const [rung, setRung] = usePhotosRung();
-  // The FRAME's latch, not Photos' (issue #712 E3). The hydrate-into-state
-  // dance this replaced lived in two Photos screens under a Photos-owned key;
-  // it is one hook in `kit/band/band-owner.ts` now, on the same
-  // `shell.bandOwner.<appId>` key the web shell already used, and the member's
-  // answer is WRITTEN from frame Settings rather than only read.
+  // The FRAME's latch, not Photos' (issue #712 E3). One hook in
+  // `kit/band/band-owner.ts`, on the `shell.bandOwner.<appId>` key, rather
+  // than a hydrate-into-state dance per Photos screen under a Photos-owned
+  // key; the member's answer is WRITTEN from frame Settings, not only read.
   const { bandOwner } = useBandOwner("photos");
 
   // The automatic sweep (#711 S4) belongs HERE, not on the Backup screen: the

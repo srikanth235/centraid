@@ -192,7 +192,7 @@ export class BlobCache {
         }));
   }
 
-  // ---- spool accounting (issue #405 §3/§7) ----
+  // ──── spool accounting (issue #405 §3/§7) ────
 
   /**
    * Live spool occupancy. Initialized ONCE by scanning the local tier (a real
@@ -219,7 +219,7 @@ export class BlobCache {
     if (this.spool !== null) this.spool = Math.max(0, this.spool - size);
   }
 
-  // ---- metrics increments (issue #405 §7), called from the custody facade ----
+  // ──── metrics increments (issue #405 §7), called from the custody facade ────
 
   onLocalHit(bytesServed: number): void {
     this.localHits += 1;
@@ -234,7 +234,7 @@ export class BlobCache {
     this.bytesServedRemote += bytesServed;
   }
 
-  // ---- QoS gate (issue #405 §7) ----
+  // ──── QoS gate (issue #405 §7) ────
 
   /** Mark one interactive read-through in flight — bulk replication yields to it. */
   enterInteractive(): void {
@@ -261,7 +261,7 @@ export class BlobCache {
     return waitUntilClear();
   }
 
-  // ---- budget (issue #405 §3) ----
+  // ──── budget (issue #405 §3) ────
 
   freeBytes(): number | null {
     const stat = this.options.statfs?.();
@@ -334,7 +334,7 @@ export class BlobCache {
     };
   }
 
-  // ---- ingest precheck (issue #405 §5) ----
+  // ──── ingest precheck (issue #405 §5) ────
 
   /**
    * Make room for `incoming` bytes or refuse. Runs an eviction pass if the
@@ -373,7 +373,7 @@ export class BlobCache {
     }
   }
 
-  // ---- eviction (issue #405 §3) ----
+  // ──── eviction (issue #405 §3) ────
 
   /**
    * The eviction pass. Admission may shed only reconstructible LRU previews;

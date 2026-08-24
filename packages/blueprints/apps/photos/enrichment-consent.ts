@@ -28,10 +28,10 @@
  * `apps/notes/commonmark.ts` is bundled), so it must not reach for the web
  * app's DOM/kit modules or its own tokens.
  *
- * WHAT THIS IS NOT (handoff line 4332, and the defect that made this module
- * necessary): a settings toggle. Both clients previously fired the enrichment
- * write from a single tap on a row/button — no panels, no facts, no choice
- * between the device and a cloud helper. The consent is asked ONCE, answered
+ * WHAT THIS IS NOT (handoff line 4332): a settings toggle. An enrichment
+ * write fired from a single tap on a row/button — no panels, no facts, no
+ * choice between the device and a cloud helper — is the defect this module
+ * exists to prevent. The consent is asked ONCE, answered
  * ONCE, and receipted; the answer is visible in Privacy afterwards.
  */
 
@@ -216,10 +216,10 @@ export type AnswerAvailability = SharedAnswerAvailability;
  *   * denied / not yet read — the client cannot say what it would be
  *     consenting to, so it offers nothing.
  *
- * THE TIER IS NOW ENFORCED, so `device` above states a fact rather than a
- * hope. It used to be written by Settings and read by nobody on the
- * execution path: enrichment automations fired and took model turns
- * whatever the tier said, which is why this module could only ever hedge.
+ * THE TIER IS ENFORCED, so `device` above states a fact rather than a
+ * hope: a tier written by Settings but read by nobody on the execution
+ * path would let enrichment automations take model turns whatever it said,
+ * and this module could only ever hedge.
  * The gate is server-side, at the one place enrichment automations are
  * fired (`packages/server/src/automation/fire/fire.ts`, deciding through
  * `fire/enrich-gate.ts` on the vault tier read by

@@ -161,7 +161,7 @@ export function makeLifecycleRouteHandler(
   };
 }
 
-// ---- POST /centraid/_apps/_clone (clone a bundled template) ----
+// ──── POST /centraid/_apps/_clone (clone a bundled template) ────
 
 async function handleClone(
   opts: LifecycleRouteOptions,
@@ -272,7 +272,7 @@ async function handleClone(
   });
 }
 
-// ---- POST /centraid/_apps/_install (install a bundled blueprint in place) ----
+// ──── POST /centraid/_apps/_install (install a bundled blueprint in place) ────
 
 async function handleInstall(
   opts: LifecycleRouteOptions,
@@ -306,7 +306,7 @@ async function handleInstall(
   return sendJson(res, 200, { app, installed: true, alreadyInstalled });
 }
 
-// ---- POST /centraid/_apps/<id>/meta (edit name/description) ----
+// ──── POST /centraid/_apps/<id>/meta (edit name/description) ────
 
 async function handleMeta(
   opts: LifecycleRouteOptions,

@@ -1,8 +1,8 @@
 // Places, cards first (Photos v4 handoff §14, §18, proto:4197, :3939-3940,
 // :4050-4063 via :4428).
 //
-// The shelf the More sheet's "Places" row opens. It used to open the map
-// directly (`PlacesMap.tsx`) — the handoff is explicit that on the phone this
+// The shelf the More sheet's "Places" row opens — not the map
+// (`PlacesMap.tsx`) directly. The handoff is explicit that on the phone this
 // is inverted: place cards are the content, the map is a bounded control in
 // the head that opens a second, full screen. North star is Google Photos:
 // Places reads as an album-like grid, not a map with a list bolted on.
@@ -63,10 +63,10 @@ export default function PlacesView({
   }, [assets, cards]);
 
   return (
-    // The band, via the shell (issue #712 P8). This screen used to draw a bare
-    // `SafeAreaView` with a back chevron and NO band, so the only way out of
-    // Photos from here was the OS gesture — the §F dead end `PhotosScreen`
-    // exists to make unrepresentable. `current="more"` because the More
+    // The band, via the shell (issue #712 P8). A bare `SafeAreaView` with a
+    // back chevron and NO band leaves the OS gesture as the only way out of
+    // Photos from here — the §F dead end `PhotosScreen` exists to make
+    // unrepresentable. `current="more"` because the More
     // sheet's Places row is how a member arrives.
     <PhotosScreen current="more">
       <View style={styles.header}>

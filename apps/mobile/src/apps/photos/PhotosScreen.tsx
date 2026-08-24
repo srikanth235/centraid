@@ -1,9 +1,9 @@
 // The frame every Photos surface sits in (v4 handoff §F, proto:4950-4990).
 //
-// THE DEFECT THIS EXISTS TO FIX. The claimed band used to be rendered by
-// exactly one screen — `PhotosHome` — so every destination that screen pushed
-// (the Library index, one album, Backup, Duplicates, Trash, Favorites) arrived
-// with NO band and no Home capsule. The only way out was the OS back gesture.
+// THE DEFECT THIS EXISTS TO FIX. A claimed band rendered by exactly one screen
+// — `PhotosHome` — leaves every destination that screen pushes (the Library
+// index, one album, Backup, Duplicates, Trash, Favorites) with NO band and no
+// Home capsule, and the only way out is the OS back gesture.
 // §F's whole argument is that the way OUT of an app must be no harder to reach
 // than the app's own tabs; a stack of dead ends is the opposite of that.
 //
@@ -105,11 +105,10 @@ export default function PhotosScreen({
   // The member's band-owner choice, per device — the same latch (and the same
   // key) `PhotosHome` reads, so handing the band back on one Photos surface
   // hands it back on all of them rather than on whichever screen was open.
-  // The FRAME's latch, not Photos' (issue #712 E3). The hydrate-into-state
-  // dance this replaced lived in two Photos screens under a Photos-owned key;
-  // it is one hook in `kit/band/band-owner.ts` now, on the same
-  // `shell.bandOwner.<appId>` key the web shell already used, and the member's
-  // answer is WRITTEN from frame Settings rather than only read.
+  // The FRAME's latch, not Photos' (issue #712 E3). One hook in
+  // `kit/band/band-owner.ts`, on the `shell.bandOwner.<appId>` key, rather
+  // than a hydrate-into-state dance per Photos screen under a Photos-owned
+  // key; the member's answer is WRITTEN from frame Settings, not only read.
   const { bandOwner } = useBandOwner("photos");
 
   const selecting = (selection?.count ?? 0) > 0;
@@ -123,8 +122,8 @@ export default function PhotosScreen({
     // live on the stack's home surface, so this returns there with the
     // destination named; tapping "Library" from inside an album must land on
     // the library, not deepen a stack the member then has to unwind. `navigate`
-    // used to mean exactly that and no longer does — on React Navigation 7 it
-    // pushes a second `PhotosHome` instead, which is the same defect the
+    // does not mean that on React Navigation 7 — it pushes a second
+    // `PhotosHome` instead, which is the same defect the
     // capsule had. `PhotosHome` is this stack's initial route, so `popTo`
     // always finds it.
     navigation.popTo("PhotosHome", { destination: key });
@@ -232,7 +231,7 @@ function SelectionBottomBar({
             accessibilityHint={action.disabled ? action.reason : undefined}
             disabled={action.disabled}
             key={action.id}
-            // `buildSelectionActions` already replaced a disabled target's
+            // `buildSelectionActions` already replaces a disabled target's
             // handler with a no-op; this guard is the second half of the same
             // rule, so neither a synthetic press nor a future refactor of the
             // table alone can reach a write the member's grant refuses.

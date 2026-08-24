@@ -94,10 +94,10 @@ function formatWhereClause(where: unknown): string {
  * collectAutomationRuns).
  *
  * Returns the rows alongside the feed because the caller needs them too, and
- * they cost a request. `loadAutomationsOverviewData` used to call
- * `listAutomations()` itself *and* sit in the same `Promise.all` as this
- * function, which called it again — the overview paid for the same list twice
- * on every visit. Handing the rows back means one fetch, still fully parallel.
+ * they cost a request. `loadAutomationsOverviewData` sits in the same
+ * `Promise.all` as this function, so calling `listAutomations()` itself would
+ * make the overview pay for the same list twice on every visit. Handing the
+ * rows back means one fetch, still fully parallel.
  */
 export async function collectAutomationRuns(): Promise<{
   rows: CentraidAutomationRow[];
@@ -107,11 +107,10 @@ export async function collectAutomationRuns(): Promise<{
   //
   // The automation list is load-bearing: the overview cannot render without
   // it, and an empty list is indistinguishable from "you have no automations".
-  // So a list failure THROWS and the overview paints its error card. This
-  // function used to swallow both — which was harmless while the overview
-  // fetched the list itself, and became a silent regression the moment it
-  // started sourcing rows from here: a 500 rendered the empty state over a
-  // broken gateway, with no error and no Retry.
+  // So a list failure THROWS and the overview paints its error card. Swallowing
+  // both here would be a silent regression, because the overview sources its
+  // rows from this function: a 500 would render the empty state over a broken
+  // gateway, with no error and no Retry.
   //
   // The run feed is decoration. Losing it should cost you the recent-activity
   // rows, not the page, so it degrades to empty on its own.
@@ -121,7 +120,7 @@ export async function collectAutomationRuns(): Promise<{
   //
   // The run feed itself is TWO independently-windowed fetches, not one
   // (issue #731 M2). A single `listAutomationTurns({ limit: 100 })` call —
-  // no lane filter — used to hand back whichever 100 turns ran most
+  // no lane filter — would hand back whichever 100 turns ran most
   // recently; a large photo import fires the recognition automations once
   // per photo, so it could fill the entire 100-row window with recognition
   // runs and leave a member's own "Recent activity" empty. Fetching the

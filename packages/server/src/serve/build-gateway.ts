@@ -1284,9 +1284,9 @@ export async function buildGateway(
   // resolves it — outbox is auto-parked (vault-quarantine.ts), automations
   // are NOT, deliberately (see that module's header).
   //
-  // "ok" here used to mean only "the plane object is in memory" — it never
-  // proved the SQLite file behind it was still readable (issue #351). Each
-  // tick now runs one trivial statement against every mounted plane's
+  // "ok" here is not merely "the plane object is in memory": that never
+  // proves the SQLite file behind it is still readable (issue #351). Each
+  // tick runs one trivial statement against every mounted plane's
   // `vault.db` handle; a plane whose file was corrupted or closed out from
   // under the process (disk failure, external `rm`) fails this and flips
   // the component red by vault id instead of staying silently "ok".
@@ -2551,8 +2551,8 @@ export async function buildGateway(
         vaultRegistry.enrollApp(appId);
         await grantDeclaredAppScopes(plane, host.store, appId);
       });
-      // Every first-party app ships INSTALLED (issue #708). The catalogue that
-      // used to hand them out one at a time is retired, so a vault does not
+      // Every first-party app ships INSTALLED (issue #708). No catalogue hands
+      // them out one at a time, so a vault does not
       // ACQUIRE its first-party apps — it has them, the way a phone has its
       // camera. Mount is the right seam rather than vault creation: it is the
       // one path every vault takes on every boot, so an older vault and a vault
@@ -4388,16 +4388,12 @@ export async function buildGateway(
   // Diagnostics bundle assembly (issue #351): a closure so the route
   // handler (`diagnostics-routes.ts`) stays thin wiring.
   //
-  // The document IS the shareable support bundle (#846 P8). It used to be a
-  // second, hand-assembled structure that redacted only `config`, by key
-  // name — so the owner-authored vault name rode out verbatim in
-  // `vaults[].name` and the log tail was embedded raw, in the one artifact
-  // this module's own header told a person to attach to a support request.
-  // `support-bundle.ts` is allowlist-by-construction: every field is emitted
+  // The document IS the shareable support bundle (#846 P8) — one document,
+  // not a second hand-assembled structure beside it. `support-bundle.ts` is
+  // allowlist-by-construction: every field is emitted
   // through a declared leaf policy, so a field nobody added on purpose is
   // absent rather than copied, and the serialized text is swept for literals
-  // harvested from this running system. There is now one document instead of
-  // two, and it is the safe one.
+  // harvested from this running system.
   //
   // Level `standard` rather than the builder's `strict` default: this route
   // is behind the host bearer gate and answers the owner, so a scrubbed
@@ -4947,9 +4943,9 @@ export async function buildGateway(
   ];
 
   // `composedHandler` owns the whole request: resolve the vault the request
-  // is addressed to (#289), then replay the chain `startRuntimeHttpServer`
-  // used to run — chat-history → prefs → extra handlers → `runtime.handle`
-  // — inside that vault's ambient scope. WITHOUT the bearer check, for
+  // is addressed to (#289), then run the chain chat-history → prefs → extra
+  // handlers → `runtime.handle` inside that vault's ambient scope. WITHOUT
+  // the bearer check, for
   // hosts that own auth themselves. CORS is the host's job too: a fronting
   // gateway emits its own.
   const conversationHandler = makeConversationRouteHandler(

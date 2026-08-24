@@ -149,7 +149,7 @@ export function classifyHarnessFailureDetail(
  *   4. keywords in stderr.
  *
  * Order matters: a crashed harness whose stderr happens to mention "timeout"
- * used to be classified `timeout`, and the timeout breaker tripped for a
+ * must not be classified `timeout`, or the timeout breaker trips for a
  * crash. stderr is the weakest signal because it is unstructured vendor
  * output, so it is only consulted when nothing else decided.
  */

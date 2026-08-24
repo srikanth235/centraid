@@ -18,12 +18,12 @@ export type GatewayProfile = Awaited<
 /**
  * The renderer's appearance prefs.
  *
- * The Binding Layer retired both per-owner colour overrides (#707): the shell
- * spends no hue, so there is no accent to pick, and the dark ramp is a set of
- * literal surface tones rather than one `--bg-l` lightness anchor to slide.
- * `sidebarOpen` went with them: the stem never scrolls away and never changes
- * width, so there is no open state to remember. What is left is what an owner
- * can still meaningfully choose — light/dark, card treatment, tile finish.
+ * NO per-owner colour overrides (#707): the shell spends no hue, so there is
+ * no accent to pick, and the dark ramp is a set of literal surface tones rather
+ * than one `--bg-l` lightness anchor to slide. No `sidebarOpen` either: the
+ * stem never scrolls away and never changes width, so there is no open state to
+ * remember. What an owner can meaningfully choose is light/dark, card
+ * treatment, tile finish.
  */
 export interface AppearancePrefs {
   /** The owner's pick. `system` re-resolves on OS appearance changes. */
@@ -54,15 +54,15 @@ export type ShellRoute =
   | { kind: "starred" }
   | { kind: "automations" }
   // Vault data-source connections (Gmail, GitHub, …) — a launcher
-  // destination; previously Settings → Account → Connections.
+  // destination.
   | { kind: "connectors" }
   | { kind: "approvals" }
   | {
       kind: "gateway";
       /**
        * Which of System's pages. The drill-ins are ROUTES rather than local
-       * state so the frame's own back arrow returns to the overview — the page
-       * used to carry a "‹ System" row of its own, which was a second back
+       * state so the frame's own back arrow returns to the overview. The page
+       * carries no "‹ System" row of its own: that would be a second back
        * control competing with the one in the chrome.
        */
       tab?:
@@ -81,8 +81,8 @@ export type ShellRoute =
   // devices from, leaving Gateway purely about runtime health.
   | { kind: "household" }
   // Local disk footprint by component, the owner's disk budget, and the
-  // offsite snapshot custody that used to be the whole page (issue #544 —
-  // this was `backups`). A launcher destination beside Gateway; Settings →
+  // offsite snapshot custody (issue #544). A launcher destination beside
+  // Gateway; Settings →
   // Storage provider owns the connection itself.
   | { kind: "storage" }
   // Ontology-at-a-glance — the Kinds/Relations/Browse census over the vault
@@ -142,8 +142,8 @@ export interface TemplateEntry {
    *  and an unmounted audience vault can still say `false`. */
   installed?: boolean;
   /** Requested vault access as the gateway declares it (issue #434). Read by
-   *  the Privacy grants ledger; the install/consent sheet that used to render
-   *  it retired with Discover (#708), since nothing asks to install any more. */
+   *  the Privacy grants ledger; nothing asks to install, so no consent sheet
+   *  renders it (#708). */
   vault?: TemplateVaultBlock;
   // automation-only display fields:
   emoji?: string;

@@ -23,5 +23,5 @@ declare global {
   }
 }
 
-// eslint-disable-next-line unicorn/require-module-specifiers -- (#468) ambient module marker for __APP_VERSION__
+// oxlint-disable-next-line unicorn/require-module-specifiers -- (#468) ambient module marker for __APP_VERSION__
 export {};

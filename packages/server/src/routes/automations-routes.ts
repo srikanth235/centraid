@@ -1,10 +1,10 @@
 // governance: allow-repo-hygiene file-size-limit (#387) single dispatch surface for the automation read/turn/item/SSE wire (one switch over one HTTP contract); splitting scatters the route table without a seam
 // HTTP surface for automation runtime ops (issue #141).
 //
-// The desktop used to read automation manifests off the local
-// materialized `main` and read/write turn ledgers + analytics from local
-// SQLite directly — so these operations threw for a remote gateway.
-// These routes move them onto HTTP so the desktop is a thin client for
+// These routes carry automation manifest reads and turn-ledger + analytics
+// read/writes over HTTP, rather than the desktop reading the local
+// materialized `main` and local SQLite directly — which throws for a remote
+// gateway. So the desktop is a thin client for
 // local AND remote gateways alike. Mounted via `serve()`'s
 // `extraHandlers`, after the bearer check.
 //

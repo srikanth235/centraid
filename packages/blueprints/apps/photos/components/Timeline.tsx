@@ -138,10 +138,11 @@ function purgeNote(asset: Asset): string | undefined {
 
 /**
  * Album detail's own Remove — deliberately outside the tile's four slots
- * (Tile.tsx's `extras`, §4.4). Trash's Restore used to live here beside it;
- * it retired once the selection bar grew the Trash → Restore swap (§6). This
- * one stays: removing a single photograph from the album you are looking at
- * has no equivalent among the bar's fixed five, since "Add to album" is a
+ * (Tile.tsx's `extras`, §4.4). Trash's Restore does not live here beside it:
+ * the selection bar carries the Trash → Restore swap (§6). This
+ * one belongs here: removing a single photograph from the album you are
+ * looking at has no equivalent among the bar's fixed five, since "Add to
+ * album" is a
  * destination picker on every other shelf and album detail is not a
  * destination to pick.
  */

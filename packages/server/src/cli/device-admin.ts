@@ -205,9 +205,9 @@ export async function commandPair(
       localFail(`daemon at ${baseUrl} owns a different data directory`, 1);
     }
     // `endpointTicket` is auth-gated, so an unauthenticated handshake drops it
-    // silently. Reporting that as "the endpoint is not ready" was a lie the
-    // owner could not act on (issue #603 C2): the real cause is that the
-    // daemon was started with a pinned bearer this CLI cannot derive.
+    // silently. Reporting that as "the endpoint is not ready" is a lie the
+    // owner cannot act on (issue #603 C2): the real cause is a daemon
+    // started with a pinned bearer this CLI cannot derive.
     if (handshake.info.authenticated === false) {
       localFail(
         `daemon at ${baseUrl} rejected this CLI's credential. It was started with a pinned ` +

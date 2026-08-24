@@ -1434,8 +1434,8 @@ export function applyCommonsIncrement(input: {
         sql(row["created_at"]),
         ...chainColumns(row)
       );
-    // A full bootstrap used to bound this seat's op replica by pruning below
-    // the snapshot; increments must not let it grow forever. Same retention
+    // A full bootstrap bounds this seat's op replica by pruning below the
+    // snapshot; increments must not let it grow forever. Same retention
     // floor as the steward — the verified point outlives the pruned rows.
     seatDb
       .prepare(

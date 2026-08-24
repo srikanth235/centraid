@@ -46,8 +46,8 @@ const ICON_DATA = {
   Pause: [{ d: "M6 5h4v14H6zM14 5h4v14h-4z", fill: "currentColor" }],
   Skip: [{ d: "M6 4l10 8-10 8zM18 5v14" }],
   Reset: [{ d: "M3 12a9 9 0 1 0 3-6.7L3 8" }, { d: "M3 3v5h5" }],
-  // Paper-plane send glyph. The previous artwork was a plain right-arrow
-  // visually identical to the forward-nav icon — see Refined Screens §B2.
+  // Paper-plane send glyph, deliberately not a plain right-arrow: that would
+  // be visually identical to the forward-nav icon — see Refined Screens §B2.
   Send: [{ d: "M22 2L11 13" }, { d: "M22 2l-7 20-4-9-9-4z" }],
   Refresh: [{ d: "M21 12a9 9 0 1 1-3-6.7M21 3v5h-5" }],
   Copy: [
@@ -488,11 +488,10 @@ const ICON_DATA = {
   // "placeholder stroke paths" (its "New icon keys this design needs" row),
   // not final artwork. None of the ten shared keys (album, dupe, heart,
   // info, person, place, removeFrom, restore, share, trash) is byte-for-byte
-  // identical to the handoff's path data. `heart` was a genuine bug — its
-  // lobes were drawn centred at x=9.25 while the bottom point sat at x=12,
-  // so the glyph leaned left and the right lobe collapsed into a notch — and
-  // has been replaced with the handoff's curve, which is symmetric about
-  // x=12. The other nine are a deliberate deviation, not an oversight:
+  // identical to the handoff's path data. `heart` carries the handoff's own
+  // curve, which is symmetric about x=12 — lobes off-centre from the bottom
+  // point lean the glyph and collapse the right lobe into a notch. The other
+  // nine are a deliberate deviation, not an oversight:
   //   - `trash` and `share` reuse this file's app-wide `Trash`/`Share`
   //     artwork verbatim, so those glyphs look identical everywhere they
   //     appear instead of drawing a second, different-looking version for

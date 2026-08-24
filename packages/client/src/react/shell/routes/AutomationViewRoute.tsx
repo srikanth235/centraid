@@ -462,10 +462,10 @@ export default function AutomationViewRoute({
           if (!row) return null;
           try {
             // One conversational turn against the automation's own thread, and
-            // nothing else. The `applyFuture` branch that used to live here
-            // rewrote the standing instructions and kicked a compile from the
-            // run screen. Changing what an automation does happens in exactly
-            // one place now: the instructions field on the compile screen.
+            // nothing else — this never rewrites the standing instructions or
+            // kicks a compile from the run screen. Changing what an automation
+            // does happens in exactly one place: the instructions field on the
+            // compile screen.
             return await askAutomationWithConsent({
               automationRef: row.ref,
               text,

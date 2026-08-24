@@ -1,19 +1,18 @@
-// The FOLDERS shelf (Docs spec §4.3 `folders`) — the shelf that replaced the
-// folder-tree rail, drawn in THE DRIVE'S OWN IDIOM.
+// The FOLDERS shelf (Docs spec §4.3 `folders`) — the shelf that stands where a
+// folder-tree rail would, drawn in THE DRIVE'S OWN IDIOM.
 //
 // "Cut: a folder tree in a rail. Two navigation columns in one window is what
 // invariant 1 refuses. Folders are a breadcrumb and a shelf." (spec §14,
 // verbatim.) This is the shelf half of that sentence — and a shelf in this app
-// has a shape, which this screen used to ignore.
+// has a shape, which this screen honours rather than re-decides. A bordered
+// card of its own, with its own padding inside a region that already pads, no
+// breadcrumb, no column heads, no sort, a hand-rolled row and a closing
+// sentence in a bespoke class would each be something the drive already
+// decides — and a shelf that decides them again, differently, is a second app
+// inside the first. Six tabs across the strip, and pressing one of them must
+// not change the furniture.
 //
-// WHAT IT WAS: a bordered card of its own, with its own padding inside a
-// region that already pads, no breadcrumb, no column heads, no sort, a
-// hand-rolled row, and a closing sentence in a bespoke class. Every one of
-// those is something the drive already decides — and a shelf that decides them
-// again, differently, is a second app inside the first. Six tabs across the
-// strip, and pressing one of them changed the furniture.
-//
-// WHAT IT IS NOW: the drive's block sequence, breadcrumb → set → caption, and
+// WHAT IT DRAWS: the drive's block sequence, breadcrumb → set → caption, and
 // the drive's ACTUAL stylesheet classes (`Chrome.module.css` `.listwrap` /
 // `.listHead`, `List.module.css` `.row` / `.badge` / `.rowMain` / `.rowTitle`
 // / `.cell` / `.rowEnd`, `DriveRoute.module.css` `.caption`). Not a lookalike

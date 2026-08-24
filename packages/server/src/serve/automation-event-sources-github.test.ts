@@ -203,7 +203,7 @@ describe("pollProviderEventSource — GitHub", () => {
       filter: { repo: "acme/app" },
     };
     // An unbounded `x-poll-interval` (hostile response, or a proxy inside
-    // `allowed_hosts`) previously parked the trigger for ~3 years with no
+    // `allowed_hosts`) would park the trigger for ~3 years with no
     // health signal (issue #541 review). Clamp is 15 minutes.
     const parked = await pollProviderEventSource({
       trigger,

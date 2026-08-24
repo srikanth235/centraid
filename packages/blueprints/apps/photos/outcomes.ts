@@ -62,8 +62,8 @@ export function writeTarget(kind: WriteTargetKind = "new"): WriteTarget {
  *
  * The sink is installed once by app-root.tsx, which holds the frame handle.
  * Until it is — and on any host that mounts this app without a frame — the
- * calls below are no-ops rather than a banner the app drew for itself: the
- * `#noticeBanner` this used to write to retired with the app's own chrome.
+ * calls below are no-ops rather than a banner the app draws for itself: this
+ * app has no chrome of its own, so there is no `#noticeBanner` to write to.
  */
 export interface StatusNote {
   text: string;

@@ -18,11 +18,11 @@ export const COLUMN_GAP = 3;
 /**
  * The most columns this plot can carry (#775).
  *
- * A GUARD, not a fold: the block used to sample every window down to ten
- * columns itself, so a single expensive day was averaged into a three-day
- * smear and the screen had no way to know. The caller folds the window
- * (`dayFold`) and this is the ceiling it folds to — one column per day for
- * every window up to a month, on a 390pt screen at a 1pt gutter.
+ * A GUARD, not a fold: this block never samples a window down to fit, because
+ * a single expensive day averaged into a three-day smear is invisible to the
+ * screen. The caller folds the window (`dayFold`) and this is the ceiling it
+ * folds to — one column per day for every window up to a month, on a 390pt
+ * screen at a 1pt gutter.
  */
 export const MAX_COLUMNS = 31;
 

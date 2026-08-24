@@ -94,9 +94,9 @@ function runWord(runs: number): string {
 /**
  * Columns the chart draws: ONE PER DAY, up to what the plot can carry (#775).
  *
- * The chart used to sample every window to ten columns, so a single expensive
- * afternoon was averaged across three ordinary days — the one shape a spend
- * chart exists to show. Every window up to a month is now one column per day;
+ * Sampling a window down to ten columns averages a single expensive afternoon
+ * across three ordinary days — the one shape a spend chart exists to show.
+ * Every window up to a month is one column per day;
  * a ninety-day window folds to `max`, and each column says the span it covers.
  */
 export function columnCount(windowDays: number, max: number): number {

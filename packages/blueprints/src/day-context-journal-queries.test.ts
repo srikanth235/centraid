@@ -1,5 +1,5 @@
 /*! Browser-JS fixtures intentionally lack TypeScript declarations. (#408) */
-// eslint-disable-next-line typescript/ban-ts-comment -- (#408) these browser-JS fixture imports have no TypeScript declarations
+// oxlint-disable-next-line typescript/ban-ts-comment -- (#408) these browser-JS fixture imports have no TypeScript declarations
 // @ts-nocheck -- the imported browser fixtures intentionally lack declarations
 // Stage-0 handler coverage for issue #834: Agenda's new read-only
 // `day-context` projection (R-daycontext / R-shelf-scope) and the

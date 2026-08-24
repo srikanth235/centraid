@@ -13,8 +13,8 @@
 //      filtered by another — the "labelled destination opens something else"
 //      class issue #711 found in People.
 //   3. THE MAP IS A CONTROL IN THE HEAD, not the shelf itself. This screen
-//      used to BE the map; the handoff inverts that on the phone, and the one
-//      chip that still reaches it must reach the map rather than a place.
+//      is not the map: the handoff inverts map-first on the phone, and the one
+//      chip that reaches it must reach the map rather than a place.
 //
 // Same react-native-as-DOM technique as `FaceReview.test.tsx`: every RN
 // primitive becomes a plain DOM element, the production component and its

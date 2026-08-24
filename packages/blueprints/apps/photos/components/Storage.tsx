@@ -77,11 +77,11 @@ export function storageFacts(
  * A section head, with the numbers it introduces in its META slot (proto
  * 4357/4364/4371 — `sectionBlock(label, meta)`).
  *
- * The two big `.figure` displays this replaced were not in the prototype at
- * all, and they were the wrong object for the screen: Storage answers "is it
- * safe, and what would freeing space cost me?", and a 31px total answers
- * neither. Every number on this screen now sits where it belongs — beside the
- * row or the section it describes, in the numeric register.
+ * There are no big `.figure` displays on this screen: the prototype has none,
+ * and they are the wrong object for it. Storage answers "is it safe, and what
+ * would freeing space cost me?", and a 31px total answers neither. Every
+ * number sits where it belongs — beside the row or the section it describes,
+ * in the numeric register.
  */
 function Head({
   label,

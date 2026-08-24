@@ -1,16 +1,10 @@
 // A4 — the placement registry (issue #712).
 //
-// Three blueprint apps each hand-copied the same union of "what can be
-// placed into an audience vault": the web `AudiencePlacement.tsx` (retired
-// #726 P6, replaced by the shared `ShareSheet.tsx` every web app now
-// shares), its mobile twin `AudiencePlacementSheet.tsx` (retired the same
-// way, replaced by `apps/mobile/src/kit/share/ShareSheet.tsx`), and Photos'
-// own copy-to-vault wiring (`apps/photos/sharing.ts`) for
-// `media.asset`. A fourth copy (`core.content_item`, for
-// Notes attachments) never existed anywhere, so an app wanting to share a
-// note body had nothing to import. This module is the ONE place that answers
-// "what is placeable, and which app owns it" — every placement control reads
-// its `itemType` union from here instead of restating it.
+// This module is the ONE place that answers "what can be placed into an
+// audience vault, and which app owns it". Every placement control reads its
+// `itemType` union from here instead of restating it: the shared web
+// `ShareSheet` and `grant-plane.ts` here, and the mobile share sheet's own
+// twin of them.
 //
 // A7 — LOCKER IS STRUCTURALLY EXCLUDED. `packages/vault/src/share/closure.ts`
 // keeps `locker.item` in its `ShareableItemType` because the vault-level

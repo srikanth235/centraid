@@ -88,8 +88,8 @@ test("12.5 — appearance choices persist across a reload", async () => {
     await waitForHome(page);
     await gotoSettings(page);
     await page.getByTestId("settings-page").waitFor({ state: "visible" });
-    // Cards was retired from You (#814); the pref still paints with no
-    // control. Theme is the remaining visual pick on this page. `light` is
+    // You exposes no Cards control (#814); the pref paints with nothing
+    // driving it. Theme is the remaining visual pick on this page. `light` is
     // never the shipped default (`dark`), so a reload that restores it proves
     // the prefs write path. Reload is not a restart — 12.6 still covers
     // Electron process death.
@@ -203,11 +203,10 @@ test("12.4 — the Agents (providers) settings page renders", async () => {
         .getByTestId("settings-dialog")
         .getByRole("heading", { name: "Agents" })
     ).toBeVisible();
-    // Realigned: the exclusive "active agent" switch no longer exists. Per
-    // SettingsHarnessesScreen.tsx:103-113 the exclusive radio was retired by
-    // per-subsystem harnesses and became the *default* lane of the Routing
-    // table — so the page's primary control is now the "Default agent" select
-    // (SettingsHarnessesScreen.tsx:268).
+    // There is no exclusive "active agent" switch. Per-subsystem harnesses
+    // make the exclusive pick the *default* lane of the Routing table, so
+    // `SettingsHarnessesScreen`'s primary control is the "Default agent"
+    // select.
     await expect(
       page.getByRole("combobox", { name: "Default agent" })
     ).toBeVisible({
@@ -389,8 +388,8 @@ test("14.2 — a first-party inline app has no Build control", async () => {
     await waitForHome(page);
     await openAppFromPalette(page, "Tasks");
     await expect(page.getByTestId("inline-app-view")).toBeVisible();
-    // #799 retired the served-app builder. The titlebar must not still
-    // advertise a Build that cannot load.
+    // There is no served-app builder (#799). The titlebar must not advertise
+    // a Build that cannot load.
     await expect(
       page.getByRole("button", { name: "Build", exact: true })
     ).toHaveCount(0);

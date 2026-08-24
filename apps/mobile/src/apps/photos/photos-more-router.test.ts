@@ -1,23 +1,19 @@
 // Pins the More-sheet router (issue #711 — the phone's band and More sheet
-// are labelled destinations, and every one of them used to open something
-// else). `PhotosHome`'s old `onMoreRow` handled only `duplicates`, `places`
-// and `storage`; every other key — including `trash` and `favorites` — fell
-// through to an `else navigation.navigate("PhotosLibrary")`.
+// are labelled destinations, and each must open the thing it names).
 // `resolveMoreRowRoute` (photos-band.ts) is the pure, exhaustive mapping that
-// replaced that fallthrough: a row added to `PHOTOS_MORE_ROWS` without a
-// matching case fails to TYPECHECK via the `never` assignment in its default
-// branch, rather than silently landing on Library at runtime.
+// makes that mechanical: a row added to `PHOTOS_MORE_ROWS` without a matching
+// case fails to TYPECHECK via the `never` assignment in its default branch,
+// rather than falling through to `navigation.navigate("PhotosLibrary")` at
+// runtime.
 //
-// WHAT THIS SUITE IS ABOUT NOW (issue #712). The sheet used to carry six rows;
-// it carries one. Collections is the landing surface and holds every shelf —
-// Favorites, Places, Duplicates, Trash — as a named section with a live
-// count, on screen. (Sharing was a sixth shelf until issue #726 retired the
-// Photos "Sharing" place outright.) A row here for any of them would be a
-// second, hidden door to a shelf the member can already see, and a second
-// place to keep its label and its count honest. So most of the assertions
-// this file used to make are now made by `photos-collections.test.ts` against
-// the sections instead, and what is pinned HERE is what stayed and, more
-// importantly, what must not come back.
+// WHAT THIS SUITE IS ABOUT (issue #712). The sheet carries ONE row.
+// Collections is the landing surface and holds every shelf — Favorites,
+// Places, Duplicates, Trash — as a named section with a live count, on screen,
+// and there is no Photos "Sharing" place at all (issue #726). A row here for
+// any of them would be a second, hidden door to a shelf the member can already
+// see, and a second place to keep its label and its count honest. The section
+// assertions live in `photos-collections.test.ts`; what is pinned HERE is what
+// stayed and, more importantly, what must not come back.
 //
 // Kept in its own file and importing only from `photos-band.ts`, which stays
 // free of react-native/replica imports — so this suite needs no RN mocking to

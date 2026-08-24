@@ -440,9 +440,9 @@ describe("route assertion", () => {
 });
 
 /*
- * Copy-as-share retired with the grant plane (#825, ruling G-copy). These are
- * the frames that carried it; a linked peer asking for them now learns exactly
- * what it learns about a path that never existed.
+ * No give plane rides the peer wire (#825, ruling G-copy). A linked peer
+ * asking for these frames learns exactly what it learns about a path that
+ * never existed.
  */
 describe("retired give frames (#825)", () => {
   it.each([

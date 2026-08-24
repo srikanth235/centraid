@@ -278,7 +278,7 @@ describe("store-routing", () => {
     }
   });
 
-  // ---------- ReplicaIndex store-column unit coverage ----------
+  // ────────── ReplicaIndex store-column unit coverage ──────────
 
   function memIndex(): ReplicaIndex {
     const db = new DatabaseSync(":memory:");

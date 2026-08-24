@@ -1,24 +1,25 @@
 // The Albums shelf (v4 handoff §5): a card grid — 4 columns desktop / 2 phone,
 // a 4:3 cover, 4px radius, the title clamped to two lines, the count in mono.
 //
-// WHAT CHANGED FROM v3, and why each one had to:
+// WHAT THE CARD REFUSES, and why each one:
 //
-//  * the cover was a SQUARE with a 12px radius and a drop shadow. A card is a
+//  * NO square cover with a 12px radius and a drop shadow. A card is a
 //    sheet laid on the page, not a plane floating above it ("surfaces are
-//    paper, not elevation"), so the shadow went and the ratio is the handoff's
-//    4:3 — an album cover is a photograph, and photographs are not square.
-//  * the ground was `--bg-sunken`, which reads as a recessed track. A cover
+//    paper, not elevation"), so there is no shadow and the ratio is the
+//    handoff's 4:3 — an album cover is a photograph, and photographs are not
+//    square.
+//  * NOT `--bg-sunken` for the ground, which reads as a recessed track. A cover
 //    with no bytes yet is an ABSENCE, and the ground for an absence is `--skel`
 //    (§2.2) at the exact geometry the cover will occupy, so nothing reflows.
-//  * the title was `--t-body-strong` and truncated with an ellipsis on one
+//  * the title is NOT `--t-body-strong` truncated with an ellipsis on one
 //    line. Text in a fixed-height container is LINE-CLAMPED, never clipped, and
 //    the role §5 names is UI at 13px.
-//  * the count said `4 photos`. Numerics are mono and tabular everywhere, so
-//    the number stands on its own in the numeric register.
-//  * the New album tile hovered to `--accent`, which IS the ink — an outline
-//    turning accent-coloured reads as a fill arriving. It takes the strong line
-//    instead, and it is the only dashed thing here because it is the only one
-//    that is not an album.
+//  * the count does NOT say `4 photos`. Numerics are mono and tabular
+//    everywhere, so the number stands on its own in the numeric register.
+//  * the New album tile does NOT hover to `--accent`, which IS the ink — an
+//    outline turning accent-coloured reads as a fill arriving. It takes the
+//    strong line instead, and it is the only dashed thing here because it is
+//    the only one that is not an album.
 //
 // The vault initial §5 puts in a cover's top-leading corner is deliberately
 // absent: album membership is computed against OWN-SCOPE assets only

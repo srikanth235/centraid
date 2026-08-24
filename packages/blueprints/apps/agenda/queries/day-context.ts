@@ -4,10 +4,9 @@
  *
  * Agenda's grid wants to say more about a day than "here are your events" —
  * whose birthday it is, how many tasks come due, which days are holidays.
- * Before this query each of those was a separate client-side pull from
- * another app's surface. They arrive here instead: one query, one shape, no
- * write path, and every entity it reads is registered in Agenda's
- * `CHANGE_TABLES` so a doorbell on any of them re-fetches the decorations.
+ * They arrive here as one query, one shape, no write path, and every entity it
+ * reads is registered in Agenda's `CHANGE_TABLES` so a doorbell on any of them
+ * re-fetches the decorations.
  *
  * Scope (#834 R-shelf-scope): the due-task counts are THIS vault's tasks and
  * nothing else. There is deliberately no cross-vault aggregation — a shelf

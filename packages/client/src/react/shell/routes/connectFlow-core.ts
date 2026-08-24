@@ -7,8 +7,8 @@
  *     test (it's always reachable); the flow skips straight to picking or
  *     creating a vault on it.
  *   - `gateway` — an existing gateway elsewhere, reached ONLY by a pairing
- *     ticket over iroh. URL pairing and per-device bearers were retired in
- *     issue #555; the QUIC identity is the enrollment credential.
+ *     ticket over iroh. There is no URL pairing and no per-device bearer
+ *     (issue #555); the QUIC identity is the enrollment credential.
  *
  * The third method, `ssh`, was deleted in issue #603: driving a remote
  * `centraid-gateway` CLI over SSH was an admin channel, not an onboarding

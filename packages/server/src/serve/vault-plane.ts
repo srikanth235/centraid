@@ -177,7 +177,8 @@ const BLOB_SWEEP_MAX_BACKOFF_MS = 30 * 60_000;
  * Pure backoff decision (issue #367 §C5), extracted out of `runSweep` so it
  * is unit-testable without a live timer: no failures yet, or the backoff
  * window (since the last ATTEMPT, not the last success) has elapsed →
- * proceed; otherwise skip this tick. Exported for `vault-plane.test.ts`.
+ * proceed; otherwise skip this tick. Exported for
+ * `vault-plane-blob-sweep.test.ts`.
  */
 export function blobSweepBackoff(
   status: { consecutiveFailures: number; lastAttemptedAt: string | null },
@@ -426,10 +427,10 @@ function asVaultCallResult(fn: () => unknown): VaultCallResult {
  * (which clears the tombstone) brings one back.
  */
 // `scopeCovers` is the vault package's canonical extent comparison
-// (`@centraid/vault` → `scope-extent.ts`). It used to be duplicated here with
-// slightly different null handling, which let consent memory and install-grant
-// reconciliation disagree about the same scope; one definition keeps them in
-// lockstep (issue #541 review).
+// (`@centraid/vault` → `scope-extent.ts`), never a local copy with slightly
+// different null handling: one definition keeps consent memory and
+// install-grant reconciliation in lockstep about the same scope (issue #541
+// review).
 
 function missingScopes(
   grants: GrantSummary[],
@@ -2272,7 +2273,7 @@ export class VaultPlane {
             return this.gateway.discover(cred);
           case "parked":
             // The app's own parked invocations — the "my pending approvals"
-            // surface blueprints used to fake session-locally (issue #260).
+            // surface (issue #260).
             // Matched on `callerId` (the enrolled row id), not `caller` (a
             // display name — no longer guaranteed to equal `appId`).
             return this.gateway
@@ -2975,11 +2976,11 @@ export class VaultPlane {
     graceWindowMs: number | undefined;
   }): void {
     if (options.skipOrphanDelete) return;
-    // Bounded window + carried cursor (issue #659 L5). A CAS with 100k objects
-    // used to make every hourly tick a 100k-entry walk; now each tick examines
-    // a fixed slice and the NEXT tick resumes where this one stopped, so sweep
+    // Bounded window + carried cursor (issue #659 L5). Each tick examines a
+    // fixed slice and the NEXT tick resumes where this one stopped, so sweep
     // cost per tick is constant and total cadence scales with CAS size instead
-    // of the tick doing so.
+    // of the tick doing so — an unbounded sweep makes every hourly tick a
+    // 100k-entry walk on a CAS with 100k objects.
     const result = sweepLocalOrphans(this.db, {
       graceWindowMs: options.graceWindowMs ?? LOCAL_ORPHAN_GRACE_MS,
       maxEntries: LOCAL_ORPHAN_SWEEP_MAX_ENTRIES,

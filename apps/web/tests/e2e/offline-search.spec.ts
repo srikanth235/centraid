@@ -19,8 +19,8 @@ import {
 //    Unicode word runs, making it two independent terms — so offline search
 //    returned rows the same query would never return online, and applied the
 //    16-token bound to a different stream on top of that.
-//  - the highlight. Because the second half of that phrase was a separate term,
-//    the marks landed on `don` and stopped, cutting the hit in half on screen.
+//  - the highlight. With the second half of that phrase as a separate term,
+//    the marks land on `don` and stop, cutting the hit in half on screen.
 //
 // This journey pins both through the production UI: the Docs Search shelf, its
 // own snippet marks, over two pending rows chosen so that the divergence is the

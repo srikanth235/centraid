@@ -96,9 +96,9 @@ function successResult(value: unknown): ToolSuccessResult {
   };
 }
 
-// ----------------------------------------------------------------------------
+// ────────────────────────────────────────────────────────────────────────────
 // Public input shapes
-// ----------------------------------------------------------------------------
+// ────────────────────────────────────────────────────────────────────────────
 
 export interface CentraidWriteInput {
   readonly app: string;
@@ -120,9 +120,9 @@ export interface CentraidDescribeInput {
   readonly query?: string;
 }
 
-// ----------------------------------------------------------------------------
+// ────────────────────────────────────────────────────────────────────────────
 // Dispatcher
-// ----------------------------------------------------------------------------
+// ────────────────────────────────────────────────────────────────────────────
 
 export interface DispatcherOptions {
   /**
@@ -184,7 +184,7 @@ export class Dispatcher {
     return this.registryProvider();
   }
 
-  // --------- resolution helpers ---------
+  // ───────── resolution helpers ─────────
   private async resolveCodeDir(
     entry: RegistryEntry
   ): Promise<string | undefined> {
@@ -234,7 +234,7 @@ export class Dispatcher {
     else this.manifestCache.delete(codeDir);
   }
 
-  // --------- describe ---------
+  // ───────── describe ─────────
 
   // `overrideCodeDir` (read/write/describe): the draft-preview path (#141)
   // runs a session worktree's handlers against the app's live data.
@@ -327,7 +327,7 @@ export class Dispatcher {
     return successResult(manifest);
   }
 
-  // --------- write (action) ---------
+  // ───────── write (action) ─────────
 
   async write(
     input: CentraidWriteInput,
@@ -436,7 +436,7 @@ export class Dispatcher {
     return successResult(result?.body ?? null);
   }
 
-  // --------- read (query) ---------
+  // ───────── read (query) ─────────
 
   async read(
     input: CentraidReadInput,
@@ -517,7 +517,7 @@ export class Dispatcher {
     return successResult(outcome.value ?? null);
   }
 
-  // --------- shared validation ---------
+  // ───────── shared validation ─────────
 
   private validateInput(
     codeDir: string,
@@ -630,9 +630,9 @@ function manifestErrorToResult(appId: string, err: unknown): ToolErrorResult {
   );
 }
 
-// ----------------------------------------------------------------------------
+// ────────────────────────────────────────────────────────────────────────────
 // HTTP-status mapping for the app RPC routes (issue #505).
-// ----------------------------------------------------------------------------
+// ────────────────────────────────────────────────────────────────────────────
 
 /** Map a `ToolErrorCode` to an HTTP status code for the app RPC routes. */
 export function statusForToolError(code: ToolErrorCode): number {

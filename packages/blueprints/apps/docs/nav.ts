@@ -95,8 +95,8 @@ export function createNav({
   // Every navigation inside Docs clears selection and any open menu or
   // search state (spec §1.1's `dgo`). The drawer's own close is the
   // caller's — app-root wraps this so the React drawer state moves with it;
-  // this module no longer reaches for `#root`'s class list, which was a write
-  // onto the HOST's mount div and had been a no-op since the inline flip.
+  // this module does not reach for `#root`'s class list: that is a write onto
+  // the HOST's mount div, and a no-op from here.
   function selectShelf(shelf: ShelfId) {
     state.shelf = shelf;
     // A shelf is a place. Leaving for another one leaves the document route
@@ -109,9 +109,9 @@ export function createNav({
     state.searchStatus = "resting";
     // THE FIELD IS NOT CHROME ANY MORE (components/SearchField.tsx): it is
     // rendered by the Search shelf and by nothing else, so on every other
-    // shelf `#searchInput` is legitimately absent. This used to assert it into
-    // existence with a cast, which turned an ordinary navigation into a
-    // TypeError the moment the field moved.
+    // shelf `#searchInput` is legitimately absent — hence the null check and
+    // not a non-null cast, which turns an ordinary navigation into a TypeError
+    // the moment the field moves.
     const field = $("searchInput") as HTMLInputElement | null;
     if (field) field.value = "";
     state.newMenuOpen = false;

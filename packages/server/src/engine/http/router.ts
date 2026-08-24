@@ -118,8 +118,8 @@ export function parseRoute(method: string, rawUrl: string): Route {
   const appId = decodeURIComponent(segments[0] ?? "");
   if (!appId || appId.startsWith("_")) return { kind: "not-found" };
 
-  // `/centraid/<id>` names no endpoint. #799 retired the UI-byte plane, so an
-  // app is reached only through the named RPC/stream sub-routes below.
+  // `/centraid/<id>` names no endpoint (#799): an app is reached only through
+  // the named RPC/stream sub-routes below.
   if (segments.length === 1) return { kind: "not-found" };
 
   const second = decodeURIComponent(segments[1] ?? "");

@@ -31,12 +31,12 @@ import styles from "./SettingsDiagnosticsScreen.module.css";
 // the gateway I/O lives in `routes/settingsDiagnosticsData.ts`. Mounted from
 // the Gateway page's Components drill-in (GatewayScreen.tsx), not Settings.
 //
-// BUILT FROM THE BLOCK KIT (binding layer v11). It used to be a page of its
-// own furniture: a status bar with an inline Refresh, four uppercase metric
-// tiles, one bespoke row per component carrying a coloured dot AND an
-// uppercase HEALTHY/DEGRADED badge, and two uppercase `<div>` sub-heads over
-// two more bespoke panels. Six components read as six shouted words with the
-// actual sentence — WHAT stopped, and WHEN — set smaller than the badge.
+// BUILT FROM THE BLOCK KIT (binding layer v11) — NOT a page of its own
+// furniture: a status bar with an inline Refresh, four uppercase metric tiles,
+// one bespoke row per component carrying a coloured dot AND an uppercase
+// HEALTHY/DEGRADED badge, two uppercase `<div>` sub-heads over two more bespoke
+// panels. That way six components read as six shouted words, with the actual
+// sentence — WHAT stopped, and WHEN — set smaller than the badge.
 //
 // In v11 the page is the same four statements said in the shared vocabulary:
 // the count and the Refresh verb are the SECTION HEAD, the gateway's coarse
@@ -252,7 +252,7 @@ function componentRow(
       ? (row.detail ??
         (row.lastOkAt ? `last ok ${relativeTime(row.lastOkAt)}` : undefined))
       : (row.lastError ?? row.detail);
-  // The error tally used to be its own cell. It belongs in the sentence: "12
+  // The error tally belongs in the sentence, not in a cell of its own: "12
   // errors since it last answered" is a reading; "12 errs" beside a badge is a
   // number the reader has to assemble a meaning for.
   const tally =

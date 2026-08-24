@@ -1,15 +1,13 @@
 /*
  * The ONE executor of the sharing plane's effect outbox (issue #750
- * abstraction 2). It replaced three specialized drainers with per-kind
- * handlers over one queue, one retry policy, and one place that decides what
- * "discharged" means.
+ * abstraction 2): per-kind handlers over one queue, one retry policy, and one
+ * place that decides what "discharged" means.
  *
- * ONE HANDLER REMAINS (#825, ruling G-copy). Copy-as-share retired, so the
- * peer transport this module used to select between — `deliverGiveOverPeer`,
- * the background blob pull, the relayed refusal — is gone with the frames it
- * dialed, and every surviving `deliver-give` is a same-owner placement whose
- * two vaults are open in this process. Transport SELECTION was this module's
- * distinguishing job; what is left is the retry policy around one vault call.
+ * ONE HANDLER (#825, ruling G-copy). There is no peer transport to select
+ * between — no `deliverGiveOverPeer`, no background blob pull, no relayed
+ * refusal — and every `deliver-give` is a same-owner placement whose two
+ * vaults are open in this process. What is left is the retry policy around
+ * one vault call.
  *
  * The handler never throws for a vault condition: a vault this gateway cannot
  * open right now is a RETRY, and the durable row is what makes the next tick's

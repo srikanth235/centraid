@@ -8,9 +8,9 @@
 // what makes that division visible rather than merely true, and it is the seam a
 // future viewer engine claims — the same shapes on every media surface.
 //
-// ANATOMY: THERE IS NO TOP BAR. A 52px full-width strip was a second ground laid
-// over the photograph, and it charged the stage its own height on every screen
-// whether or not there was anything to say. The head of the stage now carries
+// ANATOMY: THERE IS NO TOP BAR. A 52px full-width strip is a second ground laid
+// over the photograph, and it charges the stage its own height on every screen
+// whether or not there is anything to say. The head of the stage carries
 // THREE FLOATING ELEMENTS standing on it (`VIEWER_TOP_CHROME`):
 //
 //   chip     round, leading — a back chevron. It is `chevron-left`, not `✕`,
@@ -22,8 +22,8 @@
 //   stamp    centred capsule, WHEN over WHEN-and-WHERE. Not a control, which is
 //            why it sits in the middle: a member scanning for something to press
 //            skips the centre. See `captureStamp` for why the date outranks the
-//            caption it replaced — the caption is still this element's ACCESSIBLE
-//            NAME, and its editable home is the info sheet's Caption row.
+//            caption — the caption is this element's ACCESSIBLE NAME, and its
+//            editable home is the info sheet's Caption row.
 //   chip     round, trailing — the `···` overflow, or the slideshow's one
 //            labelled way out.
 //
@@ -283,9 +283,9 @@ export function ViewerStatusLine({
   colors: ThemeColors;
   text: string;
   /** The ONE offer to spend the bytes (proto 4645), or null when there is
-   *  none to make. The page used to render a second `Load the original` chip
-   *  over the photograph; two controls for one fetch is two states to keep in
-   *  step, and they did not stay in step. */
+   *  none to make. The page renders no second `Load the original` chip over
+   *  the photograph: two controls for one fetch is two states to keep in
+   *  step. */
   actionLabel: string | null;
   onAction: () => void;
 }): React.JSX.Element {

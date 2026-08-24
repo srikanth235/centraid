@@ -178,11 +178,11 @@ export interface DeriveOutageEventsInput {
  * Why a gateway just turned `degraded`, in one line — or `undefined` when we
  * have nothing honest to say (issue #647 follow-up).
  *
- * This used to stamp `${latencyMs}ms latency` on EVERY degraded event, which
- * produced the nonsense card "Local is degraded — 4ms latency": latency only
- * degrades a gateway past `DEGRADED_LATENCY_MS` (2000ms), so a 4ms
- * reading meant the degradation actually came from a component, and the detail
- * was reporting the one number that proved it hadn't. `latencyDegraded` is the
+ * The detail must NOT stamp `${latencyMs}ms latency` on EVERY degraded event,
+ * which yields the nonsense card "Local is degraded — 4ms latency": latency
+ * only degrades a gateway past `DEGRADED_LATENCY_MS` (2000ms), so a 4ms
+ * reading means the degradation came from a component, and the detail would be
+ * reporting the one number that disproves it. `latencyDegraded` is the
  * flag `applyProbe` sets for the latency path, so trust it rather than the
  * raw sample, and otherwise name the components that are actually unwell.
  */

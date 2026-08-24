@@ -2,10 +2,9 @@
  * Turn-driver contract — the host-agnostic interface between a run spine and
  * the harness that actually drives one model turn.
  *
- * These types used to live in `@centraid/server/acp` (the local
- * codex/claude harness). They moved down here so the harness-agnostic run
- * engine (`makeConversationRunnerCore`, the automation fire spine) can speak the
- * turn contract without depending on any harness implementation — agent-runtime and
+ * These types live below every harness implementation so the harness-agnostic
+ * run engine (`makeConversationRunnerCore`, the automation fire spine) can
+ * speak the turn contract without depending on one — agent-runtime and
  * the gateway both inject a concrete `RunTurnFn` that satisfies it. The
  * interface lives here next to `ConversationRunner`; the codex/claude
  * implementation (`runTurn`) stays in agent-runtime.

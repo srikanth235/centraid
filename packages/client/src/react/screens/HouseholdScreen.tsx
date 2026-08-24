@@ -164,8 +164,8 @@ function otherSide(
 
 /**
  * What is waiting on a decision: a link the other side proposed and this owner
- * has not answered. A parked incoming SHARE used to count here too; copy-as-
- * share retired (#825, ruling G-copy), and a grant's audience answers its
+ * has not answered. A parked incoming SHARE does not count here: there is no
+ * copy-as-share (#825, ruling G-copy), and a grant's audience answers its
  * channel invitation in People rather than on this page.
  */
 function pendingRequests(
@@ -462,9 +462,9 @@ export default function HouseholdScreen(
         ]
       : []),
     {
-      // ONE door for every vault on this gateway. It used to be a button
-      // inside each vault's own detail, which drew the same door once per
-      // vault and implied capacity was a per-vault fact.
+      // ONE door for every vault on this gateway. A button inside each
+      // vault's own detail would draw the same door once per vault and imply
+      // capacity is a per-vault fact.
       action: { label: "Open", onClick: props.onOpenStorage },
       id: "storage",
       meta: "System",

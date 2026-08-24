@@ -307,7 +307,7 @@ export class Gateway {
   /**
    * Data-keyed Locker reveal gate (issue #630 review). Lives on the gateway
    * so every reveal arm — app bridge, agent bridge, tests — hits the same
-   * lock, not only the locker HTTP path that previously special-cased fill.
+   * lock, not only the locker HTTP path.
    */
   private enforceLockerReveal(
     request: RevealRequest,

@@ -6,9 +6,8 @@
 // PHOTOS DRAWS NO CHROME OF ITS OWN. The app bar, the ONE status line and the
 // compact bottom band are the frame's; this module contributes to all three
 // through the `frame` prop and renders, inside its pane, only the shelf strip,
-// the toolbar row, the grid and the overlay regions. The hamburger, the
-// in-pane search field, the zoom pair, the slideshow button and the drawer
-// retired with the header that carried them.
+// the toolbar row, the grid and the overlay regions. There is no hamburger,
+// no in-pane search field, no zoom pair, no slideshow button and no drawer.
 //
 // MULTI-SCOPE (issue #599, v4 §H). This app mounts over N scopes at once — the
 // member's own vault, the shared one the account was founded with, and every
@@ -218,7 +217,7 @@ export function Root({
   useEffect(() => {
     let disposed = false;
 
-    // ---- slot roots ----
+    // ──── slot roots ────
     const setSlot = (key: SlotKey, node: ReactNode): void => {
       setSlots((prev) => ({ ...prev, [key]: node }));
     };
@@ -243,7 +242,7 @@ export function Root({
     const permissionRoot = mk("permission");
     const moreSheetRoot = mk("moreSheet");
 
-    // ---- state ----
+    // ──── state ────
     let assets: Asset[] = [];
     let albums: Album[] = [];
     let places: Place[] = [];
@@ -317,7 +316,7 @@ export function Root({
       contributeAppBar();
     });
 
-    // ---- scopes (issue #599) ----
+    // ──── scopes (issue #599) ────
     const scopesNow = (): InlineScope[] => mountedScopes();
     const ownId = (): string => ownScopeId(scopesNow());
     /** Merged assets restricted to the member's own scope — see the header. */
@@ -342,7 +341,7 @@ export function Root({
       )
     );
 
-    // ---- the frame's ONE status line ----
+    // ──── the frame's ONE status line ────
     // Every write outcome announces itself there, with Undo where undo is
     // possible. No toast, no badge, no spinner, no red dot (§3, §14).
     // `progress` rides through untouched: a long local operation says how far
@@ -362,7 +361,7 @@ export function Root({
       )
     );
 
-    // ---- data ----
+    // ──── data ────
     const store = createLibraryStore({
       readScopes: (scopeIds, input) =>
         readLibraryScopes(scopeIds, input, (scopeId, data) =>
@@ -393,10 +392,10 @@ export function Root({
         contributeAppBar();
         return;
       }
-      // A FAILED READ IS NOT A DEAD END (§14). It used to `return` here, which
-      // meant the app stopped repainting entirely and left whatever was on
+      // A FAILED READ IS NOT A DEAD END (§14). A `return` here would stop the
+      // app repainting entirely and leave whatever was on
       // screen — including, on a first read, the empty state — standing under
-      // one invented sentence. Now the failure is recorded, the banner
+      // one invented sentence. Instead the failure is recorded, the banner
       // explains it in the product's own words, and everything that IS known
       // keeps rendering from the replica: months, days, counts, captions,
       // albums, people. The store keeps each scope's last good page for
@@ -421,9 +420,9 @@ export function Root({
       // A read that came back is a read that landed, even if the library it
       // describes is genuinely empty — THAT is when the empty state may speak.
       if (!readFailed) loaded = true;
-      // The Trash → Library redirect that used to live here is GONE (§14). An
+      // There is NO Trash → Library redirect here (§14). An
       // empty trash is a state with its own words ("Trash is empty."), and
-      // silently landing the member on a different shelf answered a question
+      // silently landing the member on a different shelf answers a question
       // they did not ask. The one shelf that cannot survive a read is a
       // deleted album — see `shelfAfterRead`.
       shelf = shelfAfterRead(
@@ -447,7 +446,7 @@ export function Root({
      * Both are driven by `libraryReachability`, which is the honest answer
      * this app can give — the frame contract carries no reachability channel
      * today (see that function's own note). The status line says the state in
-     * the product's words instead of the invented apology it used to carry;
+     * the product's words, never an invented apology;
      * the frame owns the `--net` dot and takes it from the shell's own
      * heartbeat, which this app cannot and must not restyle.
      */
@@ -497,8 +496,8 @@ export function Root({
      * WHY? Albums are a per-scope collection this app only ever authors in the
      * member's own space (scopes.ts `photoWriteTarget("own", …)`), so ONE
      * answer serves the bar's Rename and Delete, the tile's Remove and the app
-     * bar's primary. They each used to derive their own, which is how a
-     * read-only album ended up refusing two writes and offering a third.
+     * bar's primary. Each deriving its own is how a read-only album ends up
+     * refusing two writes and offering a third.
      */
     function albumWriteTarget(): WriteTarget {
       return photoWriteTarget("own", null, scopesNow());
@@ -597,7 +596,7 @@ export function Root({
       getSelectedAlbum: () => shelf,
     });
 
-    // ---- memories (§4.6) ----
+    // ──── memories (§4.6) ────
     function memories(): MemoryCard[] {
       if (rootElRef.current?.dataset.showMemories === "hide") return [];
       return buildMemories({
@@ -608,7 +607,7 @@ export function Root({
       });
     }
 
-    // ---- navigation ----
+    // ──── navigation ────
     function navigateTo(id: ShelfId): void {
       // The shelf strip is the way back OUT of the review (proto :4849 keeps
       // the strip on `dupereview`, and gives the review no Back control of its
@@ -662,7 +661,7 @@ export function Root({
       applyStore();
     }
 
-    // ---- the frame's app bar (§3) ----
+    // ──── the frame's app bar (§3) ────
     function contributeAppBar(): void {
       const album = currentAlbum();
       const copy = shelfCopy(shelf);
@@ -831,7 +830,7 @@ export function Root({
       return visibleAssets().length;
     }
 
-    // ---- the app's own navigation: the rail (v16) or the strip (§5) ----
+    // ──── the app's own navigation: the rail (v16) or the strip (§5) ────
     //
     // ONE FUNCTION FOR ONE QUESTION. The rail and the strip are the same spine
     // on two axes and they answer the same question — where in Photos am I —
@@ -975,7 +974,7 @@ export function Root({
       return counts;
     }
 
-    // ---- the Photos toolbar row (§3) ----
+    // ──── the Photos toolbar row (§3) ────
     // It renders only when it carries something — ToolbarView returns null
     // when it does not, so an empty row is never laid out.
     function renderToolbarRow(): void {
@@ -1006,7 +1005,7 @@ export function Root({
       );
     }
 
-    // ---- main content ----
+    // ──── main content ────
     function renderMain(): void {
       if (shelf === DUPLICATES) {
         applyEmptyState(NO_EMPTY_STATE);
@@ -1105,9 +1104,9 @@ export function Root({
       applyEmptyState(emptyFor(shown.length));
 
       // BEFORE THE FIRST READ LANDS THE GRID IS A SHAPE, NOT A VERDICT (§14).
-      // `shown` is `[]` while the read is in flight, and the app used to hand
-      // that straight to the empty state — telling a member with 6,214
-      // photographs that their library was empty. Now it paints `--skel` at
+      // `shown` is `[]` while the read is in flight, and handing that straight
+      // to the empty state would tell a member with 6,214
+      // photographs that their library is empty. It paints `--skel` at
       // the packed geometry, so nothing reflows when the rows arrive, and the
       // toolbar, the shelf strip and the rail all stay exactly where they are.
       if (!loaded) {
@@ -1226,8 +1225,8 @@ export function Root({
           inAlbum={Boolean(album)}
           albumId={album ? album.album_id : null}
           // The tile's own Remove is gated by the SAME answer as the album
-          // bar's Rename and Delete. It used to be gated by `inAlbum` alone,
-          // so a read-only album refused two writes in its bar and offered a
+          // bar's Rename and Delete. Gating it by `inAlbum` alone would make
+          // a read-only album refuse two writes in its bar and offer a
           // third, working one on every tile below it.
           canWriteAlbum={!albumWriteTarget().disabled}
           {...(albumRefusal === undefined ? {} : { albumReason: albumRefusal })}
@@ -1405,7 +1404,7 @@ export function Root({
       );
     }
 
-    // ---- search (a shelf, §9) ----
+    // ──── search (a shelf, §9) ────
     const { run: runSearch, invalidate: invalidateSearch } = createSearch({
       getQuery: () => searchQuery,
       setResults: (r) => {
@@ -1445,7 +1444,7 @@ export function Root({
       contributeAppBar();
     }
 
-    // ---- the band's overflow sheet (§3.1) ----
+    // ──── the band's overflow sheet (§3.1) ────
     // The band's sixth slot is the APP's, so the sheet is the app's too. It
     // opens on a tap, dismisses on Esc, on Close, and on navigating — never by
     // itself, and never over a destination it just reached.
@@ -1470,7 +1469,7 @@ export function Root({
       renderMoreSheet();
     }
 
-    // ---- upload ----
+    // ──── upload ────
     async function uploadFiles(files: File[]): Promise<void> {
       if (uploading || files.length === 0) return;
       // WHAT THE TRASH HELD BEFORE THE RUN, snapshotted now. Re-uploading the
@@ -1586,7 +1585,7 @@ export function Root({
     $("emptyCamera").addEventListener("click", onCameraClick);
     $("cameraInput").addEventListener("change", onCameraChange);
 
-    // ---- global wiring ----
+    // ──── global wiring ────
     const onKeydown = (e: globalThis.KeyboardEvent): void => {
       if (e.key === "Escape" && moreOpen) {
         closeMore();
@@ -1672,14 +1671,14 @@ export function Root({
         })
       : () => {};
 
-    // ---- first paint ----
+    // ──── first paint ────
     renderNavigation();
     renderToolbarRow();
     // `renderMain` paints the packed `--skel` grid while `loaded` is false
     // (§14) — the first frame already occupies the geometry the photographs
-    // will, so nothing reflows when the read lands. It used to be a stack of
-    // placeholder bars, which is the wrong shape for a timeline and
-    // guaranteed exactly the reflow §14 exists to prevent.
+    // will, so nothing reflows when the read lands. A stack of placeholder
+    // bars is the wrong shape for a timeline and guarantees exactly the
+    // reflow §14 exists to prevent.
     renderMain();
     // The host may already know the gateway is unreachable before this app has
     // asked it anything — if it says so, the member reads why on the first

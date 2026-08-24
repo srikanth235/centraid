@@ -87,7 +87,7 @@ describe("registry", () => {
     );
   });
 
-  // ---- ACP-native kinds: launch invocation is the only thing that differs ----
+  // ──── ACP-native kinds: launch invocation is the only thing that differs ────
 
   test("opencode/grok/kimi launch ACP natively with their own subcommand", () => {
     // The ACP entry point is the whole per-kind difference, so it is pinned
@@ -145,7 +145,7 @@ describe("registry", () => {
     expect(HARNESSES.grok.installHint).toMatch(/SuperGrok|X Premium/u);
   });
 
-  // ---- wave 7: eight more ACP-native kinds ---------------------------------
+  // ──── wave 7: eight more ACP-native kinds ─────────────────────────────────
 
   test("the eight added kinds pin their exact ACP invocation", () => {
     // The invocation is the whole per-kind difference, so each is pinned
@@ -341,7 +341,7 @@ describe("registry", () => {
     );
   });
 
-  // ---- issue #479: one integration path, per-kind launch config -------------
+  // ──── issue #479: one integration path, per-kind launch config ─────────────
 
   test("codex and claude-code drive the generic ACP client, not a bespoke harness", async () => {
     // The bespoke backends are gone; the only way to observe the transport from
@@ -400,7 +400,7 @@ describe("registry", () => {
     // harness it replaced, so it is asserted explicitly rather than inferred.
     const codex = acpConfigFor("codex", { binPath: "/opt/bin/codex" });
     expect(codex.adapter?.packageName).toBe("@agentclientprotocol/codex-acp");
-    // Parity with the retired `approvalPolicy:'never'` + full-access sandbox.
+    // Headless full-access: the adapter never round-trips an approval.
     // Launch env is ONE field shared by native and adapter-backed kinds, so it
     // reads off the config, not off `adapter`.
     expect(codex.env).toStrictEqual({
@@ -415,7 +415,7 @@ describe("registry", () => {
     expect(claude.adapter?.packageName).toBe(
       "@agentclientprotocol/claude-agent-acp"
     );
-    // Parity with the retired `permissionMode: 'bypassPermissions'`.
+    // Bypass mode: no approval this surface cannot show.
     expect(claude.adapter?.sessionModeId).toBe("bypassPermissions");
     // The adapter refuses bypass for a root process unless IS_SANDBOX is set.
     expect(claude.adapter?.bypassNeedsSandboxWhenRoot).toBe(true);

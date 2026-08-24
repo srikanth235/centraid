@@ -27,7 +27,7 @@ export function mobileNotificationsDestination(
   }
   // An app-scoped notice has no destination of its own: every app is a native
   // cover reached from Home, and there is no generic per-app screen left to
-  // push (issue #799 retired the WebView cover). The notice list is where the
+  // push (issue #799). The notice list is where the
   // owner reads it, so that is where the tap lands.
   return { kind: "notifications" };
 }

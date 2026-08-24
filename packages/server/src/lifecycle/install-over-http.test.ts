@@ -405,8 +405,8 @@ describe("install-over-http scenarios", () => {
   test("the listing is a union — installed bundled app + code-store app, no duplicates", async () => {
     await install("tasks");
 
-    // Publish a code-store app. Automations are the only code the store still
-    // takes since #799 retired the blank-app scaffold with the served plane.
+    // Publish a code-store app. Automations are the only code the store takes
+    // (#799): there is no blank-app scaffold.
     const create = await fetch(`${handle.url}/centraid/_automations`, {
       method: "POST",
       headers: jsonAuth(),

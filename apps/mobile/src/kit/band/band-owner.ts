@@ -1,28 +1,13 @@
 // WHO OWNS THE BAND, PER APP — the frame's latch (issue #712 E3).
 //
-// This used to live inside Photos (`apps/photos/photos-band.ts`), under the
-// key `photos.bandOwner.<appId>`, while the shipped web shell kept the same
-// concept under `shell.bandOwner.<appId>`
-// (`packages/client/src/react/shell/useBandOwner.ts`). Two namespaces for one
-// preference, in an app directory, for a decision the FRAME makes: the phone
-// could not have answered "has any app claimed the band" without importing
-// Photos, and `kit`/`screens` may not import an app
+// THE NAMESPACE IS `shell.bandOwner.<appId>`. The key names the owner of the
+// concept — the shell — because the decision is one the FRAME makes: the phone
+// cannot answer "has any app claimed the band" by importing Photos, and
+// `kit`/`screens` may not import an app
 // (`scripts/check-import-boundaries.ts`).
 //
-// THE NAMESPACE IS NOW `shell.bandOwner.<appId>`, MATCHING WEB. Mobile adopted
-// web's spelling rather than the reverse because the web key is the one that
-// already names the owner of the concept (the shell), and because the web
-// hook's storage is the surface a future shared core would keep. The cost is
-// stated plainly: any answer a member had already stored under
-// `photos.bandOwner.*` on a device is NOT migrated and silently reverts to the
-// default (`app`). That is acceptable only because nothing shipped could WRITE
-// that key — `setBandOwner` had no caller on either client, which is the
-// defect this change fixes — so the only stored values in the world are ones a
-// developer put there by hand. If a writer had shipped, this would need a
-// read-through migration instead.
-//
-// Per app, not global, for the reason web's hook gives: a member who wants the
-// host band back in Photos has said nothing about the next app that claims.
+// Per app, not global: a member who wants the host band back in Photos has
+// said nothing about the next app that claims.
 // Nothing here is keyed on vault or gateway — which band a phone shows is not
 // vault-scoped state (docs/client-keying.md: prefer no key over a key that
 // churns).

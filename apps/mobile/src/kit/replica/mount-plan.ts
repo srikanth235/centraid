@@ -33,8 +33,8 @@
 // where the network genuinely holds the only copy of the answer.
 //
 // That second rule has a corollary worth stating on its own: "unpaired" is a
-// DISK FACT. It used to be a network verdict — an unanswered `resolveGatewayBase`
-// threw the pairing-wall copy at a member whose phone was, on disk, fully
+// DISK FACT, never a network verdict: an unanswered `resolveGatewayBase` must
+// not throw the pairing-wall copy at a member whose phone is, on disk, fully
 // paired and fully populated. A plan may only end in the pairing wall when this
 // module has looked at every persisted identity there is and found none.
 

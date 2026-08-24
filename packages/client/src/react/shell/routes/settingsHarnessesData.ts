@@ -15,12 +15,12 @@ import type {
 // host. This maps that snapshot into the HarnessesStatusDTO the
 // SettingsHarnessesScreen renders.
 //
-// The snapshot is a LIST (`{ harnesses: [...] }`), one entry per harness kind the
-// gateway registers — it used to be `codex*`/`claude*` field pairs matched
-// against a local 2-row table, which meant a harness the gateway grew was
-// invisible here until this file was edited too. Nothing below enumerates
-// harness kinds locally any more: the gateway's list drives the cards, the
-// model-prefs read, and the pickers alike.
+// The snapshot is a LIST (`{ harnesses: [...] }`), one entry per harness kind
+// the gateway registers — not a fixed set of field pairs matched against a
+// local table, which would leave a harness the gateway grows invisible here
+// until this file was edited too. Nothing below enumerates harness kinds
+// locally: the gateway's list drives the cards, the model-prefs read, and the
+// pickers alike.
 //
 // Model selection moved off desktop-local settings and onto the gateway
 // prefs store (`GET/PUT /_centraid-user/prefs`) so every client sharing a
@@ -136,10 +136,10 @@ function readHarnessPrefs(
   const byKey: Partial<Record<ModelSubsystem, HarnessKind>> = {};
   for (const s of SUBSYSTEMS) {
     const v = prefs[harnessPrefKey(s)];
-    // Any non-empty string counts as a pin. This used to check against a
-    // closed pair, which would have silently dropped a pin onto a harness
-    // kind this build predates — the gateway is what resolves a pin, and it
-    // treats an unknown one as "inherit" anyway.
+    // Any non-empty string counts as a pin. Checking against a closed set
+    // would silently drop a pin onto a harness kind this build predates —
+    // the gateway is what resolves a pin, and it treats an unknown one as
+    // "inherit" anyway.
     if (typeof v === "string" && v) byKey[s] = v;
   }
   return byKey;

@@ -198,7 +198,7 @@ class DesktopTunnel {
     await this.handleTunnelConnection(connection);
   }
 
-  // ---- pairing ----
+  // ──── pairing ────
 
   private beginPairing(ttlMs: number): ActivePairing {
     const code = crypto.randomBytes(16).toString("base64url");
@@ -273,7 +273,7 @@ class DesktopTunnel {
     };
   }
 
-  // ---- HTTP forwarding ----
+  // ──── HTTP forwarding ────
 
   private revokeDevice(deviceId: string): PairedDevice | undefined {
     const removed = this.options.deviceStore.remove(deviceId);

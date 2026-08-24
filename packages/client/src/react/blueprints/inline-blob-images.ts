@@ -58,14 +58,14 @@ const BG_SELECTOR = '[style*="_vault/blobs"], [data-blob-origin-bg]';
 /**
  * THE OTHER SRC-BEARING SINKS: an embedded document and time-based media.
  *
- * This module used to watch `<img>` and CSS backgrounds only, which was every
- * blob surface the photos grid had. It is not every blob surface the product
- * has: Docs' stage renders a PDF in an `<iframe>` and sound and video in
- * `<video>`/`<audio>`, all three pointed at the same relative
- * `/centraid/_vault/blobs/<id>` path. Un-authorized, that path resolves to the
- * SPA's own index.html — so the PDF frame painted a BLANK WHITE PAGE and the
- * players failed silently, which reads as "the file is empty" rather than
- * "nobody asked for it with a credential".
+ * Watching `<img>` and CSS backgrounds alone covers every blob surface the
+ * photos grid has, and not every blob surface the product has: Docs' stage
+ * renders a PDF in an `<iframe>` and sound and video in `<video>`/`<audio>`,
+ * all three pointed at the same relative `/centraid/_vault/blobs/<id>` path.
+ * Un-authorized, that path resolves to the SPA's own index.html — so the PDF
+ * frame paints a BLANK WHITE PAGE and the players fail silently, which reads
+ * as "the file is empty" rather than "nobody asked for it with a
+ * credential".
  *
  * They take the same swap as an `<img>`'s `src`, minus the staged-prefetch
  * dance: there is no lazy grid behind them, so the whole reference lands in

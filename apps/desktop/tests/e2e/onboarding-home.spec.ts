@@ -62,8 +62,8 @@ test("1.1 — first launch reaches Home without a profile gate", async () => {
 });
 
 test('1.2 — "Start fresh on this Mac" auto-founds Personal and lands on home', async () => {
-  // Issue #603 replaced the founding ceremony (create-vault + recovery-kit
-  // download + verify) with a two-option chooser. On a virgin install the
+  // First run is a two-option chooser, not a founding ceremony (create-vault +
+  // recovery-kit download + verify) — issue #603. On a virgin install the
   // desktop deliberately does NOT start its local gateway until the user picks
   // "Start fresh on this Mac" — that start is what would otherwise pop an OS
   // keychain prompt before any UI. The gateway then founds Personal itself;
@@ -231,13 +231,13 @@ test("2.1 — home paints the springboard (or day-one first-moves) for first-par
     // so the companion must appear within 100ms of the member gesture. Measure
     // in the renderer to exclude Playwright transport latency.
     //
-    // MutationObserver, NOT a requestAnimationFrame poll (#842). The rAF loop
-    // this replaced stopped when the RUNNER next scheduled a frame, so on a
-    // shared CI machine the number was dominated by frame cadence rather than
-    // by anything the product does: 180.6 ms and 209.8 ms on macOS against a
-    // ceiling of 100, while the same build passed on Linux. A budget that
-    // reports the runner's contention is not a budget, and one that is red on
-    // every macOS and Windows run stops being read at all.
+    // MutationObserver, NOT a requestAnimationFrame poll (#842). An rAF loop
+    // ends when the RUNNER next schedules a frame, so on a shared CI machine
+    // the number is dominated by frame cadence rather than by anything the
+    // product does: 180.6 ms and 209.8 ms on macOS against a ceiling of 100,
+    // while the same build passes on Linux. A budget that reports the runner's
+    // contention is not a budget, and one that is red on every macOS and
+    // Windows run stops being read at all.
     //
     // The CEILING IS UNCHANGED at 100 ms — this is not a widening. What changed
     // is that the interval now ends when the dialog enters the DOM, which is
@@ -522,7 +522,7 @@ test("2.7 — the stem nav is present and All apps is reachable", async () => {
   const { app, page } = await launchApp(env);
   try {
     await waitForHome(page);
-    // The fixed stem (#707) replaced the collapsible sidebar — it does not
+    // The stem is fixed, not a collapsible sidebar (#707) — it does not
     // toggle open/closed, and All apps lives in the foot.
     await expect(page.locator('nav[aria-label="Apps"]')).toBeVisible();
     await page.getByRole("button", { name: /All apps/iu }).click();

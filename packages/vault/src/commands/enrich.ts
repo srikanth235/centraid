@@ -501,8 +501,8 @@ const REQUEST_ENRICHMENT: CommandDefinition = {
       // CONSENT SCOPE (see schema/enrich.ts `capability`): which enricher
       // this ask is for. Required for `manual` — an owner's "detect faces
       // now" must not read as consent for captioning, screenshot OCR and
-      // every other enabled enricher, which is exactly what an untagged row
-      // used to mean.
+      // every other enabled enricher — which is what an untagged row would
+      // mean.
       capability: { type: "string", minLength: 1, maxLength: 64 },
     },
   },

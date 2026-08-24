@@ -18,8 +18,7 @@ import type { ResourceUsageDTO } from "./screens/resource-summary.js";
 // shell modules, whose ambient globals aren't in the React island's tsconfig.
 // `CatalogTemplate` mirrors `TemplateEntry` (app-shell-context.ts) field for
 // field so the vanilla side's `TemplateEntry` values pass through unchanged.
-// It was `DiscoverTemplate` until Discover was retired (issue #708); the shape
-// outlived the page because the automation gallery renders the same card.
+// The automation gallery is the one surface that renders this card (#708).
 export interface CatalogTemplate {
   id: string;
   name: string;
@@ -668,8 +667,8 @@ export interface CompileAttemptDTO {
   startedAt: number;
   endedAt: number | null;
   status: "ok" | "fail" | "running";
-  /** Failure text from the ledger — shown verbatim in the rail's failure block.
-   *  (It used to seed a fix-it assistant; there is no second editor now.) */
+  /** Failure text from the ledger — shown verbatim in the rail's failure
+   *  block. There is no second editor. */
   error: string | null;
   summary: string | null;
   /** Relative label for the attempt header ("just now", "12m ago"). */
@@ -937,18 +936,16 @@ export interface AutomationThreadBridgeProps {
 /** The three positions of the Appearance control. `system` is a standing mode
  *  the shell keeps tracking, not a one-shot snap to the current OS value. */
 export type SettingsThemeMode = "light" | "dark" | "system";
-/** Appearance is the one visual-treatment page, and theme is now the whole of
- *  it. Layout was folded in (#608), and the controls that came with it have
- *  been retired one by one: the app-tile treatment picker was cut but keeps its
- *  pref; the dark ramp's surface temperature was removed outright, so dark has
- *  exactly one ramp — parity with light, which never had a temperature; and the
- *  card surface followed, a three-way choice nothing in the product asked the
- *  owner to make. `cardVariant` still paints (`html.dataset.cards`, default
- *  `outlined`) — it is a stored pref with no control, like the tile treatment.
+/** Appearance is the one visual-treatment page, and theme is the whole of it
+ *  (#608). Dark has exactly one ramp — parity with light, which never had a
+ *  surface temperature — and the card surface is not a choice the owner is
+ *  asked to make. `cardVariant` still paints (`html.dataset.cards`, default
+ *  `outlined`) — it is a stored pref with no control, like the app-tile
+ *  treatment.
  *
- *  The accent swatches went the same way in #608 and their PREF went in #707:
- *  the shell spends no hue at all now, so there is no accent to store. Neither
- *  is `sidebarOpen` — the stem never hides, so there is no open state. */
+ *  There is no accent pref either (#707): the shell spends no hue at all, so
+ *  there is no accent to store. Neither is `sidebarOpen` — the stem never
+ *  hides, so there is no open state. */
 export interface SettingsAppearanceBridgeProps {
   themeMode: SettingsThemeMode;
   onSetThemeMode: (mode: SettingsThemeMode) => void;
@@ -1061,10 +1058,9 @@ export interface HarnessesStatusDTO {
 }
 /**
  * Every writer here resolves to the GATEWAY'S OWN TEXT when the write was
- * refused, and `null` when it landed. It used to be `void` for the model,
- * effort and ladder pins, which made a refusal invisible: the pick stayed on
- * screen looking saved. The screen restores the previous value and puts the
- * refusal on the status line.
+ * refused, and `null` when it landed — a refusal is never invisible. The
+ * screen restores the previous value and puts the refusal on the status
+ * line.
  */
 export type HarnessPrefWrite = Promise<string | null>;
 export interface SettingsHarnessesBridgeProps {
@@ -1114,12 +1110,10 @@ export interface SettingsHarnessesBridgeProps {
 }
 
 // ── Settings: Vault (issue #382) ─────────────────────────────────────────────
-// The cross-vault "Vaults" list + gateway "Connections" group DTOs
-// (ProfileRowDTO/ConnectionRowDTO/SettingsProfilesBridgeProps) retired with
-// SettingsProfilesScreen.tsx — that surface moved to the switcher, which is
-// the (gateway, vault) pair manager now. The Settings "Vault" page's own
-// shape is `ActiveVaultData` (shell/routes/settingsAccountData.ts), scoped
-// to the active vault only.
+// The switcher is the (gateway, vault) pair manager — there are no
+// cross-vault "Vaults" list or gateway "Connections" group DTOs here. The
+// Settings "Vault" page's own shape is `ActiveVaultData`
+// (shell/routes/settingsAccountData.ts), scoped to the active vault only.
 
 // ── Home ────────────────────────────────────────────────────────────────────
 export interface HomeMenuAnchor {

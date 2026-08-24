@@ -39,11 +39,10 @@ export const PEER_COMMONS_CLAIM_PATH = "/centraid/_peer/commons/claim";
 export const PEER_COMMONS_REFUSE_PATH = "/centraid/_peer/commons/refuse";
 
 /**
- * Per-transfer authorization state (#750 defect b). Authorizing a blob pull
- * used to run a FULL closure export + Ed25519 signing for EVERY 1 MiB chunk
- * (~1024 exports per member per GiB). Now the closure walk happens ONCE, when
- * a transfer session is opened; each chunk only validates against the
- * session's sha set. Sessions are in-memory and expiring — losing one on a
+ * Per-transfer authorization state (#750 defect b). The closure walk happens
+ * ONCE, when a transfer session is opened — not a FULL closure export +
+ * Ed25519 signing for EVERY 1 MiB chunk (~1024 exports per member per GiB).
+ * Each chunk only validates against the session's sha set. Sessions are in-memory and expiring — losing one on a
  * gateway restart merely costs the member one re-authorize round trip.
  * The same store carries a paginated bootstrap frame (#750 defect d), sliced
  * so no single response serializes the entire commons.

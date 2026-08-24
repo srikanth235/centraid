@@ -267,10 +267,11 @@ const faceRegionPublisher: Publisher = {
   },
   update(vault, entityId, payload) {
     const p = assertPayload<FaceRegionPayload>("FaceRegionPayload", payload);
-    // AN ANSWERED REGION IS TERMINAL (issue #712). The guard used to read
-    // `confirmed_by_party_id IS NULL`, which only protected a confirm; a
-    // rejection was a DELETE, so the next run re-created the same face as a
-    // brand-new proposal and the member re-answered it for ever. Now every
+    // AN ANSWERED REGION IS TERMINAL (issue #712). The guard reads
+    // `review_state = 'proposed'`, not `confirmed_by_party_id IS NULL`: a
+    // null-check on the confirm protects only a confirm, and a rejection kept
+    // as a DELETE lets the next run re-create the same face as a brand-new
+    // proposal for the member to answer for ever. Every
     // answer — confirmed, rejected, dismissed — leaves the row in place with
     // a non-`proposed` state, and the enricher may only refresh a region the
     // owner has not yet answered. This one WHERE clause is the whole

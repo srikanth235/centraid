@@ -33,9 +33,9 @@ import styles from "./AutomationEditorScreen.module.css";
 // One writer, one field. INSTRUCTIONS is the only prose surface in the product
 // that changes what an automation does; the rail reports on it and never
 // edits it, and the run screen neither edits nor compiles. That is the whole
-// division. Compiling used to be a side effect of Save that navigated straight
-// to the run screen, which is why a failed compile had nowhere to be read —
-// Save now compiles WITHOUT leaving, and the rail owns the loop.
+// division. Compiling is NOT a side effect of Save that navigates straight to
+// the run screen — a failed compile would have nowhere to be read. Save
+// compiles WITHOUT leaving, and the rail owns the loop.
 
 type TriggerKind = "cron" | "webhook" | "condition" | "data" | "event";
 /** One row of a condition trigger's `where` builder. `value` is the raw text

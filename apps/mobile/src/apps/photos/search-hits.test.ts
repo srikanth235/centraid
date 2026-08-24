@@ -352,10 +352,10 @@ describe("the semantic row", () => {
   });
 });
 
-// A PLACE IS A SEARCH TERM (issue #816). A place used to answer to exactly one
-// string — its `name` column — so the Tahoe weekend was unfindable by the word
-// "Tahoe" once the member had called the sections something of their own (or the
-// vault had called them a coordinate), and "near home" matched nothing at all.
+// A PLACE IS A SEARCH TERM (issue #816). A place answering to exactly one
+// string — its `name` column — leaves the Tahoe weekend unfindable by the word
+// "Tahoe" once the member has called the sections something of their own (or the
+// vault has called them a coordinate), and "near home" matching nothing at all.
 // The three fixtures below are the seeded roll's own geography: a declared home
 // in Palo Alto, an errand a few kilometres away, and Tahoe ~250 km off.
 const HOME_ROW = {

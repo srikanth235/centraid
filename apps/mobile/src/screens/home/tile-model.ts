@@ -134,7 +134,7 @@ function byDescending(
     text(left, idColumn).localeCompare(text(right, idColumn));
 }
 
-// ---------------------------------------------------------------- photos ---
+// ──────────────────────────────────────────────────────────────── photos ───
 
 /**
  * The newest assets, as a mosaic that bleeds to the tile edge.
@@ -237,7 +237,7 @@ export function mosaicCells(
   return Array.from({ length: MOSAIC_SLOTS }, (_, index) => photos[index]);
 }
 
-// ------------------------------------------------------------ prose bodies ---
+// ──────────────────────────────────────────────────────────── prose bodies ───
 
 /**
  * Decode a `core.content_item` body. Notes and short documents store their text
@@ -295,7 +295,7 @@ export function selectNoteExcerpt(
   };
 }
 
-// ------------------------------------------------------------------ docs ---
+// ────────────────────────────────────────────────────────────────── docs ───
 
 const BYTE_UNITS = ["bytes", "KB", "MB", "GB", "TB"] as const;
 
@@ -348,7 +348,7 @@ export function selectDocRows(
     }));
 }
 
-// ---------------------------------------------------------------- agenda ---
+// ──────────────────────────────────────────────────────────────── agenda ───
 
 export interface AgendaOccurrence {
   instanceKey: string;
@@ -397,7 +397,7 @@ export function countUpcoming(
   ).length;
 }
 
-// ---------------------------------------------------------------- people ---
+// ──────────────────────────────────────────────────────────────── people ───
 
 /** Overlapping face circles: a sample of the directory, name-ordered. */
 export function selectFaces(
@@ -436,7 +436,7 @@ export function initialsOf(name: string): string {
   return (parts[0]![0] ?? "").toUpperCase();
 }
 
-// ----------------------------------------------------------------- tasks ---
+// ───────────────────────────────────────────────────────────────── tasks ───
 
 const OPEN_STATUSES = new Set(["needs-action", "in-process"]);
 
@@ -478,7 +478,7 @@ export function selectTaskRows(
   ];
 }
 
-// ----------------------------------------------------------------- tally ---
+// ───────────────────────────────────────────────────────────────── tally ───
 
 /** Minor units summed over the rows the read already scoped to this month. */
 export function sumMinor(rows: readonly ReplicaRow[]): number {

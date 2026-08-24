@@ -99,14 +99,11 @@ export interface MoreRow {
 /**
  * ONE ROW. What this sheet is FOR, after Collections.
  *
- * It used to carry six — Sharing, Favorites, Places, Duplicates, Trash and
- * Backup — because the band could hold five destinations and Photos has more
- * shelves than that. Collections (`PhotosCollectionsView.tsx`) is now the
- * landing surface and carries every shelf that still exists as a named
- * section with a live count, on screen, without a sheet in the way (Sharing
- * stopped existing with issue #726). Keeping the rows here as well would mean
- * two doors to each shelf, of which one is hidden — and two places to keep
- * their labels and counts honest.
+ * Collections (`PhotosCollectionsView.tsx`) is the landing surface and
+ * carries every shelf as a named section with a live count, on screen,
+ * without a sheet in the way (there is no Sharing shelf, issue #726). A row
+ * here for a shelf Collections carries would mean two doors to it, of which
+ * one is hidden — and two places to keep its label and count honest.
  *
  * So the sheet keeps exactly what Collections does not carry:
  *
@@ -114,14 +111,13 @@ export interface MoreRow {
  *     FRAME screen (issue #712 B2) about whether this device's bytes have
  *     left it — a policy that governs Docs' scans and Notes' attachments too.
  *
- * Tile size used to be rendered directly by this sheet too; it has since
- * moved on to the Library's own header menu (`photos-library-menu.ts`),
- * reached from the header chip rather than from here — see that module's own
- * header comment.
+ * Tile size lives in the Library's own header menu
+ * (`photos-library-menu.ts`), reached from the header chip rather than from
+ * here — see that module's own header comment.
  *
- * `Import` was never here (no phone surface ships one) and `Photo access` was
- * removed in P13, because the grant's sentence belongs in the grid's own slot
- * where the question is actually asked.
+ * `Import` is not here (no phone surface ships one), and neither is `Photo
+ * access` (P13): the grant's sentence belongs in the grid's own slot where
+ * the question is actually asked.
  */
 export const PHOTOS_MORE_ROWS: readonly MoreRow[] = [
   // "Backup", not "Storage" (issue #712, B1). The screen it opens has always
@@ -182,12 +178,10 @@ export function resolveMoreRowRoute(key: PhotosMoreRowKey): MoreRowRoute {
 
 /**
  * Who owns the band right now — THE FRAME'S LATCH, not Photos'
- * (`kit/band/band-owner.ts`, issue #712 E3). This module used to define the
- * type, the default and the storage key itself, under `photos.bandOwner.*`,
- * while the web shell kept the same concept under `shell.bandOwner.*`. Two
- * namespaces for one preference, owned by an app, for a decision the frame
- * makes. Mobile adopted web's key; see that module's header for what that
- * costs and why it is safe here.
+ * (`kit/band/band-owner.ts`, issue #712 E3). One namespace for one
+ * preference, owned by the frame that makes the decision: mobile shares
+ * web's `shell.bandOwner.*` key rather than keeping a `photos.*` twin — see
+ * that module's header for what sharing the key costs and why it is safe.
  *
  * NOTHING is re-exported from here — every consumer imports the type, the
  * hook and the key straight from `kit/band/band-owner`. This file only

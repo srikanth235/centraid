@@ -333,8 +333,8 @@ describe("HomeRoute", () => {
   });
 
   it("advances the fill's progress per app, then names the replica catch-up", async () => {
-    // The seed is about ten seconds of work and it used to be ten seconds of
-    // one unchanging sentence. The route is what turns the run's position into
+    // The seed is about ten seconds of work, and it must not be ten seconds
+    // of one unchanging sentence. The route turns the run's position into
     // something Home can say: each app as it starts, then the catch-up while
     // the replica pulls — the beat where the counts are already full and the
     // tiles are still empty.

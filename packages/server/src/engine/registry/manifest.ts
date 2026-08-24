@@ -293,11 +293,11 @@ export interface Manifest {
   readonly states?: ManifestStatesBlock;
 }
 
-// ----------------------------------------------------------------------------
+// ────────────────────────────────────────────────────────────────────────────
 // Meta-schema document — the JSON Schema *for the manifest itself*. Exported
 // so builder consumers (and external tooling) can validate `app.json` against
 // it without depending on our runtime module.
-// ----------------------------------------------------------------------------
+// ────────────────────────────────────────────────────────────────────────────
 export const MANIFEST_JSON_SCHEMA: Record<string, unknown> = {
   $schema: "https://json-schema.org/draft/2020-12/schema",
   $id: "https://centraid.dev/schemas/app-manifest/v1.json",
@@ -499,9 +499,9 @@ export const MANIFEST_JSON_SCHEMA: Record<string, unknown> = {
   },
 };
 
-// ----------------------------------------------------------------------------
+// ────────────────────────────────────────────────────────────────────────────
 // Validators
-// ----------------------------------------------------------------------------
+// ────────────────────────────────────────────────────────────────────────────
 
 /**
  * Shared Ajv instance for input/output schema validation. Configured for

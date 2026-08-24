@@ -22,10 +22,9 @@
  *     {@link DEFAULT_COMPONENT_ALERT_SECONDS} — mirroring `evaluateAlert`'s
  *     shape but keyed per-component instead of per-gateway.
  *
- * Wave 2 of #351 wires up the version handshake (version-handshake.ts) that
- * previously had zero runtime callers: `applyProbe` judges a REMOTE
- * gateway's **protocol** floor against this build (product version is display
- * only — issue #512) and records the verdict as `versionSkew`. A local
+ * `applyProbe` uses the version handshake (version-handshake.ts) to judge a
+ * REMOTE gateway's **protocol** floor against this build (product version is
+ * display only — issue #512) and records the verdict as `versionSkew`. A local
  * gateway is embedded — always built from the same tree as the app — so it's
  * never judged; `versionSkew` stays permanently undefined for it. This is
  * v0's "surface loudly" posture for protocol skew; hard refuse remains the

@@ -7,9 +7,9 @@
 //
 // NARRATION GOES THROUGH outcomes.ts, NOT the element layer's `statusLine`. The ONE
 // status line is the frame's (`frame.setStatus`, via `notice`) — this module
-// used to write to the kit's own DOM status-line host instead, which put a
-// second status surface on screen for exactly one of this app's writes, and
-// dropped the Undo the same delete offers everywhere else. Trashing IS
+// must not write to the kit's own DOM status-line host instead, which would
+// put a second status surface on screen for exactly one of this app's writes,
+// and drop the Undo the same delete offers everywhere else. Trashing IS
 // undoable: `restore` puts the asset back, which is what runBatchRestore
 // fires, so the summary carries Undo rather than implying a finality that is
 // not true.

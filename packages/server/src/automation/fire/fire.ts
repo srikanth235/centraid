@@ -6,14 +6,12 @@
  * Resolving an automation, opening its run ledger, running the generated
  * `handler.js`, and cascading `onFailure` only ever touch app-engine
  * primitives (`parseRef`, `AutomationRunsStore`,
- * `runHandler`). That spine used to live in
- * `agent-runtime/run-automation.ts`; the only thing it genuinely needed from
- * agent-runtime was the `ctx.delegate` dispatch surface (a bounded model turn
- * through the harness registry). So the spine moves down and the dispatch
- * surface is injected via `openDispatch` — the same dependency inversion the
- * `Host` / `ConversationRunner` seams already use.
+ * `runHandler`). The only thing the spine needs from agent-runtime is the
+ * `ctx.delegate` dispatch surface (a bounded model turn through the harness
+ * registry), and that is injected via `openDispatch` — the same dependency
+ * inversion the `Host` / `ConversationRunner` seams already use.
  *
- * agent-runtime's `runAutomation` is now a thin wrapper that builds the
+ * agent-runtime's `runAutomation` is a thin wrapper that builds the
  * `openDispatch` closure (capturing the harness kind) and calls `runFire`. A
  * future host can inject its own dispatch surface instead of reimplementing
  * the spine. A fire whose handler never calls `ctx.delegate` starts zero child

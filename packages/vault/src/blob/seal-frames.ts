@@ -1,14 +1,14 @@
 // Framed remote-blob seal format (issue #405 §1 "chunked/rangeable seal").
 //
-// The old remote seal (issue #296) was a single whole-blob AES-GCM envelope:
-// any Range on a `remote-only` blob had to fetch AND unseal the ENTIRE object
-// in RAM before a single byte could be served (custody.ts:176-186). A phone
-// scrolling onto one cold 40 MiB video paid 40 MiB of download + unseal to
-// show a poster frame. This module replaces that envelope with a FRAMED
-// format: the plaintext is cut into fixed-size frames, each frame is
-// independently sealed, and a footer directory records where every sealed
-// frame landed — so a ranged read fetches (trailer + directory + only the
-// frames covering the requested bytes) and never the whole object.
+// The seal is FRAMED, not a single whole-blob AES-GCM envelope (issue #296):
+// a whole-blob envelope forces any Range on a `remote-only` blob to fetch AND
+// unseal the ENTIRE object in RAM before a single byte can be served, so a
+// phone scrolling onto one cold 40 MiB video would pay 40 MiB of download +
+// unseal to show a poster frame. Here the plaintext is cut into fixed-size
+// frames, each frame is independently sealed, and a footer directory records
+// where every sealed frame landed — so a ranged read fetches (trailer +
+// directory + only the frames covering the requested bytes) and never the
+// whole object.
 //
 // Wire layout (all integers big-endian):
 //

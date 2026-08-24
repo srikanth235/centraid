@@ -292,7 +292,7 @@ const LIST_EXISTS_SQL = `
            JOIN core_concept_scheme s ON s.scheme_id = c.scheme_id
           WHERE c.concept_id = :list_id AND s.uri = '${LIST_SCHEME_URI}')`;
 
-// ---------- Person ----------
+// ────────── Person ──────────
 
 const ADD_PERSON: CommandDefinition = {
   name: "people.add_person",
@@ -782,7 +782,7 @@ function logInteraction(ctx: HandlerCtx): Record<string, unknown> {
   return { interaction_id: interactionId };
 }
 
-// ---------- Favorite (the canonical flags-scheme star, on the party) ----------
+// ────────── Favorite (the canonical flags-scheme star, on the party) ──────────
 
 const STAR_PERSON: CommandDefinition = {
   name: "people.star_person",
@@ -937,7 +937,7 @@ const MOVE_PERSON: CommandDefinition = {
   },
 };
 
-// ---------- Notes (knowledge.annotation on the party) ----------
+// ────────── Notes (knowledge.annotation on the party) ──────────
 
 const ADD_NOTE: CommandDefinition = {
   name: "people.add_note",
@@ -975,7 +975,7 @@ const ADD_NOTE: CommandDefinition = {
   },
 };
 
-// ---------- Tasks ----------
+// ────────── Tasks ──────────
 
 const ADD_TASK: CommandDefinition = {
   name: "people.add_task",
@@ -1086,7 +1086,7 @@ const TOGGLE_TASK: CommandDefinition = {
   },
 };
 
-// ---------- Important dates (birthdays auto-remind) ----------
+// ────────── Important dates (birthdays auto-remind) ──────────
 
 const ADD_IMPORTANT_DATE: CommandDefinition = {
   name: "people.add_important_date",
@@ -1251,7 +1251,7 @@ const TOGGLE_REMINDER: CommandDefinition = {
   },
 };
 
-// ---------- Relationships ----------
+// ────────── Relationships ──────────
 
 const ADD_RELATIONSHIP: CommandDefinition = {
   name: "people.add_relationship",
@@ -1358,7 +1358,7 @@ const ADD_RELATIONSHIP: CommandDefinition = {
   },
 };
 
-// ---------- Gifts (canonical schedule tasks linked to their recipient) ----------
+// ────────── Gifts (canonical schedule tasks linked to their recipient) ──────────
 
 const ADD_GIFT: CommandDefinition = {
   name: "people.add_gift",
@@ -1470,7 +1470,7 @@ const TOGGLE_GIFT: CommandDefinition = {
   },
 };
 
-// ---------- Debts ----------
+// ────────── Debts ──────────
 
 const ADD_DEBT: CommandDefinition = {
   name: "people.add_debt",
@@ -1602,7 +1602,7 @@ const SETTLE_DEBT: CommandDefinition = {
   },
 };
 
-// ---------- Lists (SKOS concepts, like Docs folders) ----------
+// ────────── Lists (SKOS concepts, like Docs folders) ──────────
 
 const CREATE_LIST: CommandDefinition = {
   name: "people.create_list",
@@ -1762,7 +1762,7 @@ const DELETE_LIST: CommandDefinition = {
   },
 };
 
-// ---------- Journal (owner-level, not per-person) ----------
+// ────────── Journal (owner-level, not per-person) ──────────
 
 const ADD_JOURNAL_ENTRY: CommandDefinition = {
   name: "people.add_journal_entry",

@@ -1108,18 +1108,13 @@ export function makeVaultRouteHandler(
             });
       }
 
-      // NOTE (issue #665): `POST /centraid/_vault/inbox/gateway-health` (the
-      // path spelling of the day, before the surface was renamed
-      // Notifications) used to live here so the desktop monitor could
-      // dual-write gateway health into the stream (#647). It is gone, along
-      // with its only caller. Health is STATUS, not a decision the owner can
+      // NOTE (issue #665): no route here writes gateway health into the
+      // Notifications stream. Health is STATUS, not a decision the owner can
       // resolve from Notifications — it lives on the Gateway page (Overview
       // card, Components tab, durable Alerts history) and in the desktop's OS
-      // notification. The route was never part of the published protocol
-      // surface (`packages/core/src/protocol/routes.ts` exposes only
-      // `vaultNotifications` / `vaultNotificationsEvents`) and carried no
-      // COMPAT tag, so deleting it outright is the documented path rather
-      // than a deprecation window.
+      // notification. The published protocol surface
+      // (`packages/core/src/protocol/routes.ts`) exposes only
+      // `vaultNotifications` / `vaultNotificationsEvents`.
 
       // Manifest scope-widening requests (issue #308 A3): a published
       // manifest asking beyond its last consent parks here; the owner's

@@ -104,8 +104,8 @@ describe("the plan a mount is allowed to produce", () => {
 
   // THE PIN. Phase A has two answers and neither of them is "wait". If a third
   // shape ever appears — a `pending`, a promise, a "resolve the base first" —
-  // this fails, and it should: that shape IS the defect, which was a cold start
-  // that withheld local data because a tunnel never answered.
+  // this fails, and it should: that shape IS the defect — a cold start that
+  // withholds local data because a tunnel never answered.
   it("never answers a mount with wait-for-the-network", () => {
     for (const input of matrix) {
       const plan = planMount(input);

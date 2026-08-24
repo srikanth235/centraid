@@ -149,10 +149,10 @@ if (gotSingleInstanceLock) {
     installApplicationMenu();
     installTray(ICON_PATH);
     // `installAuthInjector` reads settings, so it rejects for exactly the same
-    // reasons the gateway boot below does. Bare `void` left that rejection
-    // unhandled, which meant every locked-data-dir / missing-credential launch
-    // wrote a `kind:"unhandledRejection"` row into crash.log — a startup
-    // diagnosis, filed as a crash, in the log used to triage real crashes. The
+    // reasons the gateway boot below does. A bare `void` would leave that
+    // rejection unhandled, so every locked-data-dir / missing-credential launch
+    // would write a `kind:"unhandledRejection"` row into crash.log — a startup
+    // diagnosis, filed as a crash, in the log that triages real crashes. The
     // header injector simply has no headers to inject until a gateway resolves,
     // and it is reinstalled on every gateway change (`refreshAuthInjector`).
     installAuthInjector().catch((error: unknown) => {
@@ -163,15 +163,15 @@ if (gotSingleInstanceLock) {
     registerIpcHandlers();
     // The window comes FIRST, before the gateway boot below can fail.
     //
-    // This used to be the other way round, with a `dialog.showErrorBox` in the
-    // catch: a modal NSAlert with no window behind it. Every failure mode that
-    // needs the user to *do* something — a locked data dir, missing device
-    // credentials — therefore parked the app on a system alert that only a
-    // human at the keyboard could dismiss, and unattended relaunch (a login
-    // item, an automated run) simply hung. Startup failures are rendered
-    // in-window instead: the renderer's boot path already calls `getSettings()`,
-    // whose IPC rejects with the same message this catch logs, so the error
-    // reaches a surface the user can read, retry, and copy from.
+    // The reverse order, with a `dialog.showErrorBox` in the catch, is a modal
+    // NSAlert with no window behind it. Every failure mode that needs the user
+    // to *do* something — a locked data dir, missing device credentials —
+    // would park the app on a system alert that only a human at the keyboard
+    // can dismiss, and unattended relaunch (a login item, an automated run)
+    // would simply hang. Startup failures are rendered in-window instead: the
+    // renderer's boot path already calls `getSettings()`, whose IPC rejects
+    // with the same message this catch logs, so the error reaches a surface
+    // the user can read, retry, and copy from.
     createWindow();
     // Boot the active gateway (issue #351). Before this, a `serve()` failure
     // during lazy startup only surfaced as a failed IPC invoke the FIRST time

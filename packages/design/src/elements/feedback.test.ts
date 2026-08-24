@@ -161,7 +161,7 @@ describe("stand-in states", () => {
     showSkeleton(box, 5);
     expect(box.querySelector("p")).toBeNull();
     // The same `.kit-skeleton` rows `_shared/LoadingSkeleton.tsx` renders in
-    // React — #799 retired the `<kit-skeleton>` element both went through.
+    // React (#799).
     expect(box.querySelectorAll(".kit-skeleton")).toHaveLength(5);
     expect(box.children).toHaveLength(5);
   });

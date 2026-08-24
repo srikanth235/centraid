@@ -91,10 +91,10 @@ const noopLog: Required<EngineLogger> = {
   warn: () => undefined,
 };
 
-// ---------------------------------------------------------------------------
+// ───────────────────────────────────────────────────────────────────────────
 // Bounded concurrency helper — chunk uploads run up to 4 in flight while
 // entries are still read/chunked one file at a time (bounded memory).
-// ---------------------------------------------------------------------------
+// ───────────────────────────────────────────────────────────────────────────
 
 class Semaphore {
   private available: number;
@@ -123,9 +123,9 @@ class Semaphore {
   }
 }
 
-// ---------------------------------------------------------------------------
+// ───────────────────────────────────────────────────────────────────────────
 // createSnapshot
-// ---------------------------------------------------------------------------
+// ───────────────────────────────────────────────────────────────────────────
 
 export interface CreateSnapshotOptions {
   provider: BackupProvider;
@@ -446,9 +446,9 @@ export async function createSnapshot(
   return row;
 }
 
-// ---------------------------------------------------------------------------
+// ───────────────────────────────────────────────────────────────────────────
 // restoreSnapshot
-// ---------------------------------------------------------------------------
+// ───────────────────────────────────────────────────────────────────────────
 
 export interface RestoreCurrentVersions {
   gatewayVersion: string;
@@ -791,9 +791,9 @@ export async function restoreSnapshot(
   };
 }
 
-// ---------------------------------------------------------------------------
+// ───────────────────────────────────────────────────────────────────────────
 // verifySnapshot
-// ---------------------------------------------------------------------------
+// ───────────────────────────────────────────────────────────────────────────
 
 export interface VerifySnapshotOptions {
   provider: BackupProvider;
@@ -1062,14 +1062,14 @@ function sampleWithoutReplacement<T>(items: readonly T[], count: number): T[] {
   return out;
 }
 
-// ---------------------------------------------------------------------------
+// ───────────────────────────────────────────────────────────────────────────
 // Recovery-kit target rows
 //
 // `writeRecoveryKit` (a plaintext kit emitter) was deleted in issue #568 item
 // J: it had zero production callers after #555 moved kit authorship to
 // `wrapRecoveryKit`, and keeping a plaintext writer alive alongside a reader
 // that now REFUSES unwrapped kits would have been a live footgun.
-// ---------------------------------------------------------------------------
+// ───────────────────────────────────────────────────────────────────────────
 
 export interface RecoveryKitTarget {
   provider: string;

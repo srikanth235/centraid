@@ -571,8 +571,8 @@ describe("admin scenarios", () => {
       relays: "disabled",
     });
     expect(registry.isFresh()).toBe(true);
-    // #603 retired the admit-anyone founding window: an enrollment is now the
-    // ONLY admission, so an unknown EndpointId is refused even on a fresh dir.
+    // An enrollment is the ONLY admission (#603), so an unknown EndpointId is
+    // refused even on a fresh dir.
     expect(plane.dataPlaneControl.authorize("first-device")).toMatchObject({
       allowed: false,
     });

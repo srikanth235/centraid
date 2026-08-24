@@ -195,13 +195,12 @@ export function makeDaemonDevicePlane(input: {
   );
   /*
    * Persistent iroh identity (issue #289 phase 3). Loaded here, synchronously
-   * — NOT inside `startEndpoint` where it used to live — because the peer
+   * — NOT inside `startEndpoint` — because the peer
    * DIAL capability built from it (below) must exist as soon as this
    * function returns: `serve()`/`buildGateway()` read `peerPlane.dial`
    * before `startEndpoint()` ever runs (it needs the HTTP server's own URL,
-   * so it necessarily starts after `serve()`). A corrupt key still aborts
-   * boot exactly as before, just before the HTTP listener starts instead of
-   * after.
+   * so it necessarily starts after `serve()`). A corrupt key aborts boot
+   * before the HTTP listener starts.
    */
   const endpointSecretKey = loadEndpointSecret({
     persistence: {
@@ -231,8 +230,8 @@ export function makeDaemonDevicePlane(input: {
     input.controlSecret ?? crypto.randomBytes(32).toString("hex");
   let liveEndpointId: string | undefined;
   let liveRelayHints: string[] = [];
-  // An enrollment is the ONLY admission (issue #603 retired the admit-anyone
-  // founding window): a gateway founds itself locally, so no unknown
+  // An enrollment is the ONLY admission (issue #603): a gateway founds
+  // itself locally, so no unknown
   // EndpointId ever needs to reach it before it holds a ticket-issued row.
   const authorizeEndpoint = (endpointId: string): boolean =>
     enrollments.isEnrolled(endpointId);

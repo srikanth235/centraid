@@ -1,7 +1,6 @@
 // Which scopes an app is mounted over (issue #599), and the two questions
 // every part of an app asks about them. Deliberately tiny and dependency-free
-// so the store, the components and the write sites share ONE answer. Moved
-// here from `apps/photos/scopes.ts` unchanged (issue #726 D11): an app
+// so the store, the components and the write sites share ONE answer. An app
 // becomes shareable by declaring three lines against this kit, not by writing
 // its own sharing code — see `ScopeAppDeclaration` below.
 //

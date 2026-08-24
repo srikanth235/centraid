@@ -2,8 +2,8 @@
 // Photos' way into the grant sheet, web seat (#825): what the member is TOLD
 // when the sheet does not open. Three refusals, three different facts — no
 // grant plane on this host, a roster that answered nobody, and a roster that
-// could not be read at all. The third used to be spoken as the second, which
-// accused a member with a full People directory of knowing nobody.
+// could not be read at all. The third must never be spoken as the second: that
+// accuses a member with a full People directory of knowing nobody.
 //
 // Driven as the real hook inside a probe component against a stubbed
 // `window.centraid`, the same harness shape share-sheet-quick-add.test.tsx

@@ -116,9 +116,9 @@ export function warmIrohTransport(): void {
  *
  * This key IS the enrolled device identity — losing it means the gateway no
  * longer recognises this browser and the only way back is a fresh pairing
- * ticket. It used to live in sessionStorage whenever "Remember this device"
- * was unchecked (the default), so every browser restart silently unpaired.
- * Durability is no longer a consent axis; the offline copy still is.
+ * ticket. It must never live in sessionStorage — "Remember this device" being
+ * unchecked would then silently unpair on every browser restart. Durability is
+ * not a consent axis; the offline copy is.
  */
 export function adoptDurableIrohDeviceKey(): string | null {
   const stored =
@@ -435,7 +435,7 @@ export async function syncIrohWakeConfiguration(): Promise<void> {
     type: "centraid:configure-iroh-wake",
     configuration: currentIrohWakeConfiguration(),
   };
-  // eslint-disable-next-line unicorn/require-post-message-target-origin -- ServiceWorker has no targetOrigin argument (#647)
+  // oxlint-disable-next-line unicorn/require-post-message-target-origin -- ServiceWorker has no targetOrigin argument (#647)
   worker?.postMessage(message);
 }
 

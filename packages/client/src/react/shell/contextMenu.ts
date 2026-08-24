@@ -6,9 +6,9 @@ import styles from "./contextMenu.module.css";
  * Where an anchored menu hangs from — a pointer position (right-click) or a
  * rect (a ••• button, a row).
  *
- * It lived in Sidebar.tsx until #707 retired that column. It belongs here: the
- * menu mechanics are what the type describes, and every caller already reaches
- * for `openMenu` beside it. Mirrors the ambient `MenuAnchor` in the renderer's
+ * It belongs here: the menu mechanics are what the type describes, and every
+ * caller already reaches for `openMenu` beside it. Mirrors the ambient
+ * `MenuAnchor` in the renderer's
  * types.d.ts, redeclared because the React tsconfig does not pull that ambient
  * file in.
  */

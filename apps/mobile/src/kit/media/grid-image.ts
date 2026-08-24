@@ -4,8 +4,8 @@
 // tens of megapixels for a modern phone. Decoding that at full size to draw it
 // into a thumbnail is the single largest allocation the Photos cover makes.
 //
-// Every prop here was checked against the installed expo-image (57.x,
-// `node_modules/expo-image/build/Image.types.d.ts`); nothing is aspirational:
+// Every prop here exists on the installed expo-image (57.x) `ImageProps`
+// type; nothing is aspirational:
 //
 // - `allowDownscaling` (default `true`) is what makes the native side ask for
 //   container-sized pixels rather than the whole asset. On iOS it sets

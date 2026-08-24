@@ -135,7 +135,7 @@ export interface GatewayScreenProps {
    * Absent, the screen keeps the page in local state and behaves exactly as it
    * did — which is what a test rendering it standalone, or a host with no
    * router, needs. The one thing it must never do is draw its own back
-   * control: that was a second, competing way back sitting inside the page.
+   * control: that would be a second, competing way back inside the page.
    */
   onOpenTab?: (tab: TabId) => void;
   loadLocalUsage?: StorageScreenProps["loadLocalUsage"];
@@ -224,9 +224,9 @@ export default function GatewayScreen(props: GatewayScreenProps): JSX.Element {
 
   // ── The hero, WHEN THERE IS SOMETHING TO EXPLAIN.
   //
-  // It used to open the page in every state, and once the strip and the status
-  // line's own stamp landed it was saying nothing the rest of the page had not
-  // already said better: "This browser last synced 4s ago" over a foot that
+  // A hero opening the page in every state says nothing the strip and the
+  // status line's own stamp have not already said better: "This browser last
+  // synced 4s ago" over a foot that
   // reads "Synced · 4s ago" and an app bar that reads "checked just now";
   // "availability 100.0%" over a strip whose entire subject is availability;
   // "uptime 3h 31m" over an Identity row stating when the gateway started. A

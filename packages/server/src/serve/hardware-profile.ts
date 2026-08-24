@@ -8,9 +8,8 @@ export type HardwareClass = "constrained" | "standard";
 
 /**
  * The prioritized throughput knobs the resolver attributes a source to
- * (#528 Phase F). Each accepts a durable UI override. The pair of static
- * compression qualities that used to sit here retired with the gateway's
- * UI-byte plane (#799): every body the gateway compresses now is dynamic
+ * (#528 Phase F). Each accepts a durable UI override. No static compression
+ * qualities sit here (#799): every body the gateway compresses is dynamic
  * JSON, which is fixed at `DYNAMIC_QUALITY`.
  */
 export type ResourceKnobName =

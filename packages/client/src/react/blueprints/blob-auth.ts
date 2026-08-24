@@ -2,7 +2,7 @@
 //
 // A leaf module on purpose: `inline-blob-images.ts` is eager (InlineAppRoute →
 // App), so anything it imports lands in the shell's boot chunk. Reaching
-// `authorizeBlobUrl` through a barrel used to drag the whole app substrate in
+// `authorizeBlobUrl` through a barrel would drag the whole app substrate in
 // with it and regress initial-load JS. Nothing here needs that substrate —
 // only the authed gateway client — so it stands alone, and every caller
 // (`inline-blob-images`, `blob-staging`, `homeTileContent`, the host client's

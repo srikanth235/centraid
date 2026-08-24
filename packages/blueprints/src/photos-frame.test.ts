@@ -1,8 +1,7 @@
 // Photos as a route inside the frame (v4 handoff §3, §5, §H).
 //
-// Three behaviours, each of which used to be drawn by the app itself and is
-// now either a contribution to the frame or a control that knows when NOT to
-// render:
+// Three behaviours, each either a contribution to the frame or a control that
+// knows when NOT to render:
 //
 //   1. the shelf strip carries the current shelf on the TAB, not as a fill;
 //   2. the app bar is CONTRIBUTED — title, count, Select, Import — and the one
@@ -224,7 +223,7 @@ describe("the app bar contribution", () => {
     const html = actions(base);
     expect(html.indexOf("Select")).toBeLessThan(html.indexOf("Import"));
     expect([...html.matchAll(/kit-btn primary/gu)]).toHaveLength(1);
-    // upload.ts drives this id; it moved here from the retired drawer.
+    // upload.ts drives this id.
     expect(html).toContain('id="uploadBtn"');
   });
 

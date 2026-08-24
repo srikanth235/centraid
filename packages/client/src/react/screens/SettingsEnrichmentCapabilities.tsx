@@ -52,9 +52,9 @@ import styles from "./SettingsEnrichmentScreen.module.css";
 // has no "what reads it" to answer yet.
 //
 // THE ROW READS LEFT TO RIGHT AS ITS OWN SENTENCE: what this is, where its work
-// goes, what reads it, and last whether it runs. The switch used to lead, which
-// put the commit ahead of its subject and pushed the description into the
-// middle of the row.
+// goes, what reads it, and last whether it runs. A leading switch would put the
+// commit ahead of its subject and push the description into the middle of the
+// row.
 
 /**
  * The profile id a row's agent choice is stored under — derived, never typed.

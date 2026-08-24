@@ -141,8 +141,7 @@ export function dueInstants(
  * ticks once a minute, so the two absolute minutes carrying the same wall clock
  * land in two different one-minute windows — each dedupes against itself and
  * fires, and the automation runs twice against the Overlap row's promise of
- * once (#846 P2). "Once" used to hold only for a window wide enough to contain
- * both copies, i.e. after downtime, which is why the gap went unseen.
+ * once (#846 P2).
  *
  * The memory is derived, not persisted: when — and only when — a schedule's
  * zone actually moved its clock back inside the lookback, the reader re-walks

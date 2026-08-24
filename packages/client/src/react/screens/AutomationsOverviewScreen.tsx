@@ -40,7 +40,7 @@ import styles from "./AutomationsOverviewScreen.module.css";
 // from here through `publishRouteSignals` at the one point the data resolves,
 // so the count line and the health line can never disagree about state.
 //
-// What the tile grid used to say, and where it went:
+// What a tile grid would say, and where it lands in this list instead:
 //   glyph plate / hue        → gone. A hue per automation was decoration; the
 //                              list answers "what needs me?" by ORDER and by
 //                              the one net-toned row, not by colour.

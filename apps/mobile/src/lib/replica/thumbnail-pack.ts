@@ -28,10 +28,10 @@ function filename(contentId: string): string {
 /**
  * One directory listing per scope, reused until the pack changes.
  *
- * The timeline used to ask the filesystem "does this thumbnail exist?" once per
- * photo, on every recompute — a synchronous `stat` per asset per upload poll. A
- * pack holds at most a few thousand files, so listing each scope once and
- * answering from a map is both cheaper and a single crossing.
+ * Asking the filesystem "does this thumbnail exist?" once per photo, on every
+ * recompute, is a synchronous `stat` per asset per upload poll. A pack holds at
+ * most a few thousand files, so listing each scope once and answering from a
+ * map is both cheaper and a single crossing.
  */
 let packListing: Map<string, string> | undefined;
 
@@ -116,9 +116,9 @@ export async function refreshPinnedThumbnailPack(
 /**
  * Newest-first thumbnails, a few at a time.
  *
- * The pack used to download strictly one after another, so a first sync on a
- * 90-day window waited out thousands of sequential round trips before the grid
- * had any local pixels. Filling the pipe with a small number of parallel
+ * Downloading strictly one after another makes a first sync on a 90-day window
+ * wait out thousands of sequential round trips before the grid has any local
+ * pixels. Filling the pipe with a small number of parallel
  * requests is a large wall-clock win; keeping the number small is what stops it
  * from starving the foreground reads and the upload drainer sharing the radio.
  */

@@ -289,8 +289,8 @@ describe(VaultLinksStore, () => {
 
   test("one signed-route slot serves EVERY link to a peer vault (#750 invariants 1–2)", async () => {
     // Two LOCAL vaults link to the SAME peer vault — the household shape that
-    // used to duplicate the peer's key/label/route across two rows, where a
-    // later assertion updated only whichever row a lookup found first.
+    // must not duplicate the peer's key/label/route across two rows, where a
+    // later assertion would update only whichever row a lookup found first.
     const store = await open();
     for (const local of ["vault-local-1", "vault-local-2"]) {
       const ticket = store.tickets.mint(local, keyA);

@@ -102,9 +102,9 @@ export function kindOverlay(asset: PhotoAsset, rung: Rung): string | undefined {
 // never a red dot, never a vanishing tile — a tile that disappears when
 // something goes wrong is the grey mosaic §14 calls a bug.
 //
-// WHY A MARK AND NOT A LINE. This slot used to narrate the whole custody
-// triple: `on the gateway` for `remote-only`, `on this device only` for
-// `local-only`. Both are true, and captioning them was still wrong, for the
+// WHY A MARK AND NOT A LINE. This slot does not narrate the whole custody
+// triple — `on the gateway` for `remote-only`, `on this device only` for
+// `local-only`. Both are true, and captioning them is still wrong, for the
 // reason Apple Photos and Google Photos independently arrived at — neither
 // annotates the NORMAL case, and neither spends words on a tile:
 //
@@ -132,8 +132,8 @@ export function kindOverlay(asset: PhotoAsset, rung: Rung): string | undefined {
 
 /** Copy is final (§4.4). The only string the state slot still owns besides
  *  Trash's countdown, and it is about THIS tile's own bytes — which is the
- *  whole bar for entry into this slot. (`on the gateway` used to live here for
- *  an unreachable gateway; see `stateOverlay` for why it is gone.) */
+ *  whole bar for entry into this slot. (`on the gateway` does NOT live here
+ *  for an unreachable gateway; see `stateOverlay` for why.) */
 export const STATE_COULD_NOT_DECODE = "could not decode";
 
 /** The rung from which the custody mark is drawn. Below S a 13px stroke glyph
@@ -236,10 +236,10 @@ export function stateOverlay(
   if (days !== undefined) {
     return { form: "line", text: purgeNote(days), tone: "seam" };
   }
-  // NO `on the gateway` LINE. It used to render on every `remote-only` tile
-  // whenever the gateway stopped answering — an ambient condition (one fact
-  // about the whole app) printed through a per-tile slot, so a screenful said
-  // the same sentence forty times. Forty copies of one sentence is not an
+  // NO `on the gateway` LINE. Rendering it on every `remote-only` tile
+  // whenever the gateway stops answering prints an ambient condition (one fact
+  // about the whole app) through a per-tile slot, so a screenful says the same
+  // sentence forty times. Forty copies of one sentence is not an
   // explanation, it is wallpaper. The replica bar states it once, at the top,
   // where an ambient fact belongs; this slot speaks only for THIS tile.
   // The mark: bytes are HERE and nowhere else. The mobile seat is an origin,

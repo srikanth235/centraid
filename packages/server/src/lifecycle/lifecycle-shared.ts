@@ -100,7 +100,7 @@ export interface InstalledBundledApp {
   description?: string;
   iconKey?: string;
   colorKey?: string;
-  /** True when the app was already installed — the install was a no-op. */
+  /** True when the app is already installed — the install is a no-op. */
   alreadyInstalled: boolean;
 }
 
@@ -267,7 +267,7 @@ export async function stageAndMaybePublish(
     message: string;
     /**
      * When true, close the session after a successful publish — the session
-     * was a one-shot `lifecycle-<appId>` (see {@link prepareLifecycleSession}),
+     * is a one-shot `lifecycle-<appId>` (see {@link prepareLifecycleSession}),
      * not the renderer's persistent editing session, so leaving it open would
      * orphan a worktree. No-op on the staged (`publish:false`) path: a staged
      * draft must keep its session so it stays previewable.

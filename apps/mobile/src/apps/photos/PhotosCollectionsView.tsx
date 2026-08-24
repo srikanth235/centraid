@@ -1,12 +1,12 @@
 // Collections — the shape of a member's library, on one page.
 //
-// This is the landing surface of Photos now, and it replaces the destination
-// that used to be called "Albums". Two things were wrong with that name: it
-// described one section of what the screen showed, and the screen it named was
-// a two-column grid of album tiles with a Favorites row bolted above it, while
-// every other shelf this product has — People, Places, Duplicates, Trash —
-// was reachable only from the bottom row of a sheet behind a **More** tab. A
-// member could use Photos for a month without learning that Places existed.
+// This is the landing surface of Photos, and it is NOT called "Albums". Two
+// things are wrong with that name: it describes one section of what the screen
+// shows, and a screen it named would be a two-column grid of album tiles with a
+// Favorites row bolted above it, leaving every other shelf this product has —
+// People, Places, Duplicates, Trash — reachable only from the bottom row of a
+// sheet behind a **More** tab. A member could use Photos for a month without
+// learning that Places existed.
 //
 // So the page is the shelves, all of them, each one a named section over a
 // horizontal rail of covers. The section model — including what each section
@@ -399,15 +399,14 @@ export default function PhotosCollectionsView({
   };
 
   return (
-    // No header row of its own anymore (issue #712). This page used to draw
-    // a second trailing `···` chip here, below the real "Photos" header
-    // (`PhotosHome.tsx`) — two stacked trailing controls where iOS Photos
-    // has exactly one. That chip's menu (Show All / Collapse All) moved into
-    // the SAME header slot Library's Sliders chip uses, scoped to whichever
-    // destination is current; see `PhotosHome.tsx`'s `menuGroups` comment.
-    // Only the per-section fold chevrons stay here — they act on `collapsed`
-    // and `onToggleSection`, the two props that now own what used to be this
-    // file's own `useState`.
+    // No header row of its own (issue #712). A second trailing `···` chip
+    // here, below the real "Photos" header (`PhotosHome.tsx`), would be two
+    // stacked trailing controls where iOS Photos has exactly one. That menu
+    // (Show All / Collapse All) lives in the SAME header slot Library's
+    // Sliders chip uses, scoped to whichever destination is current; see
+    // `PhotosHome.tsx`'s `menuGroups` comment. Only the per-section fold
+    // chevrons stay here — they act on `collapsed` and `onToggleSection`, the
+    // two props that own the fold state, which this file keeps none of.
     <ScrollView
       contentContainerStyle={styles.scroll}
       showsVerticalScrollIndicator={false}

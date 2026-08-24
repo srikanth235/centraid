@@ -198,10 +198,10 @@ function cover(assets: readonly PhotoAsset[]): PhotoAsset | undefined {
 /**
  * An album's cover tile (issue #721 B5): the member's OWN choice when they
  * have made one, the newest member otherwise — never the reverse. This is
- * the fix for the defect this section used to carry: every rail tile called
- * `cover()` unconditionally and so a member's "Make cover"/"Make key photo"
- * write was honored by `AlbumDetail`'s own header but silently ignored by
- * every OTHER surface that draws this album, including this one. A chosen
+ * load-bearing: a rail tile that calls `cover()` unconditionally leaves a
+ * member's "Make cover"/"Make key photo" write honoured by `AlbumDetail`'s own
+ * header and silently ignored by every OTHER surface that draws this album,
+ * including this one. A chosen
  * cover that is no longer a live member of the album (removed, trashed) is
  * read exactly as "no choice" — `members` here is already the LIVE set
  * (`assetsOf`, in the caller below), so a stale id simply fails to match and

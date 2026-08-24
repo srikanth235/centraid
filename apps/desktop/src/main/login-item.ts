@@ -9,7 +9,7 @@
  * user remembering to open Centraid.
  *
  * This just wraps `app.setLoginItemSettings` — thin enough that it doesn't
- * need a `-core.ts` split, but pulled out of settings.ts/main.ts so both the
+ * need a `-core` split, but pulled out of settings.ts/main.ts so both the
  * startup call site and the settings-IPC call site share one implementation
  * rather than duplicating the platform guard.
  */

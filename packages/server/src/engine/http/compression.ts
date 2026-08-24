@@ -84,8 +84,8 @@ export interface CompressQuality {
 /**
  * Dynamic responses (tool JSON) are compressed on the request's hot path, so
  * favour speed: mid brotli / mid gzip still land most of the ratio. Every
- * body the gateway compresses is dynamic — #799 retired the cached static
- * asset plane that spent for ratio instead.
+ * body the gateway compresses is dynamic (#799): there is no cached static
+ * asset plane spending for ratio instead.
  */
 export const DYNAMIC_QUALITY: CompressQuality = { brotli: 4, gzip: 6 };
 

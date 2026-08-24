@@ -92,7 +92,7 @@ export interface HomeSampleProgress {
  * the whole point of this function's second argument: the run has a POSITION,
  * so the wait can be described ("adding photographs, 5 of 7") instead of
  * endured. Photos alone is ten uploads, which is most of the ten seconds a
- * member used to spend looking at a disabled label.
+ * member would otherwise spend looking at a disabled label.
  *
  * Returns the ids that actually seeded, so a caller can say something true
  * about a partial result rather than claiming the whole week landed.

@@ -1832,9 +1832,9 @@ export class BackupService {
       this.timer.unref();
     }, jitterDelayMs(HOUR_MS));
     this.timer.unref();
-    // The 30 s global clock used to run even with no backend. Resolve live
-    // configuration first, then arm one tick for the earliest actual policy
-    // due time; unconfigured gateways arm no WAL-drain clock (#456 I4).
+    // Resolve live configuration first, then arm one tick for the earliest
+    // actual policy due time; unconfigured gateways arm no WAL-drain clock
+    // (#456 I4).
     void this.refreshWalSchedule().catch((error) => {
       this.logger.warn(
         `backup: wal scheduler setup failed: ${error instanceof Error ? error.message : String(error)}`
@@ -2210,9 +2210,9 @@ export class BackupService {
     // an explicit `lazy` option (tests, the recovery UI once it holds its own
     // tier) wins; else a `--full` caller forces the bulk download; else
     // auto-resolve the vault's own durable remote CAS tier and prefer lazy
-    // whenever one exists — the metered-egress whole-library download the CLI
-    // used to always incur is exactly what the previews-first path was built to
-    // avoid. No remote tier ⇒ the snapshot is the only copy ⇒ full.
+    // whenever one exists — a metered-egress whole-library download is
+    // exactly what the previews-first path avoids. No remote tier ⇒ the
+    // snapshot is the only copy ⇒ full.
     const lazy =
       opts.lazy ?? (opts.full ? undefined : this.autoLazyTier(opts.vaultId));
     const result = await restoreSnapshot({

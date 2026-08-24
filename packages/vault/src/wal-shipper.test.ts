@@ -117,7 +117,7 @@ describe("wal-shipper", () => {
     return c;
   }
 
-  // --------------------------------------------------------------- G1/G2/G3
+  // ─────────────────────────────────────────────────────────────── G1/G2/G3
 
   test("[G1] a committed write ships a segment byte-identical to the live WAL range", () => {
     const shipper = makeShipper();
@@ -279,7 +279,7 @@ describe("wal-shipper", () => {
     expect(Buffer.compare(concat, wal)).toBe(0);
   });
 
-  // --------------------------------------------------------------------- G4
+  // ───────────────────────────────────────────────────────────────────── G4
 
   test("[G4] a failed segment write reports an error, moves nothing, and retries the same range", () => {
     const shipper = makeShipper();
@@ -339,7 +339,7 @@ describe("wal-shipper", () => {
     expect(shipper.status().dbs.vault!.offset).toBe(last.addr!.endOffset);
   });
 
-  // -------------------------------------------------------- rollover + closers
+  // ──────────────────────────────────────────────────────── rollover + closers
 
   test("rollover: exceeding walSizeThresholdBytes closes the group with a closer and truncates the WAL", () => {
     const shipper = makeShipper({ walSizeThresholdBytes: 8192 });
@@ -492,7 +492,7 @@ describe("wal-shipper", () => {
     expect(shipper.status().dbs.vault!.group).toBe(1);
   });
 
-  // ------------------------------------------------- end-to-end (the money test)
+  // ───────────────────────────────────────────────── end-to-end (the money test)
 
   test("end-to-end: capture → seal → replay round-trips the real vault byte-exactly", async () => {
     const shipper = makeShipper({ walSizeThresholdBytes: 8192 }); // force multi-group streams

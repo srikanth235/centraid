@@ -11,9 +11,9 @@
 // (search.ts) draws, for the same reason: a bounded per-scope window with
 // nothing paginated ACROSS scopes has no horizon to reconcile.
 //
-// PER-SCOPE REACH (issue #726 D10/D11 finding 3). A scope that failed to
-// answer used to fold into the merge as `rows: []` and vanish — a remote
-// list that could not be reached rendered identically to one that is
+// PER-SCOPE REACH (issue #726 D10/D11 finding 3). A scope that fails to
+// answer must not fold into the merge as `rows: []` and vanish — a remote
+// list that cannot be reached would render identically to one that is
 // genuinely empty, the exact failure D10 exists to beat. `reach` on the
 // returned payload names every scope's own state (`perScopeReach`) so a
 // caller can render an unreached list as a STATE beside whatever other

@@ -22,9 +22,9 @@
  * a green metric here can never disagree with a healthy backup component.
  */
 
-// ---------------------------------------------------------------------------
+// ─────────────────────────────────────────────────────────────────────────
 // 1. Freshness
-// ---------------------------------------------------------------------------
+// ─────────────────────────────────────────────────────────────────────────
 
 /** The four independent custody clocks the freshness metric reconciles. Each
  *  is epoch ms, or `null` when that protection event has never happened. */
@@ -91,9 +91,9 @@ function deriveFreshness(input: FreshnessInput, now: number): FreshnessMetric {
   return { status, tMs, ageMs, declaredCadenceMs, clocks };
 }
 
-// ---------------------------------------------------------------------------
+// ─────────────────────────────────────────────────────────────────────────
 // 2. Recovery window
-// ---------------------------------------------------------------------------
+// ─────────────────────────────────────────────────────────────────────────
 
 /** The provider's retention promise (discovery `backup.retention`,
  *  PROTOCOL.md). Structural subset of `@centraid/backup`'s `Retention` — kept
@@ -119,9 +119,9 @@ function deriveRecoveryWindow(retention: RetentionInput): RecoveryWindowMetric {
   return { days: retention.dailyDays, retention };
 }
 
-// ---------------------------------------------------------------------------
+// ─────────────────────────────────────────────────────────────────────────
 // 3. Privacy — a structural constant
-// ---------------------------------------------------------------------------
+// ─────────────────────────────────────────────────────────────────────────
 
 export interface PrivacyMetric {
   /** Every remote object is a sealed CBSF envelope. */
@@ -138,9 +138,9 @@ const PRIVACY_METRIC: PrivacyMetric = Object.freeze({
     "Every byte is sealed client-side before it leaves the device; the provider stores ciphertext and holds no keys.",
 });
 
-// ---------------------------------------------------------------------------
+// ─────────────────────────────────────────────────────────────────────────
 // 4. Cost
-// ---------------------------------------------------------------------------
+// ─────────────────────────────────────────────────────────────────────────
 
 /** Per-store usage figures (a subset of `StoreUsageReport`). */
 export interface StoreUsageInput {
@@ -197,9 +197,9 @@ function deriveCost(usage: UsageInput | null): CostMetric {
   return { bytesStored, quotaBytes, fractionUsed, metered };
 }
 
-// ---------------------------------------------------------------------------
+// ─────────────────────────────────────────────────────────────────────────
 // 5. Exit
-// ---------------------------------------------------------------------------
+// ─────────────────────────────────────────────────────────────────────────
 
 export interface ExitMetric {
   /** Export is a structural guarantee — always available, no provider gate. */
@@ -214,9 +214,9 @@ function deriveExit(
   return { exportAlwaysAvailable: true, restoreCostClass };
 }
 
-// ---------------------------------------------------------------------------
+// ─────────────────────────────────────────────────────────────────────────
 // Combined derivation
-// ---------------------------------------------------------------------------
+// ─────────────────────────────────────────────────────────────────────────
 
 export interface StorageMetricsInput {
   /** Reference clock (epoch ms) the freshness age is measured from. */

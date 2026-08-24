@@ -114,8 +114,8 @@ export async function resolveIdentity(vault: VaultLink | undefined): Promise<{
   // prefers the gateway's OWN reported endpoint id — the durable fact — over
   // the vault we were already carrying, and only falls to a stable literal
   // when the gateway cannot report one at all. It never asks the desktop's
-  // display name, which used to demote a durable endpoint id to whatever the
-  // desktop happened to be called at that moment and write it back through
+  // display name: that would demote a durable endpoint id to whatever the
+  // desktop happens to be called at that moment and write it back through
   // `noteActiveIdentity`.
   const [probe, endpointId] = await Promise.all([
     fetchReplicaBootstrapPage(

@@ -232,10 +232,10 @@ describe("ConversationStore — attachments", () => {
   });
 });
 
-// Issue #659 G5: reading a transcript used to run one items query per turn and
-// one attachments query per message. These are the batched replacements — the
-// law is that they return exactly what the per-row reads returned, and that
-// their statement count does not grow with the number of turns.
+// Issue #659 G5: these are the conversation-wide batched reads that stand in
+// for one items query per turn and one attachments query per message. The law
+// is that they return exactly what the per-row reads return, and that their
+// statement count does not grow with the number of turns.
 describe("ConversationStore — conversation-wide batched reads (#659 G5)", () => {
   /** A provider that counts every executed read, so "N+1" is measurable. */
   function countingProvider(): {

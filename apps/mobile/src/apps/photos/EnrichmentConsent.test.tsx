@@ -4,8 +4,8 @@
 // suite existed — this is a privacy regression net, not a styling snapshot:
 //
 //   1. NO ENRICHMENT WRITE MAY BE ISSUED WITHOUT AN EXPLICIT ANSWER. Library's
-//      `Enrichment` row used to call `request-enrichment` straight from its
-//      `onPress`: one tap, one write, no panels and no facts. The surface now
+//      `Enrichment` row may not call `request-enrichment` straight from its
+//      `onPress` — one tap, one write, no panels and no facts. The surface
 //      routes every answer through a callback, and only the `Run on this
 //      device` control may reach it.
 //   2. THE EGRESS DISCLOSURE MUST BE ON SCREEN. The cloud panel is the only

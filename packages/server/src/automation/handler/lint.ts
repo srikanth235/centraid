@@ -20,7 +20,8 @@
  * The deterministic alternatives are watermarks via `ctx.runs.last()` /
  * `ctx.state`, ids derived from the run's inputs, and values read off a
  * `ctx.vault` result. The rules below only ever match raw globals (or the
- * retired `ctx.tool`), so anything else on the `ctx.` surface passes untouched.
+ * `ctx.tool`, which the surface does not provide), so anything else on the
+ * `ctx.` surface passes untouched.
  */
 
 /** One flagged pattern found in a handler. */

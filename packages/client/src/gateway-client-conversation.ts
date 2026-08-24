@@ -2,9 +2,8 @@
  * governance: allow-repo-hygiene file-size-limit (#567) one browser-safe conversation transport owns the route DTOs and SSE parser together so wire additions cannot drift between request and stream handling
  *
  * Renderer-side unified chat transport over direct HTTP (issue #141,
- * Phase 3). The chat panel used to relay through the desktop main process
- * (`main/chat.ts` + the `centraid:chat:*` IPC); it now talks to the gateway
- * directly:
+ * Phase 3). The chat panel talks to the gateway directly, with no desktop
+ * main-process relay in the path:
  *
  *   - `streamTurn` POSTs `/centraid/<appId>/_turn` and parses the SSE stream
  *     into the gateway's native `TurnStreamEvent`s (fetch + ReadableStream
@@ -13,8 +12,9 @@
  *     turn in the app's draft worktree with the union of tools, so one turn
  *     can both tweak the app's code and operate its data.
  *   - the chat-history surface (`/_centraid-conversations/apps/<appId>/sessions…`)
- *     mirrors the old `main/conversation-history-client.ts`: list / create / load /
- *     rename / delete, used to persist + resume conversations.
+ *     lives in `gateway-client-conversation-history.ts` and is re-exported here:
+ *     list / create / load / rename / delete, which persist + resume
+ *     conversations.
  *
  * Re-exported from `gateway-client.ts` so call sites import from one barrel.
  */

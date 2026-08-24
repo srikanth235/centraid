@@ -69,10 +69,9 @@ export function createCentraidApi(bridge: PreloadBridge) {
 
   return {
     onDeepLink: (cb: (url: string) => void) => deepLinkBuffer.subscribe(cb),
-    // Desktop file-ASR (device-transcription.ts, the on-device probe this
-    // used to make) is gone (issue #724 W6) — transcription now runs on the
-    // self-contained recognition automation, never a device compute lease, so
-    // this is a pure synchronous snapshot again.
+    // There is no desktop file-ASR probe (issue #724 W6) — transcription runs
+    // on the self-contained recognition automation, never a device compute
+    // lease, so this is a pure synchronous snapshot.
     getHostCapabilities: async () => hostCapabilities(),
 
     // Settings
@@ -82,8 +81,8 @@ export function createCentraidApi(bridge: PreloadBridge) {
 
     // Apps: list/create/files/write/delete/update-meta moved to the
     // renderer's direct HTTP client (renderer/gateway-client.ts) under the
-    // thin-client pivot. #799 retired the preview iframe with the rest of the
-    // served plane, so only the local-only reveal-in-Finder stays on IPC.
+    // thin-client pivot. There is no preview iframe and no served plane
+    // (#799), so only the local-only reveal-in-Finder stays on IPC.
     openAppFolder: (input: { id: string }) =>
       bridge.invoke(Channel.APPS_OPEN, input),
 

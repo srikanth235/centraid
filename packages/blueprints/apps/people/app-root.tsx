@@ -184,7 +184,7 @@ export function Root({
       stopFocus();
       stopWidth();
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- mount-once wiring, stable deps via refs (#505)
+    // oxlint-disable-next-line react-hooks/exhaustive-deps -- mount-once wiring, stable deps via refs (#505)
   }, []);
 
   // OFFLINE IS READ, NEVER INVENTED (`_shared/view-state-kit.ts`): the host's
@@ -195,7 +195,7 @@ export function Root({
       readFailed: readFailedState,
     }) === "unreachable";
 
-  // ---- navigation + screen handlers ----
+  // ──── navigation + screen handlers ────
 
   const navigate = useCallback(
     (shelf: typeof state.shelf, personId?: string | null) => {
@@ -307,7 +307,7 @@ export function Root({
     [state]
   );
 
-  // ---- the route ----
+  // ──── the route ────
 
   // `loading` is passed at every call site rather than folded into `base`:
   // "a read has not landed yet" is the gate every empty state in the app sits
@@ -414,7 +414,7 @@ export function Root({
     />
   );
 
-  // ---- the two modal confirms ----
+  // ──── the two modal confirms ────
 
   const confirm = state.confirm;
   const confirmSubject = logic.personRow(confirm?.party_id ?? null);
@@ -448,7 +448,7 @@ export function Root({
     />
   );
 
-  // ---- the frame ----
+  // ──── the frame ────
 
   const counts = logic.rosterCounts();
   const barCountValue =

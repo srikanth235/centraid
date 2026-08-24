@@ -2,9 +2,8 @@
 // "how much of this" reading. Determinate only: the grammar has no
 // indeterminate bar, because a local-first product always knows the ratio.
 //
-// This was the `<kit-meter>` custom element until #799 retired the element
-// layer's presentation primitives; it emits the same `.kit-bar` markup, which
-// `@centraid/design/kit.css` already styles.
+// It emits `.kit-bar` markup, which `@centraid/design/kit.css` already styles
+// (#799).
 import type { ReactNode } from "react";
 
 export function Meter({

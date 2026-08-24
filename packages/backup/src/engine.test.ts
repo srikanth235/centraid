@@ -78,7 +78,7 @@ class CountingObjectStore implements ObjectStore {
   }
 }
 
-/* eslint-disable max-classes-per-file -- (#354) the two spies are small, colocated
+/* oxlint-disable max-classes-per-file -- (#354) the two spies are small, colocated
    test-only wrappers around one seam (ObjectStore + BackupProvider). */
 /** Wraps a BackupProvider, exposing the CountingObjectStore it hands out from openDataPlane. */
 class SpyProvider implements BackupProvider {
@@ -614,10 +614,10 @@ describe(verifySnapshot, () => {
   });
 });
 
-// ---------------------------------------------------------------------------
+// ───────────────────────────────────────────────────────────────────────────
 // /1 WAL format (issue #408): anchored db entries, format gating,
 // point-in-time row selection, deterministic objects.
-// ---------------------------------------------------------------------------
+// ───────────────────────────────────────────────────────────────────────────
 
 /** A real, cleanly-closed SQLite database file (close checkpoints + deletes the WAL). */
 function makeSqliteDbFile(filePath: string, vals: string[]): void {
@@ -1259,12 +1259,12 @@ describe("deterministic objects (G7 — idempotent uploads)", () => {
   });
 });
 
-// ---------------------------------------------------------------------------
+// ───────────────────────────────────────────────────────────────────────────
 // Entropy-gated compression (FORMAT.md § Chunk payload framing — /2, #405 §1).
 // These ride the real seal path (createSnapshot → chunks/ objects), so they
 // prove the framing survives encryption, dedup and restore — not just the unit
 // framing in compress.test.ts.
-// ---------------------------------------------------------------------------
+// ───────────────────────────────────────────────────────────────────────────
 
 /**
  * A REAL SQLite file stuffed with repetitive rows (the compressible shape a

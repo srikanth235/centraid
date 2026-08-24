@@ -103,7 +103,7 @@ const EXPORT_PAGE_CAP = 40;
 // `all` genuinely means all (#775): the kinds list carries the never-written
 // ones too, so the chip that says "All kinds" is not quietly showing a subset.
 // `never` is the chip that isolates them — the answer to "what are the other
-// thirty-one?" that the count line asks and nothing used to answer.
+// thirty-one?" that the count line asks and nothing else answers.
 const CHIPS = [
   { id: "all", label: "All kinds" },
   { id: "largest", label: "Largest" },

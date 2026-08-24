@@ -3,8 +3,8 @@
  *
  * The shell is a long-lived document: the desktop app and an installed PWA are
  * opened once and left open for days, and every app open is a route swap
- * inside that ONE document (#799 retired the served-app iframe, so nothing is
- * ever torn down by a navigation any more). That makes the four classic
+ * inside that ONE document (there is no served-app iframe — #799 — so nothing
+ * is ever torn down by a navigation). That makes the four classic
  * renderer leaks product-relevant rather than academic:
  *
  *   detached DOM nodes  — a subtree removed from the document that JS still

@@ -1,4 +1,4 @@
-// eslint-disable-next-line typescript-eslint/triple-slash-reference -- consumer tsconfigs follow this source without including sibling declarations; governance: allow-no-unjustified-suppressions Vite asset type boundary (#414)
+// oxlint-disable-next-line typescript-eslint/triple-slash-reference -- consumer tsconfigs follow this source without including sibling declarations; governance: allow-no-unjustified-suppressions Vite asset type boundary (#414)
 /// <reference path="./vite-assets.d.ts" />
 
 // Browser compute adapters for the idle-device queue (issue #414 D11/D13).
@@ -13,7 +13,7 @@
 // implementation ran does not change the answer.
 
 import type { PDFDocumentProxy } from "pdfjs-dist";
-// eslint-disable-next-line import/default -- Vite's ?url loader synthesizes the default URL export; governance: allow-no-unjustified-suppressions upstream module has no source-level default (#414)
+// oxlint-disable-next-line import/default -- Vite's ?url loader synthesizes the default URL export; governance: allow-no-unjustified-suppressions upstream module has no source-level default (#414)
 import pdfWorkerUrl from "pdfjs-dist/legacy/build/pdf.worker.min.mjs?url";
 
 // The shared browser capture pipeline. It sits on the blueprints side of the
@@ -53,7 +53,7 @@ function readBlobBytes(source: Blob): Promise<ArrayBuffer> {
         once: true,
       }
     );
-    // eslint-disable-next-line unicorn/prefer-blob-reading-methods -- older WebViews/jsdom lack Blob.arrayBuffer(); governance: allow-no-unjustified-suppressions runtime compatibility fallback (#414)
+    // oxlint-disable-next-line unicorn/prefer-blob-reading-methods -- older WebViews/jsdom lack Blob.arrayBuffer(); governance: allow-no-unjustified-suppressions runtime compatibility fallback (#414)
     reader.readAsArrayBuffer(source);
   });
 }
@@ -108,8 +108,8 @@ async function extractPdfText(source: Blob): Promise<string | null> {
     return null;
   } finally {
     try {
-      // pdfjs 6 dropped `PDFDocumentProxy.destroy()`; the worker teardown it
-      // used to delegate to now lives on the owning loading task.
+      // pdfjs 6 has no `PDFDocumentProxy.destroy()`; worker teardown lives on
+      // the owning loading task.
       await pdfDocument?.loadingTask.destroy();
     } catch {
       // A captured text layer remains valid when worker cleanup fails.

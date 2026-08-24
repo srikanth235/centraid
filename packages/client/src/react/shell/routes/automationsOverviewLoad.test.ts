@@ -101,8 +101,8 @@ describe("automationsOverviewLoad", () => {
       expect(data.rows).toHaveLength(1);
       expect(data.rows[0]!.name).toBe("Daily Digest");
       expect(data.rows[0]!.attentionCount).toBe(0);
-      // The automation list costs a request; the overview must pay for it once.
-      // It used to be fetched here AND inside `collectAutomationRuns`.
+      // The automation list costs a request; the overview must pay for it
+      // once — `collectAutomationRuns` is the only place it is fetched.
       expect(listAutomationsMock).not.toHaveBeenCalled();
       expect(collectRunsMock).toHaveBeenCalledOnce();
       expect(getBlockingMock).toHaveBeenCalledOnce();

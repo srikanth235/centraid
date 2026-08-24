@@ -86,8 +86,8 @@ function fileSizeOf(path: string): number {
  * Pull the bytes one manifest still needs, over ONE transfer session (#750
  * defect b): the steward authorizes the pull once and every chunk validates
  * against that session — no per-chunk closure export or signing on either
- * side. Chunks stream into the vault's own promotion temp file (the same
- * pattern the retired give-side blob pull used), so member-side peak memory is one chunk
+ * side. Chunks stream into the vault's own promotion temp file, so
+ * member-side peak memory is one chunk
  * plus the hash state, not the whole blob; a store without the temp seam (the
  * in-memory test tier) falls back to whole-blob assembly, bounded by the
  * blob's declared size.

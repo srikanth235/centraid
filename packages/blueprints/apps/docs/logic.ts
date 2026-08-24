@@ -127,7 +127,7 @@ export function createLogic({
     }
   }
 
-  // ---------- Data helpers ----------
+  // ────────── Data helpers ──────────
 
   function folderById(id: string | null | undefined): Folder | undefined {
     return data.folders.find((f) => f.folder_id === id);
@@ -215,7 +215,7 @@ export function createLogic({
     return [...list].sort(compareDocs);
   }
 
-  // ---------- Selection ----------
+  // ────────── Selection ──────────
 
   function clearSelection() {
     state.selected.clear();
@@ -252,7 +252,7 @@ export function createLogic({
     render();
   }
 
-  // ---------- Document writes ----------
+  // ────────── Document writes ──────────
 
   async function trashDoc(doc: DriveDoc) {
     const outcome = await act("trash", { document_id: doc.document_id });
@@ -404,7 +404,7 @@ export function createLogic({
     render();
   }
 
-  // ---------- Folder writes ----------
+  // ────────── Folder writes ──────────
 
   async function createFolder(name: string) {
     const outcome = await act("create-folder", { name });
@@ -451,7 +451,7 @@ export function createLogic({
     render();
   }
 
-  // ---------- Upload (picker + drag-and-drop) ----------
+  // ────────── Upload (picker + drag-and-drop) ──────────
   // A separate module for the same reason versions.ts and metadata.ts are:
   // file-size hygiene on a seam that is real. It closes over this factory's
   // own state/act/notice/render/refresh, so the queue and every refusal still
@@ -465,7 +465,7 @@ export function createLogic({
     notice,
   });
 
-  // ---------- Content lifecycle (edit / replace / version history) ----------
+  // ────────── Content lifecycle (edit / replace / version history) ──────────
   // A separate module purely for file-size hygiene — see versions.ts's own
   // header for why. It closes over this factory's own act/narrate/notice
   // rather than re-implementing them, so every outcome still narrates in
@@ -477,7 +477,7 @@ export function createLogic({
     notice,
   });
 
-  // ---------- Metadata (tags + real activity) ----------
+  // ────────── Metadata (tags + real activity) ──────────
   // Another file-size split (metadata.ts) — closes over this factory's own
   // act/narrate/refresh rather than re-implementing them.
   const { addTag, removeTag, loadActivity } = createMetadata({
@@ -486,7 +486,7 @@ export function createLogic({
     narrate,
   });
 
-  // ---------- Popovers (kebab + move) ----------
+  // ────────── Popovers (kebab + move) ──────────
   // Another file-size split (popovers.ts) — closes over data.folders plus
   // the document-write functions just above, passed in rather than
   // re-implemented.

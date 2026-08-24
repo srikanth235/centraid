@@ -2,9 +2,9 @@
 // `packages/server/src/routes/vault-links-routes.ts`), mirroring
 // `placement-transport.ts`'s shape. Mobile's own People/Sharing screen data
 // source — a link is the channel a grant to another person is delivered over
-// (#825), same-machine or across the world alike (D3). Its per-link "receive
-// gives" preference retired with copy-as-share: nothing arrives unasked for a
-// preference to govern.
+// (#825), same-machine or across the world alike (D3). A link carries no
+// per-link "receive gives" preference: nothing arrives unasked for one to
+// govern.
 import { authHeader } from "../gateway";
 
 const LINKS_PATH = "/centraid/_gateway/links";

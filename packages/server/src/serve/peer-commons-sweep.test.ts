@@ -168,7 +168,7 @@ describe("sweepPeerCommons backs off an absent steward (issue #750 defect e)", (
     const { member, grantId } = await memberWithGrant("sweep-backoff");
     const t0 = new Date().toISOString();
     // A pending intent alongside the grant pull: without the gate the sweep
-    // used to dial the dead steward once per intent per grant per tick.
+    // dials the dead steward once per intent per grant per tick.
     queueCommonsIntent({
       seat: member.vault.vault,
       grantId,

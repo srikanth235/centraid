@@ -88,7 +88,7 @@ export interface HarnessSpec {
   readonly enumerateModels: (prefs: EnumeratePrefs) => Promise<HarnessModel[]>;
 }
 
-// ---- the one harness shape ----------------------------------------------
+// ──── the one harness shape ──────────────────────────────────────────────
 
 interface AcpHarnessSpec {
   kind: HarnessKind;
@@ -252,7 +252,7 @@ function makeAcpHarness(spec: AcpHarnessSpec): HarnessSpec {
   };
 }
 
-// ---- codex ---------------------------------------------------------------
+// ──── codex ───────────────────────────────────────────────────────────────
 
 const codexHarness = makeAcpHarness({
   kind: "codex",
@@ -264,9 +264,9 @@ const codexHarness = makeAcpHarness({
   minVersion: { major: 0, minor: 128, patch: 0 },
   installHint:
     "Install Codex CLI (https://platform.openai.com/docs/codex) and run `codex login`.",
-  // Headless parity with the retired bespoke integration's `approvalPolicy:'never'`
-  // + full-access sandbox. Set at startup, so the adapter never round-trips an
-  // approval this surface cannot show. Lives on the spec, not the adapter:
+  // Headless full-access mode, set at startup, so the adapter never
+  // round-trips an approval this surface cannot show. Lives on the spec, not
+  // the adapter:
   // launch env is one field for native and adapter-backed kinds alike.
   env: { INITIAL_AGENT_MODE: "agent-full-access" },
   adapter: {
@@ -279,7 +279,7 @@ const codexHarness = makeAcpHarness({
   probeModels: true,
 });
 
-// ---- claude-code ---------------------------------------------------------
+// ──── claude-code ─────────────────────────────────────────────────────────
 
 const claudeHarness = makeAcpHarness({
   kind: "claude-code",

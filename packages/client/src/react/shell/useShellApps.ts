@@ -25,12 +25,12 @@ const FIRST_PARTY_IDS: ReadonlySet<string> = new Set(
 // pointer, falling back to the registry's first (the gateway's default) so
 // the implicit-default and explicit-id spellings of the same vault agree.
 //
-// `null` means UNKNOWN, and unknown is not a vault. It used to be `""`, which
-// compares unequal to every real vault id — so an offline boot, where both
-// reads fail, looked exactly like a switch to a vault named "": the branch
-// below parked the owner's real pins under the last vault and installed
-// `byVault[""] ?? []`, emptying the persisted pin list on a launch that never
-// reached the gateway at all.
+// `null` means UNKNOWN, and unknown is not a vault. `""` would compare unequal
+// to every real vault id — so an offline boot, where both reads fail, would
+// look exactly like a switch to a vault named "": the branch below would park
+// the owner's real pins under the last vault and install `byVault[""] ?? []`,
+// emptying the persisted pin list on a launch that never reached the gateway
+// at all.
 async function activeVaultKey(): Promise<string | null> {
   try {
     const auth = await window.CentraidApi.getGatewayAuth();

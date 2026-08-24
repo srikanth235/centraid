@@ -135,7 +135,7 @@ export function createLogic({
     return outcome;
   }
 
-  // ---------- Reading one note ----------
+  // ────────── Reading one note ──────────
 
   function findNote(noteId: string): Note | null {
     return (
@@ -200,7 +200,7 @@ export function createLogic({
     render();
   }
 
-  // ---------- Writing a note ----------
+  // ────────── Writing a note ──────────
 
   /**
    * A new note is UNTITLED, UNFILED AND WRITING IMMEDIATELY. There is no
@@ -312,7 +312,7 @@ export function createLogic({
     await openNote(noteId);
   }
 
-  // ---------- Notebooks ----------
+  // ────────── Notebooks ──────────
 
   async function createNotebook(name: string): Promise<void> {
     const trimmed = name.trim();
@@ -352,7 +352,7 @@ export function createLogic({
     if (notebookIdFrom(state.shelf) === notebookId) go(null);
   }
 
-  // ---------- Tags, links, files ----------
+  // ────────── Tags, links, files ──────────
 
   async function addTag(noteId: string, label: string): Promise<void> {
     const trimmed = label.trim();
@@ -422,7 +422,7 @@ export function createLogic({
     await write("detach", { attachment_id: attachmentId });
   }
 
-  // ---------- Checklists ----------
+  // ────────── Checklists ──────────
 
   /**
    * Toggle one checklist box, by line. The body is the fact — a box is a
@@ -449,7 +449,7 @@ export function createLogic({
     saveNote(noteId, { body_text: body });
   }
 
-  // ---------- Search, and the powerbox ----------
+  // ────────── Search, and the powerbox ──────────
 
   const runSearch = debounce(async (term: string) => {
     const trimmed = term.trim();
@@ -545,7 +545,7 @@ export function createLogic({
   };
 }
 
-// ---------- Pure derivations (no closure — a component may call these) ----------
+// ────────── Pure derivations (no closure — a component may call these) ──────────
 
 /** The rows a route paints: the trash on the trash shelf, the ranked matches
  *  while a query is live, the Journal place's own set, else the library

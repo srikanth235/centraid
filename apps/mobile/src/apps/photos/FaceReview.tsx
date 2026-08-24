@@ -39,8 +39,7 @@
 //      queue (`face-review-queue.ts`'s `buildQueue`), one proposal on screen
 //      at a time.
 //
-// EVERY CONTROL IS A REAL WRITE NOW (issue #712), which was not true before —
-// this header used to end by explaining which button was an apology:
+// EVERY CONTROL IS A REAL WRITE (issue #712) — no button here is an apology:
 //   * Confirm / Not this person / Someone else → `answer-face` with
 //     `confirm` or `reject`. "Someone else" is a picker over people ALREADY
 //     confirmed elsewhere in this vault; minting a BRAND NEW person has no

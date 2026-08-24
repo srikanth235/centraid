@@ -28,8 +28,8 @@
  * per-app knob is a manifest edit in `<app>/app.json#knobs[]` plus the
  * matching CSS — no runtime change required.
  *
- * #799 retired the gateway's UI-byte plane, so nothing in this repo calls
- * `buildSettingsInject` today: the shells resolve appearance themselves
+ * Nothing in this repo calls `buildSettingsInject` (#799): the gateway serves
+ * no UI bytes and the shells resolve appearance themselves
  * (`packages/client/src/react/shell/appearance.ts`). It stays as the
  * engine's public settings-routing contract for hosts that need it.
  */

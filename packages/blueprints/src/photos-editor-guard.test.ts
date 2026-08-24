@@ -1,15 +1,15 @@
 // @vitest-environment jsdom
-// eslint-disable-next-line typescript-eslint/ban-ts-comment -- issue #711: browser-DOM fixture is intentionally checked by jsdom, while the blueprint TS config excludes DOM globals (see photos-media.test.ts's own note)
+// oxlint-disable-next-line typescript-eslint/ban-ts-comment -- issue #711: browser-DOM fixture is intentionally checked by jsdom, while the blueprint TS config excludes DOM globals (see photos-media.test.ts's own note)
 // @ts-nocheck
 // THE EDITOR IS A DECISION SURFACE, AND NOTHING IS WRITTEN UNTIL SAVE
 // (v4 handoff §7.4, proto 4627). This file is the regression net for the one
 // bug that makes that sentence false:
 //
-//   Arrow keys used to step the viewer whenever the lightbox was open. The
-//   editor is mounted per asset (`key={asset.asset_id}` in Lightbox.tsx), so a
-//   stray ← or → while an edit was in progress remounted it and silently threw
-//   away the member's crop and rotation — with no prompt, and with nothing
-//   written anywhere to get back to.
+//   Arrow keys stepping the viewer whenever the lightbox is open. The editor
+//   is mounted per asset (`key={asset.asset_id}` in Lightbox.tsx), so a stray
+//   ← or → during an edit remounts it and silently throws away the member's
+//   crop and rotation — with no prompt, and with nothing written anywhere to
+//   get back to.
 //
 // So the assertions are, in order:
 //

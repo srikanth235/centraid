@@ -86,11 +86,10 @@ function categoryWords(category: string): string {
  * model and the level it thinks at — and **Lanes** is which agent each surface
  * reaches for, with the model and level it overrides that answer with.
  *
- * The page previously led with an exclusive Codex/Claude-Code radio, because
- * exactly one harness could be active. Per-subsystem harnesses retired that
- * premise: there is no "active" harness any more, only a DEFAULT one that
- * inheriting lanes fall back to — so it is the first row of Lanes rather than
- * a separate switch above them.
+ * The page does NOT lead with an exclusive "which harness is active" radio.
+ * Per-subsystem harnesses mean no harness is the active one: there is only a
+ * DEFAULT that inheriting lanes fall back to — so it is the first row of Lanes
+ * rather than a separate switch above them.
  */
 export default function SettingsHarnessesScreen({
   loadStatus,
@@ -169,10 +168,10 @@ export default function SettingsHarnessesScreen({
 
   /**
    * EVERY PICK ON THIS PAGE IS OPTIMISTIC AND EVERY PICK ROLLS BACK. A refused
-   * write used to be invisible here — the model and effort setters were
-   * fire-and-forget, so a gateway that rejected a pin left the pick sitting on
-   * screen as though it were saved. The gateway's own text goes on the status
-   * line and the displayed value returns to what the gateway holds.
+   * write must never be invisible here — fire-and-forget model and effort
+   * setters would leave a rejected pin sitting on screen as though it were
+   * saved. The gateway's own text goes on the status line and the displayed
+   * value returns to what the gateway holds.
    */
   const settle = (
     what: string,

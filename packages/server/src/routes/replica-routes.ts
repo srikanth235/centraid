@@ -655,11 +655,11 @@ async function streamChanges(
   let heartbeatAt = Date.now();
   const heartbeatMs = options.heartbeatMs ?? 15_000;
   /*
-   * A LOOP, not recursion (issue #659 G11). `streamNext()` used to tail-call
-   * itself once per page and once per wake, so a long-lived subscriber built an
-   * ever-deeper chain of pending promises — memory that grew with the
-   * connection's age rather than with its work. The control flow is otherwise
-   * unchanged: the access check runs before every projection, a `hasMore` page
+   * A LOOP, not recursion (issue #659 G11). A `streamNext()` that tail-calls
+   * itself once per page and once per wake builds an ever-deeper chain of
+   * pending promises for a long-lived subscriber — memory that grows with the
+   * connection's age rather than with its work. The control flow:
+   * the access check runs before every projection, a `hasMore` page
    * loops immediately without a heartbeat or a wait, and either rebootstrap
    * path ends the stream.
    *

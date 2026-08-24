@@ -5,9 +5,9 @@
 // It is one module rather than three private helpers because the three
 // screens make ONE claim between them: a card, the detail it opens, and a pin
 // must name the same place the same way. That claim is only checkable if the
-// naming is written once; while each screen kept its own copy, "they agree"
-// was a comment rather than a fact, and nothing would have noticed the day one
-// of the three drifted.
+// naming is written once; with a copy per screen, "they agree" is a comment
+// rather than a fact, and nothing would notice the day one of the three
+// drifted.
 //
 // The split inside is deliberate and is NOT an accident of the extraction:
 //
@@ -173,8 +173,8 @@ export function placeCards(
     const key = placeCardKey(row);
     if (!row || key === null) continue;
     // A coordinate-shaped label is not a name (issue #816). `readableName` is
-    // the one predicate both surfaces ask, and this card used to print the
-    // digits `findOrCreatePlaceTx` minted as if a person had typed them.
+    // the one predicate both surfaces ask; without it this card prints the
+    // digits `findOrCreatePlaceTx` mints as if a person had typed them.
     const name =
       readableName(row.name ? String(row.name) : null) ?? PLACE_UNNAMED;
     const current = groups.get(key);

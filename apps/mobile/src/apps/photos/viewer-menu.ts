@@ -288,8 +288,8 @@ export function viewerOverflowMenuGroups(
         {
           key: "delete",
           // Delete is in BOTH places on iOS — the toolbar's trash chip and the
-          // bottom of this menu — and this pass takes the parity rather than
-          // the tidier argument it previously made for one door. A member who
+          // bottom of this menu — and that parity outranks the tidier argument
+          // for one door. A member who
           // has the menu open should not have to close it to reach the verb
           // the same menu carries on the phone they came from. The confirm
           // step is where the safety lives (`PhotoLightbox.tsx`), not in the

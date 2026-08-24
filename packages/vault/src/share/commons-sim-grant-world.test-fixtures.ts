@@ -71,11 +71,10 @@ export interface ShareSlot {
   everDelivered: boolean;
   /**
    * A pass found the peer unreachable AFTER it had been delivered to, so the
-   * store's row fell back from `delivered` to `syncing`. This was the precise
-   * precondition of defect D1 (#839), fixed by #846 P1, and it stays tracked
-   * as a NON-VACUITY witness: a program that never degraded a delivered row
-   * never exercised the durable delivery memory, so `checkSeverance` passing
-   * would prove nothing about the thing that used to break.
+   * store's row fell back from `delivered` to `syncing`. Tracked as a
+   * NON-VACUITY witness (#839, #846 P1): a program that never degrades a
+   * delivered row never exercises the durable delivery memory, so
+   * `checkSeverance` passing would prove nothing.
    */
   reachLostAfterDelivery: boolean;
 }

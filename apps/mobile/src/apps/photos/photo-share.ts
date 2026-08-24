@@ -1,12 +1,12 @@
 // SENDING A COPY — the one path a photograph takes off this device (#816).
 //
-// The viewer used to hand the share sheet `resolveLocalOriginal(asset)` and be
-// done: the original file, whose EXIF still carries the metre-accurate fix the
-// camera wrote. Nothing in the UI said so, which is what made it worth fixing —
-// a member choosing to send a picture of their kitchen was also sending their
-// address, and had no way to know it.
+// Handing the share sheet `resolveLocalOriginal(asset)` and being done sends
+// the original file, whose EXIF still carries the metre-accurate fix the camera
+// wrote — and nothing in the UI would say so: a member choosing to send a
+// picture of their kitchen would be sending their address with no way to know
+// it.
 //
-// So a share is now two decisions and one guarantee:
+// So a share is two decisions and one guarantee:
 //
 //   1. WHAT THE MEMBER CHOSE. `share-place.ts` (a blueprint, so the web gets
 //      the same three precisions when it grows a share) owns the choice and

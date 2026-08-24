@@ -13,9 +13,9 @@ import type * as TypeImport_6gxkc6 from "./object-store.js";
  * grouped the same way.
  */
 
-// ---------------------------------------------------------------------------
+// ───────────────────────────────────────────────────────────────────────────
 // Layer 1 — Account & grants
-// ---------------------------------------------------------------------------
+// ───────────────────────────────────────────────────────────────────────────
 
 /** The store classes this revision defines (PROTOCOL.md § Terminology). */
 export type StoreClass = "backup" | "cas" | "derived";
@@ -236,9 +236,9 @@ export interface ProviderAuditPage {
   nextCursor: string | null;
 }
 
-// ---------------------------------------------------------------------------
+// ───────────────────────────────────────────────────────────────────────────
 // Layer 2 — backup store semantics
-// ---------------------------------------------------------------------------
+// ───────────────────────────────────────────────────────────────────────────
 
 /** One registry row — the response of registration, and of listSnapshots/getSnapshot. */
 export interface SnapshotRow {
@@ -272,9 +272,9 @@ export interface SnapshotRegistration {
   appMeta: Record<string, string>;
 }
 
-// ---------------------------------------------------------------------------
+// ───────────────────────────────────────────────────────────────────────────
 // Errors (protocol-wide)
-// ---------------------------------------------------------------------------
+// ───────────────────────────────────────────────────────────────────────────
 
 /** Reserved error codes (PROTOCOL.md § Error envelope) — providers MAY add others. */
 export type BackupProviderErrorCode =
@@ -344,9 +344,9 @@ export class BackupProviderError extends Error {
   }
 }
 
-// ---------------------------------------------------------------------------
+// ───────────────────────────────────────────────────────────────────────────
 // The provider seam
-// ---------------------------------------------------------------------------
+// ───────────────────────────────────────────────────────────────────────────
 
 /**
  * The provider seam (PROTOCOL.md § Routes). One implementation per provider;

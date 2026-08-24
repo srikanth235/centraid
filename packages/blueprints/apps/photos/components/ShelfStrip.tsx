@@ -9,7 +9,7 @@
 // carries the shelves, and drawing both would put Duplicates and Trash in a
 // horizontal strip that scrolls out of sight while the band says the same
 // thing better. `bandOwned` is the app's own answer to "did my band claim get
-// honoured", so the strip disappears for exactly the surface that replaced it.
+// honoured", so the strip disappears for exactly the surface that supplants it.
 //
 // ALBUM DETAIL drops the strip entirely (§5) — the app bar carries the album's
 // own title and count, and the toolbar row carries the way back.

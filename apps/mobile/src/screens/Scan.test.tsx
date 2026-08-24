@@ -1,9 +1,8 @@
 // THE CAPTURE-TIME OCR CONSENT GATE (issue #712 C3) — the second instance of
 // the §8 consent gate, after Photos' face detection.
 //
-// Scan.tsx used to call `extract()` unconditionally the moment a photograph
-// was captured or chosen: no consent moment existed at all. This file pins
-// the moment that closes that gap:
+// `Scan.tsx` must never call `extract()` unconditionally the moment a
+// photograph is captured or chosen. This file pins the consent moment:
 //
 //   1. THE GATE SHOWS BEFORE THE FIRST EXTRACTION on a device that has
 //      never answered — `recognizeText` must not be called until the

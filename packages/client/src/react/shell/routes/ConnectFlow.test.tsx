@@ -316,7 +316,7 @@ describe("ConnectFlow scenarios", () => {
       });
     });
 
-    // Issue #603 D10: a ticket that decodes but names no vault used to land
+    // Issue #603 D10: a ticket that decodes but names no vault must not land
     // on an empty, actionless list with "Enter Centraid" still enabled.
     it("a ticket that grants no vault explains itself and blocks the CTA", async () => {
       testGatewayConnection.mockResolvedValue({

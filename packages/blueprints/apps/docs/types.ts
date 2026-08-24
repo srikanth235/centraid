@@ -187,13 +187,12 @@ export interface AppData {
 export interface AppState {
   view: "grid" | "list";
   /**
-   * The current shelf (shelves.ts). This replaced the flat
+   * The current shelf (shelves.ts). Not a flat
    * `NavKind = all|recent|starred|folder|trash` bag: a shelf is a value the
    * strip, the band, the app bar, the breadcrumb and the row set all read, so
    * expressing it as one id — with `null` for All and `folder:<id>` for one
    * folder — is what keeps those five surfaces from disagreeing about where
-   * the member is. Nothing persists it, so the migration needed no upgrade
-   * path.
+   * the member is. Nothing persists it.
    */
   shelf: ShelfId;
   /**

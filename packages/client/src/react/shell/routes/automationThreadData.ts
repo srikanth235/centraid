@@ -256,7 +256,7 @@ export async function loadAutomationThreadData(input: {
   const hero = deriveAutomationHero(row, input.gatewayOrigin);
   // The one place the two surfaces are cut apart. A compile turn is the
   // COMPILER working, not the automation running: it never belongs in the run
-  // history, where it used to sit as a "Compile" card among real executions.
+  // history as a "Compile" card among real executions.
   // It is distilled into `plan` (an inert status the run screen may report and
   // must not act on) and otherwise handed to the compiler screen, which reads
   // the same turns as steps via automationCompileData.ts.

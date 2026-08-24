@@ -419,8 +419,8 @@ export default function AssistantScreen({
     // switch; its completion must not re-enable the old harness's controls.
     pickerLoadSeqRef.current += 1;
     setModelPickerLoaded(false);
-    // `finally` is load-bearing: a rejected switch used to leave every picker
-    // disabled forever (plus an unhandled rejection). Mirrors BuilderChatPane.
+    // `finally` is load-bearing: without it a rejected switch leaves every
+    // picker disabled forever, plus an unhandled rejection.
     void onSetHarness(harnessKind)
       .then((picker) => {
         if (harnessSwitchSeqRef.current === switchSeq) setModelPicker(picker);

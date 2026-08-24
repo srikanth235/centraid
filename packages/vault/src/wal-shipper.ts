@@ -567,7 +567,7 @@ export class WalShipper {
     return total;
   }
 
-  // -------------------------------------------------------------------- state
+  // ──────────────────────────────────────────────────────────────────── state
 
   private loadState(): ShipperState {
     try {
@@ -660,7 +660,7 @@ export class WalShipper {
     );
   }
 
-  // -------------------------------------------------------------------- paths
+  // ──────────────────────────────────────────────────────────────────── paths
 
   private walPath(db: WalDbName): string {
     return path.join(this.db.dir, `${WAL_DB_FILES[db]}-wal`);
@@ -713,7 +713,7 @@ export class WalShipper {
     );
   }
 
-  // ------------------------------------------------------------------ ticking
+  // ────────────────────────────────────────────────────────────────── ticking
 
   private nextTickMs(): number {
     const t = Math.max(this.now(), this.state.lastTickMs + 1);
@@ -1428,8 +1428,8 @@ export class WalShipper {
       olds.vault.basePending &&
       olds.journal.basePending
     ) {
-      // The retired pair was never registered ⇒ never restorable ⇒ its pair
-      // markers are dead weight, exactly like its segments.
+      // A pair still at its pending base is not registered ⇒ not restorable
+      // ⇒ its pair markers are dead weight, exactly like its segments.
       this.dropLocalMarkers(olds.vault.generation, olds.journal.generation);
     }
     this.persistState();
@@ -1708,7 +1708,7 @@ export class WalShipper {
     }
   }
 
-  // ------------------------------------------------------- controlled points
+  // ─────────────────────────────────────────────────────── controlled points
 
   /**
    * A controlled checkpoint of both databases (replaces `checkpointVault`
@@ -1815,7 +1815,7 @@ export class WalShipper {
     return report;
   }
 
-  // ------------------------------------------------------------ upload seam
+  // ──────────────────────────────────────────────────────────── upload seam
 
   /** Every durable local file awaiting upload, oldest generation first. */
   listUploadable(): UploadableWalFile[] {

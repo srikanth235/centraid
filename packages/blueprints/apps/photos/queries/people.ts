@@ -24,9 +24,9 @@
  * proposal (the model's own claim that they are the same face, across
  * however many photographs). A region with no candidate at all is its own
  * proposal of one — which is *every* region today: no shipped producer of
- * face regions sets `party_id` at all. (The `face-proposer` automation that
- * used to write them was deleted in issue #712 — face detection is becoming
- * the Photos app's own, and it will be identity-blind for the same reason:
+ * face regions sets `party_id` at all. (There is no `face-proposer`
+ * automation writing them, issue #712 — face detection is the Photos app's
+ * own, and identity-blind for the same reason:
  * naming a person is the owner's assertion, made in the app.) That is not
  * this query approximating anything: there is no face-similarity signal in
  * this schema to group strangers by today, so every unconfirmed face

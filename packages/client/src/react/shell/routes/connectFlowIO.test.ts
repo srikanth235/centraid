@@ -112,8 +112,8 @@ describe("connectFlowIO scenarios", () => {
       });
     });
 
-    // Issue #603 W4: an unreachable gateway used to fold into an empty list,
-    // which the UI then rendered as "no vaults here" and offered to create one
+    // Issue #603 W4: an unreachable gateway must not fold into an empty list,
+    // which the UI would render as "no vaults here" and offer to create one
     // against. Failure must stay distinguishable from an empty registry.
     it("reports a transport failure instead of an empty list", async () => {
       listVaults.mockRejectedValue(new Error("down"));

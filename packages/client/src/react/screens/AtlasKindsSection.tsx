@@ -18,12 +18,11 @@ import type { KindRow } from "./atlasScreenModel.js";
 
 // "What it holds" — the first of the Vault surface's three questions (v11).
 //
-// It was the Kinds block of the retired Data route: one `RowsBlock` row per
-// kind, each carrying its pack, its counts and a Browse verb. The row said
-// everything and showed nothing, so a vault with forty kinds was forty
-// sentences a member had to hold in their head to find the two that matter.
-// The v11 row keeps the same facts and adds a bar — share of the LARGEST kind
-// — so the list reads as an ordering before it is read as text.
+// One `RowsBlock` row per kind, each carrying its pack, its counts and a
+// Browse verb. A row that says everything and shows nothing makes a vault with
+// forty kinds forty sentences a member has to hold in their head to find the
+// two that matter, so the row also carries a bar — share of the LARGEST kind —
+// and the list reads as an ordering before it is read as text.
 //
 // A kind nothing has ever written stays in the list: "we hold nothing of that
 // sort" is an answer a custody page owes, and dropping it left the head's
@@ -43,11 +42,11 @@ export interface AtlasKindsSectionProps {
    * The caption's "of M" — how many kinds are in THIS LIST before the chips
    * filtered it, never a census total from elsewhere.
    *
-   * It used to be `totals.kinds`, which counts blueprint kinds only while the
-   * list itself carries blueprint AND machinery packs. On a real vault that
-   * printed "131 of 79 kinds" — a numerator larger than its own denominator,
-   * which is not a number a member can do anything with. The head still states
-   * the census's own "N of M written"; this caption is about the rows below it.
+   * NOT `totals.kinds`, which counts blueprint kinds only while the list
+   * itself carries blueprint AND machinery packs: on a real vault that prints
+   * "131 of 79 kinds" — a numerator larger than its own denominator, which is
+   * not a number a member can do anything with. The head states the census's
+   * own "N of M written"; this caption is about the rows below it.
    */
   totalKinds: number;
   /** The head's own sentence: "25 of 31 kinds written · 41,208 records". */

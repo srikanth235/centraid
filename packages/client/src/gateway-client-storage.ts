@@ -17,7 +17,7 @@
  * gateway simply never puts one on the wire (storage-connections.ts).
  */
 
-/* eslint-disable max-classes-per-file -- the two typed gate errors (recovery-kit + home-profile) are one storage-connection boundary (#436) */
+/* oxlint-disable max-classes-per-file -- the two typed gate errors (recovery-kit + home-profile) are one storage-connection boundary (#436) */
 
 import {
   auth,

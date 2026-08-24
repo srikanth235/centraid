@@ -212,8 +212,8 @@ describe("screens/HomeSpringboard", () => {
         tiles: buildHomeTiles({ content: {}, installedIds: ["docs"] }),
       });
       // An app with nothing to show is not a tile at all — it becomes a first
-      // move under the grid. The dashed in-grid placeholder it used to draw was
-      // the second spelling of a state that now has exactly one.
+      // move under the grid. A dashed in-grid placeholder would be a second
+      // spelling of a state that has exactly one.
       expect(
         el.querySelector('[data-app-id="docs"][data-testid="home-tile"]')
       ).toBeNull();

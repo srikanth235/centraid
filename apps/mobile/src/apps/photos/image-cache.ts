@@ -9,10 +9,10 @@
 //
 // - iOS has `Image.configureCache`, an explicit byte/count budget on the
 //   SDWebImage memory cache. Verified against the installed expo-image 57
-//   (`ios/ImageModule.swift` registers `configureCache`; `Image.d.ts` marks it
-//   `@platform ios`). It genuinely does not exist on Android — the Android
-//   module (`ExpoImageModule.kt`) registers no such function — so calling it
-//   there would throw, hence the platform check.
+//   (`ios/ImageModule.swift` registers `configureCache`, and its type
+//   declaration marks it `@platform ios`). It genuinely does not exist on
+//   Android — the Android module (`ExpoImageModule.kt`) registers no such
+//   function — so calling it there would throw, hence the platform check.
 // - Android's Glide cache is sized by the framework and has no equivalent
 //   knob in expo-image 57. The lever that *is* available on both platforms is
 //   dropping the cache on demand, so both get an AppState-driven release.

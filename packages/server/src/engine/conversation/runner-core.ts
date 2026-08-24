@@ -10,9 +10,9 @@
  * thing around that turn: load prefs, resolve a cwd, build the system prompt,
  * thread the `centraid_*` dispatcher into a `ToolContext`, resume when the
  * prior turn used the same harness kind, drive the turn, and (optionally) run a
- * post-turn side effect. That spine used to be copied into both
+ * post-turn side effect. That spine is shared by
  * `makeConversationRunner` (agent-runtime, data-only chat) and the gateway's
- * `makeUnifiedConversationRunner` (code+data builder chat); they now differ
+ * `makeUnifiedConversationRunner` (code+data builder chat); they differ
  * only by the four injected seams below (issue #147, Concern 1):
  *
  *   - `resolveCwd`            — data chat returns `input.dataDir`; builder

@@ -3,14 +3,14 @@ import type { ShellRoute } from "../../app-shell-context.js";
 // invariant 5) — extracted from App so the rule can be read, and tested,
 // without mounting the whole shell.
 //
-// The reachability half of it used to be a two-way ternary: "up" said "Synced"
-// and EVERYTHING ELSE said "Ready". That made the line lie in the one state
-// where the shell knows least. "unknown" is not a short blip on the web host —
-// an Iroh dial times out at 15s and is tried three times with backoff, so the
-// window is roughly half a minute — and for all of it a member reading "Ready"
-// was being told an affirmative thing about a gateway we had not reached.
-// Worse, it is the same word the line shows when everything is fine but idle,
-// so the state that most needs to be visible was the state that looked normal.
+// The reachability half of it is NOT a two-way ternary. "up" ⇒ "Synced" with
+// EVERYTHING ELSE ⇒ "Ready" makes the line lie in the one state where the shell
+// knows least. "unknown" is not a short blip on the web host — an Iroh dial
+// times out at 15s and is tried three times with backoff, so the window is
+// roughly half a minute — and for all of it a member reading "Ready" is being
+// told an affirmative thing about a gateway we have not reached. Worse, it is
+// the same word the line shows when everything is fine but idle, so the state
+// that most needs to be visible is the state that looks normal.
 //
 // Three statuses, three sentences. Saying "Checking…" costs nothing when the
 // probe comes back in 200ms and is the truth when it does not.

@@ -17,8 +17,8 @@ import {
 // app-root.tsx owns and re-renders from (`onData`), not a React hook, so it
 // fits the rest of that file's imperative boot closure.
 //
-// THE LOAD-BEARING RULE, carried over unchanged from the retired toggle: no
-// enrichment write is issued without an explicit answer. Reading the policy
+// THE LOAD-BEARING RULE: no enrichment write is issued without an explicit
+// answer. Reading the policy
 // and declining both write nothing; `runOnDevice` is reachable from exactly
 // the `Run on this device` answer, and the answer latches so a second click
 // cannot answer twice.

@@ -115,8 +115,8 @@ export const PHOTOS_SAVE_AS_NEW = "Save as a new photograph";
  * The explanation beside it, at the point of decision.
  *
  * A non-destructive edit is a risk decision, so it keeps its reassurance — but
- * ONE clause of it. It used to close "The original is not touched, and nothing
- * is overwritten", which is the same promise twice.
+ * ONE clause of it: closing with "The original is not touched, and nothing
+ * is overwritten" is the same promise twice.
  */
 export const PHOTOS_SAVE_AS_NEW_EXPLANATION =
   "Saving writes a new photograph dated today; the original is not touched.";

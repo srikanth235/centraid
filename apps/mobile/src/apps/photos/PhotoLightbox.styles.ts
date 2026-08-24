@@ -231,9 +231,9 @@ export const styles = StyleSheet.create({
     minHeight: VIEWER_CHROME_CHIP,
     paddingHorizontal: spacing[3],
   },
-  /** The video's kind label — `video · 4K · 0:24` — where the hand-rolled
-   *  transport used to be. Centred under the frame, micro-caps, and the only
-   *  thing we say about a recording the platform's own controls are playing. */
+  /** The video's kind label — `video · 4K · 0:24`. Centred under the frame,
+   *  micro-caps, and the only thing we say about a recording the platform's
+   *  own controls are playing. */
   kindLabel: {
     ...t("eyebrow"),
     paddingHorizontal: spacing[3],

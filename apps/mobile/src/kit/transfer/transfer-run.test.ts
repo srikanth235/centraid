@@ -1,6 +1,5 @@
-// The serial transfer run, engine-side. These cases came over WHOLE from the
-// behaviour `apps/photos/photos-backup.ts` used to carry inline (#711, S4) —
-// the guarantees are the same, they simply no longer belong to Photos.
+// The serial transfer run, engine-side. These guarantees belong to the engine
+// rather than to Photos (#711, S4).
 
 import { describe, expect, it, vi } from "vitest";
 

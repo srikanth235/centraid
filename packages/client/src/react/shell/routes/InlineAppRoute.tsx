@@ -364,10 +364,10 @@ export default function InlineAppRoute({
     []
   );
 
-  // THE FRAME CONTRIBUTES NOTHING TO THE BAR. It used to add a settings gear
-  // ahead of the app's own actions; every bundled app now draws its bar to a
-  // design handoff, and none of those handoffs has a frame control in it.
-  // What the gear opened — rename, delete, reveal, per-app automations, the
+  // THE FRAME CONTRIBUTES NOTHING TO THE BAR — no settings gear ahead of the
+  // app's own actions. Every bundled app draws its bar to a design handoff,
+  // and none of those handoffs has a frame control in it.
+  // What a gear would open — rename, delete, reveal, per-app automations, the
   // enrichment settings link and the appearance knobs — has no other door and
   // is unreachable until one is designed. `AppSettingsController.tsx` and
   // `inlineAppFlows.ts` are kept unmounted for that day rather than deleted,

@@ -76,7 +76,7 @@ export interface FailedMount {
   /** ISO timestamp of the most recent failed attempt. */
   at: string;
   /**
-   * Set when the failure was a `VaultSchemaAheadError` — a newer-software
+   * Set when the failure is a `VaultSchemaAheadError` — a newer-software
    * backup restored onto older software. Callers may want to special-case
    * this (e.g. an "upgrade the app" affordance) rather than treat it as a
    * generic corruption error.
@@ -172,7 +172,7 @@ export interface VaultInfo {
   blurb?: string;
 }
 
-/* eslint-disable max-classes-per-file -- error class is colocated with its module (#247) */
+/* oxlint-disable max-classes-per-file -- error class is colocated with its module (#247) */
 /** A refused registry act (delete the last vault, unknown id, …). */
 export class VaultRegistryError extends Error {
   constructor(
@@ -645,7 +645,7 @@ export class VaultRegistry {
    * lexicographic order IS creation order. An older non-personal vault can
    * still exist in a data dir that was created or restored before the personal
    * marker was introduced, so oldest-first can put the wrong vault at the head.
-   * Clients treat the first row as PRIMARY (`useMemberScopes.ts` takes
+   * Clients treat the first row as PRIMARY (`useOwnerScopes` takes
    * `scopes[0]`), which must agree with the gateway's own
    * `defaultVaultId()`. Hoisting the default vault settles that disagreement
    * in one place.

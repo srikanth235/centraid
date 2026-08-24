@@ -26,9 +26,9 @@ import type { ShelfId } from "./shelves.ts";
 import type { SortOption } from "./types.ts";
 import { SHELF_LABELS } from "./view-copy.ts";
 
-// ---------------------------------------------------------------------------
+// ───────────────────────────────────────────────────────────────────────────
 // The sort menu (§4.1's `DSORTS`)
-// ---------------------------------------------------------------------------
+// ───────────────────────────────────────────────────────────────────────────
 
 /**
  * The named orders, in the order the menu lists them.
@@ -51,9 +51,9 @@ export const SORT_OPTIONS: readonly SortOption[] = [
   { key: "size", dir: -1, name: "Size", sub: "largest first" },
 ];
 
-// ---------------------------------------------------------------------------
+// ───────────────────────────────────────────────────────────────────────────
 // The breadcrumb (§1.6)
-// ---------------------------------------------------------------------------
+// ───────────────────────────────────────────────────────────────────────────
 
 /**
  * One crumb. `shelf` is the place it goes; the TRAILING crumb has none —
@@ -155,9 +155,9 @@ export const PLACE_MENU: readonly PlaceMenuItem[] = [
   { label: "Docs and Locker", shelf: LOCKER, icon: "locker" },
 ];
 
-// ---------------------------------------------------------------------------
+// ───────────────────────────────────────────────────────────────────────────
 // The filter row (§4.2)
-// ---------------------------------------------------------------------------
+// ───────────────────────────────────────────────────────────────────────────
 
 /**
  * §4.2's four properties, with the spec's own option words.
@@ -250,9 +250,9 @@ export function sharedWithOption(label: string): string {
 /** §4.2's link, which appears only once at least one filter is set. */
 export const CLEAR_FILTERS = "Clear filters";
 
-// ---------------------------------------------------------------------------
+// ───────────────────────────────────────────────────────────────────────────
 // The Search shelf's field
-// ---------------------------------------------------------------------------
+// ───────────────────────────────────────────────────────────────────────────
 
 /** The placeholder, verbatim from the v11 handoff's docs `search` scene
  *  (`fieldBlock('right of way', 'Search titles and contents', true)`). It
@@ -338,21 +338,21 @@ export const SEARCH_COPY = {
   },
 } as const satisfies SearchStateCopy;
 
-// ---------------------------------------------------------------------------
+// ───────────────────────────────────────────────────────────────────────────
 // Trash's ask (§4.3 `trash`, §14)
-// ---------------------------------------------------------------------------
+// ───────────────────────────────────────────────────────────────────────────
 
 /**
  * THE ASK, NOT THE VERB — and on screen it is a label plus one sentence.
  *
- * THE RATIONALE, which this panel used to print at a member standing in
- * Trash: "There is no destroy verb in the platform today; destruction happens
- * only on the purge schedule." (§4.3, verbatim.) Photos shipped an emptiable
- * trash and Docs is where it matters most — a scanned passport should be gone
- * when a member says so — so what is asked for is two typed commands (destroy
- * one document, destroy everything in trash), confirmed exactly as Photos
- * confirms it: an outlined --net button, the count named, no default. If the
- * ask is refused, the shelf says once, plainly, why destruction is scheduled.
+ * THE RATIONALE IS NOT PRINTED AT A MEMBER STANDING IN TRASH: "There is no
+ * destroy verb in the platform today; destruction happens only on the purge
+ * schedule." (§4.3, verbatim.) Photos has an emptiable trash and Docs is where
+ * it matters most — a scanned passport should be gone when a member says so —
+ * so what is asked for is two typed commands (destroy one document, destroy
+ * everything in trash), confirmed exactly as Photos confirms it: an outlined
+ * --net button, the count named, no default. While the ask stands, the shelf
+ * says once, plainly, why destruction is scheduled.
  *
  * That is a design note, and a design note is not copy (DESIGN.md → Copy). The
  * shelf shows the eyebrow — so the title is never mistaken for a control that
@@ -367,28 +367,28 @@ export const TRASH_ASK = {
 export const TRASH_FALLBACK =
   "Destruction happens only on the schedule a purge date announces, so a trash cannot be emptied.";
 
-// ---------------------------------------------------------------------------
+// ───────────────────────────────────────────────────────────────────────────
 // The fetched window (§4.1 state slot rung 1)
-// ---------------------------------------------------------------------------
+// ───────────────────────────────────────────────────────────────────────────
 
 /** What the window says when the read for the rows beyond it came back
  *  failed. A refusal, in the `net` role, and the ONLY thing rung 1 ever says —
  *  a window still in flight says nothing at all. */
 export const WINDOW_FAILED = "could not be fetched";
 
-// ---------------------------------------------------------------------------
+// ───────────────────────────────────────────────────────────────────────────
 // The Folders shelf (§4.3)
-// ---------------------------------------------------------------------------
+// ───────────────────────────────────────────────────────────────────────────
 
 /**
  * The caption under the folder rows.
  *
  * "Never a sentence on a row: the caption under the set carries the prose,
- * once." (§4.1, verbatim.) The Unfiled row used to break that rule by itself —
- * it printed *"N never put anywhere. Not an error, and not a folder"* in the
- * cell where every other row prints a number, which is both a sentence on a
- * row and a column that means two different things depending on which row you
- * read. The number stayed; the sentence came here, where the drive's prose
+ * once." (§4.1, verbatim.) The Unfiled row must not break that rule by itself:
+ * printing *"N never put anywhere. Not an error, and not a folder"* in the
+ * cell where every other row prints a number is both a sentence on a row and a
+ * column that means two different things depending on which row you read. The
+ * row keeps the number; the sentence lives here, where the drive's prose
  * lives.
  */
 export function foldersCaption(unfiled: number): string {

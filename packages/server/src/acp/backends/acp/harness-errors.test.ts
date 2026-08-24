@@ -116,7 +116,7 @@ describe("harness-errors suite", () => {
     ).toBe(failureClass);
   });
 
-  // ---- classification precedence ------------------------------------------
+  // ──── classification precedence ──────────────────────────────────────────
   //
   // The class drives a per-class circuit breaker (issue #567 D7), so a
   // misclassification trips the wrong breaker. Structured signals must beat

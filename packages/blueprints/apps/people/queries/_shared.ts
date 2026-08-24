@@ -6,13 +6,12 @@
  * (share.party_vault_binding — packages/vault/src/schema/share-commons.ts),
  * and which shared-space invitations are still awaiting their answer.
  *
- * WHAT IS SHARED WITH A PERSON IS NOT READ HERE any more (#825). It used to be
- * a commons-era projection — the circle_grant × circle_member ×
- * commons_member_state join — that no surface drew once People moved to the
- * grant plane; the person screen reads standing grants from
+ * WHAT IS SHARED WITH A PERSON IS NOT READ HERE (#825). The person screen
+ * reads standing grants from
  * `GET /centraid/_vault/grants?partyId=` through the share kit's own door
  * (`apps/people/grant-dashboard.ts`), which answers for both seats and knows
- * about delivery, which this join never did.
+ * about delivery — which a circle_grant × circle_member ×
+ * commons_member_state join here could not.
  *
  * NOT a query itself — the dispatcher resolves a query name straight to
  * `queries/<name>.ts` (packages/server/src/engine/handlers/dispatcher.ts), so

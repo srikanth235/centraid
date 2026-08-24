@@ -89,9 +89,9 @@ export const SHELF_LABELS: Readonly<Record<string, string>> = {
   [STORAGE]: "Storage",
 };
 
-// ---------------------------------------------------------------------------
+// ───────────────────────────────────────────────────────────────────────────
 // Captions — the closing sentence under a row set (§4.1, §4.3)
-// ---------------------------------------------------------------------------
+// ───────────────────────────────────────────────────────────────────────────
 
 /**
  * The caption is where the PROSE lives, once. "Never a sentence on a row: the
@@ -156,9 +156,9 @@ export function folderCaption(name: string): string {
 /** The spec's own search caption, for the day the unreadable count is real. */
 export const SEARCH_CAPTION_SAMPLE = CAPTION_SEARCH;
 
-// ---------------------------------------------------------------------------
+// ───────────────────────────────────────────────────────────────────────────
 // The five empty states (§4.6)
-// ---------------------------------------------------------------------------
+// ───────────────────────────────────────────────────────────────────────────
 
 /**
  * "Five empty states: a new drive (this one), an empty folder, an empty shelf,
@@ -300,9 +300,9 @@ export function emptyCopy(
   return shelf ?? DRIVE_EMPTY;
 }
 
-// ---------------------------------------------------------------------------
+// ───────────────────────────────────────────────────────────────────────────
 // The row state slot (§4.1)
-// ---------------------------------------------------------------------------
+// ───────────────────────────────────────────────────────────────────────────
 
 /**
  * "The state slot shows AT MOST ONE thing, in this order." (§4.1, verbatim
@@ -385,9 +385,9 @@ export function rowStateMark(input: RowStateInput): RowStateMark | null {
   return null;
 }
 
-// ---------------------------------------------------------------------------
+// ───────────────────────────────────────────────────────────────────────────
 // The "More in Docs" sheet (§1.5)
-// ---------------------------------------------------------------------------
+// ───────────────────────────────────────────────────────────────────────────
 
 /** The sheet's own title and the sentence that closes it (§1.5, verbatim). */
 export const MORE_TITLE = "More in Docs";
@@ -459,9 +459,9 @@ export const MORE_ROWS: readonly (MoreRow & { live: boolean })[] = [
   },
 ];
 
-// ---------------------------------------------------------------------------
+// ───────────────────────────────────────────────────────────────────────────
 // Banners and status (§11)
-// ---------------------------------------------------------------------------
+// ───────────────────────────────────────────────────────────────────────────
 
 /** §11's offline banner, compressed to the banner budget (DESIGN.md → Copy):
  *  one sentence, the state plus its one consequence, and one action. The

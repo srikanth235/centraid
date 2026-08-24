@@ -36,15 +36,15 @@
 // path to the same filter here is a separate, deliberate call rather than a
 // gap in this pass.
 //
-// TILE SIZE came here from `PhotosMoreSheet.tsx` by way of the bottom sheet
-// this menu replaced — see that file's header for why it left the More sheet,
-// and `photos-rungs.ts` for why the value is one shared, persisted member
-// preference rather than menu-local state. Inside a menu it is FOUR CHECKED
-// ROWS, not the stepper the sheet drew: a menu row's whole grammar is "this is
-// the current answer, here are the others", and a `‹ M ›` stepper inside one
-// would be a second, different control idiom in a card that has room for
-// neither. The rows also state where the ends are — at XS there is visibly
-// nothing below it — which the stepper could only say by disabling a chevron.
+// TILE SIZE lives here rather than in the More sheet — see
+// `PhotosMoreSheet.tsx`'s header for why, and `photos-rungs.ts` for why the
+// value is one shared, persisted member preference rather than menu-local
+// state. Inside a menu it is FOUR CHECKED ROWS: a menu row's whole grammar is
+// "this is the current answer, here are the others", and a `‹ M ›` stepper
+// inside one would be a second, different control idiom in a card that has
+// room for neither. The rows also state where the ends are — at XS there is
+// visibly nothing below it — which a stepper could only say by disabling a
+// chevron.
 
 // DETECT FACES (issue #724 W5) is the one row here that is not a view option.
 // It is in this menu because the Library header is where a member is LOOKING at

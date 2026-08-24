@@ -24,8 +24,8 @@
 // photographs.
 //
 // The reference's rail opens with **Sharing · 214** between Library and
-// Favorites. This repo has no such shelf: issue #726 retired the Sharing place
-// on the ruling that a share's place is the RECIPIENT'S vault, so the row is
+// Favorites. This repo has no such shelf: there is no Sharing place, on the
+// ruling that a share's place is the RECIPIENT'S vault (#726), so the row is
 // absent here rather than pointing at a destination that does not exist. Every
 // other row is a shelf in `shelves.ts` and is therefore reachable on touch
 // through the band or the strip, which is what keeps the rail an arrangement

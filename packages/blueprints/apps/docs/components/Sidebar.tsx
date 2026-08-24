@@ -3,8 +3,8 @@
 //
 // SMART NAV (All / Recent / Starred) AND THE TRASH ROW ARE GONE. The shelf
 // strip (components/ShelfStrip.tsx) carries all six shelves — including the
-// three the sidebar used to duplicate — and a second navigation for the same
-// destinations is exactly what the Docs restructure retires (spec §1.7). What
+// three the sidebar would otherwise duplicate — and a second navigation for
+// the same destinations is exactly what spec §1.7 refuses. What
 // remains here is the folder list, whose rename / share / delete affordances
 // have no other home yet, and the footprint.
 import { useEffect, useRef } from "react";

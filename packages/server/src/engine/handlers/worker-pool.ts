@@ -1,6 +1,6 @@
 /*
  * Warm-spare worker pool for app-handler dispatch (issue #404 mobile fast
- * path). Every query / action invocation used to pay the full cost of
+ * path). Without it, every query / action invocation pays the full cost of
  * spinning up a fresh `node:worker_threads` Worker — thread creation plus this
  * repo's worker-runner module evaluation (and, under the tsx test loader, the
  * loader re-registration) — on the request's critical path, ~10-30ms+ each.
@@ -82,8 +82,8 @@ export function workerResourceLimitsFromEnv(
 export const DEFAULT_WORKER_POOL_SIZE = 2;
 
 /**
- * Warm spares on a constrained host (issue #659 G11). It used to be 0 — every
- * handler invocation paid a cold `new Worker()` boot. That is backwards: the
+ * Warm spares on a constrained host (issue #659 G11). Zero spares makes every
+ * handler invocation pay a cold `new Worker()` boot, which is backwards: the
  * constrained host is precisely the one where a cold thread boot is slowest and
  * most visible, and it is the target hardware, not an edge case. ONE spare
  * keeps the common single-in-flight case warm for roughly one worker's idle

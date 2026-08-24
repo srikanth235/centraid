@@ -69,9 +69,9 @@ export type PhotosStackParamList = {
   PlacesMap: undefined;
   PlaceDetail: { placeKey: string; placeName: string };
   FaceReview: undefined;
-  // The people roster (issue #712). It used to be a band destination rendered
-  // inline by `PhotosHome`; now that People is off the band, it is a pushed
-  // route like every other shelf behind Collections — reached from Collections'
+  // The people roster (issue #712). People is OFF the band, so this is a
+  // pushed route like every other shelf behind Collections — reached from
+  // Collections'
   // own People section heading (`PhotosCollectionsView.tsx`'s `open()`) and from
   // the Library shelf list's People row alongside `FaceReview`, which this route
   // keeps distinct from: `PhotosPeople` browses confirmed identities,
@@ -86,8 +86,7 @@ export type PhotosStackParamList = {
   // The full Memories surface (issue #724 W7) — On this day, Trips, and
   // Similar moments, read off the vault's `media.memory` projection. Reached
   // from Collections' own Memories section heading
-  // (`PhotosCollectionsView.tsx`'s `open()`), which used to have nowhere to
-  // send that tap because no "all memories" screen existed.
+  // (`PhotosCollectionsView.tsx`'s `open()`).
   PhotosMemories: undefined;
   AlbumDetail: { albumId: string };
   // The picker (§10) — full screen on the phone. Its picked set is its own,
@@ -178,9 +177,9 @@ export type SettingsStackParamList = {
   Sharing: undefined;
   PhoneStorage: { signalCause?: string } | undefined;
   // Backup health (issue #712 B2) — a FRAME screen, beside Phone storage. It
-  // used to live in the Photos stack, which was always a compromise: the policy
-  // it edits governs Docs' scans and Notes' attachments too, and nothing on it
-  // is Photos-specific. Photos deep-links across to it from the More sheet's
+  // does not live in the Photos stack: the policy it edits governs Docs' scans
+  // and Notes' attachments too, and nothing on it is Photos-specific. Photos
+  // deep-links across to it from the More sheet's
   // "Backup" row rather than keeping a copy.
   BackupHealth: { signalCause?: string } | undefined;
 };
@@ -213,10 +212,10 @@ export type RootStackParamList = {
   Insights: { initialTab?: "overview" | "alerts" } | undefined;
   // The three places promoted to screens of their own (issue #765). They are
   // ROOT covers, beside Automations and Insights — not members of
-  // `SettingsStackParamList`. Two reasons: a place is not a setting (Connectors
-  // used to land on Settings because nothing else existed, which is the bug
-  // this fixes), and the Settings stack is deliberately not composed with the
-  // root stack, so a screen inside it cannot navigate to a sibling cover.
+  // `SettingsStackParamList`. Two reasons: a place is not a setting, so
+  // Connectors is not a Settings row; and the Settings stack is deliberately
+  // not composed with the root stack, so a screen inside it cannot navigate to
+  // a sibling cover.
   Connectors: undefined;
   // `kind` names which store's records to open on — the same "land on the named
   // shelf rather than push a second copy" shape `PhotosHome.destination` uses.
@@ -308,7 +307,7 @@ export type SettingsScreenProps<T extends keyof SettingsStackParamList> =
 
 declare global {
   // Makes `useNavigation()` infer the right list everywhere.
-  // eslint-disable-next-line @typescript-eslint/no-namespace -- grandfathered pre-existing suppression (#247)
+  // oxlint-disable-next-line @typescript-eslint/no-namespace -- grandfathered pre-existing suppression (#247)
   namespace ReactNavigation {
     interface RootParamList extends RootStackParamList {}
   }

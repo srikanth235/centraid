@@ -47,9 +47,8 @@ export interface FetchPolicy {
 const METERED_NETWORK_TYPES = new Set(["CELLULAR", "WIMAX"]);
 
 /**
- * The default policy, used until a frame-level policy store exists. Reproduces
- * exactly what `full-quality-gate.ts` did before this extraction: cellular and
- * WiMAX are metered, everything reported and everything unreported is not.
+ * The default policy, used until a frame-level policy store exists: cellular
+ * and WiMAX are metered, everything reported and everything unreported is not.
  */
 export const defaultFetchPolicy: FetchPolicy = {
   connectionKind(networkType: string | undefined): ConnectionKind {

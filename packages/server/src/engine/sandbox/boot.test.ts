@@ -4,14 +4,12 @@
  * `boot.ts` exists because a worker runner cannot import the sandbox the
  * ordinary way: worker threads boot under Node's native type stripping, which
  * runs a `.ts` file handed to it directly but does not map a `./sibling.js`
- * specifier onto `./sibling.ts`. So boot has zero relative imports and resolves
+ * specifier onto its `.ts` source. So boot has zero relative imports and resolves
  * the rest of the sandbox by absolute path, preferring compiled `.js`.
  *
  * That makes it the single point of failure for the whole slice — if it cannot
  * load, `engine/worker/runner.ts` throws and the handler does not run, which is
  * the correct direction but only if the loader itself works in BOTH layouts.
- * It was previously exercised only inside worker threads, where V8 coverage
- * does not reach, so nothing about it was measured.
  *
  * `loadSandbox()` resolves and imports; it installs nothing, revokes no global
  * and registers no hook, so it is safe to call in-process here.

@@ -537,12 +537,12 @@ export function extSearchable(
   }
 }
 
-// ---------------------------------------------------------------------------
+// ───────────────────────────────────────────────────────────────────────────
 // The per-app typed write trio. Registered under owner schema `ext.<appId>`
 // so one manifest scope ({ schema: "ext.<appId>", verbs: "read+act" }) covers
 // the whole band; the `band` input routes a builder session's writes at the
 // scratch copy without a second grant.
-// ---------------------------------------------------------------------------
+// ───────────────────────────────────────────────────────────────────────────
 
 const BAND_PROP = { enum: ["live", "draft"] };
 

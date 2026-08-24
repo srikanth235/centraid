@@ -17,21 +17,19 @@
 //   2. One face at a time (v4 3967 "One face at a time") — `current` below
 //      is always exactly one entry; nothing here loops the queue into a list.
 //
-// EVERY CONTROL HERE IS A REAL WRITE, AND THAT IS NEW (issue #712). Four of
-// the five used to be, and the fifth was an apology:
+// EVERY CONTROL HERE IS A REAL WRITE (issue #712), and none of the five is an
+// apology:
 //   * Confirm / Not this person / Someone else → `answer-face` with
 //     `confirm` or `reject`. "Someone else" opens an inline picker over
 //     people ALREADY confirmed elsewhere in this vault; the prototype's
 //     "name this face yourself" implies minting a BRAND NEW person and there
 //     is no action-plane command to create one (app.json has no create-party
 //     action), so picking an existing person is the honest subset.
-//   * Unknown person / Keep unnamed → `answer-face` with `dismiss`. This
-//     button used to set a note reading "isn't wired up yet — there's no
-//     command for it. Skip for now.", because confirm demanded a party_id
-//     and reject DELETED the row. That gap is why this queue could not be
-//     finished: every stranger the member deliberately declined to name came
-//     back on the next load, for ever. `media.answer_face_proposal` now has
-//     an answer for it, and a dismissed face stays dismissed.
+//   * Unknown person / Keep unnamed → `answer-face` with `dismiss`.
+//     `media.answer_face_proposal` carries this answer, so a dismissed face
+//     stays dismissed. Without it the queue cannot be finished: every
+//     stranger the member deliberately declined to name comes back on the
+//     next load, for ever.
 //   * Skip: still genuinely local — nothing is written, so "it stays in the
 //     queue" (4315) is exactly true, not just a promise.
 //
@@ -231,10 +229,10 @@ export function FaceReview({
   const people = useMemo(() => data?.people ?? [], [data]);
 
   /**
-   * The ONE write behind every answer on this screen (issue #712). It used to
-   * be two actions with two shapes; the answer is now the discriminant, so
-   * adding "keep unnamed" was a new member of a union rather than a new
-   * endpoint — and Skip stayed the only control that writes nothing.
+   * The ONE write behind every answer on this screen (issue #712). The
+   * answer is the discriminant, not two actions with two shapes, so a new
+   * answer like "keep unnamed" is a new member of a union rather than a new
+   * endpoint — and Skip is the only control that writes nothing.
    */
   async function answer(
     kind: FaceAnswer,

@@ -2,9 +2,10 @@
  * AnalyticsStore — a read-only lens over the per-vault `run_summary` VIEW
  * (issue #98, decision 4; moved into the vault's own `journal.db` by #280).
  *
- * `run_summary` used to be a denormalized table maintained by a best-effort
- * write-through at run completion — justified when the rollup lived in a
- * DIFFERENT file than the ledger. With both in the vault's `journal.db`
+ * `run_summary` is a VIEW, not a denormalized table maintained by a
+ * best-effort write-through at run completion — that is justified only while
+ * the rollup lives in a DIFFERENT file than the ledger. With both in the
+ * vault's `journal.db`
  * there is no file boundary to denormalize across, so the view (declared in
  * `CONVERSATION_LEDGER_DDL`) derives every row from `turns ⋈ conversations`
  * plus the dominant model from `items`: no write path, no drift, nothing to

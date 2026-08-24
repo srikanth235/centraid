@@ -23,7 +23,7 @@ const PNG_BYTES = Buffer.from(
   "base64"
 );
 
-// ---------- local stores ----------
+// ────────── local stores ──────────
 
 let tmp: string;
 describe("blob", () => {
@@ -70,7 +70,7 @@ describe("blob", () => {
     );
   });
 
-  // ---------- spool pipeline ----------
+  // ────────── spool pipeline ──────────
 
   test("sniffing: magic bytes beat the declared type, declared beats extension", () => {
     expect(sniffMediaType(PNG_BYTES, "application/octet-stream", "x.bin")).toBe(
@@ -240,7 +240,7 @@ describe("blob", () => {
     ]);
   }
 
-  // ---------- custody: two tiers, encryption, reconcile ----------
+  // ────────── custody: two tiers, encryption, reconcile ──────────
 
   test("sealBlob/unsealBlob round-trip and refuse a swapped address", () => {
     const key = Buffer.alloc(32, 7);
@@ -378,7 +378,7 @@ describe("blob", () => {
     expect(reread.getSync(sha)?.toString()).toBe("take me home");
   });
 
-  // ---------- the S3 driver against a fake S3-compatible endpoint ----------
+  // ────────── the S3 driver against a fake S3-compatible endpoint ──────────
 
   interface FakeS3 {
     url: string;
@@ -560,7 +560,7 @@ describe("blob", () => {
     }
   });
 
-  // ---------- issue #405: framed rangeable seal + single-flight ----------
+  // ────────── issue #405: framed rangeable seal + single-flight ──────────
 
   function s3RemoteTier(
     fake: FakeS3,

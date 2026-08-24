@@ -102,7 +102,7 @@ export class KeyStoreError extends Error {
  * vaultless gateway creates `keys/` only when the endpoint identity is
  * actually requested.
  */
-/* eslint-disable max-classes-per-file -- the typed custody error is colocated with the KeyStore boundary that throws it (#555) */
+/* oxlint-disable max-classes-per-file -- the typed custody error is colocated with the KeyStore boundary that throws it (#555) */
 export class KeyStore {
   readonly dir: string;
   private readonly protector: KeyProtector | undefined;

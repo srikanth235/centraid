@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-// eslint-disable-next-line typescript-eslint/ban-ts-comment -- issue #711: browser-DOM fixture is intentionally checked by jsdom, while the blueprint TS config excludes DOM globals (see photos-media.test.ts's own note)
+// oxlint-disable-next-line typescript-eslint/ban-ts-comment -- issue #711: browser-DOM fixture is intentionally checked by jsdom, while the blueprint TS config excludes DOM globals (see photos-media.test.ts's own note)
 // @ts-nocheck
 // The Face review surface (apps/photos/components/FaceReview.tsx, issue
 // #711, v4 handoff 4305-4318). Same regression net as photos-faces.test.ts,
@@ -159,7 +159,7 @@ describe("Face review surface", () => {
       await Promise.resolve();
     });
     // ONE action, carrying the answer as its discriminant — not a second
-    // endpoint, and not the note this button used to set instead of writing.
+    // endpoint, and not a note set in place of writing.
     expect(acts).toStrictEqual([
       { action: "answer-face", input: { region_id: "r1", answer: "dismiss" } },
     ]);

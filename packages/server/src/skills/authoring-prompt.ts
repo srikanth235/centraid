@@ -7,9 +7,8 @@
  * (`baseExtra`) first, then the authoring contract for the app `kind`
  * (`composeSkills`).
  *
- * The UI-grounding blocks that used to follow for `kind: "app"` retired with
- * the served-app plane they described (issue #799): nothing authors an app's
- * front end any more — the eight bundled apps are inline React routes in the
+ * `kind: "app"` gets no UI-grounding blocks (issue #799): nothing authors an
+ * app's front end — the eight bundled apps are inline React routes in the
  * shell, written in this repo, not generated against a design-token contract
  * at turn time. Automation authoring, which has no front end, is untouched.
  */

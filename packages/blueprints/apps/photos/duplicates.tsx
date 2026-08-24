@@ -51,7 +51,7 @@ export function createDuplicates({
   let loading = false;
   const selected = new Set<string>();
 
-  // ---- the review queue ----
+  // ──── the review queue ────
   //
   // A SNAPSHOT, taken when the review opens, and NOT the live `clusters` list.
   // The queue's length is the denominator the member reads on every step

@@ -36,13 +36,10 @@ async function loadSandboxBoot(): Promise<
  *     that decodes media by shelling out to ffmpeg. A larger hole, named as
  *     one in policy.ts.
  *
- * There is no "no sandbox" option any more (#846 P9). It used to be the
- * default, and deliberately so: the ONNX bundles reached `node:module`'s
- * `createRequire` to resolve `runtime/node_modules`, which every lane refuses,
- * so nothing could run sandboxed until `packages/model-runtime/src/onnx.ts`
- * stopped needing it. It has, so the floor applies to everyone and a handler
- * that needs more says so in its manifest — where the ask is reviewable —
- * rather than every handler getting everything because one needed more.
+ * There is no "no sandbox" option (#846 P9). The floor applies to everyone,
+ * and a handler that needs more says so in its manifest — where the ask is
+ * reviewable — rather than every handler getting everything because one
+ * needs more.
  */
 type SandboxLaneRequest =
   | "automation-handler"
@@ -522,8 +519,7 @@ function execute(request: WorkerRequest): void {
           ] = request.sandboxRuntimeDir;
         }
         // Unconditional (#846 P9). An absent lane is the strict floor, never
-        // "no containment" — the one shape that used to make the whole plane
-        // unsandboxed because a single lane could not be satisfied.
+        // "no containment".
         const sandboxApi = await (await loadSandboxBoot()).loadSandbox();
         const roots = request.sandboxReadRoots ?? [];
         const policy =
