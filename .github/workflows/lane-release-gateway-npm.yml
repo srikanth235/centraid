@@ -50,7 +50,7 @@ jobs:
       - uses: ./.github/actions/setup
       # Required when the action is pinned by SHA — see security.yml's note.
       - name: Install Rust toolchain
-        uses: dtolnay/rust-toolchain@2c7215f132e9ebf062739d9130488b56d53c060c # stable
+        uses: dtolnay/rust-toolchain@6c977a6ca4077a0ceb28ffbe03f59d46e9ac8772 # stable
         with:
           toolchain: stable
       - name: Build tunnel native (+ TS dist)
