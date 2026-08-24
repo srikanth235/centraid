@@ -19,9 +19,9 @@ const here = import.meta.dirname;
 // extra engines are gated behind CENTRAID_WEB_CROSS_BROWSER: the default path
 // stays Chromium-only and green, and the cross-browser CI job (e2e.yml
 // `web-e2e-cross-browser`, reported to root under #842) sets the flag AFTER
-// `bunx playwright install --with-deps webkit firefox`. Until that job runs for
-// the first time the webkit/firefox result is UNMEASURED, not green — its first
-// CI run is the measurement (#842 W5.1 demonstrated-red).
+// `bunx playwright install --with-deps chromium webkit firefox`. Until that job
+// runs for the first time the webkit/firefox result is UNMEASURED, not green —
+// its first CI run is the measurement (#842 W5.1 demonstrated-red).
 //
 // `--list` enumerates the webkit/firefox specs without launching a browser, so
 // the projects are verifiably CONFIGURED here even though they cannot RUN here.

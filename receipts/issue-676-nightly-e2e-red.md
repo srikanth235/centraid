@@ -146,3 +146,11 @@ which the checklist still marks unmeasured. Verdict: PASS.
 | date | harness | session |
 | --- | --- | --- |
 | 2026-08-24 | opencode | - |
+
+Cross-browser verification command, once landed:
+
+```
+cd apps/web
+CENTRAID_WEB_CROSS_BROWSER=1 bunx playwright install --with-deps chromium webkit firefox
+bun run e2e
+```
