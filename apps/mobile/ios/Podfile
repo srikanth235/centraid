@@ -112,5 +112,14 @@ target 'Centraid' do
       Pod::UI.puts '[centraid] unpublished op-sqlite/sqlite3.h so it cannot shadow the SDK <sqlite3.h>'
     end
 
-  end
+    # @maplibre/maplibre-react-native ships its native SDK through Swift Package
+    # Manager, not CocoaPods: its podspec compiles the RN bridge but expects the
+    # MapLibre product (maplibre-gl-native-distribution, exact 6.26.0) to be
+    # attached to both the Pods project and the app target by THIS hook. Skip it
+    # and every MLRN header fails with 'MapLibre/MapLibre.h' file not found —
+    # the shape the nightly iOS lane died in since the pod landed (#816/#817,
+    # whose native regeneration hand-off this closes).
+    $MLRN.post_install(installer)
+
+   end
 end

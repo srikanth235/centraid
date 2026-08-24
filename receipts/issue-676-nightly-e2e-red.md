@@ -104,6 +104,8 @@ grep -n "MapLibreReactNative (11.3.6)" Podfile.lock
 # 349:  - MapLibreReactNative (11.3.6):
 grep -c "maplibre-gl-native-distribution" Centraid.xcodeproj/project.pbxproj
 # 4
+grep -n "MLRN.post_install" apps/mobile/ios/Podfile
+#     $MLRN.post_install(installer)
 ```
 
 The remaining claims are delegated to the e2e lanes themselves, dispatched via

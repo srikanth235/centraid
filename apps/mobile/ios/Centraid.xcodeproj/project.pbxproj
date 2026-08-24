@@ -204,6 +204,7 @@
 				800E24972A6A228C8D4807E9 /* [CP] Copy Pods Resources */,
 				632970EFAB083B550E69D911 /* [CP] Embed Pods Frameworks */,
 				6CB87BB15A1340CE909BA00B /* Copy Files */,
+				CC3D57CC5829C2458605BCB1 /* [MapLibre React Native] Remove MapLibre.xcframework-ios.signature */,
 			);
 			buildRules = (
 			);
@@ -211,6 +212,9 @@
 				8AE6FD25D0024D4593FDDDAF /* PBXTargetDependency */,
 			);
 			name = Centraid;
+			packageProductDependencies = (
+				E729A5BFADF7D541AB7B8278 /* MapLibre */,
+			);
 			productName = Centraid;
 			productReference = 13B07F961A680F5B00A75B9A /* Centraid.app */;
 			productType = "com.apple.product-type.application";
@@ -254,6 +258,9 @@
 				Base,
 			);
 			mainGroup = 83CBB9F61A601CBA00E9B192;
+			packageReferences = (
+				8CC5EAE655114E3534C27CA8 /* XCRemoteSwiftPackageReference "maplibre-gl-native-distribution" */,
+			);
 			productRefGroup = 83CBBA001A601CBA00E9B192 /* Products */;
 			projectDirPath = "";
 			projectRoot = "";
@@ -428,6 +435,25 @@
 			shellPath = /bin/sh;
 			shellScript = "\"${PODS_ROOT}/Target Support Files/Pods-Centraid/Pods-Centraid-resources.sh\"\n";
 			showEnvVarsInLog = 0;
+		};
+		CC3D57CC5829C2458605BCB1 /* [MapLibre React Native] Remove MapLibre.xcframework-ios.signature */ = {
+			isa = PBXShellScriptBuildPhase;
+			alwaysOutOfDate = 1;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputFileListPaths = (
+			);
+			inputPaths = (
+			);
+			name = "[MapLibre React Native] Remove MapLibre.xcframework-ios.signature";
+			outputFileListPaths = (
+			);
+			outputPaths = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "rm -rf \"$CONFIGURATION_BUILD_DIR/MapLibre.xcframework-ios.signature\"";
 		};
 /* End PBXShellScriptBuildPhase section */
 
@@ -747,6 +773,25 @@
 			defaultConfigurationName = Release;
 		};
 /* End XCConfigurationList section */
+
+/* Begin XCRemoteSwiftPackageReference section */
+		8CC5EAE655114E3534C27CA8 /* XCRemoteSwiftPackageReference "maplibre-gl-native-distribution" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/maplibre/maplibre-gl-native-distribution";
+			requirement = {
+				kind = exactVersion;
+				version = 6.26.0;
+			};
+		};
+/* End XCRemoteSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		E729A5BFADF7D541AB7B8278 /* MapLibre */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 8CC5EAE655114E3534C27CA8 /* XCRemoteSwiftPackageReference "maplibre-gl-native-distribution" */;
+			productName = MapLibre;
+		};
+/* End XCSwiftPackageProductDependency section */
 	};
 	rootObject = 83CBB9F71A601CBA00E9B192 /* Project object */;
 }
