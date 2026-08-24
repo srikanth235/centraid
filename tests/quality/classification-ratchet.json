@@ -1,9 +1,9 @@
 {
-  "approvedDeviation": "Two governed fingerprints are re-pinned by #846. manifest.ts: validateSandbox now fail-closes on an unknown sandbox.lane, so a manifest may declare only model-runtime or media-transcode and anything else is refused at validation rather than at fire time. tests/matrix.json: the sim-revocation-severance joinLaw is added because P1 turned the D1 pin into an ordinary passing test, which grid E must list. No classification was weakened — one file gained a refusal it did not have, the other gained a law, no quality lost a gate, no gate lost its evidence, and the remaining governed fingerprints are unmoved.",
+  "approvedDeviation": "#861 comment sweep re-pin: packages/server/src/acp/backends/acp/vault-mcp-server.ts and packages/server/src/automation/manifest/manifest.ts changed in comment lines only (historical narration converted to present tense; no code, classification, refusal, or gate changed), so their governed fingerprints are re-pinned to the same logic at new bytes. No quality lost a gate, no gate lost its evidence, and every other governed fingerprint is unmoved.",
   "matrixGovernanceFingerprint": "2f4acea8300a63b0fb407307840938bd29af4035239340a3addba62fc81e7b75",
   "fingerprints": {
-    "packages/server/src/acp/backends/acp/vault-mcp-server.ts": "62893489b538f861feb46200dc69a53a7ce02b0809224b93f74e2f39fc32276d",
-    "packages/server/src/automation/manifest/manifest.ts": "e1acf3c249bc869f0aaa19cad157d76a350f7b09c0597749280be8826b20276e",
+    "packages/server/src/acp/backends/acp/vault-mcp-server.ts": "89bfbe15f3f853150f2f6fc7f81bfc7ce93ca11337341401b1f157f75f6875da",
+    "packages/server/src/automation/manifest/manifest.ts": "cd13a443f0f3cd69c320ee46ed12c4a1e65f652af07eec2db7f1843e4a10e170",
     "packages/server/src/routes/route-security.ts": "c2fd8dcb6a9687552e4550e3496085b28c1498034472eb6f1173027b4300d82c",
     "packages/server/src/serve/health-registry.ts": "d1f3fc416ecbe43af2ab4b091fecf3b1041590e52f2002a242e5031c65c9fd04",
     "packages/vault/src/schema/sealed.ts": "40fba400b21048b193006c3e81d063e0fdfb79cfe1dd3b4b90b94bd44547ecc0",

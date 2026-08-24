@@ -15,6 +15,11 @@
 // Schema/export audit #801: the schema fingerprint moved on import remaps
 // (`@centraid/time-engine` → `@centraid/core/time`) with no table or adapter
 // change.
+// Schema/export audit #861: the schema fingerprint moved on comment-only
+// edits across schema/*.ts (the current-state comment sweep: narration
+// converted to present tense, banners normalized). No table, column, index,
+// or CHECK changed anywhere in the schema directory, so export completeness
+// is unchanged; the canonical table walk carries exactly what it carried.
 // Schema/export audit #721: the schema fingerprint moved on comment-only edits
 // to schema/enrich.ts (the model-versioning convention is documented in its
 // header; no table, column, or CHECK changed). `enrich_embedding` and its

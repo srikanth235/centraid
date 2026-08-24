@@ -20,7 +20,7 @@ receipt, no child issues.
 - [x] Every sweep change touches comment lines only (plus the sanctioned Wave-3 relocations); no test, type, or behavior changes.
 - [x] Wave 3 verdict (keep / compress / relocate) recorded per ratio-offender file; `perf-budgets.ts` runbook relocated.
 - [x] QUALITY.md carries the module-size observation (settled Q4).
-- [ ] The dangling-ref promotion decision (settled Q2) is recorded as a comment on issue #861.
+- [x] The dangling-ref promotion decision (settled Q2) is recorded as a comment on issue #861.
 
 ## What changed
 
@@ -91,6 +91,9 @@ converted, leaving zero ASCII banners repo-wide.
 
 ### Change surface (every file in this umbrella's diff)
 
+- `tests/quality/classification-ratchet.json`
+- `tests/schema-export-fingerprint.json`
+- `packages/vault/src/gateway/portable-export.ts`
 - `QUALITY.md`
 - `apps/desktop/src/main.ts`
 - `apps/desktop/src/main/apps-store-client.ts`
@@ -709,6 +712,18 @@ converted, leaving zero ASCII banners repo-wide.
 - `scripts/lint-comment-narration.mjs`
 - `scripts/perf/README.md`
 
+## User impact
+
+None visible. The diff is comment-only across every UI package — no rendered
+pixel, string, or behavior changes anywhere. The evidence for "unchanged" is
+the first-run surface the desktop harness already captures:
+`artifacts/e2e/ui-impact/issue-679-first-run-home.png`, emitted by
+`apps/desktop/tests/e2e/onboarding-home.spec.ts` (in this diff with comment
+edits only), re-captures the same Home because nothing user-facing moved.
+
+First-run: onboarding and the fresh Home are unchanged; this change series
+touches only comments.
+
 ## Out of scope
 
 - Markdown docs narration (done under #767); the evidence layer (receipts,
@@ -739,6 +754,25 @@ converted, leaving zero ASCII banners repo-wide.
   `prefer-named-capture-group`).
 - `perf-budgets.ts`'s `approvedDeviation` string is treated as append-only
   ratchet evidence and left byte-identical.
+- Two byte-level fingerprint ratchets tripped on comment-only edits and are
+  re-pinned per their own protocols. Schema/export:
+  `tests/schema-export-fingerprint.json` re-pinned with the deviation note
+  prepended and the export owner touched
+  (`packages/vault/src/gateway/portable-export.ts`, audit note #861 — the
+  same comment-only precedent as its #721 note). Classification
+  (`tests/quality/classification-ratchet.json`), deviation note verbatim:
+  #861 comment sweep re-pin: packages/server/src/acp/backends/acp/vault-mcp-server.ts and packages/server/src/automation/manifest/manifest.ts changed in comment lines only (historical narration converted to present tense; no code, classification, refusal, or gate changed), so their governed fingerprints are re-pinned to the same logic at new bytes. No quality lost a gate, no gate lost its evidence, and every other governed fingerprint is unmoved.
+- Three local `check:push` failures are environmental, not this diff's, and
+  are left to CI where those lanes run with their real toolchains:
+  `@centraid/desktop` `ipc-core.test.ts` cannot load the Electron binary in
+  this sandbox ("Electron failed to install correctly"; the suite's 308/308
+  tests pass); `design:gallery` wants a Playwright chromium revision this
+  container does not have; and the iOS `@expo/fingerprint` identity mismatch
+  is iOS-only while Android matches — a comment-only TS diff feeds neither,
+  so the committed fingerprint is left alone rather than re-written from a
+  container whose prebuild state differs from CI. The push therefore uses the
+  pre-push gate's own documented escape (`SKIP_CHECK_PR=1`, "CI still
+  enforces") after every non-environmental gate was run and fixed locally.
 
 ## Verification
 
@@ -799,6 +833,12 @@ scoped typechecks plus the final repo-wide typecheck hold. Every Wave 1 site
 in the issue appendix is fixed with the current truth verified by grep — no
 guessed successor filenames; where no successor exists the claim was deleted
 (`apps-store-client.ts`, `band-owner.ts`, `host-platform.ts`).
+
+The dangling-ref promotion decision (settled Q2) is recorded as a comment on
+issue #861. See
+[issuecomment-5396382447](https://github.com/srikanth235/centraid/issues/861#issuecomment-5396382447):
+warn-only for now; promotion to a blocking directive is a future ruling taken
+once the zero baseline has held through normal PR cycles.
 
 Acceptance criteria, restated verbatim over the evidence above:
 
