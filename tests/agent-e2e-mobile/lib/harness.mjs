@@ -81,12 +81,20 @@ export const HOME_READY_MARKER = "All apps and places";
 // iOS Simulator's `openLink` (simctl openurl) raises a system
 // `Open in "Centraid"?` confirmation for custom-scheme links a moment AFTER
 // the openLink directive returns; Android fires the VIEW intent directly.
-// `optional: true` absorbs the no-dialog case (Android, or an already-open
-// session); `^Open$` anchors the tap so it cannot land on the dialog's own
-// title text, which also contains "Open".
-export const CONFIRM_SYSTEM_OPEN = `# iOS system confirmation for a custom-scheme openLink — see CONFIRM_SYSTEM_OPEN.
+// Then, because CI reinstalls the dev build every run, expo-dev-client shows
+// its one-time "This is the developer menu" explainer sheet over whatever the
+// app renders — both screenshots in the 05:42 home-loads run show
+// "Connect your gateway." fully painted BEHIND that sheet. `optional: true`
+// absorbs the no-dialog cases (Android, or an already-open session);
+// `^…$` anchors each tap so it cannot land on the dialog's own title text,
+// which also contains "Open", or on prose that contains "Continue".
+export const CONFIRM_SYSTEM_OPEN = `# iOS system confirmation for a custom-scheme openLink, then the dev-client
+# first-run explainer — see CONFIRM_SYSTEM_OPEN.
 - tapOn:
     text: "^Open$"
+    optional: true
+- tapOn:
+    text: "^Continue$"
     optional: true
 `;
 // An individual chunk owns one coherent user interaction. Fresh pairing is the
