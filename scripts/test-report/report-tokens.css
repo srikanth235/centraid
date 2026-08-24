@@ -603,3 +603,77 @@
   --st-degraded: var(--warning);
   --st-degraded-text: var(--warning);
 }
+
+/* ---------------------------------------------------------------------------
+   Night Watch layer — the report page's own ground, ink, rules and signal
+   tints. One name per rung, both themes; see
+   docs/design-divergences.md#the-nightly-test-report for what bounds it.
+   --------------------------------------------------------------------------- */
+
+:root {
+  --nw-ground: #FDFDFC;
+  --nw-ink: #141414;
+  --nw-ink2: #5A5A58;
+  --nw-ink3: #6C6C69;
+  --nw-ghost: #888885;
+  --nw-line: #E5E4E1;
+  --nw-lineS: #EFEEEB;
+  --nw-surf: #F5F4F2;
+  --nw-sunken: #F9F8F6;
+  --nw-danger: #9A3B2E;
+  --nw-attn: #B4441F;
+  --nw-link: #2D4BA8;
+  --nw-ring: #4A67C8;
+  --nw-ok: #3E6B45;
+  --nw-grey: #B4B3B0;
+  --nw-dangerbg: #F7EBE8;
+  --nw-attnbg: #F8EFE7;
+  --nw-okbg: #EDF2EE;
+  --nw-greybg: #F1F0EE;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --nw-ground: #0E0E0E;
+    --nw-ink: #EDEDEC;
+    --nw-ink2: #9A9A98;
+    --nw-ink3: #878785;
+    --nw-ghost: #656563;
+    --nw-line: #232322;
+    --nw-lineS: #1B1B1A;
+    --nw-surf: #171716;
+    --nw-sunken: #121211;
+    --nw-danger: #E08878;
+    --nw-attn: #E0864F;
+    --nw-link: #9DB0F0;
+    --nw-ring: #8098E8;
+    --nw-ok: #7FA886;
+    --nw-grey: #4A4A48;
+    --nw-dangerbg: #241614;
+    --nw-attnbg: #231A12;
+    --nw-okbg: #151D16;
+    --nw-greybg: #1A1A19;
+  }
+}
+
+:root[data-theme="dark"] {
+  --nw-ground: #0E0E0E;
+  --nw-ink: #EDEDEC;
+  --nw-ink2: #9A9A98;
+  --nw-ink3: #878785;
+  --nw-ghost: #656563;
+  --nw-line: #232322;
+  --nw-lineS: #1B1B1A;
+  --nw-surf: #171716;
+  --nw-sunken: #121211;
+  --nw-danger: #E08878;
+  --nw-attn: #E0864F;
+  --nw-link: #9DB0F0;
+  --nw-ring: #8098E8;
+  --nw-ok: #7FA886;
+  --nw-grey: #4A4A48;
+  --nw-dangerbg: #241614;
+  --nw-attnbg: #231A12;
+  --nw-okbg: #151D16;
+  --nw-greybg: #1A1A19;
+}

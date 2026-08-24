@@ -115,6 +115,23 @@ function trackingHook(cell, matrix) {
 }
 
 /**
+ * The newest evidence stamp across a cell's owners, or null.
+ *
+ * A grey owner carries `{lastAt: null}` rather than a zero — `buildCells`
+ * substitutes that shape when nothing reported — so the absence survives here
+ * and the queue can print "—" instead of an age of zero hours, which would
+ * read as "measured just now" for a lane that never ran at all.
+ * @param {object[]} owners A cell's evidence owners.
+ * @returns {string|null} An ISO stamp, or null when nothing is timestamped.
+ */
+function newestEvidenceAt(owners = []) {
+  const stamps = owners
+    .map((owner) => Date.parse(owner.latest?.lastAt ?? ""))
+    .filter((value) => Number.isFinite(value));
+  return stamps.length ? new Date(Math.max(...stamps)).toISOString() : null;
+}
+
+/**
  * Compute the verdict from the grading the report already did.
  *
  * The rule, in one sentence: no run evidence at all is `no-evidence`; any red
@@ -140,6 +157,10 @@ export function computeVerdict({
   mutationRows = [],
 }) {
   const counts = {
+    // The one count that is not a finding: cells that ran and passed. It is
+    // read straight off the same cell states as the rest, so the bar's green
+    // number can never disagree with the grid under it.
+    green: cells.filter((cell) => cell.state === "passed").length,
     red: cells.filter((cell) => RED_CELL_STATES.includes(cell.state)).length,
     grey: cells.filter((cell) => GREY_CELL_STATES.includes(cell.state)).length,
     stale: cells.filter((cell) => cell.state === "stale").length,
@@ -207,9 +228,9 @@ export function computeVerdict({
  * @param {{level: string, counts: object}} verdict Tonight's verdict.
  * @param {object[]} history Durable history points, oldest first, EXCLUDING
  *   tonight.
- * @returns {{priorLabel: string|null, priorLevel: string|null, direction: string, deltas: object}}
- *   Last night's label and level, which way tonight moved, and the per-count
- *   deltas that decided it.
+ * @returns {{priorLabel: string|null, priorLevel: string|null, direction: string, deltas: object, greenDelta: number|null}}
+ *   Last night's label and level, which way tonight moved, the per-count
+ *   deltas that decided it, and the green movement alongside them.
  */
 export function verdictDelta(verdict, history = []) {
   const prior = history.at(-1);
@@ -219,6 +240,7 @@ export function verdictDelta(verdict, history = []) {
       priorLevel: null,
       direction: "unknown",
       deltas: {},
+      greenDelta: null,
     };
   }
   const priorCounts = {
@@ -232,11 +254,17 @@ export function verdictDelta(verdict, history = []) {
   }
   const worse = Object.values(deltas).some((value) => value > 0);
   const better = Object.values(deltas).some((value) => value < 0);
+  // Green is reported beside `deltas` rather than inside it: every count in
+  // there is a finding, so more of it is worse, and folding a count whose sign
+  // reads the other way into the same record would invert `direction`.
   return {
     priorLabel: prior.label ?? null,
     priorLevel: prior.verdict ?? null,
     direction: worse ? "regressed" : better ? "improved" : "unchanged",
     deltas,
+    greenDelta: Number.isFinite(prior.cellsPassed)
+      ? (verdict.counts?.green ?? 0) - prior.cellsPassed
+      : null,
   };
 }
 
@@ -287,6 +315,7 @@ export function buildAttentionQueue({
       owner: cell.owners?.[0]?.owner ?? null,
       owners: (cell.owners ?? []).map((owner) => owner.owner),
       isNew: newlyGrey.has(cell.id) || newlyRed.has(cell.id),
+      lastAt: newestEvidenceAt(cell.owners),
       pinned: false,
       trackingIssue: hook?.number ?? null,
       trackingUrl: hook?.url ?? null,
@@ -309,6 +338,9 @@ export function buildAttentionQueue({
       owner: finding.found ?? null,
       owners: finding.found ? [finding.found] : [],
       isNew: false,
+      // A standing finding is a register entry, not a run: it has no evidence
+      // stamp of its own, and the queue's age column says so.
+      lastAt: null,
       pinned: true,
       trackingIssue: Number.isFinite(Number(finding.issue))
         ? Number(finding.issue)

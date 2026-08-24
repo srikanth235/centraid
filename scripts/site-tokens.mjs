@@ -26,6 +26,7 @@
  * base-path juggling an absolute URL would need.
  */
 import {
+  existsSync,
   mkdirSync,
   readdirSync,
   readFileSync,
@@ -48,6 +49,9 @@ import {
 const ROOT = path.resolve(import.meta.dirname, "..");
 const FONTS_SRC = path.join(ROOT, "packages/design/fonts");
 
+/** The vendored bytes of one bundled face. */
+const faceBytes = (fileName) => readFileSync(path.join(FONTS_SRC, fileName));
+
 /**
  * The mark the PRODUCT wears — the PWA's own icon, not a second drawing of
  * it. Both sites carried a teal orbit tile on `#3EC8B4`, a brand hue the v8
@@ -58,12 +62,14 @@ const FONTS_SRC = path.join(ROOT, "packages/design/fonts");
  */
 const MARK_SRC = path.join(ROOT, "apps/web/public/centraid.svg");
 
-/** Every public surface that renders in the product's design. Each gets its
- *  own `assets/` copy of the sheet and the faces. */
-const SURFACES = [
-  path.join(ROOT, "scripts/home-site/public/assets"),
-  path.join(ROOT, "scripts/docs-site/public/assets"),
+/** Every public surface that renders in the product's design: the site tree
+ *  whose authored files the gate below reads, and — derived from it, so the two
+ *  can never name different sites — its `assets/` copy of the sheet and faces. */
+const SITE_ROOTS = [
+  path.join(ROOT, "scripts/home-site"),
+  path.join(ROOT, "scripts/docs-site"),
 ];
+const SURFACES = SITE_ROOTS.map((root) => path.join(root, "public/assets"));
 
 /**
  * The third public surface, and the one that cannot take an `assets/`
@@ -159,7 +165,47 @@ const SITE_LAYER = `
 `;
 
 /**
- * The report layer — the matrix status ramp, and nothing else.
+ * The Night Watch palette — the surface, ink, rule and signal values the
+ * nightly report's own layout is drawn in (issue #862).
+ *
+ * The status ramp below says what a STATE is; this says what the PAGE is. The
+ * two are separate because the report is a dense operational read — a person
+ * scanning fifteen surfaces at a glance, before coffee — and the ground, the
+ * three ink steps and the two rule weights it needs are finer than the shell's,
+ * which is solved for reading-size prose in a window. That is a departure, and
+ * it is bounded the same way the fill departure below is: see
+ * docs/design-divergences.md#the-nightly-test-report.
+ *
+ * A rung is spelled ONCE — a `name light dark` triple, in emission order, read
+ * off this table by whitespace — so the three blocks the theme needs cannot
+ * drift into disagreeing about it. The names carry an `--nw-` prefix because
+ * three of the mockup's bare names (`--line`, `--danger`, `--link`) are already
+ * product tokens in this sheet, and a report rule has to be able to say which
+ * of the two it means.
+ */
+const NIGHT_WATCH_RAMP = `
+  ground   #FDFDFC #0E0E0E  ink    #141414 #EDEDEC  ink2   #5A5A58 #9A9A98
+  ink3     #6C6C69 #878785  ghost  #888885 #656563  line   #E5E4E1 #232322
+  lineS    #EFEEEB #1B1B1A  surf   #F5F4F2 #171716  sunken #F9F8F6 #121211
+  danger   #9A3B2E #E08878  attn   #B4441F #E0864F  link   #2D4BA8 #9DB0F0
+  ring     #4A67C8 #8098E8  ok     #3E6B45 #7FA886  grey   #B4B3B0 #4A4A48
+  dangerbg #F7EBE8 #241614  attnbg #F8EFE7 #231A12  okbg   #EDF2EE #151D16
+  greybg   #F1F0EE #1A1A19
+`;
+
+/** One theme's rungs, indented to the block that carries them. Spaces only:
+ *  a triple can never run past the end of its row. */
+const NW_RUNG = /(?<name>\S+) +(?<light>\S+) +(?<dark>\S+)/gu;
+function nightWatchDecls(indent, theme) {
+  return [...NIGHT_WATCH_RAMP.matchAll(NW_RUNG)]
+    .map(({ groups }) => `${indent}--nw-${groups.name}: ${groups[theme]};`)
+    .join("\n");
+}
+
+/**
+ * The report layer — the matrix status ramp, then the Night Watch palette the
+ * page's own layout is drawn in, whose dark rungs are spelled twice so a pinned
+ * theme and a followed one agree. One template: the second reads the table.
  *
  * The nightly report is a heat map: fifteen product surfaces by eleven quality
  * dimensions, and a cell's whole job is to say which of eleven states it is in
@@ -250,6 +296,26 @@ const REPORT_LAYER = `
   --st-degraded: var(--warning);
   --st-degraded-text: var(--warning);
 }
+
+/* ---------------------------------------------------------------------------
+   Night Watch layer — the report page's own ground, ink, rules and signal
+   tints. One name per rung, both themes; see
+   docs/design-divergences.md#the-nightly-test-report for what bounds it.
+   --------------------------------------------------------------------------- */
+
+:root {
+${nightWatchDecls("  ", "light")}
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+${nightWatchDecls("    ", "dark")}
+  }
+}
+
+:root[data-theme="dark"] {
+${nightWatchDecls("  ", "dark")}
+}
 `;
 
 /**
@@ -262,26 +328,23 @@ function facesInline() {
   let css = toFontFaceCss(FACE_BASE);
   for (const file of FONT_FILES) {
     const from = `url(${FACE_BASE}/${file.fileName})`;
-    if (!css.includes(from)) {
-      throw new Error(
-        `site tokens: ${file.fileName} is not in the emitted @font-face block`
-      );
+    const b64 = faceBytes(file.fileName).toString("base64");
+    const inlined = css.replaceAll(from, `url(data:font/woff2;base64,${b64})`);
+    if (inlined === css) {
+      throw new Error(`site tokens: ${file.fileName} has no @font-face rule`);
     }
-    const bytes = readFileSync(path.join(FONTS_SRC, file.fileName)).toString(
-      "base64"
-    );
-    css = css.replaceAll(from, `url(data:font/woff2;base64,${bytes})`);
+    css = inlined;
   }
+  // A survivor would become a request for a path that does not exist.
   if (css.includes(FACE_BASE)) {
-    throw new Error(
-      "site tokens: a face URL survived inlining — the report would fetch a path that does not exist"
-    );
+    throw new Error(`site tokens: a face URL survived inlining: ${FACE_BASE}`);
   }
   return css;
 }
 
 /** The report's sheet: the same tokens and the same site layer the two sites
- *  take, with the faces inlined and the status ramp composed over them. */
+ *  take, with the faces inlined and the status ramp and the Night Watch
+ *  palette composed over them. */
 function reportSheet() {
   return [
     "/* Centraid — the product design system, lowered onto the nightly test report.",
@@ -328,17 +391,14 @@ function sheet() {
 
 /** What every surface's `assets/` must contain, as `relative path -> bytes`. */
 function emitted() {
-  const files = new Map([
+  return new Map([
     [EMITTED_SHEET, Buffer.from(sheet(), "utf8")],
     ["centraid-mark.svg", readFileSync(MARK_SRC)],
-  ]);
-  for (const file of FONT_FILES) {
-    files.set(
+    ...FONT_FILES.map((file) => [
       path.posix.join(FONT_SUBDIR, file.fileName),
-      readFileSync(path.join(FONTS_SRC, file.fileName))
-    );
-  }
-  return files;
+      faceBytes(file.fileName),
+    ]),
+  ]);
 }
 
 /**
@@ -411,27 +471,35 @@ const REPORT_FORBIDDEN = [
  *  it must name a family literally. `.woff2` and the generated sheet are the
  *  emitter's own output, checked above by bytes instead. */
 const AUTHORED = /\.(?:css|html|js|astro)$/u;
-const SITE_ROOTS = [
-  path.join(ROOT, "scripts/home-site"),
-  path.join(ROOT, "scripts/docs-site"),
-];
 const REPORT_DIR = path.dirname(REPORT_SHEET);
 
 function authoredFiles(dir, out = []) {
   for (const entry of readdirSync(dir, { withFileTypes: true })) {
-    const abs = path.join(dir, entry.name);
-    if (entry.isDirectory()) {
-      if (entry.name === "node_modules" || entry.name === "dist") continue;
-      authoredFiles(abs, out);
-    } else if (AUTHORED.test(entry.name) && entry.name !== EMITTED_SHEET) {
-      out.push(abs);
-    }
+    const { name } = entry;
+    if (name === "node_modules" || name === "dist") continue;
+    const abs = path.join(dir, name);
+    if (entry.isDirectory()) authoredFiles(abs, out);
+    else if (AUTHORED.test(name) && name !== EMITTED_SHEET) out.push(abs);
   }
   return out;
 }
 
 const write = process.argv.includes("--write");
 const stale = [];
+
+/** One emitted artifact, on the terms every one of them takes: written under
+ *  `--write`, and otherwise compared to the committed bytes so a hand edit or
+ *  a stale commit is named rather than silently served. */
+function settle(abs, bytes) {
+  const rel = path.relative(ROOT, abs);
+  if (write) {
+    writeFileSync(abs, bytes);
+  } else if (!existsSync(abs)) {
+    stale.push(`${rel}: missing`);
+  } else if (!readFileSync(abs).equals(bytes)) {
+    stale.push(`${rel}: differs from the emitter`);
+  }
+}
 
 for (const dir of SURFACES) {
   const files = emitted();
@@ -442,70 +510,33 @@ for (const dir of SURFACES) {
     // survive here as an orphan the `@font-face` block no longer names.
     rmSync(fontDir, { force: true, recursive: true });
     mkdirSync(fontDir, { recursive: true });
-    for (const [rel, bytes] of files) {
-      writeFileSync(path.join(dir, rel), bytes);
-    }
-    continue;
   }
 
-  for (const [rel, bytes] of files) {
-    const abs = path.join(dir, rel);
-    let actual;
-    try {
-      actual = readFileSync(abs);
-    } catch {
-      stale.push(`${path.relative(ROOT, abs)}: missing`);
-      continue;
-    }
-    if (!actual.equals(bytes)) {
-      stale.push(`${path.relative(ROOT, abs)}: differs from the emitter`);
-    }
-  }
+  for (const [rel, bytes] of files) settle(path.join(dir, rel), bytes);
 
-  let present = [];
-  try {
-    present = readdirSync(fontDir);
-  } catch {
-    present = [];
-  }
-  for (const name of present) {
+  // Whatever else the directory holds; empty under `--write`, which rebuilt it.
+  for (const name of existsSync(fontDir) ? readdirSync(fontDir) : []) {
     if (!files.has(path.posix.join(FONT_SUBDIR, name))) {
-      stale.push(
-        `${path.relative(ROOT, path.join(fontDir, name))}: not emitted by @centraid/design`
-      );
+      const rel = path.relative(ROOT, path.join(fontDir, name));
+      stale.push(`${rel}: not emitted by @centraid/design`);
     }
   }
 }
 
-// The report's single file, on the same terms: written by `--write`, and
-// otherwise compared by bytes like every other emitted artifact.
-{
-  const bytes = Buffer.from(reportSheet(), "utf8");
-  if (write) {
-    writeFileSync(REPORT_SHEET, bytes);
-  } else {
-    let actual;
-    try {
-      actual = readFileSync(REPORT_SHEET);
-    } catch {
-      actual = undefined;
-    }
-    if (actual === undefined) {
-      stale.push(`${path.relative(ROOT, REPORT_SHEET)}: missing`);
-    } else if (!actual.equals(bytes)) {
-      stale.push(
-        `${path.relative(ROOT, REPORT_SHEET)}: differs from the emitter`
-      );
-    }
-  }
-}
+// The report's single file, on the same terms.
+settle(REPORT_SHEET, Buffer.from(reportSheet(), "utf8"));
 
 if (write) {
-  console.log(
-    `site tokens: emitted ${SURFACES.length} surfaces and the report sheet from @centraid/design`
-  );
+  console.log(`site tokens: emitted ${SURFACES.length} surfaces + the report`);
   process.exit(0);
 }
+
+/** Both site trees walked once: the gate reads this list twice, and a second
+ *  walk could see a tree the first half of the gate never vetted. */
+const SITE_FILES = SITE_ROOTS.flatMap((root) => authoredFiles(root));
+
+/** The custom properties a stylesheet declares, a commented-out one excepted. */
+const declaredProps = (css) => declaredCustomProps(stripCssComments(css));
 
 /**
  * Every custom property the two sites can actually resolve: the emitted token
@@ -520,19 +551,13 @@ if (write) {
  * than re-implemented so the three cannot disagree about what counts.
  */
 function resolvableProps() {
-  const names = new Set(declaredCustomProps(stripCssComments(sheet())));
-  for (const root of SITE_ROOTS) {
-    for (const file of authoredFiles(root)) {
-      if (!file.endsWith(".css")) continue;
-      for (const name of declaredCustomProps(
-        stripCssComments(readFileSync(file, "utf8"))
-      )) {
-        names.add(name);
-      }
+  // `--d` is a per-instance knob the markup sets inline on the element itself.
+  const names = new Set(["--d", ...declaredProps(sheet())]);
+  for (const file of SITE_FILES.filter((f) => f.endsWith(".css"))) {
+    for (const name of declaredProps(readFileSync(file, "utf8"))) {
+      names.add(name);
     }
   }
-  // Per-instance knobs the markup sets inline on the element itself.
-  names.add("--d");
   return names;
 }
 
@@ -543,12 +568,7 @@ function resolvableProps() {
  * is written as an inline `style` on the cell, so it is declared where it is
  * used rather than in the sheet.
  */
-function reportResolvableProps() {
-  return new Set([
-    ...declaredCustomProps(stripCssComments(reportSheet())),
-    "--row",
-  ]);
-}
+const reportResolvable = new Set([...declaredProps(reportSheet()), "--row"]);
 
 let scanned = 0;
 
@@ -577,14 +597,11 @@ function scan(file, rules, resolvable) {
 }
 
 const resolvable = resolvableProps();
-for (const root of SITE_ROOTS) {
-  for (const file of authoredFiles(root)) scan(file, FORBIDDEN, resolvable);
-}
+for (const file of SITE_FILES) scan(file, FORBIDDEN, resolvable);
 
 // The report authors its CSS inside `.mjs` template literals rather than in a
 // stylesheet, so the scan is pointed at the modules that carry it. Tests are
 // excluded: a test asserting that a literal is REJECTED has to spell one.
-const reportResolvable = reportResolvableProps();
 for (const name of readdirSync(REPORT_DIR)) {
   if (!name.endsWith(".mjs") || name.endsWith(".test.mjs")) continue;
   scan(path.join(REPORT_DIR, name), REPORT_FORBIDDEN, reportResolvable);
@@ -593,9 +610,7 @@ for (const name of readdirSync(REPORT_DIR)) {
 // A gate that silently scans nothing passes forever; following
 // scripts/lint-types.sh, a no-op is a failure.
 if (scanned === 0) {
-  console.error(
-    "site tokens: scanned zero authored files — the gate is broken"
-  );
+  console.error("site tokens: scanned zero files — the gate is broken");
   process.exit(1);
 }
 
@@ -606,6 +621,4 @@ if (stale.length > 0) {
   process.exit(1);
 }
 
-console.log(
-  "site tokens: home + docs + the nightly report match the @centraid/design emitters"
-);
+console.log("site tokens: home + docs + the report match @centraid/design");
