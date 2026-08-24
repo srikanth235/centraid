@@ -6,7 +6,7 @@ import {
   rigDriftBudget,
 } from "../../agent-e2e-shared/harness.mjs";
 import { readFrameEvidence } from "../lib/frame-report.mjs";
-import { runFlow } from "../lib/harness.mjs";
+import { CONFIRM_SYSTEM_OPEN, runFlow } from "../lib/harness.mjs";
 
 /**
  * Frame-drop probe for the Photos grid (issue #659 R3c).
@@ -101,7 +101,7 @@ ${settle}
 # Arm one sample window. Nothing is drawn while it runs, so the readout can
 # never become part of what it measures.
 - openLink: "centraid://perf-frames?ms=${SAMPLE_WINDOW_MS}"
-# Prove the arm took BEFORE flinging — a fling against an unarmed sampler
+${CONFIRM_SYSTEM_OPEN}# Prove the arm took BEFORE flinging — a fling against an unarmed sampler
 # produces no report at all, and that failure would surface later and elsewhere.
 - extendedWaitUntil:
     visible:

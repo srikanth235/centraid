@@ -22,6 +22,24 @@
 export const METRO_PORT = Number(process.env.METRO_PORT ?? 8081);
 export const METRO_ORIGIN = `http://127.0.0.1:${METRO_PORT}`;
 
+/**
+ * Deep link that tells the Expo dev client WHICH experience to load.
+ *
+ * Since #723 the debug build ships `expo-dev-client`, whose launcher activity
+ * owns every cold start. A plain icon launch shows its server picker, and the
+ * picker's discovery never lists this repo's Metro on a CI emulator/simulator
+ * — the app would sit on "DEVELOPMENT SERVERS" until every assertion times out
+ * (the 2026-08-05..08-23 nightly red). Opening this link hands the launcher the
+ * explicit bundle URL; afterwards plain relaunches auto-resume that last
+ * session, so only cleared-state launches need it (`pm clear` / clearState
+ * wipes the stored "last opened" URL along with everything else).
+ *
+ * The scheme is the app's own (`scheme: "centraid"` in app.config.ts), which
+ * both platforms register for exactly this host — AndroidManifest.xml's VIEW
+ * intent filter and Info.plist's CFBundleURLSchemes.
+ */
+export const DEV_LAUNCHER_LINK = `centraid://expo-development-client/?url=${encodeURIComponent(METRO_ORIGIN)}`;
+
 // The Expo dev build fetches its JS bundle from Metro at runtime. If
 // clearState wipes the cached bundle and Metro isn't reachable, the
 // app shows a redbox ("No script URL provided") and every `assertVisible`

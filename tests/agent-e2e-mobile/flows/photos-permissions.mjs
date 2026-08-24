@@ -1,5 +1,6 @@
 import { retryableTapCommands } from "../lib/first-run.mjs";
 import {
+  CONFIRM_SYSTEM_OPEN,
   FIRST_LAUNCH_TIMEOUT_MS,
   HOME_READY_MARKER,
   runFlow,
@@ -22,7 +23,7 @@ await runFlow("photos-permissions", async (ctx) => {
     visible: "${HOME_READY_MARKER}"
     timeout: ${FIRST_LAUNCH_TIMEOUT_MS}
 - openLink: "centraid://photos"
-- extendedWaitUntil:
+${CONFIRM_SYSTEM_OPEN}- extendedWaitUntil:
     visible: "Collections"
     timeout: ${FIRST_LAUNCH_TIMEOUT_MS}
 ${retryableTapCommands("Library")}
