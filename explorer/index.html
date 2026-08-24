@@ -1,0 +1,94 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>The Sovereign Isle — how Centraid works</title>
+    <meta
+      name="description"
+      content="An interactive visual world that teaches how Centraid works: one floating isle, every landmark a real component."
+    />
+    <link rel="stylesheet" href="styles.css" />
+    <link
+      rel="icon"
+      href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%230c0d14'/%3E%3Ccircle cx='16' cy='16' r='7' fill='none' stroke='%23E9EAF2' stroke-width='2.5'/%3E%3C/svg%3E"
+    />
+  </head>
+  <body>
+    <div class="brand" id="homeBtn" title="Back to the isle overview (Esc)">
+      <div class="mark"></div>
+      <div>
+        <h1>THE SOVEREIGN ISLE</h1>
+        <p>how Centraid works — one journey at a time</p>
+      </div>
+    </div>
+
+    <div class="pills" id="journeyTabs" aria-label="Journeys"></div>
+
+    <div class="ctlbar">
+      <button class="pill" id="playBtn" title="Autoplay this journey">
+        ▶ PLAY
+      </button>
+      <button
+        class="pill"
+        id="dimBtn"
+        title="Switch between the 3D isle and the 2D schematic"
+      >
+        2D
+      </button>
+      <button
+        class="pill on"
+        id="xrayBtn"
+        title="Lift the hood: real names over the metaphor (X)"
+      >
+        X-RAY
+      </button>
+      <button
+        class="pill"
+        id="mapBtn"
+        title="Workspace map — the monorepo as districts"
+      >
+        WORKSPACE
+      </button>
+      <button class="pill" id="glossBtn" title="Glossary rail">TERMS</button>
+      <button
+        class="pill"
+        id="mappingBtn"
+        title="The mapping table — world element → real component"
+      >
+        MAPPING
+      </button>
+    </div>
+
+    <aside id="rail" aria-label="Chapters"></aside>
+
+    <div class="narr">
+      <span class="beat" id="stepPos">ISLE</span>
+      <span class="ntxt" id="narrBody">
+        <span id="narrTitle"></span>
+        <span id="narrText"></span>
+        <a id="narrSrc" target="_blank" rel="noopener" hidden></a>
+      </span>
+      <span class="nnav">
+        <button id="prevBtn" title="Previous beat (←)">←</button>
+        <button id="nextBtn" title="Next beat (→)">→</button>
+      </span>
+    </div>
+
+    <canvas id="flat" hidden></canvas>
+    <div id="callouts" aria-hidden="true"></div>
+
+    <div id="modal" hidden>
+      <div id="modalCard">
+        <button id="modalClose" title="Close (Esc)">✕</button>
+        <div id="modalContent"></div>
+      </div>
+    </div>
+
+    <script src="js/vendor/three.min.js"></script>
+    <script src="js/isle.js"></script>
+    <script src="js/flat.js"></script>
+    <script src="js/journeys.js"></script>
+    <script src="js/engine.js"></script>
+  </body>
+</html>
