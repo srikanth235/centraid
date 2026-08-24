@@ -1,9 +1,8 @@
 // governance: allow-repo-hygiene file-size-limit the canonical journal.db ledger-band DDL is one cohesive template-literal schema + its openers; #438 added the conversation_archive/conversation_digest tables in place — the band cannot be split across files without breaking ensureConversationLedger's single-statement idempotence
 /*
  * Centraid SQLite state. app-engine owns the CONVERSATION-LEDGER BAND of the
- * vault's `journal.db` — the old standalone `transcripts.db` folded into the
- * journal file (one fewer file per vault; both carry the same append-heavy,
- * derived-growth profile that keeps `vault.db` — the sovereign asset — small).
+ * vault's `journal.db` — one file per vault, carrying the append-heavy,
+ * derived-growth profile that keeps `vault.db` — the sovereign asset — small.
  *
  *   journal.db (`<vaultDir>/<vaultId>/journal.db`) — one per vault, TWO bands:
  *     · the audit band (consent receipts, provenance, invocations, checks) —
@@ -92,9 +91,9 @@
  * ledger shape change edits the DDL in place and dev vaults are recreated
  * (v0: no data migrations); post-1.0 the band gets its own versioning story.
  *
- * The old gateway identity file (`identity.sqlite`: users + user_prefs) is
- * gone — the vault owner IS the user (`core_vault.owner_party_id`), and
- * device-level prefs live in a plain JSON file (see `prefs-store.ts`).
+ * There is no gateway identity file (`identity.sqlite`: users + user_prefs) —
+ * the vault owner IS the user (`core_vault.owner_party_id`), and device-level
+ * prefs live in a plain JSON file (see `prefs-store.ts`).
  *
  * Each opener gets one connection per file. A host's worker subprocesses
  * (which may construct the runtime in every context but only the gateway
@@ -123,9 +122,8 @@ import { DatabaseSync } from "node:sqlite";
 export type DatabaseProvider = () => DatabaseSync;
 
 /**
- * The conversation-ledger band of the vault's `journal.db` (issue #98 → #190
- * shape, moved per-vault and merged with the run-summary rollup by #280,
- * folded from the standalone `transcripts.db` into the journal file).
+ * The conversation-ledger band of the vault's `journal.db` (#98, #190 shape;
+ * per-vault, with the run-summary rollup, since #280).
  * Every statement is `IF NOT EXISTS` — see the versioning note above.
  */
 export const CONVERSATION_LEDGER_DDL = `
@@ -489,7 +487,7 @@ export const CONVERSATION_LEDGER_DDL = `
  * automation_ref/app_id derivation and the dominant-model / dominant-
  * harness picks are computed by the view itself.
  *
- * RECREATED ONLY WHEN THE DEFINITION CHANGES (issue #659 G11). An
+ * RECREATED ONLY WHEN THE DEFINITION CHANGES (#659). An
  * unconditional DROP+CREATE on every journal open is a schema write —
  * a transaction, a schema-version bump, and an invalidation of every prepared
  * statement in the process — paid on every gateway start and every worker that
@@ -553,7 +551,7 @@ CREATE VIEW run_summary AS
 `;
 
 /**
- * Conversation search plane (issue #420, Wave 3) — an FTS5 shadow table over
+ * Conversation search plane (#420) — an FTS5 shadow table over
  * chat/build conversation titles + inbound message text, kept in sync by
  * triggers, exactly mirroring the vault's own FTS pattern (schema/fts.ts):
  * `snippet()` for match context, `unicode61 remove_diacritics 2` tokenizer.
@@ -564,7 +562,7 @@ CREATE VIEW run_summary AS
  * trigger, so titles + the user's own words are the search surface — the words
  * a user actually remembers a thread by. A conversation accretes items
  * incrementally and the `body` row is maintained incrementally to match: the
- * insert trigger APPENDS the new item's text (issue #659 G4). Only the rare
+ * insert trigger APPENDS the new item's text (#659). Only the rare
  * paths — a title change, an item delete, the first-open backfill — re-derive
  * the whole body from items.
  *
@@ -820,7 +818,7 @@ export function ensureConversationLedger(db: DatabaseSync): void {
 
 /**
  * Create `run_summary` only when it is absent or its stored definition differs
- * from {@link RUN_SUMMARY_VIEW_DDL} (issue #659 G11). SQLite records a view's
+ * from {@link RUN_SUMMARY_VIEW_DDL} (#659). SQLite records a view's
  * CREATE statement verbatim in `sqlite_master.sql` (without the trailing
  * semicolon), so comparing against the source we would execute is an exact
  * equality check — a definition edit still lands on every existing vault, but
@@ -856,7 +854,7 @@ export function openJournalDb(dbPath: string): DatabaseSync {
   // the worker subprocesses that open the SAME journal file the gateway's vault
   // plane holds open.
   //
-  // The value is a STALL BUDGET, not a patience setting (issue #659 G11). This
+  // The value is a STALL BUDGET, not a patience setting (#659). This
   // driver is `node:sqlite`'s SYNCHRONOUS one, so the wait is a blocked event
   // loop: at 30s a single contended write can freeze every request,
   // SSE heartbeat, and health probe on the gateway for half a minute — a
@@ -866,11 +864,11 @@ export function openJournalDb(dbPath: string): DatabaseSync {
   // how long a genuinely stuck lock can hold the process hostage before the
   // write surfaces SQLITE_BUSY to its caller.
   //
-  // wal_autocheckpoint=0: the vault's WAL shipper (issue #408) is the sole
+  // wal_autocheckpoint=0: the vault's WAL shipper (#408) is the sole
   // checkpointer of journal.db — its backup segments are raw WAL byte
   // ranges, valid only while the WAL is append-only between the shipper's
   // own TRUNCATE checkpoints. This is a PERFORMANCE HINT, not a correctness
-  // requirement (issue #411 action 1): the shipper VERIFIES salts/offsets at
+  // requirement (#411 action 1): the shipper VERIFIES salts/offsets at
   // every capture and breaks the generation on any foreign checkpoint, so a
   // default-autocheckpointing ledger connection (this one commits!) resetting
   // the WAL in place at the 1000-page threshold is caught and healed while a
@@ -878,7 +876,7 @@ export function openJournalDb(dbPath: string): DatabaseSync {
   // The pragma just keeps that heal — a full base re-upload — rare.
   // Per connection, so EVERY by-path opener sets it, not just the vault's.
   //
-  // auto_vacuum=INCREMENTAL (issue #438) bounds journal.db: the ledger-band
+  // auto_vacuum=INCREMENTAL (#438) bounds journal.db: the ledger-band
   // archival prune frees pages that only `incremental_vacuum` returns to the OS.
   // MUST precede journal_mode=WAL — on a fresh file the setting is pending until
   // the first table is created, but once WAL writes page 1 the header is fixed
@@ -903,7 +901,7 @@ export function openJournalDb(dbPath: string): DatabaseSync {
   // NON-empty file still reads 0. The pragma above set INCREMENTAL as the VACUUM
   // target, so one full VACUUM rewrites the file into incremental mode. No txn is
   // held and no other connection is on the file yet at open. The WAL shipper
-  // (issue #408) treats this whole-file rewrite as a foreign checkpoint and heals
+  // (#408) treats this whole-file rewrite as a foreign checkpoint and heals
   // via a generation break — a one-time base re-upload, acceptable at small size.
   const autoVacuum = (
     db.prepare("PRAGMA auto_vacuum").get() as { auto_vacuum: number }

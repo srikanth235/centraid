@@ -1,59 +1,46 @@
-// FACE REVIEW, NATIVE (issue #711, v4 handoff 4305-4318 / §8) — brought in
+// FACE REVIEW, NATIVE (#711, v4 handoff 4305-4318 / §8) — brought in
 // governance: allow-repo-hygiene file-size-limit The #712 face-review handoff remains one cohesive stateful screen; #716 only adds its testability contract.
 // line with the same handoff EnrichmentConsent.tsx already answers to, and
 // with the web twin (@centraid/blueprints FaceReview.tsx).
 //
-// WHAT THIS REPLACES, AND WHY EACH PIECE WAS A REAL DEFECT, NOT A STYLING GAP
-// (issue #711 review):
+// WHAT THIS SCREEN MAY NOT DO (#711):
 //
-//   1. Title read "People review" — the handoff's own name for this screen
-//      is "Face review" (proto:4306, §16 `faces.title`).
-//   2. No face crop, no source photograph — just a `--skel` circle with a
-//      generic user glyph, because the old query never asked for bytes. The
-//      photograph and the crop are the evidence the member is being asked to
-//      judge (4307); a member confirming a face they cannot see is not
-//      meaningfully consenting. Fixed by widening the read to the LOCAL
-//      TIMELINE (`usePhotoTimeline`, the same source every other Photos
-//      screen already paints from) rather than the faces query — see
+//   1. The screen is named "Face review", never "People review" (proto:4306,
+//      §16 `faces.title`).
+//   2. The photograph and the crop are the EVIDENCE the member is asked to
+//      judge (4307) — a member confirming a face they cannot see is not
+//      meaningfully consenting. The bytes come from the LOCAL TIMELINE
+//      (`usePhotoTimeline`, the same source every other Photos screen paints
+//      from), never from the faces query, which asks for no bytes — see
 //      `sourceAssetFor` below.
-//   3. The three escape rows (Someone else / Unknown person / Skip) did not
-//      exist — only a bare confirm/reject icon pair.
-//   4. CONFIRM RENDERED ONLY WHEN `party_id` WAS ALREADY SET, so an unmatched
-//      face — the PRIMARY case a face detector produces — was reject-only:
-//      no way forward at all beyond deleting it. Fixed: every proposal has
-//      "Not this person", "Someone else", "Unknown person" and "Skip"
-//      regardless of whether the enricher proposed a name.
-//   5. Confidence read `{pct}% confidence`, the enricher's raw similarity
-//      score. README.md:285 is explicit: confidence is expressed in
-//      MATCHES, not a percentage. Fixed by `face-review-queue.ts`'s
-//      `matchCountFor`.
-//   6. No progress line (v4 3966/4316's three-part note).
-//   7. AN INVENTED "CONFIRMED PEOPLE" horizontal carousel duplicating the
-//      real People destination (`PhotosPeopleView.tsx`, its own band
-//      destination per v4 §3.1) and using "{count} photos" — the handoff's
-//      vocabulary is "photographs" throughout. Removed outright, not
-//      relabelled: Face review is proposal triage, not a browsable roster
-//      (see PhotosPeopleView.tsx's own header for that same distinction).
-//   8. A FlatList over every unconfirmed region at once — batched, contrary
-//      to v4 3967 "One face at a time". Restructured into a single-entry
-//      queue (`face-review-queue.ts`'s `buildQueue`), one proposal on screen
-//      at a time.
+//   3. Every proposal carries "Not this person", "Someone else", "Unknown
+//      person" and "Skip" REGARDLESS of whether the enricher proposed a name.
+//      An unmatched face is the PRIMARY case a face detector produces, and a
+//      reject-only proposal offers no way forward beyond deleting it.
+//   4. Confidence is expressed in MATCHES, never as a percentage
+//      (README.md:285) — `face-review-queue.ts`'s `matchCountFor`.
+//   5. There is NO "confirmed people" carousel here. Face review is proposal
+//      triage, not a browsable roster; the roster is `PhotosPeopleView.tsx`,
+//      its own destination per v4 §3.1. The vocabulary is "photographs",
+//      never "photos".
+//   6. ONE FACE AT A TIME (v4 3967) — a single-entry queue
+//      (`face-review-queue.ts`'s `buildQueue`), never a FlatList over every
+//      unconfirmed region at once.
+//   7. The progress line is v4 3966/4316's three-part note.
 //
-// EVERY CONTROL IS A REAL WRITE (issue #712) — no button here is an apology:
+// EVERY CONTROL IS A REAL WRITE (#712) — no button here is an apology:
 //   * Confirm / Not this person / Someone else → `answer-face` with
 //     `confirm` or `reject`. "Someone else" is a picker over people ALREADY
 //     confirmed elsewhere in this vault; minting a BRAND NEW person has no
 //     action-plane command in app.json, so picking an existing one is the
 //     honest subset of "name this face yourself" this client can do.
-//   * Unknown person / Keep unnamed → `answer-face` with `dismiss`. It used
-//     to set a note reading "isn't wired up yet"; there was genuinely no
-//     vault command that meant "reviewed, deliberately left unnamed", so
-//     every stranger the member declined to name came back on the next
-//     replica pull. `media.answer_face_proposal` has one, and a dismissed
-//     face stays dismissed.
+//   * Unknown person / Keep unnamed → `answer-face` with `dismiss`, which is
+//     `media.answer_face_proposal`'s "reviewed, deliberately left unnamed".
+//     Without that real write every stranger the member declined to name
+//     comes back on the next replica pull; a dismissed face stays dismissed.
 //   * Skip: local only — nothing is written, so "it stays in the queue"
-//     (4315) is literally true, and it is now the ONLY control of which that
-//     is true.
+//     (4315) is literally true, and it is the ONLY control of which that is
+//     true.
 //
 // The cursor/progress arithmetic is `@centraid/blueprints`'
 // `apps/photos/triage-session` — the same pure model the web twin and the
@@ -114,8 +101,8 @@ export default function FaceReview({
     "photos",
     useMemo(() => ({ entity: "core.party" }), [])
   );
-  // Metadata only (captured_at/width/height) — the same "no bytes over the
-  // replica" contract the old query kept. The PHOTOGRAPH itself is looked up
+  // Metadata only (captured_at/width/height) — the "no bytes over the
+  // replica" contract. The PHOTOGRAPH itself is looked up
   // from the local timeline below, exactly like every other Photos screen.
   const assetsQuery = useReplicaQuery(
     "photos",
@@ -215,11 +202,11 @@ export default function FaceReview({
   );
 
   /**
-   * The ONE write behind every answer on this screen (issue #712) — the same
+   * The ONE write behind every answer on this screen (#712) — the same
    * `answer-face` action, and the same three answers, the web twin fires.
    *
-   * The OPTIMISTIC row is an upsert for all three: a rejection no longer
-   * deletes anything, so the local row must land in the same answered state
+   * The OPTIMISTIC row is an upsert for all three: a rejection deletes
+   * nothing, so the local row must land in the same answered state
    * the vault is about to write, or the queue would rebuild with the face
    * still in it for the moment before the pull catches up. Rejected and
    * dismissed regions carry no party — the vault's own CHECK says so.

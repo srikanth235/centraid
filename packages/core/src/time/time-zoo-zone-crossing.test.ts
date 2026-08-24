@@ -1,5 +1,5 @@
 /*
- * ZONE-CROSSING recurrence collapse (issue #839, gap G12).
+ * ZONE-CROSSING recurrence collapse (#839, gap G12).
  *
  * A recurrence is DEFINED in one zone and READ from another: the schedule
  * carries `start_tz`, the viewer carries a device zone, and the window a

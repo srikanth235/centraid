@@ -1,4 +1,4 @@
-// Client↔gateway seam laws for the Vault Atlas (#441 Part B): the three
+// Client↔gateway seam laws for the Vault Atlas (#441): the three
 // read-only census surfaces and the Browse editor's read/write split, which had
 // no test file (#656 Layer 1B). The load-bearing law here is the write path's
 // deliberate inversion of the client's usual error handling — an expected

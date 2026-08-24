@@ -3,7 +3,7 @@ import type { DatabaseSync } from "node:sqlite";
 import { afterEach, describe, expect, test } from "vitest";
 
 import { ensureConversationLedger } from "@centraid/server/engine";
-// Sweep wiring for the conversation-ledger archival engine (issue #438
+// Sweep wiring for the conversation-ledger archival engine (#438
 // decision 7): the daily archival block in `runSweep` must invoke conversation
 // archival alongside journal archival and roll ONE shared journal generation
 // when either engine wrote or pruned rows.

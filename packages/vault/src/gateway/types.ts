@@ -27,7 +27,7 @@ export type Credential =
        */
       scopeClamp?: readonly ExecutionScopeSpec[];
       /**
-       * The L2 owner this agent turn acts ON BEHALF OF (issue #599 decision
+       * The L2 owner this agent turn acts ON BEHALF OF (#599 decision
        * 7; #726). The host resolves whether that owner owns THIS vault and
        * passes the one bit the vault can enforce: an agent working for an
        * owner who does not own this vault must fail a write exactly where
@@ -42,7 +42,7 @@ export type Credential =
 export type Risk = "low" | "medium" | "high";
 
 /**
- * The auto-defaulted DPV purpose (issue #306 decision 4): purposes are off
+ * The auto-defaulted DPV purpose (#306 decision 4): purposes are off
  * the critical path — a request that names none journals this notation. The
  * vocabulary and `consent.policy` purpose rules stay for the day sharing
  * reintroduces a genuine second party.
@@ -63,7 +63,7 @@ export interface Identity {
   /** Authenticated per-execution attenuation, never caller-supplied data. */
   scopeClamp?: readonly ExecutionScopeSpec[];
   /**
-   * The on-behalf-of owner cap for an agent turn (issue #599 decision 7;
+   * The on-behalf-of owner cap for an agent turn (#599 decision 7;
    * #726), carried from the credential. Independent of `mayAct` (device
    * trust) on purpose: the two failures have different causes and journal
    * differently.
@@ -117,7 +117,7 @@ export interface ReadRequest {
    */
   orderBy?: OrderBy;
   limit?: number;
-  /** Declared DPV purpose. Absent = `DEFAULT_PURPOSE` (issue #306). */
+  /** Declared DPV purpose. Absent = `DEFAULT_PURPOSE` (#306). */
   purpose?: string;
 }
 
@@ -157,7 +157,7 @@ export interface InvokeRequest {
   /** Host-authenticated device binding for a browser-replica intent. */
   intentDeviceId?: string;
   /**
-   * The L2 owner this write is attributable to (issue #599 decision 8;
+   * The L2 owner this write is attributable to (#599 decision 8;
    * #726) — the principal the calling device is bound to, resolved by the
    * host from the binding and never supplied by a caller. Recorded on the
    * invocation's journal receipt beside the agent/app that carried it, so
@@ -165,7 +165,7 @@ export interface InvokeRequest {
    */
   actingOwnerId?: string;
   /**
-   * The demo register (issue #290 phase 1): rows this invocation writes are
+   * The demo register (#290): rows this invocation writes are
    * scenario-seed data — provenance stamps `seed.demo` instead of the
    * command activity, and every write lands in the seed registry so it is
    * purgeable in one act and invisible to the automation plane. Owner-device
@@ -306,7 +306,7 @@ export interface Citation {
 }
 
 /**
- * The blob surface inside a command (issue #296): pure row work over bytes
+ * The blob surface inside a command (#296): pure row work over bytes
  * that already sit in the local CAS — a command never does byte I/O beyond
  * the synchronous local tier, so the transaction stays the unit of truth.
  */
@@ -320,7 +320,7 @@ export interface HandlerBlobs {
   } | null;
   /**
    * Claim a staged sha into a canonical content item — the promotion from
-   * "bytes waiting" to "model" (issue #296 §3). Idempotent over dedup:
+   * "bytes waiting" to "model" (#296). Idempotent over dedup:
    * a live content item already owning the sha restores + returns.
    */
   claimStaged: (
@@ -360,7 +360,7 @@ export interface HandlerCtx {
   /** Cite a row the command read to justify its action. */
   cite: (citation: Citation) => void;
   /**
-   * Decrypt one sealed cell INSIDE the command (issue #293 decision 5):
+   * Decrypt one sealed cell INSIDE the command (#293 decision 5):
    * derivatives without revelation — `locker.totp_code` unseals the seed,
    * returns the 6 digits, and the seed never crosses the command boundary.
    * Only cells the command declares in `unseals` resolve; every unseal is
@@ -372,7 +372,7 @@ export interface HandlerCtx {
     entityId: string,
     column: string
   ) => string | null;
-  /** Blob custody surface (issue #296) — staged claims and data_uri spills. */
+  /** Blob custody surface (#296) — staged claims and data_uri spills. */
   blobs: HandlerBlobs;
 }
 
@@ -392,13 +392,13 @@ export interface CommandDefinition {
   postconditions: ConditionSpec[];
   idempotency: "idempotent" | "once" | "retry-safe";
   /**
-   * Salience marker (issue #306 decision 2): journaled on every invocation
+   * Salience marker (#306 decision 2): journaled on every invocation
    * receipt and used to rank the owner's review feed — NOT an approval
    * trigger. Parking rides `confirm` alone.
    */
   risk: Risk;
   /**
-   * Tier 3/4 marker (issue #306 decision 1): the command is loud on purpose —
+   * Tier 3/4 marker (#306 decision 1): the command is loud on purpose —
    * a non-owner invocation PARKS for explicit owner confirmation regardless
    * of risk. Reserved for semantic egress (sends, publishes) and
    * consent-state or irreversible acts (trust widening, merges). Everything
@@ -408,7 +408,7 @@ export interface CommandDefinition {
   confirm?: boolean;
   handler: CommandHandler["execute"];
   /**
-   * Input keys carrying secret material (issue #293 decision 4). The journal
+   * Input keys carrying secret material (#293 decision 4). The journal
    * is append-only — these keys are replaced with a keyed hash token before
    * the invocation row is written, and in every parked-summary payload. The
    * handler still receives the raw input.
@@ -422,7 +422,7 @@ export interface CommandDefinition {
   unseals?: readonly string[];
   /**
    * The output is derived from secret material and must not persist in any
-   * durable store (issue #298 item 6). `locker.totp_code` returns a live
+   * durable store (#298). `locker.totp_code` returns a live
    * 6-digit code from an unsealed seed; low-stakes (30s TTL) but the one
    * crack in "secrets never enter durable transcripts". Marking it here
    * redacts the OUTPUT from the vault journal receipt (which otherwise keeps
@@ -431,13 +431,13 @@ export interface CommandDefinition {
   transcriptSensitive?: boolean;
 }
 
-/** A reveal: plaintext of one entity's sealed columns (issue #293). */
+/** A reveal: plaintext of one entity's sealed columns (#293). */
 export interface RevealRequest {
   /** Logical entity, e.g. `locker.item`. Must have sealed columns. */
   entity: string;
   entityId?: string;
   /**
-   * Resolve the target by a stable alias instead of entityId (issue #298
+   * Resolve the target by a stable alias instead of entityId (#298
    * item 4): `locker.item` only. The gateway maps the alias to the live
    * item under the same reveal grant, so a connector binding survives the
    * delete+recreate rotation gesture. Exactly one of entityId/alias.

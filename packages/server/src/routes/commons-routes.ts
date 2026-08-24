@@ -56,7 +56,7 @@ const COMMONS_CONTAINER_TYPES = new Set<ShareableItemType>([
   "tally.group",
 ]);
 /**
- * Container types the DECLARED routing table can address (issue #750). A
+ * Container types the DECLARED routing table can address (#750). A
  * container nobody can route a write to would accept the share and then
  * silently revert every member edit at the next compile, so the routing table
  * — not a second hand-kept list — decides whether offering it is honest.
@@ -739,7 +739,7 @@ export function makeCommonsRouteHandler(deps: CommonsRouteDeps): RouteHandler {
         // The baseline `queueCommonsIntent` recorded above from the actor's
         // OWN seat, read back rather than re-derived, so authorization sees
         // exactly the sequence the actor's mental model was composed against
-        // (issue #731 goal 1) — never a caller-supplied or re-guessed value.
+        // (#731 goal 1) — never a caller-supplied or re-guessed value.
         const basedOnSequence = readCommonsIntentBasedOnSequence(
           actor.vault,
           intentId

@@ -3,7 +3,7 @@
 // worktree is the harness's single directory holding the app code it edits.
 // Full design in receipt #137; this header sketches the layout +
 // invariants. (Draft DATA lives in the vault's ext draft band, not in a
-// branched data.sqlite beside the code — issue #286 phase 2.)
+// branched data.sqlite beside the code — #286 phase 2.)
 //
 // Layout: `apps.git/` (bare repo, pushed to GitHub),
 // `worktrees/main/<sha>/` (read-only materialization, swapped on
@@ -44,9 +44,9 @@ const EMPTY_TREE_SHA = "4b825dc642cb6eb9a060e54bf8d69288fbee4904";
 /**
  * Conservative slug check — matches the canonical app id rule
  * (harness): leading alnum, then alnum / `_` / `-`. No dot, so a
- * tree-traversing `..` is impossible by construction. Automation apps are
- * now marked by the manifest's `kind` field, not a dotted `auto.` id
- * prefix, so the id grammar is a plain slug again.
+ * tree-traversing `..` is impossible by construction. An automation app is
+ * marked by its manifest's `kind` field, never by a dotted `auto.` id
+ * prefix, so the id grammar is a plain slug.
  */
 const SAFE_ID_RE = /^[a-z0-9][a-z0-9_-]*$/iu;
 
@@ -158,8 +158,7 @@ export class WorktreeStore {
 
   /**
    * App ids on main plus their `app.json` metadata, read from the
-   * materialized-main worktree. Replaces the desktop's legacy
-   * `listProjects(workspaceDir)` scan.
+   * materialized-main worktree.
    */
   async listAppsWithMeta(): Promise<
     Array<{
@@ -190,7 +189,7 @@ export class WorktreeStore {
           ...(manifest.kind === "automation" || manifest.kind === "app"
             ? { kind: manifest.kind as "app" | "automation" }
             : {}),
-          // Tile identity (issue #263) — pass-through strings; the shells
+          // Tile identity (#263) — pass-through strings; the shells
           // validate against the design-tokens sets before rendering.
           ...(typeof manifest.iconKey === "string"
             ? { iconKey: manifest.iconKey }

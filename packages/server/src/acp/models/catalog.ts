@@ -2,8 +2,7 @@
  * Gateway-owned host-capability catalog store.
  *
  * Persists, per harness, the host runtime's self-reported model list (the chat
- * picker) at a host-supplied `<dir>/model-catalog.json`. (The tool surface it
- * once also tracked went away with the `ctx.tool` rail — issue #484.)
+ * picker) at a host-supplied `<dir>/model-catalog.json`.
  *
  * This module is pure storage: read + merge-write. It NEVER enumerates, so
  * reads are instant (no CLI spawn, no SDK call) — `readHarnessModels` just

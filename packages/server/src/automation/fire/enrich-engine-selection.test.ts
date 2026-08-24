@@ -1,5 +1,5 @@
 /*
- * WHICH ENGINE RUNS (issue #807, Wave 5) — selection as policy.
+ * WHICH ENGINE RUNS (#807) — selection as policy.
  *
  * The policy cascade's engine profile decides which variant runs, and the
  * manifest's `delegateStep` block is the capability's DECLARATION that a
@@ -188,7 +188,7 @@ describe("engine-profile selection on the fire path", () => {
   });
 
   it("[law 1] a member's per-recipe delegate pin still selects the delegate variant", async () => {
-    // The pre-Wave-5 switch (`lifecycle-automation-routes.ts`) writes
+    // The manifest switch (`lifecycle-automation-routes.ts`) writes
     // `selected: "delegate"` into the manifest. A built-in profile — the
     // answer a vault that has chosen nothing gives — must not revoke it.
     const { outcome } = await fire({

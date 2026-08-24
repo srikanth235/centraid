@@ -1,4 +1,4 @@
-// Engine profiles (issue #807, Wave 1): the user-facing primitive that binds
+// Engine profiles (#807): the user-facing primitive that binds
 // a CAPABILITY to an ENGINE.
 //
 // WHY A PROFILE AND NOT A SETTING. The capability registry says what a

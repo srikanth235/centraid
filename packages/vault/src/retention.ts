@@ -1,4 +1,4 @@
-// Bounded retention for the vault's silent growers (issue #659 L4).
+// Bounded retention for the vault's silent growers (#659).
 //
 // Three tables append a row per event forever and have no reader past a few
 // days. None of them is a fact the owner authored, and none is custody

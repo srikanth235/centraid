@@ -1,8 +1,7 @@
 import crypto from "node:crypto";
 /*
- * `GET /_automations/turns?systemLane=` lane split (issue #731 M2). Same
- * mock req/res harness as automations-routes.test.ts, split out so the
- * flood-isolation scenario has room of its own.
+ * `GET /_automations/turns?systemLane=` lane split (#731). Same
+ * mock req/res harness as automations-routes.test.ts.
  */
 import { promises as fs } from "node:fs";
 import type { IncomingMessage, ServerResponse } from "node:http";

@@ -8,12 +8,12 @@ import { formatBytes } from "./localUsageView.js";
 /**
  * One row per vault, each drawing its share.
  *
- * IT WAS A `<details>` LABELLED "By vault" (issue #814). Whose bytes these are
- * is the second question anyone asks of a disk figure, and on a gateway hosting
- * someone else's vault it is the first — "2.1 GB · held here for Tom, who can
- * revoke this machine at any time" is a custody fact, and it was folded shut
- * behind a summary nobody opens. The handoff draws these as plain rows for that
- * reason; they are meter rows here so the ordering reads before the numbers do.
+ * NOT A COLLAPSED `<details>` LABELLED "By vault" (#814). Whose bytes these
+ * are is the second question anyone asks of a disk figure, and on a gateway
+ * hosting someone else's vault it is the first — "2.1 GB · held here for Tom,
+ * who can revoke this machine at any time" is a custody fact, and a custody
+ * fact may not be folded shut behind a summary nobody opens. They are meter
+ * rows so the ordering reads before the numbers do.
  *
  * The bar is a share of the LARGEST vault, matching every other meter list in
  * the app: on a gateway holding one big vault and three small ones, shares of
@@ -25,7 +25,7 @@ export default function VaultFootprintRows({
 }: {
   report: LocalUsageReportDTO;
   /** vaultId → owning person's label — what hosting this vault costs THEM
-   *  (issue #726 P1). Absent entries render the vault name alone. */
+   *  (#726). Absent entries render the vault name alone. */
   ownerLabels: ReadonlyMap<string, string>;
 }): JSX.Element | null {
   // ONE VAULT NEEDS NO BREAKDOWN. A single row here is the headline figure

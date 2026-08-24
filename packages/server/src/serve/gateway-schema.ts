@@ -1,7 +1,5 @@
 /*
- * `gateway.db`'s DDL, extracted out of `gateway-db.ts` to keep that file
- * under the 500-line cap (mirrors the P1 precedent of
- * `device-ticket-mint.ts`). Pre-1.0, this repo carries NO backward
+ * `gateway.db`'s DDL. Pre-1.0, this repo carries NO backward
  * compatibility for `gateway.db`: there are no legacy-generation migrations
  * here, on principle. `installGatewaySchema` is the single source of truth
  * for the current shape; a `gateway.db` written by an older generation is

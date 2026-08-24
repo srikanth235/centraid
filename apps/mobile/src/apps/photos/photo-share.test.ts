@@ -1,4 +1,4 @@
-// THE CALL SITE, not the ladder (issue #816).
+// THE CALL SITE, not the ladder (#816).
 //
 // `share-place.test.ts` proves the phrase module suppresses the Home-relative
 // rung. That is a claim about a function; the acceptance criterion is a claim

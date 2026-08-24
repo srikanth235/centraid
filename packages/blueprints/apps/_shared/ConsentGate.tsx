@@ -1,8 +1,6 @@
-// THE §8 CONSENT GATE — GENERIC TWO-PANEL RENDERER (issue #712 C1, web).
+// THE §8 CONSENT GATE — GENERIC TWO-PANEL RENDERER (#712 C1, web).
 //
-// Lifted out of Photos' `components/EnrichmentConsent.tsx`, which is now a
-// thin wrapper passing Photos' own copy through this component unchanged —
-// see that file. Two panels, shown BEFORE anything runs, then the note.
+// Two panels, shown BEFORE anything runs, then the note.
 // Panel A is the on-device/primary answer: the ONE filled element on the
 // surface (§18). Panel B is bordered in `--net` and outlined, never filled —
 // it exists to say what would leave the device, and it renders even when its

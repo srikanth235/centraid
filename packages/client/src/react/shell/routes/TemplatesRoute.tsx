@@ -15,11 +15,10 @@ import {
   surfaceMintedWebhook,
 } from "./templatesData.js";
 
-// React-owned automation templates gallery — replaces the vanilla
-// renderAutomationTemplates (app-automations-templates.ts). Loads the automation
-// template slice, wires the preview drawer + adopt (clone → webhook secrets →
-// the automation's thread), and "Start from scratch" (straight to the
-// instructions-first editor — no draft scaffold, no builder detour).
+// The automation templates gallery. Loads the automation template slice,
+// wires the preview drawer + adopt (clone → webhook secrets → the automation's
+// thread), and "Start from scratch" (straight to the instructions-first editor
+// — no draft scaffold, no builder detour).
 export default function TemplatesRoute(): JSX.Element {
   const { navigate, showToast } = useShellActions();
   const state = useAsyncData(() => loadAutomationTemplates());

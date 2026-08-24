@@ -1,4 +1,4 @@
-// Model identity for derived rows (issue #721 E1): the convention that makes a
+// Model identity for derived rows (#721): the convention that makes a
 // model upgrade a BACKFILL rather than a migration.
 //
 // THE PROBLEM. `enrich_embedding` is keyed `UNIQUE (target_type, target_id,

@@ -1,4 +1,4 @@
-// The reseal maintenance verb (issue #298 item 8): decrypt-with-old,
+// The reseal maintenance verb (#298): decrypt-with-old,
 // encrypt-with-new, one transaction, receipted. `sealed:v1:` gave the
 // version seam; this is the machinery that walks it — a DEK compromise or
 // an algorithm bump finally has a migration path instead of a shrug.
@@ -108,7 +108,7 @@ export function resealVaultKey(
   try {
     replicaCommit = beginReplicaCommit(db.vault);
     // Live band: every sealed column of every entity — canonical (static
-    // registry) AND ext-band (declared in consent_app_ext, issue #298 item 9).
+    // registry) AND ext-band (declared in consent_app_ext, #298 item 9).
     for (const entity of sealedEntities(db)) {
       const cols = sealedColumnsOf(entity, db.vault);
       if (cols.length === 0) continue;

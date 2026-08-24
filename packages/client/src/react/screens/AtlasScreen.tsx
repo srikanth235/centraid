@@ -40,7 +40,7 @@ import type { KindRow } from "./atlasScreenModel.js";
 
 import styles from "./AtlasScreen.module.css";
 
-// The Data route (v9 §6, issue #765) — one vertical block list, no tab strip.
+// The Data route (v9 §6, #765) — one vertical block list, no tab strip.
 //
 // KINDS → the note → HOW THEY RELATE → the browsed kind's records. The three
 // tabs it replaces (Kinds / Map / Browse) were three ways of asking the same

@@ -1,4 +1,4 @@
-// The batched, resumable data-rewrite primitive (issue #659 L7). The laws:
+// The batched, resumable data-rewrite primitive (#659). The laws:
 // a call never rewrites more than the batches it was given, a later call
 // resumes from the last committed cursor, and no row is rewritten twice.
 

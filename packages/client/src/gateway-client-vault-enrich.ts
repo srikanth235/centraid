@@ -66,7 +66,7 @@ export async function setEnrichPolicy(
 }
 
 /**
- * The policy CASCADE (issue #807): the scoped rules layered over the tiers
+ * The policy CASCADE (#807): the scoped rules layered over the tiers
  * above. A rule states only what its scope decides — `null` is inherit — and
  * the gateway's ONE resolver folds a chain into the effective answer.
  *
@@ -165,7 +165,7 @@ export async function getEffectiveEnrichPolicy(input: {
 }
 
 /*
- * The EGRESS-CONSENT ledger (issue #807, Wave 3) — capability × egress class,
+ * The EGRESS-CONSENT ledger (#807) — capability × egress class,
  * asked once, answered once, recorded. A READ surface here: the ledger's one
  * writer is the vault's journalled `enrich.record_consent` command, reached
  * through the owner-plane POST below, and no client ever writes the rows.

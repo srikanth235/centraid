@@ -1,5 +1,5 @@
 /**
- * A document's version chain (issue #352): never a command, since core.link
+ * A document's version chain (#352): never a command, since core.link
  * is already the durable history — this walks it. Starting at the wrapper's
  * current_content_id, each step follows the single live `revises` edge OUT
  * of the current content item (NEW -> OLD, the direction

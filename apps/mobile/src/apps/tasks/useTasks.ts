@@ -1,4 +1,4 @@
-// The Tasks read layer (issue #834) — the board, projected from this device's
+// The Tasks read layer (#834) — the board, projected from this device's
 // consent-shaped replica, exactly the entity set the `tasks` manifest's read
 // scopes grant (packages/blueprints/apps/tasks/app.json).
 //

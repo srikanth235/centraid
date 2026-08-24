@@ -16,8 +16,8 @@ import { mergePersistedSettings } from "./settings-merge.js";
 
 /**
  * Persisted desktop settings live at `<userData>/centraid-settings.json`
- * with mode `0600`. After issue #109 it carries only UI preferences and
- * a pointer at the active gateway — connection state is per-gateway and lives
+ * with mode `0600`. It carries only UI preferences and a pointer at the
+ * active gateway (#109) — connection state is per-gateway and lives
  * in one `connections.json`; device identity and the detached daemon's
  * loopback secret stay in the OS keychain. See `gateway-store.ts`.
  *
@@ -27,21 +27,19 @@ import { mergePersistedSettings } from "./settings-merge.js";
  *   - **Effective form** (`DesktopSettings`, returned by `loadSettings`):
  *     the persisted fields, plus everything derived from the active
  *     gateway — a loopback `gatewayUrl`/`gatewayToken` for local runtime
- *     plumbing, or an iroh EndpointId for a remote connection. App *code* now
- *     lives in the gateway's git store (issue #137), so there is no
- *     `workspaceDir`; `appsDir` holds only per-app data.
- *     Every IPC handler that needs to act against the active gateway
- *     reads the effective form; that's why the shape didn't shrink
- *     when `runtimeMode` / `remoteGateway*` left it.
+ *     plumbing, or an iroh EndpointId for a remote connection. App *code*
+ *     lives in the gateway's git store (#137), so there is no `workspaceDir`;
+ *     `appsDir` holds only per-app data. Every IPC handler that acts against
+ *     the active gateway reads the effective form.
  */
 
 export interface PersistedSettings {
   /** Active gateway id. Defaults to `'local'` on a fresh install. */
   activeGatewayId: string;
   /**
-   * The active vault the client addresses on each gateway (issue #289),
-   * keyed by gateway id. The server no longer holds an active-vault
-   * pointer — the client owns it and sends it as `x-centraid-vault`.
+   * The active vault the client addresses on each gateway (#289), keyed by
+   * gateway id. The client — not the server — owns this pointer and sends it
+   * as `x-centraid-vault`.
    * Switching vaults is a pure client-side pointer flip; a missing entry
    * means "let the gateway pick" from the device's proved enrollments.
    */
@@ -76,8 +74,8 @@ export interface PersistedSettings {
    */
   changelogSeenVersion?: string;
   /**
-   * Launch Centraid automatically at OS login (issue #351, tier 4 — the
-   * cheap 80% fix for "always-on": with the detached gateway (#468 H1)
+   * Launch Centraid automatically at OS login (#351, tier 4 — the
+   * cheap 80% fix for "always-on": with the detached gateway (#468)
    * the child can outlive a single session, and launch-at-login still
    * brings the app UI back after reboot). Applied via
    * `app.setLoginItemSettings` — see `login-item.ts`. Absent → disabled
@@ -87,18 +85,18 @@ export interface PersistedSettings {
    */
   launchAtLogin?: boolean;
   /**
-   * H5 / issue #468 — offer OS service install (`centraid-gateway service
+   * H5 / #468 — offer OS service install (`centraid-gateway service
    * install`, label `dev.centraid.gateway`) during onboarding so the
    * gateway survives logout/reboot. **Default off**; silent install is
-   * forbidden. Wiring the onboarding UI is a follow-up; this flag is the
-   * settings key. See `shouldOfferServiceInstall` in detached-gateway-core.
+   * forbidden. This flag is only the settings key. See
+   * `shouldOfferServiceInstall` in detached-gateway-core.
    */
   offerGatewayService?: boolean;
 }
 
 export interface DesktopSettings {
-  /** Remote gateway base URL — e.g. http://127.0.0.1:8765. Inlined here in
-   * #141 Phase 5 so desktop settings do not depend on the turn runtime. */
+  /** Remote gateway base URL — e.g. http://127.0.0.1:8765. Inlined here so
+   * desktop settings do not depend on the turn runtime (#141). */
   gatewayUrl: string;
   /**
    * Bearer token sent as `Authorization: Bearer <token>` to the gateway.
@@ -205,7 +203,7 @@ function narrow(raw: Record<string, unknown>): PersistedSettings {
 }
 
 /**
- * Defensive parse of `activeVaultByGateway` (issue #289): keep only
+ * Defensive parse of `activeVaultByGateway` (#289): keep only
  * `string → non-empty-string` entries. Malformed-write hygiene, not
  * migration.
  */
@@ -244,7 +242,7 @@ async function writePersisted(next: PersistedSettings): Promise<void> {
 }
 
 /**
- * First-run keychain deferral (issue #603).
+ * First-run keychain deferral (#603).
  *
  * Starting the local gateway — embedded or detached — reads/mints this
  * device's wrapping key and loopback token through `safeStorage`
@@ -262,7 +260,7 @@ async function writePersisted(next: PersistedSettings): Promise<void> {
  * starts the gateway for real.
  *
  * A returning install (onboarding already completed) never takes this branch —
- * its gateway still starts eagerly at boot, as before.
+ * its gateway starts eagerly at boot.
  */
 let localGatewayStartRequested = false;
 
@@ -411,7 +409,7 @@ export async function setActiveGatewayId(id: string): Promise<DesktopSettings> {
 }
 
 /**
- * Point the client at another vault ON THE ACTIVE GATEWAY (issue #289).
+ * Point the client at another vault ON THE ACTIVE GATEWAY (#289).
  * This is a pure client-side pointer flip — no server call, no re-root:
  * every subsequent request just carries a different `x-centraid-vault`
  * header. Pass `undefined` to clear (let the gateway pick). Keyed by

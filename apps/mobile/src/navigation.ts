@@ -69,7 +69,7 @@ export type PhotosStackParamList = {
   PlacesMap: undefined;
   PlaceDetail: { placeKey: string; placeName: string };
   FaceReview: undefined;
-  // The people roster (issue #712). People is OFF the band, so this is a
+  // The people roster (#712). People is OFF the band, so this is a
   // pushed route like every other shelf behind Collections — reached from
   // Collections'
   // own People section heading (`PhotosCollectionsView.tsx`'s `open()`) and from
@@ -83,7 +83,7 @@ export type PhotosStackParamList = {
   // primary control is the way into the review.
   DuplicatesShelf: undefined;
   DuplicateReview: undefined;
-  // The full Memories surface (issue #724 W7) — On this day, Trips, and
+  // The full Memories surface (#724) — On this day, Trips, and
   // Similar moments, read off the vault's `media.memory` projection. Reached
   // from Collections' own Memories section heading
   // (`PhotosCollectionsView.tsx`'s `open()`).
@@ -92,7 +92,7 @@ export type PhotosStackParamList = {
   // The picker (§10) — full screen on the phone. Its picked set is its own,
   // so the album it commits to is a route param rather than shared state.
   PhotoPicker: { albumId: string };
-  // There is no `PhotoPermission` route (issue #712 P13). The OS
+  // There is no `PhotoPermission` route (#712). The OS
   // photo-library grant is a designed STATE of the timeline, not a screen a
   // member has to go and find: `PhotosHome` renders the permission content in
   // the grid's own slot (`PhotoAccessPanel.tsx`) when the grant cannot produce
@@ -103,7 +103,7 @@ export type PhotosStackParamList = {
   // that ever sets it (nothing writes `archived`/`archived_at` true), but
   // `PhotosLibrary.tsx` still reads it back out — left in place until that
   // caller is retired, not deleted blind. `videos` is Collections' Videos
-  // shelf (issue #721 B3) — the same "filter over the one shared timeline"
+  // shelf (#721) — the same "filter over the one shared timeline"
   // shape as `favorites`, so it grew this union rather than a screen of
   // its own.
   PhotoStateView:
@@ -172,11 +172,11 @@ export type AgendaStackParamList = {
 export type SettingsStackParamList = {
   Settings: undefined;
   Approvals: undefined;
-  // Sharing (issue #726 P6): the People panel — shares in/out, link
+  // Sharing (#726): the People panel — shares in/out, link
   // propose/approve, the D9 ask surface and receive setting.
   Sharing: undefined;
   PhoneStorage: { signalCause?: string } | undefined;
-  // Backup health (issue #712 B2) — a FRAME screen, beside Phone storage. It
+  // Backup health (#712) — a FRAME screen, beside Phone storage. It
   // does not live in the Photos stack: the policy it edits governs Docs' scans
   // and Notes' attachments too, and nothing on it is Photos-specific. Photos
   // deep-links across to it from the More sheet's
@@ -210,7 +210,7 @@ export type RootStackParamList = {
   SignalNotification: { cause: string; detail: "phone" | "backup" };
   Automations: { automationRef?: string } | undefined;
   Insights: { initialTab?: "overview" | "alerts" } | undefined;
-  // The three places promoted to screens of their own (issue #765). They are
+  // The three places promoted to screens of their own (#765). They are
   // ROOT covers, beside Automations and Insights — not members of
   // `SettingsStackParamList`. Two reasons: a place is not a setting, so
   // Connectors is not a Settings row; and the Settings stack is deliberately

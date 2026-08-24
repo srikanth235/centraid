@@ -1,4 +1,4 @@
-// THE LIBRARY'S TEMPORAL GRAIN — Years · Months · All (issue #712 iOS parity).
+// THE LIBRARY'S TEMPORAL GRAIN — Years · Months · All (#712 iOS parity).
 //
 // iOS Photos' Library is not one grid, it is three views of the same ledger at
 // three grains. This module is the grouping half of that: sections in, period
@@ -18,9 +18,8 @@
 // sections were built by `sectionPhotoAssets`, which resolved each capture into
 // its own wall clock (`captureLocalDay`) before slicing the day. Re-parsing the
 // instant here would file a 20:00-local photograph in the wrong month — and,
-// every December 31st, in the wrong YEAR — exactly as often as the old day
-// bucketing put it on the wrong day. `section.month` is already that resolved
-// answer; the year is its first four characters.
+// every December 31st, in the wrong YEAR. `section.month` is already that
+// resolved answer; the year is its first four characters.
 //
 // COVER = NEWEST. iOS picks a "key photo" per period from signals this vault
 // does not have (faces, scene scores, curation history). Rather than invent a
@@ -41,9 +40,9 @@
 //
 // REVERSE ANCHORING IS THE POINT OF `periodContaining`. Drilling DOWN a grain
 // is easy: the card knows its own anchor day. Keeping the member's place when
-// they switch grains from a persistent control is the harder half, and it is
-// the half the previous implementation never had — a member who scrolled Months
-// back to 2019 and tapped Years landed at the top of the library. Both
+// they switch grains from a persistent control is the harder half: without it
+// a member who scrolled Months back to 2019 and tapped Years lands at the top
+// of the library. Both
 // directions run through one rule here: a period's key is a PREFIX of every day
 // it contains (`2026` of `2026-03-15`, `2026-03` of `2026-03-15`), so the
 // period containing a day is found by slicing the day to the key's own width.

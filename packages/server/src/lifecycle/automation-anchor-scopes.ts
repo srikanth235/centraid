@@ -1,5 +1,5 @@
 /*
- * Anchor resolution for automation instructions (issue #541).
+ * Anchor resolution for automation instructions (#541).
  *
  * Every read here goes through the vault's consent gateway with the OWNER
  * credential, a declared purpose, and therefore a receipt — the same door
@@ -298,8 +298,8 @@ function sourceFieldFor(
 
 /**
  * The anchor row plus its still-live link, read through the consent gateway
- * as two receipted reads (the gateway's `read` is single-entity, so the old
- * hand-written JOIN becomes an anchor read + a link read).
+ * as two receipted reads (the gateway's `read` is single-entity, so this is an
+ * anchor read plus a link read rather than a JOIN).
  */
 function liveAnchorRows(
   vault: AnchorVaultReads,

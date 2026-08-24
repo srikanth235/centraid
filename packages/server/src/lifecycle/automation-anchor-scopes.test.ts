@@ -243,8 +243,8 @@ describe("automation-anchor-scopes", () => {
         n: number;
       }
     ).n;
-    // Previously these three reads went straight at `db.vault` — no credential,
-    // no purpose, no audit trail (issue #541 review).
+    // These three reads ride the consent gateway; straight at `db.vault` there
+    // is no credential, no purpose, and no audit trail (#541 review).
     expect(after).toBeGreaterThan(before);
     expect(rows.map((r) => r.object_type)).toStrictEqual(
       expect.arrayContaining(["core.link_anchor", "core.link", "schedule.task"])
@@ -263,8 +263,9 @@ describe("automation-anchor-scopes", () => {
         `UPDATE core_link SET from_type = 'constructor' WHERE link_id = 'link-1'`
       )
       .run();
-    // `SEARCHABLE['constructor']` inherits an `Object` member: the old lookup
-    // passed the guard and then threw a bare `TypeError` when spread.
+    // `SEARCHABLE['constructor']` inherits an `Object` member: a lookup that
+    // trusts inherited members passes the guard and then throws a bare
+    // `TypeError` when spread.
     expect(() =>
       resolveAutomationAnchors(vault, "@[core.link_anchor/anchor-1]")
     ).toThrow(AutomationAnchorError);

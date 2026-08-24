@@ -1,6 +1,6 @@
 /**
  * Pin a file to an event through core.attach. Bytes arrive either STAGED
- * (issue #296: the app streamed them to /_vault/blobs and claims the sha
+ * (#296: the app streamed them to /_vault/blobs and claims the sha
  * here — big files) or as a small inline data: URI; the vault dedupes the
  * bytes into a canonical content item and links it. The same handler shape is
  * copied across every app — only the subject_type differs.

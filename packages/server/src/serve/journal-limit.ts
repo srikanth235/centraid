@@ -1,9 +1,9 @@
 /*
- * The size-triggered ledger archive (issue #544) — the decision half of
+ * The size-triggered ledger archive (#544) — the decision half of
  * "archive early when `journal.db` gets big", kept pure so the ladder is
  * unit-testable without a plane, a sweep timer, or a real database.
  *
- * Why this exists. `journal.db` carries BOTH the audit ladder (#367 §E2) and
+ * Why this exists. `journal.db` carries BOTH the audit ladder (#367) and
  * the conversation ledger (#438), and it is explicitly "the file that reaches
  * gigabytes". Both archival engines already run in `VaultPlane.runSweep`, but
  * only on a once-a-day gate with a fixed 90-day window. That is a *time*

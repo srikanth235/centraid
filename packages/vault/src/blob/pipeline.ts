@@ -1,4 +1,4 @@
-// The spool pipeline (issue #296 §4): what the gateway learns from bytes
+// The spool pipeline (#296): what the gateway learns from bytes
 // while they sit in the local spool. Everything here is dependency-free and
 // synchronous — declared media types are hints (content decides), image
 // dimensions and EXIF capture metadata come from the bytes, and text-shaped
@@ -8,7 +8,7 @@
 // GPS is a policy surface, not a parser detail: `extractBlobMeta` always
 // reports whether location was present, but coordinates only ride along when
 // the caller passes `keepLocation` (the `media.location` vault setting,
-// issue #296 §4 — automatic extraction must not silently write location).
+// #296 §4 — automatic extraction must not silently write location).
 
 import { parseIsoBmffMetadata, parseMediaMetadata } from "./media-metadata.js";
 import { extractPdfText } from "./pdf-text.js";

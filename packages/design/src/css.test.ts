@@ -53,12 +53,9 @@ describe("shell CSS lowering", () => {
   });
 
   test("follows the OS until `data-theme` is stamped", () => {
-    // The un-stamped first paint has to be able to be LIGHT. While this block
-    // was missing, the shell's index.html hardcoded `data-theme="dark"` to
-    // avoid a light flash before the renderer read the member's prefs — and a
-    // hardcoded attribute always beats a preference, so "follow the system"
-    // could not be honoured at all. The blueprint sheet has emitted this pair
-    // since it shipped; this is the shell catching up.
+    // The un-stamped first paint has to be able to be LIGHT. A hardcoded
+    // `data-theme` in index.html would beat the member's preference and make
+    // "follow the system" unhonourable, so this pair must stay emitted.
     const fallback = blockFor(":root:not([data-theme])");
     expect(css).toContain("@media (prefers-color-scheme: dark) {");
     expect(fallback).toContain(`--bg: ${themes.dark.bg};`);
@@ -105,9 +102,9 @@ describe("shell CSS lowering", () => {
       expect(css).toContain(`[data-theme='${name}'] {`);
     }
     const dark = blockFor("[data-theme='dark']");
-    // The dark ramp is warm-tinted paper now (`#171716`, not `hsl(0 0% 9%)`),
-    // which the old one-knob greyscale calc could not express. The knob is
-    // gone rather than faked with a saturation parameter.
+    // The dark ramp is warm-tinted paper (`#171716`), which a one-knob
+    // greyscale calc cannot express — so there is no lightness-anchor knob,
+    // and it is not to be faked with a saturation parameter.
     expect(dark).toContain(`--accent: ${BRAND_DARK};`);
     expect(dark).toContain("--bg: #0E0E0E;");
     expect(dark).toContain("--bg-elev: #171716;");

@@ -1,5 +1,5 @@
 // Single source of truth for the PWA fast-path performance budgets
-// (issue #404 workstream I). Every ceiling here is derived from a MEASURED
+// (#404 workstream I). Every ceiling here is derived from a MEASURED
 // baseline captured by perf-waterfall.spec.ts against the e2e harness, then
 // padded with headroom so normal CI jitter never trips a red build.
 //
@@ -11,7 +11,7 @@
 // fence: the ratios (warm-vs-cold, connect-vs-stream) hold regardless of which
 // app is measured, and the absolute ceilings move with its chunk graph.
 //
-// Timing budgets hard-fail when `enforceTiming` is true (issue #468 L5).
+// Timing budgets hard-fail when `enforceTiming` is true (#468).
 // Request-count and byte budgets remain hard gates regardless.
 
 export interface OpenBudget {
@@ -255,7 +255,7 @@ export const perfBudgets: PerfBudgets = {
 };
 
 /**
- * Timing budgets are enforced (issue #468 L5): CI fails when cold/warm open
+ * Timing budgets are enforced (#468): CI fails when cold/warm open
  * exceed the ceilings in `perfBudgets.timing`. Request/byte budgets are hard
  * gates regardless of this flag.
  */

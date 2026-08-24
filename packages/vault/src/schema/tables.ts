@@ -6,7 +6,7 @@
 // reach SQL.
 //
 // The registry has a static half (the canonical ontology below) and a
-// dynamic half (issue #286 phase 2): app-declared ext-band tables recorded
+// dynamic half (#286): app-declared ext-band tables recorded
 // in `consent_app_ext`. Callers that pass their vault handle resolve both;
 // without a handle only the canonical model resolves.
 
@@ -39,7 +39,7 @@ export const VAULT_TABLES: Readonly<Record<string, readonly string[]>> = {
     "collection_entry",
     // P5 pre-mutation snapshots. Grants row-filter this by entity_type.
     "entity_revision",
-    // Share-by-placement provenance (issue #599). Registered so a merged
+    // Share-by-placement provenance (#599). Registered so a merged
     // multi-scope app view can read the audience + who-placed-it badge for a
     // projected row like any other table.
     "share_origin",
@@ -91,7 +91,7 @@ export const VAULT_TABLES: Readonly<Record<string, readonly string[]>> = {
     "asset",
     "face_region",
     "asset_phash",
-    // Memories v0 (issue #724 W7): a rebuildable projection over signals the
+    // Memories v0 (#724): a rebuildable projection over signals the
     // vault already carries — see schema/enrich.ts's header for the shape and
     // enrich/memories.ts for the sweep that (re)derives it. Registered here
     // (not a new column on media_asset) for the same reason
@@ -101,7 +101,7 @@ export const VAULT_TABLES: Readonly<Record<string, readonly string[]>> = {
     // manifest or mobile consent change is needed to read it.
     "memory",
     "memory_member",
-    // Faces (issue #724 W5): the unnamed-face grouping projection — see
+    // Faces (#724): the unnamed-face grouping projection — see
     // schema/enrich.ts's header for why identity is NOT in it. Registered for
     // the same two reasons `memory` is: it is app-reachable derived data, so
     // the existing `{schema:'media', verbs:'read'}` grant scope covers it with
@@ -142,15 +142,15 @@ export const VAULT_TABLES: Readonly<Record<string, readonly string[]>> = {
     "settlement",
     "obligation",
   ],
-  // `derivation` (issue #724 W2's provenance stamp) is registered here for the
+  // `derivation` (#724 W2's provenance stamp) is registered here for the
   // reason `portable-export.ts`'s own audit note already assumes it is: the
   // canonical table walk IS this list, so an unregistered table is silently
   // absent from every export AND gets no replica change-log trigger. Both
-  // matter for the face-delete gate (#724 W5): a stamp left behind after
+  // matter for the face-delete gate (#724): a stamp left behind after
   // `media.forget_person` would survive a restore and would never reach an
   // offline phone, and it is the row that tells the next sweep those faces
   // are current.
-  // `policy_rule` and `consent` (issue #807) are registered for the same two
+  // `policy_rule` and `consent` (#807) are registered for the same two
   // reasons: both are OWNER DECISIONS, so a portable restore that dropped them
   // would hand back a vault that had forgotten which scopes enrich with what
   // and which egress the owner ever agreed to — the second silently re-asking
@@ -191,8 +191,8 @@ export const VAULT_TABLES: Readonly<Record<string, readonly string[]>> = {
   ],
   notifications: ["notice"],
   // Read-only custody projections, both rebuilt on the standing sweep:
-  // `custody_state` (issue #352) is local-vs-replicated state per content item;
-  // `custody_rollup` (issue #711) is its aggregate — per-bucket counts and
+  // `custody_state` (#352) is local-vs-replicated state per content item;
+  // `custody_rollup` (#711) is its aggregate — per-bucket counts and
   // bytes, including how much of the local tier is provably safe to release.
   // See blob/custody.ts and blob/custody-rollup.ts.
   blob: ["custody_state", "custody_rollup"],

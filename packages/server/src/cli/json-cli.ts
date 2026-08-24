@@ -1,5 +1,5 @@
 /*
- * Shared `--json` error contract for the admin CLI (issue #382).
+ * Shared `--json` error contract for the admin CLI (#382).
  *
  * Every `fail(message, code)` call in this package writes to stderr and
  * calls `process.exit` immediately — right for a human terminal, wrong for

@@ -1,7 +1,3 @@
-/**
- * Direct tests for the capability map (issue #545 B9).
- */
-
 import { describe, expect, it } from "vitest";
 
 import {

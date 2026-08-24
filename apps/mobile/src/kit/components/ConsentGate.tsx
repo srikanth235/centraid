@@ -1,7 +1,7 @@
 import React from "react";
 import { Pressable, View } from "react-native";
 
-// THE §8 CONSENT GATE — GENERIC TWO-PANEL RENDERER (issue #712 C1, native).
+// THE §8 CONSENT GATE — GENERIC TWO-PANEL RENDERER (#712, native).
 //
 // Photos' `apps/photos/EnrichmentConsent.tsx` is a thin wrapper carrying only
 // its own header chrome (back button, title, status line) and Photos' copy —
@@ -28,7 +28,7 @@ import { Text } from "./NativeText";
 
 export interface ConsentGateProps {
   /** Which `enrich_policy` domain this consent moment is about — a Locker
-   *  consent gate is a type error, not a policy (issue #712 C4): Locker has
+   *  consent gate is a type error, not a policy (#712): Locker has
    *  no `"photos" | "docs"` value to supply here. Read into the panels'
    *  accessible names; never used to branch copy. */
   domain: EnrichDomain;

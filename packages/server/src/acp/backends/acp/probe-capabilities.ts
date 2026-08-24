@@ -63,7 +63,6 @@ export interface AcpHarnessCapabilities {
   locationsObserved: boolean;
   /** session/new failed with AUTH_REQUIRED. */
   authRequired: boolean;
-  /** Prompt image capability. */
   promptImage: boolean;
   promptAudio: boolean;
   promptEmbeddedContext: boolean;

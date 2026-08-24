@@ -35,10 +35,9 @@ import { Text } from "../../kit/components/NativeText";
 import { borders, pageMargin, t, useTheme } from "../../kit/theme";
 import type { ThemeColors } from "../../kit/theme";
 
-/** The vault mark, :5363–5365 — 30×30, radius 8. Smaller than the old 34px
- *  pill: it is a wash-ground identity chip now, not a solid-filled avatar, and
- *  the lighter fill reads best at the app-icon-chip size rather than a full
- *  control height. */
+/** The vault mark, :5363–5365 — 30×30, radius 8. A wash-ground identity chip,
+ *  not a solid-filled avatar: the lighter fill reads best at the app-icon-chip
+ *  size rather than at a full control height. */
 const MARK = 30;
 
 /** `NEWCHAT_ICON`, handoff :3446 — a speech bubble with a `+`. Drawn inline

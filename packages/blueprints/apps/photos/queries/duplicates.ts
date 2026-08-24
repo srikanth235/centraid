@@ -1,20 +1,16 @@
 /**
- * Near-duplicate clusters over the live library (issue #352 phase 3/4 —
+ * Near-duplicate clusters over the live library (#352 phase 3/4 —
  * closing #299's deferred "duplicates shelf").
  *
- * A prior wave of this app fell back to an approximation here: exact-sha
- * groups plus a "same dimensions + same byte size" coarse fingerprint,
- * because `media_asset_phash` wasn't a registered logical entity and
- * `cluster_id` didn't exist yet (see git history of this file for that
- * version's full reasoning). Both gaps are closed server-side now:
+ * THE SIMILARITY SIGNAL IS THE SERVER'S, never an exact-sha group plus a
+ * "same dimensions + same byte size" fingerprint, which is coincidence-prone:
  *   - `media.asset_phash` is a registered logical entity (schema/tables.ts)
  *     an app with `{schema:'media', verbs:'read'}` can read directly.
  *   - `cluster_id` is a column the standing sweep recomputes wholesale
  *     every run (enrich/clusters.ts's `recomputeDuplicateClusters` —
  *     union-find over phash hamming distance ≤ 6, deterministic id = the
  *     group's lowest asset_id), so reading `WHERE cluster_id IS NOT NULL`
- *     and grouping client-side is now a real visual-similarity signal, not
- *     a coincidence-prone fingerprint.
+ *     and grouping client-side is a real visual-similarity signal.
  *
  * This query does the read + group + join to content, nothing more — the
  * clustering itself already happened server-side.

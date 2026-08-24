@@ -1,5 +1,5 @@
 /*
- * The peer lane where it meets the composed handler (issue #726 P3).
+ * The peer lane where it meets the composed handler (#726).
  *
  * `mountUnauthed` is the honest model of the hole this file closes: the
  * gateway's own bearer is checked ABOVE the composed handler, and every

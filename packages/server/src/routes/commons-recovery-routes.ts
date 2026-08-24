@@ -16,7 +16,7 @@
  *
  * Recovery never fabricates consent: the successor's roster mirrors the old
  * one, but every other seat is INVITED and must accept. This door now also
- * DELIVERS those invitations (issue #750) — co-hosted seats, linked peers,
+ * DELIVERS those invitations (#750) — co-hosted seats, linked peers,
  * and an out-of-band claim ticket for the members whose only link was to the
  * vault that disappeared — and reports per-seat what happened, so an operator
  * following docs/recovery/commons-steward-loss.md can see exactly who still

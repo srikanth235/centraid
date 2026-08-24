@@ -1,5 +1,5 @@
 // governance: allow-repo-hygiene file-size-limit — this file holds the app's whole orchestration as one React tree by design (#505); it is smaller than the served app.tsx + app-inline.tsx it replaces. Splitting it belongs to the app's own code evolution, not this migration.
-// Docs — query-free React tree (issue #505). Holds the `Root` component and
+// Docs — query-free React tree (#505). Holds the `Root` component and
 // every constant, helper and type it needs that does NOT depend on the
 // node-side `./queries/*` handler modules. The shell's InlineAppModule
 // descriptor imports `Root` and `CHANGE_TABLES` from here and adds the query
@@ -872,13 +872,6 @@ export function Root({
   const readOnlyScope =
     primaryScope && !primaryScope.canWrite ? primaryScope.label : null;
 
-  // THE IN-PAGE TITLE AND ITS BYLINE ARE GONE (Chrome.tsx). Both restated what
-  // two surfaces above them already said, and each sentence they carried has a
-  // home that outlived them: the shelf's title and count are the app bar's
-  // (`frame.tsx` → `shelfCopy`); trash's purge window and the folder rule are
-  // captions under their own row sets (`view-copy.ts`). None of it was lost,
-  // and none of it is said twice.
-
   // The compact button's label. The words are the column heads' own, so the
   // two controls name the same four orders rather than inventing two dialects.
   // ──── what the view may SAY about itself (view-state.ts, §4.6, §11) ────
@@ -982,7 +975,7 @@ export function Root({
   const trashed = inTrash;
   const showFoot =
     state.driveTruncated && !searching && state.shelf !== STARRED;
-  // WHAT DOCS OWES THE SHARE KIT (issue #825): the roster, and the one status
+  // WHAT DOCS OWES THE SHARE KIT (#825): the roster, and the one status
   // line. Absent until the roster has actually been read — a sheet opened over
   // an unread roster would say "nobody yet" about a vault full of people.
   const handleShareStatus = (message: string): void => {
@@ -1031,9 +1024,9 @@ export function Root({
   // — no strip, no band, and six shelves reachable from nowhere. A layout
   // signal may hide a navigation only where it knows the replacement rendered.
   // WHICH SURFACE CARRIES THE SHELVES (v16, `_shared/nav-seat.ts`) — band,
-  // strip or rail, exactly one of the three and never two. The condition used
-  // to be spelled out here and again in the rail's own expression; it is one
-  // function now, so "a destination that exists only in the rail is a defect"
+  // strip or rail, exactly one of the three and never two. It is ONE function
+  // and not a condition spelled out here and again in the rail's own
+  // expression, so "a destination that exists only in the rail is a defect"
   // holds by construction rather than by inspection.
   const seat = navSeat({ narrow, compact });
   /** The band claim was HONOURED — the frame is carrying the shelves. The app

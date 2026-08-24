@@ -121,7 +121,7 @@ const CUSTODY_DOT_TONE: Record<CustodyTone, string> = {
   danger: styles.custodyDanger!,
 };
 
-// A compact backup-status dot (issue #352 phase 4, blob/custody.ts) for Grid
+// A compact backup-status dot (#352 phase 4, blob/custody.ts) for Grid
 // cards and List rows — the full-text chip version lives inline in
 // Details.tsx, where there's room for the label. Renders nothing for a
 // custody-less row (an inline document, or the standing sweep hasn't run

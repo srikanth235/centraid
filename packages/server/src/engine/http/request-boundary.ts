@@ -1,5 +1,5 @@
 /**
- * Loopback HTTP request-boundary checks (issue #504 batch 0).
+ * Loopback HTTP request-boundary checks (#504 batch 0).
  *
  * Host allowlist closes DNS rebinding against the local control plane.
  * CORS distinguishes Bearer (no ambient credentials) from cookie/session

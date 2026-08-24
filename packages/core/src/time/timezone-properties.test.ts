@@ -2,11 +2,10 @@
  * Civil-time laws for `timezone.ts` (#656 Layer 3 mutation seed).
  *
  * `recurrence.ts` is only correct if the wall-clock primitives underneath it
- * are. Before this file nothing imported `timezone.ts` directly — every one of
- * its branches was reached transitively by a handful of table-driven
- * recurrence cases, which is execution, not detection: swapping `<` for `<=`
- * in the overlap sort, dropping the day-clamp in `addWallMonths`, or padding
- * the year to 2 digits all still produced the same six asserted strings.
+ * are, and reaching `timezone.ts` transitively through table-driven recurrence
+ * cases is execution, not detection: swapping `<` for `<=` in the overlap sort,
+ * dropping the day-clamp in `addWallMonths`, or padding the year to 2 digits
+ * all still produce the same six asserted strings.
  *
  * Each test below states a law the module must obey for ALL inputs, never a
  * literal the current implementation happens to emit.

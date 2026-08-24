@@ -1,8 +1,8 @@
-// Demo-data purge (issue #290 phase 1) — the second half of the scenario
+// Demo-data purge (#290) — the second half of the scenario
 // contract: loading demo data is only safe because unloading it is one act.
 // Purge walks the seed registry, hard-deletes the physical rows, and runs the
 // same lifecycle duties any hard delete owes (end-date links, drop tags and
-// collection entries — the sweep's doctrine, issue #272/#274). Provenance
+// collection entries — the sweep's doctrine, #272/#274). Provenance
 // records the purge; receipts stay: history is never rewritten.
 
 import type { VaultDb } from "../db.js";
@@ -44,7 +44,7 @@ const DEPENDENT_ROWS: Record<string, { table: string; column: string }[]> = {
   // A staged import row is not owner meaning — it is the batch's own line
   // items, and it cannot outlive the batch it belongs to (its FK says so).
   // Photos' scenario stages face proposals through the ordinary publisher
-  // road (issue #712), which is the same road any enricher takes, so without
+  // road (#712), which is the same road any enricher takes, so without
   // this the batch is reported blocked for ever and the one-click purge stops
   // being one act. This differs from the content-derivative case above — an
   // import row does not regenerate — but the deletion is still lossless in

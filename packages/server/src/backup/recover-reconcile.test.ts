@@ -1,7 +1,7 @@
 import crypto from "node:crypto";
 import { promises as fs } from "node:fs";
 /*
- * Adopt-time inventory reconcile (issue #439 R5) — the four outcomes, in
+ * Adopt-time inventory reconcile (#439) — the four outcomes, in
  * isolation: a restored `blob_replica` index of beliefs, a provider inventory
  * that is truth, an injected `materialize` standing in for the engine's blob
  * re-pin, and the assertions that (a) a snapshot-carried missing blob is

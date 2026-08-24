@@ -1,6 +1,6 @@
 /*
- * The link store over its three tables (issue #726 P2 §3 + P3 decisions 1–4,
- * reshaped by issue #750): `vault_links` is pure permission, `vault_directory`
+ * The link store over its three tables (#726 P2 §3 + P3 decisions 1–4,
+ * reshaped by #750): `vault_links` is pure permission, `vault_directory`
  * is one identity record per known vault, and `vault_routes` is ONE row per
  * vault that lives elsewhere — a pair on this machine and a pair across the
  * world are the same link rows, differing only in whether the far vault has a

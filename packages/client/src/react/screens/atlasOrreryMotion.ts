@@ -60,7 +60,7 @@ function driveRecenter(
   return () => cancelAnimationFrame(raf);
 }
 
-// The orrery's re-centre motion (issue #519), lifted out of AtlasRelationsTab.
+// The orrery's re-centre motion (#519), lifted out of AtlasRelationsTab.
 // Two concerns: reading the user's reduced-motion preference, and the
 // radius-only re-centre animation. Bearings never animate (the anti-hairball
 // invariant) — only each kind's radial distance eases to its new ring when the

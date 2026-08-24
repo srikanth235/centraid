@@ -1,4 +1,4 @@
-// A4 — the placement registry (issue #712).
+// The placement registry (#712).
 //
 // This module is the ONE place that answers "what can be placed into an
 // audience vault, and which app owns it". Every placement control reads its
@@ -8,7 +8,7 @@
 //
 // A7 — LOCKER IS STRUCTURALLY EXCLUDED. `packages/vault/src/share/closure.ts`
 // keeps `locker.item` in its `ShareableItemType` because the vault-level
-// primitive from issue #599 decision 11 (a household "watchtower" vault could
+// primitive from #599 decision 11 (a household "watchtower" vault could
 // in principle project a locker item into it) never went away. But no
 // SHIPPED app offers that door: a secret is the one thing v0 refuses to let a
 // member place, full stop, so `locker.item` is left OUT of
@@ -54,7 +54,6 @@ export const PLACEMENT_REGISTRY: readonly PlacementEntity[] = [
   { itemType: "tally.group", appId: "tally", label: "group" },
 ];
 
-/** Every placeable item type, for a control that needs the bare list. */
 export const PLACEABLE_ITEM_TYPES: readonly PlaceableItemType[] =
   PLACEMENT_REGISTRY.map((entity) => entity.itemType);
 

@@ -1,5 +1,5 @@
 /*
- * Bounded server-sent-event writer (issue #659 G6).
+ * Bounded server-sent-event writer (#659).
  *
  * An SSE surface that calls `res.write()` and ignores the result is unbounded.
  * `res.write()` returning `false` means the socket is full and Node is

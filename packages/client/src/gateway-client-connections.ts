@@ -1,6 +1,6 @@
 /*
  * Renderer-side client for the broker-owned OAuth / BYO-client connections
- * surface (issue #304's gateway routes, `packages/server/src/routes/
+ * surface (#304's gateway routes, `packages/server/src/routes/
  * connections-routes.ts`). Split out of `gateway-client.ts` so the new
  * Settings → Connections screen doesn't grow the barrel file further; the
  * barrel re-exports this module so call sites still import from
@@ -226,7 +226,7 @@ export async function listConnectionProviders(): Promise<
 
 /** Attach (or, with `credKind: 'none'`, detach) a credential on a connection,
  *  identified by `(kind, label)` — the same pair the connector manifest
- *  names (issue #304 decision: "credential attaches to the connection row,
+ *  names (#304 decision: "credential attaches to the connection row,
  *  not the manifest"). A `(kind, label)` that doesn't exist yet is created. */
 export interface ConfigureConnectionInput {
   kind: string;
@@ -377,7 +377,7 @@ async function readRemoveOutcome(
 }
 
 /**
- * The real delete (issue #304's missing renderer half): removes the
+ * The real delete (#304's missing renderer half): removes the
  * connection row, its credential + health sidecars and cursor state. Refused
  * (409) when the connection still has undecided outbox items or receipted
  * sync history — `reason` is the server's own explanation, meant for a

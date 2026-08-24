@@ -1,4 +1,4 @@
-// Device-side CBSF v2 edge sealing (#419 M0.4).
+// Device-side CBSF v2 edge sealing (#419.4).
 //
 // The wire format is defined by `packages/vault/src/blob/seal-frames.ts` and
 // enforced on arrival by `packages/vault/src/blob/remote-verify.ts`

@@ -1,20 +1,19 @@
 // @vitest-environment jsdom
-// Pins the three defects issue #711 found in the native Face review screen
-// (see FaceReview.tsx's own header for the full list) — a regression net,
-// not a styling snapshot:
+// A regression net over the Face review screen's rules (#711, #712; see
+// FaceReview.tsx's own header), not a styling snapshot:
 //
-//   1. CONFIDENCE IS NEVER A PERCENTAGE (README.md:285). The old screen said
-//      `{pct}% confidence`; nothing rendered here may contain a `%`.
+//   1. CONFIDENCE IS NEVER A PERCENTAGE (README.md:285) — nothing rendered
+//      here may contain a `%`.
 //   2. ONE FACE AT A TIME (v4 3967). Never a FlatList over every unconfirmed
 //      region: exactly one "Is this someone you know?" panel is ever on
 //      screen.
-//   3. AN UNMATCHED FACE HAS A FORWARD ACTION. The old screen rendered
-//      Confirm only when `party_id` was already set, so a proposal with no
-//      match — the PRIMARY case a face detector produces — was reject-only.
-//   4. THE QUEUE CAN BE FINISHED (issue #712). "Keep unnamed" writes a real
-//      `dismiss` answer through the one `answer-face` verb instead of setting
-//      an apologetic note; an already-answered region stays out of the queue
-//      across pulls; and Skip is the only control that still writes nothing.
+//   3. AN UNMATCHED FACE HAS A FORWARD ACTION — a proposal with no match is
+//      the PRIMARY case a face detector produces, and it is never
+//      reject-only.
+//   4. THE QUEUE CAN BE FINISHED. "Keep unnamed" writes a real `dismiss`
+//      answer through the one `answer-face` verb; an already-answered region
+//      stays out of the queue across pulls; and Skip is the only control that
+//      writes nothing.
 //
 // Same react-native-as-DOM mocking technique as PhotosPeopleView.test.tsx:
 // every RN primitive becomes a plain DOM element so the screen can be driven
@@ -69,7 +68,7 @@ const mocks = vi.hoisted(() => ({
       review_state: "proposed",
       bbox_json: null,
     },
-    // Already answered and NOT confirmed (issue #712) — a face the member
+    // Already answered and NOT confirmed (#712) — a face the member
     // deliberately left unnamed. It must not be in the queue, and it must not
     // be counted as one of Ana's matches either.
     {

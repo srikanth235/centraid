@@ -52,7 +52,7 @@ async function openAutomations(page: TypeImport_11i4z7t.Page): Promise<void> {
  * #765): a row is not a control, its trailing action is, and every one of
  * those reads "Open". The `title` is what distinguishes them — it is a title
  * rather than an `aria-label` because the button already renders visible text
- * (aria-label discipline, issue #708 B.4).
+ * (aria-label discipline, #708 B.4).
  */
 async function openAutomationRow(
   page: TypeImport_11i4z7t.Page,

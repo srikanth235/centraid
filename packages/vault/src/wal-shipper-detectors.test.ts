@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 // governance: allow-repo-hygiene file-size-limit (#408) the detector suite shares real SQLite race hooks, restore helpers, and restart fixtures whose correctness depends on one common lifecycle harness
-// WAL shipper detectors + lifecycle (issue #408): G5 foreign-actor
+// WAL shipper detectors + lifecycle (#408): G5 foreign-actor
 // detection (in-process stand-ins — the real second-process test lives in
 // the gateway e2e rig), G7 crash-ordering/restart, generation lifecycle
 // (first-run, cadence, explicit rolls, base registration, clean close +
@@ -601,7 +601,7 @@ describe("wal-shipper-detectors", () => {
   // ──────────────────────────────── I2: the capture micro read-lock (issue #411)
 
   test("[I2] the capture read-mark pins the WAL: a foreign TRUNCATE/RESTART busys, no reset", () => {
-    // Action 2 of issue #411, belt-and-suspenders to the after-the-fact detection.
+    // Action 2 of #411, belt-and-suspenders to the after-the-fact detection.
     // capture() holds a short read snapshot over the byte copy — the SAME
     // acquisition the shipper uses: a read-only connection, BEGIN, then a read
     // that materializes the snapshot and grabs the WAL read mark. While that mark

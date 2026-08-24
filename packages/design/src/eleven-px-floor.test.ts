@@ -1,4 +1,4 @@
-// The 11px floor (issue #708 §B.1) — the ramp's own header in typography.ts
+// The 11px floor (#708) — the ramp's own header in typography.ts
 // says it plainly: "Nothing falls below 11px." This test is what enforces
 // that promise on the two things an app actually reads: the emitted CSS
 // (`toCss()`) and the native lowering (`toNativeTheme()`), not the source

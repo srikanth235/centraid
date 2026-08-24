@@ -350,7 +350,7 @@ export function createLogic({ state, data, render, refresh }: LogicDeps) {
 // ────────── Clipboard copy (standalone — no closure over app state) ──────────
 
 // Seconds a copied secret is allowed to live on the clipboard before we wipe
-// it (issue #298 item 5): copy-password legitimately crosses into the OS
+// it (#298): copy-password legitimately crosses into the OS
 // clipboard, and from there into clipboard-history tools. We can't reach the
 // native `org.nspasteboard.ConcealedType` mark from a browser context
 // (navigator.clipboard only speaks text/html/png), so the portable

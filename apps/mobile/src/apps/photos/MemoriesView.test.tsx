@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-// The Memories screen's trip block (issue #816) — the phone is the primary
+// The Memories screen's trip block (#816) — the phone is the primary
 // surface, so this is where "the seeded roll yields the Tahoe trip as a NAMED
 // card" is actually checked.
 //

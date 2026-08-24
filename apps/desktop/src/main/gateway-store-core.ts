@@ -1,7 +1,7 @@
 import { IDENTITY_COLORS } from "@centraid/design";
 
 /**
- * Gateway profile registry — pure core (issue #109 / #545 C1).
+ * Gateway profile registry — pure core (#109 / #545 C1).
  *
  * Avatar palette, profile shape validation, read-time defaults, and list sort
  * are side-effect-free so unit tests cover them without mocking fs / keychain.
@@ -104,9 +104,9 @@ export function normalizeProfile(
     ...(typeof parsed.relayHint === "string" && parsed.relayHint.length > 0
       ? { relayHint: parsed.relayHint }
       : {}),
-    // Local profiles created before durable replica storage had no preference.
-    // Treat that legacy absence as opted in so desktop offline state survives a
-    // restart; an explicit false still honors the user's storage choice.
+    // A local profile with no stored preference counts as opted in, so desktop
+    // offline state survives a restart; an explicit false still honors the
+    // user's storage choice.
     rememberDevice:
       parsed.rememberDevice === true ||
       (parsed.kind === "local" && parsed.rememberDevice === undefined),

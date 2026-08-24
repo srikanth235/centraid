@@ -1,11 +1,11 @@
 /*
  * `POST /centraid/_gateway/resource/pause` + `DELETE …/pause` — the owner's
- * hot-apply "pause background work" control (#528 Phase B).
+ * hot-apply "pause background work" control (#528).
  *
  * `POST /centraid/_gateway/resource/power-context` + `DELETE …/power-context`
  * — the Electron desktop pushes live host power state (on battery / charging /
  * thermal), which composes into the same safe-loop deferral as the pause
- * (#528 Phase D). Client-pushed state goes stale after 120s (the monitor's
+ * (#528). Client-pushed state goes stale after 120s (the monitor's
  * own clock enforces it); a DELETE clears it, falling back to the boot probe.
  *
  * A self-hoster on a busy or thermally-throttled machine can suspend the

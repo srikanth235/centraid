@@ -10,7 +10,7 @@ import { Store } from "./store.js";
 /**
  * The first-party app ids, resolved locally rather than fetched.
  *
- * Every one of these is installed in every vault at mount (issue #708), so a
+ * Every one of these is installed in every vault at mount (#708), so a
  * listing row carrying one of these ids is an INSTALLED APP — never a draft and
  * never something waiting to be pinned.
  */
@@ -98,7 +98,7 @@ export function resetInstalledAppsCache(): void {
 }
 
 /** What a reconcile pass produces; `null` means the listing itself failed.
- *  Also the unit an optimistic app mutation edits (issue #659). */
+ *  Also the unit an optimistic app mutation edits (#659). */
 export interface ShellAppsSnapshot {
   userApps: UserAppMeta[];
 }
@@ -108,7 +108,7 @@ export interface ShellAppsSnapshot {
  *  rewrites the Store, and hands back the next lists for the caller to apply. */
 async function reconcileShellApps(): Promise<ShellAppsSnapshot | null> {
   const projs = await listApps().catch(() => null);
-  // The listing is the only source for what a vault HAS (issue #708), so a
+  // The listing is the only source for what a vault HAS (#708), so a
   // launch with the gateway down had nothing to show and Home rendered its
   // day-one empty state on a vault holding a fully synced replica — the one
   // moment the offline copy exists for. Fall back to what the last successful
@@ -174,7 +174,7 @@ async function reconcileShellApps(): Promise<ShellAppsSnapshot | null> {
   if (reconciled.length !== pins.length) Store.set("home.userApps", reconciled);
 
   // The first-party apps, from the LISTING rather than from the pin store
-  // (issue #708).
+  // (#708).
   //
   // Before this, "installed" meant "a pin the Discover install flow wrote into
   // local storage". Retiring the catalogue removed the only writer, so an app
@@ -225,7 +225,7 @@ export interface ShellAppsController {
   setUserApps: (next: UserAppMeta[]) => void;
   /**
    * Apply a local edit to both lists, run the wire call, then reconcile against
-   * the gateway (issue #659). A rejection restores the pre-edit lists and
+   * the gateway (#659). A rejection restores the pre-edit lists and
    * rethrows, so a delete or rename lands on the tile immediately and only
    * un-lands if the gateway actually refused.
    */

@@ -1,4 +1,4 @@
-// What each springboard tile SAYS, derived from replica rows (issue #708 A).
+// What each springboard tile SAYS, derived from replica rows (#708 A).
 //
 // The Binding Layer's Home is made of content, not of icons: every tile carries
 // an INVARIANT header — app icon, app name at the UI role, a count in the
@@ -209,11 +209,10 @@ export const MOSAIC_SLOTS = 4;
  * Lives here, beside the slot count, so the geometry the tile depends on is
  * asserted in the same place the selection rules are.
  *
- * The row now bleeds to the full card width rather than sitting inside three
+ * The row bleeds to the full card width rather than sitting inside three
  * columns of padded content, so a single row of four reads roughly square at
- * ordinary phone widths — taller than the old 56pt half-row, because it is
- * carrying the whole tile's vertical budget alone now instead of splitting it
- * across two rows.
+ * ordinary phone widths. It carries the whole tile's vertical budget alone
+ * rather than splitting it across two rows.
  */
 export const MOSAIC_CELL_HEIGHT = 88;
 

@@ -23,9 +23,6 @@
  * could never leave `loading` — opencode and grok spun forever instead of
  * saying they have no model choice.
  *
- * (The tool surface this warmer once also tracked went away with the
- * `ctx.tool` rail — issue #484.)
- *
  * Reads stay in `./catalog.ts` (`readHarnessModels`); this module only writes.
  * `deriveStatus` turns (cached length, isWarming) into the tri-state the UI
  * renders.

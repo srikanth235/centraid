@@ -1,4 +1,4 @@
-// Properties (Docs handoff Part 2 §11; issue #821) — "the whole custody
+// Properties (Docs handoff Part 2 §11; #821) — "the whole custody
 // story, on demand", told strictly from facts this device holds:
 //
 //   * the custody projection (`blob.custody_state`) in the same owner-facing

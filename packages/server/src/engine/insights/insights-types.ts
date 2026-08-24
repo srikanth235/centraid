@@ -1,6 +1,5 @@
 /*
  * Insights payload types for InsightsStore (#514).
- * Kept separate so the store file stays under the repo-hygiene line limit.
  */
 
 export interface InsightsKpis {

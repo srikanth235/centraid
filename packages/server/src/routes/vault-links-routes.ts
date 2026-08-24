@@ -1,6 +1,6 @@
 /*
  * `/centraid/_gateway/links` — the same-machine "link ceremony" a
- * cross-owner edge needs before it may cross (#726 P2 §3), PLUS the
+ * cross-owner edge needs before it may cross (#726), PLUS the
  * owner-facing door onto the remote half (audit #726 finding 1).
  *
  * Same-owner edges never reach this surface: owning both vaults already IS
@@ -10,10 +10,9 @@
  * table, one answerer (D3) — differing only in that neither side needs a
  * route to reach the other.
  *
- * `ticket`/`redeem` are that remote ceremony's missing door: before this,
- * `PeerLinkTicketStore.mint` and `redeemLinkTicket` (`serve/peer-link-*.ts`)
- * were reachable only from tests and fixtures — no owner-facing route ever
- * called them. `ticket` mints a one-time capability for a vault the caller
+ * `ticket`/`redeem` are that remote ceremony's owner-facing door onto
+ * `PeerLinkTicketStore.mint` and `redeemLinkTicket` (`serve/peer-link-*.ts`).
+ * `ticket` mints a one-time capability for a vault the caller
  * owns (mirrors `propose`'s ownership check); `redeem` is the OTHER
  * gateway's owner pasting/scanning what `ticket` produced, and dials out
  * over `peerPlane.dial` (`serve/peer-dial.ts`) to actually run the ceremony

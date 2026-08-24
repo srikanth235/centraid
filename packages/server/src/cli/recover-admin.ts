@@ -1,5 +1,5 @@
 /*
- * `centraid-gateway recover` (issue #439 R6) — the CLI shell over the
+ * `centraid-gateway recover` (#439) — the CLI shell over the
  * service-layer `recover()` verb (`backup/recover.ts`). Headless Linux daemon
  * installs recover this way, and it is the blank-machine e2e harness: a fresh
  * data dir plus NOTHING but the recovery kit and the provider api-key.
@@ -11,12 +11,12 @@
  * Unlike `backup …`, recover needs NO daemon config file: the provider
  * addressing lives in the kit and the api-key is passed in. It prints the
  * "found your vault" facts (size / as-of / provider / cost class) to stderr,
- * gates a metered-egress home behind `--yes` (the same rule Wave 1's restore
+ * gates a metered-egress home behind `--yes` (the same rule the restore
  * gate uses — PROTOCOL.md's `restoreCostClass`), streams phase progress to
  * stderr, and writes the JSON completion report to stdout. It refuses to touch
  * a vault root a live gateway holds. The restore is LAZY by default (defers
  * every blob the provider's attested inventory holds); `--full` materializes
- * every blob. `--at` is point-in-time recovery (issue #408).
+ * every blob. `--at` is point-in-time recovery (#408).
  *
  * The recovered gateway's keyring lands under `<data-dir>/keys/`, fenced
  * backup state lands in `gateway.db`, and the vault lands under
@@ -79,7 +79,7 @@ function parseRecoverArgs(
   return out;
 }
 
-/** Phase → the user-facing progress line wave 4's SSE will echo. */
+/** Phase → the user-facing progress line; machine vocabulary stays out. */
 const PHASE_LINES: Record<RecoverPhase, string> = {
   discovering: "finding your vault",
   fetching: "fetching your vault",
@@ -90,7 +90,7 @@ const PHASE_LINES: Record<RecoverPhase, string> = {
   done: "done",
 };
 
-/** The "found your vault" facts card (issue #439 R6) — zero machine vocabulary. */
+/** The "found your vault" facts card (#439) — zero machine vocabulary. */
 function printFacts(discovery: RecoveryDiscovery): void {
   const size =
     discovery.fullBytes === undefined
@@ -225,7 +225,7 @@ export async function commandRecover(
 
     printJson(report);
 
-    // Adopt-time reconcile (issue #439 R5). Recovery SUCCEEDED for everything
+    // Adopt-time reconcile (#439). Recovery SUCCEEDED for everything
     // else, so this never fails the command (no non-zero exit) — a lost blob is
     // not a reason to abandon a recovered vault. But LOST bytes are surfaced as a
     // prominent CRITICAL block so an operator cannot miss them; a re-pin is a

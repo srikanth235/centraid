@@ -6,11 +6,10 @@
 // different emitter with a different ramp (`--bg-l: 5%`) and two more surfaces
 // (`--bg`, `--bg-app`), and packages/client paints these rungs on all four.
 //
-// A floor held on one emitter says nothing about the other, which is exactly
-// how the raw fills survived in ~30 client `color:` sites: as ink on the
-// shell's own surfaces they measure 2.04–5.03:1 on light and 3.12–8.44:1 on
-// dark — 17 of 32 cells below AA, every hue failing on at least one theme, and
-// amber missing even the 3:1 non-text floor that an icon glyph owes.
+// A floor held on one emitter says nothing about the other. As ink on the
+// shell's own surfaces the raw fills measure 2.04–5.03:1 on light and
+// 3.12–8.44:1 on dark — most cells below AA, and amber missing even the 3:1
+// non-text floor an icon glyph owes. Hence this grid, beside the other.
 
 import { describe, expect, test } from "vitest";
 

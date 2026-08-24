@@ -5,7 +5,7 @@
 // refresh() re-reads.
 //
 // Every command here is ABOUT an existing asset, so it goes to the scope that
-// asset is shown from (issue #599) — never to the chip selection. Favoriting a
+// asset is shown from (#599) — never to the chip selection. Favoriting a
 // photo in a shared audience edits it there; the member's own library has no
 // copy of it to edit.
 //

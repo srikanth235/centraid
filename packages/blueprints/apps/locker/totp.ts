@@ -1,6 +1,5 @@
 // Secret crypto: real RFC-6238 TOTP, password strength scoring and the
-// in-browser password generator — the app's only crypto surface, ported
-// byte-for-byte from the Lit original (app.js's "Secret helpers" section).
+// in-browser password generator — the app's only crypto surface.
 // base32 decode → HMAC-SHA1 over the big-endian 30s counter → dynamic
 // truncation → 6 digits. Cached per (seed, 30s-step) so the once-a-second
 // tick is cheap; the seed and code never get logged.
@@ -92,16 +91,15 @@ export function useTotp(seed: string | null | undefined): {
   // The code is derived during render, never synced into state by an effect
   // (#573). `computed` carries the last value this hook resolved asynchronously,
   // so a fresh 30s step keeps showing the previous code until its replacement
-  // lands — the same continuity the old `code` state gave. The tick value itself
-  // is never read: bumping it is what re-renders the countdown ring each second.
+  // lands. The tick value itself is never read: bumping it is what re-renders
+  // the countdown ring each second.
   const [, setTick] = useState(0);
   const [step, setStep] = useState(() => Math.floor(Date.now() / 30000));
   const [computed, setComputed] = useState<string | null>(null);
 
   // One interval drives both: `tick` re-renders for the countdown ring, `step`
-  // rolls the 30s window over within a second of the real one — the same
-  // once-a-second re-check the old `[seed, tick]` effect performed, but as
-  // state the render can read purely.
+  // rolls the 30s window over within a second of the real one, as state the
+  // render can read purely.
   useEffect(() => {
     if (!seed) return undefined;
     const id = setInterval(() => {
@@ -113,8 +111,7 @@ export function useTotp(seed: string | null | undefined): {
 
   const key = seed ? cacheKey(seed, step) : null;
   // A cached entry wins even when it is null (a failed compute is cached as
-  // null, exactly as the old effect stored it); only a cache miss falls back to
-  // the previous resolved code.
+  // null); only a cache miss falls back to the previous resolved code.
   const code = key
     ? OTP_CACHE.has(key)
       ? (OTP_CACHE.get(key) ?? null)

@@ -248,7 +248,7 @@ describe("cli scenarios", () => {
   // End-to-end: spawn the CLI via tsx, parse "listening on …" out of stdout,
   // hit /centraid/_apps with the loopback secret, assert 200, send SIGTERM,
   // confirm clean exit. There is no persistent `token.bin` and no printed
-  // bearer (issue #505 phase 7) — the daemon mints an ephemeral per-boot
+  // bearer (#505) — the daemon mints an ephemeral per-boot
   // loopback secret. A parent (here the test, mirroring the desktop's
   // detached-gateway spawn) pins a known value via `CENTRAID_GATEWAY_TOKEN` so
   // it can reach the loopback listener; the secret is never written to disk.

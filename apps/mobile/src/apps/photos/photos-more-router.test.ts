@@ -1,4 +1,4 @@
-// Pins the More-sheet router (issue #711 — the phone's band and More sheet
+// Pins the More-sheet router (#711 — the phone's band and More sheet
 // are labelled destinations, and each must open the thing it names).
 // `resolveMoreRowRoute` (photos-band.ts) is the pure, exhaustive mapping that
 // makes that mechanical: a row added to `PHOTOS_MORE_ROWS` without a matching
@@ -6,10 +6,10 @@
 // rather than falling through to `navigation.navigate("PhotosLibrary")` at
 // runtime.
 //
-// WHAT THIS SUITE IS ABOUT (issue #712). The sheet carries ONE row.
+// WHAT THIS SUITE IS ABOUT (#712). The sheet carries ONE row.
 // Collections is the landing surface and holds every shelf — Favorites,
 // Places, Duplicates, Trash — as a named section with a live count, on screen,
-// and there is no Photos "Sharing" place at all (issue #726). A row here for
+// and there is no Photos "Sharing" place at all (#726). A row here for
 // any of them would be a second, hidden door to a shelf the member can already
 // see, and a second place to keep its label and its count honest. The section
 // assertions live in `photos-collections.test.ts`; what is pinned HERE is what
@@ -52,7 +52,7 @@ describe("resolveMoreRowRoute (the More sheet's router)", () => {
   });
 
   it("backup deep-links ACROSS stacks to frame Settings, not to a Photos route", () => {
-    // issue #712 B1/B2: the row is labelled "Backup" (the screen it opens is
+    // #712/B2: the row is labelled "Backup" (the screen it opens is
     // titled "Backup health"), and the screen itself moved to frame Settings
     // beside Phone storage. A Photos-stack route name here would not resolve
     // at all — which is the point of routing through this one function.
@@ -68,7 +68,7 @@ describe("resolveMoreRowRoute (the More sheet's router)", () => {
   });
 
   it("carries no `access` row: permission is a takeover of the timeline now", () => {
-    // issue #712 P13. The permission content is rendered in the GRID's slot by
+    // #712. The permission content is rendered in the GRID's slot by
     // `PhotosHome`, so a More row pointing at a pushed screen would be a
     // second, worse route to the same words — and there is no screen left.
     expect(PHOTOS_MORE_ROWS.map((row) => row.key)).not.toContain("access");

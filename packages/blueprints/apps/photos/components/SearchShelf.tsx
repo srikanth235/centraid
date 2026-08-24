@@ -22,13 +22,12 @@ import type { SearchGroupRow } from "../../_shared/search-scaffold.ts";
 // a Retry, never the "no matches" line, which would be a claim nobody
 // verified.
 //
-// THE FOUR STATES THEMSELVES now render through `_shared/SearchScaffold.tsx`
-// (issue #712 S1) — this file keeps only what is genuinely Photos-specific:
+// THE FOUR STATES THEMSELVES render through `_shared/SearchScaffold.tsx`
+// (#712) — this file keeps only what is genuinely Photos-specific:
 // the field, the "whole library, not the loaded window" line under it, and
 // the photo grid this shelf sits above (passed through as `children`). The
-// text every state prints is unchanged (`view-copy.ts`'s `SEARCH_COPY`), so
-// this is a rendering-owner change, not a copy change —
-// `photos-shelves-v4.test.ts`'s string assertions pin that.
+// text every state prints is `view-copy.ts`'s `SEARCH_COPY`, pinned by
+// `photos-shelves-v4.test.ts`'s string assertions.
 import { SearchScaffold } from "../../_shared/SearchScaffold.tsx";
 import type { SearchGroupHit } from "../search-groups.ts";
 import type { SearchStatus } from "../search.ts";
@@ -86,7 +85,7 @@ export function SearchShelf({
    *  only control. */
   onRetry?: () => void;
   onOpenGroup?: (shelf: ShelfId) => void;
-  /** Per-scope reach for the current answer (issue #726 D10/D11,
+  /** Per-scope reach for the current answer (#726 D10/D11,
    *  `search.ts`'s `createSearch`) — a scope that did not answer, named
    *  BESIDE whatever other scopes' hits are still on screen. */
   reachFacts?: readonly { label: string; value: string }[];

@@ -51,14 +51,14 @@ export interface VaultDb {
   /** Directory holding vault.db + journal.db, or ':memory:'. */
   dir: string;
   /**
-   * The vault's data-encryption key for sealed columns (issue #293). On-disk
+   * The vault's data-encryption key for sealed columns (#293). On-disk
    * vaults load-or-create it in the `keys/` sibling of the vault directory —
    * outside anything export/backup/copy moves, so a copied vault carries
    * ciphertext only. In-memory vaults get an ephemeral key.
    */
   sealKey: Buffer;
   /**
-   * The vault's own Ed25519 signing seed (issue #726 P1) — same custody as
+   * The vault's own Ed25519 signing seed (#726) — same custody as
    * `sealKey`, minted at creation, loaded (or lazily minted) on every later
    * open. In-memory vaults get an ephemeral seed. Derive the public key with
    * `vaultIdentityPublicKey`; sign with `signWithVaultIdentity`.
@@ -67,7 +67,7 @@ export interface VaultDb {
   /** Host-selected custody store that owns the on-disk seal-key envelope. */
   keyStore?: KeyStore;
   /**
-   * Blob custody (issue #296): the always-present local CAS plus the
+   * Blob custody (#296): the always-present local CAS plus the
    * settings-declared remote tier. The remote resolves lazily from
    * `core_vault.settings_json.blob_store` on every use, so switching
    * backends needs no reopen.
@@ -78,7 +78,7 @@ export interface VaultDb {
   /** Persistent resumable ingress + continuous pending-offsite drain (#414). */
   blobTransfers: BlobTransferCoordinator;
   /**
-   * The preview ladder's raster codec (issue #405 §2), or undefined when no
+   * The preview ladder's raster codec (#405), or undefined when no
    * codec is wired (the vault package carries none of its own). The gateway
    * host injects its jpeg-js/pngjs implementation here so the blob sweep's
    * preview backstop (gateway.ts `sweepBlobs` → `backfillPreviews`) can fill
@@ -88,7 +88,7 @@ export interface VaultDb {
    */
   previewCodec?: PreviewCodec;
   /**
-   * `skipOptimize` is for the WAL-shipper shutdown path (issue #408): the
+   * `skipOptimize` is for the WAL-shipper shutdown path (#408): the
    * shipper runs `PRAGMA optimize` itself BEFORE its final checkpoint, so
    * that optimize's ANALYZE writes don't sit in the WAL at handle close,
    * where SQLite's close-checkpoint would fold them into the main file
@@ -98,7 +98,7 @@ export interface VaultDb {
   close: (opts?: { skipOptimize?: boolean }) => void;
 }
 
-/** The `blob_store` settings bag shape (issue #296 §2, extended #367). */
+/** The `blob_store` settings bag shape (#296 §2, extended #367). */
 export interface BlobStoreSettings {
   kind?: "fs" | "s3";
   endpoint?: string;
@@ -106,7 +106,7 @@ export interface BlobStoreSettings {
   region?: string;
   prefix?: string;
   /**
-   * Key prefix for the target's `derived` store grant (issue #425 Wave 2),
+   * Key prefix for the target's `derived` store grant (#425),
    * stamped by the gateway when the provider advertises + grants the `derived`
    * store. Pairwise-disjoint from `prefix` (cas) and the backup prefix. Present
    * ⇒ `remoteTier()` builds a second `S3BlobStore` here and binary derivatives
@@ -117,7 +117,7 @@ export interface BlobStoreSettings {
   /** Legacy settings field. Remote CAS encryption is mandatory in v0. */
   encrypt?: boolean;
   /**
-   * The gateway-level `storage-connections` entity (#367 §C1) this vault's
+   * The gateway-level `storage-connections` entity (#367) this vault's
    * remote tier resolves credentials from. When set, `s3Credentials` is
    * expected to resolve creds keyed off this id (a short-lived
    * `requestCasGrant` against the provider). Absent = the legacy
@@ -127,17 +127,17 @@ export interface BlobStoreSettings {
   connectionId?: string;
   /**
    * Denormalized copy of the connection's kind, stamped by the gateway
-   * whenever it wires `connectionId` (issue #367 §C4). Only `provider`
-   * connections exist now (#436 §2); all remote CAS objects use CBSF.
+   * whenever it wires `connectionId` (#367). Only `provider`
+   * connections exist now (#436); all remote CAS objects use CBSF.
    */
   connectionKind?: "provider";
   /**
-   * Upload rate cap for the replication path, bytes/sec (issue #367 §C7,
+   * Upload rate cap for the replication path, bytes/sec (#367 §C7,
    * simple token bucket in `S3BlobStore`). Omitted/0 = unthrottled.
    */
   throttleBytesPerSec?: number;
   /**
-   * S3 storage class for object-creating writes (issue #405 §6) — passed
+   * S3 storage class for object-creating writes (#405) — passed
    * straight to `S3BlobStore` as `x-amz-storage-class` on PUT and
    * CreateMultipartUpload. camelCase in the settings JSON to match
    * `throttleBytesPerSec` (the bag is cast 1:1 from JSON, so the wire key and
@@ -147,7 +147,7 @@ export interface BlobStoreSettings {
    */
   storageClass?: string;
   /**
-   * Storage classes the target declared it supports (issue #425 Wave 3),
+   * Storage classes the target declared it supports (#425),
    * stamped by the gateway from provider discovery (`ProviderCapabilities.
    * storageClasses`) at attach time. The direct-to-cold heuristic only engages
    * when this includes `STANDARD_IA`; a BYO-S3 target has no discovery so the
@@ -173,11 +173,11 @@ export interface OpenVaultOptions {
   /** Override the local blob tier (tests inject a MemoryBlobStore). */
   blobStore?: LocalBlobStore;
   /**
-   * How S3 credentials resolve (issue #296 §2): the host wires this to the
+   * How S3 credentials resolve (#296): the host wires this to the
    * broker/sealed-secret path (#290/#293) — creds never live in settings.
    * Without a resolver, an s3-configured vault stays local-only and the
    * replication sweep reports the gap instead of failing writes. The optional
-   * `store` argument (issue #425 Wave 2) lets the host mint a store-scoped grant
+   * `store` argument (#425) lets the host mint a store-scoped grant
    * — `cas` for the primary store, `derived` for the derivatives prefix — so a
    * provider that issues per-store credentials authorizes each store correctly;
    * a resolver that ignores it (own-S3, tests) simply returns the same creds.
@@ -187,7 +187,7 @@ export interface OpenVaultOptions {
     store?: "cas" | "derived"
   ) => Promise<S3Credentials>;
   /**
-   * The preview ladder's raster codec (issue #405 §2) — the gateway host
+   * The preview ladder's raster codec (#405) — the gateway host
    * passes its jpeg-js/pngjs implementation so the blob sweep's backstop can
    * generate missing thumb/preview derivatives. Omitted for hosts (and tests)
    * with no codec: the backstop simply doesn't run.
@@ -195,7 +195,7 @@ export interface OpenVaultOptions {
   previewCodec?: PreviewCodec;
   /**
    * Host-injected loadable SQLite extensions for the CANONICAL vault handle
-   * (issue #721 E3), following the same injection precedent as `previewCodec`
+   * (#721), following the same injection precedent as `previewCodec`
    * directly above: `packages/vault` is deliberately dependency-light and ships
    * no native modules, so the gateway host owns the npm package that carries
    * the platform binary (`sqlite-vec`) and hands in the loader.
@@ -222,7 +222,7 @@ export interface OpenVaultOptions {
   /** FULL by default; a measured low-end hardware profile may choose WAL-safe NORMAL. */
   synchronous?: "FULL" | "NORMAL";
   /**
-   * Per-vault memory footprint (issue #659 L8). Omitted = today's numbers
+   * Per-vault memory footprint (#659). Omitted = today's numbers
    * exactly. See `VaultFootprintBudget` for why this is a TOTAL rather than a
    * per-file constant.
    */
@@ -250,7 +250,7 @@ function openFile(
     loadExtensions?.(db);
     db.exec("PRAGMA foreign_keys = ON");
     if (location !== ":memory:") {
-      // auto_vacuum=INCREMENTAL bounds journal.db (issue #438): the ledger-band
+      // auto_vacuum=INCREMENTAL bounds journal.db (#438): the ledger-band
       // archival prune (and #367's audit-band archival) frees pages that only
       // `incremental_vacuum` returns to the OS — freelist mode never shrinks the
       // file. MUST be set BEFORE journal_mode=WAL: on a fresh file the setting is
@@ -266,8 +266,8 @@ function openFile(
       // transaction (WAL's default NORMAL can drop the last commit(s) on
       // power loss; FULL fsyncs the WAL on every commit).
       db.exec(`PRAGMA synchronous = ${synchronous}`);
-      // Read-path tuning for Pi-class hosts (issue #456 S1), now a divisible
-      // per-vault budget rather than a per-file constant (issue #659 L8 — see
+      // Read-path tuning for Pi-class hosts (#456), now a divisible
+      // per-vault budget rather than a per-file constant (#659 L8 — see
       // `VaultFootprintBudget`). One owner for the division: a host that
       // re-divides across live planes calls the same function.
       applyVaultFootprint(db, footprint);
@@ -276,11 +276,11 @@ function openFile(
       // transcripts.db folded in), which worker subprocesses open by path —
       // wait for their locks instead of failing immediately.
       db.exec("PRAGMA busy_timeout = 30000");
-      // Checkpointing is the WAL shipper's exclusive duty (issue #408): segments
+      // Checkpointing is the WAL shipper's exclusive duty (#408): segments
       // are raw WAL byte ranges, valid only while the WAL is strictly
       // append-only between checkpoints THE SHIPPER performs (TRUNCATE-only —
       // PASSIVE/RESTART reuse byte offsets in place). This pragma is a
-      // PERFORMANCE HINT, not a correctness requirement (issue #411 action 1):
+      // PERFORMANCE HINT, not a correctness requirement (#411 action 1):
       // correctness rests on the shipper VERIFYING salts/offsets/main-file
       // identity at every capture and breaking the generation on any foreign
       // checkpoint — a stray autocheckpointing connection is caught and healed,
@@ -297,7 +297,7 @@ function openFile(
       // a single full VACUUM rewrites the file into incremental mode. Runs at
       // open with no transaction held and no other connection on the file yet, so
       // the "VACUUM cannot run inside a transaction / mid-write" constraints hold.
-      // The WAL shipper (issue #408) sees this whole-file rewrite as a foreign
+      // The WAL shipper (#408) sees this whole-file rewrite as a foreign
       // checkpoint and heals via a generation break — a one-time base re-upload,
       // acceptable now that files are small (cf. vault-plane.ts:~1815-1846).
       const autoVacuum = (
@@ -368,7 +368,7 @@ export function openVaultDb(options: OpenVaultOptions = {}): VaultDb {
   // The FTS sync triggers (and the v2 backfill) decode canonical bodies via
   // this function, so it must exist before migrations touch the file.
   registerContentTextFn(vault);
-  // Perceptual-hash distance (issue #299) — near-duplicates are plain SQL.
+  // Perceptual-hash distance (#299) — near-duplicates are plain SQL.
   registerHammingFn(vault);
   migrateVault(vault);
   migrate(journal, JOURNAL_MIGRATIONS);
@@ -397,7 +397,7 @@ export function openVaultDb(options: OpenVaultOptions = {}): VaultDb {
     (dir === undefined
       ? ephemeralSealKey()
       : resolveSealKey(vault, sealKeyFileFor(dir), options.keyStore));
-  // The vault's own signing identity (issue #726 P1) — minted alongside the
+  // The vault's own signing identity (#726) — minted alongside the
   // DEK, same custody, no fingerprint gate (see `vault-identity.ts`).
   const identitySeed =
     options.identitySeed ??
@@ -410,7 +410,7 @@ export function openVaultDb(options: OpenVaultOptions = {}): VaultDb {
   const blobContentKeys = new BlobContentKeyRegistry(vault, sealKey);
 
   // One remote per settings snapshot — rebuilt only when the bag changes.
-  // This is also the mechanism behind issue #367 §C9's rotation semantics:
+  // This is also the mechanism behind #367 §C9's rotation semantics:
   // changing `endpoint`/`bucket`/`connectionId` changes the JSON key, so the
   // NEXT use resolves a fresh S3BlobStore against the new target. Nothing
   // migrates custody rows explicitly — `reconcile()`/`statusFor()` re-derive
@@ -437,7 +437,7 @@ export function openVaultDb(options: OpenVaultOptions = {}): VaultDb {
     const throttle = policy.throttleBytesPerSec
       ? { throttleBytesPerSec: policy.throttleBytesPerSec }
       : {};
-    // Storage class passthrough (issue #405 §6): unset ⇒ omitted ⇒ the driver
+    // Storage class passthrough (#405): unset ⇒ omitted ⇒ the driver
     // sends no x-amz-storage-class header (today's behavior).
     const storageClass = policy.storageClass
       ? { storageClass: policy.storageClass }
@@ -455,7 +455,7 @@ export function openVaultDb(options: OpenVaultOptions = {}): VaultDb {
       store: new S3BlobStore(s3Options),
       transfer: new S3TransferStore(s3Options),
       keyFor: (sha256: string) => blobContentKeys.getOrCreate(sha256),
-      // Direct-to-cold heuristic (issue #425 Wave 3): resolve the class an
+      // Direct-to-cold heuristic (#425): resolve the class an
       // eligible large media original's object-creating write carries. Reads
       // policy fresh each call so a `directToColdOriginals` change needs no
       // reopen (the settings snapshot the cache key is built from already
@@ -469,7 +469,7 @@ export function openVaultDb(options: OpenVaultOptions = {}): VaultDb {
           readBackupPolicy(vault),
           originalHint
         ),
-      // The `derived` store (issue #425 Wave 2): a second CAS-shaped store under
+      // The `derived` store (#425): a second CAS-shaped store under
       // the target's derived-grant prefix, sharing endpoint/bucket/creds — only
       // the key prefix differs. No transfer store: binary derivatives are small
       // and never take the multipart path. Absent ⇒ derivatives stay on cas.
@@ -487,7 +487,7 @@ export function openVaultDb(options: OpenVaultOptions = {}): VaultDb {
     return tier;
   };
 
-  // The bounded storage tier's cache coordinator (issue #405 §3/§4). Only a
+  // The bounded storage tier's cache coordinator (#405 §3/§4). Only a
   // file-backed vault has a volume to measure, so the derived budget's `statfs`
   // probe is wired ONLY for fs vaults (in-memory vaults get an unlimited budget
   // unless a test sets `blob_cache.budgetBytes` explicitly). The budget's
@@ -526,7 +526,7 @@ export function openVaultDb(options: OpenVaultOptions = {}): VaultDb {
     remoteConfigured: () => readBlobStoreSettings(vault).kind === "s3",
     policy: () => readBackupPolicy(vault),
     contentKeys: blobContentKeys,
-    // Capture-time previews (issue #405 §2): rungs + dHash while the plaintext
+    // Capture-time previews (#405): rungs + dHash while the plaintext
     // is in hand, instead of the next sweep's backfill backstop. Fire-and-
     // forget best-effort; closes over `api` (below) — only fires post-open.
     ...(options.previewCodec && {
@@ -550,11 +550,11 @@ export function openVaultDb(options: OpenVaultOptions = {}): VaultDb {
     blobs: new BlobCustody(local, remoteTier, blobCache, (sha) =>
       desiredStoreForSha(vault, sha)
     ),
-    // Narrow read-only accessor onto the cached remote-tier closure (issue #439
+    // Narrow read-only accessor onto the cached remote-tier closure (#439
     // R2) — the lazy-by-default restore's "durable remote CAS tier?" oracle.
     remote: remoteTier,
     blobTransfers,
-    // Injected raster codec for the preview backstop (issue #405 §2), or
+    // Injected raster codec for the preview backstop (#405), or
     // undefined — a codec-less open just never runs the backstop.
     ...(options.previewCodec ? { previewCodec: options.previewCodec } : {}),
     close(opts) {
@@ -564,7 +564,7 @@ export function openVaultDb(options: OpenVaultOptions = {}): VaultDb {
       // on the next open. Callers that need a graceful drain await
       // blobTransfers.close() before closing the DB.
       blobTransfers.abandon();
-      // PRAGMA optimize (issue #374 tier 5a): a cheap, targeted ANALYZE that
+      // PRAGMA optimize (#374 tier 5a): a cheap, targeted ANALYZE that
       // only touches tables whose stats look stale — recommended by SQLite
       // to run "occasionally", and connection-close is the one point every
       // caller reliably passes through, across 188 tables and an ad hoc SQL

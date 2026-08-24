@@ -1,9 +1,9 @@
-// The preview ladder (issue #405 §2): two sealed derivative rungs beside every
+// The preview ladder (#405): two sealed derivative rungs beside every
 // image original — a TINY ~256 px thumbnail (~20-40 KB) for the browse grid
 // and a MEDIUM ~2048 px preview (~300-500 KB) for the lightbox — so the
 // browse surface never touches a multi-MB original just to paint a tile.
 //
-// Generation is HYBRID (issue #405 §2, "gateway-as-backstop"): a capable
+// Generation is HYBRID (#405 §2, "gateway-as-backstop"): a capable
 // client produces both rungs at capture time on free edge CPU (photos
 // upload.js — its canvas is the client's raster codec), and this module is
 // the GATEWAY BACKSTOP for everything a client can't reach — imported
@@ -30,13 +30,13 @@ import { nowIso } from "../ids.js";
 import { stageBlobBytes } from "./staging.js";
 import { shaOfBlobUri } from "./store.js";
 
-/** Tiny rung (issue #405 §2): the browse-grid thumbnail, ~256 px long edge. */
+/** Tiny rung (#405): the browse-grid thumbnail, ~256 px long edge. */
 export const TINY_EDGE = BLOB_TINY_EDGE;
-/** Medium rung (issue #405 §2): the lightbox preview, ~2048 px long edge. */
+/** Medium rung (#405): the lightbox preview, ~2048 px long edge. */
 export const MEDIUM_EDGE = BLOB_MEDIUM_EDGE;
 
 /**
- * How many image items the gateway backstop processes per sweep (issue #405
+ * How many image items the gateway backstop processes per sweep (#405
  * §2: "up to a bounded batch per sweep"). Preview generation is cheap CPU
  * QoS, never a foreground duty — a large Takeout import drains a batch at a
  * time across successive hourly sweeps rather than pinning a core on mount.
@@ -68,7 +68,7 @@ export interface PreviewOutput {
 }
 
 /**
- * The injected raster codec (issue #405 §2). Decode + downscale + re-encode
+ * The injected raster codec (#405). Decode + downscale + re-encode
  * one image to fit within `maxEdge` on its long side, WITHOUT upscaling (a
  * source already smaller than `maxEdge` re-encodes at its native size). The
  * implementation lives in the gateway package with its npm decoders; the
@@ -77,7 +77,7 @@ export interface PreviewOutput {
  * Returns `null` for anything it cannot or will not process — an unsupported
  * type (GIF/WebP/video), a corrupt decode, or an input past the codec's
  * memory cap. `null` is not an error: the browse surface's placeholder
- * contract (issue #404, media.js `gridSrc`) already covers a missing thumb,
+ * contract (#404, media.js `gridSrc`) already covers a missing thumb,
  * so a skipped item simply renders a placeholder.
  */
 export interface PreviewCodec {
@@ -278,7 +278,7 @@ export async function backfillPreviews(
   // keeps the backstop off trashed items (they render from what they already
   // hold until purge); the raster filter is `media_type LIKE 'image/%'` so
   // video/audio never enter (video posters are a client-only concern in v0,
-  // and the gateway video backstop is deliberately out — issue #405 §2).
+  // and the gateway video backstop is deliberately out — #405 §2).
   const items = db.vault
     .prepare(
       `SELECT i.content_id, i.content_uri, i.media_type

@@ -1,5 +1,5 @@
 // governance: allow-repo-hygiene file-size-limit — this file holds the app's whole orchestration as one React tree by design (#505/#834); every screen's BODY lives in its own component under ./components, and what is left here is the routing, the reads and the frame contributions.
-// Notes — the query-free React tree (issue #505, rebuilt for #834).
+// Notes — the query-free React tree (#505, rebuilt for #834).
 //
 // This file decides WHICH screen; each screen decides what it looks like
 // (`components/*`). It holds the mutable state bag, the library read, the

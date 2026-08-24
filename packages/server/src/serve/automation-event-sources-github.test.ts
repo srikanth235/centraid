@@ -3,9 +3,8 @@
 // (including the clamp that stops a hostile hint parking a trigger for years),
 // and baselining a newly authored watcher without replay. Gmail cursors and the
 // cross-provider malformed-row handling stay in automation-event-sources.test.ts;
-// provider failures in automation-event-sources-errors.test.ts. Split from
-// automation-event-sources.test.ts (500-line repo-hygiene cap); shared fixtures
-// in automation-event-sources.test-fixtures.ts.
+// provider failures in automation-event-sources-errors.test.ts; shared
+// fixtures in automation-event-sources.test-fixtures.ts.
 
 import { describe, expect, it, vi } from "vitest";
 
@@ -204,7 +203,7 @@ describe("pollProviderEventSource — GitHub", () => {
     };
     // An unbounded `x-poll-interval` (hostile response, or a proxy inside
     // `allowed_hosts`) would park the trigger for ~3 years with no
-    // health signal (issue #541 review). Clamp is 15 minutes.
+    // health signal (#541 review). Clamp is 15 minutes.
     const parked = await pollProviderEventSource({
       trigger,
       connection: github,

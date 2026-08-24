@@ -30,7 +30,7 @@ import styles from "./HouseholdScreen.module.css";
 // — removing the PERSON is a host-custody act on this machine
 // (`owners-routes.ts`), never reachable from a device-token client.
 //
-// "Add someone" (#726 P1) mints a NEW person a vault of their own, hosted on
+// "Add someone" (#726) mints a NEW person a vault of their own, hosted on
 // this machine, then shows the SAME ticket panel "Pair a device" renders — the
 // two entry points open one `DevicePairPanel`, one self-paired and one
 // `forPerson`, rather than two implementations of a ticket screen.
@@ -138,7 +138,7 @@ export function useDeviceRoster(wiring: DeviceRosterWiring): DeviceRoster {
   useEffect(() => {
     mountedRef.current = true;
     refresh();
-    // Suspended while the tab is hidden and caught up on return (issue #659).
+    // Suspended while the tab is hidden and caught up on return (#659).
     const stop = startVisibilityTicker(refresh, POLL_MS);
     return () => {
       mountedRef.current = false;

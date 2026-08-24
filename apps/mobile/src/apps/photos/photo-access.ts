@@ -51,7 +51,7 @@ export function photoAccessState(
 }
 
 /**
- * WHETHER THE PERMISSION CONTENT REPLACES THE GRID (issue #712, P13).
+ * WHETHER THE PERMISSION CONTENT REPLACES THE GRID (#712).
  *
  * The rule this predicate exists to make assertable: a timeline that cannot be
  * produced must SAY so where it would have been drawn. Never a dead grid, and

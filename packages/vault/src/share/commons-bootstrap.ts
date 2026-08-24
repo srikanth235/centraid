@@ -81,7 +81,7 @@ export interface CommonsTombstone {
 /** Small control-plane rows an increment still refreshes wholesale — they are
  * roster-sized, never library-sized, so this stays O(members) per frame. The
  * grant row travels WITHOUT `checkpoint_json`: an increment must never ship
- * (or overwrite) the full stored closure (issue #750 defects c/d). */
+ * (or overwrite) the full stored closure (#750 defects c/d). */
 export interface CommonsIncrementControl {
   grant: Record<string, unknown>;
   circle: Record<string, unknown>;
@@ -92,7 +92,7 @@ export interface CommonsIncrementControl {
 }
 
 /**
- * Ops-since-cursor catch-up (issue #750 invariant 7): what a member whose
+ * Ops-since-cursor catch-up (#750 invariant 7): what a member whose
  * cursor sits ON the op chain receives instead of a full closure. `ops` are
  * the verbose chained rows in `(fromSequence, currentSequence]` — the
  * EXECUTABLE tail the member re-runs to reach the steward's state, not a
@@ -702,7 +702,7 @@ export function exportCommonsSyncFrame(input: {
   memberVaultId: string;
   identitySeed: Buffer;
   /**
-   * The member's applied cursor (issue #750 invariant 7). When supplied and
+   * The member's applied cursor (#750 invariant 7). When supplied and
    * the cursor sits on the retained op chain, the frame is an increment —
    * ops + receipts + the closure delta — instead of a full re-baseline.
    */
@@ -971,7 +971,7 @@ export function applyCommonsBootstrap(input: {
     .get() as { vault_id: string } | undefined;
   if (localVaultId?.vault_id !== input.wire.memberVaultId)
     throw new Error("commons bootstrap targets another vault");
-  // Never move a seat backward (issue #731). A delayed or stale frame whose
+  // Never move a seat backward (#731). A delayed or stale frame whose
   // head is behind what this seat already holds must not regress its state, so
   // drop it before touching anything.
   const cursor = seatDb
@@ -988,7 +988,7 @@ export function applyCommonsBootstrap(input: {
       "SELECT 1 AS n FROM share_commons_retained WHERE grant_id = ? LIMIT 1"
     )
     .get(input.wire.grantId);
-  // Fail closed BEFORE the destructive scrub (issue #731). A closure from a
+  // Fail closed BEFORE the destructive scrub (#731). A closure from a
   // format this build cannot project must PARK — leave the prior replica intact
   // and let the caller surface unavailable — never scrub first and then throw,
   // which would strand the member empty and re-fail every sweep. Retained seats
@@ -999,7 +999,7 @@ export function applyCommonsBootstrap(input: {
         input.wire.closure.formatVersion
       )}`
     );
-  // Same fail-closed shape for history (issue #731): a tampered op, a forked
+  // Same fail-closed shape for history (#731): a tampered op, a forked
   // chain, or a steward whose log rewound below what this seat already proved
   // parks BEFORE the scrub. The replica stays exactly as it was.
   const history = verifyCommonsFrameHistory({
@@ -1270,7 +1270,7 @@ function unprovenStateRun(
 }
 
 /**
- * Apply an ops-since-cursor increment (issue #750 invariant 7) by REPLAYING
+ * Apply an ops-since-cursor increment (#750 invariant 7) by REPLAYING
  * its executable tail against this replica. The frame is verified against this
  * seat's OWN proven chain head before anything is written; a
  * diverged/forked/tampered increment throws `CommonsHistoryError` and PARKS
@@ -1332,7 +1332,7 @@ export function applyCommonsIncrement(input: {
     .get(increment.grantId, increment.memberVaultId) as
     | { sequence: number }
     | undefined;
-  // The seat's cursor IS the replay idempotency boundary (issue #750): it
+  // The seat's cursor IS the replay idempotency boundary (#750): it
   // advances in the same transaction as the tail it stands for, so a frame
   // whose head this seat already holds carries nothing to re-execute. A
   // redelivered or delayed frame is a no-op, never a second application.

@@ -1,6 +1,4 @@
-// Pure, DOM-free identity + status logic for automations (Automations
-// redesign). Extracted so it is unit-testable; app.ts wraps these in DOM
-// builders (`autoGlyphTile` / `auStatusPill` / `triggerBadge`).
+// Pure, DOM-free identity + status logic for automations.
 //
 // Per-automation identity colour + glyph are derived deterministically from
 // the automation id — there is no manifest field for them, mirroring how the

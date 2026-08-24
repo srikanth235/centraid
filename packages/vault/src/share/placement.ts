@@ -1,4 +1,4 @@
-// Share-by-placement (issue #599 decision 11) — the vault-side mechanism the
+// Share-by-placement (#599 decision 11) — the vault-side mechanism the
 // gateway's cross-vault share plane calls.
 //
 // The standing product promise is that *no one can ever query your vault —
@@ -9,7 +9,7 @@
 // boundary is the isolation.
 //
 // The shape of one share — the LOCAL COMPOSITION of the two halves the split
-// in issue #726 made independent (read-closure.ts / project-closure.ts):
+// in #726 made independent (read-closure.ts / project-closure.ts):
 //
 //   (a) read the closure out of the origin (read-only, no transaction there);
 //   (b) hardlink its blobs from the origin CAS into the audience CAS
@@ -75,7 +75,7 @@ export interface ShareItemsToVaultInput {
   /** The items' row ids in the ORIGIN vault. One closure covers the set. */
   itemIds: readonly string[];
   /**
-   * Written into `core_share_origin.shared_by` (issue #726 Finding 6 — the
+   * Written into `core_share_origin.shared_by` (#726 Finding 6 — the
    * household L2 member-principal layer this field name once implied is
    * gone). An owner id for a co-hosted edge, or a `peer:<vaultId>` string
    * naming the remote vault a give arrived from — an attribution, not a

@@ -3,7 +3,7 @@
  * the reducer (`share-coordinator.ts`), the durable applier
  * (`share-edge-store.ts`), both transports and every route that answers an
  * edge all need this type, and none of them should have to import a
- * transport to get it (issue #750 abstraction 5).
+ * transport to get it (#750 abstraction 5).
  *
  * The statuses live here as one union, not as strings sprinkled through
  * routes: which of them may follow which is `share-coordinator.ts`'s single
@@ -15,7 +15,7 @@ import type { ShareableItemType } from "@centraid/vault";
 import type { GatewayDatabase } from "./gateway-db.js";
 
 export type EdgeKind = "add" | "move";
-/** Live lending was removed in #731; `snapshot` is the only mode there is. */
+/** `snapshot` is the only mode there is — no live lending (#731). */
 export type EdgeMode = "snapshot";
 export type EdgeStatus =
   | "queued"

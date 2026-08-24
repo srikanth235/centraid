@@ -1,5 +1,5 @@
 /*
- * The sharing plane's ONE effect outbox, as a law (issue #750 abstraction 2).
+ * The sharing plane's ONE effect outbox, as a law (#750 abstraction 2).
  *
  * `share_effects` is the plane's single queue, and it is only worth having if
  * three things hold together: an obligation is keyed by WHAT IT IS ABOUT (so a

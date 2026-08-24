@@ -1,5 +1,5 @@
 /*
- * Pure detached-gateway decisions (issue #468, H2–H7).
+ * Pure detached-gateway decisions (#468, H2–H7).
  *
  * The desktop gateway runs as a detached child process that outlives the UI
  * (H1). This module is Electron-free so the ownership / port / spawn-flag
@@ -9,9 +9,8 @@
  *
  * H7 — crash-loop still uses {@link ./gateway-supervisor-core.ts}:
  * `recordFailure` / `loopBroken` / `backoffForAttempt` apply to detached
- * *spawn* failures the same way they applied to in-process `serve()`
- * failures. This file does not re-implement that bookkeeping; callers keep
- * using the supervisor core.
+ * *spawn* failures the same way they apply to in-process `serve()` failures.
+ * Do not re-implement that bookkeeping here; callers use the supervisor core.
  *
  * H6 — lifecycle verbs (start / stop / status / service install) route
  * through the same bundled `centraid-gateway` CLI entry the OS service unit
@@ -19,7 +18,7 @@
  * code path.
  */
 
-/** Stable default listen port (H4). Replaces ephemeral port:0 for bookmarks / pairing / service. */
+/** Stable default listen port (H4) — bookmarks / pairing / service need a fixed port, not `port: 0`. */
 export const DEFAULT_GATEWAY_PORT = 17832;
 
 /** Outcome of the adopt-don't-kill decision (H3). */
@@ -47,9 +46,9 @@ export function decideControl(input: {
 /**
  * What `centraid-gateway lock-status` actually told us.
  *
- * The old code collapsed everything that was not parseable JSON into a
- * fail-closed `{held: true, answering: false}`, so three unrelated situations
- * produced one message that was wrong for two of them:
+ * Do not collapse everything unparseable into a fail-closed
+ * `{held: true, answering: false}`: three unrelated situations then share one
+ * message that is wrong for two of them:
  *
  *   - the CLI could not even open the key store (wrong/absent wrapping key) —
  *     the lock is very likely FREE and the real problem is device credential
@@ -60,8 +59,8 @@ export function decideControl(input: {
  *   - the CLI answered normally.
  *
  * Fail-closed stays the safety default for all of them (never start a second
- * writer on a maybe-locked db); what changes is that the refusal now says
- * which one happened. {@link classifyLockStatus} is the pure half.
+ * writer on a maybe-locked db), but the refusal must say which one happened.
+ * {@link classifyLockStatus} is the pure half.
  */
 export type LockProbe =
   | { kind: "reported"; held: boolean; answering: boolean; holderPid?: number }

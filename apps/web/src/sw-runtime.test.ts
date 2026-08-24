@@ -154,7 +154,7 @@ describe("service worker fetch routing", () => {
   // The iroh WASM binary is loaded by a JS `fetch()`, which carries an EMPTY
   // destination — the one shape a naive routing bailout skips. It is also
   // the single biggest asset the app ships (~2 MB), so "never cached" means
-  // re-downloading it every visit (issue #659 C3).
+  // re-downloading it every visit (#659).
   test("caches a JS-initiated /assets fetch, which is how the wasm loads", async () => {
     const worker = loadWorker({
       routes: { "/assets/centraid_web_iroh_bg-abc.wasm": () => html("wasm") },

@@ -1,7 +1,7 @@
 // Regression coverage for the v4 Binding Layer search overlay anatomy
-// (issue #711). This isn't a snapshot of every pixel — it pins the handful
-// of rules a future edit is likeliest to silently undo, because each one
-// has already been invented/reintroduced once by a previous pass:
+// (#711). This isn't a snapshot of every pixel — it pins the handful of rules
+// a future edit is likeliest to silently undo, every one of which has been
+// reintroduced at least once:
 //
 //  - the panel is OPAQUE paper (bg-elev), never glass — no translucent tint
 //    film anywhere in the tree
@@ -277,9 +277,9 @@ describe("the search overlay anatomy", () => {
       // The opaque paper layer itself, and nothing else painting a colour.
       expect(painted).toStrictEqual([mocks.colors.bgElev]);
       // Belt and braces: whatever is painted, none of it may carry alpha —
-      // an `rgba(` tint film reads the same as the one this overlay used to
-      // stack under a backdrop blur. (`expo-blur` is gone from the app
-      // entirely, so a live blur can no longer be reintroduced by accident.)
+      // an `rgba(` tint film reads the same as one stacked under a backdrop
+      // blur. (`expo-blur` is absent from the app entirely, so a live blur
+      // cannot be reintroduced by accident.)
       for (const value of painted) expect(value).not.toMatch(/rgba\(/u);
     });
   });

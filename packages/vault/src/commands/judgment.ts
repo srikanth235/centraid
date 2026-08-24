@@ -1,4 +1,4 @@
-// The learning loop's write surface (issue #310 C1, rule R08). The read side
+// The learning loop's write surface (#310 C1, rule R08). The read side
 // is agent_correction, agent_judgment and judgmentVeto(), consulted on every
 // execution; these commands are the ONLY thing that writes those tables, and
 // they keep the loop's promise ("corrections feed back as durable judgment
@@ -252,7 +252,6 @@ const REVOKE_JUDGMENT: CommandDefinition = {
   },
 };
 
-/** Register the judgment-loop commands on a gateway. */
 export function registerJudgmentCommands(gateway: Gateway): void {
   gateway.registerCommand(RECORD_CORRECTION);
   gateway.registerCommand(DISTILL_JUDGMENT);

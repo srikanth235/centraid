@@ -1,6 +1,6 @@
-// The frame's transfer policy record (#711, S4). The EVALUATION of these rules
-// against the radios lives in `lib/upload/native-policy.test.ts` and did not
-// move; what is pinned here is the record itself — its defaults, the key it is
+// The frame's transfer policy record (#711). The EVALUATION of these rules
+// against the radios lives in `lib/upload/native-policy.test.ts`; what is
+// pinned here is the record itself — its defaults, the key it is
 // stored under, which switches go inert, and the sentence it says about itself.
 
 import { describe, expect, it, vi } from "vitest";
@@ -49,7 +49,7 @@ describe("the policy record", () => {
       chargerOnly: false,
       // …and `never` is OFF by default: the conservative answer is "under
       // rules", not "not at all". A device that shipped refusing every
-      // transfer would look identical to a broken one (#712 P5).
+      // transfer would look identical to a broken one (#712).
       never: false,
     });
   });
@@ -92,7 +92,7 @@ describe("which switches go inert", () => {
     ).toStrictEqual([]);
   });
 
-  // THE REFUSAL GRAMMAR (issue #712 E1). "Shown disabled and explained" was
+  // THE REFUSAL GRAMMAR (#712). "Shown disabled and explained" was
   // the interface's own promise and only the first half was kept — four
   // switches went grey in silence. `inertReason` is required on the switch's
   // shape now, so these two properties are what keep it honest rather than
@@ -142,7 +142,7 @@ describe("which switches go inert", () => {
   });
 
   it("`never` makes every other switch inert, and is never inert itself", () => {
-    // It is the floor of the table (#712 P5): once this device may not move
+    // It is the floor of the table (#712): once this device may not move
     // bytes at all, "on Wi-Fi" and "while charging" are questions about a
     // thing that is not going to happen. The switch that says so must stay
     // reachable, or a member could not undo it.

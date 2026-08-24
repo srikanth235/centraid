@@ -1,11 +1,9 @@
 // The phone's bottom band, rendered (Photos v4 handoff §3.1, CHANGELOG §F/§G).
 //
-// Opaque paper, never glass — which is now simply what the whole app is, so
-// this file no longer has to argue the case. The blur idiom is gone from the
-// tree entirely (`GlassBar` deleted, `expo-blur` dropped); the handoff carries
-// no `backdrop-filter`, no `blur()` and no soft shadow on any product surface.
+// Opaque paper, never glass — what the whole app is. No `backdrop-filter`, no
+// `blur()` and no soft shadow on any product surface.
 //
-// The reason stands on its own: this bar sits over
+// The reason: this bar sits over
 // unpredictable photographs, so label contrast, the 2px ink active mark and the
 // focus ring must not depend on what the member photographed — a white bar over
 // a white beach loses all three — and `prefers-reduced-transparency` would need
@@ -89,7 +87,7 @@ export default function PhotosBand({
   const styles = useMemo(() => makeStyles(colors), [colors]);
   const band = resolveBand(owner);
   if (band.owner !== "app") {
-    // HANDED BACK, BUT NOT STRANDED (issue #712 E3). This must not `return
+    // HANDED BACK, BUT NOT STRANDED (#712). This must not `return
     // null` outright on the premise that "the frame's own band takes over" —
     // true on web, where the shell renders its stem band underneath, and false
     // on the phone, where the frame's band lives on Home and a Photos stack

@@ -1,5 +1,5 @@
 /*
- * Named gateway/vault key custody (issue #555).
+ * Named gateway/vault key custody (#555).
  *
  * A KeyStore file is never a bare secret. Every backend writes the same
  * self-describing envelope so custody can move between host and OS wrappers

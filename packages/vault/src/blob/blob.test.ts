@@ -1,6 +1,6 @@
 import { rmSync } from "node:fs";
 // governance: allow-repo-hygiene file-size-limit pre-existing cohesive blob regression suite; decomposition is outside issue #417
-// Blob custody units (issue #296): the stores, the spool pipeline, and the
+// Blob custody units (#296): the stores, the spool pipeline, and the
 // two-tier custody facade — including the S3 driver against an in-process
 // fake S3 endpoint (SigV4-signed requests over real HTTP, no SDK).
 import http from "node:http";
@@ -386,7 +386,7 @@ describe("blob", () => {
     authHeaders: string[];
     /**
      * Every request recorded for the ranged-read / single-flight acceptance
-     * tests (issue #405 §1/§4): method, object key, and the raw Range header
+     * tests (#405 §1/§4): method, object key, and the raw Range header
      * (empty string = a whole-object fetch). A framed ranged read must show up
      * here as (trailer + directory + covering-frame) ranges and NEVER a
      * rangeless GET of the object.
@@ -614,7 +614,7 @@ describe("blob", () => {
       expect(gets.some((g) => g.range === "")).toBe(false);
       expect(gets).toHaveLength(3); // trailer + directory + 1 covering frame
       // The blob was NOT promoted whole into local (a partial read can't verify
-      // the whole-blob sha — issue #405 §1).
+      // the whole-blob sha — #405 §1).
       expect(local.hasSync(sha)).toBe(false);
     } finally {
       await fake.close();

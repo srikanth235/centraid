@@ -1,4 +1,4 @@
-// GC roots for the conversation-ledger band (issue #438 decision 6). Mirrors
+// GC roots for the conversation-ledger band (#438 decision 6). Mirrors
 // the retained-snapshot pin test (blob/blob.test.ts): an archive-row sha must
 // read as reachable so the reconcile sweep never deletes the only durable copy
 // of pruned rows. Also covers the missing-table guard.

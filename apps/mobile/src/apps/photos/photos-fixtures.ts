@@ -9,7 +9,7 @@ export type PhotosFixtureName =
   | "video-mixed"
   | "place-tagged"
   | "undated-mixed"
-  // Adversarial fixtures (issue #721 D1) — the corpora above prove the happy
+  // Adversarial fixtures (#721) — the corpora above prove the happy
   // path groups correctly; these prove the model degrades honestly, not
   // silently, on inputs a real device/backfill can actually hand it.
   | "all-undated"
@@ -111,7 +111,7 @@ export function makePhotosFixture(name: PhotosFixtureName): PhotosFixture {
         source: "device",
       }),
     ],
-    // 10k captures inside one calendar day (issue #721 C1/D1): the timeline's
+    // 10k captures inside one calendar day (#721/D1): the timeline's
     // day-grouping cost is one bucket holding everything, not n buckets of
     // one — the pathological case a real "shot a wedding" burst produces.
     // Spaced 8s apart from local midnight so 10k rows still land inside the
@@ -124,7 +124,7 @@ export function makePhotosFixture(name: PhotosFixtureName): PhotosFixture {
         ).toISOString()
       )
     ),
-    // The international-date-line trap (issue #721 C2): two capture-local
+    // The international-date-line trap (#721): two capture-local
     // wall clocks 30–90 minutes apart in real elapsed time, each carrying its
     // own tzOffsetMin, that straddle both the date line AND the 2025→2026
     // year boundary. Every asset's raw UTC calendar slice DISAGREES with its
@@ -150,7 +150,7 @@ export function makePhotosFixture(name: PhotosFixtureName): PhotosFixture {
         tzOffsetMin: -120,
       }),
     ],
-    // A camera whose clock forgot the date entirely (issue #721 D1): rows
+    // A camera whose clock forgot the date entirely (#721): rows
     // from a live 2026 shoot beside rows the same device stamped in 2003,
     // AND with no tzOffsetMin recorded — device-media.ts never backfills one
     // it did not read off the file — so these fall through to the
@@ -166,7 +166,7 @@ export function makePhotosFixture(name: PhotosFixtureName): PhotosFixture {
         tzOffsetMin: undefined,
       }),
     ],
-    // 99% offloaded (issue #721 D1): `PhotoAsset` has no separate "offloaded"
+    // 99% offloaded (#721): `PhotoAsset` has no separate "offloaded"
     // boolean — `backupState: "remote-only"` + `source: "replica"` IS how the
     // model already spells "bytes live in the vault, not on this device"
     // (the same pair `mergePhotoAssets`' own tests use for a replica-only

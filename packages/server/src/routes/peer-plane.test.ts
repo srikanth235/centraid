@@ -1,5 +1,5 @@
 /*
- * Peer plane route layer (issue #726 P3): the ceremony, the update wall, the
+ * Peer plane route layer (#726): the ceremony, the update wall, the
  * signed route assertion, and the two traps as seen from the HTTP side.
  */
 

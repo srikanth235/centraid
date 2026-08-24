@@ -1,11 +1,11 @@
 /**
- * The member-facing cards for the Commons plane (issue #750).
+ * The member-facing cards for the Commons plane (#750).
  *
- * Two conditions were BUILT but unreachable: a steward whose device has been
- * silent for a week (recorded in `share_commons_steward_contact`, derived by
- * `commons-observability.ts`, and until now only ever logged), and a commons
- * that grew past the size the member consented to when they accepted the
- * invitation. Both are facts the seat already holds; neither had a surface.
+ * Two conditions the seat already holds, given a surface here: a steward whose
+ * device has been silent for a week (recorded in
+ * `share_commons_steward_contact`, derived by `commons-observability.ts`), and
+ * a commons that grew past the size the member consented to when they
+ * accepted the invitation.
  *
  * They land on the ordinary notices store (#647) — the same durable
  * `(kind, sourceRef)` card the inbox renders — rather than a bespoke Commons

@@ -8,7 +8,7 @@
 
 /**
  * Auth resolved from main: normalized base URL + optional bearer token +
- * the vault this client addresses on the active gateway (issue #289 — the
+ * the vault this client addresses on the active gateway (#289 — the
  * client owns its vault pointer; the gateway no longer holds one).
  */
 export interface GatewayAuth {
@@ -54,7 +54,7 @@ export function href(baseUrl: string, pathname: string): string {
 export const VAULT_HEADER = "x-centraid-vault";
 
 /**
- * Bearer headers that name their target vault EXPLICITLY (issue #599).
+ * Bearer headers that name their target vault EXPLICITLY (#599).
  *
  * `doFetch`'s `withVaultHeader` only fills {@link VAULT_HEADER} when the caller
  * left it unset, so a header stamped here wins over the shell's internal

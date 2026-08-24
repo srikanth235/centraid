@@ -31,7 +31,7 @@ import VaultModal, {
 import { addVault } from "./vaultModals.js";
 import { startVisibilityTicker } from "./visibility-ticker.js";
 
-// React-owned Household route (issue #599, Decision 14; ownership #726). The
+// React-owned Household route (#599, Decision 14; ownership #726). The
 // roster half is the device/owner surface; the vaults half reads the owner's
 // scope registry, which is also what
 // every "which vault?" picker resolves against — one source, so the page and

@@ -1,6 +1,6 @@
 /*
  * Loopback MCP server exposing the vault tools to whatever ACP harness the
- * turn spawned (issue #479).
+ * turn spawned (#479).
  *
  * Before the ACP fold, each bespoke backend reached the vault through its
  * CLI's own tool surface: claude got an in-process MCP server, codex got

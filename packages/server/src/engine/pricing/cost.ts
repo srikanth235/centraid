@@ -1,5 +1,5 @@
 /*
- * Cost formula (issue #445). Prices raw token counts against a catalog
+ * Cost formula (#445). Prices raw token counts against a catalog
  * entry's per-token USD rates (ccusage/CodexBar formula):
  *
  *   input×input + output×output + cacheRead×cacheRead + cacheWrite×cacheWrite

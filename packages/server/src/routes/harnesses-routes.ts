@@ -94,9 +94,9 @@ export type ResolveHarnessHealth = (kind: HarnessKind) => HarnessHealthEntry[];
  * codex + claude-code) because the boot warmer would otherwise spawn a process
  * per installed harness. But the capability probe launches those same harnesses
  * anyway and reads the very same `session/new` model config option — so for a
- * native ACP kind like opencode the answer (76 models) was already sitting in
- * `capabilities.configOptions`, while the picker showed "Built-in model"
- * because the catalog was empty.
+ * native ACP kind like opencode the answer (76 models) is already sitting in
+ * `capabilities.configOptions`, while a picker reading only the catalog shows
+ * "Built-in model".
  *
  * So an empty catalog falls back to that evidence rather than to nothing. No
  * extra spawn, and nothing is fabricated: this only echoes `{value, name}`
@@ -168,7 +168,7 @@ export interface HarnessStatusEntry {
   minVersion: string;
   /** Install/setup hint — present only when the CLI is NOT available. */
   hint?: string;
-  /** Models this harness can serve, from the catalog (issue #188). */
+  /** Models this harness can serve, from the catalog (#188). */
   models: HarnessModel[];
   /** Load state of `models` — lets the picker show loading vs empty. */
   modelsStatus: SurfaceStatus;

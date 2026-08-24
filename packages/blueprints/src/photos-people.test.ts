@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 // oxlint-disable-next-line typescript-eslint/ban-ts-comment -- issue #711: browser-DOM fixture is intentionally checked by jsdom, while the blueprint TS config excludes DOM globals (see photos-media.test.ts's own note)
 // @ts-nocheck
-// The People shelf's own conformance fixes (issue #711, v4 handoff §5, proto
+// The People shelf's own conformance fixes (#711, v4 handoff §5, proto
 // :4432-:4433):
 //
 //   1. SIX COLUMNS DESKTOP, THREE PHONE (proto :4432) — a fixed column
@@ -15,7 +15,7 @@
 //      `queries/face-queue.ts` uses for the same fact) and passes down as a
 //      prop, not a fixed prototype number and not a second read of a
 //      different query.
-//   3. UNCONFIRMED PROPOSALS RENDER, NEVER NAMED (issue #711 review, proto
+//   3. UNCONFIRMED PROPOSALS RENDER, NEVER NAMED (#711 review, proto
 //      :3760 `PPEOPLE` — named cards next to "Unnamed" ones, each with its
 //      own count) — distinguishable from a confirmed person's card and
 //      routing into Face Review, never asserting a name nobody confirmed.
@@ -90,10 +90,9 @@ describe("People is six columns desktop, three phone (proto :4432)", () => {
   const css = fs.readFileSync(PEOPLE_MODULE_CSS, "utf8");
 
   it("fixes the desktop grid at six columns, not auto-fill's floor", () => {
-    // `auto-fill` with a 104px floor lands near nine columns on a wide pane —
-    // the exact regression this fix closes, so its absence from the RULE
-    // (not the file's own prose, which still explains the old bug) is
-    // asserted too.
+    // `auto-fill` with a 104px floor lands near nine columns on a wide pane,
+    // so its absence from the RULE (not from the file's prose, which explains
+    // the hazard) is asserted too.
     // The desktop rule is the first `.grid { … }` block — the phone override
     // lives inside the `@media` block asserted separately below.
     const gridRule = css.match(/\.grid\s*\{(?<body>[^}]*)\}/u);
@@ -144,9 +143,9 @@ describe("a confirmed person with no display name is never invented", () => {
     // `queries/people.ts` types `name` as nullable defensively, but the one
     // command that can mint a person (`people.create`) requires
     // `display_name` with `minLength: 1` — this case cannot occur from a
-    // real read. The old fallback ("Someone with no name yet") therefore
-    // pretended to handle a case the query never produces; this asserts the
-    // shelf no longer invents prose for it.
+    // real read. A fallback string ("Someone with no name yet") would pretend
+    // to handle a case the query never produces; this asserts the shelf
+    // invents no prose for it.
     const { container } = await mount({
       people: [{ party_id: "p1", name: null, count: 3, asset_ids: [] }],
       unmatchedCount: 0,

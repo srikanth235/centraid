@@ -1,22 +1,19 @@
 /*
- * Which lane every SHIPPED automation bundle could actually run under (#846 P9).
+ * Which lane every SHIPPED automation bundle could actually run under (#846).
  *
- * The automation plane's default USED to be no lane at all, and the reason was
- * one builtin: the recognition bundles resolved `runtime/node_modules` through
- * `node:module`'s `createRequire`, which every lane here refuses — correctly,
- * since a `createRequire` in the graph resolves through Node's own loader and
- * skips the lane's hooks entirely. While that was true, no recognition
- * automation could run sandboxed, so nothing did.
+ * The worker installs the strict floor unconditionally (#846), and no
+ * bundle may reach for `node:module`'s `createRequire`: every lane refuses it,
+ * correctly, since a `createRequire` in the graph resolves through Node's own
+ * loader and skips the lane's hooks entirely (`packages/model-runtime/src/
+ * onnx.ts` does its own entry resolution, pinned by `onnx.test.ts`).
  *
- * #846 P9 removed that dependency (`packages/model-runtime/src/onnx.ts` now
- * does its own entry resolution, pinned by `onnx.test.ts`) and the worker now
- * installs the strict floor unconditionally. This suite is what keeps that
- * safe, measured against the bundles the product actually executes rather than
- * against the source they are built from:
+ * This suite is what keeps the unconditional floor safe, measured against the
+ * bundles the product actually executes rather than against the source they
+ * are built from:
  *
  *   - every non-recognition bundle imports NO node builtin at all, so the
  *     `automation-handler` lane admits it as-is;
- *   - the four ONNX recognition bundles now import only `fs`, `fs/promises`,
+ *   - the four ONNX recognition bundles import only `fs`, `fs/promises`,
  *     `path` and `url`, all admitted by the `model-runtime` lane;
  *   - `transcript` is the one bundle that still cannot run under any lane,
  *     because it shells out to ffmpeg through `node:child_process`. That is a
@@ -192,7 +189,7 @@ describe("shipped automation bundles against the sandbox lanes", () => {
 
   test("every bundle is admitted by the lane its own manifest declares", () => {
     /*
-     * The load-bearing one (#846 P9). Since the automation worker installs the
+     * The load-bearing one (#846). Since the automation worker installs the
      * strict floor for a handler whose manifest declares nothing, a bundle that
      * grows a `node:fs` import without declaring `model-runtime` stops working
      * at RUN time, in production, on the first fire. This is that failure moved

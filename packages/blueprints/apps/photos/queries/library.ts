@@ -4,7 +4,7 @@
  * first page) and the newest 200 trashed ones — never the whole
  * media.asset table, and crucially never the whole core.content_item
  * table, because every photo's bytes ride inline as a data: URI and a full
- * content read ships the entire library on every refresh (issue #264).
+ * content read ships the entire library on every refresh (#264).
  * Content items and album entries are joined only for the windowed rows;
  * albums stay a full read (a collection list is small). Media has no text
  * index, so anything older is reachable only by growing the window
@@ -12,7 +12,7 @@
  *
  * Trash is a first-class shelf, not a filter the UI must remember: the
  * `assets` array is live rows only, and trashed assets ride separately in
- * `trash` with days-until-purge from the asset's own purge_at (issue #274:
+ * `trash` with days-until-purge from the asset's own purge_at (#274:
  * the standard soft-delete pair — the shelf empties even when the bytes
  * stay rented elsewhere).
  *
@@ -28,7 +28,7 @@
  * A consent denial is a first-class outcome, not an error: the UI renders
  * it as the "ask the owner for access" state, receipt id included.
  *
- * KEYSET CURSOR (issue #599). Growing `limit` re-reads the whole window every
+ * KEYSET CURSOR (#599). Growing `limit` re-reads the whole window every
  * time, which is fine for one scope and quadratic for N merged ones, so the
  * window also takes a cursor: `input.before` is an ISO timestamp and admits
  * only assets with `captured_at` strictly older than it. The page reports
@@ -104,7 +104,7 @@ export default async function libraryHandler({ input, ctx }: HandlerArgs) {
         // the window — acceptable semantics for a recency slice.
         ctx.vault.read({
           entity: "media.asset",
-          // Live timeline excludes archived assets (issue #419): archive hides
+          // Live timeline excludes archived assets (#419): archive hides
           // from the timeline without trashing, so an archived photo is neither
           // here nor in the trash shelf. `liveWhere` also carries the optional
           // keyset cursor (`input.before`).
@@ -123,7 +123,7 @@ export default async function libraryHandler({ input, ctx }: HandlerArgs) {
           limit: 200,
           purpose,
         }),
-        // Albums are collections (issue #274) — the one curation mechanism.
+        // Albums are collections (#274) — the one curation mechanism.
         ctx.vault.read({ entity: "core.collection", purpose }),
         readPlaces({ ctx, purpose }),
         before
@@ -254,7 +254,7 @@ export default async function libraryHandler({ input, ctx }: HandlerArgs) {
     );
 
     const trash = trashRows.map((asset) => {
-      // The asset carries its own grace window (issue #274); the content
+      // The asset carries its own grace window (#274); the content
       // fallback covers vaults trashed before the pair landed.
       const purgeAt =
         asset.purge_at ?? contentById.get(asset.content_id)?.purge_at ?? null;

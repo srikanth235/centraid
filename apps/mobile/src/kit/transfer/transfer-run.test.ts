@@ -1,5 +1,5 @@
 // The serial transfer run, engine-side. These guarantees belong to the engine
-// rather than to Photos (#711, S4).
+// rather than to Photos (#711).
 
 import { describe, expect, it, vi } from "vitest";
 

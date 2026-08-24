@@ -1,4 +1,4 @@
-// Photos' home layout (issue #712 P18, extracted from ./PhotosHome).
+// Photos' home layout.
 //
 // THE SEAM. `PhotosHome.tsx`'s own header calls the screen "the wiring: state,
 // data and routing" and lists the seven modules already pulled out of it on
@@ -64,7 +64,7 @@ export const makeStyles = (colors: ThemeColors) =>
       width: 44,
     },
     safe: { flex: 1 },
-    // SELECTION BAR (iOS Photos parity, issue #712). Ground it takes over from
+    // SELECTION BAR (iOS Photos parity, #712). Ground it takes over from
     // the band while a selection is live — same plate anatomy as
     // `PhotosBand.tsx`'s own two plates (opaque `bgElev`, `lineStrong` edge,
     // `BAND_RADIUS` corners, held BAND_INSET off the stage edges) rather than

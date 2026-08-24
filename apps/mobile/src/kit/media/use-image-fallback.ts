@@ -7,12 +7,12 @@
 // lands. Between those two moments the variant URL 404s while the original
 // sits in CAS, whole and decodable.
 //
-// The web grid has always handled this (`packages/blueprints/apps/photos/
-// media.ts`, `originalFallback`): on error, fall back to the original once,
-// and only call it a failure if THAT fails too. Mobile had no such ladder, so
-// a 404 on a derivative rendered as `could not decode` over bytes that were
-// right there — a whole library of failed tiles, and a face-review card with
-// no evidence on it, on a vault where nothing was actually wrong.
+// The web grid handles this in `packages/blueprints/apps/photos/media.ts`
+// (`originalFallback`): on error, fall back to the original once, and only
+// call it a failure if THAT fails too. Without the ladder a 404 on a
+// derivative renders as `could not decode` over bytes that are right there —
+// a whole library of failed tiles, and a face-review card with no evidence on
+// it, on a vault where nothing is wrong.
 //
 // One hook rather than one copy per surface: the tile and the face card hit
 // this within a single pass of each other, and a ladder implemented twice is a

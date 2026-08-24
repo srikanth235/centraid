@@ -1,4 +1,4 @@
-// The Collections header menu's MODEL (issue #712).
+// The Collections header menu's MODEL (#712).
 //
 // iOS' own Collections page carries a chip that opens Show All / Collapse
 // All plus a Reorder row and a grid-density control. This file states which

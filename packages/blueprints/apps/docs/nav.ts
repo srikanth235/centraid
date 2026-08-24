@@ -82,7 +82,7 @@ export function createNav({
     render();
   }
 
-  // Free-form label filter (issue #352 phase 4) — toggling off when the same
+  // Free-form label filter (#352) — toggling off when the same
   // tag is clicked again (a chip row's usual idiom) rather than requiring a
   // separate "All" chip of its own. Tags are not one of §4.2's four filter
   // axes, so they keep their own chips rather than becoming a fifth pill.

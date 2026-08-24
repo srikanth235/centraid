@@ -2,14 +2,14 @@
 // checkpointing, and backup coordination. Custody applies to file-backed
 // vaults; in-memory vaults (tests) have no files to keep.
 //
-// The old attached appext_<app_id>.db files are gone (issue #286 phase 2):
+// The old attached appext_<app_id>.db files are gone (#286):
 // app extension tables now live INSIDE vault.db as the ext band
 // (schema/ext.ts + gateway/ext.ts), so export, FTS, links and consent see
 // them like any canonical table. R09 survives band-shaped: ext tables may
 // reference the vault, the vault never references them.
 //
 // `stageVaultDbs` (VACUUM INTO staging for the offsite backup engine) is
-// gone (issue #408): the backup path ships WAL segments continuously
+// gone (#408): the backup path ships WAL segments continuously
 // (wal-shipper.ts) instead of rewriting the whole database per snapshot —
 // the SSD-wear cliff a 5-minute VACUUM cadence implied (~288 GB/day for a
 // 1 GB vault) is the reason it left. `backupVault` stays: it is the
@@ -35,7 +35,7 @@ function requireDir(db: VaultDb, action: string): string {
 /**
  * Truncate both WAL files back into their databases.
  *
- * With a WAL shipper attached (issue #408) this MUST NOT be called
+ * With a WAL shipper attached (#408) this MUST NOT be called
  * directly — the shipper is the sole checkpointer (invariant I2) and a
  * checkpoint behind its back destroys unshipped WAL bytes' append-only
  * addressing (detected as a generation break, at the cost of a full base
@@ -90,14 +90,14 @@ export interface BackupResult {
   journalPath: string;
   vaultSha256: string;
   journalSha256: string;
-  /** CAS blobs copied into `<destDir>/blobs` (issue #296). */
+  /** CAS blobs copied into `<destDir>/blobs` (#296). */
   blobsCopied: number;
   receiptId: string;
 }
 
 /**
  * Consistent copies of both files via VACUUM INTO, hashed so the owner can
- * verify the copy independently, plus the blob CAS (issue #296: export =
+ * verify the copy independently, plus the blob CAS (#296: export =
  * copy two files and a directory — the self-contained exit ramp, whatever
  * remote tier settings name). Portability.ts stays the semantic half.
  */

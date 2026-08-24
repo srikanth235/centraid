@@ -11,7 +11,6 @@ export function Skeleton({ rows = 3 }: { rows?: number }): ReactNode {
   ));
 }
 
-/** Consistent first-read placeholder for bundled blueprint surfaces. */
 export function LoadingSkeleton({ rows = 6 }: { rows?: number }): ReactNode {
   return <Skeleton rows={rows} />;
 }

@@ -1,4 +1,4 @@
-// Transcript model → screen DTOs, with identity (issue #659).
+// Transcript model → screen DTOs, with identity (#659).
 //
 // `AssistantRoute` keeps its message model in a ref and MUTATES it in place as
 // a turn streams — text is appended, tool rows are spliced in ahead of the

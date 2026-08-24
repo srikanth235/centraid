@@ -1,4 +1,4 @@
-// Derivative contribution vocabulary (issue #414 D9/D13).
+// Derivative contribution vocabulary (#414 D9/D13).
 //
 // This is the one registry shared by ingress validation, ingest/promotion,
 // byte serving and future work-lease dispatch. Binary display rungs live in
@@ -95,7 +95,7 @@ export const DERIVATIVE_REGISTRY: Readonly<
     maxBytes: 64,
     backstop: "raster-codec",
   },
-  // ThumbHash (issue #419): a DCT placeholder a native client paints while a
+  // ThumbHash (#419): a DCT placeholder a native client paints while a
   // real thumb streams. Canonical value is unpadded standard base64 of the
   // 5-49 byte hash; the cap covers base64 of 64 bytes (~88 chars) with slack.
   thumbhash: {

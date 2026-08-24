@@ -43,7 +43,7 @@ export function createUploads({
   notice,
 }: UploadsDeps) {
   // Each file's bytes stage into the vault's CAS via kit stageFileBytes
-  // (issue #296); the upload action claims the returned sha — that claim is
+  // (#296); the upload action claims the returned sha — that claim is
   // the receipt.
   async function uploadFiles(fileList: FileList | File[]) {
     if (state.uploading) return;

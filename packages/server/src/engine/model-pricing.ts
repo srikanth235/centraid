@@ -1,9 +1,9 @@
 /*
- * Per-model token pricing (issue #90 open question 4; live catalog #445).
+ * Per-model token pricing (#90 open question 4; live catalog #445).
  *
  * `items.cost_usd` is frozen at write time — prices drift, so a run recorded
  * today keeps the cost it was billed at. Prefer harness/ACP-reported USD when
- * present (`resolveItemCost`, issue #514); otherwise this module's catalog
+ * present (`resolveItemCost`, #514); otherwise this module's catalog
  * estimate. The repricing backfill (#445) is the ONLY sanctioned rewriter of
  * already-frozen *estimated* costs (never `cost_source = 'harness'`).
  *
@@ -76,7 +76,7 @@ export function costForUsage(
   return entry ? costFromEntry(entry, usage) : undefined;
 }
 
-/** Where a frozen `cost_usd` came from (issue #514). */
+/** Where a frozen `cost_usd` came from (#514). */
 export type CostSource = "harness" | "estimated";
 
 export interface ResolvedItemCost {

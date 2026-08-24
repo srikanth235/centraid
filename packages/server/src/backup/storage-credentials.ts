@@ -1,8 +1,8 @@
 /*
  * The `s3Credentials` resolver every mounted vault's remote blob tier calls
- * on each use (issue #367 §C3) — bridges `BlobStoreSettings.connectionId` to
+ * on each use (#367) — bridges `BlobStoreSettings.connectionId` to
  * a live `StorageConnectionStore` row. Every connection is a provider
- * connection now (#436 §2): resolution is always a short-lived
+ * connection (#436): resolution is always a short-lived
  * `requestCasGrant` (`centraid-storage-provider/1`, packages/backup/PROTOCOL.md
  * § Layer 1), cached per connection until near expiry so a busy replication
  * sweep doesn't mint a fresh grant on every blob.
@@ -45,7 +45,7 @@ export function makeStorageCredentialsResolver(
   settings: BlobStoreSettings,
   storeClass?: "cas" | "derived"
 ) => Promise<S3Credentials> {
-  // Keyed by `${connectionId}:${store}` (issue #425 Wave 2): a provider may
+  // Keyed by `${connectionId}:${store}` (#425): a provider may
   // issue per-store-scoped credentials, so cas and derived grants cache apart.
   const grantCache = new Map<string, CachedGrant>();
 
@@ -89,7 +89,7 @@ export function makeStorageCredentialsResolver(
 }
 
 /**
- * Home-profile status of a provider (issue #436 §1) — read from the discovery
+ * Home-profile status of a provider (#436) — read from the discovery
  * document (`GET /v1/storage/provider`, PROTOCOL.md § Profiles). A connection
  * may only be created/attached against a provider that advertises the `home`
  * profile, i.e. a full managed household home carrying all of
@@ -180,7 +180,7 @@ export async function ensureProviderCasTarget(
   /** The `derived` store prefix, present iff the provider advertises + grants it. */
   derivedPrefix?: string;
   /**
-   * Storage classes the provider declared it accepts (issue #425 Wave 3),
+   * Storage classes the provider declared it accepts (#425),
    * learned from the same discovery document. Present iff discovery advertised a
    * non-empty list; the vault's direct-to-cold heuristic only engages when this
    * includes `STANDARD_IA`.
@@ -210,7 +210,7 @@ export async function ensureProviderCasTarget(
     targetId,
     mode: "read-write",
   });
-  // The `derived` store is opt-in per provider (issue #425 Wave 2): only learn +
+  // The `derived` store is opt-in per provider (#425): only learn +
   // stamp its prefix when discovery advertises the capability. A request for an
   // unadvertised store is a 400, so gate strictly on the discovery document.
   let derivedPrefix: string | undefined;
@@ -224,7 +224,7 @@ export async function ensureProviderCasTarget(
     });
     derivedPrefix = derivedGrant.prefix;
   }
-  // The declared storage-class list (issue #425 Wave 3) rides the SAME discovery
+  // The declared storage-class list (#425) rides the SAME discovery
   // document; stamp it so the vault heuristic knows whether STANDARD_IA is safe.
   const supportedStorageClasses =
     capabilities?.storageClasses && capabilities.storageClasses.length > 0

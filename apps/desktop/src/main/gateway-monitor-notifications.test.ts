@@ -4,12 +4,12 @@ import type { GatewayProbe } from "./gateway-monitor-core.js";
 import type { OutageLogEvent } from "./gateway-outage-log-core.js";
 
 /**
- * Gateway health never reaches the Notifications (issue #665).
+ * Gateway health never reaches the Notifications (#665).
  *
- * For one release the monitor dual-wrote every transition it persisted into
- * the vault Notifications as well (#647), which produced a card the owner could never
- * resolve by acting on it: marking a persistent "degraded" read does not
- * un-degrade anything, so it simply came back. Health is STATUS — it belongs
+ * Dual-writing a persisted transition into the vault Notifications produces a
+ * card the owner can never resolve by acting on it: marking a persistent
+ * "degraded" read does not un-degrade anything, so it simply comes back
+ * (#647). Health is STATUS — it belongs
  * to the Gateway page (Overview card, Components tab, durable Alerts history)
  * and the threshold-gated OS notification.
  *

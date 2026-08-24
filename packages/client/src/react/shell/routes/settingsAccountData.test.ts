@@ -1,6 +1,6 @@
 /* oxlint-disable import/first -- vi.mock is hoisted; subject imports intentionally follow */
 /**
- * Settings account / vault data layer (issue #545 B8).
+ * Settings account / vault data layer (#545).
  */
 
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -110,7 +110,7 @@ describe("settingsAccountData", () => {
       expect(data?.deletable).toBe(false);
     });
 
-    // "On this device → Disconnect" (issue #665) exists only for a vault on a
+    // "On this device → Disconnect" (#665) exists only for a vault on a
     // REMOTE connection, and the confirm has to be able to name every vault
     // that leaves with it — `listVaults()` already answers for exactly the
     // connection in question, so the siblings come free.

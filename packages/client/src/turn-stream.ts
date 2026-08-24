@@ -77,7 +77,7 @@ export type TurnStreamEvent =
       reason: "direct" | "ladder";
       message: string;
     }
-  /** Non-fatal, human-readable notice (issue #420) — e.g. a runner that can't
+  /** Non-fatal, human-readable notice (#420) — e.g. a runner that can't
    *  read PDF attachments. Rendered in the transcript live AND persisted with
    *  the turn, so a reload replays it (#567). */
   | { type: "notice"; level: "warn" | "info"; code?: string; message: string }
@@ -143,7 +143,7 @@ export function parseFrame(rawFrame: string): TurnStreamEvent | null {
 
 /**
  * True when a raw frame is the gateway's terminal `event: end` frame — the
- * clean "the server finished this turn" marker (issue #420). Its `data: {}`
+ * clean "the server finished this turn" marker (#420). Its `data: {}`
  * carries no `type`, so `parseFrame` returns null for it; catch-up-on-reconnect
  * needs to tell "stream closed AFTER the server finished" (end seen) from
  * "connection dropped mid-turn" (end never seen).

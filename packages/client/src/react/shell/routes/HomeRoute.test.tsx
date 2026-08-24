@@ -11,7 +11,7 @@ import type * as TypeImport_1t4fyrr from "./HomeRoute.js";
 import type * as TypeImport_sample from "./homeSample.js";
 import type * as TypeImport_tiles from "./homeTileContent.js";
 
-// Home is the springboard and nothing else (issue #708): no composer hero, no
+// Home is the springboard and nothing else (#708): no composer hero, no
 // library shelf, and no identity bar — the app bar above the route carries the
 // title and the two actions. What the route still owns is the two reads the
 // tiles are made of, and the three treatments they resolve to (working, first
@@ -162,7 +162,7 @@ describe("HomeRoute", () => {
     navigate.mockClear();
     openCommandPalette.mockClear();
     // The route's reads live in the shared cache; start each case from an
-    // empty one (issue #659).
+    // empty one (#659).
     (await import("../queryCache.js")).resetQueryCache();
   });
 

@@ -1,4 +1,4 @@
-// Generic blob-image authorizer for inline apps (issue #505 Phase 4).
+// Generic blob-image authorizer for inline apps (#505).
 //
 // A bundled app painting vault media points an `<img>` `src`, media-observer's
 // staged `data-prefetch-src`, or a CSS `background-image: url(…)` at a RELATIVE
@@ -114,7 +114,7 @@ function scopeOf(el: Element): string | undefined {
 /**
  * The dedupe/staleness key. It MUST include the scope: the same blob pathname
  * in two mounted scopes is two different images (content ids are per-vault and
- * collide across them by design, issue #599), so keying by pathname alone would
+ * collide across them by design, #599), so keying by pathname alone would
  * let a tile keep the other scope's bytes.
  */
 function sourceKey(scope: string | undefined, pathname: string): string {

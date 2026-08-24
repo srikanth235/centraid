@@ -1,14 +1,11 @@
 /*
- * Pure core for GATEWAY_TEST_CONNECTION (issue #382) — the ConnectFlow
+ * Pure core for GATEWAY_TEST_CONNECTION (#382) — the ConnectFlow
  * "handshake ladder". Every raw signal (a fetch outcome, a decoded ticket)
  * is folded into `ConnectivityStage`s here; `gateway-connectivity.ts` owns
  * the actual network calls and threads their results through these fold
  * functions in sequence, skipping later stages once an earlier one fails
  * (the "ladder" never runs a step whose precondition didn't pass). Same
  * "electron-free pure core" split as `gateway-pairing-core.ts`.
- *
- * Issue #603 deleted the SSH-connect feature, and with it the
- * `ssh`/`cli`/`daemon` rungs — those stage ids had no other producer.
  */
 
 import {

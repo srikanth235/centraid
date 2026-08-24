@@ -1,5 +1,5 @@
 /*
- * The five-metric storage derivation (issue #436 §6) — normative and computed
+ * The five-metric storage derivation (#436) — normative and computed
  * ONCE, here, so every surface (the Storage card, Settings → Storage, any
  * future report) reads the SAME numbers from one pure function instead of each
  * re-deriving a slightly different story. Framework-free by construction: no
@@ -237,7 +237,7 @@ export interface StorageMetrics {
 }
 
 /**
- * The one normative derivation of the five storage metrics (issue #436 §6).
+ * The one normative derivation of the five storage metrics (#436).
  * Pure: given the same inputs it always returns the same metrics, with no
  * ambient clock or IO. See each metric's helper above for its rule.
  */

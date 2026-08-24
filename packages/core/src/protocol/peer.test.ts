@@ -1,5 +1,5 @@
 /*
- * Peer handshake (issue #726 P3 decision 5). The contract under test is that
+ * Peer handshake (#726 P3 decision 5). The contract under test is that
  * NOTHING a far gateway sends produces an exception: every input — absent,
  * malformed, hostile, or merely old — leaves as a named state.
  */

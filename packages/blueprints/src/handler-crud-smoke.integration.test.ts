@@ -1,9 +1,9 @@
 /**
- * Behavioural contract for every manifested blueprint handler (#630 Wave 0).
+ * Behavioural contract for every manifested blueprint handler (#630).
  *
- * The old test merely imported actions and swallowed query errors. This suite
- * invokes every action and query with schema-derived input against a seeded,
- * scope-enforcing vault seam. A handler now fails the suite when it throws,
+ * Every action and query is invoked with schema-derived input against a
+ * seeded, scope-enforcing vault seam — importing a handler and swallowing its
+ * query errors proves nothing. A handler fails the suite when it throws,
  * returns the wrong shape, skips its vault operation, or reaches outside the
  * scopes declared in app.json.
  */

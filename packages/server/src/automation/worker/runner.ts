@@ -23,7 +23,7 @@ async function loadSandboxBoot(): Promise<
 }
 
 /**
- * Which containment lane the PARENT chose for this run (issue #842 W7.1).
+ * Which containment lane the PARENT chose for this run (#842).
  * Handler-chosen containment would be no containment, so this is never read
  * from the handler bundle or its manifest — only from the parent's request.
  *
@@ -36,7 +36,7 @@ async function loadSandboxBoot(): Promise<
  *     that decodes media by shelling out to ffmpeg. A larger hole, named as
  *     one in policy.ts.
  *
- * There is no "no sandbox" option (#846 P9). The floor applies to everyone,
+ * There is no "no sandbox" option (#846). The floor applies to everyone,
  * and a handler that needs more says so in its manifest — where the ask is
  * reviewable — rather than every handler getting everything because one
  * needs more.
@@ -57,7 +57,7 @@ interface WorkerRequest {
    * Resolved model-runtime directory, planted on `globalThis` before the
    * handler's graph loads. A sandboxed handler has no `process.env`, so this
    * is how the `CENTRAID_AUTOMATION_RUNTIME_DIR` override still reaches it
-   * (#846 P9). A path, not a capability.
+   * (#846). A path, not a capability.
    */
   sandboxRuntimeDir?: string;
   /** Fire-start instant fixed by the parent; stable for the whole run. */
@@ -324,16 +324,16 @@ const vault = {
   changes(request: Record<string, unknown>): Promise<unknown> {
     return vaultCall("changes", request);
   },
-  /** Reference cards for cross-domain (type, id) refs (issue #272). */
+  /** Reference cards for cross-domain (type, id) refs (#272). */
   resolve(request: Record<string, unknown>): Promise<unknown> {
     return vaultCall("resolve", request);
   },
-  /** Plaintext of one entity's sealed columns — `reveal` verb, receipted per item (issue #293). */
+  /** Plaintext of one entity's sealed columns — `reveal` verb, receipted per item (#293). */
   reveal(request: Record<string, unknown>): Promise<unknown> {
     return vaultCall("reveal", request);
   },
   /**
-   * One content item's derivative, size-bounded (issue #299): `variant` is
+   * One content item's derivative, size-bounded (#299): `variant` is
    * `thumb`, `preview` or `text` — originals never egress. Every fetch is a
    * receipted read on the host side.
    */
@@ -367,7 +367,7 @@ const ctx = {
    * derivatives (thumb / preview / text of a content item) to hand the model
    * alongside the prompt — the HOST resolves them under this automation's
    * grant, receipts each fetch, and stages the bytes for the provider; the
-   * worker never holds them (issue #299 §2).
+   * worker never holds them (#299).
    */
   delegate(args: {
     prompt: string;
@@ -518,7 +518,7 @@ function execute(request: WorkerRequest): void {
             "__centraidAutomationRuntimeDir"
           ] = request.sandboxRuntimeDir;
         }
-        // Unconditional (#846 P9). An absent lane is the strict floor, never
+        // Unconditional (#846). An absent lane is the strict floor, never
         // "no containment".
         const sandboxApi = await (await loadSandboxBoot()).loadSandbox();
         const roots = request.sandboxReadRoots ?? [];

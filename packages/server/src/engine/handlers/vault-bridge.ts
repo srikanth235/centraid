@@ -18,10 +18,10 @@
  * Operations `ctx.vault` exposes to handlers. `parked` (the caller's
  * invocations awaiting owner confirmation) and `changes` (the consented
  * journal feed) are agent-plane ops — automation bridges implement them;
- * app bridges may reject them. `resolve` (issue #272) turns (type, id)
+ * app bridges may reject them. `resolve` (#272) turns (type, id)
  * references into renderable cards under the resolvable-if-linked rule.
  * `authenticate` is the host-only Locker user-presence plane (#630);
- * bridges reject it for every other app. `content` (issue #299) is the
+ * bridges reject it for every other app. `content` (#299) is the
  * size-bounded derivative fetch — thumb,
  * preview or extracted text of one content item, never original bytes.
  */

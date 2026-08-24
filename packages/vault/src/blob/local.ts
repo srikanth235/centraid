@@ -1,4 +1,4 @@
-// The local tier of blob custody (issue #296): a content-addressed store
+// The local tier of blob custody (#296): a content-addressed store
 // that is ALWAYS present — the spool every ingress hashes into, the tier
 // egress serves from, and the only tier the synchronous command pipeline may
 // touch (data_uri spills happen inside a command's transaction, so the local
@@ -34,7 +34,7 @@ import type { BlobRange, BlobStat, BlobStore } from "./store.js";
 /* oxlint-disable max-classes-per-file -- (#296) FsBlobStore + MemoryBlobStore are the two tiers of one LocalBlobStore contract (file-backed + in-memory, identical semantics), paired by design */
 
 /**
- * What `linkFromSync` did (issue #599 decision 11):
+ * What `linkFromSync` did (#599 decision 11):
  *   - `linked`      a new directory entry now points at the SAME inode — zero
  *                   bytes copied, and the filesystem's link count is the
  *                   cross-vault refcount.
@@ -63,7 +63,7 @@ export interface LocalBlobStore extends BlobStore {
   /** Allocate a same-filesystem temp path for a bounded remote promotion. */
   promotionTempPathSync?: (sha256: string) => string;
   /**
-   * Open a large blob for streaming (issue #367 §C8) instead of reading it
+   * Open a large blob for streaming (#367) instead of reading it
    * whole into memory — the replication path uses this for anything over
    * the multipart threshold. `null` when the driver has no streaming seam
    * (e.g. `MemoryBlobStore`) or the blob is absent; callers fall back to
@@ -80,7 +80,7 @@ export interface LocalBlobStore extends BlobStore {
   /** Local path for an authorized X-Sendfile-style native handoff. */
   localPathSync?: (sha256: string) => string | null;
   /**
-   * Adopt `sourcePath`'s bytes under `sha256` by HARDLINK (issue #599 decision
+   * Adopt `sourcePath`'s bytes under `sha256` by HARDLINK (#599 decision
    * 11) — the share-by-placement primitive. Present only on file-backed
    * stores; an absent implementation (the memory tier) means the caller copies
    * instead. The two-hex fan-out stays a directory detail owned by this

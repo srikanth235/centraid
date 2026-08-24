@@ -118,7 +118,7 @@ export interface VaultCursorEngineOptions {
   onDormancyChange?: (dormant: boolean, at: Date) => void | Promise<void>;
   catchUpCap?: number;
   /**
-   * Gateway-wide default cron timezone (issue #570 tier 2). Read on each
+   * Gateway-wide default cron timezone (#570 tier 2). Read on each
    * register/reconcile so a prefs change applies on the next reconcile without
    * restarting the engine. Absent or invalid → host-local for triggers that
    * also omit `tz`.

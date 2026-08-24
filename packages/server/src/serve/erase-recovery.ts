@@ -1,5 +1,5 @@
 /*
- * Durable vault erase completion (issue #555).
+ * Durable vault erase completion (#555).
  *
  * Gateway rows are removed and an erase_intents row is committed before any
  * filesystem unlink. A process death can therefore leave only one recoverable

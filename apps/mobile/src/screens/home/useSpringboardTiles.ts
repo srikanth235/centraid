@@ -1,4 +1,4 @@
-// Per-app data plumbing for the Home springboard (issue #708 A).
+// Per-app data plumbing for the Home springboard (#708 A).
 //
 // Home is not an app and has no vault grant of its own, so every read here goes
 // out under the OWNING app's id — `useReplicaQuery("photos", …)` resolves the

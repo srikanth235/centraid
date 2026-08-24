@@ -33,7 +33,7 @@ import { Icon } from "./Shared.tsx";
 import styles from "./QuickLook.module.css";
 
 // The iframe (PDF) / img stage is load-bearing: content_uri is a same-origin
-// vault blob URL or data: URI (CSP `default-src 'self'` — issue #296), and
+// vault blob URL or data: URI (CSP `default-src 'self'` — #296), and
 // re-setting `src` reloads/rescrolls it. React's reconciler gives the
 // short-circuit for free: as long as the doc is unchanged the new element tree
 // has the same type/position/props at every node (including this `src` string,

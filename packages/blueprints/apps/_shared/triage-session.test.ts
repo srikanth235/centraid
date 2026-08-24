@@ -1,4 +1,4 @@
-// The shared triage state machine (issue #712 D3). Pinned here rather than
+// The shared triage state machine (#712). Pinned here rather than
 // through either surface, because the two behaviours that actually bit — a
 // denominator that slides under the member, and a "skip" that is
 // indistinguishable from an answer — are arithmetic, and arithmetic is

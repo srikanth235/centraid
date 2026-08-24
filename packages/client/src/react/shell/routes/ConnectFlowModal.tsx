@@ -10,7 +10,7 @@ import ConnectTicketPanel, {
 
 import controlsCss from "../../styles/controls.module.css";
 // Reuses VaultModal's overlay/scrim/head/foot chrome verbatim, the precedent
-// for the whole "Add X" dialog family (issue #376) — one implementation of the
+// for the whole "Add X" dialog family (#376) — one implementation of the
 // overlay/backdrop/pop-animation CSS shared by every "Add ___" modal in
 // Settings/the switcher.
 import vaultModalStyles from "./VaultModal.module.css";
@@ -22,7 +22,7 @@ export interface ConnectFlowModalProps extends Omit<
   onCancel: () => void;
 }
 
-/** The switcher's "Add vault…" modal (issue #382) — dialog chrome around
+/** The switcher's "Add vault…" modal (#382) — dialog chrome around
  *  ConnectTicketPanel, the SAME ticket step onboarding shows, offering the
  *  ticket path only ('local' is always already registered, so re-offering it
  *  here would be a dead end rather than a new connection).

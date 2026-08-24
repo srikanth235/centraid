@@ -3,10 +3,10 @@
 // cause, consequence, one action. Never edit that file from here — read it
 // for structure only.
 //
-// Mobile had the sentence (../../lib/replica/replica-storage-error.ts) with
-// no component consuming it (issue #708 gap). This is that component, wired
-// to ReplicaProvider's `storageFull` flag, itself set from the real
-// `isReplicaStorageFullError` signal raised by the op-sqlite driver.
+// The sentence itself lives in ../../lib/replica/replica-storage-error.ts;
+// this component is what draws it, wired to ReplicaProvider's `storageFull`
+// flag, itself set from the real `isReplicaStorageFullError` signal raised by
+// the op-sqlite driver (#708).
 //
 // Desktop's variant also plots a bounded quota (used/limit bytes, a meter).
 // The mobile signal is an OS ENOSPC/SQLITE_FULL error with no knowable device

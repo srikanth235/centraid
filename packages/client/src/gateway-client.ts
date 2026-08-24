@@ -13,7 +13,7 @@
  *
  * This module carries the pure `fetch` methods for the app read surface
  * (logs / settings / deregister — there is no schema/table-rows/query trio,
- * issue #286 phase 2), version history (list / activate), the
+ * #286), version history (list / activate), the
  * `/_centraid-user` identity + prefs surface, and the automation
  * read/run/analytics + insights surface. The shared fetch infrastructure
  * lives in `gateway-client-core.ts`; the app-editing + lifecycle surface
@@ -79,7 +79,7 @@ export async function appLogs(input: {
 }
 
 /**
- * All app-owned `settings.json` values for the app (issue #286 phase 2:
+ * All app-owned `settings.json` values for the app (#286:
  * the per-app data.sqlite's `__centraid_settings` table became this
  * file). Knob keys are the manifest's camelCase `app*` names.
  */
@@ -148,7 +148,7 @@ export interface AppMetaEntry {
   name?: string;
   description?: string;
   kind?: "app" | "automation";
-  /** Tile identity from `app.json` (issue #263) — raw strings; validate
+  /** Tile identity from `app.json` (#263) — raw strings; validate
    *  against the design-tokens sets before rendering. */
   iconKey?: string;
   colorKey?: string;
@@ -180,7 +180,7 @@ export interface TemplateVaultScope {
   fieldMask?: string[];
 }
 
-/** A template's requested vault access (issue #434). Read from the app-kind
+/** A template's requested vault access (#434). Read from the app-kind
  *  template's `app.json`; automations omit it. `why` is the owner-facing
  *  sentence; `scopes` are what it will touch. No install/consent sheet renders
  *  it (#708) — the standing surface for the same question is the Privacy grants
@@ -205,13 +205,13 @@ export interface TemplateMetaEntry {
   triggerLabel?: string;
   /**
    * Whether this bundled app is already installed in the addressed vault
-   * (issue #434). Present only when the gateway resolves per-vault install
+   * (#434). Present only when the gateway resolves per-vault install
    * state. True for every bundled app on a mounted vault since #708 installs
    * them all at mount.
    */
   installed?: boolean;
   /**
-   * Requested vault access (issue #434). Present for app-kind templates whose
+   * Requested vault access (#434). Present for app-kind templates whose
    * `app.json` declares a `vault` block; the install sheet renders it as the
    * consent surface before the owner installs.
    */
@@ -780,7 +780,7 @@ export async function getGatewayHealth(): Promise<CentraidGatewayHealth> {
 }
 
 /**
- * Hot-apply a background-work pause (issue #528 Phase B). `durationMs` absent
+ * Hot-apply a background-work pause (#528). `durationMs` absent
  * ⇒ an indefinite pause (`until: null`); the gateway clamps to a 24h max.
  * Returns the reconciled pause state — same shape health reports under
  * `metrics.backgroundPause`.
@@ -800,7 +800,7 @@ export async function pauseBackgroundWork(
   );
 }
 
-/** Lift a background-work pause (issue #528 Phase B). */
+/** Lift a background-work pause (#528). */
 export async function resumeBackgroundWork(): Promise<{ paused: boolean }> {
   const { baseUrl, token } = await auth();
   const res = await doFetch(baseUrl, "/centraid/_gateway/resource/pause", {
@@ -819,7 +819,7 @@ export * from "./gateway-client-editing.js";
 export * from "./gateway-client-automation-editing.js";
 
 // The unified chat transport (SSE turn streaming + chat-history surface)
-// lives in `gateway-client-conversation.ts` (issue #141, Phase 3). Re-exported here
+// lives in `gateway-client-conversation.ts` (#141). Re-exported here
 // so the chat panel imports it from the same barrel.
 export * from "./gateway-client-conversation.js";
 
@@ -827,12 +827,12 @@ export * from "./gateway-client-conversation.js";
 // lives in `gateway-client-vault.ts`. Re-exported here so the per-app
 // Vault tab imports it from the same barrel.
 export * from "./gateway-client-vault.js";
-// The staged-import workflow half of that same plane (issue #712 P18) — one
+// The staged-import workflow half of that same plane (#712) — one
 // lifecycle rather than one act per call; see its header for the seam.
 export * from "./gateway-client-vault-imports.js";
 export * from "./gateway-client-atlas.js";
 
-// The broker-owned OAuth / BYO-client connections surface (issue #304)
+// The broker-owned OAuth / BYO-client connections surface (#304)
 // lives in `gateway-client-connections.ts`. Re-exported here so the
 // Settings → Connections screen imports it from the same barrel.
 export * from "./gateway-client-connections.js";
@@ -847,22 +847,22 @@ export * from "./gateway-client-outbox.js";
 // same barrel.
 export * from "./gateway-client-logs.js";
 
-// The offsite backup engine's status/run surface (issue #351) lives in
+// The offsite backup engine's status/run surface (#351) lives in
 // `gateway-client-backup.ts`. Re-exported here so the Gateway page's
 // Backup card imports it from the same barrel.
 export * from "./gateway-client-backup.js";
 
-// The gateway-level storage-connection surface (issue #367 §C1/§D) lives in
+// The gateway-level storage-connection surface (#367 §C1/§D) lives in
 // `gateway-client-storage.ts`. Re-exported here so the Gateway page's
 // Storage card and the Settings → Storage screen import it from the same
 // barrel.
 export * from "./gateway-client-storage.js";
 
-// The LOCAL disk surface (issue #544) — footprint by component + the owner's
+// The LOCAL disk surface (#544) — footprint by component + the owner's
 // two limits. Same route prefix, different question; see the module header.
 export * from "./gateway-client-local-storage.js";
 
-// The paired-device roster + revoke surface (issue #376) lives in
+// The paired-device roster + revoke surface (#376) lives in
 // `gateway-client-devices.ts`. Re-exported here so the Gateway page's
 // Devices card imports it from the same barrel.
 export {
@@ -891,7 +891,7 @@ export {
 // row revoked?" without importing the HTTP client (see the module header).
 export { isRevokedDevice } from "./device-roster.js";
 
-// The caller's own person (issue #726) — the device roster's own-owner
+// The caller's own person (#726) — the device roster's own-owner
 // header. Same card, same barrel; see `gateway-client-owners.ts`.
 export {
   listGatewayOwners,

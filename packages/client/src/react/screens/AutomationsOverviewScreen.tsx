@@ -32,7 +32,7 @@ import { sortOverviewRows } from "./automationsOverviewGrouping.js";
 
 import styles from "./AutomationsOverviewScreen.module.css";
 
-// Automations overview — the v9 operational page (issue #765, spec §3).
+// Automations overview — the v9 operational page (#765, spec §3).
 //
 // The screen is a SEQUENCE OF BLOCKS and nothing else: section heads, row
 // lists, a note. Its identity (title, the two verbs) lives in the app bar
@@ -74,7 +74,7 @@ const CHIP_ORDER: readonly ChipId[] = ["all", "failing", "paused", "drafts"];
 
 // The empty state, the error plate and the skeleton note are the same words
 // mobile's Automations screen says, so they live in `../../automations-copy.js`
-// and `../../surface-copy.js` (issue #805).
+// and `../../surface-copy.js` (#805).
 const EMPTY_TITLE = AUTOMATIONS_EMPTY_TITLE;
 const EMPTY_BODY = AUTOMATIONS_EMPTY_BODY;
 const EMPTY_ACTION = AUTOMATIONS_EMPTY_ACTION;
@@ -435,7 +435,7 @@ export default function AutomationsOverviewScreen({
         onClick: () => onOpenAutomation(row.ref),
         // The one thing that distinguishes ten identical "Open" controls. It
         // is a hint and not an `aria-label` because the button already renders
-        // visible text (aria-label discipline, issue #708 B.4); the shell
+        // visible text (aria-label discipline, #708 B.4); the shell
         // lowers it to `title`, the phone to `accessibilityHint`.
         hint: `Open ${row.name}`,
       },

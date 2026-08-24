@@ -58,7 +58,7 @@ test("12.1 — picking a theme in Appearance applies it live and saves to the ga
     await gotoSettings(page);
     await page.getByTestId("settings-page").waitFor({ state: "visible" });
 
-    // Accent swatches were removed in the #608 consolidation. Theme is a
+    // There are no accent swatches (#608). Theme is a
     // three-position Segmented control (role=tablist "Appearance") with
     // Light / Dark / Match system — default is dark (appearance.ts).
     const appearance = page.getByRole("tablist", { name: "Appearance" });
@@ -372,7 +372,7 @@ test("13.8 — switching to an unreachable gateway degrades gracefully", async (
       deadId
     );
     // No crash — the shell stays mounted even though the gateway is unreachable.
-    // The stem (`nav[aria-label="Apps"]`) is the chrome root post-#707.
+    // The stem (`nav[aria-label="Apps"]`) is the chrome root (#707).
     await expect(page.locator('nav[aria-label="Apps"]')).toBeVisible();
   } finally {
     await closeApp(app);

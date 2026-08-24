@@ -1,5 +1,5 @@
 /**
- * THE CAPTURE-TIME OCR CONSENT MOMENT (issue #712 C3) — the second instance
+ * THE CAPTURE-TIME OCR CONSENT MOMENT (#712) — the second instance
  * of the §8 consent gate, after Photos' face detection
  * (`apps/photos/enrichment-consent.ts`).
  *
@@ -90,6 +90,6 @@ export const OCR_CONSENT_NOTE =
   "Declining saves the scan without extracted text, stated on the scan itself — search and receipt-splitting need the text, but nothing else about saving changes.";
 
 /** What the scan screen says once extraction was declined, beside the scan —
- *  never a dead control (issue #712 C3). */
+ *  never a dead control (#712). */
 export const OCR_DECLINED_INLINE =
   "Text extraction declined — this scan saves without extracted text.";

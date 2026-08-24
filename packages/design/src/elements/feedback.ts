@@ -42,7 +42,7 @@ export interface StatusLineOptions {
 
 // ────────── Status line ──────────
 //
-// There is no floating `toast` stack (#707 Phase 3 — the Binding Layer's
+// There is no floating `toast` stack (#707 — the Binding Layer's
 // fifth invariant): state is reported on ONE persistent line docked to the
 // bottom of the frame, updated IN PLACE. There is no stack, no per-call
 // element, and no entry/exit animation — a single `.kit-status-line` element

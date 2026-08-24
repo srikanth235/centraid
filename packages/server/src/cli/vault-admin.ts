@@ -1,6 +1,6 @@
 /*
  * `centraid-gateway vault …` — the stopped-daemon filesystem maintenance
- * surface for vault lifecycle (issue #289).
+ * surface for vault lifecycle (#289).
  *
  * Vault create/delete left the HTTP surface: they are landlord acts,
  * guarded by having shell access to the box — a family owner's device can
@@ -13,7 +13,7 @@
  *   centraid-gateway vault rename --data-dir <path> <vaultId> <name>
  *   centraid-gateway vault delete --data-dir <path> <vaultId>
  *
- * `--json` (issue #382) wraps `list`/`create`'s output in a single
+ * `--json` (#382) wraps `list`/`create`'s output in a single
  * `{ok, vaults:[...]}` / `{ok, vaultId, name}` line instead of the default
  * one-JSON-object-per-line stream — a caller driving this over SSH (the
  * desktop's ConnectFlow) wants one line to parse, not an NDJSON stream.
@@ -111,7 +111,7 @@ export async function commandVault(
       // The daemon always writes sealing keys through a protector, so a
       // protector-less store cannot unwrap them: mounts fail, `list()`
       // returns `[]`, and every verb here reports an empty gateway
-      // (issue #568 item D).
+      // (#568).
       keyStore: daemonKeyStore(layout.keysDir),
       rootDir: layout.vaultDir,
       logger: quietLogger,
@@ -123,7 +123,7 @@ export async function commandVault(
           const vaults = registry.list();
           // A vault dir that would not mount is absent from `list()`, so a
           // silent listing reads as "you have fewer vaults" instead of "one
-          // of them is broken" (issue #603 X1). The listing itself succeeded,
+          // of them is broken" (#603). The listing itself succeeded,
           // so the exit code stays 0 — the failures are reported, not raised.
           const failedMounts = registry.failedMounts();
           if (json) {

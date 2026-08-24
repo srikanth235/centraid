@@ -46,7 +46,7 @@ export interface ButtonProps extends ButtonData {
    */
   ariaExpanded?: boolean;
   /**
-   * Is this the control that COMMITS — the one that writes data (issue #708,
+   * Is this the control that COMMITS — the one that writes data (#708,
    * C7)? Defaults to `variant === "primary"`, because the filled ink IS the
    * commit control in this grammar. Set it explicitly on a commit that is not
    * the view's one filled element, or `false` on a primary that only navigates

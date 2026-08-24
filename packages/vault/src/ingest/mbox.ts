@@ -1,6 +1,6 @@
 // Minimal RFC 4155 MBOX parsing — enough for the mail people actually export
 // (Google Takeout, Thunderbird): `From ` separator lines, unfolded headers,
-// MIME multiparts walked for the text body AND the attachments (issue #296:
+// MIME multiparts walked for the text body AND the attachments (#296:
 // the import spine is the real volume source of blobs — an mbox door that
 // drops attachments would re-open the gap the staging band closes).
 

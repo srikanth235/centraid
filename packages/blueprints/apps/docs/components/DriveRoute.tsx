@@ -3,17 +3,10 @@
 // Starred, Search and Trash.
 //
 // This is one of three route bodies carved out of `app-root.tsx` so that the
-// orchestrator holds ROUTING and the components hold SCREENS. Two reasons, and
-// both are load-bearing:
-//
-//   * the oxlint file-size cap. `app-root.tsx` already carries an explicit
-//     governance allowance for its size; every route body added inline would
-//     have grown it further, and a route body is exactly the kind of thing
-//     that belongs in a component;
-//   * disjoint ownership. The remaining Docs work is parallel — the drive
-//     family, the reading/editor pair and the details rail land separately —
-//     and three route bodies in three files is three agents who never touch
-//     the same lines.
+// orchestrator holds ROUTING and the components hold SCREENS. `app-root.tsx`
+// already carries an explicit governance allowance for its size under the
+// oxlint file-size cap, and a route body inlined there would grow it further —
+// a route body belongs in a component.
 //
 // THE BLOCK SEQUENCE IS THE SPEC'S (§4.3): breadcrumb → filter row → row set
 // (or the empty block that stands in for it) → caption → the shelf's own

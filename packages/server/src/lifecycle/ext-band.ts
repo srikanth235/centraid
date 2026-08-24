@@ -1,5 +1,4 @@
-// The ext band's lifecycle wiring (issue #286 phase 2) — the successor to
-// the silo's draft-data seeding and migrations-on-publish. App data lives
+// The ext band's lifecycle wiring (#286). App data lives
 // in the vault; what a draft session branches is the app's DECLARED
 // extension tables:
 //

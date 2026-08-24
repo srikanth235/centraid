@@ -1,5 +1,3 @@
-// WAL uploader pure helpers (issue #545 B7).
-
 import { describe, expect, test } from "vitest";
 
 import type { VaultPlane } from "../serve/vault-plane.js";

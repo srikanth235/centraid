@@ -5,7 +5,7 @@ import { fmtBytes } from "@centraid/design/elements";
 // EVERY NUMBER HERE IS READ, NEVER INVENTED. Two sources, and the screen is
 // explicit about which is speaking:
 //
-//   * the ROLLUP (issue #711) — `blob.custody_rollup`, computed by the
+//   * the ROLLUP (#711) — `blob.custody_rollup`, computed by the
 //     gateway's standing blob sweep over the WHOLE library and read by
 //     queries/storage.ts. It answers where the originals are and how much of
 //     the local tier is provably safe to release. Until the sweep has run

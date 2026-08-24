@@ -3,10 +3,10 @@
 // a polymorphic edge (core_attachment.target_type/target_id) onto a
 // canonical core_content_item.
 //
-// Byte custody is issue #296: large files arrive STAGED (POST /_vault/blobs
+// Byte custody is #296: large files arrive STAGED (POST /_vault/blobs
 // hashed the bytes into the CAS; `staged_sha` claims them here, which is
 // when the receipt mints), small payloads still ride inline as `data_uri`
-// (text stays in the row, binaries spill to the CAS), and issue #272's
+// (text stays in the row, binaries spill to the CAS), and #272's
 // `content_id` attaches EXISTING bytes without re-shipping them. Exactly one
 // source per call. The edge counts as a reference in the shared GC rule
 // (media.ts CONTENT_REFERENCES), so an embedded photo survives the photo
@@ -67,7 +67,7 @@ const ATTACH: CommandDefinition = {
       data_uri: { type: "string", minLength: 6 },
       /** An existing canonical content item — attach without re-uploading. */
       content_id: { type: "string", minLength: 1 },
-      /** Staged bytes (issue #296): claim what POST /_vault/blobs hashed. */
+      /** Staged bytes (#296): claim what POST /_vault/blobs hashed. */
       staged_sha: { type: "string", minLength: 64, maxLength: 64 },
       /** Only meaningful when minting new bytes; an existing item keeps its title. */
       title: { type: "string" },
@@ -102,7 +102,7 @@ const ATTACH: CommandDefinition = {
       value: 1,
     },
     {
-      // The inline door is for SMALL payloads (issue #296): the journal
+      // The inline door is for SMALL payloads (#296): the journal
       // records every input, so big bytes take the staging route.
       name: "within_size_cap",
       sql: `SELECT CASE WHEN :data_uri IS NULL THEN 1 ELSE (length(:data_uri) <= ${MAX_INLINE_DATA_URI_CHARS}) END AS n`,
@@ -186,7 +186,7 @@ function attach(ctx: HandlerCtx): Record<string, unknown> {
   } else if (input.data_uri !== undefined) {
     // Binary payloads spill to the CAS unconditionally in mintContentFromDataUri;
     // text/* cannot redirect (FTS reads content_uri in-transaction), so it
-    // gets the tighter inline budget here (issue #367 §E4).
+    // gets the tighter inline budget here (#367).
     assertInlineDataUriWithinBudget(input.data_uri);
     const minted = mintContentFromDataUri(ctx, input.data_uri, {
       title: input.title,
@@ -295,7 +295,6 @@ function detach(ctx: HandlerCtx): Record<string, unknown> {
   return { attachment_id: input.attachment_id };
 }
 
-/** Register the core attachment commands on a gateway. */
 export function registerAttachmentCommands(gateway: Gateway): void {
   gateway.registerCommand(ATTACH);
   gateway.registerCommand(DETACH);

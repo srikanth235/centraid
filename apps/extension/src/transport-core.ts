@@ -1,5 +1,5 @@
 /**
- * Extension transport pure helpers (issue #545 C10) — failure classification
+ * Extension transport pure helpers (#545) — failure classification
  * and byte codecs without WASM / chrome.storage.
  */
 

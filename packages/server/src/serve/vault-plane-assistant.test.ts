@@ -1,7 +1,7 @@
-// The vault assistant (`_assistant`, issue #286 phase 2) is a first-class
+// The vault assistant (`_assistant`, #286 phase 2) is a first-class
 // non-owner caller: its standing grant is self-healing on first use, but
 // confirm-gated commands still park, and an owner narrowing is never undone by
-// the heal (issue #308 B3).
+// the heal (#308).
 import { describe, expect, test } from "vitest";
 
 import { tempDir } from "@centraid/test-kit/temp-dir";
@@ -47,7 +47,7 @@ describe("vault-plane assistant", () => {
       plane.listParked().some((p) => p.command === "social.send_message")
     ).toBe(true);
 
-    // The credential-touching pair parks for the assistant too (issue #308
+    // The credential-touching pair parks for the assistant too (#308
     // A1): the all-schema grant reaches sync, but confirm holds the line on
     // exactly the fields #304 pinned.
     const credentialGrab = await plane.invokeAsAssistant({

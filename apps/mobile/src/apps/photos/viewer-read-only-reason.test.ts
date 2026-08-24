@@ -1,4 +1,4 @@
-// The viewer's read-only reason (v4 handoff §6, §18; issue #711 item M).
+// The viewer's read-only reason (v4 handoff §6, §18; #711 item M).
 //
 // Two defects closed here:
 //
@@ -17,9 +17,9 @@
 // every other *.test.ts under this app, which test pure logic, never JSX
 // output), so this asserts the same properties a render would, by reading
 // the component sources directly: the shared constant is referenced (not a
-// re-typed literal) in both files, the old duplicate stub strings are gone,
-// and the reason reaches JSX as element children — not only as a prop value
-// a screen reader alone would announce.
+// re-typed literal) in both files, no duplicate stub string is left, and the
+// reason reaches JSX as element children — not only as a prop value a screen
+// reader alone would announce.
 import fs from "node:fs";
 import path from "node:path";
 

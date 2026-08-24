@@ -178,7 +178,7 @@ describe("offline is explained, never left as a grey mosaic (§14)", () => {
   it("names what still renders, and never says the meaning is gone", () => {
     // README §14: "A grey mosaic with no explanation is a bug." The banner is
     // the explanation, and it is explicit about what is still true — in one
-    // sentence since issue #805, which is why it names the class of thing that
+    // sentence since #805, which is why it names the class of thing that
     // still renders rather than listing captions, dates, albums and people.
     for (const phrase of [
       "meaning reads from this device",

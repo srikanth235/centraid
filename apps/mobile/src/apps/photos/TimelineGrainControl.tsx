@@ -1,4 +1,4 @@
-// THE LIBRARY'S GRAIN CONTROL — Years · Months · All (issue #712 iOS parity).
+// THE LIBRARY'S GRAIN CONTROL — Years · Months · All (#712 iOS parity).
 //
 // PERMANENT — never armed by scroll and withdrawn 3.2 seconds after the last
 // gesture. The defect that arrangement causes is worth stating plainly: the

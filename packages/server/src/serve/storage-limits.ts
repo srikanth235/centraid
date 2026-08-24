@@ -1,5 +1,5 @@
 /*
- * The owner's two local-disk limits (issue #544), persisted in gateway.db.
+ * The owner's two local-disk limits (#544), persisted in gateway.db.
  *
  * Two limits, two DELIBERATELY different enforcement models:
  *
@@ -16,7 +16,7 @@
  *     starts archiving EARLY. This one is actuating, not advisory, because
  *     the action it triggers is non-destructive: archival seals cold rows
  *     into content-addressed CAS segments, and the prune half is already
- *     gated behind proven custody (issue #438). Reaching this limit changes
+ *     gated behind proven custody (#438). Reaching this limit changes
  *     WHEN archival runs and how far back its window reaches — never what it
  *     is allowed to delete.
  *

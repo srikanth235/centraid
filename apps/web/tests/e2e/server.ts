@@ -22,7 +22,7 @@ const pairingTickets = PairingTicketStore.open(gatewayDatabase);
 const webDeviceKey = "web-e2e-device";
 const webControlToken = "web-e2e-control-session";
 // No `initVaultName`: a fresh gateway auto-founds "Personal" at
-// construction (issue #603), and the specs address whichever vault
+// construction (#603), and the specs address whichever vault
 // `/centraid/_web/control` hands back rather than one by name.
 const handle = await serve({
   host: "127.0.0.1",

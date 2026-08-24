@@ -1,5 +1,5 @@
 /*
- * Integrity-scrub check library (issue #839 W1.2). Every check is exercised
+ * Integrity-scrub check library (#839). Every check is exercised
  * BOTH ways over a real on-disk vault: clean (passes) and against an injected
  * REAL fault (a flipped CAS byte, an extra hardlink, a foreign-epoch change
  * row), so a green here means the check detects the corruption it claims to.

@@ -3,6 +3,13 @@ export type GroupCommitResult =
   | { ok: false; error: unknown };
 
 /**
+ * The most writes one event-loop phase may execute (#659). Each is a
+ * synchronous SQLite transaction, so an uncapped batch is an uncapped
+ * event-loop stall — the exact thing the low-end lag budget measures.
+ */
+const DEFAULT_MAX_BATCH = 64;
+
+/**
  * A short write coalescer for the constrained gateway profile.
  *
  * SQLite WAL + synchronous=NORMAL defers durable WAL sync to checkpoints. The
@@ -11,13 +18,6 @@ export type GroupCommitResult =
  * checkpoint work without weakening Centraid's per-invocation transaction and
  * evidence boundaries by wrapping unrelated commands in one SQL transaction.
  */
-/**
- * The most writes one event-loop phase may execute (issue #659 G11). Each is a
- * synchronous SQLite transaction, so an uncapped batch is an uncapped
- * event-loop stall — the exact thing the low-end lag budget measures.
- */
-const DEFAULT_MAX_BATCH = 64;
-
 export class GroupCommitQueue {
   private readonly pending: Array<{
     run: () => unknown;
@@ -41,7 +41,7 @@ export class GroupCommitQueue {
         resolve: (value) => resolve(value as T),
         reject,
       });
-      // A full batch does not wait out the rest of its window (issue #659 G11):
+      // A full batch does not wait out the rest of its window (#659):
       // under a burst the window would otherwise keep collecting, and the
       // single event-loop phase that executes the batch would block for as long
       // as the burst lasted. Re-arm at zero so the batch runs next tick.
@@ -63,7 +63,7 @@ export class GroupCommitQueue {
     if (this.timer) clearTimeout(this.timer);
     this.timer = undefined;
     // Never execute more than one batch's worth in a single phase; the
-    // remainder re-arms below and gets its own window (issue #659 G11).
+    // remainder re-arms below and gets its own window (#659).
     const batch = this.pending.splice(0, this.maxBatch);
     if (this.runBatch && batch.length > 0) {
       try {

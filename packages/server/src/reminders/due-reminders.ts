@@ -1,5 +1,4 @@
-// Reminders (the gap flagged in the Tasks/Agenda comparison: neither app had
-// any time-based alert). Deliberately stateless on the gateway side — no
+// Reminders. Deliberately stateless on the gateway side — no
 // "already fired" bookkeeping here, no resident timer. Each call is a pure
 // read of the vault's own `remind_before_min` (schedule_task) and
 // `reminders_json` (schedule_event_ext) columns against `now`, returning

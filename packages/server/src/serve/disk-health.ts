@@ -1,5 +1,5 @@
 /*
- * Disk watermark — the `disk` health component (issue #351 tier 3 + #521).
+ * Disk watermark — the `disk` health component (#351 tier 3 + #521).
  *
  * A gateway that runs out of free space on the vault volume fails writes
  * (SQLite WAL checkpoints, blob CAS, backups) with confusing downstream
@@ -7,14 +7,14 @@
  * is nearly full" instead of a SQLITE_FULL stack trace three layers down.
  *
  * Absolute-only watermarks mis-handle small volumes (a 32 GiB SD card with
- * 4 GiB free is healthy by percent but was "degraded" under a 5 GiB floor).
- * Status now uses **percent free OR absolute floor** — either signal can
+ * 4 GiB free is healthy by percent yet "degraded" under a 5 GiB floor).
+ * Status uses **percent free OR absolute floor** — either signal can
  * trip degraded/error so large disks and tiny disks both degrade correctly.
  *
  * `statfs`/`fileSize` are injectable so tests can exercise the thresholds
  * without needing an actual near-full filesystem.
  *
- * Disk-full (issue #351 wave 4): a `statfs` snapshot alone can miss a real
+ * Disk-full (#351): a `statfs` snapshot alone can miss a real
  * write failure — a per-volume quota, or a few bytes freed up between the
  * ENOSPC and the next health tick — so every write path (vault SQLite
  * writes, blob CAS, gateway log persistence) reports into

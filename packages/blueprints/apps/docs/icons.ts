@@ -37,7 +37,7 @@ export const I = {
 /**
  * THE KIND GLYPH A ROW WEARS BESIDE A NAME.
  *
- * This replaces a tinted square with `DOC` / `PDF` / `XLS` stamped inside it.
+ * NEVER A TINTED SQUARE WITH `DOC` / `PDF` / `XLS` STAMPED INSIDE IT.
  * Three capital letters is a filename extension wearing a badge: it repeats
  * what the Kind column already prints one field to the right, it cannot be
  * read at a glance the way a shape can, and it put a coloured chip at the

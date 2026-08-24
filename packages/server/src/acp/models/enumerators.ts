@@ -1,7 +1,7 @@
 /*
  * Per-harness model enumeration.
  *
- * There is no per-kind enumeration strategy any more (issue #484). A harness
+ * There is no per-kind enumeration strategy any more (#484). A harness
  * reports its models the same way it reports anything else — over ACP: an
  * harness advertises its model selector as a `configOptions` entry on the
  * `session/new` result. So enumeration is one generic ACP probe (launch →
@@ -10,9 +10,8 @@
  * never hardcode a catalog or fetch an external one.
  *
  * The probe is opt-in per kind (`AcpBackendSpec.probeModels`): the two
- * adapter-backed kinds that once had bespoke enumerators — codex (was
- * `codex app-server model/list`) and claude-code (was the Agent SDK's
- * `supportedModels()`) — opt in. Native ACP kinds stay on "Gateway default"
+ * adapter-backed kinds, codex and claude-code, opt in. Native ACP kinds stay
+ * on "Gateway default"
  * and pin a model per-session at turn time instead.
  *
  * This file is just the switchboard onto the registry hook. Everything is

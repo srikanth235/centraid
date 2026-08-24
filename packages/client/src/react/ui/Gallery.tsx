@@ -66,9 +66,8 @@ function Section({
 
 /**
  * Component gallery — the single preview surface for the local UI library.
- * Rendered both by the in-shell coexistence island (Phase 0 proof) and, once
- * synced, by claude.ai/design (Phase 2). Every primitive is drawn from the
- * real design tokens so the gallery matches the shell exactly.
+ * Every primitive is drawn from the real design tokens so the gallery matches
+ * the shell exactly.
  */
 export default function Gallery(): JSX.Element {
   return (

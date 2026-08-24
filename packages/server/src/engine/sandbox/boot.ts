@@ -7,8 +7,7 @@
  * `./sibling.js` specifier onto its `.ts` source the way the compiled build
  * does.
  * Under `dist/` the `.js` files exist and the plain specifier resolves; running
- * from `src/` it does not, and the runner dies at import — which is exactly how
- * this file came to exist.
+ * from `src/` it does not, and the runner dies at import.
  *
  * So: this module has ZERO relative imports. Runners load it by absolute path,
  * it decides whether the sandbox is compiled, installs a `.js`→`.ts` sibling

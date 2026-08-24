@@ -1,10 +1,9 @@
-// The arithmetic the phone's three Places surfaces share (issue #781).
+// The arithmetic the phone's three Places surfaces share (#781).
 //
-// Places shipped with a tested projection (`place-map.test.ts` owns the
-// pixels, the graticule and the scale bar) and an untested seat: nothing
-// checked which rows become a card, which become a pin, or that the count on
-// a card matches the screen that card opens. Those are this file's claims —
-// the projection's own arithmetic is deliberately NOT restated here.
+// The projection has its own tests (`place-map.test.ts` owns the pixels, the
+// graticule and the scale bar) and its arithmetic is deliberately NOT restated
+// here. This file's claims are the seat's: which rows become a card, which
+// become a pin, and that the count on a card matches the screen it opens.
 //
 // The law worth naming is the third one: `placeCards` and `assetsAtPlace` are
 // two readers of one key, and a card whose detail opens empty is the exact
@@ -466,7 +465,7 @@ describe("what a pin says and how big it is", () => {
   });
 });
 
-// THE NO-LOCATION BUCKET (issue #816). The photographs nobody told where they
+// THE NO-LOCATION BUCKET (#816). The photographs nobody told where they
 // were taken were in the library and on no shelf: every card on Places stands
 // at a coordinate, so the whole set was reachable only by scrolling the
 // timeline. It is a card at the end of the shelf now, and the same reserved key

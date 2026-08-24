@@ -1,5 +1,5 @@
 // The kebab menu and the shared "Move to…" tree — plain DOM popovers built
-// with kit's h()/popItem(), exactly as logic.ts always built them inline.
+// with kit's h()/popItem().
 // Split out purely to keep logic.ts under the file-size cap (same factory
 // pattern as versions.ts): closes over data.folders (read-only) plus the
 // document-write functions logic.ts already owns, passed in rather than
@@ -98,7 +98,7 @@ export function createPopovers({
    * TWO OF THE HANDOFF'S ENTRIES ARE NOT DRAWN, both because they would be
    * dead:
    *   * `Place in a space` — placement is not how Docs shares. A document is
-   *     shared as a STANDING GRANT (issue #825) from the two surfaces that are
+   *     shared as a STANDING GRANT (#825) from the two surfaces that are
    *     already about one document: the details rail and the stage. A third
    *     entry point on the row menu would be a third door to one decision.
    *   * `Delete forever` — THE PLATFORM HAS NO DESTROY VERB (frame.tsx's

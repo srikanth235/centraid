@@ -1,4 +1,4 @@
-// The ANCHORED MENU — the second layer iOS has and this app did not (#712).
+// The ANCHORED MENU — the second layer iOS has (#712).
 //
 // iOS Photos' header chips do not open sheets. They open a floating card
 // hanging off the chip itself: the control stays where it is, the card appears
@@ -10,11 +10,11 @@
 // WHY THIS LIVES IN THE KIT. The anatomy is the frame's, not any one app's:
 // the same plate the band draws (`kit/band-surface.ts` — opaque `bgElev`
 // ground, 1pt `lineStrong` edge, 12 radius), the same 12pt inset off the
-// stage. An app-local copy would be the exact drift `bandSurfaceStyle` was
-// extracted to make unrepresentable.
+// stage. An app-local copy would be the exact drift `bandSurfaceStyle` exists
+// to make unrepresentable.
 //
 // OPAQUE, NEVER GLASS. iOS' own menu is a blur plate; this app's is paper.
-// The argument is `PhotosBand.tsx`'s header, unchanged: a card that floats
+// The argument is `PhotosBand.tsx`'s header: a card that floats
 // over unpredictable photographs cannot let label contrast, the checkmark and
 // the disabled ink depend on what the member photographed, and
 // `prefers-reduced-transparency` would need the opaque plate anyway — so glass

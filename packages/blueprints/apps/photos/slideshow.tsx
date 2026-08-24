@@ -1,6 +1,6 @@
 import type { ReactNode } from "react";
 
-// Full-screen slideshow (issue #352 phase 3): its own tiny render
+// Full-screen slideshow (#352): its own tiny render
 // orchestrator, same shape as picker.tsx/toolbar.jsx — a small private slice
 // of state (whether it's open) plus one root. Read-only viewing, so unlike
 // the lightbox it never needs to re-render on refresh(): once open, it owns

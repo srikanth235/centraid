@@ -6,7 +6,7 @@
 // `@font-face` emitter — lives in `./font-faces`, and that is what a renderer,
 // a preload, or an app surface imports. Electron's sandboxed preload cannot
 // resolve `node:path` at all, and a preload that fails to load takes the whole
-// desktop app with it (issue #707).
+// desktop app with it (#707).
 //
 // The fonts are the one part of this package that is SERVED rather than
 // imported: what the rest of the repo needs from them is a PATH, not a module

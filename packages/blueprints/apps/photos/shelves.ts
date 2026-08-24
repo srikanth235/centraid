@@ -11,9 +11,9 @@ import { ALBUMS, DUPLICATES, FAVORITES, TRASH } from "./constants.ts";
 
 export type { Shelf, ShelfId } from "../_shared/shelves.ts";
 
-// The shelves that had no built-in id before v4. Same one-slot trick as the
-// existing built-ins: the prefix can never collide with a collection id,
-// which is an opaque token and never carries a colon.
+// Built-in shelf ids. Same one-slot trick as the other built-ins: the prefix
+// can never collide with a collection id, which is an opaque token and never
+// carries a colon.
 export const PLACES = "built-in:places";
 export const PEOPLE = "built-in:people";
 /** Search is a shelf (§9), reached from the band and the frame — not a field

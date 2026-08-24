@@ -38,7 +38,7 @@ export interface RevocationResult {
  * invocations under it are dropped, and once its last grant dies the app's
  * ext band is RETAINED — the data stays in the vault (it is the owner's),
  * app access is gone, and the owner purges explicitly when they mean it
- * (issue #286 phase 2: uninstall = retain + purge policy) — while the
+ * (#286 phase 2: uninstall = retain + purge policy) — while the
  * model, history and receipts remain (the §11 success test).
  */
 export function revokeGrantCascade(
@@ -65,7 +65,7 @@ export function revokeGrantCascade(
       `UPDATE consent_access_grant SET status='revoked', revoked_at=? WHERE grant_id=?`
     )
     .run(now, grantId);
-  // The owner's "no" outlives the grant row (issue #308 A4): tombstone each
+  // The owner's "no" outlives the grant row (#308): tombstone each
   // revoked scope triple so the install-grant top-up can never silently
   // re-mint it on the next mount/sync/publish. Uninstall clears these — a
   // reinstall is a fresh consent.
@@ -164,13 +164,13 @@ export interface SweepResult {
   grantsExpired: number;
   contentPurged: number;
   assetsPurged: number;
-  /** Trashed notes whose grace window lapsed (issue #308 A6). */
+  /** Trashed notes whose grace window lapsed (#308). */
   notesPurged: number;
-  /** Trashed documents whose grace window lapsed (issue #352). */
+  /** Trashed documents whose grace window lapsed (#352). */
   documentsPurged: number;
   /**
    * Lapsed trashed rows of the domain content tables that carry the uniform
-   * soft-delete pair (People + Tally, issue #441 A4), purged table-driven with
+   * soft-delete pair (People + Tally, #441 A4), purged table-driven with
    * their polymorphic references cleaned.
    */
   domainRowsPurged: number;
@@ -178,7 +178,7 @@ export interface SweepResult {
   /**
    * Retention policies the pass refused to serve, with the reason each —
    * standing exclusions (media assets ride the trash lifecycle) and missing
-   * timestamp columns both land here rather than in a silent skip (#712 P11).
+   * timestamp columns both land here rather than in a silent skip (#712).
    */
   retentionRefused: RetentionRefusal[];
   /**
@@ -192,7 +192,7 @@ export interface SweepResult {
    * derived copy that is not itself lapsed still names them as its source.
    */
   assetsBlockedByLineage: string[];
-  /** CAS bytes reclaimed with their purged content items (issue #296). */
+  /** CAS bytes reclaimed with their purged content items (#296). */
   blobsReclaimed: number;
   /** Unclaimed blob_staging rows past the TTL, dropped with their bytes. */
   stagingExpired: number;
@@ -212,7 +212,7 @@ export interface RetentionRefusal {
  * `media_face_region.asset_id`, both without `ON DELETE`), and asset purging
  * already has a lifecycle (`purge_at` + the lineage-aware sweep above) — a
  * blanket `DELETE` here would either violate those FKs or, with the missing
- * column, run forever and silently retain nothing (issue #712 P11). Adding
+ * column, run forever and silently retain nothing (#712). Adding
  * `created_at` is a platform decision to be taken deliberately (PX4), at
  * which point the entry below is removed in the same change.
  */
@@ -229,7 +229,7 @@ const RETENTION_REFUSALS: ReadonlyMap<string, string> = new Map([
  * rule_json.timestamp_column (default created_at) and must exist. Either way
  * a policy this pass does not serve is a RECORDED refusal, never a silent
  * `continue` — a duty that runs and silently retains nothing is the failure
- * mode this shape exists to prevent (issue #712 P11).
+ * mode this shape exists to prevent (#712).
  */
 function enforceRetention(
   db: VaultDb,
@@ -396,7 +396,7 @@ function ownedByAnotherLiveDocument(
 
 /**
  * True when some OTHER asset still names this one as its `source_asset_id` —
- * the editor's edit-lineage self-FK (issue #711 decision S8).
+ * the editor's edit-lineage self-FK (#711 decision S8).
  *
  * Trashed derived copies count exactly as much as live ones: `source_asset_id`
  * is a real FK with no `ON DELETE` clause and `PRAGMA foreign_keys` is ON
@@ -428,7 +428,7 @@ function deleteAssetRow(
   assetId: string
 ): void {
   writeProvenance(db.journal, owner, "media.asset", assetId, "sweep.purge");
-  // A face region is itself a polymorphic TARGET now (issue #724 W5): its
+  // A face region is itself a polymorphic TARGET now (#724): its
   // vector lives in enrich_embedding and its producer in enrich_derivation,
   // both keyed `media.face_region`. Deleting the region without sweeping those
   // leaves an orphan FACE vector — the one leftover that could match a new
@@ -477,7 +477,7 @@ function purgeContentItem(
     .prepare("SELECT asset_id FROM media_asset WHERE content_id = ?")
     .get(contentId) as { asset_id: string } | undefined;
   if (asset) {
-    // Edit lineage (issue #711 S8). Another asset names this one as its
+    // Edit lineage (#711). Another asset names this one as its
     // source, and both ways through are dishonest: NULLing the child's column
     // forges "camera original" (the schema says NULL means exactly that), and
     // cascading destroys a photograph the owner never trashed. The
@@ -509,7 +509,7 @@ function purgeContentItem(
       "UPDATE core_collection SET cover_content_id = NULL WHERE cover_content_id = ?"
     )
     .run(contentId);
-  // Derivatives go with their parent (issue #296): registry rows first (the
+  // Derivatives go with their parent (#296): registry rows first (the
   // FK), then their CAS bytes, then the original's bytes. sha256 is UNIQUE
   // on content items, so nothing else can claim the original — remote
   // replicas fall to the reconciliation sweep by design.
@@ -527,7 +527,7 @@ function purgeContentItem(
   db.vault
     .prepare("DELETE FROM core_content_item WHERE content_id = ?")
     .run(contentId);
-  // Bytes go only when their FINAL claim just disappeared (issue #750).
+  // Bytes go only when their FINAL claim just disappeared (#750).
   // sha256 is UNIQUE on content items, but NOT on derivatives: two rows'
   // thumbs may share one CAS entry, so re-derive the live set AFTER the row
   // deletes above and skip any sha another row still claims. A skipped copy
@@ -544,7 +544,7 @@ function purgeContentItem(
     db.blobs.deleteLocalSync(originalSha);
     reclaimed += 1;
   }
-  // Every polymorphic pointer at the content item (issue #441 A1): end-date
+  // Every polymorphic pointer at the content item (#441): end-date
   // links, drop tags/entries/annotations/attachments/embeddings/sync-map/seed
   // rows. cover_content_id above is a plain FK, not a poly ref.
   cleanupPolyRefs(db.vault, now, "core.content_item", contentId);
@@ -553,7 +553,7 @@ function purgeContentItem(
 
 /**
  * The domain content tables that carry the uniform soft-delete pair but have
- * no bespoke purge pass of their own (People + Tally, issue #441 A4). The
+ * no bespoke purge pass of their own (People + Tally, #441 A4). The
  * sweep walks this list, purges every row whose grace window has lapsed, and
  * cleans each row's polymorphic references via the A1 registry — so the trash
  * lifecycle is complete BY CONSTRUCTION for these tables and the next
@@ -592,7 +592,7 @@ const DOMAIN_TRASH_TABLES: readonly {
 ];
 
 /**
- * Purge lapsed trashed rows of the domain content tables (issue #441 A4).
+ * Purge lapsed trashed rows of the domain content tables (#441).
  * Each purged row gets a `sweep.purge` provenance stamp and a full
  * `cleanupPolyRefs` pass so nothing points at a row that no longer exists.
  * Returns the total rows purged across all tables.
@@ -618,7 +618,7 @@ function purgeDomainTrash(db: VaultDb, owner: Identity, now: string): number {
 }
 
 /**
- * Purge lapsed trashed media assets, DERIVED COPIES FIRST (issue #711 S8).
+ * Purge lapsed trashed media assets, DERIVED COPIES FIRST (#711).
  *
  * `source_asset_id` is a self-FK, so deleting a photograph while an edited
  * copy still points at it raises FOREIGN KEY — and inside a sweep that is not
@@ -678,7 +678,7 @@ function purgeLapsedAssets(
 export function sweepLifecycle(db: VaultDb, owner: Identity): SweepResult {
   const now = nowIso();
   let blobsReclaimed = 0;
-  // Content items this pass declined over edit lineage (issue #711 S8), from
+  // Content items this pass declined over edit lineage (#711), from
   // both the document-chain purge and the generic purge below.
   const contentBlockedByLineage: string[] = [];
   const grants = db.vault
@@ -694,11 +694,11 @@ export function sweepLifecycle(db: VaultDb, owner: Identity): SweepResult {
     .all(now) as { content_id: string }[];
   // Purges are the one hard delete outside the command pipeline, so the
   // polymorphic-cleanup duty runs here too: links onto a purged row end-date
-  // (issue #272), tags/entries/annotations/attachments/embeddings/sync-map/seed
+  // (#272), tags/entries/annotations/attachments/embeddings/sync-map/seed
   // rows drop (issues #274, #441 A1). The registry in schema/poly-refs.ts is
   // the single, complete enumeration — cleanupPolyRefs walks it so no purge
   // path re-derives a partial list by hand.
-  // Lapsed trashed notes purge FIRST (issue #308 A6): the note row rents its
+  // Lapsed trashed notes purge FIRST (#308): the note row rents its
   // body content (NOT NULL FK), so the row and its edges must go before the
   // content purge below can delete the body's bytes in the same pass.
   const lapsedNotes = db.vault
@@ -719,7 +719,7 @@ export function sweepLifecycle(db: VaultDb, owner: Identity): SweepResult {
       .run(n.note_id);
     cleanupPolyRefs(db.vault, now, "knowledge.note", n.note_id);
   }
-  // Lapsed trashed documents purge next (issue #352), same reason as notes
+  // Lapsed trashed documents purge next (#352), same reason as notes
   // above: the wrapper rents its current content (NOT NULL FK), so the row
   // must go before any of its content items can be deleted. Retention
   // stance: superseded bodies are durable while the document lives — only
@@ -767,7 +767,7 @@ export function sweepLifecycle(db: VaultDb, owner: Identity): SweepResult {
     if (purge.blockedByAssetId === null) contentPurged += 1;
     else contentBlockedByLineage.push(row.content_id);
   }
-  // The standard soft-delete pair on domain rows (issue #274): a trashed
+  // The standard soft-delete pair on domain rows (#274): a trashed
   // asset whose own grace window lapsed purges even while its bytes stay
   // rented elsewhere (an attachment, an avatar) — asset meaning and byte
   // custody have independent lifecycles. Assets already removed alongside
@@ -779,10 +779,10 @@ export function sweepLifecycle(db: VaultDb, owner: Identity): SweepResult {
   // leaving the established content → asset → domain sequence alone.
   const lapsedAssets = purgeLapsedAssets(db, owner, now);
   // Lapsed trashed People/Tally content rows purge table-driven, each with its
-  // polymorphic references cleaned (issue #441 A4). Runs after the content /
+  // polymorphic references cleaned (#441). Runs after the content /
   // asset passes above so a row that referenced now-purged bytes is judged last.
   const domainRowsPurged = purgeDomainTrash(db, owner, now);
-  // Heal the rebuildable projection social_thread.last_message_at (issue #441
+  // Heal the rebuildable projection social_thread.last_message_at (#441
   // A3), the blob_custody_state pattern: recompute it wholesale from the
   // messages so import corrections or message purges above can never leave it
   // drifted. Threads with no messages fall back to NULL.
@@ -794,7 +794,7 @@ export function sweepLifecycle(db: VaultDb, owner: Identity): SweepResult {
     .run();
   const retention = enforceRetention(db, now);
   const retentionDeleted = retention.deleted;
-  // The staging TTL (issue #296 §3): bytes nothing claimed leave with their
+  // The staging TTL (#296): bytes nothing claimed leave with their
   // rows; a batch hold (import review in progress) pins past the TTL.
   const staging = sweepBlobStaging(db, { now });
   const receiptId = writeReceipt(db.journal, {
@@ -814,7 +814,7 @@ export function sweepLifecycle(db: VaultDb, owner: Identity): SweepResult {
       domainRowsPurged,
       retentionDeleted,
       retentionRefused: retention.refused,
-      // What the pass declined rather than died on (issue #711 S8). Empty on
+      // What the pass declined rather than died on (#711). Empty on
       // every ordinary sweep; a non-empty list is the receipt saying which
       // rows outlived their grace window and why.
       contentBlockedByLineage,

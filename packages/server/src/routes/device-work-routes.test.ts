@@ -45,7 +45,7 @@ describe("device-work-routes", () => {
     derivativeText: (variant: string) => string | null;
   }> {
     const capability = options.capability ?? "poster";
-    // The two rungs the DEVICE lane still leases after issue #724's split: a
+    // The two rungs the DEVICE lane still leases after #724's split: a
     // poster frame off a video, and text out of a PDF. Both are format
     // conversion, which is why they stayed on the device.
     const variant = capability === "poster" ? "poster" : "text";
@@ -262,7 +262,7 @@ describe("device-work-routes", () => {
     const leased = await post(f.base, "lease", f.deviceKey, {
       vaultId: f.vaultId,
       // `transcript` is asked for and ignored: it left the device lane in
-      // issue #724, so a client that still advertises it leases only pdfText.
+      // #724, so a client that still advertises it leases only pdfText.
       capabilities: ["pdfText", "transcript"],
       charging: true,
       unmetered: true,

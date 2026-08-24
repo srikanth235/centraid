@@ -2,7 +2,7 @@ import fss from "node:fs";
 // governance: allow-repo-hygiene file-size-limit (#408) the wal-format behavior suite — key codecs, sealing, frame math against real WALs, and the replay planner share one fixture vocabulary; sharding would duplicate it per file
 /*
  * WAL segment format tests (FORMAT.md § WAL segments, § Encryption — /1,
- * issue #408). Everything here is restore-correctness-critical: key codec
+ * #408). Everything here is restore-correctness-critical: key codec
  * (restore planning reads ONLY keys), deterministic sealing (crash-retry
  * nonce safety), commit-boundary math against a REAL SQLite WAL (no
  * synthetic frames — the shipper reads real files), and replay planning

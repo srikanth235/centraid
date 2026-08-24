@@ -1,8 +1,8 @@
-// Blob egress resolution (issue #296 §5). Deduped content is polymorphically
+// Blob egress resolution (#296). Deduped content is polymorphically
 // shared — the same bytes can back a note attachment, a photo and an invoice
 // — so byte-read authorization is DERIVED, never granted: content X serves
 // iff some edge in the reference registry links X to a subject row, i.e. the
-// owner put these bytes somewhere in their model (issue #272's
+// owner put these bytes somewhere in their model (#272's
 // both-endpoints rule extended to content items). Trashed edges still count
 // (the Photos/Docs trash views render what they hold until the purge sweep
 // actually reclaims the bytes); a fully unreferenced-but-unpurged item is in
@@ -153,7 +153,7 @@ export interface DerivativeRef {
 }
 
 /**
- * Chunk size for the batched derivative resolve (issue #405 §2). SQLite's
+ * Chunk size for the batched derivative resolve (#405). SQLite's
  * default `SQLITE_MAX_VARIABLE_NUMBER` is comfortably above this, but a
  * bounded IN list keeps the prepared statement small and the plan stable
  * across arbitrarily large id sets.
@@ -162,7 +162,7 @@ const DERIVATIVE_IN_CHUNK = 500;
 
 /**
  * Resolve one binary rung (`thumb` or `preview`) for MANY content ids in a
- * single pass (issue #405 §2: "tinies for these N content ids in one pass").
+ * single pass (#405 §2: "tinies for these N content ids in one pass").
  * The browse grid (and #405's later previews-first restore wave) paints N
  * tiles at once — asking `resolveServableBlob` per id would be N statements
  * and N reachability derivations; this is one indexed sweep over
@@ -263,7 +263,7 @@ function vaultWriteKey(vault: DatabaseSync): string {
 }
 
 /**
- * `liveBlobShas`, computed once per write (issue #659 L5).
+ * `liveBlobShas`, computed once per write (#659).
  *
  * The live set is three full scans of the content tables, and the hourly CAS
  * mark/sweep, the backup reconciliation tick, and the remote sweep each

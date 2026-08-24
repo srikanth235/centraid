@@ -1,5 +1,5 @@
 /*
- * Device credential custody (issue #555).
+ * Device credential custody (#555).
  *
  * A desktop connection has one secret: this device's own iroh key. The
  * non-secret connection row lives in connections.json; all connection keys

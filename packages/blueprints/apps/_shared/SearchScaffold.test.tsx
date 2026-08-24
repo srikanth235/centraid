@@ -1,4 +1,4 @@
-// The shared search scaffold's rendering half (issue #712 S1) — a generic
+// The shared search scaffold's rendering half (#712) — a generic
 // smoke test with invented copy, independent of any one app's strings. The
 // exact-copy assertions for a real consumer live with that consumer
 // (`src/photos-shelves-v4.test.ts` for Photos; this file only proves the

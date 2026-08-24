@@ -1,5 +1,5 @@
 /**
- * Webhook trigger dispatch (issue #96).
+ * Webhook trigger dispatch (#96).
  *
  * A `webhook` trigger fires an automation on an inbound HTTP POST. The core
  * gateway (`packages/server/src/serve/build-gateway.ts`) mounts a listener
@@ -93,7 +93,7 @@ export interface ProvisionedWebhook {
   readonly dir: string;
   /** Automation id (the directory basename). */
   readonly automationId: string;
-  /** Owning app id — every automation is app-owned (issue #98). */
+  /** Owning app id — every automation is app-owned (#98). */
   readonly ownerApp: string;
   /** Minted webhook route slug — the path segment under the prefix. */
   readonly webhookId: string;
@@ -134,7 +134,7 @@ export async function provisionPendingWebhookAt(
 
 /**
  * Provision every pending webhook across an app's owned automations at
- * `<appDir>/automations/<id>/` (issue #98). A missing `automations/`
+ * `<appDir>/automations/<id>/` (#98). A missing `automations/`
  * subdir contributes nothing. Each entry's `ownerApp` is the app id.
  */
 export async function provisionAppPendingWebhooks(
@@ -166,7 +166,7 @@ export async function provisionAppPendingWebhooks(
   );
 }
 
-/** A single draft file in a git-store file map (issue #141). */
+/** A single draft file in a git-store file map (#141). */
 export interface WebhookFileMapEntry {
   path: string;
   content: string;
@@ -191,7 +191,7 @@ const AUTOMATION_MANIFEST_RE =
 
 /**
  * Filesystem-free variant of {@link provisionAppPendingWebhooks} for the
- * git-store/HTTP path (issue #141). Scans a draft file map for pending
+ * git-store/HTTP path (#141). Scans a draft file map for pending
  * webhook triggers, mints id + secret for each, rewrites the trigger to
  * its provisioned form, and returns the updated map plus the minted
  * secrets (to be shown once). Secrets are minted here (crypto) and only
@@ -257,7 +257,7 @@ export interface RotatedWebhookInFiles {
 
 /**
  * Rotate a specific automation's PROVISIONED webhook secret within a draft
- * file map (issue #141 wire path, webhook-secret-rotation follow-up). The
+ * file map (#141 wire path, webhook-secret-rotation follow-up). The
  * plaintext secret is shown to the owner exactly once at mint time
  * (create/clone) — if they miss that one-time reveal the automation is
  * otherwise permanently uncallable, since only the SHA-256 hash persists.

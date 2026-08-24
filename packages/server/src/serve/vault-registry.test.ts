@@ -577,7 +577,7 @@ describe("vault-registry scenarios", () => {
     // Clone the mounted vault's files into a second directory — same
     // vaultId, so it can never cleanly mount alongside the original. The
     // `-wal` siblings are part of the clone: with `wal_autocheckpoint = 0`
-    // (issue #408 — only the WAL shipper checkpoints), a live vault's recent
+    // (#408 — only the WAL shipper checkpoints), a live vault's recent
     // writes live in the WAL until the next shipper checkpoint, so a bare
     // `vault.db` copy would be an EMPTY database that bootstraps fresh under
     // a new id instead of colliding.

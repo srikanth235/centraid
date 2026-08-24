@@ -1,6 +1,6 @@
 import { statSync } from "node:fs";
 // Share-by-placement lifecycle: failure atomicity, unshare, and the GC
-// interplay between vaults that hardlink the same inode (issue #599 d11).
+// interplay between vaults that hardlink the same inode (#599 d11).
 
 import { describe, afterEach, expect, test } from "vitest";
 

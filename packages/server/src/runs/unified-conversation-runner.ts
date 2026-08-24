@@ -1,5 +1,5 @@
 /*
- * Unified chat runner (issue #141, Phase 3 — "the big one").
+ * Unified chat runner (#141, Phase 3 — "the big one").
  *
  * One chat surface, both jobs. "Builder chat" (tweak the app's code) and
  * "app chat" (operate its data) are one call site on the same
@@ -21,23 +21,23 @@
  *
  * Code edits STAGE in the draft worktree; ext-table schema changes are
  * DECLARED there (`app.json#ext.tables`) and mirrored into the vault's
- * draft band each turn, so preview data ops stay scratch (issue #286
+ * draft band each turn, so preview data ops stay scratch (#286
  * phase 2). The user clicks Publish to flip the live version + apply the
  * declared DDL diff to the live band — explicit-publish holds. Webhook
  * secrets are minted as a post-turn step (the harness can't generate
  * crypto-random credentials) and surfaced once via a `webhooks` stream
  * event.
  *
- * Since issue #147 (Concern 1) this is a thin config over
+ * Since #147 (Concern 1) this is a thin config over
  * `makeConversationRunnerCore` (`@centraid/server/engine`): the shared per-turn
  * spine lives there; this file supplies only the builder seams — draft-worktree cwd,
  * the authoring prompt (delegated to `src/skills/`), and post-turn
  * webhook minting.
  *
- * Replaces the data-only `makeConversationRunner` injection in `serve.ts` whenever a
- * git store is active (the local embedded gateway and the standalone daemon
- * both have one). Without a store there's no draft worktree to edit, so the
- * host falls back to the data-only `makeConversationRunner`.
+ * Injected instead of the data-only `makeConversationRunner` whenever a git
+ * store is active (the local embedded gateway and the standalone daemon both
+ * have one). Without a store there's no draft worktree to edit, so the host
+ * falls back to the data-only `makeConversationRunner`.
  */
 
 import { promises as fs } from "node:fs";
@@ -94,19 +94,19 @@ export interface UnifiedConversationRunnerOptions {
    *  URLs after minting. A thunk because the ephemeral port is only known
    *  after the server starts — and a turn only ever runs post-start. */
   publicBaseUrl: () => string;
-  /** The vault plane's ext-band operations (issue #286 phase 2). When set,
+  /** The vault plane's ext-band operations (#286). When set,
    *  each turn keeps the app's DRAFT ext band in step with the draft
    *  manifest (first access seeds it from live rows) so the harness's
    *  preview operates on prod-shaped data without touching live. */
   ext?: ExtBandOps;
-  /** The builder's vault read tool (issue #286 phase 2): the same
+  /** The builder's vault read tool (#286): the same
    *  owner-side `vault_sql` runner the assistant uses — looking at real
    *  data while building IS the owner asking their own vault. */
   vaultSql?: () => VaultSqlRunner;
   /** The builder's typed-write tool — rides the `_assistant` agent, so
    *  high-risk commands park exactly like assistant/ask turns. */
   vaultInvoke?: () => VaultInvokeRunner;
-  /** Document-text access (issue #299) — same owner-side runner as the assistant. */
+  /** Document-text access (#299) — same owner-side runner as the assistant. */
   vaultContent?: () => VaultContentRunner;
   /** Session id for an app's shared draft worktree. Defaults to a
    *  host-neutral `chat-<appId>` scheme. Hosts that share the draft with
@@ -207,8 +207,8 @@ export function makeUnifiedConversationRunner(
     providerEgressConsent: opts.providerEgressConsent,
     ...(opts.onFailover ? { onFailover: opts.onFailover } : {}),
 
-    // cwd IS the draft session worktree (issue #144's draft-code framing
-    // survives; the branched data.sqlite did not — #286 phase 2).
+    // cwd IS the draft session worktree (#144's draft-code framing;
+    // there is no branched data.sqlite — #286 phase 2).
     cwdIsDraftWorktree: (input) =>
       input.workspaceKind === undefined || input.workspaceKind === "draft",
 

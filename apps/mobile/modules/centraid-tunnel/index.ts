@@ -1,4 +1,4 @@
-// JS surface for the CentraidTunnel Expo local module (issue #263).
+// JS surface for the CentraidTunnel Expo local module (#263).
 //
 // The native side owns an iroh endpoint (device identity = an ed25519 secret
 // key supplied from JS as base64), handles one-time pairing with the desktop

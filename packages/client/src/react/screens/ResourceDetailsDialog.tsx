@@ -11,7 +11,7 @@ import ResourceCardDetails from "./ResourceCardDetails.js";
 
 import styles from "./ResourceDialogs.module.css";
 
-// "How we sized this" dialog (issue #528 follow-up): the L2 host facts +
+// "How we sized this" dialog (#528 follow-up): the L2 host facts +
 // resolved knobs (ResourceCardDetails, embedded) and the L3 owner-tunable knobs
 // (ResourceAdvancedKnobs), lifted out of the card body into a focused sheet so
 // the card itself stays a compact choose-and-glance surface. Esc / backdrop /

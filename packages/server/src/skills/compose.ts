@@ -6,11 +6,9 @@
  * Anthropic Agent Skill format, so both agent backends can discover and
  * progressively disclose them from disk.
  *
- * `composeSkills()` is the phase-1 delivery: it concatenates the named skills'
- * bodies into one string the gateway appends to a turn's instructions. This is
- * byte-equivalent to the old `CENTRAID_APPEND_PROMPT` / `AUTOMATION_APPEND_PROMPT`
- * constants, just sourced from editable markdown. It also doubles as the
- * safety-valve path once native progressive disclosure is wired on each backend.
+ * `composeSkills()` concatenates the named skills' bodies into one string the
+ * gateway appends to a turn's instructions. It also doubles as the safety-valve
+ * path once native progressive disclosure is wired on each backend.
  */
 
 import { readFileSync, readdirSync, statSync } from "node:fs";

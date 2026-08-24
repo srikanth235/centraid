@@ -1,7 +1,7 @@
 // Attachments — the "shared pattern across apps", actually shared.
 //
 // Small files travel inline as data: URIs through the command JSON; larger
-// ones stream to the vault's blob CAS and attach by sha (issue #296). The
+// ones stream to the vault's blob CAS and attach by sha (#296). The
 // BYTES leave through the host (`stageBlob`/`stageDerivative`): the app
 // document is not the gateway origin — the installable web PWA rides the iroh
 // tunnel and desktop runs from `file://` — so a relative `fetch` would resolve
@@ -66,7 +66,7 @@ export function isPendingOffsite(
  * can preflight it and ship zero bytes when another device already
  * established custody; the gateway still hashes and verifies authoritatively.
  *
- * `scope` (issue #599) names WHICH mounted scope the bytes land in — a
+ * `scope` (#599) names WHICH mounted scope the bytes land in — a
  * multi-scope app adding to a shared audience must not stage into the
  * member's own CAS.
  */
@@ -80,7 +80,7 @@ export async function stageFileBytes(
   return stage(file, extra, options);
 }
 
-/** Submit a typed derivative contribution (issue #299 enrichers). */
+/** Submit a typed derivative contribution (#299 enrichers). */
 export async function stageDerivative(
   parentSha: string,
   variant: string,

@@ -1,4 +1,4 @@
-// The Home springboard's tile model (issue #708, section A).
+// The Home springboard's tile model (#708, section A).
 //
 // The Binding Layer's Home is not an icon launcher. Every tile carries the
 // INVARIANT header — app mark, app name at the UI role, count in the numeric

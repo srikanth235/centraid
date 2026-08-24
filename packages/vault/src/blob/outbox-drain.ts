@@ -47,7 +47,7 @@ export interface OutboxDrainDeps {
   remote: () => RemoteTier | null;
   onReplicated: (sha256: string) => void;
   settlementAllowed?: () => boolean;
-  /** The store class a sha's bytes belong in (issue #425 Wave 2). Default cas. */
+  /** The store class a sha's bytes belong in (#425). Default cas. */
   desiredStore?: (sha256: string) => ReplicaStore;
 }
 
@@ -308,7 +308,7 @@ export async function drainOutboxRow(
   const remote = deps.remote();
   if (!remote)
     throw new Error("remote CAS is not currently reachable/configured");
-  // Route by the sha's store class (issue #425 Wave 2): a binary derivative
+  // Route by the sha's store class (#425): a binary derivative
   // lands under the derived prefix when the tier grants one, else cas — the
   // resolver caps size + degrades gracefully, so `store`/`storeClass` always
   // agree with where the bytes go, and the preflight HEADs the same store.
@@ -319,7 +319,7 @@ export async function drainOutboxRow(
     row.byte_size
   );
   if (await confirmFinal(deps, remote, row, store, storeClass)) return; // preflight/dedupe
-  // Direct-to-cold heuristic (issue #425 Wave 3): a large media original writes
+  // Direct-to-cold heuristic (#425): a large media original writes
   // to STANDARD_IA when the target declares it. Computed once here and threaded
   // to whichever door serves it — both the single-PUT and the multipart path are
   // cas-only, so a derived write never resolves a class (`storageClassFor`

@@ -59,12 +59,11 @@ import {
 } from "./update-watcher.js";
 
 /**
- * Status read for the auto-publish queue (issue #137: there is no
- * queue anymore — every publish is synchronous via PUBLISH IPC). Kept
- * as a stable `CentraidApi` surface (the web host declares the same
- * pair); always returns "not in flight". The `PUBLISH_EVENT` channel is
- * similarly never fired post-#137 — the renderer's onPublishEvent
- * subscription just stays quiet.
+ * Status read for the auto-publish queue. There is no queue — every publish
+ * is synchronous via PUBLISH IPC — so this always returns "not in flight";
+ * it is kept as a stable `CentraidApi` surface (the web host declares the
+ * same pair). The `PUBLISH_EVENT` channel is never fired either, so the
+ * renderer's `onPublishEvent` subscription just stays quiet.
  */
 type PublishStatus = {
   inFlight: boolean;
@@ -103,7 +102,7 @@ export function registerIpcHandlers(): void {
     await refreshAuthInjector();
   };
 
-  // Vault switch is lighter than a gateway swap (issue #289): the base URL +
+  // Vault switch is lighter than a gateway swap (#289): the base URL +
   // token are unchanged, only the addressed vault. Drop the auth caches so
   // every client re-reads the new `x-centraid-vault` header, and refresh the
   // auth injector — but KEEP the app-editing sessions. They are keyed by
@@ -126,10 +125,9 @@ export function registerIpcHandlers(): void {
   };
 
   // ─── Settings ───────
-  // The bearer token reaches the renderer only through `getGatewayAuth()`
-  // (the single bridge crossing post thin-client pivot), so the broad
-  // settings payload no longer carries `gatewayToken` — nothing in the
-  // renderer reads it off `getSettings()`.
+  // The bearer token reaches the renderer only through `getGatewayAuth()` —
+  // the single bridge crossing — so the broad settings payload must not carry
+  // `gatewayToken`, and nothing in the renderer reads it off `getSettings()`.
   ipcMain.handle(Channel.SETTINGS_GET, async () => {
     const { gatewayToken: _gatewayToken, ...rest } = await loadSettings();
     return rest;
@@ -138,14 +136,14 @@ export function registerIpcHandlers(): void {
     Channel.SETTINGS_SAVE,
     async (_e, patch: Partial<DesktopSettings>) => {
       const next = await saveSettings(patch);
-      // Settings can no longer flip gateway URL/token directly (those
-      // live in the gateway store), but the active gateway pointer can
-      // change through here — invalidate caches the same way.
+      // Settings cannot flip gateway URL/token directly (those live in the
+      // gateway store), but the active gateway pointer can change through
+      // here — invalidate caches the same way.
       await invalidateGatewayCaches();
       // Alert-threshold/toggle changes ride this surface too — re-broadcast
       // the runtime snapshot now so the Gateway page reflects them instantly.
       nudgeGatewayMonitor();
-      // launchAtLogin (issue #351) rides this same generic surface — apply it
+      // launchAtLogin rides this same generic surface — apply it
       // to the OS immediately rather than waiting for next launch.
       if ("launchAtLogin" in patch) applyLaunchAtLogin(next.launchAtLogin);
       return next;
@@ -250,7 +248,7 @@ export function registerIpcHandlers(): void {
         next.activeGatewayKind === "local" ? next.activeGatewayId : undefined
       );
       // Tear down iroh proxies for every gateway but the new active one
-      // (issue #289) — a dormant QUIC dialer per switch would accumulate.
+      // (#289) — a dormant QUIC dialer per switch would accumulate.
       const { closeAllIrohDialersExcept } = await import("./iroh-dialer.js");
       await closeAllIrohDialersExcept(
         next.activeGatewayKind === "remote" ? next.activeGatewayId : undefined
@@ -264,7 +262,7 @@ export function registerIpcHandlers(): void {
     }
   );
 
-  // Redeem a pairing ticket (issue #376): decode + dial (iroh) or POST
+  // Redeem a pairing ticket (#376): decode + dial (iroh) or POST
   // (http), add-or-reuse the gateway profile, and flip BOTH the active
   // gateway and the active vault on it (a pairing ticket enrolls into
   // exactly one vault). On success this runs the same
@@ -303,7 +301,7 @@ export function registerIpcHandlers(): void {
     }
   );
 
-  // Read a gateway's vaults WITHOUT switching to it (issue #376) — the flat
+  // Read a gateway's vaults WITHOUT switching to it (#376) — the flat
   // (gateway, vault) switcher's preview. Pure read; no cache invalidation or
   // broadcast, since nothing about the active gateway/vault changed.
   ipcMain.handle(
@@ -314,7 +312,7 @@ export function registerIpcHandlers(): void {
     ): Promise<ListGatewayVaultsResult> => listGatewayVaults(input.gatewayId)
   );
 
-  // ConnectFlow "handshake ladder" (issue #382): a pure read, no cache
+  // ConnectFlow "handshake ladder" (#382): a pure read, no cache
   // invalidation or broadcast — never throws, every failure is a failed
   // stage in the returned report.
   ipcMain.handle(
@@ -323,7 +321,7 @@ export function registerIpcHandlers(): void {
       testGatewayConnection(input)
   );
 
-  // Vault switch (issue #289): a pure client-side pointer flip on the active
+  // Vault switch (#289): a pure client-side pointer flip on the active
   // gateway. No server call, no re-root, no session teardown — only
   // the auth cache drops so the next request carries the new
   // `x-centraid-vault` header. The renderer keeps its per-(gateway,vault)
@@ -340,8 +338,7 @@ export function registerIpcHandlers(): void {
 
   // Vault create/delete run on the LOCAL gateway only: the desktop is the
   // landlord for its own in-process gateway, and a remote gateway's vault
-  // lifecycle is a host-side admin act. Issue #603 deleted the SSH-routed
-  // remote create, so both verbs share this one guard again.
+  // lifecycle is a host-side admin act.
   const assertLocalAdmin = async (): Promise<string> => {
     const settings = await loadSettings();
     if (settings.activeGatewayKind !== "local") {
@@ -379,12 +376,11 @@ export function registerIpcHandlers(): void {
       }
       const { deleteLocalVault } = await import("./local-gateway.js");
       await deleteLocalVault(gatewayId, input.vaultId, input.name);
-      // Every other vault-mutating handler (create/switch/pair/ssh-connect)
-      // broadcasts VAULT_CHANGED so the renderer's active-vault state
-      // (sidebar head, switcher, Settings -> Vault) re-reads itself. This
-      // one didn't — deleting the ACTIVE vault left the shell showing the
-      // just-deleted vault's name until some unrelated event happened to
-      // refresh it (found via live E2E, issue #382).
+      // Every vault-mutating handler broadcasts VAULT_CHANGED so the
+      // renderer's active-vault state (sidebar head, switcher, Settings ->
+      // Vault) re-reads itself. Without it, deleting the ACTIVE vault leaves
+      // the shell showing the just-deleted vault's name until some unrelated
+      // event happens to refresh it (#382).
       if (next) broadcastVaultChanged(next);
       return { deleted: true };
     }
@@ -404,21 +400,20 @@ export function registerIpcHandlers(): void {
   });
 
   // ─── User identity + prefs (gateway-backed) ───────
-  // USER_ID_GET / USER_PREFS_GET / USER_PREFS_SAVE moved to the renderer's
-  // direct HTTP client (renderer/gateway-client.ts) under the thin-client
-  // pivot.
+  // USER_ID_GET / USER_PREFS_GET / USER_PREFS_SAVE belong to the renderer's
+  // direct HTTP client (renderer/gateway-client.ts), not to IPC.
   //
-  // Harness detection + the custom OpenAI-compatible endpoint config
-  // also left the main process: the gateway is colocated with the harness, so
-  // it owns both the credential probe (`GET /centraid/_harnesses/status`) and
+  // Harness detection + the custom OpenAI-compatible endpoint config belong to
+  // the gateway: it is colocated with the harness, so it owns both the
+  // credential probe (`GET /centraid/_harnesses/status`) and
   // the harness preflight (`GET /centraid/_turn/harness-status`). The renderer
   // reads them over HTTP via `renderer/gateway-client-conversation.ts` — a remote
   // gateway reports its own host's agents.
 
   // ─── Apps (issue #137: git-store backend; #141: thin client) ───────
-  // App lifecycle (delete/update-meta/clone) moved to the renderer's direct
-  // HTTP client (renderer/gateway-client.ts) under the thin-client pivot: the
-  // renderer opens its own editing session per app (same `desktop-<id>` id the
+  // App lifecycle (delete/update-meta/clone) belongs to the renderer's direct
+  // HTTP client (renderer/gateway-client.ts), not to IPC: the renderer opens
+  // its own editing session per app (same `desktop-<id>` id the
   // automation-authoring harness uses, so they share one draft) and the
   // gateway owns clone/meta. APPS_OPEN stays on IPC — a deliberately
   // LOCAL-ONLY reveal-in-Finder that needs the on-disk session worktree.
@@ -426,22 +421,22 @@ export function registerIpcHandlers(): void {
   ipcMain.handle(Channel.APPS_OPEN, async (_e, input: { id: string }) => {
     // Reveal-in-Finder: opens the app's on-disk code — the live published
     // dir when available, else its editing-session worktree. One of the two
-    // deliberately LOCAL-ONLY handlers (issue #141) — a remote gateway
+    // deliberately LOCAL-ONLY handlers (#141) — a remote gateway
     // exposes no worktree over the filesystem. The renderer hides this for
     // remote; `resolveAppRevealDir` (via `assertActiveGatewayLocal`) is the
     // backstop and throws a clear error if it's ever reached remotely.
     const dir = await resolveAppRevealDir(input.id);
     // `shell.openPath` reports failure by RESOLVING with a non-empty error
-    // string (it doesn't reject), so the previous `await` swallowed every
-    // failure and the handler always claimed success. Surface it instead, so
-    // the renderer's catch shows a real toast.
+    // string (it doesn't reject), so a bare `await` swallows every failure and
+    // the handler claims success. Surface the string so the renderer's catch
+    // shows a real toast.
     const openErr = await shell.openPath(dir);
     if (openErr) throw new Error(`Could not open ${dir}: ${openErr}`);
     return { ok: true };
   });
 
-  // APPS_DELETE + APPS_UPDATE_META moved to the renderer's direct
-  // HTTP client (renderer/gateway-client.ts): delete is a `DELETE /_apps/<id>`
+  // APPS_DELETE + APPS_UPDATE_META belong to the renderer's direct HTTP
+  // client (renderer/gateway-client.ts): delete is a `DELETE /_apps/<id>`
   // + session close; meta is a `POST /_apps/<id>/meta` the gateway stages +
   // publishes.
 
@@ -454,9 +449,9 @@ export function registerIpcHandlers(): void {
   );
 
   // ─── Publish + versions (issue #137; #141: thin client) ───────
-  // PUBLISH moved to the renderer's direct HTTP client
+  // PUBLISH belongs to the renderer's direct HTTP client
   // (renderer/gateway-client.ts): the renderer holds the editing session and
-  // POSTs `…/publish` directly. VERSIONS_LIST / VERSIONS_ACTIVATE moved there
+  // POSTs `…/publish` directly. VERSIONS_LIST / VERSIONS_ACTIVATE live there
   // too (pure git-store tag reads + a forward-only rollback POST).
 
   // Thin-client token bridge: resolve the active gateway's base URL +
@@ -470,7 +465,7 @@ export function registerIpcHandlers(): void {
     getGatewayRuntimeSnapshot()
   );
 
-  // Manual restart of the embedded LOCAL gateway (issue #351): refused for
+  // Manual restart of the embedded LOCAL gateway: refused for
   // a remote gateway (nothing here to restart — that's the server's job).
   // `restartLocalGateway` always mints a fresh per-launch bearer token
   // (same as first boot, since no `token` option is passed to `serve()`),
@@ -549,7 +544,7 @@ export function registerIpcHandlers(): void {
   );
 
   // Fetch the active gateway's diagnostics bundle and save it via a native
-  // dialog (issue #351). Pure orchestration lives in gateway-ops-core.ts;
+  // dialog. Pure orchestration lives in gateway-ops-core.ts;
   // gateway-ops.ts wires in the real dialog/fs/settings.
   ipcMain.handle(Channel.GATEWAY_DIAGNOSTICS_EXPORT, async () => {
     const { exportActiveGatewayDiagnostics } = await import("./gateway-ops.js");
@@ -591,8 +586,8 @@ export function registerIpcHandlers(): void {
     }
   );
 
-  // Settings → This device's offline-copy switch. The pairing flow no longer
-  // asks the question (it defaults ON), so this is where it is answered after
+  // Settings → This device's offline-copy switch. The pairing flow does not
+  // ask the question (it defaults ON), so this is where it is answered after
   // the fact. Turning it OFF reuses the redeem path's purge signal so the
   // replica this device already built is dropped rather than left orphaned;
   // the enrollment on the gateway is untouched either way.
@@ -617,11 +612,11 @@ export function registerIpcHandlers(): void {
     }
   );
 
-  // VERSIONS_LIST / VERSIONS_ACTIVATE moved to the renderer's direct HTTP
-  // client (`renderer/gateway-client.ts`) under the thin-client pivot —
-  // pure git-store tag reads + a forward-only rollback POST, no main-side
-  // state. APP_LIVE_URL / APP_SCHEMA / APP_TABLE_ROWS / APP_QUERY /
-  // APP_LOGS / APPS_DEREGISTER moved there too.
+  // VERSIONS_LIST / VERSIONS_ACTIVATE belong to the renderer's direct HTTP
+  // client (`renderer/gateway-client.ts`) — pure git-store tag reads + a
+  // forward-only rollback POST, no main-side state. APP_LIVE_URL /
+  // APP_SCHEMA / APP_TABLE_ROWS / APP_QUERY / APP_LOGS / APPS_DEREGISTER
+  // live there too.
 
   // ─── Phone link (issue #263) ───────
   // The tunnel endpoint + device allowlist live in main (they hold the
@@ -678,14 +673,14 @@ export function registerIpcHandlers(): void {
   ipcMain.handle(Channel.CHANGELOG_GET, async () => getChangelog());
 
   // ─── Templates ───────
-  // TEMPLATES_LIST + TEMPLATES_CLONE moved to the renderer's direct HTTP
-  // client (renderer/gateway-client.ts) under the thin-client pivot — the
-  // gateway owns the catalog (`GET /centraid/_templates`) and the clone
+  // TEMPLATES_LIST + TEMPLATES_CLONE belong to the renderer's direct HTTP
+  // client (renderer/gateway-client.ts) — the gateway owns the catalog
+  // (`GET /centraid/_templates`) and the clone
   // orchestration (`POST /centraid/_apps/_clone`: scaffold + webhook mint +
   // stage + publish). The remote gateway never needs the desktop catalog.
 
   // ─── Automations (issue #98; #141: thin client) ───────
-  // Automation create/enable/delete + the read/run/analytics surface moved
+  // Automation create/enable/delete + the read/run/analytics surface belong
   // to the renderer's direct HTTP client (renderer/gateway-client.ts): the
   // gateway owns scaffold + webhook mint + stage + publish
   // (`POST /centraid/_automations`, `…/set-enabled`, `DELETE …`). The gateway
@@ -693,8 +688,8 @@ export function registerIpcHandlers(): void {
   // ledgers, and the central analytics DB.
 
   // The run feed / single-run / node-timeline / pin-run reads and
-  // INSIGHTS_SUMMARY moved to the renderer's direct HTTP client
-  // (renderer/gateway-client.ts) under the thin-client pivot — they were
-  // pure proxies over the gateway's `/centraid/_automations` +
-  // `/centraid/_insights` routes with no main-side state.
+  // INSIGHTS_SUMMARY belong to the renderer's direct HTTP client
+  // (renderer/gateway-client.ts) — pure proxies over the gateway's
+  // `/centraid/_automations` + `/centraid/_insights` routes, with no
+  // main-side state to keep here.
 }

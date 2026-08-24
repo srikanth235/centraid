@@ -1,7 +1,7 @@
 // The library card family — one app card, one automation card, and the grid
 // they sit in.
 //
-// Home is the springboard now (issue #708): a grid of CONTENT tiles, not a
+// Home is the springboard now (#708): a grid of CONTENT tiles, not a
 // shelf of icons. The card that answers "which things do I own" outlived that
 // shelf — Starred lays out the starred subset and the automations overview
 // lays out every automation — so the cards live here, on their own, rather

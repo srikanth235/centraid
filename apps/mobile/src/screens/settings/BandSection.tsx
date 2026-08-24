@@ -8,7 +8,7 @@ import { radii, spacing, t, useTheme } from "../../kit/theme";
 import type { ThemeColors } from "../../kit/theme";
 import SettingsSection from "./SettingsSection";
 
-// HANDING THE BAND BACK, ON THE PHONE (issue #712 E3).
+// HANDING THE BAND BACK, ON THE PHONE (#712).
 //
 // `useBandOwner` shipped on both clients with a `setBandOwner` nothing called:
 // a first-party route could CLAIM the phone's bottom band and the member had

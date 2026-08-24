@@ -1,4 +1,4 @@
-// THE STAGE'S CHROME (issue #712 P18, extracted from ./PhotoLightbox).
+// THE STAGE'S CHROME.
 //
 // THE SEAM. `PhotoLightbox` owns the viewer's STATE — which photograph, which
 // mode (viewing / editing / slideshow), what the last write did, whether the
@@ -16,9 +16,9 @@
 //   chip     round, leading — a back chevron. It is `chevron-left`, not `✕`,
 //            because this viewer is pushed onto a stack and pressing it RETURNS
 //            to the grid the photograph was opened from; `✕` promises a thing
-//            that closes over nothing, which is what a modal does. The
-//            swipe-down still dismisses, and now the mark agrees with the swipe
-//            as well as with the effect.
+//            that closes over nothing, which is what a modal does. Swipe-down
+//            dismisses too, and the mark agrees with both the gesture and the
+//            effect.
 //   stamp    centred capsule, WHEN over WHEN-and-WHERE. Not a control, which is
 //            why it sits in the middle: a member scanning for something to press
 //            skips the centre. See `captureStamp` for why the date outranks the
@@ -89,7 +89,7 @@ ViewerChromePlate.displayName = "ViewerChromePlate";
 /**
  * One icon target inside a plate. Icon-only, because the iOS arrangement this
  * copies drops the words — which is only allowed because the accessible name is
- * still `label`, read from the SAME field the old visible label was drawn from
+ * still `label`, read from the SAME field a visible label would be drawn from
  * (WCAG 4.1.2). Where a label carried a REASON rather than a name, the reason
  * stays on screen: see the toolbar's inline read-only sentence.
  */
@@ -221,10 +221,10 @@ export function ViewerTopChrome({
         </View>
       </ViewerChromePlate>
 
-      {/* The slideshow's ONE action, LABELLED. It used to wear a pause glyph
-          and exit the slideshow — a control whose mark promised one thing and
-          whose press did another. Label and effect are now read from the same
-          value (`SLIDESHOW_ACTION`), so they cannot drift apart again; the
+      {/* The slideshow's ONE action, LABELLED — never a pause glyph over a
+          press that exits the slideshow, which is a mark promising one thing
+          and a press doing another. Label and effect are read from the same
+          value (`SLIDESHOW_ACTION`), so they cannot drift apart; the
           missing transport is a recorded non-goal, stated beside that value.
           The editor suppresses this slot entirely: its way out is `Cancel`,
           beside the commit it is the alternative to — and the slot still takes

@@ -1,5 +1,5 @@
 /*
- * The in-product integrity scrub check library (issue #839 W1.2).
+ * The in-product integrity scrub check library (#839).
  *
  * A reusable set of invariant checks over the databases and content-addressed
  * store a gateway owns, plus one orchestrator that runs them all. The
@@ -21,7 +21,7 @@
  *      (`@centraid/vault` `FsBlobStore`), so `sha256(getSync(sha)) === sha` is
  *      the exact write-once invariant. Sampled by default; `full` re-hashes
  *      every object.
- *   - `hardlink-refcount`  audits the cross-vault GC contract (issue #599
+ *   - `hardlink-refcount`  audits the cross-vault GC contract (#599
  *      decision 11): share-by-placement hardlinks a blob into a second vault's
  *      CAS, so "the filesystem's link count is the cross-vault refcount". A
  *      blob's `st_nlink` must therefore equal the number of CAS directory

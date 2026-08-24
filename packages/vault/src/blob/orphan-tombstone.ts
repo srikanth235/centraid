@@ -1,4 +1,4 @@
-// The orphan-grace tombstone index (issue #439 R4) — the `blob_orphan` table
+// The orphan-grace tombstone index (#439) — the `blob_orphan` table
 // (schema/blob.ts) behind a small stateful helper, mirroring ReplicaIndex's
 // shape so the reconciliation sweep never writes raw SQL for it. Kept in its
 // own leaf module (custody.ts is at the governance line-cap): the machinery
@@ -18,7 +18,7 @@
 import type { DatabaseSync } from "node:sqlite";
 
 /**
- * The orphan-grace tombstone index (issue #439 R4): durable evidence of WHEN a
+ * The orphan-grace tombstone index (#439): durable evidence of WHEN a
  * remote sha was first observed orphaned, in epoch ms. It is a cache of a
  * transient observation, not model — a sha that re-references (or is deleted)
  * loses its row; the sweep re-stamps a fresh one if it goes orphaned again.

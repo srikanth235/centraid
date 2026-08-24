@@ -1,4 +1,4 @@
-// The durable replication index and LRU access tracker (issue #405 §3/§4) —
+// The durable replication index and LRU access tracker (#405 §3/§4) —
 // the two `blob_replica` / `blob_access` tables (schema/blob.ts) behind small
 // stateful helpers so the custody facade and the cache coordinator never write
 // raw SQL for either. Kept in their own leaf module (custody.ts is at the
@@ -10,7 +10,7 @@ import type { DatabaseSync } from "node:sqlite";
 
 import { nowIso } from "../ids.js";
 
-/** Which remote store class a replica lives under (issue #425 Wave 2). */
+/** Which remote store class a replica lives under (#425). */
 export type ReplicaStore = "cas" | "derived";
 
 /**
@@ -21,7 +21,7 @@ export type ReplicaStore = "cas" | "derived";
 const IN_CHUNK = 500;
 
 /**
- * The replication index (issue #405 §4): durable local EVIDENCE that a sha has
+ * The replication index (#405): durable local EVIDENCE that a sha has
  * been pushed to the remote tier and acknowledged (a 2xx). `statusFor()` and
  * `replicate()` read this instead of a live `remote.list()`; evict-only-if-
  * replicated (§3) consults it before deleting any local copy. It is a cache of
@@ -33,7 +33,7 @@ export class ReplicaIndex {
 
   /**
    * Record (or refresh) evidence that `sha` is replicated. Idempotent. `store`
-   * records WHERE the bytes actually landed (issue #425 Wave 2) — originals
+   * records WHERE the bytes actually landed (#425) — originals
    * default to `cas`, so every existing caller stays byte-for-byte unchanged;
    * only the routed derivative write paths pass `derived`. A later mark with a
    * different store re-stamps the row (the bytes moved), keeping the index and
@@ -75,7 +75,7 @@ export class ReplicaIndex {
    * The set of shas the index believes are replicated. Store-agnostic by
    * default (presence anywhere is enough for custody-state projection); pass a
    * `store` to scope to one class — the reconciliation sweep diffs each granted
-   * store class against its own listing (issue #425 Wave 2).
+   * store class against its own listing (#425).
    */
   all(store?: ReplicaStore): Set<string> {
     const rows = (
@@ -111,7 +111,7 @@ export class ReplicaIndex {
 
   /**
    * Reconcile ONE store class's rows against that store's full remote listing
-   * (issue #404 §4 rebuild path, made store-aware in #425 Wave 2): the store's
+   * (#404 §4 rebuild path, store-aware per #425): the store's
    * real object set is TRUTH, so `store`-classed rows for shas that listing no
    * longer has are dropped and shas the listing has but the index missed are
    * added under `store`. Scoping by store is what keeps a `derived` listing from
@@ -147,7 +147,7 @@ export class ReplicaIndex {
 }
 
 /**
- * The LRU access tracker (issue #405 §3): last-access time per sha with an
+ * The LRU access tracker (#405): last-access time per sha with an
  * in-memory WRITE-BEHIND buffer, so the hot sync read path never pays a
  * synchronous SQLite write per read. Touches land in `pending`; `flush()`
  * upserts them in one transaction (called at sweep boundaries and before an

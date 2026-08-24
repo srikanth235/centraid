@@ -23,7 +23,7 @@ import type {
 
 import chrome from "./chrome.module.css";
 
-// The navigation stem (issue #707, invariant 1).
+// The navigation stem (#707, invariant 1).
 //
 // A reserved band, `--w-stem` on the leading edge on desktop and the bottom
 // band on compact. It is never themed by an app, never scrolls away, and never

@@ -1,5 +1,4 @@
-// Automation thread data layer (Automations UI revamp — see
-// receipts/issue-387-automations-ui-revamp.md). The thread is one long-lived conversation per
+// Automation thread data layer (#387). The thread is one long-lived conversation per
 // automation: every fire is a run appended to it, and consent (parked
 // invocations, staged outbox writes, standing grants) surfaces inline
 // instead of behind a separate Approvals detour. This module aggregates the

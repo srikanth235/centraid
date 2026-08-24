@@ -1,4 +1,4 @@
-// Device-local Appearance preference (issue #498) — the theme override the user
+// Device-local Appearance preference (#498) — the theme override the user
 // picks in Settings → Appearance, folded over the OS colour scheme. Persisted in
 // the same AsyncStorage `Store` as the rest of the mobile prefs and exposed as an
 // external store so `useAppearance()` re-renders every themed surface the instant

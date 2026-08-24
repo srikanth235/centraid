@@ -1,5 +1,5 @@
 /*
- * The Storage page's presentation derivation (issue #544) — every decision
+ * The Storage page's presentation derivation (#544) — every decision
  * about what the footprint READS AS, kept pure and framework-free so the
  * numbers can be asserted in a unit test instead of a rendered DOM.
  *

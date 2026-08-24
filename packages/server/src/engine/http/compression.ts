@@ -1,5 +1,5 @@
 /*
- * Response compression for the gateway HTTP layer (issue #404, "Mobile fast
+ * Response compression for the gateway HTTP layer (#404, "Mobile fast
  * path"). One negotiator in front of the JSON responses the gateway serves —
  * app RPC results, `_describe`, and the conversation ledger.
  *

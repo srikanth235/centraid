@@ -1,5 +1,5 @@
 /**
- * COPY BOTH CLIENTS PRINT, for the shared app machinery (issue #805).
+ * COPY BOTH CLIENTS PRINT, for the shared app machinery (#805).
  *
  * The same shape and the same reason as `apps/photos/shared-copy.ts`:
  * deliberately IMPORT-FREE, because native bundles this file straight out of

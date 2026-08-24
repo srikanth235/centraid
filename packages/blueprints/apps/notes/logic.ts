@@ -153,7 +153,7 @@ export function createLogic({
 
   /**
    * Open the editor and pull the canonical body lazily. The library ships a
-   * preview, never a body (issue #404), so the full text is fetched here on
+   * preview, never a body (#404), so the full text is fetched here on
    * open; a note whose body is already in hand skips the round trip, and a
    * denial leaves the editor usable with what the preview had.
    */

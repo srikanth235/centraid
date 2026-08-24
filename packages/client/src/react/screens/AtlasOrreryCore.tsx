@@ -6,7 +6,7 @@ import { ORRERY } from "./atlasOrreryGeometry.js";
 
 import styles from "./AtlasRelationsTab.module.css";
 
-// The orrery's brass centre plate (issue #519) — a presentational leaf split out
+// The orrery's brass centre plate (#519) — a presentational leaf split out
 // of AtlasOrreryChart to keep that file focused on the layered graph body. It
 // draws the glow, the static tick bezel, the plate, the human name (People, not
 // core_party), the demoted physical/SQL name line, and the measured-fact

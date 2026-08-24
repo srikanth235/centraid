@@ -8,11 +8,11 @@
 // confirmation-gated command that erases the row for good.
 //
 // Favorites are NOT a column: star_item/unstar_item write the shared
-// flags-scheme star on the item (issue #274) — the same mechanism Docs and
+// flags-scheme star on the item (#274) — the same mechanism Docs and
 // Photos use — through setStarred. Every write is a typed command, consent-
 // checked and receipted; only purge carries elevated risk.
 //
-// Secret handling (issue #293): password, otp_seed, card_number, cvv and
+// Secret handling (#293): password, otp_seed, card_number, cvv and
 // content are SEALED columns — the execution pipeline seals them inside the
 // write transaction, default reads show a placeholder, and plaintext takes
 // the `reveal` verb. This pack's own derivative commands (`totp_code`,
@@ -34,7 +34,7 @@ export const LOCKER_ITEM_TYPE = "locker.item";
 
 /**
  * Free-form locker tags are SKOS concepts in this scheme, carried by
- * core_tag rows on the item (issue #310 S3) — the one classification
+ * core_tag rows on the item (#310) — the one classification
  * mechanism, not a second per-domain tag table. https URI, not urn:, for
  * the same colon-literal reason as the flags scheme.
  */
@@ -73,7 +73,7 @@ const ALL_FIELDS = [
 ] as const;
 
 /**
- * Input keys carrying secret material (issue #293): the journal records a
+ * Input keys carrying secret material (#293): the journal records a
  * keyed hash token at these paths, never the value. Mirrors the sealed
  * columns of `locker.item` in the schema registry.
  */
@@ -178,7 +178,7 @@ function setTags(
 }
 
 /**
- * Set (or clear, on '') the item's service anchor (issue #310 S3): the
+ * Set (or clear, on '') the item's service anchor (#310): the
  * broker connection this credential is for. Validated live — an anchor to a
  * connection the vault does not hold would be the opaque pointer again.
  */
@@ -204,7 +204,7 @@ function setConnection(
 }
 
 /**
- * Set (or clear, on '') this item's connector alias (issue #298 item 4).
+ * Set (or clear, on '') this item's connector alias (#298).
  * Uniqueness AMONG LIVE items is enforced here — the vault is single-writer,
  * so a check-then-write needs no lock. A trashed item still holding the
  * alias yields it: reassigning to a live item steals it.
@@ -244,7 +244,7 @@ function fieldValues(
 }
 
 /**
- * A round-tripped placeholder is "unchanged", never a value (issue #293):
+ * A round-tripped placeholder is "unchanged", never a value (#293):
  * the app's detail pane shows `«sealed»` for secrets it has not revealed,
  * and an edit that sends it back must not overwrite the stored secret.
  */
@@ -271,10 +271,10 @@ const ADD_ITEM: CommandDefinition = {
       title: { type: "string", minLength: 1 },
       tags: { type: "array", items: { type: "string" } },
       compromised: { type: "boolean" },
-      // A stable connector-binding name (issue #298 item 4): letters, digits,
+      // A stable connector-binding name (#298): letters, digits,
       // dot, dash, underscore — the token in `locker:@<alias>:<column>`.
       alias: { type: "string", pattern: "^[A-Za-z0-9._-]{1,64}$" },
-      // The service anchor (issue #310 S3): the broker connection this
+      // The service anchor (#310): the broker connection this
       // credential is for, validated live.
       connection_id: { type: "string" },
       url_match_policy: {
@@ -551,7 +551,7 @@ const PURGE_ITEM: CommandDefinition = {
   ],
   idempotency: "once",
   risk: "medium",
-  // Destructive and irreversible (issue #306 decision 2) — parks for owner
+  // Destructive and irreversible (#306 decision 2) — parks for owner
   // confirmation on every non-owner-device invocation, matching the
   // "confirmation": "required" the app manifest already advertises. Without
   // this the manifest's claim was cosmetic: the app's own two-click "Delete
@@ -696,10 +696,10 @@ const TOTP_CODE: CommandDefinition = {
   postconditions: [],
   idempotency: "retry-safe",
   risk: "low",
-  // The exemplar of the sealed class (issue #293): the seed unseals INSIDE
+  // The exemplar of the sealed class (#293): the seed unseals INSIDE
   // the command and only the 6 digits emerge; the unseal is receipted.
   unseals: ["locker.item.otp_seed"],
-  // The 6-digit code is secret-derived (issue #298 item 6): the caller gets
+  // The 6-digit code is secret-derived (#298): the caller gets
   // the live value, but it is redacted from the durable journal receipt so a
   // one-time code never persists in a replayable store.
   transcriptSensitive: true,
@@ -738,7 +738,7 @@ const WATCHTOWER: CommandDefinition = {
   idempotency: "retry-safe",
   risk: "low",
   // Weak/reused/last4 are computed inside the sealed boundary — only
-  // booleans and a card's last four digits emerge (issue #293 decision 5).
+  // booleans and a card's last four digits emerge (#293 decision 5).
   unseals: ["locker.item.password", "locker.item.card_number"],
   handler: (ctx) => {
     const rows = ctx.db
@@ -807,7 +807,7 @@ const SET_MEMO: CommandDefinition = {
   risk: "low",
   handler: (ctx) => {
     // The owner's remark ABOUT an item — "rotated after the breach" — is a
-    // knowledge.annotation on the canonical row (issue #310 C6), plaintext
+    // knowledge.annotation on the canonical row (#310), plaintext
     // and searchable. Secret material never belongs here: recovery codes
     // and the like go in the item's SEALED fields (notes/content), which
     // stay out of every index by the structural gate.
@@ -818,7 +818,6 @@ const SET_MEMO: CommandDefinition = {
   },
 };
 
-/** Register the Locker commands on a gateway. */
 export function registerLockerCommands(gateway: Gateway): void {
   gateway.registerCommand(ADD_ITEM);
   gateway.registerCommand(EDIT_ITEM);

@@ -8,7 +8,7 @@ import type { ReplicaShapeAccess } from "./replica-shape.js";
 export interface ReplicaRequestAccess extends ReplicaShapeAccess {
   deviceId: string;
   deviceKey?: string;
-  /** The acting owner behind the device (issue #599 L2/L4, #726). */
+  /** The acting owner behind the device (#599 L2/L4, #726). */
   ownerId?: string;
   enrollment?: DeviceEnrollment;
 }
@@ -23,7 +23,7 @@ export type ReplicaAccessResolution =
  * The `?app=` selector names which replica SHAPE the caller wants, nothing
  * more: the caller's authority is its device enrollment, which covers the
  * whole vault either way. There is no narrower per-app identity to contradict
- * the selector (issue #799).
+ * the selector (#799).
  */
 export function resolveReplicaAccess(
   url: URL,

@@ -2,8 +2,8 @@
  * The enrichment tier, end to end: OWNER CONTROL → vault → mirror → gate.
  *
  * The gate (decision S9) is enforced on the execution path, and the
- * `off | device | gateway` axis (issue #712 C5, renamed from
- * `off | local | model`) is the whole of what it enforces — there is no
+ * `off | device | gateway` axis (#712) is the whole of what it
+ * enforces — there is no
  * separate `provider` tier; provider egress is gated per call (#567) and
  * per capability (S9's own consent read), independently of this tier. That
  * enforcement is only honest if the owner can actually move the tier, so the
@@ -57,9 +57,9 @@ describe("enrichment tier control", () => {
   });
 
   it("law: a fresh scope's seeded gateway tier already allows gateway-lane enrichment", () => {
-    // issue #712 C5: the bootstrap default moved from `local` (refuses every
-    // gateway-lane enricher) to `gateway` (allows the domain to reach the
-    // lane a manifest declares). Each shipped enricher still starts
+    // The bootstrap default is `gateway` — the domain may reach the lane a
+    // manifest declares — not `device`, which refuses every gateway-lane
+    // enricher (#712). Each shipped enricher still starts
     // `enabled: false` in its own manifest, so this tier widens what an
     // install COULD run, not what runs unasked.
     expect(readEnrichPolicyTier(db.vault, "photos")).toBe("gateway");

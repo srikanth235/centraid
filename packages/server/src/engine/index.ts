@@ -51,7 +51,7 @@ export type {
 // Chat-runner core — the per-turn chat spine, sibling to the automation fire
 // spine in `@centraid/server/automation`. The model turn is injected as a
 // `RunTurnFn`; agent-runtime's `makeConversationRunner` and the gateway's
-// `makeUnifiedConversationRunner` are thin configs over it (issue #147).
+// `makeUnifiedConversationRunner` are thin configs over it (#147).
 export {
   makeConversationRunnerCore,
   type ConversationRunnerCoreOptions,
@@ -152,7 +152,7 @@ export {
   type DeregisterLogger,
 } from "./registry/deregister-cleanup.js";
 
-// App manifest + declared-handler dispatcher (issue #107, narrowed by
+// App manifest + declared-handler dispatcher (#107, narrowed by
 // #286 phase 2: no `_sql` builtins, no live-schema reads).
 export {
   APP_MANIFEST_FILE,
@@ -216,14 +216,14 @@ export type {
 
 // The worker-thread handler runner — exported for host surfaces that run an
 // app-authored module outside the dispatcher (the scenario-seed loader,
-// issue #290 phase 1, runs `seed.js` with a demo-register vault bridge).
+// #290 phase 1, runs `seed.js` with a demo-register vault bridge).
 export {
   runHandler,
   type HandlerOutcome,
   type RunHandlerOptions,
 } from "./handlers/handler-runner.js";
 
-// Worker-spawn admission control (issue #351 Tier 4 hygiene) — the cap on
+// Worker-spawn admission control (#351 Tier 4 hygiene) — the cap on
 // concurrent app-handler workers `runHandler` enforces by default. Exported
 // so a health/metrics surface can poll live counts, and so a host can
 // construct its own scoped `WorkerAdmission` (tests do this to exercise the
@@ -251,7 +251,7 @@ export {
   type AppChange,
   type ChangeListener,
 } from "./changes/change-bus.js";
-// `_changes` SSE subscriber cap (issue #351 Tier 4 hygiene) — per-appId, not
+// `_changes` SSE subscriber cap (#351 Tier 4 hygiene) — per-appId, not
 // global (a user can legitimately have several windows of the SAME app
 // open). `changesSubscriberCount()` is the accessor a host's health/metrics
 // surface polls; `ChangesSubscriberCap` is exported for tests only.
@@ -261,7 +261,7 @@ export {
   CHANGES_SSE_MAX_SUBSCRIBERS_PER_APP,
 } from "./http/changes-sse.js";
 
-// The one bounded SSE writer every event feed goes through (issue #659 G6).
+// The one bounded SSE writer every event feed goes through (#659).
 export { SseStream } from "./http/sse-stream.js";
 
 // Conversation-history store (the read/write facade backing the chat surface)
@@ -285,10 +285,10 @@ export {
   type RecordedTurnReplay,
   type SessionTranscript,
 } from "./conversation/history.js";
-// Lazy archive rehydration seam (issue #438 wave 3): the gateway supplies the
+// Lazy archive rehydration seam (#438): the gateway supplies the
 // vault's `db.blobs.open` as the reader; the standalone host omits it.
 export type { ArchiveBlobReader } from "./conversation/rehydrate.js";
-// LLM auto-titles (issue #420, Wave 3): a cheap one-shot inference names a
+// LLM auto-titles (#420): a cheap one-shot inference names a
 // new conversation after its first turn. Provider-agnostic (tier token) and
 // fire-and-forget — the gateway owns the "apply only if still derived" guard.
 export {
@@ -318,9 +318,9 @@ export {
   parseAdditionalDirectories,
   parseWorkspaceKind,
 } from "./http/turn-sse-support.js";
-// Idempotency replay (issue #420): recorded-turn → SSE event sequence.
+// Idempotency replay (#420): recorded-turn → SSE event sequence.
 export { buildReplayEvents } from "./http/turn-replay.js";
-// Per-vault turn-concurrency gate (issue #420): bounds concurrently-running
+// Per-vault turn-concurrency gate (#420): bounds concurrently-running
 // turns; over the ceiling the driver writes 429 + Retry-After.
 export {
   TurnLimiter,
@@ -329,7 +329,7 @@ export {
   TURN_RETRY_AFTER_SECONDS,
 } from "./http/turn-limiter.js";
 
-// Blob content-addressed store for attachment bytes (issue #190). Bytes live
+// Blob content-addressed store for attachment bytes (#190). Bytes live
 // at `<workspace appsDir>/<appId>/blobs/<hash>` inside the vault, deduped by
 // sha256; the `attachments` rows in the vault's `journal.db` carry the
 // metadata. GC is refcount-by-hash off `ConversationStore.referencedHashes`.
@@ -341,11 +341,11 @@ export {
 } from "./data/blob-store.js";
 
 // SQLite state — app-engine owns the conversation-ledger BAND of the vault's
-// `journal.db` (#280 shape, transcripts.db folded into the journal file):
+// `journal.db` (#280):
 //   conversations, turns, items, attachments, automation_state, run_summary —
 //   the per-vault ledger + rollup. Ensured idempotently on open; the file's
-//   user_version belongs to the vault package's audit-band ladder. The old
-//   identity.sqlite (users/user_prefs) and central analytics.sqlite are gone.
+//   user_version belongs to the vault package's audit-band ladder. There is no
+//   identity.sqlite and no central analytics.sqlite.
 // Cross-file FKs aren't possible in SQLite, so `conversations.user_id` (the
 // vault owner's party id) is application-enforced.
 export {
@@ -356,12 +356,12 @@ export {
   type DatabaseProvider,
 } from "./stores/gateway-db.js";
 
-// Conversation-band archival engine (issue #438): the bounded, idempotent
+// Conversation-band archival engine (#438): the bounded, idempotent
 // maintenance pass that seals cold turn-ranges into the vault blob CAS
 // (phase A) and custody-gated-prunes their raw rows (phase B). The vault/
 // gateway inject the blob-CAS door and the custody-proven latch; app-engine
 // owns the band. `readArchivedConversationSegment` is the round-trip read
-// wave 3's rehydration reuses.
+// rehydration reuses.
 export {
   runConversationArchival,
   readArchivedConversationSegment,
@@ -384,7 +384,7 @@ export type {
 } from "./stores/vault-workspace.js";
 
 // Run-summary DTO — the shape of one `run_summary` row (a VIEW over the
-// ledger tables; the old write-through sink is gone). The type stays at the
+// ledger tables; there is no write-through sink). The type stays at the
 // package root so the `insights/` boundary remains one-way (#151).
 export type { RunSummary } from "./conversation/run-summary-sink.js";
 export {
@@ -438,7 +438,7 @@ export {
   type SettingsInject,
 } from "./settings/settings-merge.js";
 
-// Conversation ledger + ctx.state store (issue #190). The five tables
+// Conversation ledger + ctx.state store (#190). The five tables
 // (`conversations`, `turns`, `items`, `attachments`, `automation_state`)
 // live in the runtime-owned conversation DB, never reachable from handlers.
 export {
@@ -510,4 +510,4 @@ export {
 // barrel.
 export * from "./insights/index.js";
 
-// App scaffolders + clone moved to @centraid/blueprints (#151).
+// App scaffolders + clone live in @centraid/blueprints (#151).

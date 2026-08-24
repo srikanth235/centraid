@@ -105,7 +105,7 @@ export default function PhotosScreen({
   // The member's band-owner choice, per device — the same latch (and the same
   // key) `PhotosHome` reads, so handing the band back on one Photos surface
   // hands it back on all of them rather than on whichever screen was open.
-  // The FRAME's latch, not Photos' (issue #712 E3). One hook in
+  // The FRAME's latch, not Photos' (#712). One hook in
   // `kit/band/band-owner.ts`, on the `shell.bandOwner.<appId>` key, rather
   // than a hydrate-into-state dance per Photos screen under a Photos-owned
   // key; the member's answer is WRITTEN from frame Settings, not only read.

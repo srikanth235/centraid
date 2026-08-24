@@ -1,4 +1,4 @@
-// The Vault Atlas — Browse write side (issue #441 Part B, B3; THE hard
+// The Vault Atlas — Browse write side (#441 Part B, B3; THE hard
 // requirement). Row CRUD for the owner's generic table editor, registered as
 // three commands — `atlas.insert_row` / `atlas.update_row` / `atlas.delete_row`
 // — through the ordinary §10 command pipeline.
@@ -265,7 +265,7 @@ function deleteRow(): CommandDefinition {
       if (Number(result.changes) === 0)
         throw new Error(`${input.table}: no row ${input.id}`);
       // Sweep the polymorphic pointers at the just-deleted row exactly as a
-      // purge would (issue #441 A1) — tags/curation/annotations/attachments
+      // purge would (#441) — tags/curation/annotations/attachments
       // delete, shares revoke, links end-date — so a Browse delete never
       // leaves the orphans A1 exists to prevent. (The pipeline's own sweep
       // covers core_link; cleanupPolyRefs is idempotent over it.)
@@ -313,7 +313,7 @@ function pkWhere(
   };
 }
 
-/** Register the three Browse-edit commands (issue #441 B3). */
+/** Register the three Browse-edit commands (#441). */
 export function registerAtlasCommands(gateway: Gateway): void {
   gateway.registerCommand(insertRow());
   gateway.registerCommand(updateRow());

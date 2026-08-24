@@ -1,5 +1,5 @@
 /**
- * The Face review queue (issue #711): the vault-wide propose-and-confirm
+ * The Face review queue (#711): the vault-wide propose-and-confirm
  * backlog, read as one ORDERED queue the component walks one entry at a
  * time — never the whole backlog at once (v4 handoff §8, §16 `faces.note`:
  * "One face at a time"). `queries/faces.ts` stays the PER-ASSET read the
@@ -15,7 +15,7 @@
  * carries what this needs, because every proposal for one person shares that
  * person's `party_id`.
  *
- * THE QUEUE IS ANSWERABLE (issue #712). It filters on `review_state`, not on
+ * THE QUEUE IS ANSWERABLE (#712). It filters on `review_state`, not on
  * `confirmed_by_party_id`, and that is the whole difference between a queue
  * that can be finished and one that cannot. Every region the owner has
  * answered — confirmed, rejected, or dismissed ("reviewed, deliberately left
@@ -49,7 +49,7 @@ interface RawRegion {
   party_id?: string | null;
   confidence?: number | null;
   confirmed_by_party_id?: string | null;
-  /** `proposed` | `confirmed` | `rejected` | `dismissed` (issue #712). */
+  /** `proposed` | `confirmed` | `rejected` | `dismissed` (#712). */
   review_state?: string | null;
 }
 interface RawParty {
@@ -88,7 +88,7 @@ export default async function faceQueue({ ctx }: HandlerArgs) {
     const nameOf = new Map(
       persons.map((p) => [p.party_id, p.display_name] as const)
     );
-    // UNANSWERED, not merely unconfirmed (issue #712). A rejected or
+    // UNANSWERED, not merely unconfirmed (#712). A rejected or
     // dismissed region is a decision the owner already made; re-offering it
     // is the bug this queue existed to have.
     const pending = regions.filter((r) => r.review_state === "proposed");

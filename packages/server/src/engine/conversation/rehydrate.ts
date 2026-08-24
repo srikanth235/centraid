@@ -1,4 +1,4 @@
-// Lazy read-only rehydration of archived conversation history (issue #438
+// Lazy read-only rehydration of archived conversation history (#438
 // decision 9, wave 3). When a conversation has archive-index rows whose
 // turn-ranges were custody-gated-PRUNED (raw turns/items deleted, decision 3),
 // the transcript render fetches each range's sealed segment blob from the vault

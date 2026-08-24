@@ -1,4 +1,4 @@
-// Inline-body threshold (issue #367 §E4): notes, draft messages, and the
+// Inline-body threshold (#367): notes, draft messages, and the
 // data: URI door commands (attachments/documents/media) all mint a
 // `core_content_item` row inline as a `data:` URI. Binary payloads already
 // spill to the blob CAS unconditionally in `mintContentFromDataUri`
@@ -78,7 +78,7 @@ export interface InlineBodyViolationScan {
 }
 
 /**
- * Diagnostics scan (issue #367 §E4): pre-existing inline text bodies already
+ * Diagnostics scan (#367): pre-existing inline text bodies already
  * over budget (rows written before this guard shipped, or via a path this
  * guard doesn't cover yet). Read-only — `byte_size` is decoded-bytes,
  * recorded at write time by every minting path, so this is exact, not a

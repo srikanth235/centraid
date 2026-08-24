@@ -1,5 +1,5 @@
 /*
- * The dialing half of the peer plane (issue #726 P3 decisions 3 and 4).
+ * The dialing half of the peer plane (#726 P3 decisions 3 and 4).
  *
  * Direction-free by construction: this module is what the side that SCANS a
  * link ticket runs, and the side that SHOWED one runs `routes/peer-plane.ts`.

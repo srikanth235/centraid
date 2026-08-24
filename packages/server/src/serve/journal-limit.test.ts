@@ -7,7 +7,7 @@ import {
   decideJournalArchive,
 } from "./journal-limit.js";
 
-// The size-triggered ledger archive (issue #544). Two properties carry the
+// The size-triggered ledger archive (#544). Two properties carry the
 // whole feature: with no limit set the behaviour must be indistinguishable
 // from before, and with one set the window must never reach inside the floor
 // no matter how low the limit or how long it stays exceeded.

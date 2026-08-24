@@ -13,7 +13,7 @@ import { Pressable, ScrollView, View } from "react-native";
 // photographs can leave the device at all.
 //
 // So: a header (back chevron, title, status line) around the shared §8 gate
-// (`kit/components/ConsentGate.tsx`, issue #712 C1) — the panels/facts/
+// (`kit/components/ConsentGate.tsx`, #712) — the panels/facts/
 // actions live in the gate so Docs' capture-time OCR consent (the second
 // instance of this product law) reads the same renderer. This
 // file supplies only Photos' own chrome and copy — literally the same copy

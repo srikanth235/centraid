@@ -1,10 +1,10 @@
 /*
- * Per-route request-duration histograms (issue #659 R5).
+ * Per-route request-duration histograms (#659).
  *
- * The gateway could report event-loop lag and RSS but not "which route is
- * slow" — so every performance claim about a shipped gateway had to be
- * reproduced on a bench rig first. This closes that: the same health snapshot
- * that already carries `eventLoopLagP99Ms` now carries a p50/p95/p99 per route.
+ * The gateway reports event-loop lag and RSS, but neither says "which route is
+ * slow" — without this, a performance claim about a shipped gateway has to be
+ * reproduced on a bench rig first. The same health snapshot that carries
+ * `eventLoopLagP99Ms` carries a p50/p95/p99 per route.
  *
  * Cheap by construction, because it runs on every request:
  *   - fixed logarithmic buckets, so recording is a bounded scan and an integer

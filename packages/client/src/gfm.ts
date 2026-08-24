@@ -1,4 +1,4 @@
-// GFM block + inline parser for the rich-answer renderer (issue #420, Wave 2).
+// GFM block + inline parser for the rich-answer renderer (#420).
 // Dependency-free; assistant-rich.ts is its only consumer.
 //
 // SECURITY (see assistant-rich.ts for the full contract): every text path runs
@@ -310,7 +310,6 @@ export function blockNodes(text: string, C: GfmClasses): HTMLElement[] {
       i += 1;
       continue;
     }
-    // Heading.
     const heading = line.match(HEADING_RE);
     if (heading) {
       flushPara();

@@ -1,9 +1,9 @@
-// FACE REVIEW (issue #711, v4 handoff 4305-4318 / §8) — the surface the
-// handoff describes and the app did not have: reachable on its own (not
-// buried inside one photograph's lightbox), one proposal at a time, with the
-// exact copy transcribed from the prototype below.
+// FACE REVIEW (#711, v4 handoff 4305-4318 / §8) — the surface the
+// handoff describes: reachable on its own (not buried inside one photograph's
+// lightbox), one proposal at a time, with the exact copy transcribed from the
+// prototype below.
 //
-// SELF-CONTAINED, same pattern as Enrichment.tsx: it reads its own data
+// SELF-CONTAINED: it reads its own data
 // (`face-queue`) and fires its own writes (`outcomes.ts`'s act/narrate), so
 // app-root.tsx only needs to MOUNT it — see the file header of faces.ts for
 // the one-line wiring this still needs (app-root.tsx is out of this file's
@@ -17,7 +17,7 @@
 //   2. One face at a time (v4 3967 "One face at a time") — `current` below
 //      is always exactly one entry; nothing here loops the queue into a list.
 //
-// EVERY CONTROL HERE IS A REAL WRITE (issue #712), and none of the five is an
+// EVERY CONTROL HERE IS A REAL WRITE (#712), and none of the five is an
 // apology:
 //   * Confirm / Not this person / Someone else → `answer-face` with
 //     `confirm` or `reject`. "Someone else" opens an inline picker over
@@ -80,7 +80,7 @@ interface FaceQueueData {
   queue?: QueueEntry[];
   unmatchedTotal?: number;
   confirmedTotal?: number;
-  /** Real counts since issue #712 — a rejection is a state, not a deletion. */
+  /** Real counts (#712) — a rejection is a state, not a deletion. */
   rejectedTotal?: number;
   dismissedTotal?: number;
   people?: Array<{ party_id: string; name: string | null }>;
@@ -160,7 +160,7 @@ export function FaceReview({
 }: {
   narrow?: boolean;
   /** Opens the queue already positioned on one region — the People shelf's
-   *  proposal cards route here (issue #711 review) so tapping a specific
+   *  proposal cards route here (#711 review) so tapping a specific
    *  proposal does not land the member on an unrelated face first. Applied
    *  once, the first time it appears in a loaded queue; ignored after that
    *  so the member's own Skip/cursor movement is never fought. */
@@ -190,7 +190,7 @@ export function FaceReview({
       });
       setData(result ?? {});
       const queue = result?.queue ?? [];
-      // Land on the requested proposal exactly once (issue #711 review's
+      // Land on the requested proposal exactly once (#711 review's
       // People-shelf routing) — found or not, this only ever fires on the
       // FIRST load: a region answered elsewhere before this loads (and so
       // already missing from the queue) leaves the member on whatever the
@@ -229,7 +229,7 @@ export function FaceReview({
   const people = useMemo(() => data?.people ?? [], [data]);
 
   /**
-   * The ONE write behind every answer on this screen (issue #712). The
+   * The ONE write behind every answer on this screen (#712). The
    * answer is the discriminant, not two actions with two shapes, so a new
    * answer like "keep unnamed" is a new member of a union rather than a new
    * endpoint — and Skip is the only control that writes nothing.
@@ -479,7 +479,7 @@ export function FaceReview({
  * The foot note (v4 3966/4316). Three parts at last — the prototype asks for
  * `confirmed N · rejected M · K to go` and this surface could only ever say
  * two of them, because a rejection DELETED the region and left nothing to
- * count (issue #712, and queries/face-queue.ts's old header).
+ * count (#712, and queries/face-queue.ts's old header).
  *
  * The middle clause reads `reviewed`, not `rejected`, and counts rejections
  * AND dismissals together: both are "the member answered this and it is not

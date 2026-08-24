@@ -45,8 +45,7 @@ import { removeVault, saveVault } from "./vaultModals.js";
 
 import styles from "./SettingsRoute.module.css";
 
-// React-owned Settings — the inner-sidebar shell. Replaces the vanilla
-// renderSettings (app-settings.ts): a grouped category nav beside a content
+// Settings — the inner-sidebar shell: a grouped category nav beside a content
 // pane that shows one page at a time (page head + the page's controls).
 // Pairing a phone is NOT a
 // page here: it is a one-off act, so it lives in the account menu as
@@ -121,7 +120,7 @@ const PAGES: readonly PageDef[] = [
   },
 ];
 // Workspace, Import and Storage provider were hidden pages for several
-// releases and are now gone (issue #807): a page nothing routes to is not a
+// releases and are now gone (#807): a page nothing routes to is not a
 // page. "This device" went the same way, though not identically: Pair a phone,
 // What's new and Log out restated the stem's account menu, which still carries
 // all three, and the offline copy moved to Vault → On this device, next to
@@ -161,13 +160,13 @@ export interface SettingsRouteProps {
   setPrefs: (patch: Partial<AppearancePrefs>) => void;
   // Loosely typed (not `SettingsPageId`) so a router-level deep link (e.g.
   // `{kind: 'settings', page: 'enrichment'}` — the app popover's "Open
-  // Enrichment settings", issue #807) doesn't need a type-only import of this
+  // Enrichment settings", #807) doesn't need a type-only import of this
   // module's private page union; validated against `PAGES` below.
   initialPage?: string;
   /** Dismiss the dialog. Backdrop, the close button, and Escape all call it. */
   onClose?: () => void;
   /**
-   * Drop the active vault's connection from this device (issue #665).
+   * Drop the active vault's connection from this device (#665).
    *
    * The primitive is connection-wide — every vault the same host serves goes
    * with it — so the CONFIRM lives here, where the vault and its siblings are
@@ -216,7 +215,7 @@ export default function SettingsRoute({
   }, [onClose]);
   const def = PAGES.find((p) => p.id === page);
   const { showToast, navigate, confirm } = useShellActions();
-  // Settings → Vault (issue #382) — scoped to the ACTIVE vault only; the
+  // Settings → Vault (#382) — scoped to the ACTIVE vault only; the
   // cross-vault list + gateway "Connections" group both moved to the
   // switcher. `vaultNonce` re-fetches after a save (the preview + dirty
   // check need the freshly-saved values as the new baseline) and on any
@@ -292,7 +291,7 @@ export default function SettingsRoute({
       return !next;
     }
   };
-  // "On this device → Disconnect" (issue #665). Offered only when the active
+  // "On this device → Disconnect" (#665). Offered only when the active
   // vault sits on a REMOTE connection — the primordial local gateway is this
   // machine, and there is nothing to disconnect from. The act is
   // connection-wide, so the confirm names every sibling vault that goes with

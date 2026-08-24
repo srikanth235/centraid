@@ -114,7 +114,7 @@ export default function AssistantScreen({
   // home-indicator safe area.
   const composerPad = keyboardUp ? 8 : insets.bottom + 8;
   // Which picker is open, if any. Selection presents the platform's own
-  // single-choice list (#567 D12) — the user picks the agent they want instead
+  // single-choice list (#567) — the user picks the agent they want instead
   // of cycling through the dead ones. `selectHarness` still preflights and
   // reverts, so a chosen-but-unready harness surfaces as a selection error.
   const [picker, setPicker] = useState<"harness" | "model" | "effort" | null>(

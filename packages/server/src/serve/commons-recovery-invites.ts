@@ -1,10 +1,10 @@
 /**
- * Successor-invitation DELIVERY for the steward-absence ceremony (issue #750).
+ * Successor-invitation DELIVERY for the steward-absence ceremony (#750).
  *
  * `recoverCommonsFromReplica` re-founds the group from a member's replica and
- * leaves every other seat INVITED — consent is never fabricated. Until now
- * "sending those invitations is left to the caller" and no caller existed, so
- * the ceremony produced a steward-of-one and the group stayed dead.
+ * leaves every other seat INVITED — consent is never fabricated. Delivery is
+ * part of the ceremony rather than a caller's follow-up: undelivered, it
+ * produces a steward-of-one and the group stays dead.
  *
  * Delivery follows exactly the paths the ordinary create-a-commons route uses,
  * in this order per member seat:

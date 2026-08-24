@@ -2,10 +2,9 @@ import type { ReactNode } from "react";
 
 // The lightbox's render orchestrator — same shape as toolbar.jsx/picker.tsx:
 // a small private slice of state (which asset id is open, the render-seq
-// PanelBody keys off) plus its one root. Pulled out of app.tsx to keep that
-// file from growing unbounded as issue #352 adds regions (search/slideshow/
-// duplicates) alongside it; the pure view still lives in
-// components/Lightbox.tsx.
+// PanelBody keys off) plus its one root. It lives outside app.tsx so that file
+// does not grow unbounded as regions (search/slideshow/duplicates) land beside
+// it; the pure view is components/Lightbox.tsx.
 import { assetKey } from "./asset-key.ts";
 import { LightboxShell } from "./components/Lightbox.tsx";
 import { $ } from "./dom.ts";
@@ -71,7 +70,7 @@ export function createLightbox({
   };
 }) {
   // The COMPOSITE key of the open row (asset-key.ts), non-null while open. A
-  // bare `asset_id` would be ambiguous across scopes (issue #599).
+  // bare `asset_id` would be ambiguous across scopes (#599).
   let openKey: string | null = null;
   let renderSeq = 0;
   let priorFocus: HTMLElement | null = null;

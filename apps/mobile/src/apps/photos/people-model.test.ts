@@ -1,4 +1,4 @@
-// The People shelf's model (issue #724 W5). Each case is a claim the shelf
+// The People shelf's model (#724). Each case is a claim the shelf
 // makes to a member: who is named, what is only a question, what a group is,
 // and what the shelf says when it holds nothing.
 

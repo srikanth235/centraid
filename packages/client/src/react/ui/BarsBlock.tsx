@@ -1,4 +1,4 @@
-// The runs chart (v9 §9, issue #765).
+// The runs chart (v9 §9, #765).
 //
 // TWO OUTCOMES, and that is the whole design: succeeded in `--text-faint` ink
 // and failed stacked on top in `--net`. No third colour, no gradient, no grid,

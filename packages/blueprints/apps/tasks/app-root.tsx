@@ -1,5 +1,5 @@
 // governance: allow-repo-hygiene file-size-limit — this file holds the room's whole orchestration as one React tree by design (#834); splitting it belongs to the app's own code evolution, not this rebuild.
-// Tasks — the commitments room, query-free React tree (issue #505, rebuilt for
+// Tasks — the commitments room, query-free React tree (#505, rebuilt for
 // #834). Holds `Root` plus every constant and helper it needs that does NOT
 // depend on the node-side `./queries/*` handler modules; `app-inline.tsx` pairs
 // it with those and with the pending projection.
@@ -308,7 +308,7 @@ export function Root({
   ).length;
 
   // A scope that could not be asked is a NAMED slice of the board that is
-  // missing, never rows that quietly are not there (issue #726 D10).
+  // missing, never rows that quietly are not there (#726).
   const unreachedScope = state.boardReach.find(
     (entry) => entry.state !== "reached"
   );

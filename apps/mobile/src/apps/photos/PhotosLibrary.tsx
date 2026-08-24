@@ -441,7 +441,7 @@ export default function PhotosLibrary({
               accessibilityLabel="Open backup health"
               accessibilityRole="button"
               onPress={() =>
-                // Cross-stack since issue #712 B2: Backup health is a frame
+                // Cross-stack since #712: Backup health is a frame
                 // screen in Settings now, not a Photos route.
                 navigation.navigate("Settings", { screen: "BackupHealth" })
               }

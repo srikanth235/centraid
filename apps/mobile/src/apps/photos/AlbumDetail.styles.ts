@@ -1,4 +1,4 @@
-// One album's layout (issue #712 P18, extracted from ./AlbumDetail).
+// One album's layout.
 //
 // THE SEAM. `AlbumDetail.tsx` is the album's BEHAVIOUR — which photographs are
 // in it, which are selected, which writes the member's role permits, and what

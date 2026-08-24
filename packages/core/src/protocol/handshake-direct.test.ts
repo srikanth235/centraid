@@ -1,7 +1,3 @@
-/**
- * Direct imports of handshake.ts (issue #545 B9) — branch depth beyond the barrel.
- */
-
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { DEFAULT_GATEWAY_CAPABILITIES } from "./capabilities.js";

@@ -1,5 +1,5 @@
 /**
- * Direct naming of conformance-observability.ts (issue #545 B12).
+ * Direct naming of conformance-observability.ts (#545).
  */
 
 import { promises as fs } from "node:fs";

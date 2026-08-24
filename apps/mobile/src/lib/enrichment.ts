@@ -1,5 +1,5 @@
 // Mobile enrichment-policy client — the READ half of the phone's view of the
-// effective enrichment policy (issue #807, Wave 6).
+// effective enrichment policy (#807).
 //
 //   GET /centraid/_vault/enrich/effective?domain=&capability=  → the one
 //       resolver's fold for that capability, vault-SCOPED (apiHeaders).
@@ -33,7 +33,7 @@ import {
   requireGatewayBase,
 } from "./gateway";
 
-/** The data-shape domains policy is authored per (closed, per #807 Q1). */
+/** The data-shape domains policy is authored per (closed, per #807). */
 export type EnrichDomain = "photos" | "docs";
 
 /** When a capability's work is offered at a scope. */

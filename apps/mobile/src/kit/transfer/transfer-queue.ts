@@ -1,4 +1,4 @@
-// THE FRAME'S VIEW OF THE DURABLE QUEUE (#711, S4).
+// THE FRAME'S VIEW OF THE DURABLE QUEUE (#711).
 //
 // `lib/upload/native-queue.ts` owns the sqlite ledger. This module owns the
 // READOUT of it — the counts a member is shown, in one place, so Photos' backup

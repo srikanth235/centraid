@@ -1,4 +1,4 @@
-// THE CAPTURE-TIME OCR CONSENT LATCH (issue #712 C3) — the second instance
+// THE CAPTURE-TIME OCR CONSENT LATCH (#712) — the second instance
 // of the frame's per-device consent moment, mirroring
 // `kit/transfer/transfer-consent.ts`'s BACKUP latch: asked once per device,
 // remembered, revocable.

@@ -2,7 +2,7 @@ import { spawnSync } from "node:child_process";
 import crypto from "node:crypto";
 // governance: allow-repo-hygiene file-size-limit (#408) the WAL-shipper acceptance suite is one story — continuous loop, PITR, multi-process generation break, offline drain, restore-verification and the O(change) measurement all share one fixture vocabulary; splitting it would scatter the acceptance criteria across files that only change together
 /*
- * System-level acceptance tests for the WAL segment shipper (issue #408):
+ * System-level acceptance tests for the WAL segment shipper (#408):
  * REAL vault planes (`openVaultPlane`, small injected shipper thresholds),
  * a REAL `LocalBackupProvider` on a temp dir, the REAL `BackupService`
  * drain/restore/restore-verify paths, and a REAL child process for the G5
@@ -59,7 +59,7 @@ const silentLogger = {
 
 /** Tiny rollover threshold so a few-KB write batch closes a group. */
 const WAL_THRESHOLD = 8 * 1024;
-/** SQLite WAL layout for the 8 KiB pages required by issue #456 S7. */
+/** SQLite WAL layout for the 8 KiB pages required by #456 S7. */
 const WAL_HEADER_BYTES = 32;
 const WAL_FRAME_BYTES = 24 + 8 * 1024;
 
@@ -586,7 +586,7 @@ describe("wal", () => {
     expect(journalAfter.generation).not.toBe(genBefore);
     expect(journalAfter.basePending).toBe(true);
 
-    // …and the VAULT re-based with it (issue #408): a journal-only break would
+    // …and the VAULT re-based with it (#408): a journal-only break would
     // leave two bases from two ticks — a journal base holding receipts for vault
     // rows that live only in the vault's SEGMENTS. Lose one of those and the
     // restore hands back history asserting data it does not have. The two

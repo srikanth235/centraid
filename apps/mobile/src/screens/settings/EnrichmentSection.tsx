@@ -18,7 +18,7 @@ import type {
 } from "../../lib/enrichment";
 import SettingsSection from "./SettingsSection";
 
-// Settings → Enrichment (issue #807, Wave 6) — what the phone can SAY about
+// Settings → Enrichment (#807) — what the phone can SAY about
 // the effective enrichment policy, which is: what it is, and nothing else.
 //
 // READ ONLY, DELIBERATELY. Editing the policy cascade means choosing a scope,

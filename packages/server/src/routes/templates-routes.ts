@@ -1,4 +1,4 @@
-// HTTP surface for the gateway-owned template catalog (issue #141).
+// HTTP surface for the gateway-owned template catalog (#141).
 //
 // The gateway owns the bundled @centraid/blueprints catalog, not the
 // desktop main process: it
@@ -13,7 +13,7 @@
 //                                 triggerKind?, triggerLabel?, integrations?,
 //                                 installed?, vault? }]   (installed = per-vault, #434)
 //
-// `vault` (#434, Phase 2) is the app-kind template's requested access —
+// `vault` (#434) is the app-kind template's requested access —
 // `{ purpose?, why?, scopes[] }` read straight from its `app.json` — so the
 // Discover install sheet can render the consent surface (what the app will be
 // able to touch) BEFORE the owner installs. Automations omit it.
@@ -42,7 +42,7 @@ interface TemplateVaultScope {
 
 /** The consent-relevant slice of a template's `app.json` `vault` block —
  *  the `why` sentence + requested scopes the Discover install sheet renders
- *  before the owner consents (issue #434, Phase 2). Display metadata only;
+ *  before the owner consents (#434). Display metadata only;
  *  the `purpose` DPV URI rides along for the per-app consent pane. */
 interface TemplateVault {
   purpose?: string;
@@ -102,7 +102,7 @@ export interface TemplatesRouteOptions {
   cacheDir?: string;
 
   /**
-   * Installed bundled app ids for the request's vault (issue #434). When
+   * Installed bundled app ids for the request's vault (#434). When
    * provided, each catalog row carries `installed` so the Discover gallery
    * can show "Open" for an already-installed app instead of "Install".
    * Resolved per request off the ambient vault scope; omit for bundle-only
@@ -127,7 +127,7 @@ export function makeTemplatesRouteHandler(
     const resolved = await resolveTemplates(
       opts.cacheDir ? { cacheDir: opts.cacheDir } : {}
     );
-    // Install state is per-vault (issue #434) — resolve it once per request.
+    // Install state is per-vault (#434) — resolve it once per request.
     const installed = opts.installedAppIds ? opts.installedAppIds() : undefined;
     // Requested-access blocks, read from each app template's app.json (#434,
     // Phase 2). Read in parallel; automations resolve to undefined.

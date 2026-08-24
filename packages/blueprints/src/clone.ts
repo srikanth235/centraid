@@ -32,7 +32,7 @@ export interface CloneTemplateOptions {
    */
   newDesc?: string;
   /**
-   * Template tile identity from the catalog entry (issue #263). Backfills
+   * Template tile identity from the catalog entry (#263). Backfills
    * `app.json#iconKey` / `#colorKey` when the template's own copy predates
    * the keys; a template app.json that already declares them wins.
    */
@@ -82,13 +82,13 @@ export async function cloneTemplate(
   // `automations/<id>/` folders (e.g.
   // `journal/automations/weekly-recap/`); those carry through
   // unchanged via `copyDir` above — this step only adds missing
-  // directories, never overwrites contents (issue #70).
+  // directories, never overwrites contents (#70).
   await ensureCanonicalSubdirs(destDir);
 
   await rewriteAppJson(destDir, opts.newName, opts.newDesc, opts.newAppId);
   // Backfill the tile identity from the catalog entry so a clone of an
   // older cached template (app.json without iconKey/colorKey) still lands
-  // with the template's canonical look (issue #263).
+  // with the template's canonical look (#263).
   if (opts.iconKey || opts.colorKey) {
     await stampAppVisualIdentity(destDir, {
       iconKey: opts.iconKey,
@@ -234,7 +234,7 @@ export async function suggestCloneIdentity(
 
 /**
  * Filesystem-free variant of {@link suggestCloneIdentity} for the
- * git-store backend (issue #137): the desktop no longer has a local
+ * git-store backend (#137): the desktop has no local
  * workspace dir to scan, so the caller hands in the already-published
  * apps (id + optional display name, e.g. from `listAppsWithMeta()`).
  * Same bare-first-then-`-N` advancement and 1000-attempt cap. Id and
@@ -277,7 +277,7 @@ export interface CloneTemplateFilesOptions {
   /** Optional one-line description; defaults to the template's. */
   newDesc?: string;
   /**
-   * Template tile identity from the catalog entry (issue #263). Backfills
+   * Template tile identity from the catalog entry (#263). Backfills
    * `app.json#iconKey` / `#colorKey` when the template's own copy predates
    * the keys; a template app.json that already declares them wins.
    */
@@ -287,7 +287,7 @@ export interface CloneTemplateFilesOptions {
 
 /**
  * Filesystem-free variant of {@link cloneTemplate} for the git-store/HTTP
- * path (issue #141). Takes the template's file map and returns the full
+ * path (#141). Takes the template's file map and returns the full
  * rewritten file map for the new app — same rewrites as the disk path:
  *   - `app.json` → fresh `id`, `name`, `version` "0.1.0", carried/overridden `description`
  *   - `package.json#name` → `centraid-app-<id>` (only if it followed the convention)
@@ -341,7 +341,7 @@ export function cloneTemplateFiles(
   const descTrimmed = descSource.trim();
   if (descTrimmed) nextAppJson.description = descTrimmed;
   else delete nextAppJson.description;
-  // Backfill the tile identity from the catalog entry (issue #263) —
+  // Backfill the tile identity from the catalog entry (#263) —
   // no-op when the template's app.json already declares the keys.
   const withVisual =
     applyAppVisualIdentity(JSON.stringify(nextAppJson, null, 2) + "\n", {

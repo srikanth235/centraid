@@ -62,7 +62,6 @@ export function openAutomationTemplatePreview(
     return n;
   };
 
-  // Head
   const head = html("div", styles.auDrawerHead);
   head.append(text("span", styles.auDrawerEmoji, template.emoji ?? "⚙️"));
   const headText = document.createElement("div");

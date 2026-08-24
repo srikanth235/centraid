@@ -1,5 +1,5 @@
 // One document's read surface, as facts (Docs handoff Part 2 §6–§8;
-// issue #821).
+// #821).
 //
 // `DocumentRead` is ONE route that forks by kind — "the fork is a fact about
 // the document, not two places" (navigation.ts). The fork itself lives here,

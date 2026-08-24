@@ -3,10 +3,10 @@
 // its own terms, and the one mark a row is allowed to carry (Docs spec §1.5,
 // §2, §4.1, §4.3, §4.6).
 //
-// Extracted from the orchestrator for the same two reasons Photos extracted
-// its own: copy is a product decision that changes on its own schedule, and
-// "each shelf is empty on its own terms" is a TABLE, not a chain of ternaries
-// in a render function.
+// Copy lives here rather than in the orchestrator for two reasons: it is a
+// product decision that changes on its own schedule, and "each shelf is empty
+// on its own terms" is a TABLE, not a chain of ternaries in a render
+// function.
 //
 // The copy here is the spec's, VERBATIM, with two documented classes of
 // departure and no others:
@@ -15,7 +15,7 @@
 //      drive ("1,908 · in this vault", "Trash · 9"). Those are sample data;
 //      what ships is the member's own count, so the tables here carry the
 //      NOUN and the caller supplies the number.
-//   2. THE STORAGE NOUN IS NEVER PRINTED FOR A SCOPE (issue #599). What a
+//   2. THE STORAGE NOUN IS NEVER PRINTED FOR A SCOPE (#599). What a
 //      member reads for a scope is `scope.label`, which the owner may rename.
 //      Where the spec writes "this vault" as a place-name it is left as the
 //      spec's own words about the drive, never interpolated with a scope.
@@ -409,11 +409,11 @@ export interface MoreRow {
 /**
  * §1.5's eight rows, in the spec's order and with the spec's words.
  *
- * `live` is what THIS WAVE can honour. A row whose destination does not exist
- * yet is not rendered: a sheet that offers a place the app cannot reach is a
- * dead end, which is the one thing a navigation surface may never be. The
- * table stays whole so the agent who lands each route flips one flag rather
- * than re-deriving the copy.
+ * `live` is what this app can honour today. A row whose destination does not
+ * exist yet is not rendered: a sheet that offers a place the app cannot reach
+ * is a dead end, which is the one thing a navigation surface may never be. The
+ * table stays whole, so landing a route flips one flag rather than re-deriving
+ * the copy.
  */
 export const MORE_ROWS: readonly (MoreRow & { live: boolean })[] = [
   { shelf: RECENT, label: "Recently changed", live: true },

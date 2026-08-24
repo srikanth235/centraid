@@ -1,4 +1,4 @@
-// What a Google Takeout archive says ABOUT its photos (issue #721 A1) — as
+// What a Google Takeout archive says ABOUT its photos (#721) — as
 // opposed to what the photos' own bytes say, which is the spool pipeline's
 // job (blob/pipeline.ts).
 //

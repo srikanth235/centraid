@@ -1,5 +1,5 @@
 /**
- * Pure backup metric aggregation (issue #545 B8).
+ * Pure backup metric aggregation (#545).
  */
 
 import { describe, expect, it } from "vitest";

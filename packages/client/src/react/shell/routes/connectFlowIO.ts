@@ -9,7 +9,7 @@ import type {
 import { connectGateway } from "./gatewayModals.js";
 
 /*
- * Impure IO for ConnectFlow (issue #382) — mirrors the
+ * Impure IO for ConnectFlow (#382) — mirrors the
  * gatewayRegistry.ts pure-core / impure-glue split: every
  * `window.CentraidApi` call and error-shape decision lives here, so
  * `connectFlow-core.ts` and the component stay pure/presentational.
@@ -19,7 +19,7 @@ import { connectGateway } from "./gatewayModals.js";
  * locally as `ConnectFlowBridge` and reconciled by the integration typecheck.
  */
 
-/** The one vault a fresh gateway auto-founds for its owner (issue #603). */
+/** The one vault a fresh gateway auto-founds for its owner (#603). */
 const PERSONAL_VAULT_NAME = "Personal";
 
 export interface ConnectFlowBridge {
@@ -69,7 +69,7 @@ export async function runConnectivityTest(
  * The local gateway's existing vaults, shaped like a ConnectivityReport's
  * `vaults[]` so the vault step's rendering stays method-agnostic.
  *
- * The catch is a typed translation, not a swallow (issue #603 W4): an
+ * The catch is a typed translation, not a swallow (#603): an
  * unreachable gateway must not fold into an empty list, which the vault step
  * would render as "this gateway has no vaults" and the onboarding host would
  * auto-commit a create against. The caller sees WHY the list is empty.
@@ -104,7 +104,7 @@ export async function loadLocalVaults(): Promise<LocalVaultsResult> {
 }
 
 /**
- * First run's "Start fresh on this Mac" commit (issue #603). The embedded
+ * First run's "Start fresh on this Mac" commit (#603). The embedded
  * gateway founds one marked personal vault at construction, so there is no
  * ceremony and no vault to create here — this only makes the local gateway
  * active and addresses the owner's own vault. Shared vaults are an explicit
@@ -159,7 +159,7 @@ export async function commitConnectFlow(
 async function ensureLocalGatewayActive(): Promise<void> {
   // Always the explicit call, even when 'local' is already the active id (it
   // is the virgin-install default): on a true first run the desktop DEFERS
-  // starting the local gateway until this deliberate act (issue #603 — no
+  // starting the local gateway until this deliberate act (#603 — no
   // keychain prompt before the user chooses), and `setActiveGateway` is what
   // lifts that deferral. Skipping it when the id already matches would leave
   // the gateway unstarted and every follow-up read hanging on an empty URL.

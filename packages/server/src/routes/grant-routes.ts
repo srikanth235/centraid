@@ -1,5 +1,5 @@
 /*
- * The GRANT PLANE's owner surface (issue #825) — `/centraid/_vault/grants`.
+ * The GRANT PLANE's owner surface (#825) — `/centraid/_vault/grants`.
  *
  * A share is a standing grant, so this route says a sentence and keeps it: who
  * may see or edit which subject, from when, until it is revoked. Nothing here

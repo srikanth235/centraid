@@ -1,4 +1,4 @@
-// The words every operational page shares (issue #805, slice C).
+// The words every operational page shares (#805).
 //
 // Approvals, Connectors, Atlas, Automations, Insights and Devices all draw the
 // same three moments — reading, nothing to attend to, could not load — and

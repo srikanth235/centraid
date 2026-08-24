@@ -1,5 +1,5 @@
 /*
- * Peer-plane target differential (issue #842 W2.1).
+ * Peer-plane target differential (#842).
  *
  * The peer path confinement is written THREE times, in two languages:
  *
@@ -87,8 +87,8 @@ const utf8 = new TextEncoder();
  *    extends it by one code unit also extends it by at least one byte.
  *  - **representability.** A Rust `&str` cannot hold a lone surrogate, so a
  *    target carrying one never reaches `peer_target_allowed` at all. That is
- *    modelled as a refusal, which is what the JS guard now answers too
- *    (#846 P7) — before the fix, JS silently judged the U+FFFD rewrite.
+ *    modelled as a refusal, which is what the JS guard answers too — it must
+ *    never judge the U+FFFD rewrite instead (#846).
  *
  * Everything else follows the Rust text line for line: `split(['?', '#'])
  * .next()`, the path-length extension test, `bytes().any(...)` over `%`, `\`,
@@ -240,7 +240,7 @@ const adversarialTarget = fc
   .map(([head, pieces]) => head + pieces.join(""));
 
 /*
- * The committed JS↔Rust bridge (issue #842 W2.1).
+ * The committed JS↔Rust bridge (#842).
  *
  * `peer-target-golden.json` is the CURATED corpus — cases a human thought
  * worth naming, plus the pins. This second corpus is its MACHINE half: a
@@ -352,11 +352,9 @@ describe("peer-plane target differential", () => {
   test("the guard matches its documented intent on every input", () => {
     fc.assert(
       fc.property(adversarialTarget, (target) => {
-        // No carve-out. Until #846 P6 this property had to skip the
-        // bare-prefix-plus-separator class, because that was the one place the
-        // product and its own sentence parted company. The product moved, so
-        // the exemption goes with it: any future edit that reopens a gap
-        // between guard and sentence fails here on the first draw that hits it.
+        // No carve-out, not even for the bare-prefix-plus-separator class
+        // (#846): any edit that reopens a gap between guard and sentence fails
+        // here on the first draw that hits it.
         expect(isPeerPlaneTarget(target)).toBe(documentedIntent(target));
       }),
       { numRuns: 800, seed: 84223 }
@@ -396,8 +394,7 @@ describe("peer-plane target differential", () => {
   });
 
   /*
-   * REGRESSION LOCK for #846 P7, formerly the pin
-   * `lone-surrogate-admitted-by-js-only`.
+   * REGRESSION LOCK for #846 P7.
    *
    * protocol.ts promises the rule is "mirrored byte-for-byte in Rust", but a
    * JS string can hold a lone surrogate and a Rust `&str` cannot: the JS

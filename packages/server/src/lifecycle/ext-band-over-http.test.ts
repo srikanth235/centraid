@@ -1,8 +1,7 @@
 import crypto from "node:crypto";
 import { promises as fs } from "node:fs";
 /*
- * The ext band over HTTP (issue #286 phase 2) — the successor to the
- * silo's seed-draft-data + publish-migrations coverage.
+ * The ext band over HTTP (#286).
  *
  * Publishes an app whose manifest DECLARES extension tables and asserts
  * the vault side: publish applies the DDL to the live band (diffs on

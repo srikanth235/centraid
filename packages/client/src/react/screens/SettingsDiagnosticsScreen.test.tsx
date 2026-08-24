@@ -202,7 +202,7 @@ describe("screens/SettingsDiagnosticsScreen", () => {
     });
 
     it("renders a long multi-item detail string (disk/vaults) in full, with a title fallback", async () => {
-      // The `disk`/`vaults` components (issue #351) bake everything into one
+      // The `disk`/`vaults` components (#351) bake everything into one
       // detail string — long enough that the row must not ellipsis-clip it.
       const longDetail =
         "vault 019f5079-vault-one: 42.3 MB (vault.db 30.1 MB, journal.db 12.2 MB); " +
@@ -291,7 +291,7 @@ describe("screens/SettingsDiagnosticsScreen", () => {
     });
   });
 
-  // Connections — host plumbing (issue #665). Every management act against a
+  // Connections — host plumbing (#665). Every management act against a
   // host lives here and nowhere else, so "the three acts fire against the row
   // that was clicked" is the contract this section has to keep.
   describe("connections section", () => {

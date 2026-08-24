@@ -141,7 +141,7 @@ export default function InsightsRoute(): JSX.Element {
   }, []);
 
   const state = useAsyncData(async () => {
-    // Health carries the optional resource receipt (#528 Phase C) and the
+    // Health carries the optional resource receipt (#528) and the
     // uptime the status line quotes; its failure must never break Analytics,
     // so it resolves to null on any error.
     const [summary, automations, health] = await Promise.all([

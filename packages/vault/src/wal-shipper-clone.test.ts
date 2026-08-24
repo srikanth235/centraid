@@ -1,6 +1,6 @@
 import { randomBytes } from "node:crypto";
 /*
- * The base clone must be a REFLINK, not a byte copy (issue #408).
+ * The base clone must be a REFLINK, not a byte copy (#408).
  *
  * A base is minted on every generation break — daily at minimum. If the clone
  * copies bytes, the shipper writes a second full copy of the vault every day

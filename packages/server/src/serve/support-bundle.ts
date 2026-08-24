@@ -1,10 +1,10 @@
 /*
- * Shareable support bundle (#842 W8.1).
+ * Shareable support bundle (#842).
  *
  * This module builds the artifact an owner may choose to hand to somebody
  * ELSE — the single diagnostics document `makeDiagnosticsRouteHandler`
  * serves at `GET /centraid/_gateway/diagnostics` behind the host bearer
- * gate (#846 P8). Nothing here carries vault names or raw log lines.
+ * gate (#846). Nothing here carries vault names or raw log lines.
  *
  * Two rules define it.
  *

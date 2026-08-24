@@ -34,7 +34,7 @@ export interface StorageScreenProps {
     patch: StorageLimitsPatchDTO
   ) => Promise<StorageLimitsDTO>;
   /**
-   * `GET _gateway/owners` (issue #726 P1) — joined client-side onto the
+   * `GET _gateway/owners` (#726) — joined client-side onto the
    * footprint's per-vault rows so the gateway owner sees what hosting each
    * vault costs, and for whom. Optional so a host with no owner surface (or
    * a test) still renders the footprint, unlabeled.
@@ -103,7 +103,7 @@ export default function StorageScreen(props: StorageScreenProps): JSX.Element {
   useEffect(() => {
     mountedRef.current = true;
     const initialRefresh = setTimeout(() => void refresh(), 0);
-    // Suspended while the tab is hidden and caught up on return (issue #659).
+    // Suspended while the tab is hidden and caught up on return (#659).
     const stop = startVisibilityTicker(() => void refresh(), FOOTPRINT_POLL_MS);
     return () => {
       mountedRef.current = false;

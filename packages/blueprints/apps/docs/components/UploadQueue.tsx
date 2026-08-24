@@ -1,10 +1,10 @@
 // The upload queue, per file (Docs spec §4.4's `bulk`).
 //
-// WHAT THIS REPLACES is a notice bar reading "Uploading 3 of 12…", overwritten
-// once a second and then by a summary — so a member who dropped twelve files
-// and had three refused was told the count and never the names. The rule the
-// spec puts on this screen is "nothing was discarded", and a member cannot
-// check that claim against a sentence that has already scrolled away.
+// NEVER A ROLLING NOTICE. A bar reading "Uploading 3 of 12…", overwritten once
+// a second and then by a summary, tells a member who dropped twelve files and
+// had three refused the count and never the names. The rule the spec puts on
+// this screen is "nothing was discarded", and a member cannot check that claim
+// against a sentence that has already scrolled away.
 //
 // EVERY FAILURE NAMES ITS OWN RULE. Over the size ceiling, could not be read,
 // refused by the vault — three different sentences, each on the row it belongs

@@ -1,4 +1,4 @@
-// Owner memos (issue #274): one gesture, one mechanism. A free-text remark
+// Owner memos (#274): one gesture, one mechanism. A free-text remark
 // about an entity — "met at Ravi's wedding" on a person, "felt strong" on a
 // run — is entity-scoped meaning, so it lives in knowledge.annotation keyed
 // to the canonical entity (the mechanism's own stated example is "a note

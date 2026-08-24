@@ -1,4 +1,4 @@
-// Approvals' cross-surface copy (issue #805, slice C).
+// Approvals' cross-surface copy (#805).
 //
 // The desktop screen (`react/screens/ApprovalsScreen.tsx`) and the mobile
 // screen model (`apps/mobile/src/screens/approvals/approvals-model.ts`) drew

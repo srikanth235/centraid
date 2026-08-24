@@ -157,8 +157,8 @@ describe("harnesses-routes", () => {
 
   // Catalog enumeration is opt-in per kind (codex + claude-code), but the
   // capability probe launches every available harness anyway and reads the same
-  // session/new model option. opencode advertised 76 models there while the
-  // picker said "Built-in model", because only the empty catalog was consulted.
+  // session/new model option. Consulting only the (empty) catalog shows
+  // "Built-in model" while opencode advertises 76 models there.
   test("falls an empty catalog back to the models the capability probe saw", () => {
     const models = modelsFromCapabilities(
       caps([

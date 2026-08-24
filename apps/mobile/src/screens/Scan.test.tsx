@@ -1,4 +1,4 @@
-// THE CAPTURE-TIME OCR CONSENT GATE (issue #712 C3) — the second instance of
+// THE CAPTURE-TIME OCR CONSENT GATE (#712) — the second instance of
 // the §8 consent gate, after Photos' face detection.
 //
 // `Scan.tsx` must never call `extract()` unconditionally the moment a

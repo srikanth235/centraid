@@ -2,7 +2,7 @@
 // admin scenarios share one fixture and command-dispatch contract.
 import crypto from "node:crypto";
 /*
- * Stopped-daemon filesystem maintenance (issue #289):
+ * Stopped-daemon filesystem maintenance (#289):
  * `centraid-gateway vault|devices|pair` plus the daemon device plane. Tests
  * call the dispatched command functions, asserting stdout + gateway.db rows.
  */
@@ -104,7 +104,7 @@ describe("admin scenarios", () => {
         rootDir: layout.vaultDir,
         // The daemon this stands in for opens custody the same way; a bare
         // KeyStore cannot unwrap a protected sealkey and would mount nothing
-        // (issue #568 item D).
+        // (#568).
         keyStore: daemonKeyStore(layout.keysDir),
         logger: silentLogger,
         enableWalShipper: false,

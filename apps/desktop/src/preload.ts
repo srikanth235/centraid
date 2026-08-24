@@ -18,7 +18,7 @@ import * as tokens from "@centraid/design";
 // `/font-faces`, never `/fonts`: this module is bundled into the SANDBOXED
 // preload, where `require("node:path")` does not resolve. Importing the
 // node-only half here fails the whole preload, and a preload that will not
-// load takes the entire app down with it (issue #707).
+// load takes the entire app down with it (#707).
 import { toFontFaceCss } from "@centraid/design/font-faces";
 
 import type { PreloadBridge } from "./main/preload-core.js";

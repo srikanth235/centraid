@@ -1,9 +1,8 @@
 /*
  * `GET /centraid/_gateway/backup` + `POST /centraid/_gateway/backup/run` +
  * `POST /centraid/_gateway/backup/kit-confirmed` — the HTTP surface over
- * `BackupService` (issue #351's last workstream: the `centraid-gateway
- * backup` CLI has status/run, but nothing exposes it to the desktop's
- * Gateway page; wave 4 adds the recovery-kit confirmation gate).
+ * `BackupService` (#351) — what the desktop's Gateway page reads,
+ * including the recovery-kit confirmation gate.
  *
  * Thin wiring, same shape as `health-routes.ts`/`diagnostics-routes.ts`:
  * mounted in `extraHandlers` behind the same host bearer gate. When backup
@@ -85,7 +84,7 @@ export interface BackupStatusBody {
   provider?: string;
   vaults: BackupVaultStatus[];
   recoveryKit: RecoveryKitState;
-  /** The home bundle's provider-declared promises (#436 §6) — Recovery window
+  /** The home bundle's provider-declared promises (#436) — Recovery window
    *  (`retention`) and Exit (`restoreCostClass`) of the five-metric contract.
    *  Absent when backup isn't configured, or when discovery couldn't be read. */
   home?: HomeDiscovery;
@@ -95,7 +94,7 @@ export interface BackupRouteDeps {
   /** `undefined` when `options.backup?.enabled` is false — no service exists. */
   backupService?: BackupService;
   /**
-   * Gateway-level recovery-kit state (issue #367 §C10) — present even when
+   * Gateway-level recovery-kit state (#367) — present even when
    * backup isn't configured, so the confirmation gate the S3-storage enable
    * flow shares can actually be satisfied on a backup-less gateway (the
    * desktop embed) instead of only bypassed with force.
@@ -106,7 +105,7 @@ export interface BackupRouteDeps {
   /**
    * Direct host-custody request (authenticated bearer, never iroh-forwarded).
    * It can see every vault, so refusals it hits are `owner_only` (naming the
-   * real owner) rather than `not_found` topology hiding (#726 P1).
+   * real owner) rather than `not_found` topology hiding (#726).
    */
   isHostCustody?: (req: IncomingMessage) => boolean;
   vaults: VaultRegistry;
@@ -197,7 +196,7 @@ function vaultStatus(
   casReconciliation?: BackupReconciliationState
 ): BackupVaultStatus {
   const store = readBlobStoreSettings(plane.db.vault);
-  // Every remote CAS connection is a provider home bundle now (#436 §2).
+  // Every remote CAS connection is a provider home bundle (#436).
   const destination: BackupDestinationStatus =
     store.kind === "s3"
       ? {
@@ -241,7 +240,7 @@ function newestReconciliation(
     : second;
 }
 
-// Owner-editable policy keys (issue #436 §4). Deliberately EXCLUDED:
+// Owner-editable policy keys (#436). Deliberately EXCLUDED:
 //   - `casAck`: the wire declaration keeps the field (default 'receipt'), but
 //     durability semantics are not an owner knob — remote custody is always
 //     receipt-acked; the store engine reads the default, the owner never sets it.
@@ -304,7 +303,7 @@ export function makeBackupRouteHandler(deps: BackupRouteDeps): RouteHandler {
           message: "GET, PUT only",
         });
       }
-      // Configuring a vault's backup target is an owner act (#726 P1):
+      // Configuring a vault's backup target is an owner act (#726):
       // `backup_targets` rows key by vault_id, but hosting a vault confers
       // no authority over ITS destination/policy.
       const configRefusal = vaultOwnerRefusal(
@@ -482,7 +481,7 @@ export function makeBackupRouteHandler(deps: BackupRouteDeps): RouteHandler {
             message: "a recovery-kit password is required",
           });
         }
-        // Owner-held (#726 P1): a kit carries only the vaults the REQUESTING
+        // Owner-held (#726): a kit carries only the vaults the REQUESTING
         // owner owns — hosting someone else's vault does not entitle you to
         // their recovery material.
         const document = scopeKitToRequestingOwner(

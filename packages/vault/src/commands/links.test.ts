@@ -266,7 +266,7 @@ describe("links", () => {
     const linkId = (out as { output: { link_id: string } }).output.link_id;
 
     // Trash keeps the note (and its links) alive for the grace window
-    // (issue #308 A6): the real deletion is the sweep's purge.
+    // (#308): the real deletion is the sweep's purge.
     expect(
       invoke(owner, "knowledge.delete_note", { note_id: noteId }).status
     ).toBe("executed");

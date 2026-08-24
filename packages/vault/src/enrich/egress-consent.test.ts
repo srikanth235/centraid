@@ -1,4 +1,4 @@
-// Egress consent (issue #807) — that a decline stays on record, that a
+// Egress consent (#807) — that a decline stays on record, that a
 // vault-wide answer never silently covers a narrower scope, and that the
 // egress vocabulary is closed.
 

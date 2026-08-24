@@ -1,5 +1,5 @@
 /*
- * Installing the sandbox, in this thread (#842 W7.1).
+ * Installing the sandbox, in this thread (#842).
  *
  * `install.ts` is the enforcement core — the module hook that refuses a
  * builtin, the taint set that decides which graph is confined, and the

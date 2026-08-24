@@ -1,11 +1,11 @@
-// The Vault Atlas census/graph/pulse computations (issue #441 Part B, B4
+// The Vault Atlas census/graph/pulse computations (#441 Part B, B4
 // items 2-4). These are the read-only payload builders the gateway's
 // `/_vault/atlas/*` routes wrap. Kept in the vault package (not the gateway)
 // so the ghost-semantics invariant can be tested directly against a migrated
 // `:memory:` vault, and so the pack mapping and `table-stats.ts` sit next to
 // their single caller.
 //
-// FK ≠ core_link is the load-bearing distinction (issue #441 "the trap this
+// FK ≠ core_link is the load-bearing distinction (#441 "the trap this
 // design must not fall into"). Two DIFFERENT relation mechanisms travel as
 // SEPARATE collections in the graph payload and must never be conflated:
 //   - fkEdges     — schema-enforced FK columns; an edge "carries" when child
@@ -82,7 +82,7 @@ export interface AtlasCensusPayload {
 }
 
 /**
- * Grouped census of the vault (issue #441 B1): per-table rows/bytes wrapped
+ * Grouped census of the vault (#441): per-table rows/bytes wrapped
  * with the pack mapping. Bytes come from `table-stats.ts` (dbstat, with its
  * documented `estimate` fallback); rows are a COUNT(*) per table (the dbstat
  * method omits rows by design, and the census header wants "214 people").

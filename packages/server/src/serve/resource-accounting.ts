@@ -6,7 +6,7 @@
  * sweep passes, worker-pool tasks, and harness turns — each with the
  * wall-clock it occupied.
  *
- * Design constraints (issue #528 Phase C):
+ * Design constraints (#528):
  *   - MEASURED PROXIES ONLY. Never a fabricated watt or a synthesized
  *     energy figure — the fields are counts, byte totals, wall-clock ms,
  *     and the OS-reported process CPU/RSS. `harnessRuns.cpuSeconds` stays
@@ -31,7 +31,7 @@ const HOUR_MS = 60 * 60 * 1000;
 
 /**
  * Measured per-subsystem resource actuals, published as
- * `metrics.resourceUsage` on the gateway health snapshot (#528 Phase C).
+ * `metrics.resourceUsage` on the gateway health snapshot (#528).
  * Every field is an OS- or code-measured number — no modeled energy.
  */
 export interface ResourceUsageActuals {
@@ -70,7 +70,7 @@ export interface ResourceAccountingOptions {
   rss?: () => number;
   /**
    * Live worker-pool counters. The worker pool tracks its own cumulative
-   * `tasks`/`busyMs` (issue #351 admission gate lives in app-engine, which
+   * `tasks`/`busyMs` (#351 admission gate lives in app-engine, which
    * must not depend on the gateway), so the gateway reads them here at
    * snapshot time rather than pushing a per-task hook across the boundary.
    */

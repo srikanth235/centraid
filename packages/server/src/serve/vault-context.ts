@@ -1,5 +1,5 @@
 /*
- * Per-request vault context (issue #289).
+ * Per-request vault context (#289).
  *
  * A client addresses a (gateway, vault) pair — never a gateway alone. The
  * gateway resolves WHICH vault a request rides from the request itself
@@ -23,7 +23,7 @@ export interface VaultRequestContext {
   vaultId: string;
   /**
    * The calling device's key when the request arrived over an enrolled
-   * transport (issue #289 phase 2): an iroh EndpointId for a proved iroh
+   * transport (#289): an iroh EndpointId for a proved iroh
    * caller. A loopback embed also owns a concrete enrollment. Absence is
    * never an admin wildcard: the composed handler fails closed.
    */
@@ -47,7 +47,7 @@ export interface VaultRequestContext {
 }
 
 /**
- * Device-plane resolution + ACL (issue #289 phase 2): device key ↔ vault,
+ * Device-plane resolution + ACL (#289): device key ↔ vault,
  * one bit. Implemented by the daemon's enrollment store; absent for hosts
  * whose transport carries no device identity (loopback embed, tests).
  */

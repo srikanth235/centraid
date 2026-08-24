@@ -1,5 +1,5 @@
 /*
- * Groups the vault's per-app/per-agent grants BY STORE (issue #708 section A2)
+ * Groups the vault's per-app/per-agent grants BY STORE (#708 section A2)
  * — the inversion the brief asks for. Today's consent surfaces (VaultScreen,
  * ApprovalsScreen's "Standing grants") answer "what does this app do?" one app
  * at a time; this module answers "who can see my photos?" by turning the same

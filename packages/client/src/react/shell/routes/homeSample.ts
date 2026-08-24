@@ -1,4 +1,4 @@
-// Home's sample-data offer (issue #708).
+// Home's sample-data offer (#708).
 //
 // A vault on day one is empty, and an empty archive is a poor argument for an
 // archive. The handoff's Home is dense with content — that density IS the

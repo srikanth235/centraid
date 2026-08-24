@@ -1,5 +1,5 @@
 /*
- * Wire protocol for the centraid tunnel (issue #263).
+ * Wire protocol for the centraid tunnel (#263).
  *
  * Three ALPNs ride one iroh endpoint:
  *
@@ -12,7 +12,7 @@
  *     PairRequest frame (then FIN), the desktop answers a PairResponse
  *     frame (then FIN).
  *
- *   `centraid/gw-link/1` — the gateway↔GATEWAY peer plane (#726 P3).
+ *   `centraid/gw-link/1` — the gateway↔GATEWAY peer plane (#726).
  *     Same framing, confined to `/centraid/_peer/*`, with its own admission
  *     decision and its own identity headers. A CLIENT never speaks it: it is
  *     deliberately absent from fixtures/wire-golden.json, because the Swift
@@ -27,7 +27,7 @@
 export const TUNNEL_ALPN = "centraid/tunnel/1";
 export const PAIR_ALPN = "centraid/pair/1";
 /**
- * Gateway↔gateway peer plane (issue #726 P3). A LINK is not a pairing: the
+ * Gateway↔gateway peer plane (#726). A LINK is not a pairing: the
  * caller is another gateway acting for its own vault, never a device acting
  * for this gateway's owner. Byte-mirrored in
  * `data-plane/src/lib.rs::PEER_LINK_ALPN`; the two are pinned against each
@@ -40,7 +40,7 @@ export const TUNNEL_AUTH_MODE_HEADER = "x-centraid-tunnel-auth-mode";
 export const TUNNEL_AUTH_WEB_SESSION = "web-session";
 
 /*
- * Loopback is not an identity (issue #568 item A).
+ * Loopback is not an identity (#568).
  *
  * Every forwarder in this repo delivers a REMOTE peer to a loopback HTTP
  * listener, so the socket address proves nothing about who is calling. The
@@ -61,7 +61,7 @@ export const DEVICE_PROOF_HEADER = "x-centraid-device-proof";
 export const TUNNEL_FORWARDED_HEADER = "x-centraid-tunnel-forwarded";
 
 /*
- * The peer plane (issue #726 P3 decision 6).
+ * The peer plane (#726 P3 decision 6).
  *
  * A linked peer gateway reaches EXACTLY the routes under this prefix and
  * nothing else. The forwarded `target` is peer-supplied and is concatenated
@@ -87,10 +87,10 @@ export const PEER_PROOF_HEADER = "x-centraid-peer-proof";
  *    Rust `&str` cannot carry one at all, so a JS guard that judged the
  *    UTF-8 re-encoding (which silently rewrites a lone surrogate to U+FFFD)
  *    would be judging a different string than the one it forwards, and would
- *    admit a target the Rust lane can never represent (#846 P7);
+ *    admit a target the Rust lane can never represent (#846);
  *  - the PATH — everything before `?`/`#` — must extend `PEER_PLANE_PREFIX`.
  *    A bare prefix addresses no resource, and measuring the whole target
- *    instead let a lone `?` or `#` stand in for that extension (#846 P6);
+ *    instead let a lone `?` or `#` stand in for that extension (#846);
  *  - the path carries no percent escape, no backslash, and no byte at or
  *    below 0x20 — the peer plane's own routes never need them, and admitting
  *    them would mean re-implementing URL normalisation identically in two

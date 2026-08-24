@@ -1,5 +1,5 @@
 /*
- * Live-gateway adapter for the shareable support bundle (#842 W8.1).
+ * Live-gateway adapter for the shareable support bundle (#842).
  *
  * `support-bundle.ts` is pure and knows nothing about this process. This
  * module is the one place that reads live gateway state and turns it into

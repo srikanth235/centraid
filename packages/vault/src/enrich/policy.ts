@@ -54,7 +54,7 @@ export function isEnrichTier(value: unknown): value is EnrichTier {
 // automation the instant `local` was reinterpreted as the wider `gateway` —
 // so it maps down to the conservative `device`, the same "no gateway-lane
 // work" behaviour the vault already had, under the new name. See
-// `packages/vault/src/schema/enrich.ts` and issue #712's C5 receipt for the
+// `packages/vault/src/schema/enrich.ts` and #712's C5 receipt for the
 // full reasoning and the sabotage test that pins it.
 const LEGACY_TIER: Readonly<Record<string, EnrichTier>> = {
   local: "device",
@@ -96,7 +96,7 @@ export interface EnrichPolicyResolutionInput {
 /**
  * The material `decideEnrichmentGate`'s resolver folds for one capability:
  * the legacy per-domain tier plus the cascade's rules along a scope chain
- * (issue #807). ONE read path, on the same host plane and for the same reason
+ * (#807). ONE read path, on the same host plane and for the same reason
  * as `readEnrichPolicyTier` — a guard must never depend on the grants of the
  * party it guards, so this never goes through the consent bridge either.
  *

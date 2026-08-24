@@ -8,7 +8,7 @@
 // The confirmation is the whole safety story, and it happens BEFORE this
 // module is ever called (components/EmptyTrash.tsx).
 //
-// ORDER MATTERS. `media_asset.source_asset_id` (issue #711) is a real
+// ORDER MATTERS. `media_asset.source_asset_id` (#711) is a real
 // FK: the vault refuses to purge a photograph while an edited copy still
 // names it as its source, because NULLing the copy's lineage would forge
 // "camera original" and cascading would destroy a photograph the member never

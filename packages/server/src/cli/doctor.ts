@@ -1,5 +1,5 @@
 /*
- * `centraid-gateway doctor` — the in-product integrity scrub (issue #839 W1.2).
+ * `centraid-gateway doctor` — the in-product integrity scrub (#839).
  *
  * A stopped-daemon diagnostic that opens every vault the gateway owns and runs
  * the reusable check library (`../doctor/integrity-checks.ts`) over them:

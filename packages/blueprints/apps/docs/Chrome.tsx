@@ -1,25 +1,21 @@
-// The Docs chrome as JSX — a ROUTE INSIDE THE FRAME (issue #505 inline path,
+// The Docs chrome as JSX — a ROUTE INSIDE THE FRAME (#505 inline path,
 // Docs spec §1). The sidebar (brand, New menu, folders, storage), the
 // consent/notice banners, the shelf strip and the scroll host,
 // expressed as one React tree so app-inline.tsx renders one tree instead of
 // fourteen imperative roots.
 //
-// THE TOPBAR IS GONE and the handoff's TOOLBAR ROW is in its place. The old
-// row was `kit-app-topbar` — 66px, a full-width search field, a rule — chrome
-// pretending to be a header. The field is now the Search shelf's own first
-// block (`components/SearchField.tsx`), reached from the app bar's Search
-// control beside Select and from the compact band's Search tab. What is left
-// is what the handoff draws above the strip: a 34px row of controls carrying
-// the List/Grid pair at its trailing edge (`components/ViewToggle.tsx`), on
-// the shape Photos' own toolbar row uses.
-//
-// THE TOOLBAR ROW IS GONE, and so are the hamburger and the inline Ask button.
-// None of the three is in the handoff, and each restated something the screen
-// already says better: the tag rail and compact sort button duplicated the
-// filter pills and the column heads, the hamburger opened a sidebar this seat
-// renders `display: none` at every width, and Ask is the shell's own affordance
-// sitting in the corner of the same window. Classes come from Chrome.module.css (scoped
-// chrome) + the global kit-* vocabulary (kit.css, loaded once by the host).
+// THERE IS NO TOPBAR, NO TAG RAIL, NO HAMBURGER AND NO INLINE ASK BUTTON, and
+// none of them may come back: each would restate something the screen already
+// says better — the search field is the Search shelf's own first block
+// (`components/SearchField.tsx`), reached from the app bar's Search control
+// beside Select and from the compact band's Search tab; the filter pills and
+// the column heads carry what a tag rail and a compact sort button would; the
+// hamburger opened a sidebar this seat renders `display: none` at every width;
+// and Ask is the shell's own affordance in the corner of the same window. What
+// the handoff draws above the strip is a 34px row of controls carrying the
+// List/Grid pair at its trailing edge (`components/ViewToggle.tsx`). Classes
+// come from Chrome.module.css (scoped chrome) + the global kit-* vocabulary
+// (kit.css, loaded once by the host).
 //
 // TRAP #5 IS CLOSED HERE. This root stamps NO global `docs` / `is-narrow` /
 // `side-open` class trio alongside the module-scoped
@@ -314,23 +310,10 @@ export function Chrome(props: ChromeProps): ReactNode {
             routes that carry no strip at all. */}
         {props.slots.shelfStrip}
 
-        {/* THE PLACE IS NAMED ONCE, and this row is where it kept saying it a
-            second and third time. It opened with a display-serif "All
-            documents" over a count while the frame's app bar already said
-            "Docs · 3 documents" and the breadcrumb already said
-            "Docs / All documents"; that title went first. What replaced it —
-            a tag-chip rail and a compact sort button — is not in the handoff
-            either, and the things it carried have homes that are: the column
-            heads and their `≡` menu ARE the sort (components/List.tsx), and
-            the filter pills under the breadcrumb are where a set is narrowed
-            (components/FilterRow.tsx). A row that only restates other rows is
-            the thing this screen keeps deleting. */}
-
         {/* THE CONTENT ROW: the scroller and the details rail, side by side
-            (the handoff's `contentStyle`, `display: flex`). The scroller was
-            the only child of `main` while the rail was a fixed overlay; the
-            rail is furniture now, so the two share the row and the set
-            reflows to the width that is left rather than being covered. */}
+            (the handoff's `contentStyle`, `display: flex`). The rail is
+            furniture, not a fixed overlay, so the two share the row and the
+            set reflows to the width that is left rather than being covered. */}
         <div className={styles.content}>
           {props.slots.navRail}
           <div className={styles.scroll}>{props.slots.scroll}</div>

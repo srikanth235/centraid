@@ -1,5 +1,5 @@
 /**
- * Photo search as a vault projection (issue #352 phase 3): the FTS5 index
+ * Photo search as a vault projection (#352): the FTS5 index
  * inside the vault matches titles/captions on core.content_item — the same
  * field media.update_asset writes a caption to (Lightbox.jsx's caption
  * field) — so the app never pulls the whole library to grep it in memory.

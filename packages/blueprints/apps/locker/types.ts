@@ -1,4 +1,4 @@
-// Shared page-side shapes for the locker app (TS conversion). Type-only — no
+// Shared page-side shapes for the locker app. Type-only — no
 // runtime members — so every importer uses `import type`, which esbuild strips
 // at serve time (a value import of this module would 404). Grounded in the
 // query payloads: `LockerRow` is the secret-free decorated row the `items`/
@@ -6,7 +6,7 @@
 // shape the single-item `item` query returns (the ONLY payload with secrets).
 
 /**
- * The six item-type discriminants Locker's schema recognizes (issue #712
+ * The six item-type discriminants Locker's schema recognizes (#712
  * C4) — the source of truth is the CHECK constraint on `locker_item.type`
  * (`packages/vault/src/schema/domains-locker.ts`). Kept in lockstep with it
  * by a source-scan tripwire (`locker-item-type.test.ts`), the same technique
@@ -64,7 +64,7 @@ export interface LockerDetail {
   favorite?: boolean;
   tags?: string[];
   trashed?: boolean;
-  /** Connector alias (issue #298 item 4); not returned by the read today. */
+  /** Connector alias (#298); not returned by the read today. */
   alias?: string | null;
   purge_at?: string | null;
   updated_at?: string;

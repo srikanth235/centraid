@@ -20,7 +20,7 @@ import { dropAppSession, ensureAppSession } from "./gateway-client-editing.js";
 
 /**
  * A create-time trigger spec. `condition`/`data` are validated gateway-side
- * against the real manifest schema (issue #141 follow-up) and require a
+ * against the real manifest schema (#141 follow-up) and require a
  * paired `vault` block on the request — the consented read they gate on has to run under
  * some requested grant, or there is nothing for the trigger to evaluate.
  */

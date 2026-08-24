@@ -1,23 +1,21 @@
 // governance: allow-repo-hygiene file-size-limit (#363) single source of truth for every renderer screen's prop-type contract (issue #325); splitting would scatter one cohesive DTO surface across files that all need to change together
-// Screen prop-type contracts (issue #325).
+// Screen prop-type contracts (#325).
 //
 // The DTOs below are the typed props each React screen renders against — the
 // shape of the data a route derives (in react/shell/routes/*Data.ts) and hands
-// its screen. They began life as the vanilla↔React handoff seam (a
-// `window.CentraidReact` bridge between two module graphs); after the full-React
-// flip that runtime bridge is gone and these are just the screens' contracts,
-// kept as explicit DTOs so a route's derivation and its screen agree field for
-// field. The `*BridgeProps` names are retained only to avoid churning ~50
-// import sites.
+// its screen. They are kept as explicit DTOs so a route's derivation and its
+// screen agree field for field. `*BridgeProps` is a naming convention only;
+// no runtime bridge exists behind it.
 
 import type { ColorKey } from "@centraid/design";
 
 import type { ResourceUsageDTO } from "./screens/resource-summary.js";
 
-// The bridge is intentionally self-contained — it must not import the vanilla
-// shell modules, whose ambient globals aren't in the React island's tsconfig.
-// `CatalogTemplate` mirrors `TemplateEntry` (app-shell-context.ts) field for
-// field so the vanilla side's `TemplateEntry` values pass through unchanged.
+// This module must stay self-contained — do not import `app-shell-context.ts`
+// or any other module reaching ambient globals the React island's tsconfig
+// does not carry. `CatalogTemplate` mirrors `TemplateEntry`
+// (app-shell-context.ts) field for field so those values pass through
+// unchanged; keep them in step.
 // The automation gallery is the one surface that renders this card (#708).
 export interface CatalogTemplate {
   id: string;
@@ -151,7 +149,7 @@ export interface InsightsBridgeProps {
 
 // ── Vault pane ────────────────────────────────────────────────────────────
 // DTOs mirror the gateway-client-vault.ts types so the React island stays
-// decoupled from the vanilla client module (and its ambient globals).
+// decoupled from that module (and its ambient globals).
 export interface VaultScopeDTO {
   schema: string;
   table?: string | null;
@@ -193,7 +191,7 @@ export interface VaultData {
 }
 export interface VaultBridgeProps {
   block: VaultBlockDTO;
-  /** Re-fetch the consent surface (gateway I/O lives on the vanilla side). */
+  /** Re-fetch the consent surface — gateway I/O lives in the route, not here. */
   loadData: () => Promise<VaultData | null>;
   grant: () => Promise<void>;
   revoke: (grantId: string) => Promise<void>;
@@ -208,16 +206,16 @@ export interface VaultBridgeProps {
 // ── Automation templates gallery ────────────────────────────────────────────
 export interface AutomationTemplatesBridgeProps {
   templates: readonly CatalogTemplate[];
-  /** Subtitle under the self-painted "Templates" header (issue: automations UX pass). */
+  /** Subtitle under the self-painted "Templates" header. */
   subtitle?: string;
-  /** Open the vanilla preview drawer (kept vanilla — a body-level modal). */
+  /** Open the preview drawer — a body-level modal the route owns, not this screen. */
   onPreview: (t: CatalogTemplate) => void;
   /** "Start from scratch" → the conversational automation builder. */
   onStartFromScratch: () => void;
 }
 
 // ── Command palette (⌘K) ────────────────────────────────────────────────────
-// The vanilla side owns the data + actions: it computes the grouped rows for a
+// The route owns the data + actions: it computes the grouped rows for a
 // query (`buildGroups`) with pre-rendered icon SVG + resolved tile paint and a
 // `run` closure per row. React owns the overlay chrome, the search field, and
 // keyboard navigation.
@@ -229,7 +227,7 @@ export interface PaletteTileDTO {
 export interface PaletteRowDTO {
   label: string;
   sub?: string;
-  /** Pre-rendered icon SVG markup (from the vanilla `Icon` set). */
+  /** Pre-rendered icon SVG markup (from the shared `Icon` set). */
   iconHtml: string;
   variant: "action" | "app" | "chat";
   /** For `variant: 'app'` — the shared single-tone desktop mark. */
@@ -240,7 +238,7 @@ export interface PaletteRowDTO {
   /** Legacy fallback for older palette bridge rows. */
   tile?: PaletteTileDTO;
   /**
-   * MONO row-kind register (Binding Layer row anatomy, issue #708 §A) — a
+   * MONO row-kind register (Binding Layer row anatomy, #708 §A) — a
    * short lowercase noun for what the row IS (`doc`, `person`, `event`,
    * `conversation`), rendered ahead of the title. Unset for rows that are
    * not a vault object (apps, nav destinations, the create row).
@@ -264,7 +262,7 @@ export interface PaletteGroupIconDTO {
 export interface PaletteGroupDTO {
   group: string;
   /**
-   * Group marker (Binding Layer row anatomy, issue #708 §A point 2) — set
+   * Group marker (Binding Layer row anatomy, #708 §A point 2) — set
    * when every row in the group is a vault object owned by one app/surface
    * (entity search, Conversations, Recents); omitted for navigational
    * groups (Apps, Go to, Create) that stay plain text.
@@ -277,12 +275,12 @@ export interface PaletteBridgeProps {
   buildGroups: (query: string) => PaletteGroupDTO[];
   onClose: () => void;
   /**
-   * Handed a `refresh` fn on mount — the vanilla side calls it when
-   * async data (templates) arrives so `buildGroups` re-runs.
+   * Handed a `refresh` fn on mount — the route calls it when async data
+   * (templates) arrives so `buildGroups` re-runs.
    */
   onReady?: (refresh: () => void) => void;
   /**
-   * Example queries for the pre-query empty state (issue #708 §A) — seeded
+   * Example queries for the pre-query empty state (#708) — seeded
    * from what the vault actually contains, not static copy. Read only while
    * the query field is empty; a click fills the field with the chip's text.
    */
@@ -321,8 +319,8 @@ export interface PhoneBridgeProps {
 }
 
 // ── Automations overview ────────────────────────────────────────────────────
-// The vanilla side derives every display value (hue, glyph, trigger + status
-// labels, formatted run meta) so the React screen needs no app-format /
+// The route derives every display value (hue, glyph, trigger + status labels,
+// formatted run meta) so the screen needs no app-format /
 // automation-identity imports.
 export type AuStatusKind =
   | "active"
@@ -343,13 +341,12 @@ export interface AuOverviewRowDTO {
   lastRunLabel: string;
   /** The most recent run's message — its summary, or the error text when it
    *  failed — shown as the inbox row's preview line. `null` before the first
-   *  run (issue #539, automation-as-conversation inbox). */
+   *  run (#539, automation-as-conversation inbox). */
   lastRunSummary: string | null;
   statusKind: AuStatusKind;
   statusLabel: string;
   /** Whether the automation's most recent run succeeded — `null` when it has
-   *  never run (the "fleet" row's last-run status dot, additive field for
-   *  the Automations UI revamp — see receipts/issue-387-automations-ui-revamp.md). */
+   *  never run (the "fleet" row's last-run status dot). */
   lastRunOk: boolean | null;
   /** Relative label for the next cron fire ("in 2h"), `null` when the
    *  automation has no cron trigger. */
@@ -397,7 +394,7 @@ export interface AutomationsOverviewBridgeProps {
   onOpenAutomation: (ref: string) => void;
   onOpenRun: (automationId: string, runId: string) => void;
   /** The empty state's one verb. "New automation" is NOT here: it is the
-   *  page's filled commit and lives in the app bar (issue #765, `opsBar.ts`),
+   *  page's filled commit and lives in the app bar (#765, `opsBar.ts`),
    *  resolved by the route's published verbs — a screen that also drew it
    *  would put two of the view's one commit on the same page. */
   onBrowseTemplates: () => void;
@@ -424,9 +421,8 @@ export interface AuViewConditionDetailDTO {
   whereText: string;
   everyLabel: string | null;
 }
-// ── Automations UI revamp: consent DTOs (shared by editor + thread) ────────
-// Automations redesign (owner-approved architecture, see
-// receipts/issue-387-automations-ui-revamp.md): consent is configured at edit time (Behavior tab)
+// ── Automations consent DTOs (shared by editor + thread) ──────────────────
+// Consent is configured at edit time (Behavior tab)
 // and reviewed inline in the thread — never a runtime dialog. Both surfaces
 // read the same three consent lists, pre-filtered to ONE automation's actor
 // by the route layer (`automationThreadData.ts`), so these DTOs carry no
@@ -595,7 +591,7 @@ export interface AutomationEditorData {
   defaultModel?: string | null;
   /**
    * Gateway-wide default cron timezone (prefs `automation.cron.defaultTimezone`).
-   * Used when a cron trigger omits `tz` (issue #570). Absent/empty → host-local.
+   * Used when a cron trigger omits `tz` (#570). Absent/empty → host-local.
    */
   defaultCronTimeZone?: string | null;
   /** Dynamic gateway harness/model catalog used by the editor harness control. */
@@ -1025,8 +1021,8 @@ export interface HarnessCardDTO {
 }
 /**
  * The conversation/harness subsystems that can each pin their own model, independent
- * of the harness's default (issue: model config → gateway prefs store).
- * Mirrors the gateway prefs keys `model.<harnessKind>.<subsystem>`.
+ * of the harness's default. Mirrors the gateway prefs keys
+ * `model.<harnessKind>.<subsystem>`.
  */
 export type ModelSubsystem = "assistant" | "ask" | "builder" | "automations";
 export interface HarnessesStatusDTO {
@@ -1164,9 +1160,9 @@ export interface HomeAutoItemDTO {
 }
 
 // ── Automation run-viewer (SSE, live) ───────────────────────────────────────
-// The vanilla side owns the SSE stream + node model and derives a fully-display
-// snapshot on each event; React renders it (timeline / log). React never sees
-// the stream — same split as every other screen.
+// The route owns the SSE stream + node model and derives a fully-display
+// snapshot on each event; the screen renders it (timeline / log). The screen
+// never sees the stream — same split as every other screen.
 export interface RunLogRowDTO {
   time: string;
   tone: string;
@@ -1231,7 +1227,7 @@ export interface RunViewSnapshot {
 }
 export interface RunViewBridgeProps {
   initialMode: "timeline" | "log";
-  /** Handed an `update` fn on mount; the vanilla side calls it per stream event. */
+  /** Handed an `update` fn on mount; the route calls it per stream event. */
   onReady: (update: (snap: RunViewSnapshot | null) => void) => void;
   onBack: () => void;
   onOpenAutomation: () => void;
@@ -1242,12 +1238,12 @@ export interface RunViewBridgeProps {
 // ── Assistant (streaming copilot) ───────────────────────────────────────────
 // AssistantRoute owns the stream (streamAssistantTurn), the message model,
 // and the rich-answer renderer; it pushes a snapshot to React on each change.
-// Final AI answers carry pre-rendered HTML (from the vanilla `richAnswer`);
+// Final AI answers carry pre-rendered HTML (from `richAnswerHtml`);
 // React injects it and re-hydrates the interactive vault refs via `hydrateRefs`.
-// The conversation LIST + selection live in the assistant SURFACE since #707
-// (AssistantRoute + AssistantConversations) — AssistantScreen still renders a
-// single conversation only, so there's no `threads`/`onSelectThread`/
-// `onDeleteThread` here.
+// The conversation LIST + selection live in the assistant SURFACE (#707 —
+// AssistantRoute + AssistantConversations). AssistantScreen renders a SINGLE
+// conversation, so this contract carries no list or selection props; do not
+// add them here.
 export interface AsstToolCallDTO {
   tool: string;
   sql?: string;
@@ -1263,14 +1259,14 @@ export interface AsstAttachmentDTO {
   mime: string;
   sizeBytes: number;
 }
-/** Retry pager position on an AI answer whose turn has siblings (issue #420). */
+/** Retry pager position on an AI answer whose turn has siblings (#420). */
 export interface AsstRetryDTO {
   /** 1-based position of the shown attempt. */
   index: number;
   /** Total attempts in this turn's family. */
   count: number;
 }
-/** Per-turn token/cost usage surfaced under an answer (issue #420, Wave 2). */
+/** Per-turn token/cost usage surfaced under an answer (#420). */
 export interface AsstUsageDTO {
   inputTokens?: number;
   outputTokens?: number;
@@ -1283,7 +1279,7 @@ export interface AsstUsageDTO {
   effort?: string;
 }
 /**
- * `msgId` is a stable identity for list keying (issue #541). A projected
+ * `msgId` is a stable identity for list keying (#541). A projected
  * transcript both grows and re-orders while a turn streams — a tool row is
  * inserted ahead of the answer bubble it belongs to on flush — so an array
  * index is not an identity, and keying by it remounts `Message` (which does
@@ -1299,10 +1295,10 @@ export type AsstMsgDTO =
       msgId?: string;
     }
   | { kind: "tools"; label: string; calls: AsstToolCallDTO[]; msgId?: string }
-  /** A live streaming reasoning/thinking row (issue #420, Wave 2). Live-only —
+  /** A live streaming reasoning/thinking row (#420). Live-only —
    *  reasoning is not persisted in the ledger, so it never comes back on reload. */
   | { kind: "thinking"; text: string; streaming: boolean; msgId?: string }
-  /** A non-fatal harness notice (issue #420) — e.g. "this model can't read PDF
+  /** A non-fatal harness notice (#420) — e.g. "this model can't read PDF
    *  attachments". Persisted as a notice step and replayed on reload. */
   | { kind: "notice"; level: "warn" | "info"; text: string; msgId?: string }
   | {
@@ -1317,9 +1313,9 @@ export type AsstMsgDTO =
       streaming: false;
       html: string;
       error: boolean;
-      /** Source text for "copy message" (issue #420). */
+      /** Source text for "copy message" (#420). */
       copyText: string;
-      /** Token/cost usage for the answer's turn (issue #420, Wave 2). */
+      /** Token/cost usage for the answer's turn (#420). */
       usage?: AsstUsageDTO;
       /** ms epoch of the answer, for the hover timestamp. */
       createdAt?: number;
@@ -1332,9 +1328,9 @@ export type AsstMsgDTO =
       retry?: AsstRetryDTO;
       /** Only the last non-error answer — gates the Regenerate control. */
       canRegenerate?: boolean;
-      /** An error bubble whose failed message can be retried (issue #420). */
+      /** An error bubble whose failed message can be retried (#420). */
       canRetry?: boolean;
-      /** The failed send happened while the browser was offline (issue #420). */
+      /** The failed send happened while the browser was offline (#420). */
       offline?: boolean;
       msgId?: string;
     };
@@ -1345,9 +1341,9 @@ export interface AsstPendingAttachmentDTO {
   sizeBytes: number;
   state: "uploading" | "ready" | "error";
   errorText?: string;
-  /** MIME type — drives the composer image thumbnail (issue #420, Wave 2). */
+  /** MIME type — drives the composer image thumbnail (#420). */
   mime?: string;
-  /** Local object-URL preview for an image attachment (issue #420, Wave 2). */
+  /** Local object-URL preview for an image attachment (#420). */
   previewUrl?: string;
 }
 export interface AssistantSnapshot {
@@ -1418,7 +1414,7 @@ export interface AsstModelPickerDTO {
 export interface AssistantBridgeProps {
   suggestions: string[];
   /** The open conversation id — keys per-thread scroll restore + draft
-   *  persistence (issue #420). `undefined` for a fresh, uncreated thread. */
+   *  persistence (#420). `undefined` for a fresh, uncreated thread. */
   conversationId?: string;
   onReady: (update: (s: AssistantSnapshot) => void) => void;
   onSend: (text: string) => void;
@@ -1439,9 +1435,9 @@ export interface AssistantBridgeProps {
   /** Wire code-block "Copy" buttons inside a just-rendered answer node (#420). */
   wireCodeCopy: (node: HTMLElement) => void;
   /** Fetch an image attachment's bytes (auth-aware) as an object URL for an
-   *  inline transcript thumbnail; revoke it on cleanup (issue #420, Wave 2). */
+   *  inline transcript thumbnail; revoke it on cleanup (#420). */
   loadAttachmentImage: (hash: string, mime: string) => Promise<string>;
-  /** Copy a message's source text to the clipboard (issue #420). */
+  /** Copy a message's source text to the clipboard (#420). */
   onCopyMessage: (text: string) => void;
   /** Set 👍/👎 on an answer turn (toggles off when re-clicking the same). */
   onFeedback: (turnId: string, value: "up" | "down") => void;
@@ -1461,15 +1457,15 @@ export interface AssistantBridgeProps {
   onSetHarness: (harnessKind: HarnessKind) => Promise<AsstModelPickerDTO>;
   /** Persist the Centraid-scoped working directory for this conversation. */
   onSetWorkspaceKind?: (kind: "vault-data" | "app" | "draft") => void;
-  /** Composer entity-mention search (issue #420). Absent = mentions disabled. */
+  /** Composer entity-mention search (#420). Absent = mentions disabled. */
   searchEntities?: (term: string) => Promise<AsstComposerEntity[]>;
-  /** Slash-command menu shown on a leading `/` (issue #420). */
+  /** Slash-command menu shown on a leading `/` (#420). */
   slashCommands?: AsstSlashCommand[];
   /** Run a chosen slash command by id (wired to existing shell actions). */
   onRunSlash?: (id: string) => void;
 }
 
-/** A vault entity offered by the composer @-mention picker (issue #420). */
+/** A vault entity offered by the composer @-mention picker (#420). */
 export interface AsstComposerEntity {
   type: string;
   id: string;
@@ -1477,7 +1473,7 @@ export interface AsstComposerEntity {
   subtitle?: string;
 }
 
-/** A composer slash command (issue #420). */
+/** A composer slash command (#420). */
 export interface AsstSlashCommand {
   id: string;
   label: string;
@@ -1486,12 +1482,12 @@ export interface AsstSlashCommand {
 }
 
 // ── App-view settings popover ────────────────────────────────────────────────
-// The app-view keeps the sandboxed iframe host, the chrome window, and the
-// per-app chat vanilla; only the gear popover is React. The vanilla side owns
+// The app-view host keeps the sandboxed iframe, the chrome window, and the
+// per-app chat; only the gear popover is this contract. The controller owns
 // all gateway I/O — knob persistence + the live iframe postMessage push, the
-// automation run/toggle streams — and the two deep sub-trees the popover embeds
-// (the lazy run-history timeline and the vault consent pane), which it injects
-// into React-provided host divs via `onMountRuns` / `onMountVault`.
+// automation run/toggle streams — and the two deep sub-trees the popover
+// embeds (the lazy run-history timeline and the vault consent pane), which it
+// injects into host divs via `onMountRuns` / `onMountVault`.
 export interface AppKnobDTO {
   key: string;
   label: string;
@@ -1558,17 +1554,17 @@ export interface AppSettingsBridgeProps {
   onReveal: () => void;
   onDelete: () => void;
   /**
-   * Whether this app is a bundled install serving in place (issue #434). Its
+   * Whether this app is a bundled install serving in place (#434). Its
    * danger-zone action is Uninstall (revoke access, data stays), not Delete
    * (wipe local files) — code-store apps keep Delete.
    */
   bundled?: boolean;
-  /** Fill the per-order run-history host — vanilla owns the deep timeline. */
+  /** Fill the per-order run-history host — the controller owns the deep timeline. */
   onMountRuns: (ref: string, host: HTMLElement) => void;
-  /** Fill the vault consent pane host — vanilla `renderVaultPane`. */
+  /** Fill the vault consent pane host. */
   onMountVault: (host: HTMLElement) => void;
   /**
-   * Fill the Enrichment pane host (issue #807). Present only for an app whose
+   * Fill the Enrichment pane host (#807). Present only for an app whose
    * data shape HAS enrichment capabilities; absent withdraws the tab, on the
    * same rule as `vaultVisible` — a tab that could only be empty is not shown.
    */

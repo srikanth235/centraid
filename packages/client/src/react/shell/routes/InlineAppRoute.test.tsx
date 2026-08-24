@@ -109,7 +109,7 @@ vi.mock(
     })),
   })
 );
-// The scope set is resolved over HTTP (issue #599); this route's suite is about
+// The scope set is resolved over HTTP (#599); this route's suite is about
 // mounting, so it gets one ready scope rather than a gateway round-trip.
 vi.mock(import("./useAppScopes.js") as Promise<unknown>, () => {
   const ready = {

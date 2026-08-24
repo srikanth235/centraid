@@ -1,5 +1,5 @@
 /*
- * The ceremony end to end (issue #726 P3 decision 3), both gateways in one
+ * The ceremony end to end (#726 P3 decision 3), both gateways in one
  * process: side A shows a ticket, side B scans it, and the transport is a
  * function that hands B's request to A's real route handler.
  *

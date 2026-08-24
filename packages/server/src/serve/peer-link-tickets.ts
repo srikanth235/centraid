@@ -1,6 +1,6 @@
 /*
  * `peer_link_tickets` — the one-time capability the REMOTE half of the link
- * ceremony runs on (issue #726 P3 decision 3).
+ * ceremony runs on (#726 P3 decision 3).
  *
  * A ticket is short-lived by design: a ceremony is a live moment, not a
  * standing invitation. The secret is returned once and stored only as a

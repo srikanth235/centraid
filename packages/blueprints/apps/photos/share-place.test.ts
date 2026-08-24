@@ -1,4 +1,4 @@
-// The share-time place choice (issue #816).
+// The share-time place choice (#816).
 //
 // Two claims live here. The first is ordinary: the option list is what a sheet
 // should show, and the default is the safe rung. The second is the one this

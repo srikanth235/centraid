@@ -1,5 +1,5 @@
 /**
- * Host-injected Centraid Assist OAuth configuration (issue #526).
+ * Host-injected Centraid Assist OAuth configuration (#526).
  *
  * The gateway core never reads process.env. Desktop/daemon hosts may pass
  * public deployment coordinates through this shape; the Google client

@@ -15,7 +15,7 @@ export async function loadDiagnosticsData(): Promise<GatewayHealthDTO> {
 }
 
 /**
- * The Connections section's rows (issue #665) — every host this device is
+ * The Connections section's rows (#665) — every host this device is
  * registered against, with its transport, reachability, and vault list.
  *
  * Same registry the sidebar switcher reads, so one probe cache serves the

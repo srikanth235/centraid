@@ -1,8 +1,8 @@
-// The S3-compatible remote driver (issue #296 phase 3). Talks AWS Signature
+// The S3-compatible remote driver (#296). Talks AWS Signature
 // v4 over plain fetch — no SDK dependency — so any S3-compatible endpoint
 // (AWS, MinIO, R2, B2, Garage) works with `{endpoint, bucket, region,
 // prefix}`. Credentials never live in settings: they arrive through an async
-// provider the host wires to the broker/sealed-secret path (issue #290/#293).
+// provider the host wires to the broker/sealed-secret path (#290/#293).
 //
 // Trust posture: the gateway computes every content hash from its local
 // spool — this driver's ETags are never believed, and a hostile endpoint can
@@ -33,14 +33,14 @@ export interface S3BlobStoreOptions {
   /** Test seam. Defaults to global fetch. */
   fetchImpl?: typeof fetch;
   /**
-   * Upload rate cap, bytes/sec (issue #367 §C7) — a simple token bucket
+   * Upload rate cap, bytes/sec (#367) — a simple token bucket
    * applied before every PUT / multipart UploadPart. Omitted/0 = unthrottled.
    * Downloads (`get`) are never throttled — only the replication path this
    * store's writes serve needs pacing against the owner's uplink.
    */
   throttleBytesPerSec?: number;
   /**
-   * S3 storage class (issue #405 §6): sent as the `x-amz-storage-class`
+   * S3 storage class (#405): sent as the `x-amz-storage-class`
    * header — SigV4-signed like every other header — on the two requests that
    * CREATE an object: the single `put()` PUT and multipart's
    * `CreateMultipartUpload`. Never sent on uploadPart/complete/get/head/
@@ -53,7 +53,7 @@ export interface S3BlobStoreOptions {
    */
   storageClass?: string;
   /**
-   * Bounded-retry knobs (issue #405 §4) — a test seam. `retryAttempts` is
+   * Bounded-retry knobs (#405) — a test seam. `retryAttempts` is
    * the TOTAL number of tries (default 3); `sleepImpl` backs the backoff
    * wait so tests can run instantly / assert the schedule. Both default to
    * production values; callers never set them outside tests.
@@ -62,7 +62,7 @@ export interface S3BlobStoreOptions {
   sleepImpl?: (ms: number) => Promise<void>;
 }
 
-/** Bodies over this size use multipart upload (issue #367 §C8) instead of one PUT. */
+/** Bodies over this size use multipart upload (#367) instead of one PUT. */
 export const MULTIPART_THRESHOLD_BYTES = 32 * 1024 * 1024;
 /** Multipart part size — S3's own minimum is 5 MiB; this bounds streaming memory to roughly one part. */
 const MULTIPART_PART_SIZE_BYTES = 16 * 1024 * 1024;
@@ -77,7 +77,7 @@ async function streamToBuffer(source: NodeJS.ReadableStream): Promise<Buffer> {
 
 /**
  * Re-chunk a Readable into fixed-size Buffers, bounding resident memory to
- * roughly one part size regardless of the source's total length (issue #367
+ * roughly one part size regardless of the source's total length (#367
  * §C8: "never materializing the whole blob in memory").
  * @yields {Buffer} Fixed-size upload parts, with one final short part when needed.
  */
@@ -138,7 +138,7 @@ export class S3BlobStore implements BlobStore {
   }
 
   /**
-   * `request()` with bounded retry (issue #405 §4). Today a single transient
+   * `request()` with bounded retry (#405). Today a single transient
    * fault — one 503 from the endpoint, one dropped socket — fails a whole
    * reconciliation sweep or restore. This retries the RETRYABLE faults:
    *
@@ -186,8 +186,8 @@ export class S3BlobStore implements BlobStore {
   }
 
   /**
-   * The class this write carries: the per-call override wins (issue #425 Wave 3
-   * direct-to-cold heuristic), else the instance default (issue #405 §6), else
+   * The class this write carries: the per-call override wins (#425
+   * direct-to-cold heuristic), else the instance default (#405), else
    * none. Empty ⇒ no `x-amz-storage-class` header, byte-identical to today.
    */
   private classOf(override?: string): string | undefined {
@@ -211,7 +211,7 @@ export class S3BlobStore implements BlobStore {
   }
 
   /**
-   * Streaming upload (issue #367 §C8): bodies at or under
+   * Streaming upload (#367): bodies at or under
    * `MULTIPART_THRESHOLD_BYTES` buffer whole (bounded, same as `put`);
    * larger ones go through S3 multipart upload, streamed from `source` in
    * `MULTIPART_PART_SIZE_BYTES` chunks — at most one part resident in memory

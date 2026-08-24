@@ -6,15 +6,12 @@
 // the whole control — the rail is a thing that is showing or not showing, not
 // a thing you launch, so this is a toggle and never a "View details" verb.
 //
-// WHY IT MATTERS THAT THE RAIL HAS A SWITCH AT ALL. Before this, the details
-// rail existed but had exactly one door: a row's kebab → Details. That made
-// the facts about a document something a member had to go and fetch, one row
-// at a time, through a menu — and it opened as a MODAL drawer over a scrim,
-// so the set it was describing was covered by the description. The handoff's
-// rail is the opposite thing: pinned open beside the set, following whichever
-// row is picked ("Everything here is about one row. Select another and the
-// rail follows it"). A member who wants to compare two documents' facts flips
-// between rows; they do not open and close a drawer twice.
+// WHY THE RAIL HAS A SWITCH AT ALL, rather than only a row's kebab → Details:
+// the rail is pinned open beside the set and follows whichever row is picked
+// ("Everything here is about one row. Select another and the rail follows
+// it"). A member comparing two documents' facts flips between rows; they do
+// not open and close a drawer twice, and a modal drawer over a scrim would
+// cover the set it is describing.
 //
 // The handoff withholds it on the compact form factor (`showInfoBtn: !mob`)
 // and while a set is picked (`&& !sel`): there is no width for a 308px column
@@ -31,7 +28,6 @@ export function InfoToggle({
   on,
   onToggle,
 }: {
-  /** The rail is showing. */
   on: boolean;
   onToggle: () => void;
 }): ReactNode {

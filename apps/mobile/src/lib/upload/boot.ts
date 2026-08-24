@@ -1,4 +1,4 @@
-// Boot wiring for the upload queue (#419 M0.4).
+// Boot wiring for the upload queue (#419.4).
 //
 // Settlement reconciliation: on every foreground, re-drain. Because `begin` is
 // keyed by content sha, a drain IS the reconciliation — an item whose bytes
@@ -6,7 +6,7 @@
 // without transferring anything. There is no separate reconcile path to keep
 // in sync with the transfer path, which is the point.
 //
-// Two invariants this file exists to keep (F1):
+// Two invariants this file exists to keep:
 //   * A drain is NEVER concurrent with another drain. Every entry point here —
 //     the foreground hook and the Android headless task — routes through the
 //     shared `withDrainLock`, the same guard the producers use.
@@ -104,7 +104,7 @@ async function reconcileOnce(
 }
 
 /**
- * Drain now, and SAY what happened (issue #712, P5). The frame's Backup screen
+ * Drain now, and SAY what happened (#712). The frame's Backup screen
  * has a "Back up now" control, and a control that returns void cannot honour
  * the fallible-action contract — the member pressed it, so the member is owed
  * the count. Same lock, same reconcile, same policy gate as every other entry

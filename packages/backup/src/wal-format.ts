@@ -1,9 +1,9 @@
 // governance: allow-repo-hygiene file-size-limit (#408) the WAL wire format is one normative unit — the key codecs, the sealing AAD/nonce derivations, the frame-boundary math, and the replay planner that consumes all three are a single argument about what a restore may trust; splitting them lets the format drift from the planner that enforces it
 /*
  * WAL segment format (FORMAT.md § WAL segments — centraid-snapshot/2,
- * issue #408; carried unchanged into /2): addressing, sealing, frame-boundary
+ * #408; carried unchanged into /2): addressing, sealing, frame-boundary
  * math, and replay planning for shipped SQLite write-ahead-log byte ranges.
- * /2's entropy-gated compression (#405 §1) deliberately does NOT reach these —
+ * /2's entropy-gated compression (#405) deliberately does NOT reach these —
  * segments seal raw byte ranges so the address-bound deterministic-nonce
  * idempotency contract stays exactly as #408 shipped it (see FORMAT.md).
  *
@@ -270,7 +270,7 @@ export function parseWalSegmentKey(key: string): WalSegmentAddress | null {
  * agree on what a legal closer is, so the positivity check lives here too:
  * without it a provider listing carrying that key reads as a closed group at
  * offset 0 in `wal-restore.ts` and `backup-reconciliation.ts`. Same shape as
- * `parseWalSegmentKey`'s forward-range check one function up (#846 P3).
+ * `parseWalSegmentKey`'s forward-range check one function up (#846).
  */
 export function parseWalCloserKey(key: string): WalGroupCloser | null {
   const m = CLOSER_KEY_RE.exec(key);

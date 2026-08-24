@@ -1,6 +1,6 @@
 /*
  * [law:provider-egress-dispatch] — outbound provider work leaves centraid by
- * ONE road (issue #839, G5).
+ * ONE road (#839).
  *
  * THE LAW. A request that reaches a third-party model provider happens only via
  * the ACP dispatch path: `runTurn` (`acp/runtime.ts`) resolves a spec from

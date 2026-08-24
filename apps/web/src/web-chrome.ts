@@ -75,7 +75,7 @@ function showInstallBanner(event: InstallPromptEvent): void {
 }
 
 /** First run has no gateway yet, so "reconnect to your gateway" is nonsense
- *  copy over the welcome screen (issue #603 W6). The banner starts once the
+ *  copy over the welcome screen (#603). The banner starts once the
  *  user has actually finished onboarding. */
 function onboardingComplete(): boolean {
   return typeof loadSettingsPatch()["onboardingCompletedAt"] === "string";

@@ -1,4 +1,4 @@
-// THE GATEWAY'S CUSTODY ROLLUP, AS THE PHONE READS IT (issue #712, B3).
+// THE GATEWAY'S CUSTODY ROLLUP, AS THE PHONE READS IT (#712).
 //
 // `blob.custody_rollup` is the only projection in this repo that can say what
 // may safely be released, so it is the one BOTH clients read:

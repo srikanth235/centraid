@@ -165,7 +165,7 @@ test("2.12 — Household renders the roster, the owner's scopes, and the sharing
     await gotoNav(page, "Vault");
 
     // The frame's app bar names the merged custody surface. Household is
-    // the third disclosure; on pointer it starts open. The old Copies
+    // the third disclosure; on pointer it starts open. The Copies
     // count ("3 devices · 2 people · 1 pending") is not published when
     // Household is embedded. The custody sentence prefixes the census
     // record count when atlas answered, so pin the clauses — not a guessed

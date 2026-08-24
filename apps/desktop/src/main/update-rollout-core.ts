@@ -1,5 +1,5 @@
 /*
- * Pure staged-rollout math for desktop auto-updates (issue #468, I5/I6).
+ * Pure staged-rollout math for desktop auto-updates (#468, I5/I6).
  *
  * Admit when `bucket < elapsed / window`. The bucket is a stable per-install
  * id in [0, 1) — re-rolling per check would turn every poll into an

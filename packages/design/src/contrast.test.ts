@@ -463,11 +463,9 @@ describe("blueprint token contrast floors", () => {
   // ── The palette hues as TEXT ────────────────────────────────────────────
   //
   // `--c-*` are icon FILLS. Painted as `color:` on a near-white surface they
-  // measure 2.2:1 (`--c-amber`) to 4.8:1 (`--c-indigo`) — which is why `docs`
-  // hand-picked six deeper literals for its file-kind labels, and why #686
-  // silently broke five of six by replacing those literals with the raw fills.
-  // `--c-<name>-text` is the solved rung that closes the gap for every surface,
-  // and this grid is what stops it drifting back.
+  // measure 2.2:1 (`--c-amber`) to 4.8:1 (`--c-indigo`) — so a raw fill is
+  // never ink. `--c-<name>-text` is the solved rung that closes the gap for
+  // every surface, and this grid is what stops it drifting back (#686).
   describe("every palette hue has a legible TEXT rung", () => {
     // A kind label sits on a weak tint of its OWN hue, so the surface has
     // already moved toward the ink. `docs` paints 12%; measuring the rung on a

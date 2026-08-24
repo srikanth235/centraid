@@ -1,12 +1,12 @@
-// Pure formatting + string helpers for the renderer, extracted from the builder
-// god-file so they can be unit-tested in isolation (TESTING.md §2 — "extract
-// logic, then test it"). Nothing here touches the DOM, `window`, the network,
-// or IPC: every function is a deterministic value→value transform (the only
-// ambient inputs are `Date`/`Math.random`, which callers/tests can pin).
+// Pure formatting + string helpers for the renderer. Nothing here touches the
+// DOM, `window`, the network, or IPC: every function is a deterministic
+// value→value transform (the only ambient inputs are `Date`/`Math.random`,
+// which callers/tests can pin). Keep it that way — this module's whole value
+// is being testable without a host.
 
 import { formatBytes as sharedFormatBytes } from "@centraid/design";
 
-/** The code languages the builder's Code view knows how to syntax-highlight. */
+/** The code languages the highlighter knows. */
 export type CodeLang = "html" | "js" | "ts" | "css" | "json" | "md" | "other";
 
 /** Escape the three HTML-significant characters so source text renders inert. */
@@ -159,7 +159,7 @@ export function relativeWhen(iso: string): string {
 }
 
 /** Human byte size with one decimal at KB/MB/GB/TB, integer bytes below 1 KiB.
- *  Steps all the way to TB (issue #367's Storage card shows quota-scale
+ *  Steps all the way to TB (#367's Storage card shows quota-scale
  *  figures, not just app-log-scale ones) — behavior below 1 MB is unchanged
  *  from the original KB/MB-only helper. */
 export function formatBytes(n: number): string {

@@ -2,25 +2,22 @@
 // copy and the whole inventory can be read in one sitting — the same shape
 // `docs/view-copy.ts` gives Docs.
 //
-// THE VAULT LINK NOW HAS COPY, because the contract now answers it. The
-// queries carry the sharing plane (`queries/_shared.ts`): who is linked
-// (`linked`, `vault_count`), what is shared with them, and which invitations
-// are still out. So the linked/unlinked chips, the vault-link sub-lines, the
-// `Vaults` and `Shared with them` sections and the vault-counting status lines
-// live here in full.
+// THE VAULT LINK HAS COPY HERE, because the contract answers it. The queries
+// carry the sharing plane (`queries/_shared.ts`): who is linked (`linked`,
+// `vault_count`), what is shared with them, and which invitations are still
+// out. So the linked/unlinked chips, the vault-link sub-lines, the `Vaults`
+// and `Shared with them` sections and the vault-counting status lines live
+// here in full.
 //
-// `Share` AND `Revoke` NOW HAVE COPY, because the grant plane answers them
-// (#825). A share is a standing grant over an audience × subject × capability
-// — no container of this app's own is required, and no link ceremony precedes
-// it — so the person screen carries both verbs and the words for them come
-// from the shared kit (`_shared/grant-copy.ts`): the delivery and reach
-// sentences, the revoke confirm, and the outcome each act reports. They are
-// NOT restated here; one fact, one sentence, both seats.
+// `Share` AND `Revoke` TAKE THEIR WORDS FROM THE SHARED KIT (#825,
+// `_shared/grant-copy.ts`): the delivery and reach sentences, the revoke
+// confirm, and the outcome each act reports. They are NOT restated here; one
+// fact, one sentence, both seats.
 //
-// `Link vault` HAS NO COPY, and that is not a withholding: linking stopped
-// being an act a member performs. A grant to an unlinked person parks at
+// `Link vault` HAS NO COPY, and that is not a withholding: linking is not an
+// act a member performs. A grant to an unlinked person parks at
 // `awaiting_channel` and mints the invitation as its own first step, so a
-// `Link vault` commit would name a ceremony the product no longer has.
+// `Link vault` commit would name a ceremony the product does not have.
 //
 // Budgets (DESIGN.md § Copy): a label is a verb-first fragment, an empty state
 // or a banner is ONE sentence, nothing exceeds 120 characters, and "please",

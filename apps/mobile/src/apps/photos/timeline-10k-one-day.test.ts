@@ -1,4 +1,4 @@
-// The degenerate twin of timeline-50k.test.ts (issue #721 D1/C1): not 50k
+// The degenerate twin of timeline-50k.test.ts (#721/C1): not 50k
 // captures spread over years, but 10k captures crammed into ONE calendar day
 // — the "shot a wedding, imported the whole card at once" burst a real device
 // actually produces. sectionPhotoAssets must still resolve it to a single

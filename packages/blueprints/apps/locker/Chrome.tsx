@@ -1,19 +1,15 @@
-// The Locker chrome as JSX (issue #505 inline path). Locker's static index.html
-// carried NO chrome markup — the Lit-derived app rendered its whole surface
-// (sidebar / list / detail / overlays) into one React root at `#stage`. So this
-// "chrome" is just the `.locker` FRAME: the flex row that holds the reused
-// LockerSidebar / LockerList / LockerDetail panes, the consent + notice banners
-// (kept with their served ids so the reused logic.ts drives them verbatim), the
-// display:contents overlay host, and the floating ask mount. app-inline.tsx
-// passes the panes/overlays as slots so the whole app is ONE React tree instead
-// of app.tsx's imperative `createRoot($('stage'))` + `render()`.
+// The Locker chrome as JSX (#505 inline path). This "chrome" is only the
+// `.locker` FRAME: the flex row that holds the LockerSidebar / LockerList /
+// LockerDetail panes, the consent + notice banners (carrying the ids logic.ts
+// drives them by), the display:contents overlay host, and the floating ask
+// mount. app-inline.tsx passes the panes/overlays as slots so the whole app is
+// ONE React tree rather than an imperative root per region.
 //
 // The frame carries the GLOBAL state classes `locker` / `is-narrow` /
-// `side-open` / `show-list` / `denied` that the served static #root wore, so the
-// reused components/*.module.css `:global(.locker.is-narrow) …` rules key on it
-// exactly as they do served. Classes otherwise come from Chrome.module.css
-// (scoped frame) + the global kit-* vocabulary (kit.css, loaded once by the
-// route host).
+// `side-open` / `show-list` / `denied`, because the components/*.module.css
+// `:global(.locker.is-narrow) …` rules key on them. Classes otherwise come
+// from Chrome.module.css (scoped frame) + the global kit-* vocabulary
+// (kit.css, loaded once by the route host).
 import type { ReactNode } from "react";
 
 import { LoadingSkeleton } from "../_shared/LoadingSkeleton.tsx";

@@ -1,14 +1,13 @@
-// Pure formatting + display helpers lifted out of the app.ts shell IIFE.
-// Every function here is stateless: it depends only on its arguments and
-// ambient globals (Icon, ICON_PALETTE) declared in types.d.ts, so it can be
-// imported by app.ts and the route modules split out of it. The shared design
-// formatter is the one exception: relative time is a cross-surface contract.
+// Pure formatting + display helpers for the renderer. Every function here is
+// stateless: it depends only on its arguments and ambient globals (Icon,
+// ICON_PALETTE) declared in types.d.ts. Relative time is the one exception —
+// it comes from the shared design formatter, being a cross-surface contract.
 import { formatRelativeTime } from "@centraid/design";
 
-// Canonical icon → palette-hue mapping, lifted from the Centraid Redesign
-// bold.jsx APPS fixture. Every app type has a fixed colour identity in the
-// design (Todos is always indigo, Habits always rose, etc.). Used when minting
-// a new app and when hydrating drafts off disk. Sparkle is the default icon for
+// Canonical icon → palette-hue mapping. Every app type has a fixed colour
+// identity in the design (Todos is always indigo, Habits always rose, etc.).
+// Used when minting a new app and when hydrating drafts off disk. Sparkle is
+// the default icon for
 // drafts and freshly-prompted apps before an icon is inferred — it gets the
 // violet sub-accent.
 const CANONICAL_ICON_COLOR_KEY: Record<string, ColorKeyType> = {
@@ -37,7 +36,7 @@ export function colorForIcon(iconKey: IconNameType | string): ColorHexType {
 
 /**
  * Resolve a home tile's visual identity from a gateway listing row's
- * `app.json` keys (issue #263). Raw pass-through strings from the wire —
+ * `app.json` keys (#263). Raw pass-through strings from the wire —
  * validate against the Icon registry / palette before trusting them.
  * Returns `null` when neither key resolves, so callers fall back to the
  * legacy stored UserAppMeta / inference chain.

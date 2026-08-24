@@ -72,7 +72,7 @@ function newestRowAt(
 
 /**
  * The name to PRINT for `placeKey` right now, or null when there is no name a
- * person would recognise (issue #816).
+ * person would recognise (#816).
  *
  * Read from the rows at render, never from a route parameter: a screen opened
  * before the place was named would otherwise keep the fallback in its head
@@ -91,7 +91,7 @@ export function placeNameAt(
 
 /**
  * The `core_place` row a surface standing at `placeKey` would NAME, or null when
- * there is nothing to ask (issue #816).
+ * there is nothing to ask (#816).
  *
  * Null when the place already has a name a person would recognise: a member who
  * named somewhere is not asked again. A coordinate-shaped label is NOT such a
@@ -172,7 +172,7 @@ export function placeCards(
     const row = placeById.get(asset.placeId);
     const key = placeCardKey(row);
     if (!row || key === null) continue;
-    // A coordinate-shaped label is not a name (issue #816). `readableName` is
+    // A coordinate-shaped label is not a name (#816). `readableName` is
     // the one predicate both surfaces ask; without it this card prints the
     // digits `findOrCreatePlaceTx` mints as if a person had typed them.
     const name =
@@ -195,7 +195,7 @@ export function placeCards(
 }
 
 /**
- * The reserved shelf key of the "no location" card (issue #816) — the same
+ * The reserved shelf key of the "no location" card (#816) — the same
  * spelling the web shelf's trailing section carries (`components/Places.tsx`),
  * because a hit and the destination it opens have to agree on it.
  *
@@ -227,7 +227,7 @@ export function assetsWithNoPlace(assets: readonly PhotoAsset[]): PhotoAsset[] {
 
 /**
  * The shelf's trailing card for that bucket, or null when there is nothing in
- * it (issue #816). Kept out of `placeCards` on purpose: that function answers
+ * it (#816). Kept out of `placeCards` on purpose: that function answers
  * "which places are in this library" and the bucket is not a place.
  */
 export function noLocationCard(
@@ -251,7 +251,7 @@ export function noLocationCard(
  * anything in the trash. Same key `placeCards` mints, so the count on a card
  * and the count in its detail cannot disagree.
  *
- * `NO_LOCATION_KEY` resolves here rather than in `PlaceDetail` (issue #816) for
+ * `NO_LOCATION_KEY` resolves here rather than in `PlaceDetail` (#816) for
  * exactly the reason this module exists: the card's count and the screen's
  * count are one arithmetic, written once.
  */

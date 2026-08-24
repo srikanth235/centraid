@@ -34,7 +34,7 @@ const WORKER_FILE = resolveWorkerFile();
 export const HANDLER_WORKER_FILE = WORKER_FILE;
 
 /**
- * The one warm-spare pool guarding every real handler dispatch (issue #404).
+ * The one warm-spare pool guarding every real handler dispatch (#404).
  * Lazily constructed so the module import doesn't spawn threads (tests /
  * tools that never dispatch pay nothing), and so `CENTRAID_WORKER_POOL_SIZE`
  * is read at first use. Tests pass their own `pool` to keep spare counts
@@ -80,10 +80,10 @@ export interface RunHandlerOptions {
    * dependency DAG.
    */
   timeModuleUrl?: string;
-  /** Overridable for tests; production callers take the shared default (issue #351). */
+  /** Overridable for tests; production callers take the shared default (#351). */
   admission?: WorkerAdmission;
   /**
-   * Warm-spare worker pool (issue #404). Overridable for tests; production
+   * Warm-spare worker pool (#404). Overridable for tests; production
    * callers take the lazily-built shared default. Every run still gets a
    * single-use worker — the pool only pre-pays the thread/module boot on a
    * spare so it's off the request's critical path.
@@ -96,7 +96,7 @@ export interface HandlerOutcome {
   value?: unknown;
   error?: string;
   logs: Array<{ level: "info" | "warn" | "error"; msg: string }>;
-  /** Set when `ok` is false because admission refused a worker slot (issue #351) — no worker ever spawned. */
+  /** Set when `ok` is false because admission refused a worker slot (#351) — no worker ever spawned. */
   busy?: boolean;
 }
 
@@ -110,7 +110,7 @@ export async function runHandler(
   opts: RunHandlerOptions
 ): Promise<HandlerOutcome> {
   const admission = opts.admission ?? sharedWorkerAdmission();
-  // Admission gates the WORKER SPAWN itself (issue #351) — a saturated
+  // Admission gates the WORKER SPAWN itself (#351) — a saturated
   // gateway must fail fast here, before a single extra worker thread comes
   // into existence, not after.
   try {
@@ -134,7 +134,7 @@ export async function runHandler(
 
   // Take a pre-booted, single-use worker from the warm-spare pool and hand it
   // the request. The pool has already paid the thread/module boot on a spare
-  // thread (issue #404); this worker runs exactly this one handler and is then
+  // thread (#404); this worker runs exactly this one handler and is then
   // terminated at finish() — isolation identical to spawn-per-run.
   const pool = opts.pool ?? sharedWorkerPool();
   const worker = pool.acquire();

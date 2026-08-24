@@ -1,6 +1,6 @@
 /**
  * Star a document through core.star_document: one flags-scheme tag on the
- * canonical content item (issue #274) — the same star Photos' favorite
+ * canonical content item (#274) — the same star Photos' favorite
  * writes, so "Starred" means one thing across every surface. Idempotent;
  * refuses trashed documents (restore first). Risk low.
  */

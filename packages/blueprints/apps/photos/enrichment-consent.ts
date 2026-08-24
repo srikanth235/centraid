@@ -15,7 +15,7 @@
  * "vault" is replaced with "library" — the scope's human label — because
  * Photos mounts over several scopes and "this vault" stops being unambiguous
  * the moment a household exists (#599 vocabulary gate), and one banned-word
- * repair (issue #805): the cloud panel's "you can revoke the grant afterwards"
+ * repair (#805): the cloud panel's "you can revoke the grant afterwards"
  * reads "the grant is revocable afterwards", DESIGN.md `## Copy` banning "you
  * can" on every surface, consent included. Do not "improve" the strings beyond
  * those two: every fact below is a promise about what the library will and
@@ -36,7 +36,7 @@
  */
 
 // The gate's shapes are generic across every consent moment in the product
-// (issue #712 C1) — Docs' capture-time OCR is the second instance — so they
+// (#712) — Docs' capture-time OCR is the second instance — so they
 // live in `apps/_shared/consent-gate.ts` and are re-exported here VERBATIM
 // for every existing importer of this module.
 import type {
@@ -159,7 +159,7 @@ export const ENRICHMENT_UNAVAILABLE = {
     "Not available: the vault’s enrichment policy refuses photograph recognition, so this request cannot run.",
   // KEY NAME KEPT AS `modelTier` for both clients' sake (EnrichmentConsent.tsx
   // reads it by this name) even though the tier it now describes is named
-  // `gateway` (issue #712 C5, renamed from `model`) — the CONTENT below is
+  // `gateway` (#712 C5, renamed from `model`) — the CONTENT below is
   // what changed. `gateway` does not by itself mean "reaches a provider": it
   // means the vault's own gateway may do whatever it is already wired to,
   // which for a capability that needs a model turn is a provider egress
@@ -201,7 +201,7 @@ export type AnswerAvailability = SharedAnswerAvailability;
  *
  * The tier is the OWNER's setting, mirrored into `enrich.policy`
  * (packages/vault/src/schema/enrich.ts), on the `off | device | gateway`
- * axis (issue #712 C5, renamed from `off | local | model`). It is not this
+ * axis (#712 C5, renamed from `off | local | model`). It is not this
  * consent — it is the envelope this consent lives inside:
  *
  *   * `device` — the policy would permit a device producer, but this build

@@ -1,6 +1,6 @@
 import crypto from "node:crypto";
 /*
- * L4 attribution through the replica-intent path (issue #599 decision 8).
+ * L4 attribution through the replica-intent path (#599 decision 8).
  *
  * A write replayed from a phone must name the PERSON who made it, not only
  * the hardware that carried it — and it must name them by id, so a rename on

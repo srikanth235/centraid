@@ -17,7 +17,7 @@ import {
 } from "./storage-limits.js";
 import type { StorageLimits } from "./storage-limits.js";
 
-// The owner's two limits (issue #544). The rules worth pinning are the ones a
+// The owner's two limits (#544). The rules worth pinning are the ones a
 // wrong answer makes dangerous: a limit low enough to be unsatisfiable, a
 // malformed file silently becoming a real limit, and — above all — that the
 // disk budget classifies but never claims to block.

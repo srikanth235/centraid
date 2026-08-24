@@ -16,13 +16,12 @@ const __filename = import.meta.filename;
 const __dirname = import.meta.dirname;
 
 /*
- * E2E harness for the desktop app, rebuilt for the post-#109/#137/#141
- * architecture:
+ * E2E harness for the desktop app. The architecture it mocks:
  *
  *   - App *code* lives in the gateway's git store; the renderer is a thin
  *     HTTP client that talks to the ACTIVE gateway directly (Bearer token).
- *   - `settings.json` no longer carries a gateway URL/token — those are
- *     derived from the active EndpointId-keyed row in the main-process-owned
+ *   - `settings.json` carries no gateway URL/token — those are derived from
+ *     the active EndpointId-keyed row in the main-process-owned
  *     `<userData>/connections.json`. The Electron test entry maps that
  *     EndpointId to the loopback mock in memory; no URL/token is persisted.
  *   - Apps/automations/turns/templates all come from the gateway over HTTP,
@@ -86,7 +85,7 @@ export interface MockState {
   harnessStatus: Record<string, unknown>;
   /** GET /centraid/_harnesses/status */
   harnessesStatus: Record<string, unknown>;
-  /** GET/PUT /centraid/_vault/enrich → `{enrich, rules}` (issue #807). */
+  /** GET/PUT /centraid/_vault/enrich → `{enrich, rules}` (#807). */
   enrich: Record<string, unknown>;
   /** The cascade's scoped rules, served alongside the tiers above. */
   enrichRules: Array<Record<string, unknown>>;
@@ -96,7 +95,7 @@ export interface MockState {
   enrichProfiles: Array<Record<string, unknown>>;
   /**
    * GET /centraid/_vault/enrich/effective?domain=&capability= → what the ONE
-   * resolver folds, keyed by capability (issue #814). Settings asks this per
+   * resolver folds, keyed by capability (#814). Settings asks this per
    * capability rather than folding tiers and rules itself, so the mock has to
    * answer it or the page renders its gateway-didn't-answer state.
    */
@@ -358,7 +357,7 @@ async function route(
 
   // The desktop suite exercises the opt-in automation surfaces. Keep that
   // intent explicit in the mock handshake now that the shell reads one
-  // capability map before rendering its launcher (C1, issue #774).
+  // capability map before rendering its launcher (C1, #774).
   if (p === "/centraid/_gateway/info" && method === "GET") {
     return json(res, 200, {
       capabilities: {
@@ -525,9 +524,9 @@ async function route(
     if (s.runNowStatus !== 200)
       return json(res, s.runNowStatus, { error: "run_failed" });
     // Mirror the gateway: firing a turn materialises its ledger row, so the
-    // automation thread feed shows it on the authoritative reload. The
-    // thread is the only route to the forensic viewer now (Run now no longer
-    // navigates there itself), so without this the feed stays empty.
+    // automation thread feed shows it on the authoritative reload. The thread
+    // is the only route to the forensic viewer (Run now does not navigate
+    // there itself), so without this the feed stays empty.
     const fired = s.automationTurnsById[s.nextAutomationTurnId];
     if (
       fired &&
@@ -1361,9 +1360,9 @@ export async function markUserApp(
 
 /** Wait for the home shell to be present.
  *
- *  Post-#707/#708 the stem replaces the old sidebar, and Home is the content
- *  springboard (or day-one first-moves) rather than the library shelf + filter
- *  tabs. Wait past the "Reading your vault…" WorkingState so tests see the
+ *  The stem is the chrome root and Home is the content springboard (or day-one
+ *  first-moves), not a library shelf (#707/#708). Wait past the "Reading your
+ *  vault…" WorkingState so tests see the
  *  graded treatment (springboard or first-run), not the loading skeleton.
  */
 export async function waitForHome(page: Page): Promise<void> {
@@ -1411,8 +1410,8 @@ export function statusLine(page: Page) {
 
 /** Open an installed (or draft) app by its display name via the command palette.
  *
- *  Home no longer lists custom apps as library cards (#708) — the palette is
- *  the durable open path for anything that is not a first-party springboard
+ *  Home lists no custom apps as library cards (#708) — the palette is the
+ *  durable open path for anything that is not a first-party springboard
  *  tile. First-party apps also appear here under the Apps group.
  */
 export async function openAppFromPalette(
@@ -1557,14 +1556,14 @@ export function tile(page: Page, appId: string) {
 /** Open an app from Home (springboard tile or first-move) by id. */
 export async function openTile(page: Page, appId: string): Promise<void> {
   // The springboard button IS the tile (data-testid="home-tile"); first-moves
-  // and AppCards also carry data-app-id. Click the anchor itself rather than
-  // requiring a nested app-tile child that Home no longer renders.
+  // and AppCards also carry data-app-id. Click the anchor itself — Home
+  // renders no nested app-tile child to require.
   await tile(page, appId).first().click();
 }
 
-/** Open a tile's overflow (⋯) action menu. Located by accessible role/name so
- * it survives card restyles — the class churn in #230 is exactly what broke
- * the old `.cd-card-more` selector. AppCards (Starred) still expose this;
+/** Open a tile's overflow (⋯) action menu. Locate it by accessible role/name,
+ * never by class — card restyles churn the classes (#230). AppCards (Starred)
+ * expose this;
  * springboard tiles do not — use openAppFromPalette + Build for that path. */
 export async function openTileMenu(page: Page, appId: string): Promise<void> {
   await tile(page, appId).getByRole("button", { name: "More actions" }).click();

@@ -1,5 +1,5 @@
 /*
- * The ONE executor of the sharing plane's effect outbox (issue #750
+ * The ONE executor of the sharing plane's effect outbox (#750
  * abstraction 2): per-kind handlers over one queue, one retry policy, and one
  * place that decides what "discharged" means.
  *

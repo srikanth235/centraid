@@ -523,7 +523,7 @@ describe("storage-routes", () => {
     expect(cache?.backpressureEvents).toBe(0);
   });
 
-  // issue #712 B3 — mobile read `blob_custody_state` counts off this route
+  // #712 B3 — mobile read `blob_custody_state` counts off this route
   // while web read the ROLLUP (`blob.custody_rollup`), so the two clients could
   // disagree about what may be released. The route carries the rollup itself
   // now, and `computedAt` is the load-bearing part: null must reach a client AS

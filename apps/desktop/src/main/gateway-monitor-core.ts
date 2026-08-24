@@ -1,34 +1,31 @@
 /*
- * Pure gateway-runtime tracking core, extracted from gateway-monitor.ts so
- * it's unit-testable without pulling in `electron` (the monitor shell needs
- * Notification/BrowserWindow at module load).
+ * Pure gateway-runtime tracking core. Keep it free of `electron` imports so it
+ * stays unit-testable — the monitor shell needs Notification/BrowserWindow at
+ * module load.
  *
  * The model: the main process probes `GET /centraid/_gateway/health` on a
- * fixed cadence and feeds
- * each result through `applyProbe`, which maintains a rolling sample strip,
- * transition-derived outage log, and counters — all in memory, scoped to
- * the app launch and the active gateway (a gateway switch resets tracking).
- * `evaluateAlert` then decides whether the user should be notified: once
- * per outage, after the gateway has been continuously unreachable past the
- * configured threshold, plus a paired "back online" notice when an alerted
- * outage ends.
+ * fixed cadence and feeds each result through `applyProbe`, which maintains a
+ * rolling sample strip, transition-derived outage log, and counters — all in
+ * memory, scoped to the app launch and the active gateway (a gateway switch
+ * resets tracking). `evaluateAlert` then decides whether the user should be
+ * notified: once per outage, after the gateway has been continuously
+ * unreachable past the configured threshold, plus a paired "back online"
+ * notice when an alerted outage ends.
  *
- * Issue #351 added two more signals on top of plain up/down:
+ * Two signals sit on top of plain up/down (#351):
  *   - `healthStatus` reconciles the health probe's aggregate component
  *     status with a sustained-high-latency check ({@link applyProbe}) — a
- *     "listening but hung" gateway now reads as `degraded`, not `up`.
+ *     "listening but hung" gateway reads as `degraded`, not `up`.
  *   - `applyComponentAlerts` tracks how long each subsystem has sat at
  *     `error` and fires a de-duped OS notification once it crosses
  *     {@link DEFAULT_COMPONENT_ALERT_SECONDS} — mirroring `evaluateAlert`'s
  *     shape but keyed per-component instead of per-gateway.
  *
- * `applyProbe` uses the version handshake (version-handshake.ts) to judge a
- * REMOTE gateway's **protocol** floor against this build (product version is
- * display only — issue #512) and records the verdict as `versionSkew`. A local
- * gateway is embedded — always built from the same tree as the app — so it's
- * never judged; `versionSkew` stays permanently undefined for it. This is
- * v0's "surface loudly" posture for protocol skew; hard refuse remains the
- * path taken by full `judgeGatewayInfo` / client connect.
+ * Skew is judged on the **protocol** floor, not product version (#512), and
+ * only for a REMOTE gateway: a local gateway is built from the same tree as
+ * the app, so it is never judged and `versionSkew` stays undefined for it.
+ * Skew here is v0's "surface loudly" posture; hard refuse stays with full
+ * `judgeGatewayInfo` / client connect.
  */
 
 import {
@@ -79,7 +76,7 @@ export interface GatewayComponentIssue {
 /**
  * Protocol-handshake verdict for the active (REMOTE only, see file header)
  * gateway. Product `version` strings are informational; `skewed` means the
- * protocol support window failed (issue #512).
+ * protocol support window failed (#512).
  */
 export interface GatewayVersionSkew {
   skewed: boolean;
@@ -153,7 +150,7 @@ export interface GatewayRuntimeState {
   /** Outage log, oldest first, capped at {@link OUTAGE_CAP}. */
   outages: GatewayOutage[];
   /**
-   * Reconciled health signal (issue #351): the health probe's aggregate
+   * Reconciled health signal (#351): the health probe's aggregate
    * component status, upgraded to `'degraded'` on sustained high latency
    * even when every component reports `ok` (see {@link DEGRADED_LATENCY_MS}).
    * Undefined until the first successful probe reaches `/health`; persists
@@ -203,7 +200,7 @@ export const DEGRADED_LATENCY_MS = 2000;
 /** Consecutive successful, over-threshold samples before latency counts as "sustained". */
 export const SUSTAINED_LATENCY_SAMPLE_COUNT = 3;
 /**
- * Component-level alert default (issue #351): longer than the gateway-down
+ * Component-level alert default (#351): longer than the gateway-down
  * threshold ({@link DEFAULT_ALERT_SECONDS}) because a single subsystem
  * erroring is noisier and more often self-healing than the whole gateway
  * being unreachable.
@@ -253,22 +250,15 @@ function sustainedHighLatency(samples: GatewaySample[]): boolean {
 
 /**
  * True when this tick's failure is boot-phase noise that must NOT be folded
- * into tracking at all (issue #647 follow-up).
+ * into tracking at all (#647).
  *
- * On a fresh vault login Notifications filled with "Local is unreachable —
- * gateway URL not resolved yet ×5" / "Local recovered" cards. Their source was
- * the first few ticks after launch: the monitor synthesizes a failed probe
- * while the embedded gateway's URL is still being resolved, `applyProbe` reads
- * that as `unknown → down` (a real transition, opening an outage), and
- * `deriveOutageEvents` turns it into a severity-high durable event plus a
- * paired `recovered` once the gateway finally answered.
- *
- * The honest model is a third outcome — "pending" — which this repo already
- * has a name for: `status: 'unknown'`. Leaving the state untouched for such a
- * tick means no outage opens, so no `down` event fires AND the eventual first
- * success is an `unknown → up` transition, which derives no `recovered`
- * either. The suppressed pair disappears together, by construction, rather
- * than needing a second flag to remember it was suppressed.
+ * A synthesized failure raised while the embedded gateway's URL is still
+ * resolving would read as `unknown → down`, open an outage, and make
+ * `deriveOutageEvents` emit a severity-high durable `down` plus its paired
+ * `recovered`. Leaving the state untouched keeps `status: 'unknown'`, so no
+ * outage opens and the eventual first success is an `unknown → up`
+ * transition, which derives no `recovered` either — the pair disappears
+ * together by construction. Do not swap this for a "was suppressed" flag.
  *
  * Deliberately narrow, so genuine "remote gateway unreachable at launch"
  * alerting is untouched:
@@ -296,14 +286,11 @@ export function applyProbe(
 
   let outages = state.outages;
   if (probe.ok && transitioned && state.status === "down") {
-    // Close the open outage. (An open outage always exists after a down
-    // transition; slice defensively anyway.)
     const last = outages[outages.length - 1];
     if (last && last.endedAt === undefined) {
       outages = [...outages.slice(0, -1), { ...last, endedAt: probe.at }];
     }
   } else if (!probe.ok && transitioned) {
-    // 'up' → 'down', or the very first probe failing ('unknown' → 'down').
     outages = [...outages, { startedAt: probe.at }].slice(-OUTAGE_CAP);
   }
 
@@ -317,8 +304,6 @@ export function applyProbe(
   ].slice(-SAMPLE_CAP);
   const latencyDegraded = sustainedHighLatency(samples);
 
-  // healthStatus: 'error' from the probe wins outright; otherwise degraded
-  // components OR sustained latency downgrade an 'ok' probe to 'degraded'.
   const healthStatus = probe.ok
     ? probe.healthStatus === "error"
       ? "error"
@@ -359,10 +344,9 @@ export function applyProbe(
           ...(probe.protocolVersion === undefined
             ? {}
             : { protocolVersion: probe.protocolVersion }),
-          // Version handshake (wave 2 of #351) — REMOTE gateways only; a
-          // local gateway is embedded in this same build and can never
-          // skew. Probes without version/protocol fields leave the last-known
-          // verdict in place, same as `version` above.
+          // REMOTE gateways only — a local gateway is built from this same
+          // tree and can never skew. Probes without version/protocol fields
+          // leave the last-known verdict in place, same as `version` above.
           ...(state.gatewayKind === "remote" &&
           probe.version !== undefined &&
           probe.protocolVersion !== undefined
@@ -483,7 +467,6 @@ export function applyComponentAlerts(
       ...(alertedAt === undefined ? {} : { alertedAt }),
     });
   }
-  // Components that started erroring this tick get a fresh record.
   for (const issue of erroring.values()) {
     nextRecords.push({
       component: issue.component,

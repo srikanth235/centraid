@@ -1,4 +1,4 @@
-// Token-purity ratchet allowlist (issue #686, item A2).
+// Token-purity ratchet allowlist (#686).
 //
 // packages/design owns every color, type ramp, radius, and font in the
 // product. Blueprint app CSS is supposed to *consume* those tokens through
@@ -68,7 +68,7 @@ export const TOKEN_PURITY_ALLOWLIST: Readonly<
 };
 
 /**
- * Fallback-less `var()` references that resolve to nothing (issue #686).
+ * Fallback-less `var()` references that resolve to nothing (#686).
  *
  * **This list is empty and must stay that way.** Any entry is a live latent
  * bug: the declaration is dropped at computed-value time, so the rule silently

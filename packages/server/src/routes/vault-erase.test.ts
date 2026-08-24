@@ -308,14 +308,13 @@ describe("vault-erase scenarios", () => {
   });
 
   /*
-   * Every erase REFUSAL path (issue #568 item L).
+   * Every erase REFUSAL path (#568).
    *
    * #555's safety argument for putting erase in Settings rather than behind a
-   * CLI was typed-name confirmation plus a guaranteed recovery kit. Until now
-   * neither guard had a test proving it refuses — only production grep hits —
-   * so a regression that turned any of these into a 200 would have shipped
-   * green. Erase is irreversible; each of these is the last thing standing
-   * between a mistaken click and a destroyed vault.
+   * CLI is typed-name confirmation plus a guaranteed recovery kit. Both guards
+   * are pinned here, so a regression that turns any of these into a 200 fails
+   * rather than shipping green. Erase is irreversible; each of these is the
+   * last thing standing between a mistaken click and a destroyed vault.
    */
   async function eraseFixture(
     options: { owner?: boolean; custody?: boolean } = {}

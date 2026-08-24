@@ -118,7 +118,7 @@ describe("harness-errors suite", () => {
 
   // ──── classification precedence ──────────────────────────────────────────
   //
-  // The class drives a per-class circuit breaker (issue #567 D7), so a
+  // The class drives a per-class circuit breaker (#567), so a
   // misclassification trips the wrong breaker. Structured signals must beat
   // keyword scans, and the primary message must beat vendor stderr — these
   // stderr strings are the full, realistic multi-line dumps agents actually

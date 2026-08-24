@@ -1,12 +1,15 @@
 #!/usr/bin/env node
 // Historical-narration tripwire for code comments (issue #861) — WARN-ONLY.
 //
-// Comments describe now (docs/coding-standards.md): history is cited by bare
+// Comments face forward (docs/coding-standards.md): history is cited by bare
 // issue link, never narrated. This tripwire greps comment lines for the
 // past-tense markers that narration reaches for. It is fuzzy on purpose —
 // "was" occurs in legitimate present-perfect prose — so every match is a
-// review prompt, not a violation: a surviving match must be a present-tense
-// constraint, not a story about a previous shape of the code.
+// review prompt, not a violation: a surviving match must pass the deletion
+// test (state an obligation on future edits), not tell a story about a
+// previous shape of the code. Tense is a surrogate — a changelog conjugated
+// into present tense still fails the deletion test, and this lint can't see
+// that.
 //
 // Warn-only permanently (#861 settled Q2): the signal is too noisy to gate on.
 import { execFileSync } from "node:child_process";

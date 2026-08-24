@@ -47,8 +47,8 @@ interface ScopeWire {
    * what it is called. Apps derive the "somewhere other than my own vault"
    * marker from this and never from `label`: a member who names their own
    * vault "Sharing" has not shared anything. The gateway sends it on every
-   * scope row (`ScopeRow.personal` in `scopes-routes.ts`); the phone used to
-   * drop it.
+   * scope row (`ScopeRow.personal` in `scopes-routes.ts`), and the phone must
+   * not drop it.
    *
    * Optional because a scope cached by an older build, or the synthesised
    * fallback below, genuinely does not know.
@@ -140,8 +140,7 @@ export async function resolveIdentity(vault: VaultLink | undefined): Promise<{
  * that mounted offline (see mount-plan.ts) and only later hears the gateway
  * answer, in `ReplicaProvider`'s `refreshReachability` pass — can prime the
  * cache too, without remounting anything. Network errors are swallowed: the
- * offline cache stays authoritative until the gateway returns, same as before
- * this was split out.
+ * offline cache stays authoritative until the gateway returns.
  */
 export async function refreshCachedScopes(
   gatewayId: string,

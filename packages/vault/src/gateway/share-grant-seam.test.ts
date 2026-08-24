@@ -1,4 +1,4 @@
-// THE GRANT PLANE'S SEAM INTO THE ONE WRITE DOOR (issue #825, ruling G-edit).
+// THE GRANT PLANE'S SEAM INTO THE ONE WRITE DOOR (#825, ruling G-edit).
 //
 // `routeShareGrantEdit` answers about a CONTAINER, not about a writer: it
 // returns a route — refusals included — whenever any grant covers the

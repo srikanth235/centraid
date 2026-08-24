@@ -1,6 +1,6 @@
 /* oxlint-disable import/first -- vi.mock is hoisted; subject imports intentionally follow */
 /**
- * Connect flow IO error folding (issue #545 B8).
+ * Connect flow IO error folding (#545).
  */
 
 import { beforeEach, describe, expect, it, vi } from "vitest";

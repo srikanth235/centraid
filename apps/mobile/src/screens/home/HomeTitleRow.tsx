@@ -40,7 +40,7 @@ export default function HomeTitleRow(): React.JSX.Element {
 
 const makeStyles = (colors: ThemeColors) =>
   StyleSheet.create({
-    // Fixed chrome (moved out of the ScrollView, see Home.tsx), so this row
+    // Fixed chrome (outside the ScrollView, see Home.tsx), so this row
     // owns its own horizontal margin and the rule the handoff's app bar draws
     // beneath it (`appBarStyle`, :5532–5533) — the same rule the prototype's
     // scroll region starts flush under.

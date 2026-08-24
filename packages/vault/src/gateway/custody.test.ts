@@ -2,7 +2,7 @@ import { createHash } from "node:crypto";
 // File custody (§10): `backupVault` is the user-facing export ramp — VACUUM
 // INTO copies of the two SQLite files plus the blob CAS, hashed so the copy
 // is verifiable with standard tools. (`stageVaultDbs`, the old offsite
-// staging half, left with issue #408 — the backup path ships WAL segments
+// staging half, left with #408 — the backup path ships WAL segments
 // via wal-shipper.ts instead of rewriting the database per snapshot.)
 import { existsSync, mkdirSync, readFileSync, rmSync } from "node:fs";
 import path from "node:path";

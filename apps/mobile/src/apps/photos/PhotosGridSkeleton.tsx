@@ -8,7 +8,7 @@
 // Deliberately not a `FlashList` — there is nothing to virtualise, and one
 // screenful is all that is ever drawn.
 //
-// Lifted out of `PhotosHome.tsx` (issue #712, P13): the home screen grew a
+// Lifted out of `PhotosHome.tsx` (#712): the home screen grew a
 // second thing that can occupy the grid's slot — the permission takeover — and
 // the placeholder is a self-contained shape with its own styles, so it is the
 // half that leaves.

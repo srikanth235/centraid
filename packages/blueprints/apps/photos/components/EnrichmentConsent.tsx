@@ -1,16 +1,16 @@
 import { ConsentGate } from "../../_shared/ConsentGate.tsx";
 // THE ENRICHMENT CONSENT SURFACE (v4 handoff §8, prototype `s==='enrich'`).
 //
-// A THIN WRAPPER (issue #712 C1): the two-panel renderer itself lifted to
-// `apps/_shared/ConsentGate.tsx` so Docs' capture-time OCR consent (the
+// A THIN WRAPPER (#712): the two-panel renderer is
+// `apps/_shared/ConsentGate.tsx`, so Docs' capture-time OCR consent (the
 // second instance of this product law) reads the same component. This file
-// now only supplies Photos' own copy (`../enrichment-consent.ts`) and props
-// — the panels, facts, `--net` border, and "one filled element" rule (§18)
-// all live in the shared gate, unchanged.
+// supplies only Photos' own copy (`../enrichment-consent.ts`) and props — the
+// panels, facts, `--net` border, and "one filled element" rule (§18) all live
+// in the shared gate.
 //
-// A PURE VIEW, same as before: it holds no state, reads nothing, and writes
-// nothing — every answer leaves through a callback. The gate itself (the ONE
-// call site that may fire `request-enrichment`) lives in Enrichment.tsx.
+// A PURE VIEW: it holds no state, reads nothing, and writes nothing — every
+// answer leaves through a callback. The gate itself (the ONE call site that
+// may fire `request-enrichment`) is `../enrichment-gate.ts`.
 import {
   CLOUD_PANEL,
   ENRICHMENT_NOTE,

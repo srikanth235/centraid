@@ -1,4 +1,4 @@
-// The Storage screen's data (issue #711), page-side — the `createPeople`
+// The Storage screen's data (#711), page-side — the `createPeople`
 // (people.ts) shape applied to the custody rollup.
 //
 // LOADED LAZILY, like the People roster and the duplicate clusters: this is a
@@ -7,7 +7,7 @@
 // it on every library refresh would be a read per scope per repaint for a
 // number that moves once a sweep.
 //
-// MULTI-SCOPE, like the timeline (issue #599): the member's own library and
+// MULTI-SCOPE, like the timeline (#599): the member's own library and
 // every audience they belong to each hold their own bytes and their own sweep,
 // so each is asked, and a scope that cannot answer is NAMED rather than
 // silently folded in as empty (storage-model.ts's `unread`). The fan-out door

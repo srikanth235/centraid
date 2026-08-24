@@ -17,11 +17,6 @@
  * vault of their own. That read denies independently (People's `share.*`
  * scopes are newer than the app), and a denial leaves the pair null while the
  * four original counts stand.
- *
- * TS conversion note: the vault read surface returns `Record<string, unknown>`
- * rows (see HandlerCtx.vault), so each raw row set is cast once to a typed
- * shape (`as unknown as X[]`) at its read site. Handler logic is otherwise
- * byte-for-byte the pre-conversion JS.
  */
 
 import { readLiveBindings } from "./_shared.ts";

@@ -167,7 +167,7 @@ export const PLACE_MENU: readonly PlaceMenuItem[] = [
  * whose options cannot be computed is a control that would either do nothing
  * or, worse, filter by a fact the app invented.
  *
- * PEOPLE IS LIT ON ONE HALF OF ITSELF (issue #821). The drive projection now
+ * PEOPLE IS LIT ON ONE HALF OF ITSELF (#821). The drive projection now
  * carries `shared_with` — real commons grants over a document or the folders
  * above it — so "shared with <somebody>" is computable and the axis is
  * rendered. Its options are therefore DERIVED FROM THE ROWS (filters.ts

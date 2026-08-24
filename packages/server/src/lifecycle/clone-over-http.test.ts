@@ -1,7 +1,7 @@
 import crypto from "node:crypto";
 import { promises as fs } from "node:fs";
 /*
- * Template clone over HTTP (issue #141). The desktop no longer writes a
+ * Template clone over HTTP (#141). The desktop does not write a
  * cloned template into a local worktree — it reads the bundled catalog,
  * rewrites the file map in memory (`cloneTemplateFiles`), provisions any
  * pending webhook triggers (`provisionPendingWebhooksInFiles`), then
@@ -102,7 +102,7 @@ describe("clone-over-http scenarios", () => {
       newAppId: "inbound-2",
       templateFiles: templateFiles(),
       newName: "Inbound 2",
-      // The catalog entry's tile identity backfills app.json (issue #263) —
+      // The catalog entry's tile identity backfills app.json (#263) —
       // the template's own copy predates the keys.
       iconKey: "Sparkle",
       colorKey: "rose",

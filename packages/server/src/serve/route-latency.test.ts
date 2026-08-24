@@ -1,5 +1,6 @@
-// Issue #659 R5: the gateway could report event-loop lag but not WHICH route
-// was slow, so every performance claim needed a bench rig to reproduce.
+// The gateway reports event-loop lag; without per-route histograms it cannot
+// say WHICH route is slow, so every performance claim needs a bench rig to
+// reproduce (#659).
 
 import { describe, expect, it } from "vitest";
 

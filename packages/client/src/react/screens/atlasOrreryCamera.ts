@@ -12,7 +12,7 @@ import {
 } from "./atlasOrreryGeometry.js";
 import type { ViewTransform } from "./atlasOrreryGeometry.js";
 
-// The orrery's pan/zoom camera (issue #519), lifted out of AtlasRelationsTab so
+// The orrery's pan/zoom camera (#519), lifted out of AtlasRelationsTab so
 // the tab stays about graph state. `view` is a lens over the chart body, never a
 // layout change — the geometry beneath it is fixed (see ViewTransform / the
 // camera invariant in atlasOrreryGeometry.ts). Drag pan and click re-centre

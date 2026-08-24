@@ -1,4 +1,4 @@
-// The conversation ledger's behaviours (issue #707, Phase 4). The ledger is
+// The conversation ledger's behaviours (#707). The ledger is
 // app content owned by the assistant route, so its coverage lives here beside
 // the component rather than with the shell's navigation column.
 import { act } from "react";

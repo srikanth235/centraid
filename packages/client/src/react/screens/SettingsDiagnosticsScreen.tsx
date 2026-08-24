@@ -68,7 +68,7 @@ export interface HealthEventDTO {
   message: string;
 }
 
-/** Coarse numeric signals from the gateway health snapshot (issue #521). */
+/** Coarse numeric signals from the gateway health snapshot (#521). */
 export interface HealthMetricsDTO {
   rssBytes: number;
   outboxPending: number;
@@ -82,18 +82,18 @@ export interface HealthMetricsDTO {
   hardwareProfileClass?: string;
   resourceMode?: string;
   /**
-   * Structured resource contract (issue #528 Phase A) — host facts, class,
+   * Structured resource contract (#528) — host facts, class,
    * mode, and the resolved knobs the profile derived. Present on modern
    * gateways only; the Resource card's L1/L2 disclosure gates on it.
    */
   resourceProfile?: ResourceProfileDTO;
   /**
-   * Background-work pause state (issue #528 Phase B). Present on modern
+   * Background-work pause state (#528). Present on modern
    * gateways only; absent hides the Resource card's pause control.
    */
   backgroundPause?: BackgroundPauseDTO;
   /**
-   * Power-context posture (issue #528 Phase D) — the gateway host's battery /
+   * Power-context posture (#528) — the gateway host's battery /
    * mains / server situation. Present on modern gateways only; drives the
    * Resource card's posture note (battery/thermal chrome or a server fact).
    */
@@ -112,7 +112,7 @@ export interface GatewayHealthDTO {
 }
 
 /**
- * Host plumbing, the one place it is allowed to be visible (issue #665).
+ * Host plumbing, the one place it is allowed to be visible (#665).
  *
  * Everywhere else the owner manages vaults; here the machine serving them is
  * the subject, so "host" and "connection" are the right words and the three

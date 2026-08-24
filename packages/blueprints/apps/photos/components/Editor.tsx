@@ -228,7 +228,7 @@ export function EditorView({
         type: "image/jpeg",
       });
       // A new photograph lands beside the original, so it lands in the
-      // ORIGINAL's scope (issue #599) — never in the chip selection, which
+      // ORIGINAL's scope (#599) — never in the chip selection, which
       // could be a different audience entirely.
       const scope = asset.scope_id ?? undefined;
       const staged = await stageFileBytes(file, "", scope ? { scope } : {});
@@ -237,7 +237,7 @@ export function EditorView({
         {
           staged_sha: staged.sha256,
           kind: "photo",
-          // Both halves of what the commit's sentence promises (issue #711):
+          // Both halves of what the commit's sentence promises (#711):
           // dated TODAY, and "with this one recorded as its source" — which is
           // now a real column (`media_asset.source_asset_id`) rather
           // than a claim with nowhere to land. The lineage is what lets the

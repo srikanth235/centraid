@@ -1,5 +1,5 @@
 // governance: allow-repo-hygiene file-size-limit one command pack per domain is the vault contract (registered as a unit, read wholesale); documents own the whole drive loop (13 commands with their contracts), so it is large by design.
-// Document commands (core §01, issue #352): a document has identity SEPARATE
+// Document commands (core §01, #352): a document has identity SEPARATE
 // from its bytes — core_document wraps a canonical core_content_item exactly
 // like knowledge_note wraps a note body (the wrapper pattern), so a document
 // can be edited in place with a walkable version history instead of forcing
@@ -10,7 +10,7 @@
 // level; every document carries exactly one folders-scheme tag.
 //
 // Version lineage is a `revises` core.link between CONTENT ITEMS (NEW ->
-// OLD, issue #272's relation fabric), never a column on core_document —
+// OLD, #272's relation fabric), never a column on core_document —
 // core_document.current_content_id only ever names the HEAD; the chain
 // behind it is walked through core_link. History never rewrites (rule R3):
 // restoring an old version asserts a new link forward, it never touches the
@@ -169,7 +169,7 @@ const ADD_DOCUMENT: CommandDefinition = {
       value: 1,
     },
     {
-      // The inline door is for SMALL payloads (issue #296): the journal
+      // The inline door is for SMALL payloads (#296): the journal
       // records every input, so big documents take the staging route.
       name: "within_size_cap",
       sql: `SELECT CASE WHEN :data_uri IS NULL THEN 1 ELSE (length(:data_uri) <= ${MAX_INLINE_DATA_URI_CHARS}) END AS n`,
@@ -227,7 +227,7 @@ function addDocument(ctx: HandlerCtx): Record<string, unknown> {
     folder_id?: string;
     extracted_text?: string;
   };
-  // Staged bytes claim their content item (issue #296); small inline
+  // Staged bytes claim their content item (#296); small inline
   // payloads mint one. A document's identity is the wrapper row, not the
   // content item — re-presenting known bytes dedupes the BYTES (deduped: 1)
   // but always mints a fresh document, because two documents may
@@ -423,7 +423,7 @@ const TRASH_DOCUMENT: CommandDefinition = {
 function trashDocument(ctx: HandlerCtx): Record<string, unknown> {
   const input = ctx.input as { document_id: string };
   const until = purgeAt(ctx.now);
-  // Content is untouched here (retention stance, issue #352): the wrapper
+  // Content is untouched here (retention stance, #352): the wrapper
   // trashes, its bytes — current AND every superseded revision — stay live
   // until the document itself purges (gateway/duties.ts lapsedDocuments).
   ctx.db
@@ -659,7 +659,7 @@ function editDocument(ctx: HandlerCtx): Record<string, unknown> {
     | { content_id: string; media_type: string }
     | undefined;
   if (!doc) throw new Error("document vanished between check and execute");
-  // Same mint path add_document takes (issue #296): text stays inline, the
+  // Same mint path add_document takes (#296): text stays inline, the
   // FTS triggers decode it in-transaction. The media type carries forward —
   // an edit changes the words, never the format.
   const dataUri = `data:${doc.media_type};charset=utf-8,${encodeURIComponent(input.body_text)}`;
@@ -1120,7 +1120,6 @@ function deleteFolder(ctx: HandlerCtx): Record<string, unknown> {
   return { folder_id: input.folder_id };
 }
 
-/** Register the document commands on a gateway. */
 export function registerDocumentCommands(gateway: Gateway): void {
   gateway.registerCommand(ADD_DOCUMENT);
   gateway.registerCommand(RENAME_DOCUMENT);

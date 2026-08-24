@@ -75,7 +75,7 @@ function personGroup(
 }
 
 /**
- * WHAT A PLACE ANSWERS TO (issue #816).
+ * WHAT A PLACE ANSWERS TO (#816).
  *
  * A place is a phrase, not a label, so it is findable by every phrase that is
  * honestly true of it — not only by the one string stored in its `name` column:

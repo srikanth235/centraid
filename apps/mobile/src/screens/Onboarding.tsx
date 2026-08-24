@@ -43,7 +43,7 @@ import {
 // First-run onboarding — a self-contained, always-dark flow rendered ahead of
 // the tab shell (App.tsx gates on `profile.onboarded`).
 //
-// There is exactly one way in: a pair ticket (issue #603). A gateway founds
+// There is exactly one way in: a pair ticket (#603). A gateway founds
 // itself when it first starts, so the phone never creates or restores vaults —
 // it enrolls as a device and focuses the first vault grant by default. A
 // single ticket may make additional vaults available in the switcher.
@@ -367,7 +367,7 @@ function ConnectionStep({
 }
 
 /**
- * Unified profile step (issue #603 D2) — the single place a new member says who
+ * Unified profile step (#603) — the single place a new member says who
  * they are. Same two fields, same palette, as Settings → You, so nothing has to
  * be re-entered after onboarding.
  */

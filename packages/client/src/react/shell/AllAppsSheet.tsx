@@ -15,7 +15,7 @@ import type {
 
 import chrome from "./chrome.module.css";
 
-// Tier 2 — All apps (issue #707).
+// Tier 2 — All apps (#707).
 //
 // A searchable sheet listing EVERY destination the shell has, each as a 44px
 // row with its icon and a pin switch. Pinning adds the destination to the

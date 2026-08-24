@@ -19,13 +19,12 @@
 //     better as English in the line that already names the actor
 //     (`callerPhrase`), with the row's one state word (`Staged`, `Lapsed`,
 //     `High risk`, `New scope`) carrying the rest.
-//  2. NOTICES FOLD INTO THE QUEUE. The old phone screen had a source-type
-//     filter (Automations / Agents / Apps / Archived) over a flat notice list.
-//     A notice that demands something (warning/high) is a thing waiting on
-//     you, so it becomes an "Also waiting" row; an info notice is news, so it
-//     sits under `Updates`; archived ones keep their own section. Nothing is
-//     unreachable — what changed is that the queue narrows by what a thing
-//     NEEDS rather than by who filed it.
+//  2. NOTICES FOLD INTO THE QUEUE, never behind a source-type filter
+//     (Automations / Agents / Apps / Archived) over a flat notice list. A
+//     notice that demands something (warning/high) is a thing waiting on you,
+//     so it becomes an "Also waiting" row; an info notice is news, so it sits
+//     under `Updates`; archived ones keep their own section. The queue narrows
+//     by what a thing NEEDS, never by who filed it.
 //  3. BUSY WITHDRAWS THE VERB. A control mid-flight is not disabled-and-still-
 //     inviting; the verb is taken away until the write lands, so a second tap
 //     cannot stage a second decision.
@@ -57,7 +56,7 @@ import type {
 // ── Copy that states a rule ────────────────────────────────────────────────
 //
 // Every sentence below that desktop also renders now comes from
-// `@centraid/client/approvals-copy` (issue #805). The header's old claim —
+// `@centraid/client/approvals-copy` (#805). The header's old claim —
 // that `packages/client` is "a browser bundle this app does not import" —
 // stopped being true when this app started importing
 // `@centraid/client/replica/native` and `@centraid/client/home-copy`, and one

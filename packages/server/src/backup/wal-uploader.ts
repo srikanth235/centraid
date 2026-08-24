@@ -1,5 +1,5 @@
 /*
- * WAL segment drain + remote generation GC (issue #408) — the upload half
+ * WAL segment drain + remote generation GC (#408) — the upload half
  * of the shipper: seal each locally-captured segment/closer with the
  * deterministic /1 crypto (byte-identical retries → plain idempotent PUTs)
  * and delete the local file only after the provider accepted it. Offline

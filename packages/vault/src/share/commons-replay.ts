@@ -1,4 +1,4 @@
-// Command-tail replay: the Commons catch-up engine (issue #750 invariant 7).
+// Command-tail replay: the Commons catch-up engine (#750 invariant 7).
 //
 // A steward's `share_commons_op` log already holds the exact command and input
 // of every write that changed the shared closure. Catch-up therefore ships the

@@ -1,4 +1,4 @@
-// The per-section collapse this page draws its rails under (issue #712).
+// The per-section collapse this page draws its rails under (#712).
 //
 // Two claims this file pins:
 //
@@ -11,7 +11,7 @@
 //     unfolded.
 //
 // THE `···` CHIP AND ITS MENU LIVE IN `PhotosHome.test.tsx` NOW, not here
-// (issue #712): the page stopped drawing its own header row — Show All /
+// (#712): the page stopped drawing its own header row — Show All /
 // Collapse All open from the SAME header slot Library's Sliders chip uses,
 // scoped to whichever destination is current — so this file only owns the
 // state those two commands act on. `collapsed` and `onToggleSection` arrive
@@ -160,7 +160,7 @@ vi.mock(
   () => ({ default: () => null }) as never
 );
 
-// `PlaceDetail` reaches for the session to write a place name (issue #816), and
+// `PlaceDetail` reaches for the session to write a place name (#816), and
 // the real provider imports expo-network — which cannot load in this renderer.
 // No session here: this file renders the screen to count photographs, and the
 // naming conversation is owned by `PlaceDetail.test.tsx`.
@@ -217,12 +217,11 @@ vi.mock(
 let root: Root | undefined;
 let container: HTMLDivElement | undefined;
 
-/** Stands in for `PhotosHome.tsx`, which owns `collapsed` since issue #712 —
- *  see `PhotosCollectionsView.tsx`'s own header comment on the `collapsed`
- *  prop for why the fold moved out of this file. The toggle here is the same
- *  add/delete-from-a-`Set` shape `PhotosHome.tsx`'s own
- *  `toggleCollectionSection` uses, so a test driving it through this harness
- *  is exercising the real contract rather than a simplified stand-in. */
+/** Stands in for `PhotosHome.tsx`, which owns `collapsed` — see
+ *  `PhotosCollectionsView.tsx`'s header comment on the `collapsed` prop. The
+ *  toggle here is the same add/delete-from-a-`Set` shape `PhotosHome.tsx`'s
+ *  own `toggleCollectionSection` uses, so a test driving it through this
+ *  harness exercises the real contract rather than a simplified stand-in. */
 function Harness({
   navigate,
   initialCollapsed,
@@ -311,11 +310,10 @@ describe("Collections' per-section collapse", () => {
     container = undefined;
   });
 
-  // No header row of its own to test here anymore (issue #712) — the `···`
-  // chip and its Show All / Collapse All menu moved into `PhotosHome.tsx`'s
-  // own header, scoped to the Collections destination; see
-  // `PhotosHome.test.tsx`'s "the header's trailing control is
-  // destination-scoped" tests for that chip and its menu.
+  // This view has no header row of its own: the `···` chip and its Show All /
+  // Collapse All menu belong to `PhotosHome.tsx`'s header, scoped to the
+  // Collections destination; see `PhotosHome.test.tsx`'s "the header's
+  // trailing control is destination-scoped" tests for them.
 
   it("a collapsed section keeps its heading and count, and drops its rail", () => {
     render();
@@ -352,10 +350,8 @@ describe("Collections' per-section collapse", () => {
   });
 
   it("Show All (an empty set from PhotosHome's menu) leaves every section expanded", () => {
-    // Show All sets `collapsed` back to an empty set — the same starting
-    // shape `render()`'s default already exercises — so this proves that
-    // shape alone reads as "every section open" rather than assuming it from
-    // the previous test's fold.
+    // Show All sets `collapsed` back to an empty set, so this proves that
+    // shape alone reads as "every section open".
     render(new Set());
     expect(
       container!.querySelectorAll("button[aria-label^='Expand ']")
@@ -378,10 +374,9 @@ describe("Collections' per-section collapse", () => {
     });
   });
 
-  // People is off the band (issue #712) — this is now the one route that
-  // proves the people surface (`PhotosPeopleView`) stays reachable: its
-  // heading pushes `PhotosPeople` directly rather than a band destination
-  // that no longer exists.
+  // People is off the band (#712), so this is the one route that proves the
+  // people surface (`PhotosPeopleView`) stays reachable: its heading pushes
+  // `PhotosPeople` directly, never a band destination.
   it("the People heading reaches the people surface, off the band", () => {
     const navigate = vi.fn<(...args: unknown[]) => void>();
     act(() => {
@@ -419,7 +414,7 @@ describe("Collections' per-section collapse", () => {
     );
   });
 
-  // Issue #721 B3 — Videos joined the shelf list; its heading opens the same
+  // #721 — Videos joined the shelf list; its heading opens the same
   // `PhotoStateView` filter door Favorites already uses, not a bespoke grid.
   it("the Videos heading opens the shared filtered shelf, exactly like Favorites", () => {
     const navigate = vi.fn<(...args: unknown[]) => void>();

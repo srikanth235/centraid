@@ -1,5 +1,5 @@
 /*
- * Iroh-only gateway pairing (issue #555).
+ * Iroh-only gateway pairing (#555).
  *
  * The one-time ticket supplies the gateway's stable EndpointId plus a current
  * relay hint. Redemption may enroll this device into several vaults at once;

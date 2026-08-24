@@ -1,4 +1,4 @@
-// Egress consent for enrichment (issue #807) — reads and writes of
+// Egress consent for enrichment (#807) — reads and writes of
 // `enrich_consent`, keyed capability × egress class × scope.
 //
 // ORTHOGONAL TO POLICY, BY CONSTRUCTION. The cascade (enrich/policy-rules.ts)

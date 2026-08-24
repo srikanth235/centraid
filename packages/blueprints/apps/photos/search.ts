@@ -1,20 +1,20 @@
 import { debounce } from "@centraid/design/elements";
 
-// The server-search round trip (issue #352 phase 3): debounced like Docs'
+// The server-search round trip (#352): debounced like Docs'
 // own search box (docs/app.tsx). app.tsx keeps `searchQuery`/`searchResults`
 // as its own state (same as `assets`/`albums`) and merges the server hits
 // with the client-side day/month/album-name match itself — this module owns
 // only the fetch-and-debounce plumbing, not the merge, so it stays a thin
 // sibling of albums-actions.ts/selection-actions.ts rather than a second copy
 // of app.tsx's search logic.
-// MULTI-SCOPE (issue #599): search fans out. It is contained because a search
+// MULTI-SCOPE (#599): search fans out. It is contained because a search
 // page is UNBOUNDED — it reaches each scope's whole live library — so there is
 // no window to reconcile and none of scope-merge.ts's horizon reasoning
 // applies. Only its ordering, cross-scope dedupe and `scope_id` tagging do,
 // which is exactly what merging N untruncated pages gives. The tagging is not
 // cosmetic: a hit that reached the grid without one would paint the wrong
 // photo, since content ids collide across scopes by design.
-// PER-SCOPE REACH (issue #726 D10/D11): a scope that failed to answer is a
+// PER-SCOPE REACH (#726 D10/D11): a scope that failed to answer is a
 // NAMED STATE (`reachFacts`), never a reason to blank a scope that DID
 // answer. Own results (or any other reached scope's) still render when a
 // another mounted scope could not be asked — the whole search only collapses to
@@ -42,7 +42,7 @@ import type { Asset } from "./types.ts";
  *  * `ready`       — at least one mounted scope answered. Hits from every
  *                    scope that answered, or the honest "no matches" line
  *                    with the query echoed back — plus `reachFacts` naming
- *                    any scope that did NOT answer (issue #726 D10), rather
+ *                    any scope that did NOT answer (#726), rather
  *                    than pretending the whole answer is complete.
  *  * `unreachable` — NO mounted scope answered — nothing genuine to show.
  *                    Search WILL NOT PRETEND TO HAVE LOOKED (§9), so this is
@@ -63,7 +63,7 @@ export function createSearch({
   setStatus: (status: SearchStatus) => void;
   renderGrid: () => void;
   /**
-   * Per-scope reach for the current answer (issue #726 D10/D11) — empty when
+   * Per-scope reach for the current answer (#726 D10/D11) — empty when
    * every mounted scope answered, otherwise one `{label, value}` fact per
    * scope that did not, named ready for a caller's UI to render BESIDE
    * whatever results the other scopes still have (never in place of them).
@@ -106,7 +106,7 @@ export function createSearch({
         // has a genuine answer to show", so this search stays `ready` with
         // whatever it has and names the short scope in `reachFacts`, rather
         // than collapsing a healthy own-library answer to `unreachable`
-        // because one friend's machine is asleep (issue #726 D10/D11).
+        // because one friend's machine is asleep (#726 D10/D11).
         const reach = perScopeReach(results);
         reached = reach.some((entry) => entry.state === "reached");
         reachFacts = scopeReachFacts(reach);

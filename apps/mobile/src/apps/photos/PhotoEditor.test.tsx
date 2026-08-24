@@ -1,4 +1,4 @@
-// THE EDITOR'S ONE PROMISE, ASSERTED (v4 handoff §7.4, issue #711).
+// THE EDITOR'S ONE PROMISE, ASSERTED (v4 handoff §7.4, #711).
 //
 // The editor is only defensible because it is non-destructive: the original is
 // never touched, and NOTHING IS WRITTEN until the member presses `Save as a new

@@ -1,4 +1,4 @@
-// One link row for Sharing.tsx. Split out to keep Sharing.tsx under the
+// One link row for Sharing.tsx, kept separate so that file stays under the
 // repo's file-size guidance.
 //
 // `LinkTicketPanel` (below) is this file's one TextInput: pasting a ticket

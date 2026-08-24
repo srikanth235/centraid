@@ -132,7 +132,7 @@ interface InlineAppMountProps {
   appId: string;
   cacheKey: string;
   descriptorPromise: Promise<{ default: InlineAppModule }>;
-  /** Mounted scopes, primary first (issue #599). */
+  /** Mounted scopes, primary first (#599). */
   scopes: readonly ResolvedAppScope[];
   /** The frame's contribution channel — app bar, status line, compact band. */
   frame: InlineFrame;
@@ -157,7 +157,7 @@ function InlineAppMount({
   onOpenApprovals,
   onOpenApp,
 }: InlineAppMountProps): JSX.Element {
-  // ONLY the primary scope blocks first paint (issue #599). Every audience is
+  // ONLY the primary scope blocks first paint (#599). Every audience is
   // hydrated after the app is on screen, so a household with several shared
   // scopes still paints as fast as a single-scope one.
   const primary = scopes[0]!;
@@ -385,7 +385,7 @@ export default function InlineAppRoute({
     () => (refused ? undefined : loadDescriptor(cacheKey, loader)),
     [cacheKey, loader, refused]
   );
-  // The mount key gains a SCOPE-SET axis (issue #599, docs/client-keying.md):
+  // The mount key gains a SCOPE-SET axis (#599, docs/client-keying.md):
   // the same app over a different set of scopes is a different mount, because
   // `window.centraid` and every replica lease it holds are per scope set.
   const scopesState = useAppScopes(appId);

@@ -4,7 +4,7 @@ import { afterAll, describe, expect, test } from "vitest";
 
 import { S3TestServer } from "@centraid/backup/dist/testing/s3-test-server.js";
 /*
- * `VaultPlane`'s blob-sweep scheduling (issue #367 §C5/§C6/§C9): the
+ * `VaultPlane`'s blob-sweep scheduling (#367 §C5/§C6/§C9): the
  * failure-backoff decision (pure function, unit tests) plus a real S3-backed
  * integration covering lease-gated reconciliation and post-restart
  * resumability. Uses the same committed `S3TestServer` the backup storage

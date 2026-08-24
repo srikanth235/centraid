@@ -3,7 +3,7 @@
 // The chart says one thing: how much ran, and how much of it failed. So it
 // spends exactly one colour — `net` on the failed cap — and draws the rest in
 // tertiary ink. There is no gradient, no axis grid, no hover tooltip and no
-// vector runtime; the previous sparkline had all four and said less.
+// vector runtime.
 //
 // A chart is unreadable to a screen reader whatever it draws, so the whole
 // block carries ONE image-role label the caller composes ("Runs per day over

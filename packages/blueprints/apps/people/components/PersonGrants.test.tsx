@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 //
-// THE PERSON SCREEN AS THE GRANT DASHBOARD (#825, wave 7). Five claims:
+// THE PERSON SCREEN AS THE GRANT DASHBOARD (#825). Five claims:
 //
 //  1. Every live grant reaching the party is listed, from the ONE read the
 //     ruling names (`?partyId=`), and a revoked grant is not among them.

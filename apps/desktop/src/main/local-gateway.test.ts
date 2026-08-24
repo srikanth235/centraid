@@ -6,14 +6,14 @@ import { useFakeClock } from "@centraid/test-kit/fake-clock";
 import type * as TypeImport_detached from "./detached-gateway.js";
 
 /**
- * What "Try again" has to survive (issue #660).
+ * What "Try again" has to survive (#660).
  *
  * The supervisor in `gateway-supervisor-core.ts` deliberately gives up after a
  * burst of failed starts, and `ensureLocalGateway` then fails INSTANTLY from
  * its guard without touching the gateway again. That is correct for automatic
- * callers and fatal for the startup error screen: its one button re-read the
- * settings, the read hit the latched guard, and the member sat on the error
- * screen forever even after they had removed the cause completely.
+ * callers and fatal for the startup error screen: a button that only re-reads
+ * the settings hits the latched guard, and the member sits on the error screen
+ * forever even after removing the cause completely.
  *
  * So the contract exercised here is the whole recovery: fail until the
  * supervisor gives up, fix the cause, and prove that an explicit retry starts

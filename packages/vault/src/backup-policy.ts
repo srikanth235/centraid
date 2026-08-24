@@ -2,7 +2,7 @@ import type { DatabaseSync } from "node:sqlite";
 
 /**
  * One owner-visible policy for every backup/custody clock and byte budget
- * (issue #414). The destination itself remains a separate storage-connection
+ * (#414). The destination itself remains a separate storage-connection
  * choice; this document describes how that destination is used.
  */
 export interface BackupPolicy {
@@ -29,7 +29,7 @@ export interface BackupPolicy {
    */
   storageClass?: string;
   /**
-   * Direct-to-cold heuristic for large media originals (issue #425 Wave 3):
+   * Direct-to-cold heuristic for large media originals (#425):
    * video/audio ORIGINALS at or above `minBytes` are PUT with the
    * `STANDARD_IA` storage class instead of Standard, because a fresh
    * full-bitrate original is predictably cold at birth (browse UX is served by
@@ -112,7 +112,7 @@ function optionalPositiveNumber(
 }
 
 /**
- * Validate the `directToColdOriginals` knob's shape (issue #425 Wave 3). Absent
+ * Validate the `directToColdOriginals` knob's shape (#425). Absent
  * ⇒ undefined (the resolver applies the default-ON config). Present sub-fields
  * are validated the same way as the rest of the policy; unknown/missing ones
  * simply fall back to the resolver's defaults at read time.

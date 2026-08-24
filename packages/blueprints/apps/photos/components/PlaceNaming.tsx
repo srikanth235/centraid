@@ -1,5 +1,5 @@
 // NAMING A PLACE — the one conversation that turns a coordinate into a
-// location (issue #816).
+// location (#816).
 //
 // A place minted from a photograph's GPS carries its own coordinate as a label,
 // and every surface phrases such a row as "A place with no name yet" rather

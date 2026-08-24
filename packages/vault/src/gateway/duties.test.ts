@@ -192,7 +192,7 @@ describe("duties", () => {
     ]);
   });
 
-  // THE SABOTAGE TARGET (#712 P11): drop the media.asset entry from
+  // THE SABOTAGE TARGET (#712): drop the media.asset entry from
   // RETENTION_REFUSALS in duties.ts and this goes red — the policy would fall
   // through to the missing-column skip and the refusal would lose its stated
   // reason, which is exactly the "runs and silently retains nothing" duty the

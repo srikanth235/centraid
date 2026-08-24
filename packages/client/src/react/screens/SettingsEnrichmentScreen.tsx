@@ -27,17 +27,18 @@ import EnrichmentRules from "./SettingsEnrichmentRules.js";
 
 import controlsCss from "../styles/controls.module.css";
 
-// Settings → Enrichment (issue #807) — the one place the whole enrichment
+// Settings → Enrichment (#807) — the one place the whole enrichment
 // policy is authored, and a PROJECTION of two stores rather than a third one:
 // tiers, scoped rules and egress answers live in the vault; engine profiles
 // live in gateway prefs. Every control below writes through the owner route
 // that already owns its path and re-renders what came back, so a refused write
 // can never show as applied.
 //
-// THE PAGE IS ORGANISED BY THE MEMBER'S QUESTION, NOT BY THE STORES. It used to
-// be four groups named after four objects — ceilings, engines, scoped rules,
-// egress answers — which is the schema wearing a UI. Nobody arrives wanting to
-// name an engine. They arrive asking: what is this doing with my photos, can I
+// THE PAGE IS ORGANISED BY THE MEMBER'S QUESTION, NOT BY THE STORES. Do not
+// regroup it into four groups named after four objects — ceilings, engines,
+// scoped rules, egress answers — which is the schema wearing a UI. Nobody
+// arrives wanting to name an engine. They arrive asking: what is this doing
+// with my photos, can I
 // stop it, and does any of it leave my devices. So each DOMAIN is a group whose
 // head counts its own rows, and each row is a plain name, a switch, and the one
 // fact worth stating.

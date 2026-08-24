@@ -1,4 +1,4 @@
-// The scope-extent algebra shared by every consent plane (issue #308 A3/A4).
+// The scope-extent algebra shared by every consent plane (#308 A3/A4).
 //
 // A scope extent is (schema, table?, verbs, rowFilter?, fieldMask?) — the same
 // five columns `consent_grant_scope` and `consent_scope_tombstone` store and

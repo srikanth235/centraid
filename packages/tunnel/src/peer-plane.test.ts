@@ -1,5 +1,5 @@
 /*
- * Peer-plane transport (issue #726 P3): path confinement, lane separation,
+ * Peer-plane transport (#726): path confinement, lane separation,
  * and the per-link budget, proved over two real iroh endpoints on loopback.
  *
  * The two traps this suite exists to keep closed:

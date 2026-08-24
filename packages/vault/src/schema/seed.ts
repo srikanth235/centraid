@@ -1,4 +1,4 @@
-// Scenario-seed registry (issue #290 phase 1). Demo data is real vault data
+// Scenario-seed registry (#290). Demo data is real vault data
 // written through the normal command pipeline, but it must stay separable
 // forever: purgeable in one act, and invisible to the automation plane so a
 // fake "rent due" row never fires a real trigger or notification. Provenance

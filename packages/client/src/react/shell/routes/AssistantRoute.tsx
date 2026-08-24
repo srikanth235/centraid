@@ -104,7 +104,7 @@ function useStableEvent<T extends (...args: never[]) => unknown>(
 }
 
 /**
- * Turns fetched per request (issue #659 G5) — the gateway never materializes
+ * Turns fetched per request (#659) — the gateway never materializes
  * an entire thread, every turn and item and attachment, to render the last
  * screenful. This is the page; "Show earlier messages" walks backwards from
  * `oldestSeq` one page at a time, and the screen renders a smaller window still.
@@ -164,7 +164,7 @@ export default function AssistantRoute({
     additionalDirectories: [] as string[],
     /** Server turn count of the open thread — the reconnect catch-up baseline. */
     turnCount: 0,
-    /** Older turns exist on the server before the oldest one held (#659 G5). */
+    /** Older turns exist on the server before the oldest one held (#659). */
     hasMore: false,
     /** `seq` of the oldest turn held — the cursor for the previous page. */
     oldestSeq: undefined as number | undefined,
@@ -173,7 +173,7 @@ export default function AssistantRoute({
     /** Turns currently covered, so a post-turn reload restores the same view. */
     loadedTurns: TRANSCRIPT_PAGE_TURNS,
   });
-  // The vault this conversation addresses (issue #599). Chosen once, before the
+  // The vault this conversation addresses (#599). Chosen once, before the
   // first message; from then on the recorded scope is authoritative and every
   // request the thread makes repeats it, so a conversation reads exactly ONE
   // vault for its whole life. `undefined` — an older thread, or a gateway with
@@ -198,7 +198,7 @@ export default function AssistantRoute({
   const harnessRequestRef = useRef(0);
   /** Invalidates duplicate/stale transcript loads, including StrictMode replays. */
   const threadRequestRef = useRef(0);
-  // Row identity + reference-stable DTOs for the transcript (issue #659).
+  // Row identity + reference-stable DTOs for the transcript (#659).
   const projectionRef = useRef(createTranscriptProjection());
 
   const buildSnapshot = (): AssistantSnapshot => {
@@ -252,7 +252,7 @@ export default function AssistantRoute({
   };
   // A streamed turn fires an event per token, and re-projecting the whole
   // transcript per event would re-render synchronously — hundreds of times
-  // more often than the display can paint (issue #659). Coalesce to one projection
+  // more often than the display can paint (#659). Coalesce to one projection
   // per frame; the batched callback reads the live model when it runs, so the
   // latest state always wins and nothing is dropped.
   const pushNow = (): void => updateRef.current?.(buildSnapshot());
@@ -338,7 +338,7 @@ export default function AssistantRoute({
     if (!id) return;
     try {
       // The newest page only — a reader opens to the END of a thread, and the
-      // rest is one "Show earlier messages" away (issue #659 G5).
+      // rest is one "Show earlier messages" away (#659).
       const loaded = await loadConversation(
         ASSISTANT_APP_ID,
         id,
@@ -378,7 +378,7 @@ export default function AssistantRoute({
 
   /**
    * Fetch the page of turns before the oldest one held and PREPEND it
-   * (issue #659 G5).
+   * (#659).
    *
    * Prepending — rather than replacing the array with page+existing — is the
    * whole contract. The transcript projection keys each row on its message
@@ -435,7 +435,7 @@ export default function AssistantRoute({
       const localId = crypto.randomUUID();
       const mime = file.type || "application/octet-stream";
       // Image attachments get a local object-URL thumbnail in the composer
-      // staging area straight away — no round-trip needed (issue #420, W2).
+      // staging area straight away — no round-trip needed (#420).
       const previewUrl = mime.startsWith("image/")
         ? URL.createObjectURL(file)
         : undefined;
@@ -663,7 +663,7 @@ export default function AssistantRoute({
     text: string;
     attachments: ReadyAttachment[];
     retryOf?: string;
-    /** Idempotency key (issue #420). Fresh per user send; REUSED on a resend of
+    /** Idempotency key (#420). Fresh per user send; REUSED on a resend of
      *  the same message so a retry-after-drop replays instead of double-running. */
     idempotencyKey: string;
     appendUser: boolean;
@@ -709,7 +709,7 @@ export default function AssistantRoute({
       }
       return ai;
     };
-    // Live reasoning row (issue #420, Wave 2) — ported from BuilderChatPane. It
+    // Live reasoning row (#420) — ported from BuilderChatPane. It
     // streams `reasoning.delta`, collapses once the answer/tools begin, and (as
     // reasoning is not persisted) vanishes when the turn reloads from the ledger.
     let thinking: {
@@ -894,7 +894,7 @@ export default function AssistantRoute({
           workspaceKind: m.current.workspaceKind,
           additionalDirectories: m.current.additionalDirectories,
           // Explicit, never ambient: the turn must land in the vault the
-          // conversation was created in (issue #599).
+          // conversation was created in (#599).
           ...(conversationScope(conversationIdLocal)
             ? { scopeId: conversationScope(conversationIdLocal) }
             : {}),
@@ -1077,7 +1077,7 @@ export default function AssistantRoute({
     m.current.pendingAttachments = m.current.pendingAttachments.filter(
       (a) => a.state !== "ready"
     );
-    // Fresh idempotency key per user send (issue #420) — reused only on resend.
+    // Fresh idempotency key per user send (#420) — reused only on resend.
     await runTurn({
       text,
       attachments: ready,
@@ -1118,7 +1118,7 @@ export default function AssistantRoute({
     if (!userText) return;
     // Trim from the first tool/answer row after the user message so the retry
     // stream replaces just this turn's output. Regenerate is a deliberate NEW
-    // attempt, so it gets a fresh idempotency key (issue #420).
+    // attempt, so it gets a fresh idempotency key (#420).
     void runTurn({
       text: userText,
       attachments: [],
@@ -1134,7 +1134,7 @@ export default function AssistantRoute({
     const msg = m.current.msgs[messageIndex];
     if (!msg || msg.kind !== "ai" || !msg.error || msg.failedText === undefined)
       return;
-    // One-tap resend REUSES the failed send's idempotency key (issue #420) so a
+    // One-tap resend REUSES the failed send's idempotency key (#420) so a
     // turn that actually completed server-side replays instead of double-running;
     // a legacy bubble with no key falls back to a fresh one.
     void runTurn({

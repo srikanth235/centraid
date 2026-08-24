@@ -8,7 +8,7 @@ export type HardwareClass = "constrained" | "standard";
 
 /**
  * The prioritized throughput knobs the resolver attributes a source to
- * (#528 Phase F). Each accepts a durable UI override. No static compression
+ * (#528). Each accepts a durable UI override. No static compression
  * qualities sit here (#799): every body the gateway compresses is dynamic
  * JSON, which is fixed at `DYNAMIC_QUALITY`.
  */
@@ -21,7 +21,7 @@ export type ResourceKnobName =
 /**
  * Per-knob provenance the client renders as Linked ('preset'), Custom
  * ('prefs'), or env-locked ('env'). `envVar` is the exact operator variable
- * name and is present ONLY when `source === 'env'` (#528 Phase F).
+ * name and is present ONLY when `source === 'env'` (#528).
  */
 export interface ResourceKnobSource {
   source: "env" | "prefs" | "preset";
@@ -56,9 +56,9 @@ export interface GatewayHardwareProfile {
   /** RAW host memory (machine facts), not the cgroup-granted share. */
   totalMemoryBytes: number;
   storageFsyncMs: number | null;
-  /** A cgroup CPU quota actually clamped the granted share below the raw cores (#528 Phase E). */
+  /** A cgroup CPU quota actually clamped the granted share below the raw cores (#528). */
   cgroupLimitedCpu: boolean;
-  /** A cgroup memory limit actually clamped the granted share below raw memory (#528 Phase E). */
+  /** A cgroup memory limit actually clamped the granted share below raw memory (#528). */
   cgroupLimitedMemory: boolean;
   /** Cumulative CPU steal% since host boot (co-tenant contention), null off-Linux/unknown. */
   stealPercent: number | null;
@@ -71,14 +71,14 @@ export interface GatewayHardwareProfile {
   vaultMountStrategy: "eager";
   vaultSweepIntervalMs: number;
   outboxIdleIntervalMs: number;
-  /** Budget preset framed as the share of the granted host it claims (#528 Phase E). */
+  /** Budget preset framed as the share of the granted host it claims (#528). */
   budget: { cpuShare: number; memoryCapMb: number };
-  /** Per-knob provenance (env/prefs/preset) for the prioritized knobs (#528 Phase F). */
+  /** Per-knob provenance (env/prefs/preset) for the prioritized knobs (#528). */
   sources: Record<ResourceKnobName, ResourceKnobSource>;
 }
 
 /**
- * Budget presets (#528 Phase E). Resource modes are no longer bespoke ternary
+ * Budget presets (#528). Resource modes are no longer bespoke ternary
  * branches — they select one named budget over the *granted share of the host*
  * (cgroup- and steal-aware effective CPU/memory), not the raw machine. The
  * three presets are byte-identical to the pre-Phase-E class/mode ternaries on
@@ -133,7 +133,7 @@ const BUDGET_PRESETS: Record<BudgetPresetName, BudgetPreset> = {
  * Cumulative CPU steal at or above this percent biases the host to
  * `constrained`: a tenth of the granted CPU is already being taken by
  * co-tenants, so we size for the share we actually keep, not the vCPUs the
- * hypervisor advertises (#528 Phase E).
+ * hypervisor advertises (#528).
  */
 const STEAL_CONSTRAINED_THRESHOLD_PERCENT = 10;
 const CONSTRAINED_CORE_CEILING = 4;
@@ -145,7 +145,7 @@ const SLOW_STORAGE_FSYNC_MS = 8;
  * Env and prefs both clamp through the same [min, max] — env wins when it
  * parses to a valid in-range integer, prefs is next, else the preset baseline
  * carries. A garbage env value (out of range/non-numeric) falls THROUGH to
- * prefs, never silently to preset (#528 Phase F). `envVar` on the returned
+ * prefs, never silently to preset (#528). `envVar` on the returned
  * source is set only when env actually won.
  */
 function resolveKnob(params: {
@@ -201,7 +201,7 @@ export function hardwareClassForResourceMode(
 
 /**
  * Machine-readable projection of the resolved profile for the health
- * metrics surface (#528 Phase A). Deliberately separate from
+ * metrics surface (#528). Deliberately separate from
  * `formatHardwareProfileDetail`'s human string: a self-hoster's own
  * monitoring reads these numbers without parsing prose, and the client
  * renders the same values in Diagnostics. Pure + unit-testable — the
@@ -271,7 +271,7 @@ export function formatHardwareProfileDetail(
   profile: GatewayHardwareProfile
 ): string {
   // Name the share framing when a cgroup quota or steal actually shrank the
-  // granted host below the raw machine (#528 Phase E) — otherwise stay terse.
+  // granted host below the raw machine (#528) — otherwise stay terse.
   const shareNote =
     profile.cgroupLimitedCpu ||
     profile.cgroupLimitedMemory ||
@@ -294,17 +294,17 @@ export function resolveGatewayHardwareProfile(
     storageFsyncMs?: number;
     /**
      * cgroup CPU quota as fractional cores (quota/period), or null/absent when
-     * unlimited/unknown. Sizes the granted share of the host (#528 Phase E).
+     * unlimited/unknown. Sizes the granted share of the host (#528).
      */
     cgroupCpuLimit?: number | null;
-    /** cgroup memory limit in bytes, or null/absent when unlimited/unknown (#528 Phase E). */
+    /** cgroup memory limit in bytes, or null/absent when unlimited/unknown (#528). */
     cgroupMemoryLimitBytes?: number | null;
-    /** Cumulative CPU steal% since host boot, or null/absent when unknown (#528 Phase E). */
+    /** Cumulative CPU steal% since host boot, or null/absent when unknown (#528). */
     stealPercent?: number | null;
     /** Durable/owner Resource mode (prefs or daemon config). */
     resourceMode?: ResourceMode;
     /**
-     * Durable per-knob UI overrides (#528 Phase F). Each present knob wins over
+     * Durable per-knob UI overrides (#528). Each present knob wins over
      * its preset baseline but still loses to the matching env var, and clamps
      * through the same bounds. Absent knobs stay Linked to the preset.
      */

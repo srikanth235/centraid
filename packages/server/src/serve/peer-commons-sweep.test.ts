@@ -2,7 +2,7 @@
  * Steward-absence status surfaced by the commons sweep (#731). The status
  * itself is computed and persisted by `pullPeerCommons`/`recordCommonsPull`
  * (`commons-observability.ts`) on every attempt regardless of this file; what
- * this suite pins is that `sweepPeerCommons` stops dropping `result.steward`
+ * this suite pins is that `sweepPeerCommons` does not drop `result.steward`
  * on the floor — a concerning presence reaches the sweep's own logger, and a
  * healthy/unremarkable one stays quiet.
  */

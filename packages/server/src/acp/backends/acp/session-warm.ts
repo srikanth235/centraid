@@ -172,7 +172,6 @@ export async function disposeSlot(
   }
 }
 
-/** Test helper: drop every warm slot. */
 export async function clearWarmPool(): Promise<void> {
   const all = [...pool.values()];
   pool.clear();

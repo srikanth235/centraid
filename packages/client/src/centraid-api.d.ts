@@ -40,22 +40,21 @@ export interface CentraidSettings {
   /**
    * Active gateway id — `'local'` (always present) or the durable iroh
    * EndpointId of a remote gateway. Switching this is the multi-gateway "log in to
-   * another workspace" action (issue #109). Use `setActiveGateway`
+   * another workspace" action (#109). Use `setActiveGateway`
    * on the API rather than patching this through `saveSettings`.
    */
   activeGatewayId: string;
-  /** Kind of the active gateway. */
   activeGatewayKind: "local" | "remote";
   /** User-facing label for the active gateway (shown in the switcher). */
   activeGatewayLabel: string;
   /**
-   * Friendly display name for the active profile (issue #113). Always
+   * Friendly display name for the active profile (#113). Always
    * populated — falls back to `activeGatewayLabel` when the profile hasn't
    * set an explicit `displayName`.
    */
   activeProfileDisplayName: string;
   /**
-   * Avatar color for the active profile as `#RRGGBB` (issue #113). Always
+   * Avatar color for the active profile as `#RRGGBB` (#113). Always
    * populated — defaults to a deterministic palette pick keyed by the
    * gateway id.
    */
@@ -69,7 +68,7 @@ export interface CentraidSettings {
   /** Effective bearer token; companion to `gatewayUrl`. Read-only. */
   gatewayToken?: string;
   /**
-   * The vault this client addresses on the active gateway (issue #289),
+   * The vault this client addresses on the active gateway (#289),
    * or absent to let the gateway pick. Client-owned, keyed by gateway;
    * flip it with `setActiveVault`, not `saveSettings`. Read-only here.
    */
@@ -95,7 +94,7 @@ export interface CentraidSettings {
    */
   changelogSeenVersion?: string;
   /**
-   * Launch Centraid automatically at OS login (issue #351) — the cheap 80%
+   * Launch Centraid automatically at OS login (#351) — the cheap 80%
    * fix for "always-on" given the desktop-hosted gateway dies when the app
    * quits and there's deliberately no OS scheduler. Applied to the OS
    * immediately on save via `app.setLoginItemSettings`; no-op on Linux.
@@ -152,7 +151,7 @@ export interface CentraidGatewayOutage {
 }
 
 /**
- * One durable alert-history entry (issue #351 wave 4) — persisted under
+ * One durable alert-history entry (#351) — persisted under
  * Electron userData (`gateway-monitor.ts` / `gateway-outage-log.ts`), so
  * unlike `CentraidGatewayOutage` above (in-memory, per-launch) this
  * history survives a restart. `previousSession` marks an entry that
@@ -200,13 +199,13 @@ export interface CentraidGatewayRuntime {
   alert: { enabled: boolean; thresholdSeconds: number };
   pollIntervalMs: number;
   /**
-   * Durable alert-history log (issue #351 wave 4) — the persisted
+   * Durable alert-history log (#351) — the persisted
    * counterpart of `outages`, spanning restarts. Newest-last, capped at
    * ~500 entries (`gateway-outage-log-core.ts`'s `OUTAGE_LOG_CAP`).
    */
   alertHistory: CentraidGatewayAlertHistoryEntry[];
   /**
-   * Reconciled health signal (issue #351): folds `/centraid/_gateway/health`'s
+   * Reconciled health signal (#351): folds `/centraid/_gateway/health`'s
    * component statuses plus a sustained-high-latency check into one badge —
    * a "listening but hung" gateway reads as `'degraded'`, not `'up'`. Absent
    * until the first probe reaches `/health` (or for a gateway old enough to
@@ -219,7 +218,7 @@ export interface CentraidGatewayRuntime {
   /** True when recent probe latency has sustained above the degraded-latency threshold (~2s). */
   latencyDegraded?: boolean;
   /**
-   * Protocol-handshake verdict (issue #351 wave 2 / #512) — REMOTE only.
+   * Protocol-handshake verdict (#351 / #512) — REMOTE only.
    * `skewed: true` means the protocol support window failed — product version
    * strings may differ without setting skewed.
    */
@@ -234,7 +233,7 @@ export interface CentraidGatewayRuntime {
   };
 }
 
-/** Lightweight profile describing one gateway (issue #109, metadata #113). */
+/** Lightweight profile describing one gateway (#109, metadata #113). */
 export interface CentraidGatewayProfile {
   id: string;
   kind: "local" | "remote";
@@ -260,7 +259,7 @@ export interface CentraidGatewayProfile {
 }
 
 /**
- * Result of redeeming a gateway pairing ticket (issue #376). On success, the
+ * Result of redeeming a gateway pairing ticket (#376). On success, the
  * paired gateway AND the primary vault it enrolled into are both now active — the
  * renderer should treat this the same as a `setActiveGateway` +
  * `setActiveVault` response and drop gateway/vault-scoped state.
@@ -294,7 +293,7 @@ export type CentraidRedeemGatewayPairingResult =
 
 /**
  * One vault of a (not-necessarily-active) gateway, from `listGatewayVaults`
- * (issue #376). Mirrors `renderer/gateway-client-vault.ts`'s `VaultListEntry`
+ * (#376). Mirrors `renderer/gateway-client-vault.ts`'s `VaultListEntry`
  * — same shape, fetched for a gateway the client isn't addressing yet.
  */
 export interface CentraidGatewayVaultEntry {
@@ -312,11 +311,11 @@ export type CentraidListGatewayVaultsResult =
   | { ok: false; error: "unreachable" | "auth_failed" | "bad_response" };
 
 /**
- * Input to `testGatewayConnection` (issue #382) — the ConnectFlow wizard's
+ * Input to `testGatewayConnection` (#382) — the ConnectFlow wizard's
  * "handshake ladder", one shape per connect method. Neither carries a bearer
  * token: `ticket` proves itself, `gateway` resolves the already-known
  * profile's own credential. The `ssh` variant died with the SSH connect
- * method (issue #603).
+ * method (#603).
  */
 export type CentraidTestConnectionInput =
   | { kind: "ticket"; ticket: string }
@@ -385,7 +384,7 @@ export interface CentraidHarnessStatusEntry {
   minVersion: string;
   /** Install/setup hint — present only when the CLI is NOT available. */
   hint?: string;
-  /** Models this harness can serve, from the gateway catalog (issue #188). */
+  /** Models this harness can serve, from the gateway catalog (#188). */
   models: CentraidHarnessModel[];
   /** Load state of `models` — loading vs ready vs empty. */
   modelsStatus: CentraidSurfaceStatus;
@@ -440,9 +439,9 @@ export interface CentraidHarnessesStatus {
   harnesses: CentraidHarnessStatusEntry[];
 }
 
-// The renderer-side chat event union is the gateway's native `TurnStreamEvent`
-// (see `renderer/gateway-client-conversation.ts`) now that the chat panel streams the
-// turn directly — no IPC-translated `CentraidTurnEvent` / model-list shape.
+// The renderer-side turn event union is the gateway's native
+// `TurnStreamEvent` (see `gateway-client-conversation.ts`): the conversation
+// panel streams the turn directly, so nothing here translates it over IPC.
 
 /**
  * One persisted chat session — the session id is also the chat window id.
@@ -459,7 +458,7 @@ export interface CentraidConversationSummary {
   harnessSessionId: string | null;
   /** Number of completed turns. */
   turnCount: number;
-  /** Pinned threads sort first in the sidebar (issue #420). */
+  /** Pinned threads sort first in the sidebar (#420). */
   pinned: boolean;
   /** Archived threads hide behind a collapsed group and drop out of search. */
   archived: boolean;
@@ -483,7 +482,7 @@ export interface CentraidConversationSearchResult extends CentraidConversationSu
   snippet: string;
 }
 
-/** One file attached to a persisted user turn (issue #190 history mirror). */
+/** One file attached to a persisted user turn (#190 history mirror). */
 export interface CentraidConversationHistoryAttachment {
   hash: string;
   mime: string;
@@ -494,7 +493,7 @@ export interface CentraidConversationHistoryAttachment {
   workspacePath?: string;
 }
 
-/** Per-turn token/cost usage on a terminal `ai` answer (issue #420, Wave 2). */
+/** Per-turn token/cost usage on a terminal `ai` answer (#420). */
 export interface CentraidConversationTurnUsage {
   inputTokens?: number;
   outputTokens?: number;
@@ -514,8 +513,8 @@ export interface CentraidConversationHistoryRetryAttempt {
 
 /**
  * Coarse-grained persisted shape per message in a chat session. `fromArchive`
- * marks a message rehydrated from a custody-gated-pruned segment (issue #438
- * wave 3) — read-only cold history the surface renders with a "from the archive"
+ * marks a message rehydrated from a custody-gated-pruned segment (#438) —
+ * read-only cold history the surface renders with a "from the archive"
  * affordance and no feedback/regenerate controls.
  */
 export type CentraidConversationHistoryMessage =
@@ -530,7 +529,7 @@ export type CentraidConversationHistoryMessage =
       text: string;
       error?: boolean;
       /** The turn this answer belongs to — the target for feedback/regenerate
-       *  (issue #420). Only the terminal answer row of a turn carries it. */
+       *  (#420). Only the terminal answer row of a turn carries it. */
       turnId?: string;
       /** Reader 👍/👎 on this answer, if set. */
       feedback?: "up" | "down" | null;
@@ -541,9 +540,9 @@ export type CentraidConversationHistoryMessage =
         count: number;
         attempts: CentraidConversationHistoryRetryAttempt[];
       };
-      /** Token/cost usage for this answer's turn (issue #420, Wave 2). */
+      /** Token/cost usage for this answer's turn (#420). */
       usage?: CentraidConversationTurnUsage;
-      /** Rehydrated from a pruned archive segment (issue #438) — read-only. */
+      /** Rehydrated from a pruned archive segment (#438) — read-only. */
       fromArchive?: boolean;
     }
   | {
@@ -584,7 +583,7 @@ export interface CentraidAppFile {
 
 /**
  * App-owned `settings.json` map (`GET`/`PUT /centraid/_apps/:id/settings`,
- * issue #286 phase 2 — the per-app data.sqlite's `__centraid_settings`
+ * #286 — the per-app data.sqlite's `__centraid_settings`
  * table became this file). Knob keys are the manifest's camelCase `app*`
  * names (e.g. `appFont`) sent verbatim; the runtime kebab-cases them into
  * `data-app-*` / `--app-*` when baking the served HTML. Runtime-owned
@@ -660,11 +659,11 @@ export interface CentraidCloneTemplateResult {
 }
 
 // The in-process builder protocol's persisted-message + event types retired
-// with the unified chat (issue #141, Phase 3): the builder + the app-view
+// with the unified chat (#141): the builder + the app-view
 // data chat now stream the gateway's native `TurnStreamEvent` directly (see
 // `renderer/gateway-client-conversation.ts`).
 
-/** A phone paired over the iroh tunnel (issue #263). */
+/** A phone paired over the iroh tunnel (#263). */
 export interface CentraidPhoneDevice {
   deviceId: string;
   name: string;
@@ -697,7 +696,7 @@ interface CentraidApi {
       pdfText: boolean;
       ocr: boolean;
       embedding: boolean;
-      // Permanently false (issue #724 W6): desktop's on-device file-ASR
+      // Permanently false (#724): desktop's on-device file-ASR
       // adapter is deleted — transcription belongs to its self-contained
       // recognition automation, never to a device compute lease. The key stays
       // in this wire shape (`DeviceComputeCapabilities` in
@@ -717,7 +716,7 @@ interface CentraidApi {
   // local-only reveal-in-Finder stays on IPC.
   openAppFolder: (input: { id: string }) => Promise<{ ok: true }>;
 
-  // There is no in-process authoring IPC surface (issue #141, Phase 3): the
+  // There is no in-process authoring IPC surface (#141): the
   // renderer streams `/centraid/<id>/_turn` SSE directly
   // (gateway-client-conversation.ts), so there are no main-side turn lifecycle
   // IPC methods.
@@ -725,11 +724,11 @@ interface CentraidApi {
   // appLogs / deregisterApp / listVersions / activateVersion moved to the
   // renderer's direct HTTP client too (pure git-store reads, no main-side
   // state). The appSchema / appTableRows / appQuery trio died with the
-  // per-app data.sqlite (issue #286 phase 2); per-app knob values now
+  // per-app data.sqlite (#286); per-app knob values now
   // ride appSettings / appSettingWrite over the app's settings.json.
 
   /**
-   * Snapshot of the auto-publish queue (issue #108). Every workspace
+   * Snapshot of the auto-publish queue (#108). Every workspace
    * mutation triggers a debounced upload to the local gateway; this
    * read surfaces the in-flight flag, the last error string (if any),
    * and the timestamp of the last successful publish.
@@ -831,7 +830,7 @@ interface CentraidApi {
   }) => Promise<{ rememberDevice: boolean }>;
   /**
    * Redeem a pairing ticket minted by `centraid-gateway pair --vault <name>`
-   * over the iroh pairing plane (issue #376). On success the paired gateway AND the primary vault
+   * over the iroh pairing plane (#376). On success the paired gateway AND the primary vault
    * it enrolled into are both active; the result also carries every vault granted by a
    * multi-vault ticket. Treat it like a combined
    * `setActiveGateway` + `setActiveVault` and drop gateway/vault-scoped
@@ -847,7 +846,7 @@ interface CentraidApi {
     rememberDevice?: boolean;
   }) => Promise<CentraidRedeemGatewayPairingResult>;
   /**
-   * Read a gateway's vault list WITHOUT switching to it (issue #376) — the
+   * Read a gateway's vault list WITHOUT switching to it (#376) — the
    * flat (gateway, vault) switcher's preview. `~3s` timeout; a resolvable
    * but unauthenticated/unreachable gateway comes back `ok:false`, never a
    * rejection.
@@ -856,7 +855,7 @@ interface CentraidApi {
     gatewayId: string;
   }) => Promise<CentraidListGatewayVaultsResult>;
   /**
-   * ConnectFlow "handshake ladder" (issue #382): stage-by-stage
+   * ConnectFlow "handshake ladder" (#382): stage-by-stage
    * connectivity check for a method the user just supplied coordinates
    * for, OR an already-known gateway (`kind:'gateway'`). Never rejects.
    */
@@ -877,14 +876,14 @@ interface CentraidApi {
     cb: (snapshot: CentraidGatewayRuntime) => void
   ) => () => void;
   /**
-   * Restart the local embedded gateway (issue #351): graceful stop (WAL
+   * Restart the local embedded gateway (#351): graceful stop (WAL
    * checkpoint + close) then relaunch. Refused for remote gateways —
    * `ok: false` with an explanatory error.
    */
   restartGateway: () => Promise<{ ok: boolean; error?: string }>;
   /**
    * Clear the local gateway supervisor's give-up state and re-attempt the
-   * START (issue #660). Backs the startup error screen's "Try again", which
+   * START (#660). Backs the startup error screen's "Try again", which
    * is shown before any navigation exists — `restartGateway` cannot serve it,
    * because that call resolves the active gateway first and resolving it is
    * exactly what fails. Optional: only a host that OWNS a local gateway has
@@ -893,7 +892,7 @@ interface CentraidApi {
   retryGatewayStart?: () => Promise<{ ok: boolean; error?: string }>;
   /**
    * Fetch `/centraid/_gateway/diagnostics` from the active gateway and save
-   * it through a native save dialog (issue #351). `canceled` when the user
+   * it through a native save dialog (#351). `canceled` when the user
    * dismissed the dialog.
    */
   exportGatewayDiagnostics: () => Promise<
@@ -916,7 +915,7 @@ interface CentraidApi {
    */
   setActiveVault: (input: { vaultId?: string }) => Promise<CentraidSettings>;
   /**
-   * Create a vault on the active gateway (issue #289). Admin act: works for
+   * Create a vault on the active gateway (#289). Admin act: works for
    * the desktop's own LOCAL gateway (the desktop is its landlord); rejects
    * for a remote gateway (its vault lifecycle belongs to its own host's CLI).
    * The new vault does NOT become active implicitly — call `setActiveVault`.
@@ -925,7 +924,7 @@ interface CentraidApi {
    */
   createVault?: (input: { name?: string }) => Promise<{ vaultId: string }>;
   /**
-   * Delete a vault on the active LOCAL gateway (issue #289). Rejects for a
+   * Delete a vault on the active LOCAL gateway (#289). Rejects for a
    * remote gateway. Clears the client's active-vault pointer first if it
    * names the vault being deleted.
    */
@@ -934,7 +933,7 @@ interface CentraidApi {
     name: string;
   }) => Promise<{ deleted: true }>;
   /**
-   * Notify-only (issue #382 follow-up): call after a metadata-only
+   * Notify-only (#382 follow-up): call after a metadata-only
    * `updateVault()` HTTP call succeeds (rename/retheme) so every window's
    * `onVaultMetadataChanged` listeners re-read immediately — metadata edits
    * ride a direct HTTP call, not IPC, so unlike create/switch/delete they
@@ -1032,7 +1031,7 @@ interface CentraidApi {
   ) => () => void;
 
   /**
-   * Subscribe to vault-address changes on the active gateway (issue #289).
+   * Subscribe to vault-address changes on the active gateway (#289).
    * Fires on `setActiveVault`; the renderer re-reads its gateway auth (new
    * vault header) and re-renders the vault's world WITHOUT the wholesale
    * wipe a gateway switch triggers. Returns the unsubscribe.
@@ -1047,7 +1046,7 @@ interface CentraidApi {
 
   /**
    * Subscribe to vault METADATA changes (name/color/icon/blurb) on the
-   * active vault (issue #382 follow-up). Fires from
+   * active vault (#382 follow-up). Fires from
    * `notifyVaultMetadataChanged()`, not from any addressing change — the
    * addressed (gateway, vault) is unchanged, so unlike `onVaultChanged`
    * this must NOT trigger a navigate-Home/full re-scope. Returns the
@@ -1062,7 +1061,7 @@ interface CentraidApi {
 
   // App chat (turn streaming + history) moved to the renderer's direct HTTP
   // client (`renderer/gateway-client-conversation.ts`) under the unified-chat pivot
-  // (issue #141, Phase 3): the panel streams `/centraid/<appId>/_turn` SSE
+  // (#141): the panel streams `/centraid/<appId>/_turn` SSE
   // itself and reads/writes history over `/_centraid-conversations` — no IPC.
 
   // Harness detection moved to the gateway (`GET /centraid/_harnesses/status`,
@@ -1075,7 +1074,7 @@ interface CentraidApi {
   // that rode `saveUserPrefs` is no longer needed (the cache keys on the
   // harness prefs that matter, and the harness-status read force-invalidates).
 
-  // Automations (issue #98). Every automation lives inside an app
+  // Automations (#98). Every automation lives inside an app
   // folder under `appsDir`; these read/write that app tree and the
   // unified run ledger. An `automationId` argument is the automation's
   // `<appId>/<id>` handle (the `ref` field of `CentraidAutomationRow`).
@@ -1089,7 +1088,7 @@ interface CentraidApi {
   // publish (`POST /centraid/_automations`, `…/set-enabled`, `DELETE …`).
 }
 
-/** KPI tiles for the Insights screen (issue #514). */
+/** KPI tiles for the Insights screen (#514). */
 export interface CentraidInsightsKpis {
   totalTokens: number;
   hydrationTokens: number;
@@ -1460,14 +1459,14 @@ export interface CentraidHealthEvent {
   message: string;
 }
 
-/** Knob keys the resolver derives + the L3 "Tune" rung can override (issue #528 Phase F). */
+/** Knob keys the resolver derives + the L3 "Tune" rung can override (#528). */
 export type CentraidResourceKnobKey =
   | "workerMaxConcurrent"
   | "workerMaxOldGenerationMb"
   | "workerPoolSize"
   | "replicationConcurrency";
 
-/** Structured resource contract on health metrics (issue #528 Phase A). */
+/** Structured resource contract on health metrics (#528). */
 export interface CentraidResourceProfile {
   class: "constrained" | "standard";
   mode: "auto" | "conserve" | "balanced" | "performance";
@@ -1486,7 +1485,7 @@ export interface CentraidResourceProfile {
     outboxIdleIntervalMs: number;
   };
   /**
-   * Provenance of each resolved knob (issue #528 Phase F). `'preset'` → the
+   * Provenance of each resolved knob (#528). `'preset'` → the
    * derived default (renders as **Linked**); `'prefs'` → an owner override
    * (renders as **Custom**); `'env'` → an operator-set environment variable
    * (locked, `envVar` names it). Additive: absent on older gateways, in which
@@ -1496,11 +1495,11 @@ export interface CentraidResourceProfile {
     CentraidResourceKnobKey,
     { source: "env" | "prefs" | "preset"; envVar?: string }
   >;
-  /** Accepted range per knob (issue #528 Phase F) — inclusive. Additive. */
+  /** Accepted range per knob (#528) — inclusive. Additive. */
   bounds?: Record<CentraidResourceKnobKey, { min: number; max: number }>;
 }
 
-/** Background-work pause state on health metrics (issue #528 Phase B). */
+/** Background-work pause state on health metrics (#528). */
 export interface CentraidBackgroundPause {
   paused: boolean;
   /** ISO timestamp the pause lifts, or `null` for indefinite / not paused. */
@@ -1509,7 +1508,7 @@ export interface CentraidBackgroundPause {
 
 /**
  * Measured resource actuals — "what the gateway host actually used" — on
- * health metrics (issue #528 Phase C). Proxies only (CPU time, bytes,
+ * health metrics (#528). Proxies only (CPU time, bytes,
  * activity); no wattage. `harnessRuns.cpuSeconds` is `null` in v1 because
  * harness runs are not separately CPU-accounted yet.
  */
@@ -1535,7 +1534,7 @@ export interface CentraidResourceUsage {
 }
 
 /**
- * Power-context posture on health metrics (issue #528 Phase D). Describes the
+ * Power-context posture on health metrics (#528). Describes the
  * gateway HOST's power situation — battery / mains / shared server — so the
  * client can show a posture note attributed to the host, never the viewing
  * device. `battery` is `null` whenever the host has no battery (a mains or
@@ -1554,7 +1553,7 @@ export interface CentraidPowerContext {
   updatedAt: number | null;
 }
 
-/** Coarse numeric signals on `GET /centraid/_gateway/health` (issue #521). */
+/** Coarse numeric signals on `GET /centraid/_gateway/health` (#521). */
 export interface CentraidHealthMetrics {
   rssBytes: number;
   outboxPending: number;
@@ -1567,13 +1566,13 @@ export interface CentraidHealthMetrics {
   storageFsyncMs?: number;
   hardwareProfileClass?: string;
   resourceMode?: string;
-  /** Structured resource contract (issue #528 Phase A) — host facts + resolved knobs. */
+  /** Structured resource contract (#528) — host facts + resolved knobs. */
   resourceProfile?: CentraidResourceProfile;
-  /** Background-work pause state (issue #528 Phase B). */
+  /** Background-work pause state (#528). */
   backgroundPause?: CentraidBackgroundPause;
-  /** Measured resource actuals (issue #528 Phase C) — CPU/bytes/activity proxies. */
+  /** Measured resource actuals (#528) — CPU/bytes/activity proxies. */
   resourceUsage?: CentraidResourceUsage;
-  /** Power-context posture (issue #528 Phase D) — battery / mains / server. */
+  /** Power-context posture (#528) — battery / mains / server. */
   powerContext?: CentraidPowerContext;
   uptimeMs: number;
 }
@@ -1698,7 +1697,7 @@ declare global {
         fromArchive?: boolean;
       };
   // Mirror of the module-level automation types so screens can
-  // reference them by bare name without imports (issue #91).
+  // reference them by bare name without imports (#91).
   interface CentraidAutomationManifest {
     name: string;
     version: string;
@@ -1852,7 +1851,7 @@ declare global {
     appId?: string;
     childTurnId?: string;
   }
-  // Mirror of the module-level Insights types (issue #514).
+  // Mirror of the module-level Insights types (#514).
   interface CentraidInsightsKpis {
     totalTokens: number;
     hydrationTokens: number;
@@ -1964,7 +1963,7 @@ declare global {
     level: "warn" | "error";
     message: string;
   }
-  /** Coarse numeric signals on gateway health (issue #521) — mirrors module export. */
+  /** Coarse numeric signals on gateway health (#521) — mirrors module export. */
   interface CentraidHealthMetrics {
     rssBytes: number;
     outboxPending: number;
@@ -1977,9 +1976,9 @@ declare global {
     storageFsyncMs?: number;
     hardwareProfileClass?: string;
     resourceMode?: string;
-    /** Measured resource actuals (issue #528 Phase C) — CPU/bytes/activity proxies. */
+    /** Measured resource actuals (#528) — CPU/bytes/activity proxies. */
     resourceUsage?: CentraidResourceUsage;
-    /** Power-context posture (issue #528 Phase D) — battery / mains / server. */
+    /** Power-context posture (#528) — battery / mains / server. */
     powerContext?: CentraidPowerContext;
     uptimeMs: number;
   }

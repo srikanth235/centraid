@@ -1,4 +1,4 @@
-// Serializable incremental SHA-256 for restart-resumable ingress (#456 C6).
+// Serializable incremental SHA-256 for restart-resumable ingress (#456).
 //
 // `node:crypto` is the ordinary native streaming path, but Node deliberately
 // does not expose Hash state. The stream-through uploader must checkpoint its

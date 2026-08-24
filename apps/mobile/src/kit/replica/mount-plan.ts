@@ -1,18 +1,17 @@
 // WHAT THIS PHONE CAN OPEN WITHOUT ASKING ANYONE.
 //
-// THE ONE THIS MODULE EXISTS FOR: a cold start with no reachable gateway used
-// to render skeletons forever and never open the replica databases at all.
-// Observed on a real device by launching with the desktop asleep — the replica
-// files' mtimes were untouched across the whole launch while the SQLite file on
-// disk held 528 rows the member had already synced. The vault was there. The
-// app just would not look at it.
+// THE DEFECT THIS MODULE EXISTS TO PREVENT: a cold start with no reachable
+// gateway that renders skeletons forever and never opens the replica databases
+// at all — the replica files untouched across a whole launch while the SQLite
+// file on disk holds rows the member already synced. The vault is there; the
+// app just does not look at it.
 //
-// The cause was an ordering, not a missing feature. `ReplicaProvider` mounted in
-// the order `resolveIdentity → compatibility wall → scopes → open databases`,
-// and `resolveIdentity` opened with `await resolveGatewayBase()`, which reaches
-// `ensureTunnelStarted()` → `startTunnel()`. That start had no budget, so on a
-// launch where the peer never answers it simply never settles. `ready` never
-// flipped, `connection` stayed `loading`, and LOCAL DATA WAS WITHHELD BECAUSE
+// The cause is an ORDERING, not a missing feature. `resolveIdentity` opens with
+// `await resolveGatewayBase()`, which reaches `ensureTunnelStarted()` →
+// `startTunnel()`, and that start has no budget: on a launch where the peer
+// never answers it simply never settles. Mount in the order
+// `resolveIdentity → compatibility wall → scopes → open databases` and `ready`
+// never flips, `connection` stays `loading`, and LOCAL DATA IS WITHHELD BECAUSE
 // THE NETWORK DID NOT ANSWER. For a local-first product that is the defect: the
 // bytes are on the device, and nothing about reading them needs a gateway's
 // participation.

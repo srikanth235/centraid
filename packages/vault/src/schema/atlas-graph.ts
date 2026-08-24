@@ -117,7 +117,7 @@ function notNullColumns(vault: DatabaseSync, physical: string): Set<string> {
 }
 
 /**
- * The FK graph + authored-link overlay (issue #441 B2). Walks
+ * The FK graph + authored-link overlay (#441). Walks
  * `PRAGMA foreign_key_list` for every registered vault-file table, computes
  * each edge's fill on request (an owner ops screen — no cache), runs a BFS
  * for ring placement, and aggregates `core_link` SEPARATELY. Nothing here is
@@ -189,7 +189,7 @@ export function atlasGraph(vault: DatabaseSync): AtlasGraphPayload {
     }
   }
 
-  // Directed BFS from core_party for ring placement (issue #441 B2 — rings by
+  // Directed BFS from core_party for ring placement (#441 B2 — rings by
   // hop distance, unreached tables on the island ring).
   const hop = new Map<string, number>();
   if (childrenOf.has(ATLAS_GRAPH_CENTER)) {
@@ -296,7 +296,7 @@ export interface AtlasPulsePayload {
   windowDays: number;
   /**
    * The pulse queries only LIVE provenance rows. Old rows may have been
-   * moved to `journal_archive_manifest` segments (issue #367 §E) and are NOT
+   * moved to `journal_archive_manifest` segments (#367) and are NOT
    * counted here — a 30-day window rarely reaches the archival horizon, but
    * the flag lets the UI say "live journal only" honestly.
    */
@@ -311,7 +311,7 @@ interface PulseRow {
 }
 
 /**
- * 30-day per-table write pulse (issue #441 B1 sparklines / B4 item 4),
+ * 30-day per-table write pulse (#441 B1 sparklines / B4 item 4),
  * derived from journal.db `consent_provenance` grouped by entity_type × day.
  */
 export function atlasPulse(

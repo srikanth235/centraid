@@ -1,4 +1,4 @@
-// The app bar's STATIC half for the six operational routes (issue #765).
+// The app bar's STATIC half for the six operational routes (#765).
 //
 // The bar renders in the frame ABOVE the outlet. A screen that set its own
 // title from an effect would paint one frame carrying the previous route's

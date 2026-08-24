@@ -8,14 +8,14 @@ import type { Page } from "@playwright/test";
 import { installHarnessControlTransport } from "./control-transport.js";
 import { enforceTiming, perfBudgets } from "./perf-budgets.js";
 
-// PWA fast-path waterfall probe (issue #404 workstream I). The former desktop
-// exploratory rig is retired; this is the only budgeted app-open probe. It
-// boots the same e2e harness gateway (tests/e2e/server.ts) and measures two
+// PWA fast-path waterfall probe (#404 workstream I). This is the only
+// budgeted app-open probe. It boots the same e2e harness gateway
+// (tests/e2e/server.ts) and measures two
 // costs off the SHELL PAGE's own performance timeline: the shell bundle (cold,
 // then warm through the SW/HTTP caches) and an app open (cold, then warm).
 //
 // The app open is an INLINE REACT ROUTE. There is no served-app plane
-// (issue #799), so no app iframe and no second window to read a timeline
+// (#799), so no app iframe and no second window to read a timeline
 // from: opening a bundled app is a dynamic `import()` of that app's own lazy
 // chunk (packages/client/src/react/shell/routes/inlineApps.ts) rendered by
 // InlineAppRoute inside the live document. The cost of an open is therefore
@@ -882,7 +882,7 @@ test("iroh pool — connects stay far below streams (or contract is present)", a
 });
 
 // ───────────────────────────────────────────────────────────────────────────
-// Test D — WEB VITALS (issue #659 R3a). Until this landed, the only thing the
+// Test D — WEB VITALS (#659). Until this landed, the only thing the
 // PWA rig measured was BYTES: request counts and transfer sizes, which are
 // machine cost. A shell can move its whole bundle behind a lazy chunk, satisfy
 // every byte ceiling, and still paint late — LCP/INP/CLS are what the owner

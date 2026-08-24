@@ -1,5 +1,5 @@
-// Export / import the apps repo to/from a remote (the issue's
-// motivating use case: "back up my stuff" to the user's own GitHub).
+// Export / import the apps repo to/from a remote — "back up my
+// stuff" to the user's own GitHub.
 //
 // Export is `git push` of `main` + every `<app>/v<n>` tag from the
 // bare repo to a remote URL. Import is `git clone --bare` of that

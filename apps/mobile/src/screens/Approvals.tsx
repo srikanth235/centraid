@@ -1,5 +1,5 @@
-// NOTIFICATIONS — the phone's consent surface (#765, spec §2), revamped onto
-// the v9 block list.
+// NOTIFICATIONS — the phone's consent surface (#765, spec §2), on the v9
+// block list.
 //
 // Agents stage external writes, connections lapse, high-risk acts park,
 // republished apps ask for wider scopes, and automations file notices. This
@@ -12,19 +12,18 @@
 // underneath — standing grants, updates, the archive — is sections of rows in
 // the same list rather than content hidden behind a filter.
 //
-// WHAT THE OLD SCREEN DID, AND WHERE IT WENT (nothing was dropped):
-//   • the five-way source filter (Needs me / Automations / Agents / Apps /
-//     Archived) → the queue chips narrow by what a thing NEEDS, and the
-//     notices that are not demands live in `Updates` and `Archived` sections
-//     that are always present rather than one filter position away.
-//   • `OutboxDecisionCard` → the panel, plus two rows under it carrying the
-//     edit form and the always-allow toggle (see `approvals/StagedWrite.tsx`).
-//   • the `Reconnect` card → an `Also waiting` row whose verb runs the same
-//     in-app OAuth ceremony, with the "stay here until it closes" sentence
-//     kept on the row, because leaving the app still breaks the ceremony.
-//   • `no-gateway` → the error panel with the pairing sentence and the
-//     `Open Settings` way forward. It was never a sixth visual state.
-//   • `Loading…` → the skeleton at row geometry. Never a spinner.
+// NOTHING IS HIDDEN BEHIND A FILTER, and none of it may be dropped:
+//   • the queue chips narrow by what a thing NEEDS; notices that are not
+//     demands live in `Updates` and `Archived` sections that are ALWAYS
+//     present rather than one filter position away.
+//   • a staged write is the panel, plus two rows under it carrying the edit
+//     form and the always-allow toggle (see `approvals/StagedWrite.tsx`).
+//   • a lapsed connection is an `Also waiting` row whose verb runs the in-app
+//     OAuth ceremony, with the "stay here until it closes" sentence on the
+//     row, because leaving the app breaks the ceremony.
+//   • `no-gateway` is the error panel with the pairing sentence and the
+//     `Open Settings` way forward, never a sixth visual state.
+//   • loading is the skeleton at row geometry. Never a spinner.
 //
 // The data half is `approvals/useApprovals.ts`; every word is
 // `approvals/approvals-model.ts`. This file owns the frame and the sequence.

@@ -3,7 +3,7 @@
 // filters the timeline to them, exactly as opening an album does (§5: a shelf
 // is the same timeline under a filter).
 //
-// Since issue #711's review, unconfirmed face PROPOSALS render alongside them
+// Unconfirmed face PROPOSALS render alongside them (#711)
 // — the prototype's own PPEOPLE set mixes named cards with "Unnamed" ones,
 // each carrying its own count (v4 handoff proto :3760, :3942 "People as a
 // browsable set. Unnamed people are shown as unnamed, not hidden."). A
@@ -21,7 +21,7 @@
 // the same square rather than collapsing — the same contract the tile holds
 // (§14).
 //
-// THE CONSENT GATE LIVES HERE (issue #712 C2), not behind a toolbar icon and
+// THE CONSENT GATE LIVES HERE (#712), not behind a toolbar icon and
 // a `<dialog>` a member would have to go looking for. A member who opens
 // People and finds it empty has exactly the
 // question the gate answers, so while the roster (and its proposals) are
@@ -137,7 +137,7 @@ export function PeopleShelf({
    *  proposal card's route to naming it, the same queue `onReview` opens,
    *  just already on the face the member tapped. */
   onNameProposal?: (regionId: string) => void;
-  /** The consent gate's props (issue #712 C2), present only while the roster
+  /** The consent gate's props (#712), present only while the roster
    *  is empty and the question has not been answered this session — see the
    *  file header. Renders IN PLACE of the grid/note. */
   gate?: EnrichmentConsentProps;

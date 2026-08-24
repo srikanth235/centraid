@@ -1,12 +1,12 @@
 /*
- * The browser shell's CONTROL session (issue #504).
+ * The browser shell's CONTROL session (#504).
  *
  * A web PWA cannot hold the owner's bearer token in JS, so it establishes an
  * HttpOnly, origin-bound, device-keyed cookie once and then proxies every
  * gateway call through `/centraid/_web/control?path=…`. This module owns that
  * ceremony: establish, authorize + rewrite, logout, and expiry sweeping.
  *
- * There is no second, per-APP session plane (issue #799): every app is an
+ * There is no second, per-APP session plane (#799): every app is an
  * inline route inside this same shell, so its gateway traffic IS the shell's
  * traffic and rides the control session.
  */
@@ -29,7 +29,7 @@ export const WEB_CONTROL_PATH = "/centraid/_web/control";
 export const WEB_SERVICE_WORKER_HEADER = "x-centraid-service-worker";
 
 const CONTROL_COOKIE = "__centraid_control";
-/** Expiry reclamation cadence — see `startSweeping()` (issue #659 G3). */
+/** Expiry reclamation cadence — see `startSweeping()` (#659). */
 const SWEEP_INTERVAL_MS = 5 * 60_000;
 const SERVICE_WORKER_WAKE_PATHS = new Set([
   "/centraid/_vault/notifications",
@@ -47,7 +47,7 @@ export interface WebControlSessionsOptions {
    */
   controlsFile?: string;
   /**
-   * Enrollment liveness check for revocation propagation (issue #376): a
+   * Enrollment liveness check for revocation propagation (#376): a
    * live control cookie whose device enrollment was revoked
    * (`centraid-gateway devices revoke`) stops authorizing immediately
    * instead of riding its TTL. Given the session's `deviceKey`, return
@@ -98,7 +98,7 @@ export class WebControlSessions {
   }
 
   /**
-   * Revocation propagation (issue #376): a session bound to a device key is
+   * Revocation propagation (#376): a session bound to a device key is
    * dead the moment that key's enrollment is revoked. Sessions without a
    * device key fail closed in `authorize()`.
    */
@@ -119,7 +119,7 @@ export class WebControlSessions {
 
   /**
    * Origins bound on live control sessions — credentialed CORS allowlist for
-   * the loopback HTTP server (issue #504). Pure data for the host; does not
+   * the loopback HTTP server (#504). Pure data for the host; does not
    * authorize a request by itself.
    */
   knownShellOrigins(): string[] {
@@ -129,7 +129,7 @@ export class WebControlSessions {
   }
 
   authorize(req: IncomingMessage): BearerAuthorization | undefined {
-    // No sweep here (issue #659 G3). Expiry is enforced by the store's
+    // No sweep here (#659). Expiry is enforced by the store's
     // `expires_at > ?` predicate, so authorization never depended on the sweep
     // having just run — the sweep only reclaims rows, on `startSweeping()`'s
     // timer.
@@ -224,7 +224,7 @@ export class WebControlSessions {
   }
 
   /**
-   * Server-side logout (issue #376): a DELETE that presented a valid control
+   * Server-side logout (#376): a DELETE that presented a valid control
    * cookie + matching Origin (gated in `authorize`) drops the session row and
    * expires the cookie. Idempotent — the row may already be gone.
    */
@@ -244,7 +244,7 @@ export class WebControlSessions {
 
   /**
    * Reclaim expired control sessions on a timer instead of on every HTTP
-   * request (issue #659 G3). Idempotent; the timer is `unref`d so it never
+   * request (#659). Idempotent; the timer is `unref`d so it never
    * holds the process open.
    */
   startSweeping(intervalMs = SWEEP_INTERVAL_MS): void {

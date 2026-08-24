@@ -157,7 +157,7 @@ export function templateSourceDir(
 }
 
 /**
- * Read a template's files into an in-memory file map (issue #141). The
+ * Read a template's files into an in-memory file map (#141). The
  * desktop owns the bundled/cached catalog locally, so it reads a
  * template's files here and pushes them to the gateway over HTTP
  * (`cloneTemplateFiles` → session PUT → publish) — the remote gateway

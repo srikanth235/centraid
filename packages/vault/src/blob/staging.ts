@@ -1,4 +1,4 @@
-// Blob staging (issue #296 §3): raw bytes arriving is NOT a vault write —
+// Blob staging (#296): raw bytes arriving is NOT a vault write —
 // the command that claims them is. Both ingress doors (the HTTP upload route
 // and the import spine's stageBlobFromFile) land here: hash into the local
 // CAS, run the spool pipeline (sniff/EXIF/text), record a `blob_staging`
@@ -127,7 +127,7 @@ export function stageBlobBytes(
   const mediaType =
     contribution?.mediaType ??
     sniffMediaType(options.bytes, options.mediaType, options.filename);
-  // GPS policy gates HERE (issue #296 §4): `media.location = 'strip'` means
+  // GPS policy gates HERE (#296): `media.location = 'strip'` means
   // extraction never writes coordinates anywhere downstream.
   const meta = binary
     ? extractBlobMeta(options.bytes, mediaType, {

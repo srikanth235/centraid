@@ -1,6 +1,6 @@
 /**
  * Pure construction of the two objects `preload.ts` hands to
- * `contextBridge.exposeInMainWorld` (issue #656, Layer 1F).
+ * `contextBridge.exposeInMainWorld` (#656, Layer 1F).
  *
  * This module is the renderer/main privilege boundary in testable form:
  * every channel it reaches for comes from the shared `Channel` map, and the
@@ -69,7 +69,7 @@ export function createCentraidApi(bridge: PreloadBridge) {
 
   return {
     onDeepLink: (cb: (url: string) => void) => deepLinkBuffer.subscribe(cb),
-    // There is no desktop file-ASR probe (issue #724 W6) — transcription runs
+    // There is no desktop file-ASR probe (#724) — transcription runs
     // on the self-contained recognition automation, never a device compute
     // lease, so this is a pure synchronous snapshot.
     getHostCapabilities: async () => hostCapabilities(),
@@ -79,16 +79,16 @@ export function createCentraidApi(bridge: PreloadBridge) {
     saveSettings: (patch: Record<string, unknown>) =>
       bridge.invoke(Channel.SETTINGS_SAVE, patch),
 
-    // Apps: list/create/files/write/delete/update-meta moved to the
-    // renderer's direct HTTP client (renderer/gateway-client.ts) under the
-    // thin-client pivot. There is no preview iframe and no served plane
+    // Apps: list/create/files/write/delete/update-meta belong to the
+    // renderer's direct HTTP client (renderer/gateway-client.ts), not to IPC.
+    // There is no preview iframe and no served plane
     // (#799), so only the local-only reveal-in-Finder stays on IPC.
     openAppFolder: (input: { id: string }) =>
       bridge.invoke(Channel.APPS_OPEN, input),
 
-    // Publish moved to the renderer's direct HTTP client (it holds the
-    // editing session and POSTs `…/publish`). Auto-publish queue (issue
-    // #108) — workspaces upload to the gateway on every save. Renderer can
+    // Publish belongs to the renderer's direct HTTP client (it holds the
+    // editing session and POSTs `…/publish`). Auto-publish queue — workspaces
+    // upload to the gateway on every save. Renderer can
     // poll a snapshot of the status, or subscribe to per-event broadcasts to
     // toast failures inline.
     getPublishStatus: (input: { id: string }) =>
@@ -102,11 +102,11 @@ export function createCentraidApi(bridge: PreloadBridge) {
       }) => void
     ) => subscribe(bridge, Channel.PUBLISH_EVENT, cb),
 
-    // Gateways (issue #109) — multi-gateway lifecycle. Local gateway is
-    // always present; remote gateways use their iroh EndpointId. Issue #505
-    // phase 7 removed the manual "add by URL + token" bridge — gateways are
-    // added through the pairing ceremony (`redeemGatewayPairing`), which adds
-    // the profile itself.
+    // Gateways (#109) — multi-gateway lifecycle. Local gateway is always
+    // present; remote gateways use their iroh EndpointId. There is no manual
+    // "add by URL + token" bridge (#505): gateways are added through the
+    // pairing ceremony (`redeemGatewayPairing`), which adds the profile
+    // itself.
     listGateways: () => bridge.invoke(Channel.GATEWAYS_LIST),
     removeGateway: (input: { id: string }) =>
       bridge.invoke(Channel.GATEWAYS_REMOVE, input),
@@ -124,23 +124,22 @@ export function createCentraidApi(bridge: PreloadBridge) {
     // settings (main); this is the single bridge crossing for it.
     getGatewayAuth: () => bridge.invoke(Channel.GATEWAY_AUTH_GET),
     // Settings → This device: flip the active gateway's offline copy. The
-    // pairing flow stopped asking, so this is the only way to answer it.
+    // pairing flow does not ask, so this is the only way to answer it.
     setGatewayRememberDevice: (input: { rememberDevice: boolean }) =>
       bridge.invoke(Channel.GATEWAY_REMEMBER_DEVICE_SET, input),
-    // Pairing-ticket redemption (issue #376): decode + dial/POST, add-or-reuse
+    // Pairing-ticket redemption (#376): decode + dial/POST, add-or-reuse
     // the gateway profile, flip active gateway + active vault together.
     redeemGatewayPairing: (input: {
       ticket: string;
       label?: string;
       rememberDevice?: boolean;
     }) => bridge.invoke(Channel.GATEWAY_PAIR_REDEEM, input),
-    // Preview a gateway's vault list WITHOUT switching to it (issue #376) —
+    // Preview a gateway's vault list WITHOUT switching to it (#376) —
     // the flat (gateway, vault) switcher.
     listGatewayVaults: (input: { gatewayId: string }) =>
       bridge.invoke(Channel.GATEWAYS_LIST_VAULTS, input),
-    // ConnectFlow "handshake ladder" (issue #382): staged connectivity check
-    // for ticket/gateway inputs. Never rejects. (Issue #603 deleted the ssh
-    // variant along with the whole SSH-connect feature.)
+    // ConnectFlow "handshake ladder" (#382): staged connectivity check for
+    // ticket/gateway inputs. Never rejects.
     testGatewayConnection: (
       input:
         | { kind: "ticket"; ticket: string }
@@ -151,7 +150,7 @@ export function createCentraidApi(bridge: PreloadBridge) {
     getGatewayRuntime: () => bridge.invoke(Channel.GATEWAY_RUNTIME_GET),
     onGatewayRuntime: (cb: (snapshot: unknown) => void) =>
       subscribe(bridge, Channel.GATEWAY_RUNTIME_EVENT, cb),
-    // Gateway ops (issue #351). Restart applies to the local embedded gateway
+    // Gateway ops. Restart applies to the local embedded gateway
     // only (remote gateways restart server-side); diagnostics export fetches
     // the active gateway's bundle and saves it via a native dialog.
     restartGateway: () => bridge.invoke(Channel.GATEWAY_RESTART),
@@ -177,7 +176,7 @@ export function createCentraidApi(bridge: PreloadBridge) {
       }) => void
     ) => subscribe(bridge, Channel.GATEWAY_CHANGED, cb),
 
-    // Vault addressing (issue #289): switch the vault this client addresses on
+    // Vault addressing (#289): switch the vault this client addresses on
     // the active gateway. A pure client-side pointer flip — no server call.
     setActiveVault: (input: { vaultId?: string }) =>
       bridge.invoke(Channel.VAULTS_SET_ACTIVE, input),
@@ -204,11 +203,11 @@ export function createCentraidApi(bridge: PreloadBridge) {
       subscribe(bridge, Channel.VAULT_METADATA_PUSH, () => cb()),
 
     // Templates, app conversation, gateway-side user identity + prefs, harness
-    // detection, and the whole automations surface all moved to the
-    // renderer's direct HTTP clients under the thin-client pivot — see
-    // `renderer/gateway-client.ts` and `gateway-client-conversation.ts`.
+    // detection, and the whole automations surface belong to the renderer's
+    // direct HTTP clients, not to IPC — see `renderer/gateway-client.ts` and
+    // `gateway-client-conversation.ts`.
 
-    // Phone link (issue #263) — the Settings → Phone panel drives the
+    // Phone link (#263) — the Settings → Phone panel drives the
     // main-process iroh tunnel: status + device list, one-time pairing QR,
     // and per-device revocation. Pairing completion arrives as a broadcast.
     getPhoneLinkStatus: () => bridge.invoke(Channel.PHONE_STATUS),
@@ -236,7 +235,7 @@ export function createCentraidApi(bridge: PreloadBridge) {
       cb: (msg: { available: boolean; version: string }) => void
     ) => subscribe(bridge, Channel.UPDATE_AVAILABLE, cb),
 
-    // Keychain pre-write note (issue #603): true when starting the local
+    // Keychain pre-write note (#603): true when starting the local
     // gateway on THIS host is expected to pop an OS credential prompt, so the
     // first-run chooser can say so before the dialog appears.
     keychainPromptExpected: (): Promise<boolean> =>

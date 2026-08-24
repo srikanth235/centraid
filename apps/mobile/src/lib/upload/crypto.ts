@@ -1,10 +1,10 @@
-// The CBSF sealer's crypto seam (#419 M0.4).
+// The CBSF sealer's crypto seam (#419.4).
 //
 // CBSF v2 needs AES-256-GCM (frames + directory) and HMAC-SHA-256 (nonce
 // derivation). Hermes ships neither: `expo-crypto` is digest + random only,
 // and RN 0.81 has no `crypto.subtle`. So the sealer takes its crypto by
-// injection, exactly as M0.2 did for op-sqlite — a native module imported
-// statically into a logic module breaks under vitest.
+// injection: a native module imported statically into a logic module breaks
+// under vitest.
 //
 // The default implementation targets the WebCrypto `SubtleCrypto` API. That
 // makes it real (not a stub) in node/vitest today, and on device it needs only

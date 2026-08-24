@@ -250,7 +250,7 @@ describe("the photographs a hit reaches", () => {
   });
 });
 
-// Semantic search (issue #721 B4): one aggregate row standing for the
+// Semantic search (#721): one aggregate row standing for the
 // gateway's whole ranked set, appended after the other four and never
 // gating them — see `search-hits.ts`'s own header for the argument.
 describe("the semantic row", () => {
@@ -352,7 +352,7 @@ describe("the semantic row", () => {
   });
 });
 
-// A PLACE IS A SEARCH TERM (issue #816). A place answering to exactly one
+// A PLACE IS A SEARCH TERM (#816). A place answering to exactly one
 // string — its `name` column — leaves the Tahoe weekend unfindable by the word
 // "Tahoe" once the member has called the sections something of their own (or the
 // vault has called them a coordinate), and "near home" matching nothing at all.

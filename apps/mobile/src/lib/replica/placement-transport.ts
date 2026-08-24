@@ -16,7 +16,7 @@ export class PlacementSubmissionError extends Error {
 /**
  * `/edges`' wire status vocabulary (queued|in-flight|established|parked|
  * denied|revoked|completed|failed) succeeded `/placements`' narrower one
- * (…|executed|…, #726 P2). The durable outbox (`multi-vault-reader.ts`,
+ * (…|executed|…, #726). The durable outbox (`multi-vault-reader.ts`,
  * `multi-vault-session.ts`) still only knows the old five-plus-one values —
  * translate the one terminal-success rename here, at the transport boundary,
  * rather than touching every reader of `PlacementRecord.status`.
@@ -60,7 +60,7 @@ function toPlacementRecord(
 
 /**
  * Shared foreground/background transport for the durable placement outbox.
- * The wire door is `/edges` now (#726 P2) — one edge can carry a SET of
+ * The wire door is `/edges` now (#726) — one edge can carry a SET of
  * items, but this outbox still queues and replays one item per row, so the
  * translation is one-item-in, one-item-out: `PlacementIntent`/
  * `PlacementRecord` (the outbox's own persisted shape) are untouched.

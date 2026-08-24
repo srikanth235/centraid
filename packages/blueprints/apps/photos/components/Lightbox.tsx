@@ -353,7 +353,7 @@ export function LightboxShell({
               ? editorSourceLine(
                   displayAsset,
                   // The source of an edited copy, when this page happens to
-                  // hold it (issue #711). `list` is a bounded window, so a
+                  // hold it (#711). `list` is a bounded window, so a
                   // miss is ordinary — the line handles not knowing.
                   list.find(
                     (a) => a.asset_id === displayAsset.source_asset_id

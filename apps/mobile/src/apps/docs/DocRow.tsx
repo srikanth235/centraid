@@ -1,4 +1,4 @@
-// The document row (handoff Part 2 §"The document row"; issue #821).
+// The document row (handoff Part 2 §"The document row"; #821).
 //
 // One row recipe, one STATE SLOT, and at most one thing in it — the
 // precedence is fixed and lives in `docs-projection.ts` → the shared

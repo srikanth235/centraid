@@ -1,5 +1,5 @@
-// Row shapes and mappers for the upload queue's SQLite tables, split out of
-// store.ts to keep that module under the governance line-cap. Pure functions
+// Row shapes and mappers for the upload queue's SQLite tables, kept out of
+// store.ts so that module stays under the governance line-cap. Pure functions
 // over plain rows — no driver, no I/O.
 
 import type {

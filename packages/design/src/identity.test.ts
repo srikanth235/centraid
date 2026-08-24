@@ -1,4 +1,4 @@
-// The person-identity derivation every client shares (issue #708).
+// The person-identity derivation every client shares (#708).
 //
 // A face circle is FILLED — the handoff draws saturated identity discs with
 // inverse ink, not near-white rings with grey initials — so two things have to

@@ -36,7 +36,7 @@ export interface OptionSheetProps {
  * action sheet on iOS, a bottom sheet built from RN core `Modal` on Android
  * (RN's `Alert` renders at most three buttons there, so it cannot list agents).
  *
- * A list, never a tap-to-cycle chip (#567 D12): cycling walks the member
+ * A list, never a tap-to-cycle chip (#567): cycling walks the member
  * through every dead runner — one preflight each — to reach the one they want.
  */
 export default function OptionSheet({

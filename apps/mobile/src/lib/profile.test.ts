@@ -1,6 +1,6 @@
 /* oxlint-disable import/first -- vi.mock is hoisted; subject imports intentionally follow */
 /**
- * Onboarding owner (issue #545 C4) — pure profile helpers the Onboarding
+ * Onboarding owner (#545) — pure profile helpers the Onboarding
  * screen uses for greeting / initials / first-name and onboarded gate.
  */
 import { beforeEach, describe, expect, it, vi } from "vitest";

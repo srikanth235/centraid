@@ -1,4 +1,4 @@
-// Automations' cross-surface copy (issue #805, slice C).
+// Automations' cross-surface copy (#805).
 //
 // `react/screens/AutomationsOverviewScreen.tsx` and mobile's
 // `apps/automations/*` carried the same four sentences twice over, including

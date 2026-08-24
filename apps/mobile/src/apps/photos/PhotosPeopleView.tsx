@@ -1,8 +1,7 @@
-// The people roster (Photos v4 handoff §3.1, §14, proto:4432-4433). Split out
-// of `PhotosCollectionsView` (which now serves Albums only) because People
-// stopped being a shelf on that screen.
+// The people roster (Photos v4 handoff §3.1, §14, proto:4432-4433). Not a
+// shelf on `PhotosCollectionsView`, which serves Albums only.
 //
-// People is OFF THE BAND (issue #712): a band destination `PhotosHome` renders
+// People is OFF THE BAND (#712): a band destination `PhotosHome` renders
 // inline costs the band a fifth slot for a shelf most visits never open. This
 // is a pushed route like `PlacesView` and
 // `FaceReview` — reached from Collections' own People section heading
@@ -21,7 +20,7 @@
 //      mode "person"), never Face review. Face review is proposal triage;
 //      a person card is a browsable identity, and the two are not the same
 //      destination even though both start from `media.face_region`.
-//   3. THE CONSENT GATE (issue #712 C2). The face-detection consent moment
+//   3. THE CONSENT GATE (#712). The face-detection consent moment
 //      does not sit behind a "Face detection" row + modal on PhotosLibrary,
 //      which would be built, correct and nearly unreachable. An empty
 //      People shelf IS the
@@ -91,8 +90,7 @@ export default function PhotosPeopleView({
     "photos",
     useMemo(() => ({ entity: "media.face_cluster" }), [])
   );
-  // The tier comes from the replica's `enrich.policy` mirror, the same read
-  // PhotosLibrary.tsx used before this gate moved — the shared
+  // The tier comes from the replica's `enrich.policy` mirror — the shared
   // `deviceAnswerFor` decides whether the on-device promise is even true for
   // this vault, so web and native cannot disagree about it.
   const policies = useReplicaQuery(
@@ -171,7 +169,7 @@ export default function PhotosPeopleView({
     shelf.people.length === 0 && shelf.unnamed.length === 0 && !enrichAnswered;
 
   return (
-    // The band, via the shell (issue #712). People is off the band, so this
+    // The band, via the shell (#712). People is off the band, so this
     // screen draws the shell like every other pushed shelf, `current="more"`
     // — the same call `PlacesView` and `PhotoStateView`'s "person" mode make.
     <PhotosScreen current="more">

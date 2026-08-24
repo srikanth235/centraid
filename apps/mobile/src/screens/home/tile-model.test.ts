@@ -1,5 +1,5 @@
 /**
- * Springboard tile selection + first-run detection (issue #708 A). The module
+ * Springboard tile selection + first-run detection (#708 A). The module
  * under test is pure by construction, so nothing here needs a renderer or a
  * replica — the rows are the wire shape `useReplicaQuery` hands back.
  */

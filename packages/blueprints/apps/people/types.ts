@@ -282,7 +282,7 @@ export interface AppData {
 }
 
 // ───────────────────────────────────────────────────────────────────────────
-// The frozen route contract. Wave 2 builds against exactly these props.
+// The frozen route contract. Every screen builds against exactly these props.
 // ───────────────────────────────────────────────────────────────────────────
 
 /** What every route is told about the read that produced it. */

@@ -1,4 +1,4 @@
-// The DEVICE lane (issue #414 D11, narrowed by #724): what a browser may
+// The DEVICE lane (#414 D11, narrowed by #724): what a browser may
 // lease is previews/poster/pdfText. Model-shaped work — OCR, transcription,
 // embedding — is owned by recognition automations and never appears here.
 

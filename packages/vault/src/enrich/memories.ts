@@ -1,4 +1,4 @@
-// Memories v0 (issue #724 W7) — a REBUILDABLE, DERIVED, NEVER-AUTHORED
+// Memories v0 (#724) — a REBUILDABLE, DERIVED, NEVER-AUTHORED
 // projection over signals the vault already carries. Same mold as
 // `clusters.ts` exactly: a standing sweep drops and reinserts the whole
 // projection (schema/enrich.ts's `media_memory` / `media_memory_member`) from
@@ -65,7 +65,7 @@
 // state reuses the prior counts without regrouping; after a restart it groups
 // once, compares the desired projection, and writes only when they differ.
 // Projection rows are part of the fingerprint, so deletion/corruption still
-// invalidates the memo and is repaired on the next sweep (issue #792).
+// invalidates the memo and is repaired on the next sweep (#792).
 
 import type { DatabaseSync } from "node:sqlite";
 

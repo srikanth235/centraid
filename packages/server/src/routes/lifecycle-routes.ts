@@ -1,13 +1,11 @@
-// HTTP surface for the gateway-owned app *lifecycle* (issue #141).
+// HTTP surface for the gateway-owned app *lifecycle* (#141).
 //
 // Phase 2 of the thin-client pivot: the deterministic builder lives in
 // the gateway, not the desktop. Cloning a template, editing an app's
-// name/description, and creating/toggling/deleting automations were all
-// desktop orchestration (harness scaffolders + app-engine webhook minting,
-// pushed up over IPC-relayed session writes). They move here so the renderer
-// states intent and the gateway does the work — identical for a local or
-// remote gateway. Scaffolding a blank app went with the served-app plane it
-// produced pages for (issue #799).
+// name/description, and creating/toggling/deleting automations all happen
+// here, so the renderer states intent and the gateway does the work —
+// identical for a local or remote gateway. There is no blank-app scaffold:
+// it went with the served-app plane it produced pages for (#799).
 //
 // Surface (mounted via `serve()`'s `extraHandlers`, after the bearer
 // check; each verb returns `false` so the apps-store / automations
@@ -29,7 +27,7 @@
 //   POST   /centraid/_automations/compile?ref=<ref>  hidden builder compile → {runId}
 //   POST   /centraid/_automations/rotate-webhook?ref=<ref>  mint a fresh webhook secret
 //          body {sessionId?, publish?} — 404 if the ref doesn't exist, 400 if it has no webhook trigger
-//   POST   /centraid/_automations/enrichment    {enabled} — batch-toggle every installed enricher (issue #306)
+//   POST   /centraid/_automations/enrichment    {enabled} — batch-toggle every installed enricher (#306)
 //          body {enabled, publish?}
 //   DELETE /centraid/_automations?ref=<ref>&publish=      remove an automation
 //
@@ -47,8 +45,7 @@
 // is returned once in the response, only the hash is written into the
 // manifest that lands on `main`. The app handlers (create/clone/meta)
 // live here; the automation handlers live in `lifecycle-automation-routes`
-// and the stage/publish + error helpers in `lifecycle-shared` — split to
-// keep each module under the repo file-size limit.
+// and the stage/publish + error helpers in `lifecycle-shared`.
 
 import type { IncomingMessage, ServerResponse } from "node:http";
 
@@ -178,7 +175,7 @@ async function handleClone(
   }
   const publish = body.publish === true;
 
-  // A bundled blueprint APP is installed in place, never cloned (issue #434):
+  // A bundled blueprint APP is installed in place, never cloned (#434):
   // clone forks it into the git code store, which is exactly the per-vault
   // copy the install-in-place model removes. Automation templates aren't
   // bundled app ids, so they still clone (the hidden builder is the compiler).
@@ -214,7 +211,7 @@ async function handleClone(
     templateFiles,
     newName,
     newDesc: tmpl.desc,
-    // Catalog tile identity (issue #263) — backfills app.json when the
+    // Catalog tile identity (#263) — backfills app.json when the
     // template's own copy predates the keys; an app.json that already
     // declares them wins inside cloneTemplateFiles.
     iconKey: tmpl.iconKey,
@@ -330,7 +327,7 @@ async function handleMeta(
     typeof body.description === "string" ? body.description : undefined;
   const publish = body.publish === true;
 
-  // Installed bundled app (issue #434): its code is read-only, so a rename
+  // Installed bundled app (#434): its code is read-only, so a rename
   // can't rewrite app.json — set the per-vault label override instead. A null
   // name clears the override. (Description edits aren't supported for bundled
   // apps; the manifest description is authoritative.) Returns false when the

@@ -523,7 +523,7 @@ export async function sendPeerCommonsCommand(input: {
   commandInput: Record<string, unknown>;
   memberSignature: CommonsMemberSignature;
   /** The grant sequence the member had projected locally when it composed
-   * this command (issue #731 goal 1). Required on the wire in v0 — a remote
+   * this command (#731 goal 1). Required on the wire in v0 — a remote
    * intent must be classified on the same basis as a local one, so there is
    * no defaulting/compat branch for an omitted value; see
    * `handlePeerCommonsCommand` for the receiving side's hard refusal. */

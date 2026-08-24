@@ -1,5 +1,5 @@
 /*
- * Restored-pair verification (issue #408, G8/G9): structural and
+ * Restored-pair verification (#408, G8/G9): structural and
  * cross-database checks over a RESTORED `vault.db` + `journal.db` directory
  * — never a live vault. The restore-verification job (BackupService) and
  * the acceptance tests both run this after a real restore from the remote.
@@ -26,7 +26,7 @@ import {
 import { resolveEntity } from "./schema/tables.js";
 
 /**
- * Seal-key custody verdict for a restored pair (issue #439 R5). FORMAT.md calls
+ * Seal-key custody verdict for a restored pair (#439). FORMAT.md calls
  * a restore whose sealed columns can't be opened "a placebo"; this proves it or
  * catches it:
  *   - `not-sealed`: the vault never sealed a value (no stamped fingerprint) — no
@@ -50,7 +50,7 @@ export interface RestoredPairReport {
     objectType: string;
     objectId: string;
   }[];
-  /** Whether the restored seal key is present and unseals (issue #439 R5). */
+  /** Whether the restored seal key is present and unseals (#439). */
   sealKey: { verdict: SealKeyVerdict; expected?: string };
 }
 

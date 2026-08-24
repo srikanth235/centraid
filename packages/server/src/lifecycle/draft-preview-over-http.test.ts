@@ -1,6 +1,6 @@
 import crypto from "node:crypto";
 /*
- * Draft preview through the gateway (issue #141, "preview first").
+ * Draft preview through the gateway (#141, "preview first").
  *
  * With `appsStoreRoot` set, `serve()` wires a `draftCodeDir` resolver that
  * points an app's code dir at its OPEN session worktree. An RPC request

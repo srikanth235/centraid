@@ -1,5 +1,5 @@
 // governance: allow-repo-hygiene file-size-limit the staging spine is one pipeline — source→candidates→band→review→publish share the disposition + provenance invariants (#290)
-// The staging spine (issue #290 phase 2) — every path into the vault flows
+// The staging spine (#290) — every path into the vault flows
 // through it: source → candidates → staging band → review → publish/discard.
 // Staging is what turns import from a scary irreversible act into the same
 // draft→publish gesture the builder taught: candidates land as sync_import_row
@@ -164,7 +164,7 @@ export function ensureConnection(
  * Transaction-less staging core — batch + dispositioned rows. Callers own
  * the transaction boundary: `stageCandidates` wraps it in its own ACID
  * block; the `sync.stage_rows` command handler runs it inside the command
- * pipeline's transaction (issue #290 phase 3).
+ * pipeline's transaction (#290).
  */
 export function stageBatchTx(
   vault: DatabaseSync,
@@ -262,7 +262,7 @@ export function stageBatchTx(
         }
       }
       // First sealed draft row = this vault now holds secrets — stamp the
-      // key fingerprint in the same transaction (issue #298 item 1).
+      // key fingerprint in the same transaction (#298).
       if (sealedAny) stampSealKeyFingerprint(vault, sealKey);
     }
     insertRow.run(
@@ -364,7 +364,7 @@ export interface AppliedBatch {
  * command hands the rows to the command pipeline instead.
  */
 /**
- * Drop the sealed payload fields from a published batch's rows (issue #298
+ * Drop the sealed payload fields from a published batch's rows (#298
  * item 3). Only rows whose entity type declares sealed payload fields are
  * touched, and only the sealed keys are removed — the rest of the payload
  * stays for provenance. A published row's secret has already reached its
@@ -460,7 +460,7 @@ export function applyBatchTx(
 
   // Seal a published row's sealed columns in place — the publish path runs
   // outside the command pipeline, so the spine carries its own mini-sweep
-  // (issue #293): the row-band ciphertext re-binds to the live row's AAD.
+  // (#293): the row-band ciphertext re-binds to the live row's AAD.
   const sealPublishedRow = (entityType: string, entityId: string): void => {
     if (!sealKey) return;
     const cols = sealedColumnsOf(entityType);
@@ -486,7 +486,7 @@ export function applyBatchTx(
         );
       sealedAny = true;
     }
-    // Live sealed cells now exist — stamp the key fingerprint (issue #298).
+    // Live sealed cells now exist — stamp the key fingerprint (#298).
     if (sealedAny) stampSealKeyFingerprint(vault, sealKey);
   };
 
@@ -609,10 +609,10 @@ export function applyBatchTx(
       }),
       batchId
     );
-  // Publish releases the batch's blob holds (issue #296): claimed shas are
+  // Publish releases the batch's blob holds (#296): claimed shas are
   // model now; anything left (a failed row's attachment) resumes its TTL.
   releaseBatchHold(vault, batchId);
-  // Shred-after-publish for secret imports (issue #298 item 3): a
+  // Shred-after-publish for secret imports (#298): a
   // password-CSV drop seals its rows at stage, but the sealed payload then
   // sat in sync_import_row indefinitely — a second copy of every secret,
   // outliving its purpose the moment the live row exists. Once a row with
@@ -721,7 +721,7 @@ export function discardBatch(
         `UPDATE sync_import_batch SET status = 'discarded', resolved_at = ? WHERE batch_id = ?`
       )
       .run(nowIso(), batchId);
-    // Discard releases the batch's blob holds (issue #296): nothing claimed
+    // Discard releases the batch's blob holds (#296): nothing claimed
     // the staged bytes, so the TTL sweep reclaims them.
     releaseBatchHold(db.vault, batchId);
     endReplicaCommit(db.vault, replicaCommit);

@@ -4,7 +4,7 @@
  * A backup you never restore is not a backup — and a restore you only ever
  * check structurally is barely better. The gateway already runs a REAL restore
  * from the remote into a scratch directory on the vault's `verifyEveryDays`
- * clock (`BackupService.runRestoreVerify`, issue #408 G9) and proves the two
+ * clock (`BackupService.runRestoreVerify`, #408 G9) and proves the two
  * files open: `restoreSnapshot` re-derives every chunk id and every entry's
  * capture-time sha, then `verifyRestoredPair` (`@centraid/vault`) runs
  * `integrity_check` / `foreign_key_check`, the G8 receipt cross-check and the
@@ -33,7 +33,7 @@
  *     snapshot is a point in the past and a stale one restores fewer rows
  *     truthfully.
  *   - `cas-rehash` / `replica-journal`  reused verbatim from the doctor
- *     integrity-scrub library (`../doctor`, issue #839 W1.2). The scrub asks
+ *     integrity-scrub library (`../doctor`, #839 W1.2). The scrub asks
  *     these of a LIVE vault; a restored pair is a vault too, and it is the one
  *     copy nobody has ever opened. They are imported, never reimplemented.
  *

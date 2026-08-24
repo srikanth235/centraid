@@ -12,7 +12,7 @@ import type {
 // re-minted here), and `onChange` is a replica-invalidation subscription mapped
 // into the kit's `CentraidChangeDetail` shape.
 //
-// MULTI-SCOPE (issue #599). An app may be mounted over N scopes at once — the
+// MULTI-SCOPE (#599). An app may be mounted over N scopes at once — the
 // member's own scope plus every audience scope they belong to — each backed by
 // its OWN replica session. The facade is therefore built from an ordered list of
 // scope bindings whose FIRST entry is the primary (the member's own): `read`
@@ -76,7 +76,7 @@ interface InlineChangeDetail {
   intentId?: string;
   intentState?: string;
   ts?: number;
-  /** Which mounted scope burst. Apps refetch only this one (issue #599). */
+  /** Which mounted scope burst. Apps refetch only this one (#599). */
   scope?: string;
 }
 
@@ -103,7 +103,7 @@ export type InlineScopeRead<T> =
 /** Durable member-side overlay for a command waiting on its Commons steward.
  * `expired` (a parked intent that outlived its review window) and
  * `cancelled` (a member-initiated cancel) are settled states like `denied`
- * (issue #731 goal 2). */
+ * (#731 goal 2). */
 export interface InlineCommonsIntent {
   intentId: string;
   grantId: string;
@@ -188,7 +188,7 @@ export interface InlineCentraidClient {
     scope?: string;
     signal?: AbortSignal;
   }) => Promise<InlineCommonsIntent[]>;
-  /** Cancel a durable Commons intent that has not executed yet (issue #731
+  /** Cancel a durable Commons intent that has not executed yet (#731
    * goal 2). Idempotent and safe to race with the steward — the vault-side
    * guard only ever moves a still-open (`queued`/`parked`) intent to
    * `cancelled`; an intent the steward already settled comes back
@@ -248,7 +248,7 @@ export interface InlineCentraidClient {
     itemType: string;
     itemId: string;
   }) => Promise<{ retained: boolean; grantIds: string[] }>;
-  /** The household's cross-vault links (#726 P6) — candidate share
+  /** The household's cross-vault links (#726) — candidate share
    *  destinations beyond the member's own mounted scopes, co-hosted and
    *  remote alike (D3: locality is routing, not semantics). */
   links: () => Promise<InlineLinkDestination[]>;
@@ -557,7 +557,7 @@ function bindingsOf(
 /**
  * Live controls for a built client, kept OFF the client object so an app can
  * never reach them. The route host hydrates secondary scopes after first paint
- * (issue #599): the primary scope blocks the first render, every audience
+ * (#599): the primary scope blocks the first render, every audience
  * arrives later through `addInlineScope`.
  */
 interface InlineClientControls {
@@ -887,7 +887,7 @@ export function createInlineCentraidClient(
           "Placement needs a gateway connection on web; the native app queues it offline."
         );
       const { baseUrl, token } = await auth();
-      // The wire door is `/edges` now (#726 P2); place()'s signature/result
+      // The wire door is `/edges` now (#726); place()'s signature/result
       // stay pre-#726-P2 (placement-wire.ts), so no caller needs an edit.
       const response = await doFetch(baseUrl, ROUTES.gatewayEdges, {
         method: "POST",
@@ -980,7 +980,7 @@ export function createInlineCentraidClient(
     describe() {
       // Manifests ship in the shell bundle; no inline app reads describe on the
       // render path today, so answer with an empty descriptor rather than a
-      // network round-trip (issue #505 surface inventory).
+      // network round-trip (#505 surface inventory).
       return Promise.resolve({ commands: [] });
     },
 
@@ -1008,7 +1008,7 @@ export function createInlineCentraidClient(
     // The upload half of the same door. Passed through rather than bound to
     // the primary scope: `stageFileBytes({scope})` names the mounted scope the
     // bytes belong to, and defaulting it here would quietly stage an
-    // audience's upload into the member's own CAS (issue #599).
+    // audience's upload into the member's own CAS (#599).
     stageBlob,
     stageDerivative,
   };

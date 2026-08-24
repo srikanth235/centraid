@@ -77,7 +77,6 @@ const dayKeyOf = (row: AgendaDay): string => row.key;
 /** One shared identity for "nothing to list": a fresh `[]` per render would
  *  make FlatList re-diff a list it already knows is empty. */
 const NO_DAYS: AgendaDay[] = [];
-/** Where the phone keeps its own birthday lead, and the row that opens it. */
 const BIRTHDAY_LEAD_KEY = "centraid:birthday-lead-days:v1";
 const BIRTHDAY_LEAD_ROW = "birthday-lead";
 
@@ -87,7 +86,6 @@ function startOfDay(date: Date): Date {
   return next;
 }
 
-/** Is the owner still owed an answer on this event? */
 function awaitsMe(
   event: NativeAgendaEvent,
   attendees: readonly Record<string, unknown>[],
@@ -184,7 +182,6 @@ export default function AgendaHome({
     surface,
   ]);
 
-  // One row per DAY, each carrying its own events and its own decorations.
   const days = useMemo<AgendaDay[]>(() => {
     const out: AgendaDay[] = [];
     let current: AgendaDay | undefined;

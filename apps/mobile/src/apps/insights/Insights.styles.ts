@@ -3,9 +3,9 @@
 // line that reports a failed export.
 //
 // Colourless by the kit's convention: ink resolves at the call site from
-// `useTheme()`, so one sheet serves both schemes. The old sheet's card, KPI
-// grid, meter, sparkline and panel families are gone with the shapes they
-// drew — the page is blocks now, and a block owns its own geometry.
+// `useTheme()`, so one sheet serves both schemes. The page is blocks, and a
+// block owns its own geometry — there is no card, KPI-grid, meter, sparkline
+// or panel family here.
 
 import { StyleSheet } from "react-native";
 

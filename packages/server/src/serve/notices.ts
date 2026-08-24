@@ -71,7 +71,7 @@ function fromRow(row: NoticeRow): Notice {
 }
 
 /**
- * The artifact-level gist a headline carries (#647 D4): the first line of a
+ * The artifact-level gist a headline carries (#647): the first line of a
  * failure message, whitespace-collapsed and bounded. `detail_json` keeps the
  * full record — the headline only has to say WHICH failure this is.
  */
@@ -97,7 +97,7 @@ export function noticeGist(
 
 /**
  * A human label for an automation whose manifest could not be read. Headlines
- * never speak in refs (#647 D4), so `myapp/nightly-digest` reads as
+ * never speak in refs (#647), so `myapp/nightly-digest` reads as
  * "Nightly digest" rather than leaking the on-disk handle.
  */
 export function humanizeAutomationRef(ref: string): string {
@@ -111,11 +111,11 @@ export function humanizeAutomationRef(ref: string): string {
  * The card an ENRICHMENT-TIER REFUSAL raises (decision S9).
  *
  * The gate is enforced on the execution path over the `off | device |
- * gateway` axis (issue #712 C5). The card only appears under `off` or
+ * gateway` axis (#712). The card only appears under `off` or
  * `device` — the tier that stops a gateway-lane (model-turn) enricher —
  * since a `gateway`-tier vault only refuses the automations it hasn't
- * enabled, which is not a policy refusal. As an ordinary skip that refusal
- * was silent (#647 D6), so an owner who asked for faces got nothing and no
+ * enabled, which is not a policy refusal. As an ordinary skip the refusal is
+ * silent (#647), so an owner who asked for faces would get nothing and no
  * explanation. It is a skip, so it is not a failure and never wakes a
  * device (`severity` is deliberately below `high`, which is the only level
  * `NoticeStore.put` wakes on) — but it IS a standing state the owner is

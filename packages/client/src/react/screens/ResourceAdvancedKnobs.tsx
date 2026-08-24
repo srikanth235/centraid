@@ -18,7 +18,7 @@ import type {
 import buttonCss from "../ui/Button.module.css";
 import styles from "./GatewayScreen.module.css";
 
-// L3 "Tune" rung of the Resource card (issue #528 Phase F): advanced knobs the
+// L3 "Tune" rung of the Resource card (#528): advanced knobs the
 // owner can override. Collapsed by default (an aria-expanded button + region,
 // not native <details>, so it stays deterministic under jsdom — mirrors
 // ResourceCardDetails). Each knob is Linked to the derived budget by default,

@@ -1,6 +1,6 @@
 // governance: allow-repo-hygiene file-size-limit (#408) the WAL capture loop is one correctness argument — detectors, capture, rollover, generation lifecycle and crash-ordering rules all lean on each other's invariants; splitting them would scatter the proof across files that only ever change together
 /*
- * In-process WAL segment shipper (issue #408) — the capture half of the
+ * In-process WAL segment shipper (#408) — the capture half of the
  * continuous, PITR-capable vault backup. Each tick copies the committed
  * byte-delta of `vault.db-wal` / `journal.db-wal` into local segment files;
  * the gateway's uploader seals and drains them to the provider
@@ -13,7 +13,7 @@
  *   I2 — nobody checkpoints but this shipper, always with TRUNCATE, so the
  *        WAL is strictly append-only between our checkpoints and byte
  *        offsets are never reused within a group.
- * I2 is VERIFIED, not enforced (issue #411 action 1). Verification is the
+ * I2 is VERIFIED, not enforced (#411 action 1). Verification is the
  * single authoritative mechanism: every capture re-checks the WAL salts, the
  * offset chain, and the main-file identity, and ANY foreign checkpoint breaks
  * the generation — a fresh base snapshot — never a silent gap. Correctness
@@ -231,7 +231,7 @@ interface ShipperState {
  *     requested re-bases.
  *   - `checkpoint-raced-writer`: a foreign WRITER committed inside OUR
  *     checkpoint's lock window — OUR checkpoint folded its frames, not a foreign
- *     one. A raced writer is not a foreign checkpointer (issue #411: be precise).
+ *     one. A raced writer is not a foreign checkpointer (#411: be precise).
  *   - `wal-exceeds-safe-capture-window`: a single oversized transaction we chose
  *     to re-base past — nobody else's checkpoint.
  *   - `wal-checksum-invalid-before-captured-offset`: WAL byte corruption before
@@ -881,7 +881,7 @@ export class WalShipper {
   }
 
   /**
-   * A micro read-lock over the byte copy (issue #411 action 2), belt-and-
+   * A micro read-lock over the byte copy (#411 action 2), belt-and-
    * suspenders to the after-the-fact detection in `capture` — NOT a
    * replacement for it. A FOREIGN checkpointer (journal.db is multi-process:
    * app-engine workers, the key-admin CLI open it by path) could RESTART or

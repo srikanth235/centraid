@@ -1,4 +1,4 @@
-// THE INVARIANT, HELD OVER THE CALL SITES (issue #816).
+// THE INVARIANT, HELD OVER THE CALL SITES (#816).
 //
 // "Shared and exported contexts never carry relative-to-Home phrasing" is not
 // a property of `placePhrase` — that function will happily print "3.5 km NE of

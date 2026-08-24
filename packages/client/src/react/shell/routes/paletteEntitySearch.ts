@@ -2,7 +2,7 @@ export interface PaletteEntityHit {
   appId: string;
   appLabel: string;
   entity: string;
-  /** MONO row-kind register (Binding Layer row anatomy, issue #708 §A) — a
+  /** MONO row-kind register (Binding Layer row anatomy, #708 §A) — a
    *  short lowercase noun for what the row IS: `doc`, `person`, `event`. Never
    *  the app name (the group header already carries that). */
   kind: string;
@@ -35,7 +35,7 @@ export interface EntityTarget {
   metaFields: string[];
   /**
    * Column to sort "recently opened/edited" by (the palette's empty-state
-   * Recents, issue #708 §A) and to order-filter live reads. Omitted when the
+   * Recents, #708 §A) and to order-filter live reads. Omitted when the
    * entity's canonical schema carries no edit-time column at all —
    * `schedule.task` (packages/vault/src/schema/domains-health-finance-schedule.ts)
    * has only `due_at`/`completed_at`, no `created_at`/`updated_at`, so tasks

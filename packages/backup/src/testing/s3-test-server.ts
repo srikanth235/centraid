@@ -68,7 +68,7 @@ export class S3TestServer {
   private readonly objects = new Map<string, StoredObject>();
   private readonly server: http.Server;
   private readonly listPageSize: number;
-  /** In-flight multipart uploads (issue #367 §C8), keyed by uploadId. */
+  /** In-flight multipart uploads (#367), keyed by uploadId. */
   private readonly multipart = new Map<
     string,
     { key: string; parts: Map<number, Buffer> }
@@ -216,7 +216,7 @@ export class S3TestServer {
       return;
     }
 
-    // Multipart upload (issue #367 §C8: `S3BlobStore.putStream`'s three
+    // Multipart upload (#367 §C8: `S3BlobStore.putStream`'s three
     // control calls). `uploads` (empty value) = initiate; `uploadId` alone
     // on a POST = complete; `uploadId` + `partNumber` on a PUT = one part;
     // `uploadId` alone on a DELETE = abort. Real S3 disambiguates the same

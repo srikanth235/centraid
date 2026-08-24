@@ -1,5 +1,5 @@
 // The Search overlay's empty state — RECENTS + SUGGESTION CHIPS, both
-// derived from real replica rows (issue #708, mobile close-out). No query
+// derived from real replica rows (#708, mobile close-out). No query
 // typed yet is not "nothing to show": it is a chance to surface what the
 // vault already holds, the same way Home's springboard does.
 //

@@ -1,5 +1,5 @@
 import type { ShellRoute } from "../../app-shell-context.js";
-// The standing sentence on the shell's one status line (issue #707,
+// The standing sentence on the shell's one status line (#707,
 // invariant 5) — extracted from App so the rule can be read, and tested,
 // without mounting the whole shell.
 //
@@ -149,7 +149,7 @@ export function ambientSignalFor(input: AmbientSignalInput): AmbientSignal {
  * the moment of the last probe and ten minutes after the machine went to
  * sleep. The stamp is rendered by `StatusLine` rather than folded in here,
  * because the age changes every second and the shell root deliberately does
- * not re-render on the heartbeat (issue #659) — but the WORDING stays in this
+ * not re-render on the heartbeat (#659) — but the WORDING stays in this
  * file, which is the one place the line's sentences are written.
  */
 export const SYNCED = "Synced";
@@ -175,7 +175,6 @@ export interface AmbientStatusInput {
   gatewayStatus: "unknown" | "up" | "down" | undefined;
   /** Approvals waiting on a human decision. */
   blockingCount: number;
-  /** Unread notices in the inbox. */
   hasUnreadNotices: boolean;
 }
 

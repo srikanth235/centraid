@@ -28,7 +28,7 @@ import {
 } from "./gateway-client-core.js";
 import { consumeSseFrames, frameData } from "./turn-stream.js";
 
-/** One kind only (#436 §2): every connection is a managed provider home bundle. */
+/** One kind only (#436): every connection is a managed provider home bundle. */
 export type StorageConnectionKind = "provider";
 
 export interface StorageConnectionDTO {
@@ -63,7 +63,7 @@ export class RecoveryKitNotConfirmedError extends Error {
   }
 }
 
-/** Thrown when the provider doesn't advertise the `home` profile (issue #436
+/** Thrown when the provider doesn't advertise the `home` profile (#436
  *  §1) — the create/attach route's 400 `provider_not_home_profile`. Carries the
  *  parsed list of missing home capabilities so the UI can name them plainly. */
 export class ProviderNotHomeProfileError extends Error {
@@ -201,7 +201,7 @@ export async function testStorageConnection(
 }
 
 /**
- * Bounded storage-tier metrics (issue #405 §7) — process-lifetime custody
+ * Bounded storage-tier metrics (#405) — process-lifetime custody
  * counters that make cache health visible. All byte/count fields reset on
  * gateway restart. `budgetBytes` is `null` for an unlimited tier (no disk to
  * measure); the card shows an "unlimited" state rather than a budget bar.
@@ -242,7 +242,7 @@ export interface StorageVaultStatusDTO {
     consecutiveFailures: number;
   };
   throttleBytesPerSec?: number;
-  /** Bounded storage-tier health (issue #405 §7); absent on older gateways. */
+  /** Bounded storage-tier health (#405); absent on older gateways. */
   cache?: StorageCacheStatusDTO;
 }
 

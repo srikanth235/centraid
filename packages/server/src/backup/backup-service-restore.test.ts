@@ -2,11 +2,10 @@ import { promises as fs } from "node:fs";
 import path from "node:path";
 /*
  * Issue #439 R2 — lazy-by-default restore, `--full` override, and the
- * metered-egress cost estimate, exercised at the SERVICE layer (where the
- * future `recover()` verb inherits the defaulting). A real `VaultRegistry` +
- * `LocalBackupProvider` over temp dirs, with the same injected `assembleEntries`
- * seam `backup-service.contract.test.ts` uses. Kept in its own file purely to
- * stay under the repo-hygiene line cap.
+ * metered-egress cost estimate, exercised at the SERVICE layer, where
+ * `recover()` inherits the defaulting. A real `VaultRegistry` +
+ * `LocalBackupProvider` over temp dirs, with the same injected
+ * `assembleEntries` seam `backup-service.contract.test.ts` uses.
  */
 
 import { afterEach, describe, expect, test } from "vitest";

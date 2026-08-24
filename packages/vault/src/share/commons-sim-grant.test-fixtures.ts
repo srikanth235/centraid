@@ -1,4 +1,4 @@
-// The share-grant SCHEDULE and ORACLE for the Commons simulator (issue #839,
+// The share-grant SCHEDULE and ORACLE for the Commons simulator (#839,
 // gaps G1/G2/G3). `commons-sim-grant-world.test-fixtures.ts` owns the physical
 // world; this half owns the verbs and what must be true after each of them.
 //

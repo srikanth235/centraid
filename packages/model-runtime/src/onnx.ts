@@ -21,7 +21,7 @@ import { RUNTIME_DIR } from "./config.js";
 // `createRequire` handed to the graph resolves modules through Node's own
 // loader, skipping the lane's hooks entirely, so one builtin re-opens
 // everything the lane closed. A file that needs it cannot run under ANY lane,
-// and an automation worker that loads a recognition bundle must (#846 P9).
+// and an automation worker that loads a recognition bundle must (#846).
 // Resolution is the only thing `createRequire` would do here; the LOADING is
 // already a plain dynamic `import()` of an absolute file URL, which the
 // lane's hooks do see.

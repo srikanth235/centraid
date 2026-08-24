@@ -1,5 +1,5 @@
 // A TRIP, IN WORDS AND AS A LINE — the display layer over the vault's own trip
-// detection (issue #816).
+// detection (#816).
 //
 // The vault already decides what a trip IS: `packages/vault/src/enrich/
 // memories.ts` resolves a home place, finds maximal runs of away capture-days,

@@ -1,5 +1,5 @@
 /*
- * App identity and metadata edits over a file map (issue #141).
+ * App identity and metadata edits over a file map (#141).
  *
  * The gateway's code store tracks files, not directories, and app code is
  * edited over HTTP — so the rename/description path can't write to a
@@ -13,7 +13,7 @@ import { AppScaffoldError } from "./scaffold-types.js";
 import type { ScaffoldFile } from "./scaffold-types.js";
 
 // A plain filesystem-safe slug. Automation apps are marked by the
-// manifest's `kind` field, not a dotted `auto.` id prefix (issue #98), so
+// manifest's `kind` field, not a dotted `auto.` id prefix (#98), so
 // no dot is allowed — a tree-traversing `..` is impossible by construction.
 const ID_RE = /^[a-z0-9][a-z0-9-]{0,62}$/u;
 
@@ -29,7 +29,7 @@ export function validateAppId(id: string): void {
 
 /**
  * Apply a `{name?, description?}` patch over an app's current draft
- * files (issue #141), returning ONLY the files that changed (app.json
+ * files (#141), returning ONLY the files that changed (app.json
  * plus, on rename, any automations/<id>/automation.json#name).
  *
  * - Empty/whitespace `name` is rejected (name is mandatory).

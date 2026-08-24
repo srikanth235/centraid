@@ -1,8 +1,8 @@
 // governance: allow-repo-hygiene file-size-limit (#387) one cohesive lifecycle handler family (create/update/set-enabled/rotate/delete) sharing the same session+stage+publish plumbing; splitting duplicates the shared helpers
 // Automation lifecycle handlers for the gateway-owned builder (issue
 // #141, Phase 2): scaffold an automation app, toggle its `enabled` flag,
-// and delete it. Split out of `lifecycle-routes.ts` (file-size limit);
-// dispatched from `makeLifecycleRouteHandler` there. Webhook secrets are
+// and delete it. Dispatched from `makeLifecycleRouteHandler` in
+// `lifecycle-routes.ts`. Webhook secrets are
 // minted here — the plaintext is returned once, only the hash persists.
 
 import crypto from "node:crypto";
@@ -149,7 +149,7 @@ export async function handleAutomationCreate(
   const sessionId = explicitSession || defaultSessionId(id);
   const ephemeralSession = !explicitSession;
 
-  // Bundled ids are RESERVED (issue #434): a code-store app must never shadow
+  // Bundled ids are RESERVED (#434): a code-store app must never shadow
   // a shipped blueprint the resolver serves in place. This create is the code
   // store's only door (#799), so the reservation is enforced here.
   if (opts.isBundledAppId?.(id)) {
@@ -768,7 +768,7 @@ export async function handleAutomationRotateWebhook(
 // ──── POST /centraid/_automations/enrichment (batch toggle, issue #306) ────
 
 /**
- * "Enable enrichment" is ONE owner decision (issue #306 decision 6): flip
+ * "Enable enrichment" is ONE owner decision (#306 decision 6): flip
  * every installed enricher automation in one act instead of nine separate
  * discoveries. Enrichers are identified by the blueprint catalog's
  * `category: "Enrichment"` template ids; the response reports what toggled

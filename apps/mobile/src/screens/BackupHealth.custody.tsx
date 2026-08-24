@@ -1,8 +1,8 @@
-// The two blocks the Backup screen's numbers live in (#712, B3) — the gateway's
+// The two blocks the Backup screen's numbers live in (#712) — the gateway's
 // CUSTODY ROLLUP, and the free-up OFFER derived from one bucket of it.
 //
-// Split out of `BackupHealth.tsx` because they are the half of that screen that
-// speaks for the GATEWAY. The screen proper speaks for this phone: the durable
+// Separate from `BackupHealth.tsx` because they are the half of that screen
+// that speaks for the GATEWAY. The screen proper speaks for this phone: the durable
 // upload queue, the transfer policy, the consent latch. Two sources, two
 // voices, and the split makes it hard to accidentally print one's number under
 // the other's heading.
@@ -34,7 +34,7 @@ import { useTheme } from "../kit/theme";
 import { styles } from "./BackupHealth.styles";
 
 /**
- * WHICH APPS A FREE-UP PASS MAY RELEASE ORIGINALS FOR (#712, B3).
+ * WHICH APPS A FREE-UP PASS MAY RELEASE ORIGINALS FOR (#712).
  *
  * The list lives HERE, in the caller, and not inside `kit/storage` — that
  * module enumerates no apps on purpose, so nothing can be opted in by a

@@ -15,7 +15,7 @@
  * gateway's cached route (the vault's `vault_routes` row), so dialing under any
  * other identity would leave a peer unable to ever reach this gateway back.
  * The ACCEPTING side of that same identity runs elsewhere (the native relay
- * in production, `startGatewayEndpoint` otherwise, issue #289/#726) — this
+ * in production, `startGatewayEndpoint` otherwise, #289/#726) — this
  * client never accepts a connection, only opens them, so it is safe to run
  * alongside whichever accepts.
  *

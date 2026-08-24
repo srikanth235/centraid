@@ -1,5 +1,5 @@
 // The document row's quick-actions menu, as a model (handoff Part 2 §"The
-// document row"; issue #821).
+// document row"; #821).
 //
 // One menu for both of the row's doors — the 44×44 `···` and press-and-hold —
 // built here as plain data so the composition is testable: which verbs a row

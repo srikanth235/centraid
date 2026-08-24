@@ -1,5 +1,5 @@
 /**
- * RENDERER LEAK SOAK (issue #842, W3.5).
+ * RENDERER LEAK SOAK (#842).
  *
  * The shell is a single long-lived document with no served-app iframe (#799),
  * so opening a bundled app is a route swap inside the SAME window and

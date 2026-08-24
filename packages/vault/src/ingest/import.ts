@@ -1,5 +1,5 @@
 // Ingest customs (§10 standing duty) — the border post, rebased onto the
-// staging spine (issue #290 phase 2): parse → stage → publish is ONE path
+// staging spine (#290): parse → stage → publish is ONE path
 // for every source. These wrappers keep the original one-call contract
 // (dedupe on the external key, per-row provenance with prov:Agent class
 // 'import', identity resolution via party_identifier, batch receipts) by

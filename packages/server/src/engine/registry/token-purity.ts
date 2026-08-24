@@ -1,12 +1,12 @@
 /*
- * Token-purity lint for authored app CSS (issue #686, item D3).
+ * Token-purity lint for authored app CSS (#686).
  *
  * `packages/design` owns every colour, radius, spacing rung, and type face in
  * the product; app CSS is supposed to *consume* those names through
  * `var(--token)` and never restate them. Checked-in blueprint apps have a
  * vitest ratchet (`packages/blueprints/src/token-purity.test.ts`); this module
  * is the runtime equivalent for harness-authored app CSS at a publish gate.
- * It has no live consumer in this repo (issue #799).
+ * It has no live consumer in this repo (#799).
  *
  * Pure and dependency-free on purpose: the design contract's own property
  * names are *injected* (`contractProps`) by the caller that already depends on

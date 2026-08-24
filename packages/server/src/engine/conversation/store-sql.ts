@@ -2,8 +2,7 @@
 /*
  * Prepared-statement block + raw-row mappers for `ConversationStore`.
  *
- * Kept out of `store.ts` so both stay under the repo's 500-line cap. The SQL
- * targets the per-app runtime DB's conversation ledger
+ * The SQL targets the vault's `journal.db` conversation ledger
  * (`conversations`, `turns`, `items`, `attachments`, `automation_state` — see
  * `gateway-db.ts` RUNTIME_MIGRATIONS).
  *
@@ -361,7 +360,7 @@ export function prepare(db: DatabaseSync): PreparedStatements {
     `),
     // App scoping is a column filter (`?3 IS NULL OR c.app_id = ?`): the
     // ledger file is per VAULT, one shared `journal.db` (#280). Pinned threads
-    // sort first (issue #420); archived rows still come back so the sidebar can
+    // sort first (#420); archived rows still come back so the sidebar can
     // group them, they're just ordered last within their pin bucket.
     listConversations: db.prepare(`
       SELECT ${CONV_COLS},
@@ -372,7 +371,7 @@ export function prepare(db: DatabaseSync): PreparedStatements {
       ORDER BY c.archived ASC, c.pinned DESC, c.updated_at DESC
       LIMIT ?
     `),
-    // FTS5 search over titles + inbound message text (issue #420, Wave 3),
+    // FTS5 search over titles + inbound message text (#420),
     // mirroring the vault's search: rank order + snippet() for match context.
     // Archived threads are out of the way, so they stay out of results.
     searchConversations: db.prepare(`
@@ -484,7 +483,7 @@ export function prepare(db: DatabaseSync): PreparedStatements {
           WHERE c.id = turns.conversation_id AND (? IS NULL OR c.user_id = ?)
         )
     `),
-    // Idempotency lookup (issue #420): the most recent recorded turn on a
+    // Idempotency lookup (#420): the most recent recorded turn on a
     // conversation carrying the given key. A key is written once per user send;
     // newest-first is defensive against any accidental reuse.
     getTurnByIdempotency: db.prepare(`
@@ -493,7 +492,7 @@ export function prepare(db: DatabaseSync): PreparedStatements {
       ORDER BY seq DESC LIMIT 1
     `),
     /*
-     * The transcript window (issue #659 G5): the NEWEST `?3` turns strictly
+     * The transcript window (#659): the NEWEST `?3` turns strictly
      * older than the `?2` cursor, returned oldest-first so the fold is
      * unchanged.
      *
@@ -542,7 +541,7 @@ export function prepare(db: DatabaseSync): PreparedStatements {
       ORDER BY t.started_at DESC LIMIT ?
     `),
     setTurnPinned: db.prepare(`UPDATE turns SET pinned = ? WHERE id = ?`),
-    // Message-level 👍/👎 (issue #420). `?1` is 'up' | 'down' | NULL (clear).
+    // Message-level 👍/👎 (#420). `?1` is 'up' | 'down' | NULL (clear).
     setTurnFeedback: db.prepare(
       `UPDATE turns SET feedback = ? WHERE id = ? AND conversation_id = ?`
     ),
@@ -577,13 +576,13 @@ export function prepare(db: DatabaseSync): PreparedStatements {
         ok, error, started_at, ended_at, duration_ms
       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `),
-    // The inbound message (issue #190) — ordinal 0 of the turn. Attachments
+    // The inbound message (#190) — ordinal 0 of the turn. Attachments
     // hang off the returned item id.
     insertMessageIn: db.prepare(`
       INSERT INTO items (id, turn_id, ordinal, kind, role, text, ok, started_at)
       VALUES (?, ?, ?, 'message_in', ?, ?, 1, ?)
     `),
-    // Ledger-tail hybrid (issue #158): durable "running" row, ended_at NULL.
+    // Ledger-tail hybrid (#158): durable "running" row, ended_at NULL.
     openItem: db.prepare(`
       INSERT INTO items (
         id, turn_id, ordinal, call_id, batch_id, kind, app_id, name, args_json, raw_json,
@@ -606,7 +605,7 @@ export function prepare(db: DatabaseSync): PreparedStatements {
       SELECT * FROM items WHERE turn_id = ? ORDER BY ordinal ASC, started_at ASC
     `),
     // Every item of a conversation — or of one WINDOW of it — in ONE query
-    // (issue #659 G5). Without it, rendering a transcript runs one listItems
+    // (#659). Without it, rendering a transcript runs one listItems
     // per turn, so a 200-turn thread costs 200 round trips through the
     // prepared-statement + row-mapping path. The optional seq bounds let the
     // batching and the windowing compose instead of fight: a page reads one
@@ -634,7 +633,7 @@ export function prepare(db: DatabaseSync): PreparedStatements {
       SELECT a.* FROM attachments a JOIN items i ON a.item_id = i.id
       WHERE i.turn_id = ? ORDER BY a.created_at ASC
     `),
-    // The conversation-wide companion to listItemsForConversation (#659 G5):
+    // The conversation-wide companion to listItemsForConversation (#659):
     // one query instead of one per message-bearing item. Most threads have no
     // attachments at all, which is exactly why the per-item query was pure
     // overhead.
@@ -647,8 +646,8 @@ export function prepare(db: DatabaseSync): PreparedStatements {
         AND (? IS NULL OR t.seq <= ?)
       ORDER BY a.created_at ASC
     `),
-    // The blob-GC live set (issue #190) UNIONED with every hash an archived
-    // segment references (issue #438 decision 4) — both unpruned AND pruned
+    // The blob-GC live set (#190) UNIONED with every hash an archived
+    // segment references (#438 decision 4) — both unpruned AND pruned
     // conversation_archive rows, because archived history still points at those
     // attachment bytes forever (archiving changes temperature, never existence).
     // Deleting the conversation CASCADE-drops its archive rows and releases the
@@ -661,7 +660,7 @@ export function prepare(db: DatabaseSync): PreparedStatements {
           FROM conversation_archive ca, json_each(ca.attachment_hashes_json) j
       )
     `),
-    // Wave-3 rehydration (issue #438 decision 9): the archive-index rows for a
+    // Wave-3 rehydration (#438 decision 9): the archive-index rows for a
     // conversation, ordered by seq. `pruned_at` distinguishes a sealed-AND-pruned
     // range (raw rows gone → must fetch the segment blob to render it) from an
     // archived-but-not-yet-pruned range (raw rows still live → served as today).

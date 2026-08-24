@@ -1,4 +1,4 @@
-// The custody-proven latch for the conversation-ledger prune (issue #438
+// The custody-proven latch for the conversation-ledger prune (#438
 // decision 3). The app-engine archival engine takes this as an injected seam
 // (`custodyProven`), and the gateway composes it from vault primitives here —
 // only the vault knows the remote-tier settings, the replication index, and the

@@ -1,5 +1,5 @@
 import { existsSync, readdirSync } from "node:fs";
-// Disk-full classification units (issue #351 wave 4). `PRAGMA max_page_count`
+// Disk-full classification units (#351). `PRAGMA max_page_count`
 // gives a deterministic, REAL SQLITE_FULL condition — no mocking node:sqlite
 // — so the classifier is verified against what node:sqlite actually throws,
 // and the transaction-atomicity claim (a failed write rolls back cleanly,

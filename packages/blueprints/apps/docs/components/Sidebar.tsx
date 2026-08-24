@@ -1,12 +1,11 @@
 // Sidebar region: the folder list (with inline create/rename editors) and the
 // storage footprint.
 //
-// SMART NAV (All / Recent / Starred) AND THE TRASH ROW ARE GONE. The shelf
-// strip (components/ShelfStrip.tsx) carries all six shelves — including the
-// three the sidebar would otherwise duplicate — and a second navigation for
-// the same destinations is exactly what spec §1.7 refuses. What
-// remains here is the folder list, whose rename / share / delete affordances
-// have no other home yet, and the footprint.
+// NO SHELF NAVIGATION LIVES HERE — no All / Recent / Starred, no Trash row.
+// The shelf strip (components/ShelfStrip.tsx) carries all six shelves, and a
+// second navigation for the same destinations is exactly what spec §1.7
+// refuses. What this region holds is the folder list, whose rename / share /
+// delete affordances have no other home yet, and the footprint.
 import { useEffect, useRef } from "react";
 
 import { armConfirm } from "@centraid/design/elements";
@@ -48,12 +47,9 @@ function NavItem({
   );
 }
 
-// The new-folder editor row: an uncontrolled input, focused once on mount —
-// the React analogue of the old Lit `ref()` callback, which ran synchronously
-// during commit (well before `commit()` could be invoked by a later
-// click/keydown). React preserves this same host `<input>` node across
-// re-renders of the same tree shape, so typed text and focus both survive
-// unrelated re-renders exactly as they did under Lit.
+// The new-folder editor row: an uncontrolled input, focused once on mount.
+// React preserves this same host `<input>` node across re-renders of the same
+// tree shape, so typed text and focus both survive unrelated re-renders.
 function FolderCreateEdit({
   onCommit,
   onCancel,

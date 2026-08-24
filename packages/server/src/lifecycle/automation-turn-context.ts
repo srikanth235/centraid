@@ -1,6 +1,5 @@
 /*
- * Automation turn context + audit budgets (issue #541, Wave 6; hardened in
- * review).
+ * Automation turn context + audit budgets (#541).
  *
  * Two jobs, both about bounding what a turn is allowed to carry:
  *
@@ -17,9 +16,6 @@
  *  - `safeJson` / `boundedRawJson` hold the ledger's per-item audit budget, so
  *    no single tool envelope can write an unbounded blob into `journal.db` and
  *    fan it out to every connected viewer.
- *
- * Split out of `interactive-automation-turn.ts` to keep both files under the
- * source ceiling.
  */
 
 import type { Row as AutomationRow } from "@centraid/server/automation";

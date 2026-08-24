@@ -71,7 +71,7 @@ describe("type role parity across emitters", () => {
   });
 
   test("the shell and blueprint both adapt units host-relatively", () => {
-    // The shell now lowers to `rem` too (issue #708): 15px / 22px ÷ 16.
+    // The shell now lowers to `rem` too (#708): 15px / 22px ÷ 16.
     expect(shell["--t-body"]).toContain("0.9375rem/1.375rem");
     // The blueprint's line-height stays a unitless ratio (÷ the role's own
     // size, not the root) rather than a second `rem` value — a deliberate

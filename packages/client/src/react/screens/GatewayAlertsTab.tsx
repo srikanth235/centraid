@@ -19,13 +19,11 @@ import styles from "./GatewayScreen.module.css";
 // they are asked: what this gateway has already raised, and when it should
 // raise the next one.
 //
-// IT WAS THREE BORDERED CARDS with their heads inside them — a Down alert card
-// carrying a bespoke switch and a preset ladder, a Launch-at-login card
-// carrying a second copy of the same switch, and an Alert history card whose
-// rows were a coloured dot, a clock and a run-on sentence. In v11 the heads sit
-// above their containers, the ladder is the kit's chip picker, the history is
-// rows whose meta is the alert's own state, and each switch is a row that
-// STATES what it is doing and offers the one verb that changes it. A row
+// NOT BORDERED CARDS WITH THEIR HEADS INSIDE THEM, and not a bespoke switch
+// or a second copy of one. The heads sit above their containers, the ladder is
+// the kit's chip picker, the history is rows whose meta is the alert's own
+// state, and each switch is a row that STATES what it is doing and offers the
+// one verb that changes it. A row
 // reading "Alert when unreachable · on · [Turn off]" says in the reading order
 // what a track-and-knob says only to someone who already knows the convention.
 //

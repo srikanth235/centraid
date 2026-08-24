@@ -41,7 +41,7 @@ vi.mock(import("../../../gateway-client-vault.js"), () => ({
   confirmVaultParked: vi.fn<VaultModule["confirmVaultParked"]>(),
   vaultApps: () => vaultApps(),
   listAgents: () => listAgents(),
-  // The egress-consent ledger (issue #807, Wave 3) — reference material this
+  // The egress-consent ledger (#807) — reference material this
   // route reads alongside the queue.
   listEnrichEgressConsent: () => listEnrichEgressConsent(),
   revokeVaultGrant: vi.fn<VaultModule["revokeVaultGrant"]>(),
@@ -75,7 +75,7 @@ describe("ApprovalsRoute", () => {
   beforeEach(async () => {
     ({ default: ApprovalsRoute } = await import("./ApprovalsRoute.js"));
     // The route's data lives in the shell's shared stale-while-revalidate
-    // cache (issue #659), which deliberately outlives a mount — so each case
+    // cache (#659), which deliberately outlives a mount — so each case
     // starts from the same empty cache a fresh vault would give it.
     (await import("../queryCache.js")).resetQueryCache();
     ({ ShellActionsProvider } = await import("../actions.js"));
@@ -351,7 +351,7 @@ describe("ApprovalsRoute", () => {
       getNotifications.mockResolvedValue({
         decisions: {
           // The outbox notice below points at this still-open item, so its
-          // deep link has somewhere real to land (#647 D10).
+          // deep link has somewhere real to land (#647).
           outbox: [
             {
               itemId: "item-1",
@@ -486,7 +486,7 @@ describe("ApprovalsRoute", () => {
         tab: "alerts",
       });
       // Steward absence is only actionable where the ceremony lives: the
-      // People & circles panel on Household (issue #750).
+      // People & circles panel on Household (#750).
       openNotice("A shared space's owner device");
       expect(navigate).toHaveBeenLastCalledWith({ kind: "household" });
       openNotice("Tasks imported");

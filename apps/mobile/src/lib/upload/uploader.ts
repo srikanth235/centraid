@@ -1,4 +1,4 @@
-// The drainer (#419 M0.4): turns durable queue rows into settled CAS objects.
+// The drainer (#419.4): turns durable queue rows into settled CAS objects.
 //
 // Every step is written so that a process death at ANY point leaves the queue
 // recoverable from SQLite alone, with no duplicate object and no lost item:

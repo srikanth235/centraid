@@ -1,11 +1,11 @@
-// The app's one feedback channel (issue 707, invariant 5) — the native
+// The app's one feedback channel (#707, invariant 5) — the native
 // mirror of `packages/client/src/react/shell/statusChannel.ts`. Same shape,
 // same three note kinds, so a caller migrating a `showToast()` call reads the
 // same contract regardless of surface.
 //
 // A toast is a message that appears somewhere else, covers something, and
 // then leaves before it can be re-read; the Binding Layer bans it outright.
-// Everything this app has to say now lands on ONE persistent line at the
+// Everything this app has to say lands on ONE persistent line at the
 // bottom of the frame, which updates in place.
 //
 // Imperative on purpose — callers are `.catch()` handlers, replica callbacks

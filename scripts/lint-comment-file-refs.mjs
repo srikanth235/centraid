@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // Dangling comment file-reference sweep (issue #861) — WARN-ONLY.
 //
-// Comments describe now (docs/coding-standards.md): a comment may name another
+// Comments face forward (docs/coding-standards.md): a comment may name another
 // source file only if that file exists. A "replaces `X.ts`" or "`X.ts` calls
 // this" comment becomes a lie the day X is deleted or renamed, and nothing
 // else in the toolchain notices — rename tooling and grep see symbols, not

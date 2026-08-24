@@ -14,7 +14,7 @@ import type {
 import styles from "./OnboardingScreen.module.css";
 
 /**
- * First run branches on PLATFORM, not on gateway state (issue #603).
+ * First run branches on PLATFORM, not on gateway state (#603).
  *
  * There is no founding ceremony and no "uninitialized" gateway any more: a
  * fresh gateway founds one marked personal vault at construction, so the

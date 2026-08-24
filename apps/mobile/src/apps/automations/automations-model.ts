@@ -98,7 +98,6 @@ export interface AutomationRowCopy {
   streak: FailureStreak | null;
 }
 
-/** One run, worded. */
 export interface RunRowCopy {
   key: string;
   ref: string;
@@ -362,7 +361,7 @@ export function worstFailure(
 }
 
 // The empty and error states are the same words the desktop overview says, so
-// they come from `@centraid/client/automations-copy` (issue #805), re-exported
+// they come from `@centraid/client/automations-copy` (#805), re-exported
 // under this file's own names.
 export {
   AUTOMATIONS_EMPTY_ACTION as EMPTY_ACTION,

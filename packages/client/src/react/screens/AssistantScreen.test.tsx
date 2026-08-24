@@ -494,7 +494,7 @@ describe("AssistantScreen suite", () => {
       });
     });
 
-    // Long-transcript windowing (issue #659). The control is the safety
+    // Long-transcript windowing (#659). The control is the safety
     // property: history is deferred, never dropped, and the reader is told how
     // much is above them.
     describe("transcript windowing (#659)", () => {

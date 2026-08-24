@@ -43,7 +43,7 @@ export interface ViewerAction {
  * surface (§18).
  */
 export const VIEWER_BOTTOM_ACTIONS: readonly ViewerAction[] = [
-  // `Copy to another place` (issue #726 — there is no Photos "Sharing"
+  // `Copy to another place` (#726 — there is no Photos "Sharing"
   // place): the action puts this photograph into another vault the member
   // names, so the label names a DESTINATION, never the verb `Share` with an
   // invisible effect — the same resting caption the web viewer's
@@ -103,9 +103,9 @@ export function viewerAction(id: ViewerActionId): ViewerAction {
  * The floating chrome's round chip — 44, the touch floor EXACTLY, and
  * deliberately not the bar's 56.
  *
- * A 56 circle sitting on a photograph is a plate, not a chip: the old bar
- * earned its 56 by being a full-width strip where the target and its label
- * shared one cell, and nothing floating over the stage has that excuse. The
+ * A 56 circle sitting on a photograph is a plate, not a chip: 56 is earned by
+ * a full-width strip where the target and its label share one cell, and
+ * nothing floating over the stage has that excuse. The
  * three-up capsule keeps 56 per target (`VIEWER_ACTION_TARGET`) because those
  * targets are neighbours and 44 side by side is where mis-taps start.
  */
@@ -118,8 +118,8 @@ export const VIEWER_CHROME_INSET = 8;
 /**
  * The three floating elements at the stage's head, in leading→trailing order.
  *
- * There is no top BAR any more. A full-width strip is a second ground laid over
- * the photograph, and it charged the stage its own height on every screen; three
+ * There is no top BAR. A full-width strip is a second ground laid over
+ * the photograph, and it would charge the stage its own height on every screen; three
  * elements standing on the stage cost only the plates they occupy. The stamp is
  * the middle one because it is the only one that is not a control — a member
  * scanning for something to press skips the centre.
@@ -140,7 +140,7 @@ export function viewerChromeHeight(insetTop: number): number {
 
 /**
  * Why a write control disables in a read-only vault — the ONE sentence for
- * this truth on the phone (v4 handoff §6, §18, issue #711 item M). Two
+ * this truth on the phone (v4 handoff §6, §18, #711 item M). Two
  * stub strings saying the same thing in two places
  * (`PhotoLightboxToolbar`'s bottom-bar reasons and `PhotoLightbox`'s
  * write-refusal panel copy) leave a member reading both with no way to know
@@ -177,7 +177,7 @@ export function infoSheetHeight(screenHeight: number): number {
  * `transports: 1, pause: true` while the phone renders neither — with the one
  * control it DOES render wearing a pause glyph and exiting the slideshow —
  * makes the model, the mark and the behaviour three different stories
- * (issue #711).
+ * (#711).
  *
  * The phone's slideshow has exactly one top-bar action and it is `Leave`
  * (prototype line 4492). Building the transport is a RECORDED NON-GOAL: Google
@@ -234,10 +234,10 @@ export function slideshowPosition(
 // ───────────────────────────────────────────────────────────────────────────
 
 /**
- * The name the photograph answers to. It is no longer the stamp's first line —
- * WHEN outranks WHAT there (see `captureStamp`) — but it is still the accessible
- * name of the stamp, and it is still the visible first line for a photograph
- * that has no capture time to show instead.
+ * The name the photograph answers to. It is NOT the stamp's first line — WHEN
+ * outranks WHAT there (see `captureStamp`) — but it is the accessible name of
+ * the stamp, and the visible first line for a photograph that has no capture
+ * time to show instead.
  *
  * The timeline flattens a vault row's `title` column into `filename` (see
  * `timeline-engine.ts`), so the caption and the file name arrive in the same

@@ -1,4 +1,4 @@
-// Owner flags (issue #274): one judgment, one mechanism. An owner judgment
+// Owner flags (#274): one judgment, one mechanism. An owner judgment
 // about an entity — starred today, more flags later — is entity-scoped
 // meaning, so it lives in the universal classification join: one flags-scheme
 // tag on the CANONICAL entity, never a per-domain boolean column. A column
@@ -34,7 +34,7 @@ function actorPartyId(ctx: HandlerCtx): string {
 }
 
 /**
- * What flagging needs when it runs OUTSIDE the command pipeline (issue #721):
+ * What flagging needs when it runs OUTSIDE the command pipeline (#721):
  * the import spine's publishers hold a raw `DatabaseSync` and a provenance
  * collector, never a `HandlerCtx`. `actorPartyId` is a thunk on purpose — a
  * vault with no owner must still be able to CLEAR a flag, so the party is

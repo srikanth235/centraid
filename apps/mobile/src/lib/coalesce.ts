@@ -1,9 +1,9 @@
 /**
  * Collapse a burst of "something changed" signals into one run of the work.
  *
- * A replica delta pull applies many invalidations in a row, and each one used to
- * drive a separate read: a 200-row change batch meant 200 full mounted reads,
- * every one of them re-parsing the projection and re-rendering the tree. The
+ * A replica delta pull applies many invalidations in a row, and one read per
+ * signal means a 200-row change batch costs 200 full mounted reads, every one
+ * of them re-parsing the projection and re-rendering the tree. The
  * signals are not individually meaningful — they all say "re-read" — so the
  * honest shape is a trailing debounce that also refuses to overlap itself.
  *

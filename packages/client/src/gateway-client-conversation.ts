@@ -1,14 +1,14 @@
 /*
  * governance: allow-repo-hygiene file-size-limit (#567) one browser-safe conversation transport owns the route DTOs and SSE parser together so wire additions cannot drift between request and stream handling
  *
- * Renderer-side unified chat transport over direct HTTP (issue #141,
- * Phase 3). The chat panel talks to the gateway directly, with no desktop
- * main-process relay in the path:
+ * Renderer-side unified chat transport over direct HTTP (#141). The chat
+ * panel talks to the gateway directly, with no desktop main-process relay in
+ * the path:
  *
  *   - `streamTurn` POSTs `/centraid/<appId>/_turn` and parses the SSE stream
  *     into the gateway's native `TurnStreamEvent`s (fetch + ReadableStream
  *     reader, not `EventSource` — we need a POST body + the Bearer header).
- *     The gateway-side harness (Phase 3a `makeUnifiedConversationRunner`) runs the
+ *     The gateway-side harness (`makeUnifiedConversationRunner`) runs the
  *     turn in the app's draft worktree with the union of tools, so one turn
  *     can both tweak the app's code and operate its data.
  *   - the chat-history surface (`/_centraid-conversations/apps/<appId>/sessions…`)
@@ -77,7 +77,7 @@ export async function getHarnessesStatus(
   opts: { refresh?: boolean } = {}
 ): Promise<CentraidHarnessesStatus> {
   const { baseUrl, token } = await auth();
-  // `?refresh=1` re-enumerates each harness's models (issue #188). A plain load
+  // `?refresh=1` re-enumerates each harness's models (#188). A plain load
   // returns the catalog cache.
   const path = opts.refresh
     ? "/centraid/_harnesses/status?refresh=1"
@@ -97,7 +97,7 @@ export interface ConversationAttachmentRef {
   filename?: string;
 }
 
-/** The gateway's per-file cap on `uploadConversationAttachment` (issue #190). */
+/** The gateway's per-file cap on `uploadConversationAttachment` (#190). */
 export const MAX_ATTACHMENT_BYTES = 25 * 1024 * 1024;
 
 export interface StreamTurnInput {
@@ -105,7 +105,7 @@ export interface StreamTurnInput {
   conversationId: string;
   message: string;
   /**
-   * Chat register (issue #286 phase 2): 'ask' = the app copilot ("operate/
+   * Chat register (#286): 'ask' = the app copilot ("operate/
    * ask about my data") — the gateway routes vault-backed apps' ask turns
    * onto the vault register. Absent = builder chat (unchanged).
    */
@@ -114,13 +114,13 @@ export interface StreamTurnInput {
   harnessKind?: string;
   model?: string;
   thinking?: string;
-  /** Files uploaded ahead of the turn (issue #190). */
+  /** Files uploaded ahead of the turn (#190). */
   attachments?: ConversationAttachmentRef[];
-  /** Regenerate: the turn id this turn re-runs (issue #420). Recorded as
+  /** Regenerate: the turn id this turn re-runs (#420). Recorded as
    *  `turns.retry_of` so the transcript collapses it into a sibling pager. */
   retryOf?: string;
   /**
-   * Idempotency key (issue #420). A fresh UUID per user send, REUSED on every
+   * Idempotency key (#420). A fresh UUID per user send, REUSED on every
    * automatic/one-tap resend of the same message — so a retry-after-network-blip
    * replays the already-recorded turn instead of double-running it.
    */
@@ -137,7 +137,7 @@ export interface StreamTurnInput {
   /** Centraid-owned primary workspace selector (the host resolves the path). */
   workspaceKind?: "vault-data" | "app" | "draft";
   /**
-   * The vault this conversation reads and writes (issue #599). A conversation
+   * The vault this conversation reads and writes (#599). A conversation
    * is pinned to exactly ONE vault for its whole life: the picker records the
    * choice when the conversation is created, and every later turn/load repeats
    * it. Omitted degrades to the shell's internal default-scope pointer, which
@@ -164,7 +164,7 @@ function delay(ms: number): Promise<void> {
 
 /**
  * POST a `_turn` body, transparently auto-retrying a `429` turn-busy up to
- * `TURN_BUSY_MAX_RETRIES` times honoring `Retry-After` (issue #420). Because the
+ * `TURN_BUSY_MAX_RETRIES` times honoring `Retry-After` (#420). Because the
  * body carries a stable `idempotencyKey`, a retry can only ever replay — never
  * double-run. Returns the OK streaming `Response`; throws `GatewayClientError`
  * on a non-429 failure or once retries are exhausted.
@@ -226,7 +226,7 @@ async function postTurnWithRetry(
 /**
  * Upload one file to the app's blob CAS ahead of a chat turn
  * (`POST /_centraid-conversations/apps/<appId>/blobs`). Returns the dedup-keyed ref the
- * caller threads into `streamTurn({ attachments })` (issue #190).
+ * caller threads into `streamTurn({ attachments })` (#190).
  */
 export async function uploadConversationAttachment(
   appId: string,
@@ -354,7 +354,7 @@ export async function streamAssistantTurn(
 }
 
 /**
- * Poll a conversation's turn-settle status (issue #420) — cheap enough to loop
+ * Poll a conversation's turn-settle status (#420) — cheap enough to loop
  * during reconnect catch-up. Returns the current `turnCount` so the caller can
  * detect a turn landing server-side after a dropped stream.
  */

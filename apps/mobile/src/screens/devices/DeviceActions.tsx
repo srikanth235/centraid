@@ -1,4 +1,4 @@
-// What one device row's trailing verb opens (issue #765).
+// What one device row's trailing verb opens (#765).
 //
 // The row block gives a row exactly ONE trailing control, and a device answers
 // to two verbs, so the control is `Manage` and it opens the app's existing
@@ -7,8 +7,7 @@
 // grammar; it reuses the one the app already has.
 //
 // Rename is a name the member types, so it is a dialog with a field — the
-// idiom `apps/photos/AlbumDetail.tsx` already uses. (Docs' native copy of
-// that dialog went with the app pending its v11 handoff.)
+// idiom `apps/photos/AlbumDetail.tsx` already uses.
 //
 // Revoke asks twice, and the second ask is the load-bearing one. The gateway
 // refuses (409) to revoke the LAST live device of a vault unless the vault's

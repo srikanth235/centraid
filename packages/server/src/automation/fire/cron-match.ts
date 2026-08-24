@@ -1,5 +1,5 @@
 /**
- * Minute-resolution cron matcher for the in-process scheduler (issue #149).
+ * Minute-resolution cron matcher for the in-process scheduler (#149).
  *
  * Salvaged from the deleted OS scheduler's field expansion. Supports the
  * numeric 5-field grammar the automation scaffolder emits and the manifest

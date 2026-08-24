@@ -6,7 +6,7 @@ import { formatDuration } from "../shell/routes/gatewayData.js";
 
 import styles from "./BackupCard.module.css";
 
-// The brief's device list (issue #708 A2): every device with its size, scope,
+// The brief's device list (#708): every device with its size, scope,
 // and last-seen — last-seen in the mono/tabular register. This reuses the
 // paired-device roster (`gateway-client-devices.ts`, the same data
 // DevicesCard shows) rather than inventing a new device concept: "what would

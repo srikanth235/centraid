@@ -1,7 +1,3 @@
-/**
- * Direct unit tests for automation handler ctx message handlers (issue #545 B5).
- */
-
 import { describe, expect, it, vi } from "vitest";
 
 import {

@@ -269,7 +269,7 @@ export default function SettingsScreen({
         <AppearanceSection />
         <AppLockSection />
         <VaultSection />
-        {/* Read-only view of the effective enrichment policy (#807 Wave 6) —
+        {/* Read-only view of the effective enrichment policy (#807) —
             it sits under Vault because it is a fact ABOUT the vault, and above
             the device/link sections that are facts about this phone. */}
         <EnrichmentSection />
@@ -396,11 +396,11 @@ export default function SettingsScreen({
             <Text style={styles.rowLabel}>On this phone</Text>
             <Icon name="ChevronRight" size={16} color={colors.textFaint} />
           </Pressable>
-          {/* Backup health moved here from the Photos stack (issue #712 B2).
-              The two rows are the same question from opposite ends: what this
-              phone is HOLDING, and whether what it holds has left it. The
-              policy the second one edits governs every byte-bearing app, not
-              photographs — which is exactly why it stopped living inside one. */}
+          {/* Backup health is a FRAME row, not a Photos one (#712). The two
+              rows are the same question from opposite ends: what this phone is
+              HOLDING, and whether what it holds has left it. The policy the
+              second one edits governs every byte-bearing app, not photographs
+              — which is why it may not live inside one. */}
           <View style={styles.rowGap} />
           <Pressable
             onPress={() => navigation.navigate("BackupHealth")}

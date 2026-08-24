@@ -8,9 +8,9 @@
  * cross-owner (`delivery: "peer"`) arm of `deliver-give`. A gateway upgraded
  * across that retirement can still hold such rows, queued.
  *
- * Leaving them is the dishonest option, and it was the state wave 3 shipped:
- * the sweep kept claiming them, kept dialing a frame that answers `not_found`,
- * and kept parking the edge with a network-sounding reason — a queue pretending
+ * Leaving them is the dishonest option: the sweep keeps claiming them, keeps
+ * dialing a frame that answers `not_found`, and keeps parking the edge with a
+ * network-sounding reason — a queue pretending
  * a delivery might still land when the verb no longer exists. Marking them
  * `done` would be worse: `done` means DISCHARGED, and nothing was.
  *

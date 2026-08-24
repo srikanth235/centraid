@@ -1,6 +1,6 @@
 /**
  * Where does a write land when an app is mounted over several scopes at once
- * (issue #599)? Every multi-scope app asks the same question — the timeline
+ * (#599)? Every multi-scope app asks the same question — the timeline
  * "Add photo" button, the notes composer, the tally entry form — so the rule
  * lives here once, pure and total, instead of being re-derived per app.
  *

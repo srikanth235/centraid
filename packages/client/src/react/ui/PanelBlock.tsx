@@ -1,4 +1,4 @@
-// The consent / explanation panel (v9 §8–9, issue #765).
+// The consent / explanation panel (v9 §8–9, #765).
 //
 // Eyebrow, title, body (optionally rule-quoted), a fact list on a fixed key
 // column, and at most two actions — one filled and one outlined. `tone="net"`

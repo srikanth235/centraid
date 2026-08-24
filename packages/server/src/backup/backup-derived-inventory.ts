@@ -1,10 +1,9 @@
 /*
- * The `derived` store class reconciliation fold (issue #425 Wave 2). Kept in its
- * own module so `backup-reconciliation.ts` stays under the governance line-cap.
+ * The `derived` store class reconciliation fold (#425).
  *
- * The reconciliation sweep MUST diff every granted store class. Wave 2 adds the
- * `derived` store (binary display derivatives — thumb/preview/poster) alongside
- * `cas`: a derived replica missing from the DERIVED listing is missing even if
+ * The reconciliation sweep MUST diff every granted store class — the `derived`
+ * store (binary display derivatives — thumb/preview/poster) alongside `cas`:
+ * a derived replica missing from the DERIVED listing is missing even if
  * the same sha happens to sit under cas, and `unmark` runs synchronously so the
  * next cache eviction cannot trust evidence the derived listing did not confirm.
  * The drift is folded into the `cas` store-reconciliation state rather than a

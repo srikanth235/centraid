@@ -1,4 +1,4 @@
-// The stage (Docs handoff Part 2 §8; issue #821) — a document on the dark
+// The stage (Docs handoff Part 2 §8; #821) — a document on the dark
 // ground, "a mode with its own exit, and the one thing that drops the band"
 // (deviation 2: `DocsScreen`'s `hideBand`, passed here and nowhere else).
 // Every colour on it is a named stage token off the native theme.

@@ -1,4 +1,4 @@
-// Semantic photo search over HTTP (issue #721 E3) — the owner's query plane
+// Semantic photo search over HTTP (#721) — the owner's query plane
 // onto `enrich_embedding`.
 //
 //   POST /centraid/_vault/enrich/semantic-search

@@ -5,7 +5,7 @@
  * Each vault is a `VaultPlane` in its own directory (`<root>/<vaultId>/`,
  * holding that vault's `vault.db` + `journal.db`); the vault's identity and
  * owner-facing name live inside its own `core_vault` row, so the registry
- * persists NOTHING at the root (issue #289 killed the `vaults.json` active
+ * persists NOTHING at the root (#289 killed the `vaults.json` active
  * pointer — the client owns its pointer now).
  *
  * The registry is a warm map of mounted planes keyed by vaultId. Every
@@ -16,10 +16,10 @@
  * to the default vault — the owner's PERSONAL vault, identified by a durable
  * marker in the vault itself, never by creation order (see `defaultVaultId`).
  *
- * Vault lifecycle is split by AUTHORITY, not by transport (issue #289,
+ * Vault lifecycle is split by AUTHORITY, not by transport (#289,
  * corrected in #568 item J). `create` and `delete` are ADMIN acts, but they
  * are no longer CLI-only: a fresh data dir auto-creates its personal vault at
- * construction (issue #603), an admin device may create further ones, and the
+ * construction (#603), an admin device may create further ones, and the
  * erase ceremony (`vault-routes.ts`) deletes over HTTP behind the owner
  * enrollment + typed-name + verified-kit guards. What has not changed is that
  * neither is reachable by an ordinary enrolled device on ordinary authority.
@@ -59,7 +59,7 @@ import { openVaultPlane } from "./vault-plane.js";
 
 /**
  * Minimum time between retry attempts for a directory whose mount failed
- * (issue #351): `scan()` now runs on every `vaults` health probe tick (the
+ * (#351): `scan()` runs on every `vaults` health probe tick (the
  * desktop polls `_gateway/health` every 15s — see `useGatewayHealth.ts`), so
  * without a backoff a permanently-broken directory would reopen its corrupt
  * SQLite file on every single poll forever. This caps that to roughly once
@@ -114,9 +114,9 @@ export interface VaultRegistryOptions {
   walCaptureConfigured?: () => boolean;
   /** Fail-safe blob-GC gate for network filesystems. */
   skipOrphanDelete?: () => boolean;
-  /** Forwarded to every plane (issue #367 §C3) — see `VaultPlaneOptions.s3Credentials`. */
+  /** Forwarded to every plane (#367) — see `VaultPlaneOptions.s3Credentials`. */
   s3Credentials?: (settings: BlobStoreSettings) => Promise<S3Credentials>;
-  /** Forwarded to every plane (issue #405 §2) — see `VaultPlaneOptions.previewCodec`. */
+  /** Forwarded to every plane (#405) — see `VaultPlaneOptions.previewCodec`. */
   previewCodec?: PreviewCodec;
   /** Forwarded to each plane after journal provenance commits. */
   onProvenanceCommitted?: (
@@ -136,21 +136,21 @@ export interface VaultRegistryOptions {
   /** Concurrent remote pushes selected by the gateway hardware profile. */
   replicationConcurrency?: number;
   /**
-   * The HOST's total memory ceiling for mounted vault planes (issue #659 L8),
-   * divided evenly across them. Before this, mmap window and page cache were
+   * The HOST's total memory ceiling for mounted vault planes (#659),
+   * divided evenly across them. Without it, mmap window and page cache are
    * per-file constants, so N mounted vaults cost N times the memory of one and
-   * the only way to host a household was to buy RAM per vault. Omitted leaves
+   * the only way to host a household is to buy RAM per vault. Omitted leaves
    * every plane on the pre-#659 per-file pragmas.
    */
   footprintBudget?: VaultFootprintBudget;
-  /** Resource-actuals sweep hook (#528 Phase C), forwarded to every plane. */
+  /** Resource-actuals sweep hook (#528), forwarded to every plane. */
   onSweepPass?: (info: { durationMs: number }) => void;
-  /** Resource-actuals replication hook (#528 Phase C), forwarded to every plane. */
+  /** Resource-actuals replication hook (#528), forwarded to every plane. */
   onReplicationPass?: (info: {
     bytesReplicated: number;
     durationMs: number;
   }) => void;
-  /** Forwarded to every plane (issue #544) — see `VaultPlaneOptions.journalLimitBytes`. */
+  /** Forwarded to every plane (#544) — see `VaultPlaneOptions.journalLimitBytes`. */
   journalLimitBytes?: () => number | null;
 }
 
@@ -225,7 +225,7 @@ export class VaultRegistry {
   private readonly mountListeners = new Set<(plane: VaultPlane) => void>();
   /** Directories already MOUNTED — lets `scan()` skip them cheaply on rescan. */
   private readonly scannedDirs = new Set<string>();
-  /** Directories that failed to mount, keyed by dir (issue #351 — never silently dropped). */
+  /** Directories that failed to mount, keyed by dir (#351 — never silently dropped). */
   private readonly failedMountsByDir = new Map<string, FailedMountState>();
   private started = false;
 
@@ -289,7 +289,7 @@ export class VaultRegistry {
     const nowMs = Date.now();
     for (const entry of readdirSync(this.rootDir, { withFileTypes: true })) {
       if (!entry.isDirectory()) continue;
-      // Ignore hidden/dot directories (issue #439 R1): `recover()` stages a
+      // Ignore hidden/dot directories (#439): `recover()` stages a
       // restore into `<root>/.recover-staging-<id>/` (same device, so the adopt
       // is an atomic rename) and that half-written dir carries a `vault.db` too
       // — mounting it mid-restore would be a torn vault. Real vaults are named
@@ -338,7 +338,7 @@ export class VaultRegistry {
     }
   }
 
-  /** Directories the registry could not mount, most recently failed first (issue #351). */
+  /** Directories the registry could not mount, most recently failed first (#351). */
   failedMounts(): FailedMount[] {
     return [...this.failedMountsByDir.entries()]
       .sort((a, b) => b[1].atMs - a[1].atMs)
@@ -373,7 +373,7 @@ export class VaultRegistry {
 
   /**
    * Whether this data dir has never held a vault — the one input to the
-   * auto-found decision (issue #603). The filesystem registry is the only
+   * auto-found decision (#603). The filesystem registry is the only
    * authority; there is deliberately no `vaults` table to disagree with it.
    * A vault directory that failed to mount is still a vault for this gate:
    * corruption or a missing custody key must never make an existing gateway
@@ -396,9 +396,9 @@ export class VaultRegistry {
   }
 
   /**
-   * Adopt a recovered vault directory as a live vault (issue #439 R1 — the
-   * live-gateway path wave 4's `/recover` routes call after `recover()` has
-   * renamed its staging dir into place). The directory `<root>/<vaultId>` MUST
+   * Adopt a recovered vault directory as a live vault (#439 R1 — the
+   * live-gateway path taken after `recover()` has renamed its staging dir
+   * into place). The directory `<root>/<vaultId>` MUST
    * already exist on disk; this mounts it (`scan`). Recovery runs against a
    * data dir the operator brought, so no cleanup heuristic is needed here.
    */
@@ -415,7 +415,7 @@ export class VaultRegistry {
   }
 
   /**
-   * A plane's opening share of the host ceiling (issue #659 L8): the total
+   * A plane's opening share of the host ceiling (#659): the total
    * divided by the number of vault directories under the root, so a plane is
    * never opened at the full budget even momentarily. Counting directories
    * rather than open planes matters because `scan()` opens them one at a time —
@@ -448,7 +448,7 @@ export class VaultRegistry {
 
   /**
    * Re-divide the ceiling across every plane whenever the set of them changes
-   * (issue #659 L8).
+   * (#659).
    *
    * The opening share alone is not enough: a household grows one vault at a
    * time, so vault 1 opens at the whole budget, vault 2 at a half, and the SUM
@@ -581,7 +581,7 @@ export class VaultRegistry {
 
   /**
    * The vault the CURRENT request (or background fire) is addressed to,
-   * resolved from the ambient context (issue #289). Falls back to the
+   * resolved from the ambient context (#289). Falls back to the
    * default vault outside a scoped request.
    */
   current(): VaultPlane {
@@ -611,7 +611,7 @@ export class VaultRegistry {
   }
 
   /**
-   * The vault's own signing identity (issue #726 P1) — its public key, base64.
+   * The vault's own signing identity (#726) — its public key, base64.
    * `undefined` for an unknown vault; every MOUNTED vault has one (minted at
    * creation, or lazily on first load for a vault that predates this).
    */
@@ -634,7 +634,7 @@ export class VaultRegistry {
 
   /**
    * Every mounted vault the CLIENT sees — DEFAULT VAULT FIRST, then the rest
-   * oldest-first (issue #665).
+   * oldest-first (#665).
    *
    * This is the single choke point every client-facing vault listing goes
    * through (`GET /_vault/vaults` via `vault-routes.ts`, and the owner scopes
@@ -703,7 +703,7 @@ export class VaultRegistry {
     if (options?.personal) plane.markPersonal();
     this.scannedDirs.add(dir);
     this.planes.set(plane.boot.vaultId, plane);
-    // A new vault takes its share from the others, not from the host (#659 L8).
+    // A new vault takes its share from the others, not from the host (#659).
     this.rebalanceFootprints();
     if (this.started) plane.start();
     this.notifyMounted(plane);
@@ -736,7 +736,7 @@ export class VaultRegistry {
   /**
    * Delete a vault: plane stopped, its directory (both SQLite files, the
    * blob CAS and the appext exports under it) removed, and any remote blob
-   * tier purged best-effort (issue #296 — deleting a vault must not leave
+   * tier purged best-effort (#296 — deleting a vault must not leave
    * the owner's bytes billing in a bucket forever; a crash here costs
    * orphan objects, which any later reconcile against the empty set finds).
    * ADMIN act: the CLI, or the erase ceremony over HTTP behind the owner
@@ -755,7 +755,7 @@ export class VaultRegistry {
     const purge = plane.db.blobs.purgeRemote();
     plane.stop();
     this.planes.delete(vaultId);
-    // A removed vault hands its share back to the survivors (#659 L8).
+    // A removed vault hands its share back to the survivors (#659).
     this.rebalanceFootprints();
     this.scannedDirs.delete(plane.dir);
     this.failedMountsByDir.delete(plane.dir);
@@ -837,7 +837,7 @@ export class VaultRegistry {
     };
   }
 
-  /** The scenario-seed executor against the ACTIVE vault (issue #290). */
+  /** The scenario-seed executor against the ACTIVE vault (#290). */
   demoBridgeFor(appId: string): VaultBridge {
     return async (call) => this.current().demoBridgeFor(appId)(call);
   }

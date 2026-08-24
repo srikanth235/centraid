@@ -1,9 +1,7 @@
 /**
- * Audit-row helpers for automation handler runs (issue #80).
+ * Audit-row helpers for automation handler runs (#80).
  *
- * Split out of `runner.ts` so the handler orchestrator stays
- * focused on worker/message orchestration. Everything here is
- * pure-ish — the only side-effect surface is the supplied
+ * Everything here is pure-ish — the only side-effect surface is the supplied
  * `AutomationRunsStore` reference.
  */
 
@@ -22,7 +20,7 @@ import { resolveItemCost } from "@centraid/server/engine";
 import type { HistoryConfig } from "../manifest/manifest.js";
 
 /**
- * Sink for live run-stream events (issue #158). The host wires this to its
+ * Sink for live run-stream events (#158). The host wires this to its
  * `runId`-keyed bus; when unwired it's a no-op (the durable ledger still
  * records every node). A wedged sink must never fail the handler — every
  * emit is guarded.
@@ -69,8 +67,8 @@ export interface RunRef {
 
 /**
  * Project a `turns` row into the handler-facing `ctx.runs` ref. Each fire is
- * the automation's stable execution conversation, so the automation ref is passed in
- * (it's no longer the conversation id); `inputText` is the turn's ordinal-0
+ * the automation's stable execution conversation, so the automation ref is
+ * passed in (it is not the conversation id); `inputText` is the turn's ordinal-0
  * `message_in` payload, fetched by the caller.
  */
 export function rowToRunRef(
@@ -170,7 +168,7 @@ export interface OpenRunNodeArgs {
 }
 
 /**
- * Open a durable "running" run node (issue #158, ledger-tail hybrid) AND
+ * Open a durable "running" run node (#158, ledger-tail hybrid) AND
  * publish `item.start` to the live bus. Returns the item id for the
  * matching `closeRunNode`. Store + sink failures are swallowed — a broken
  * ledger or wedged subscriber must never fail the handler.
@@ -214,7 +212,7 @@ export function openRunNode(args: OpenRunNodeArgs): string {
 }
 
 /**
- * Map a chat `usage` event (issue #158, Phase 2) onto the token/model fields
+ * Map a chat `usage` event (#158) onto the token/model fields
  * `closeRunNode` persists. Returns `{}` when no usage was observed (a harness
  * still on the collect-on-exit path).
  */
@@ -223,7 +221,7 @@ export function usageCloseFields(
 ): Partial<CloseRunNodeArgs> {
   if (!usage) return {};
   // Prefer harness cost when present; catalog fill happens in closeRunNode when
-  // tokens exist but cost does not (issue #514).
+  // tokens exist but cost does not (#514).
   const costSource =
     usage.costSource ??
     (usage.costUsd === undefined ? undefined : ("harness" as const));
@@ -263,7 +261,7 @@ export interface CloseRunNodeArgs {
   started: number;
   ended: number;
   /**
-   * Token/model rollup for a `delegate` node (issue #158, Phase 2). Learned at
+   * Token/model rollup for a `delegate` node (#158). Learned at
    * end-of-turn from the turn plane's `usage` event; feeds `runs.total_*`.
    */
   model?: string;

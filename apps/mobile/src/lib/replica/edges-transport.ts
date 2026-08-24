@@ -1,4 +1,4 @@
-// Renderer-side transport for the gateway's placement surface (#726 P2 —
+// Renderer-side transport for the gateway's placement surface (#726 —
 // `packages/server/src/routes/edges-routes.ts`), mirroring
 // `links-transport.ts`'s shape. Mobile's own People/Sharing screen data
 // source, independent of any one app mount.

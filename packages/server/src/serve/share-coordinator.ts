@@ -1,9 +1,9 @@
 /*
- * ONE reducer for the edge lifecycle (issue #750 abstraction 5).
+ * ONE reducer for the edge lifecycle (#750 abstraction 5).
  *
- * Before this, four routes each wrote their own UPDATE over `share_edges`:
- * four hand-rolled state machines over one column meant "what may follow
- * what" had no answer — only four implementations that happened to agree.
+ * Without it, each route writes its own UPDATE over `share_edges`, and
+ * hand-rolled state machines over one column leave "what may follow what"
+ * with no answer — only implementations that happen to agree.
  *
  * This module is that answer, as PURE functions: `(state, signal) → {state,
  * effects}`. It knows nothing about SQLite, routes, vaults or the network.

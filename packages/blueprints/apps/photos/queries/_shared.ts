@@ -1,5 +1,5 @@
 /**
- * Shared read/join helpers for the photos app's queries (issue #352 phase
+ * Shared read/join helpers for the photos app's queries (#352 phase
  * 3/4) — pulled out once queries/library.js and queries/search.js both
  * needed the SAME bounded joins over the same windowed asset/content ids:
  * free-form labels (core.tag_item/untag_item over the shared "Tags" scheme —
@@ -8,24 +8,18 @@
  * media.set_asset_place) and the blob custody projection
  * (blob.custody_state, blob/custody.ts).
  *
- * Favorite USED to be joined here too (a flags-scheme starred tag on the
- * canonical content item, issue #274). Issue #419 made it a first-class
- * `favorite` column on media.asset — the photos replica shape has to be
+ * FAVORITE IS NOT JOINED HERE, and must not be: it is a first-class
+ * `favorite` column on media.asset (#419), never a flags-scheme starred
+ * tag on the canonical content item. The photos replica shape has to be
  * self-contained, and a native client cannot reconstruct a star from a
- * three-table concept join it was never granted. The tag path is gone, not
- * dual-written: the column is the only source of truth.
+ * three-table concept join it was never granted — the column is the only
+ * source of truth, and nothing dual-writes the tag path.
  *
  * NOT a query itself — the dispatcher resolves a query name straight to
  * `queries/<name>.js` (never a directory scan: packages/server/src/engine/
  * handlers/dispatcher.ts), so a plain helper module beside the handlers is
  * invisible to it and to build-manifest.mjs's install-copy walk; nothing
  * needs to know this file exists besides the two callers that import it.
- *
- * TS conversion note: the vault read surface returns `Record<string, unknown>`
- * rows (see HandlerCtx.vault), so each raw row set is cast once to a typed
- * shape (`as unknown as X[]`) at its read site — the only place unknown vault
- * columns become named fields. Handler logic is otherwise byte-for-byte the
- * pre-conversion JS.
  */
 
 /** The subset of a content-item row `srcOf` needs to build serve URLs. */
@@ -96,7 +90,7 @@ export const BLOB_ROUTE = "/centraid/_vault/blobs";
 const TAGS_SCHEME_URI = "centraid:tags:v1";
 
 /**
- * Blob-backed bytes (issue #296) resolve to same-origin serve URLs (Range,
+ * Blob-backed bytes (#296) resolve to same-origin serve URLs (Range,
  * immutable caching, server thumb variants); inline `data:` URIs pass
  * through untouched.
  */
@@ -180,7 +174,7 @@ export async function readAssetJoins({
       : { rows: [] },
   ]);
 
-  // Free-form labels (issue #352): core.tag_item targets the ASSET itself
+  // Free-form labels (#352): core.tag_item targets the ASSET itself
   // (target_type 'media.asset'), unlike the content-item-scoped
   // favorite star above — see tags.ts's SUBJECT_PK. Each entry carries the
   // tag_id too: untag-asset.js removes by tag_id (core.untag_item), not by

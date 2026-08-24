@@ -1,5 +1,5 @@
 /*
- * Gateway ops (issue #351) — diagnostics export orchestration.
+ * Gateway ops (#351) — diagnostics export orchestration.
  *
  * `exportGatewayDiagnostics` is the whole "fetch the bundle, ask where to
  * save it, write the file" flow, but every side effect (settings read,

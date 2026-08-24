@@ -37,7 +37,7 @@ export function isLoopbackRequest(req: IncomingMessage): boolean {
 
 /**
  * The host itself made this request — a kernel-observed loopback peer that
- * no forwarder produced (issue #568 items A/B).
+ * no forwarder produced (#568 items A/B).
  *
  * Loopback alone is NOT an identity: the daemon's iroh forwarder, the Rust
  * byte relay, and the desktop phone tunnel all deliver REMOTE peers to
@@ -80,7 +80,7 @@ const MAX_FILE_MAP_BYTES = 1 * 1024 * 1024; // 1 MiB per file
  * Write a `{path, content}[]` file map into an app dir (a session
  * worktree's `apps/<id>/`). Each path is resolved + confined under
  * `appDir`; parents are created. Used by the gateway lifecycle routes
- * (issue #141) to stage a scaffolded/cloned app into a session.
+ * (#141) to stage a scaffolded/cloned app into a session.
  */
 export async function writeFileMap(
   appDir: string,
@@ -162,7 +162,7 @@ export function sendJson(
  * {@link sendJson} for a body that is ALREADY serialized. Used where the
  * document's bytes are the thing the producer guarantees — the diagnostics
  * bundle's tripwire sweeps the serialized text, so re-serializing a parsed
- * object here would discard the gate that made it safe (#846 P8).
+ * object here would discard the gate that made it safe (#846).
  */
 export function sendJsonText(
   res: ServerResponse,
@@ -202,7 +202,7 @@ function sendJsonBytes(
 
 /**
  * Conditional-GET flavour of {@link sendJson} — the server half of the client's
- * `If-None-Match` revalidation (issue #659 M5's gateway counterpart).
+ * `If-None-Match` revalidation (#659 M5's gateway counterpart).
  *
  * The ETag is a strong validator over the SERIALIZED RESPONSE, mirroring
  * blob-read-route.ts, which tags a blob with its content sha256. Deriving it

@@ -24,7 +24,7 @@ const COMPANION_CAPABILITIES: Readonly<
 
 /**
  * Enforce the narrow action/query bundle behind each selected module. The app
- * id and handler name now ride in the request path (issue #505), so the caller
+ * id and handler name ride in the request path (#505), so the caller
  * passes them directly rather than a tool-body envelope.
  */
 export function companionHandlerAllowed(

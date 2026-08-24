@@ -37,7 +37,7 @@ const $ = (id: string) => document.querySelector<HTMLElement>(`#${id}`)!;
  * shelf showing 8 is the count/header disagreement v16 §3 calls a defect.
  */
 export const RECENT_WINDOW = 8;
-// Bytes stream to the blob staging route (issue #296) — no base64 through
+// Bytes stream to the blob staging route (#296) — no base64 through
 // command JSON — so big documents fit; the route itself caps at 512 MB.
 
 // The vault speaks in predicates; the drive speaks in plain language. The
@@ -199,7 +199,7 @@ export function createLogic({
     // axis narrows what the last one left, which is exactly a chain of
     // predicates and deliberately not a score (filters.ts).
     list = applyFilters(list, state.filters);
-    // Free-form label filter (issue #352 phase 4) — same "all" escape hatch
+    // Free-form label filter (#352) — same "all" escape hatch
     // and same idiom as the type chips above, alongside them rather than
     // replacing them (a document can be one type AND carry several labels).
     if (tag && tag !== "all")
@@ -331,8 +331,8 @@ export function createLogic({
   }
 
   // Loop an action over many rows (kit runBulk) in this app's voice: our
-  // notice banner, our friendly failure copy, and the old hard-wired tail —
-  // clear the selection, then refresh.
+  // notice banner, our friendly failure copy, and the fixed tail — clear the
+  // selection, then refresh.
   const runBulk = (
     ids: string[],
     run: (id: string) => Promise<VaultOutcome | undefined>,

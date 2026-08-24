@@ -19,7 +19,7 @@ import type {
 } from "../../screens/SettingsEnrichmentScreen.js";
 import { loadHarnesses } from "./settingsHarnessesData.js";
 
-// Settings → Enrichment data layer (issue #807).
+// Settings → Enrichment data layer (#807).
 //
 // ONE WRITER PER PATH, and this module is where that shows: tiers, scoped
 // rules and egress answers are VAULT state and go through the owner's

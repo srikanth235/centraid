@@ -8,7 +8,7 @@
 // and a suite that collects zero tests looks like no suite at all rather than
 // a red one.
 //
-// The externalization plugin now ships on both test-kit presets
+// The externalization plugin ships on both test-kit presets
 // (`packages/test-kit/src/vitest.ts`); drop it from the node preset and this
 // file stops collecting. Assert real driver behaviour so the pin is a working
 // test rather than an import smoke check.

@@ -1,5 +1,5 @@
 /**
- * Popup pure helpers (issue #545 C10) — error text and module availability
+ * Popup pure helpers (#545) — error text and module availability
  * without DOM wiring. `popup-state.ts` already owns paused/blocking strings.
  */
 

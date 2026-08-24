@@ -1,4 +1,4 @@
-// Bounded, parse-only media metadata (issue #414 D13).
+// Bounded, parse-only media metadata (#414).
 //
 // The gateway never decodes/transcodes media. These small container walks
 // read duration, display dimensions, codec and creation time from ISO-BMFF

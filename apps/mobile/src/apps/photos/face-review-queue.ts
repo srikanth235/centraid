@@ -1,4 +1,4 @@
-// Pure derivations for the Face review queue (issue #711), shared by
+// Pure derivations for the Face review queue (#711), shared by
 // FaceReview.tsx. Framework-free so the two rules it exists to hold are
 // unit-testable without mounting a screen:
 //
@@ -23,7 +23,7 @@ export interface FaceRegionRow {
   confidence?: unknown;
   confirmed_by_party_id?: unknown;
   bbox_json?: unknown;
-  /** `proposed` | `confirmed` | `rejected` | `dismissed` (issue #712). */
+  /** `proposed` | `confirmed` | `rejected` | `dismissed` (#712). */
   review_state?: unknown;
 }
 
@@ -49,7 +49,7 @@ function str(v: unknown): string {
 /** Every UNANSWERED region, in a deterministic order (no timestamp exists to
  *  sort on, so region_id is the tiebreak — same choice the web query makes).
  *
- *  "Unanswered", not "unconfirmed" (issue #712): a rejected region — which
+ *  "Unanswered", not "unconfirmed" (#712): a rejected region — which
  *  is a remembered decision rather than a deleted row — and one the member
  *  deliberately left unnamed are both finished with. Filtering on
  *  `confirmed_by_party_id` alone would put every one of them back in front of

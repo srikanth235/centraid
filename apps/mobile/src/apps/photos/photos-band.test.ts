@@ -18,7 +18,7 @@ import {
 
 describe("the claimed band (handoff §3.1, CHANGELOG §F)", () => {
   test("Photos claims exactly Library · Collections · Search · More", () => {
-    // Library leads (issue #712): the timeline is what a member reaches for
+    // Library leads (#712): the timeline is what a member reaches for
     // most, so it takes the first slot rather than the second. Collections
     // is not "Albums" — it is the landing destination, and "Albums" names one
     // of the eight sections the page holds — and it does not lead the band
@@ -43,16 +43,16 @@ describe("the claimed band (handoff §3.1, CHANGELOG §F)", () => {
   test("the More sheet carries only what Collections does not", () => {
     // ONE row. Favorites, Places, Duplicates and Trash are each a named
     // section of Collections, with its own live count, on screen, and there is
-    // no Photos "Sharing" place at all (issue #726). A row here as well would
+    // no Photos "Sharing" place at all (#726). A row here as well would
     // be a second, hidden door to each, and a second place to keep its label
     // honest.
     //
     // Backup survives because it is NOT a shelf: it is a cross-stack link to a
     // frame screen about whether this device's bytes have left it, and that
     // policy governs Docs' scans and Notes' attachments too. "Backup", not
-    // "Storage" (#712 B1) — the screen it opens is titled "Backup health".
+    // "Storage" (#712) — the screen it opens is titled "Backup health".
     //
-    // "Photo access" is gone (#712 P13) — permission is a takeover of the
+    // "Photo access" is gone (#712) — permission is a takeover of the
     // timeline's own slot now, not a buried row to a pushed screen.
     expect(PHOTOS_MORE_ROWS.map((row) => row.label)).toStrictEqual(["Backup"]);
     expect(PHOTOS_MORE_ROWS.map((row) => row.label)).not.toContain("Storage");

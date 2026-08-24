@@ -1,4 +1,4 @@
-// Which scopes an app is mounted over (issue #599), and the two questions
+// Which scopes an app is mounted over (#599), and the two questions
 // every part of an app asks about them. Deliberately tiny and dependency-free
 // so the store, the components and the write sites share ONE answer. An app
 // becomes shareable by declaring three lines against this kit, not by writing
@@ -66,7 +66,7 @@ export function photoWriteTarget(
 
 /**
  * May this member change things in `scopeId`? The shell already resolved the
- * answer (issue #726: a vault the member owns is writable), so controls
+ * answer (#726: a vault the member owns is writable), so controls
  * DISABLE on a `false` rather than firing a write and narrating the refusal. An id the app doesn't recognise answers
  * `true`: guessing "no" would grey out a control the shell would have accepted,
  * and the shell refuses authoritatively anyway.
@@ -90,7 +90,7 @@ export function scopeAttr(
 }
 
 /**
- * The three facts an app declares to become shareable (issue #726 D11) —
+ * The three facts an app declares to become shareable (#726) —
  * nothing here is sharing CODE, only sharing DATA the shared kit consumes:
  *
  *  * `mergeKey` — the field `mergeScopePages` (`scope-merge.ts`) orders and
@@ -98,16 +98,16 @@ export function scopeAttr(
  *    with nothing else to order by: its own row id (chronological already,
  *    e.g. a UUIDv7 primary key).
  *  * `mintedIdFamilies` — the vault entity kinds this app mints rows into
- *    (e.g. `"media.asset"`), so the closure/edge split (issue #726 §1)
+ *    (e.g. `"media.asset"`), so the closure/edge split (#726)
  *    knows which rows are this app's to project when a share crosses a scope.
  *  * `projectionIngest` — the name of the post-ingest hook a row projected
- *    onto this app's ontology must take at the audience (issue #726 §4), so
+ *    onto this app's ontology must take at the audience (#726), so
  *    it re-enters through the SAME door authored rows use (EXIF re-link,
  *    enrichment enqueue, …). `"none"` for a record-only app with no derived
  *    state to refresh. A NAME, not a function reference: this kit is a
  *    browser ES module with no bundler (see `search-scaffold.ts`) and must
  *    never import the vault-side hook itself — the projection engine (owned
- *    by issue #726 §4) resolves the name.
+ *    by #726 §4) resolves the name.
  */
 export interface ScopeAppDeclaration<Row> {
   mergeKey: (row: Row) => string | null | undefined;

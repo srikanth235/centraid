@@ -1,4 +1,4 @@
-// The first-run camera-roll import, as data (issue #724 A2).
+// The first-run camera-roll import, as data (#724).
 //
 // EVERYTHING ELSE THAT TOUCHES A CAMERA ROLL ON THIS SCREEN WRITES AD HOC.
 // `useAutomaticPhotoBackup` (`photos-backup.ts`) and its manual twin

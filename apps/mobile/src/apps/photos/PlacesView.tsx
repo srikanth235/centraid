@@ -7,9 +7,9 @@
 // the head that opens a second, full screen. North star is Google Photos:
 // Places reads as an album-like grid, not a map with a list bolted on.
 //
-// The header count is the number of PLACES ("Places · 42", proto:3939), not
-// "N of M geotagged photographs" — that sentence belonged to the old map-first
-// screen and answered the wrong question here.
+// The header count is the number of PLACES ("Places · 42", proto:3939), never
+// "N of M geotagged photographs" — that sentence belongs to a map-first
+// screen and answers the wrong question here.
 //
 // Tapping a card opens that place's photographs. `PhotoStateView` (People's
 // destination for the same shape of tap) is owned by another agent mid-flight
@@ -53,7 +53,7 @@ export default function PlacesView({
     () => placeCards(assets, places.rows),
     [assets, places.rows]
   );
-  // THE TRAILING CARD (issue #816): the photographs that carry no place at all.
+  // THE TRAILING CARD (#816): the photographs that carry no place at all.
   // It is a card so the set is reachable — it was in the library and on no
   // shelf — but it is NOT counted as a place in the head above, because it is
   // not one: it is the absence of one.
@@ -63,7 +63,7 @@ export default function PlacesView({
   }, [assets, cards]);
 
   return (
-    // The band, via the shell (issue #712 P8). A bare `SafeAreaView` with a
+    // The band, via the shell (#712). A bare `SafeAreaView` with a
     // back chevron and NO band leaves the OS gesture as the only way out of
     // Photos from here — the §F dead end `PhotosScreen` exists to make
     // unrepresentable. `current="more"` because the More
@@ -116,7 +116,7 @@ export default function PlacesView({
               })
             }
           >
-            {/* THE GROUND (issue #712 P9). `--skel` is defined as "the ground
+            {/* THE GROUND (#712). `--skel` is defined as "the ground
                 a tile paints BEFORE its bytes arrive" (packages/design/src/
                 roles.ts) — it is the absence, not the surface. This card used
                 to pin it forever, so a place whose cover had decoded still

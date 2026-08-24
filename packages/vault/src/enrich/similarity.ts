@@ -1,4 +1,4 @@
-// Similarity primitives (issue #299): the perceptual-hash distance function
+// Similarity primitives (#299): the perceptual-hash distance function
 // SQL can call, and the pure-JS cosine scan behind semantic search.
 //
 // `vault_hamming` is registered as an app-defined SQLite function beside
@@ -11,7 +11,7 @@
 //
 // The embedding scan is deliberately brute-force float32 cosine: a personal
 // vault holds thousands of rows, not billions, and an exact scan keeps the
-// index additive (issue #299 phase 5 — nothing else may depend on it).
+// index additive (#299 phase 5 — nothing else may depend on it).
 
 import type { DatabaseSync } from "node:sqlite";
 

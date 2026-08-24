@@ -1,11 +1,11 @@
 // oxlint-disable-next-line typescript-eslint/triple-slash-reference -- consumer tsconfigs follow this source without including sibling declarations; governance: allow-no-unjustified-suppressions Vite asset type boundary (#414)
 /// <reference path="./vite-assets.d.ts" />
 
-// Browser compute adapters for the idle-device queue (issue #414 D11/D13).
+// Browser compute adapters for the idle-device queue (#414 D11/D13).
 // The shell owns scheduling/eligibility; this file owns bounded PDF.js text
 // extraction and hardware-decoded video poster generation.
 //
-// TRANSCRIPTION IS NOT HERE ANY MORE (issue #724). Handing a recording to the
+// TRANSCRIPTION IS NOT HERE ANY MORE (#724). Handing a recording to the
 // desktop's file-ASR adapter was this file's third adapter; transcription is
 // owned by its self-contained recognition automation so every derived row can
 // name the versioned local model that produced it. A

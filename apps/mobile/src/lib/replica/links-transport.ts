@@ -1,4 +1,4 @@
-// Renderer-side transport for the gateway's link surface (#726 P2/P3 —
+// Renderer-side transport for the gateway's link surface (#726/P3 —
 // `packages/server/src/routes/vault-links-routes.ts`), mirroring
 // `placement-transport.ts`'s shape. Mobile's own People/Sharing screen data
 // source — a link is the channel a grant to another person is delivered over
@@ -13,7 +13,7 @@ export interface GatewayLink {
   linkId: string;
   vaultA: string;
   vaultB: string;
-  /** Each vault's own name/self-declared label (#726 P6 gap 3) — `null` when
+  /** Each vault's own name/self-declared label (#726 gap 3) — `null` when
    *  genuinely unknown. Symmetric with `vaultA`/`vaultB`: `labelA` names
    *  `vaultA`. */
   labelA: string | null;

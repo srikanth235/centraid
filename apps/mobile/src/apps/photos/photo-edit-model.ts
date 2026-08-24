@@ -13,7 +13,7 @@
 // must be given the same promise, word for word; two string literals in two
 // packages is exactly how that stops being true.
 //
-// FLIP joined crop/rotate/straighten in the same tool row (issue #724 B1) for
+// FLIP joined crop/rotate/straighten in the same tool row (#724) for
 // the same reason rotate did: `expo-image-manipulator`'s manipulator context
 // exposes it directly (`.flip('horizontal')`), so it costs nothing beyond a
 // toggle here and a chained call in `photo-edit-save.ts`.
@@ -175,7 +175,7 @@ export function moveCrop(rect: CropRect, dx: number, dy: number): CropRect {
  * Pinch: the box grows or shrinks about its own centre, KEEPING its aspect in
  * frame terms so a `3 : 2` crop is still `3 : 2` afterwards. Deliberately not a
  * free-form eight-handle resize — this is the Google Photos gesture, not a
- * gesture engine (issue #711).
+ * gesture engine (#711).
  */
 export function scaleCrop(rect: CropRect, factor: number): CropRect {
   const cx = rect.x + rect.w / 2;

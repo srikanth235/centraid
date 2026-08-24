@@ -1,5 +1,5 @@
 // The phone's bottom band, as People claims it (Binding Layer v12 handoff,
-// Part 1 § Navigation; issue #821).
+// Part 1 § Navigation; #821).
 //
 // People claims the band with THREE destinations — People · Touch · Search —
 // plus the frame's Home capsule at the leading edge. Three is a sanctioned

@@ -1,10 +1,10 @@
 /*
- * Provider usage polling (issue #367 §D1) — the gateway-side cache in front
+ * Provider usage polling (#367) — the gateway-side cache in front
  * of `centraid-storage-provider/1`'s optional Layer-1 `usage` capability
  * (`GET /v1/storage/vaults/:id/usage`, packages/backup/PROTOCOL.md § Usage;
  * `RemoteBackupProvider.usageReport()`).
  *
- * Every storage connection is a provider connection (#436 §2); a provider
+ * Every storage connection is a provider connection (#436); a provider
  * that doesn't offer the `usage` capability reports `providerReported: null`
  * and `GET storage/usage` (storage-routes.ts) falls back to locally-computed
  * custody byte counts.

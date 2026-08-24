@@ -1,16 +1,15 @@
-// *Share*, as ONE selection-bar handler (issue #825).
+// *Share*, as ONE selection-bar handler (#825).
 //
 // Four Photos shelves carry the same third target — the library's state views,
 // an album, the duplicates shelf and its review — and wiring them one at a
 // time would be four chances for the refusal grammar, the picker moment and
 // the share call to drift apart.
 //
-// What changed in wave 6: the control opens the ONE grant kit
-// (`kit/share/GrantSheet.tsx`) over the selected photograph as a standing
-// `media.asset` grant. Photos no longer assembles a destination list, no
-// longer names a source vault, and no longer reaches the replica session to
-// place a batch of items — the door, the capability verbs and every sentence
-// belong to the kit.
+// The control opens the ONE grant kit (`kit/share/GrantSheet.tsx`) over the
+// selected photograph as a standing `media.asset` grant. Photos does not
+// assemble a destination list, name a source vault, or reach the replica
+// session to place a batch of items — the door, the capability verbs and
+// every sentence belong to the kit.
 //
 // TWO REFUSALS ARE THIS FILE'S OWN, and both are honest rather than silent:
 // a selection from more than one photograph (a grant stands over one subject —

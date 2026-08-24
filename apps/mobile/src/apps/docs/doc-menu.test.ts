@@ -1,4 +1,4 @@
-// The quick-actions menu's composition (issue #821): which verbs a row
+// The quick-actions menu's composition (#821): which verbs a row
 // offers is a fact about the document, asserted here as plain data.
 import { describe, expect, it, vi } from "vitest";
 

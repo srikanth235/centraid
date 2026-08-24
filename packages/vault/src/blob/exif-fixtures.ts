@@ -1,4 +1,4 @@
-// Adversarial EXIF/JPEG byte builders (issue #721 D1) — the "corrupt EXIF"
+// Adversarial EXIF/JPEG byte builders (#721) — the "corrupt EXIF"
 // trap. `extractBlobMeta` (pipeline.ts) hands parseJpegExif bytes from
 // arbitrary cameras, screenshot tools, re-encoders, and partially-spooled
 // uploads; its own header promises a malformed header "degrades to a

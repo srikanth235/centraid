@@ -1,4 +1,4 @@
-// THE PIN, once, for all three drawings (issue #816).
+// THE PIN, once, for all three drawings (#816).
 //
 // Places renders the same pin over three different grounds — the private
 // sketch's graticule, MapKit on iOS, and MapLibre's vector tiles on Android —

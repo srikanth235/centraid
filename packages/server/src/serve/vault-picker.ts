@@ -1,7 +1,6 @@
 /*
- * The shell entity picker (duaility §12, issue #272) — the read half of the
- * cross-referencing flow, split out of vault-plane.ts to keep the plane a
- * thin surface.
+ * The shell entity picker (duaility §12, #272) — the read half of the
+ * cross-referencing flow.
  *
  * This is an OWNER-trust search/browse over the carded entities, so an app
  * can let the user reference a foreign entity without ever holding browse
@@ -82,7 +81,7 @@ export function pickAnchors(
   const term = request.term?.trim().toLowerCase() ?? "";
   const limit = Math.min(Math.max(request.limit ?? 8, 1), 25);
   // Receipted owner read, like every other door this picker drives — a raw
-  // `db.vault` JOIN is a second, unaudited read path (issue #541 review).
+  // `db.vault` JOIN is a second, unaudited read path (#541 review).
   const rows = gateway.read(cred, {
     entity: AUTOMATION_ANCHOR_ENTITY,
     orderBy: { column: "created_at", dir: "desc" },
@@ -209,12 +208,12 @@ export interface LinkInput {
   to_type: string;
   to_id: string;
   relation?: string;
-  /** Optional inline anchor written atomically with the link (issue #282). */
+  /** Optional inline anchor written atomically with the link (#282). */
   selector?: AnchorSelector;
 }
 
 /**
- * The standoff-anchor selector (issue #282): a W3C-style text quote plus a
+ * The standoff-anchor selector (#282): a W3C-style text quote plus a
  * position hint into the from-endpoint's decoded body (UTF-16 code units).
  */
 export interface AnchorSelector {

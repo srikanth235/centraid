@@ -1,7 +1,7 @@
 /*
- * Shared types for the historical agent-runtime package's harness wrappers.
+ * Shared types for this package's harness wrappers.
  *
- * The canonical definitions now live in `@centraid/server/engine`
+ * The canonical definitions live in `@centraid/server/engine`
  * (`turn.ts`) so the backend-agnostic run engine can speak the same
  * contract without depending on this backend package. Re-exported here so
  * agent-runtime's own modules (and back-compat consumers that import from

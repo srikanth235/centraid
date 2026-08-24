@@ -323,7 +323,7 @@ describe("media: places", () => {
     expect(row.place_id).not.toBe("home");
   });
 
-  // NAMING A PLACE (issue #816) — the write that turns a coordinate into a
+  // NAMING A PLACE (#816) — the write that turns a coordinate into a
   // location. Every surface phrases a place from this row at render, so the
   // only thing these tests have to hold is that the row says what the member
   // said and nothing else moved.

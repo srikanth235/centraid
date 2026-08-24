@@ -1,5 +1,5 @@
 /*
- * CLOCK ADVERSITY against the automation scheduler (issue #842, W3.3).
+ * CLOCK ADVERSITY against the automation scheduler (#842).
  *
  * The DST zoo (`time-zoo-cron.test.ts`, #839) attacks the CALENDAR: it holds
  * the device clock honest and varies the zone's own irregularities. This file

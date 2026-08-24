@@ -23,11 +23,10 @@ import type {
 } from "./paletteEntitySearch.js";
 import type { PaletteRecents } from "./paletteRecents.js";
 
-// The ⌘K command palette's data driver — the React successor to the vanilla
-// app-palette.ts `buildGroups`. Given the current query it returns grouped
-// rows (apps, navigation targets, a "build a new app" create row), each with a
-// `run` closure the palette invokes on Enter/click. Kept pure + deps-injected
-// so it is unit-testable without a live shell.
+// The ⌘K command palette's data driver. Given the current query it returns
+// grouped rows (apps, navigation targets, a "build a new app" create row),
+// each with a `run` closure the palette invokes on Enter/click. Kept pure +
+// deps-injected so it is unit-testable without a live shell.
 
 // The palette's destinations ARE the launcher's, read from the one model
 // rather than restated here (#707). The palette is the keyboard route to the
@@ -58,7 +57,7 @@ export interface PaletteDeps {
   navigate: (route: ShellRoute) => void;
   onClose: () => void;
   /**
-   * Async conversation FTS source (issue #420). `buildPaletteGroups` reads its
+   * Async conversation FTS source (#420). `buildPaletteGroups` reads its
    * synchronous cache and schedules a debounced fetch; when results land the
    * source calls the palette's `refresh()`, re-running this builder. Optional
    * so callers (and older tests) without a search source still work.
@@ -68,14 +67,14 @@ export interface PaletteDeps {
   entitySearch?: PaletteEntitySearch;
   /**
    * Recently opened/edited vault objects + the suggestion chips derived from
-   * them — the pre-query empty state (issue #708 §A). Optional so callers
+   * them — the pre-query empty state (#708). Optional so callers
    * without a live replica session still work, same convention as the other
    * two search sources.
    */
   recents?: PaletteRecents;
 }
 
-/** The owning app's icon + identity hue for a group header (issue #708 §A
+/** The owning app's icon + identity hue for a group header (#708 §A
  *  point 2 — "icon as group marker"). Looked up from the shared app catalog
  *  rather than `deps.userApps` so a group renders correctly even before the
  *  bundled app has been added to the member's home screen. */
@@ -98,7 +97,7 @@ function assistantGroupIcon(): PaletteGroupIconDTO | undefined {
 }
 
 /**
- * One vault-object row from an entity hit (issue #708 §A) — shared between
+ * One vault-object row from an entity hit (#708) — shared between
  * the query-time entity-search groups and the empty-state Recents group so
  * the two present identically.
  *
@@ -142,7 +141,7 @@ export function buildPaletteGroups(
   const q = query.trim().toLowerCase();
   const groups: PaletteGroupDTO[] = [];
 
-  // Recents (issue #708 §A): the pre-query empty state. Objects, not apps —
+  // Recents (#708): the pre-query empty state. Objects, not apps —
   // rows are the member's own recently opened/edited items, grouped by their
   // owning app exactly like a live entity-search hit would be.
   if (!q && deps.recents) {
@@ -182,7 +181,7 @@ export function buildPaletteGroups(
     });
   }
 
-  // Conversations (issue #420): FTS over titles + message text. The source
+  // Conversations (#420): FTS over titles + message text. The source
   // fetches asynchronously and re-runs this builder when hits arrive, so the
   // group fills in a beat after typing. Only shown when there's a query.
   if (q && deps.conversationSearch) {
@@ -209,7 +208,7 @@ export function buildPaletteGroups(
     }
   }
 
-  // Entity search (issue #420 Wave 3, extended #708 §A): vault OBJECTS —
+  // Entity search (#420, extended #708 §A): vault OBJECTS —
   // never "open app X" — grouped by their owning app, one group per app id
   // so the header carries that app's own icon + identity hue.
   if (q && deps.entitySearch) {
@@ -254,7 +253,7 @@ export function buildPaletteGroups(
 }
 
 /**
- * Suggestion chips for the empty state (issue #708 §A) — the palette calls
+ * Suggestion chips for the empty state (#708) — the palette calls
  * this only while the query field is empty. A thin wrapper over
  * `deps.recents` so `App.tsx` can pass it as `PaletteBridgeProps.suggestions`
  * without reaching into the recents source's shape itself.

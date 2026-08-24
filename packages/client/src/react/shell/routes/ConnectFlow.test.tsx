@@ -104,7 +104,7 @@ describe("ConnectFlow scenarios", () => {
   }
 
   // Every radio in the flow is a native <input type="radio"> wrapped in the
-  // styled <label> that carries the visible text (issue #573).
+  // styled <label> that carries the visible text (#573).
   function radios(el: HTMLElement, name: string): HTMLInputElement[] {
     return [...el.querySelectorAll("label")]
       .filter((l) => l.textContent?.includes(name))

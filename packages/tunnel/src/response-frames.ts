@@ -1,12 +1,12 @@
 /*
  * Writing one small JSON answer onto a tunnel stream.
  *
- * Split out of gateway-endpoint.ts because the two planes disagree about what
+ * Kept out of gateway-endpoint.ts because the two planes disagree about what
  * a refusal IS. A device gets an `{error}` — it belongs to this gateway's
  * owner, and naming the fault is how the owner fixes it. A peer gets a
  * `{state}` — it is another gateway's protocol code, so a refusal must be a
  * move it can make sense of, and `not_found` must cover every reason at once
- * so a probe maps nothing (issue #726 P3).
+ * so a probe maps nothing (#726).
  */
 
 import type { SendStream } from "./iroh.js";
@@ -20,7 +20,7 @@ import { encodeHeaderFrame } from "./protocol.js";
  * `Array.isArray`), so a copy-free write of the Buffer itself is not possible
  * through this binding; the conversion is an unavoidable single copy. A
  * preallocated loop is used over `Array.from(buf)` to skip the iterator
- * protocol on this per-chunk hot path. Compression (issue #404) is what
+ * protocol on this per-chunk hot path. Compression (#404) is what
  * actually shrinks the byte volume crossing here.
  */
 export function bytesToArray(buf: Buffer, out: number[] = []): Array<number> {

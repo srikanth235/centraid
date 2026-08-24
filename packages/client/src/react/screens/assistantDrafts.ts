@@ -1,4 +1,4 @@
-// Per-conversation composer draft persistence (issue #420 §4). The composer's
+// Per-conversation composer draft persistence (#420). The composer's
 // text survives navigation + reload, keyed by conversation id in localStorage
 // and cleared on send. A fresh (uncreated) thread uses a stable `:new` key so a
 // half-typed first message isn't lost either.
@@ -28,7 +28,7 @@ export function clearDraft(conversationId: string | undefined): void {
 
 // `localStorage` is synchronous and blocks the main thread, so writing the
 // draft on every keystroke put a disk-backed write between the key and the
-// character appearing (issue #659). Persistence is a safety net measured in
+// character appearing (#659). Persistence is a safety net measured in
 // seconds, not frames: coalesce keystrokes and write once they pause. Every
 // path that must not lose the last character — send, thread switch, unmount —
 // flushes explicitly, so the debounce can never eat a draft.

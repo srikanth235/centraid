@@ -125,7 +125,7 @@ async function buildSpec(
   };
   // Never a fresh `randomBytes(32)`: a headless `serve` has already wrapped
   // every key under the external host credential, and handing the service a
-  // key that cannot decrypt them poisons custody (issue #568 item E). The
+  // key that cannot decrypt them poisons custody (#568). The
   // desktop path still wins via `CENTRAID_KEYSTORE_MASTER_KEY`.
   // `--dry-run` promises zero host mutation, and `hostCredentialKey` creates
   // the fallback file on first call — so keep the placeholder there (every
@@ -153,9 +153,9 @@ async function buildSpec(
         ? ({
             kind: "keychain",
             service: "dev.centraid.gateway.keystore",
-            // Per data directory, not per label: one shared account name let
-            // an install for one data dir overwrite (`-U`) the credential
-            // another data dir's keys were wrapped under (#568 item E).
+            // Per data directory, not per label: one shared account name would
+            // let an install for one data dir overwrite (`-U`) the credential
+            // another data dir's keys are wrapped under (#568).
             account: keychainAccountFor(layout.keysDir, label),
             encoded,
             keysDir: layout.keysDir,
@@ -249,7 +249,7 @@ async function launchdInstall(parsed: ServiceArgs, fail: Fail): Promise<void> {
   }
 
   if (prepared.keyCredential?.kind === "keychain") {
-    // Adopt FIRST, commit the Keychain entry LAST (issue #568 item E).
+    // Adopt FIRST, commit the Keychain entry LAST (#568).
     // `add-generic-password -U` overwrites in place, so a credential written
     // before validation and then rejected by adoption leaves the poisoned
     // value behind — and `cli/key-store.ts` finds it on every darwin boot
@@ -448,7 +448,7 @@ async function systemdInstall(parsed: ServiceArgs, fail: Fail): Promise<void> {
   await fs.mkdir(path.dirname(unitPath), { recursive: true });
   await fs.mkdir(path.dirname(spec.stdoutLog), { recursive: true });
   if (prepared.keyCredential?.kind === "systemd") {
-    // Same ordering rule as the launchd path (#568 item E): prove the
+    // Same ordering rule as the launchd path (#568): prove the
     // credential reads this data dir's keys before committing it anywhere.
     await adoptKeyStoreCredential(fail, prepared.keyCredential);
     await fs.mkdir(path.dirname(prepared.keyCredential.path), {

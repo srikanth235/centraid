@@ -1,8 +1,7 @@
 // ConversationStore item rows: message_in landing at ordinal 0, the
 // openItem/closeItem lifecycle, the 64 KiB raw-envelope cap, and attachment
 // rows hanging off a message_in item. Conversation / turn / search behaviour
-// stays in store.test.ts. Split from store.test.ts (500-line repo-hygiene cap);
-// shared fixtures in store-test-fixtures.ts.
+// stays in store.test.ts; shared fixtures in store-test-fixtures.ts.
 
 import type { StatementSync } from "node:sqlite";
 

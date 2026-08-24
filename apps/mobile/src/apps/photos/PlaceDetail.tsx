@@ -51,7 +51,7 @@ export default function PlaceDetail({
     [timelineAssets, places.rows, placeKey]
   );
 
-  // WHICH ROW THIS SCREEN COULD NAME (issue #816). Null once the place has a
+  // WHICH ROW THIS SCREEN COULD NAME (#816). Null once the place has a
   // name a person would recognise — and after the write it becomes null on its
   // own, because the replica pushes the renamed row and this recomputes. The
   // phrase is never cached anywhere: the head reads the row at render.
@@ -94,7 +94,7 @@ export default function PlaceDetail({
   };
 
   return (
-    // The band, via the shell (issue #712 P8) — and the back chevron STAYS,
+    // The band, via the shell (#712) — and the back chevron STAYS,
     // because `PlacesView` is this screen's genuine parent, exactly the split
     // `DuplicatesShelf` states: the shell owns the band, the screen owns its
     // own head. `current="more"` for the same reason it is on Places.
@@ -122,7 +122,7 @@ export default function PlaceDetail({
           </Text>
         </View>
       </View>
-      {/* THE NAMING CONVERSATION (issue #816). It stands under the head that
+      {/* THE NAMING CONVERSATION (#816). It stands under the head that
           shows the fallback phrase and nowhere else: a place the member named
           has nothing to answer, and `unnamedPlaceAt` is what knows. Two
           answers, offered together — a typed name, or the one-tap declaration

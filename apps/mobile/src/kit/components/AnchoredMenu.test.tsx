@@ -1,4 +1,4 @@
-// Pins the anchored menu's anatomy (issue #712):
+// Pins the anchored menu's anatomy (#712):
 //
 //  - every group's rows render, and a group boundary is a rule rather than a
 //    heading
@@ -271,7 +271,7 @@ function labels(): string[] {
   );
 }
 
-// issue #712 — anchored in a comment, never in a describe string: the
+// #712 — anchored in a comment, never in a describe string: the
 // mobile-design gate counts `#712` in code (strings included) as a hex literal.
 describe("the anchored menu's rows", () => {
   beforeEach(() => {

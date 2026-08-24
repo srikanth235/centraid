@@ -1,4 +1,4 @@
-// The batched derivative resolve (issue #405 §2): "tinies for these N content
+// The batched derivative resolve (#405): "tinies for these N content
 // ids in one pass". Rows are inserted directly (no command pipeline) — this is
 // a pure query test, so it pins the contract in isolation: variant filtering,
 // absent ids, and the >500-id chunk boundary the IN list splits on.

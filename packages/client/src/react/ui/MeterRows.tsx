@@ -12,14 +12,11 @@ import styles from "./MeterRows.module.css";
 // THE LARGEST ROW rather than of the total — a total-share bar on a long tail
 // is forty invisible slivers, which is a picture of nothing.
 //
-// PROMOTED FROM `screens/AtlasMeterRows` (issue #814). It was the census's own
-// row, kept out of the kit on the stated condition that "a fifth shared block
-// earns its place only once a second surface needs it". System's Capacity is
-// that surface: it holds the same shape of question — several things sharing
-// one measure, where the ordering is the finding — and the alternative was a
-// second implementation of the same row twenty files away. `RowsBlock` still
-// cannot carry it: a row there is title/sub/meta/one verb, and a proportional
-// bar is none of those.
+// A SHARED KIT BLOCK (#814), used wherever several things share one measure
+// and the ordering is the finding — the Atlas census and System's Capacity.
+// `RowsBlock` cannot carry it: a row there is title/sub/meta/one verb, and a
+// proportional bar is none of those. Do not fold this into `RowsBlock`, and do
+// not re-implement it per surface.
 //
 // A row with nothing behind it keeps its place — "we hold nothing of that
 // sort" is an answer these pages owe — and its trailing cell is INERT TEXT,

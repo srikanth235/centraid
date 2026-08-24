@@ -2,8 +2,8 @@ import crypto from "node:crypto";
 // governance: allow-repo-hygiene file-size-limit (#608) cohesive automation lifecycle suite shares one production HTTP and scheduler fixture
 import { promises as fs } from "node:fs";
 /*
- * Automation CRUD over HTTP (issue #141, C7). The desktop no longer
- * mutates an automation in a local worktree — it reads the app's draft
+ * Automation CRUD over HTTP (#141). The desktop does not
+ * mutate an automation in a local worktree — it reads the app's draft
  * over HTTP, applies the file-map transform (toggle / delete), writes the
  * changed/removed files back through the git-store session routes, and
  * publishes. The gateway reconciles the OS scheduler on publish, so the

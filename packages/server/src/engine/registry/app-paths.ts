@@ -3,9 +3,9 @@ import type { RegistryEntry } from "../types.js";
 /**
  * Validate an app folder id. A filesystem-safe slug — alnum / `-` / `_`,
  * no path separators, no dots, and no `_`-prefixed (plugin-internal) ids.
- * Automation apps are no longer distinguished by a dotted `auto.` prefix
- * (that is now the manifest's `kind` field), so the id grammar is a plain
- * slug again and `..` is impossible by construction.
+ * Automation apps are distinguished by the manifest's `kind` field, never a
+ * dotted `auto.` prefix, so the id grammar is a plain slug and `..` is
+ * impossible by construction.
  *
  * This is general app-identity — shared by the harness-run ledger
  * (`chat-history`), the automation domain (`automation-ref`,
@@ -43,7 +43,7 @@ export function isValidAppOrAssistantId(id: string): boolean {
  * Resolve where an app's persistent runtime state lives: logs.jsonl,
  * settings.json, and the attachment blob CAS at `<appsDir>/<id>/` — the
  * stable per-app dir, kept separate from the git-store code worktree
- * (#137). App DATA lives in the vault (issue #286 phase 2).
+ * (#137). App DATA lives in the vault (#286).
  */
 export function appDataDir(entry: RegistryEntry): string {
   return entry.path;

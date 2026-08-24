@@ -1,5 +1,5 @@
 // Coalesce a burst of "state changed, re-project" calls into at most one run
-// per animation frame (issue #659).
+// per animation frame (#659).
 //
 // The assistant stream fires an event per token. Re-projecting the WHOLE
 // transcript per event and pushing it into React synchronously would make a

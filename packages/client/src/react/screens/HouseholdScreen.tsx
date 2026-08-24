@@ -100,7 +100,7 @@ export interface HouseholdScreenProps {
   ) => Promise<GatewayDeviceTicket>;
   onUpdateDeviceCompute?: DeviceRosterWiring["onUpdateCompute"];
   loadDeviceWorkStatus?: DeviceRosterWiring["loadWorkStatus"];
-  /** Sharing wiring (#726 P6). Optional so a gateway with no edge/link plane
+  /** Sharing wiring (#726). Optional so a gateway with no edge/link plane
    *  (or a test) renders the page without it. */
   sharing?: SharingCardProps;
   /**

@@ -52,7 +52,7 @@ export const TARGET_MIN = 44;
 // simply draws it twice, once for the capsule and once for the tab group.
 
 /**
- * Photos' four (§3.1, issue #712). Exactly these, in this order, on every
+ * Photos' four (§3.1, #712). Exactly these, in this order, on every
  * compact surface: Library first — the timeline is what a member reaches for
  * most, and the band is judged by how few taps that costs — then Collections,
  * then Search, then More. People is not a tab here: it is reached from
@@ -101,14 +101,14 @@ export interface MoreRow {
  *
  * Collections (`PhotosCollectionsView.tsx`) is the landing surface and
  * carries every shelf as a named section with a live count, on screen,
- * without a sheet in the way (there is no Sharing shelf, issue #726). A row
+ * without a sheet in the way (there is no Sharing shelf, #726). A row
  * here for a shelf Collections carries would mean two doors to it, of which
  * one is hidden — and two places to keep its label and count honest.
  *
  * So the sheet keeps exactly what Collections does not carry:
  *
  *   - **Backup**, which is not a shelf at all. It is a cross-stack link to a
- *     FRAME screen (issue #712 B2) about whether this device's bytes have
+ *     FRAME screen (#712) about whether this device's bytes have
  *     left it — a policy that governs Docs' scans and Notes' attachments too.
  *
  * Tile size lives in the Library's own header menu
@@ -120,10 +120,9 @@ export interface MoreRow {
  * the question is actually asked.
  */
 export const PHOTOS_MORE_ROWS: readonly MoreRow[] = [
-  // "Backup", not "Storage" (issue #712, B1). The screen it opens has always
-  // been titled "Backup health" and has always been about whether this device's
-  // photographs have left it — the row's old label named the noun the screen
-  // does not discuss.
+  // "Backup", not "Storage" (#712): the screen it opens is titled "Backup
+  // health" and is about whether this device's photographs have left it, never
+  // about storage.
   { key: "backup", label: "Backup", icon: "archive" },
 ];
 
@@ -149,7 +148,7 @@ export const PHOTOS_MORE_FOOT = "Everything Photos can show.";
  *      this routing rule depends on.
  */
 /**
- * A CROSS-STACK destination (issue #712, B2), and now the only one. Backup
+ * A CROSS-STACK destination (#712), and the only one. Backup
  * health is a frame screen — it lives in Settings beside Phone storage,
  * because nothing on it is about photographs: the policy it edits governs
  * Docs' scans and Notes' attachments too. Photos keeps a deep link to it
@@ -178,7 +177,7 @@ export function resolveMoreRowRoute(key: PhotosMoreRowKey): MoreRowRoute {
 
 /**
  * Who owns the band right now — THE FRAME'S LATCH, not Photos'
- * (`kit/band/band-owner.ts`, issue #712 E3). One namespace for one
+ * (`kit/band/band-owner.ts`, #712). One namespace for one
  * preference, owned by the frame that makes the decision: mobile shares
  * web's `shell.bandOwner.*` key rather than keeping a `photos.*` twin — see
  * that module's header for what sharing the key costs and why it is safe.

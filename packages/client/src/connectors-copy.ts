@@ -1,4 +1,4 @@
-// Connectors' cross-surface copy (issue #805, slice C).
+// Connectors' cross-surface copy (#805).
 //
 // `react/screens/SettingsConnectionsScreen.tsx` and mobile's
 // `screens/connectors/Connectors.tsx` render the same three states from the

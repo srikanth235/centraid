@@ -6,10 +6,10 @@ import { build } from "esbuild";
 
 import { toCss } from "@centraid/design";
 
-// The GRANT SHEET in a real browser (#825, wave 4).
+// The GRANT SHEET in a real browser (#825).
 //
-// The kit is not wired into an app yet — the app waves do that — so this spec
-// mounts the shipped component itself, over the shipped design tokens and the
+// This spec proves the kit ALONE, with no app around it: it mounts the shipped
+// component itself, over the shipped design tokens and the
 // shipped `kit.css`, with the grant plane stubbed at the ONE seam the kit was
 // built to take: its `door`. That is deliberately the whole point of the seam.
 // What a browser proves here that a jsdom suite cannot: the sheet's real
@@ -17,7 +17,7 @@ import { toCss } from "@centraid/design";
 // the outlined destructive control render as the recipes say, and the
 // destructive confirm reads in its own words.
 //
-// The capture is the #825 UI-impact evidence.
+// The capture is the UI-impact evidence (#825).
 
 declare global {
   interface Window {

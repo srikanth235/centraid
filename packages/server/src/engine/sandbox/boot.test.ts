@@ -1,5 +1,5 @@
 /*
- * The sandbox's loader-safe entry point (#842 W7.1).
+ * The sandbox's loader-safe entry point (#842).
  *
  * `boot.ts` exists because a worker runner cannot import the sandbox the
  * ordinary way: worker threads boot under Node's native type stripping, which

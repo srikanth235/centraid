@@ -1,7 +1,6 @@
 import crypto from "node:crypto";
 /*
- * Bundled-app install over HTTP (issue #434). "Use template" cloned a
- * blueprint into the vault's git code store; install instead registers the
+ * Bundled-app install over HTTP (#434). Install registers the
  * app + grants its declared scopes and serves it in place from the shipped
  * @centraid/blueprints package — no code copy, no git. This boots a real
  * git-store gateway and drives that exact wire path: install → listing union
@@ -312,9 +311,9 @@ describe("install-over-http scenarios", () => {
   });
 
   test("a mounted vault can seed its bundled apps — the demo plane reaches the shipped tree", async () => {
-    // Before #708 this was unreachable: the demo route scanned the git code
-    // store, bundled apps serve in place, so a vault owning every seedable app
-    // answered `{apps:[]}` and 404'd every seed request.
+    // The demo route must not scan the git code store (#708): bundled apps
+    // serve in place, so a vault owning every seedable app would answer
+    // `{apps:[]}` and 404 every seed request.
     const listed = (await (
       await fetch(`${handle.url}/centraid/_vault/demo`, { headers: auth() })
     ).json()) as { apps: { appId: string; rows: number; seedable: boolean }[] };

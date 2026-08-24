@@ -1,5 +1,5 @@
 // PERMISSION IS A TAKEOVER OF THE TIMELINE, NOT A SCREEN BEHIND A MENU ROW
-// (Photos v4 handoff §13, proto:4335-4342; issue #712 P13).
+// (Photos v4 handoff §13, proto:4335-4342; #712).
 //
 // The refusal is answered where the question is ASKED, never behind a menu
 // row: a member who refused the camera-roll prompt does not go looking through

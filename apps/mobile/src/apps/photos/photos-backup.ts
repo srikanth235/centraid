@@ -1,4 +1,4 @@
-// Photos' seat on the frame's transfer engine (#711, S4).
+// Photos' seat on the frame's transfer engine (#711).
 //
 // The serial run, the counters and the failure shape moved to
 // `kit/transfer/transfer-run.ts` — none of it was ever about photographs, and
@@ -9,8 +9,8 @@
 // run stalls.
 //
 // It also holds the S4 half of the model: which photographs the AUTOMATIC
-// sweep is allowed to enqueue. `runBackup` below is now the manual OVERRIDE —
-// the north star keeps one too — and `automaticBackupCandidates` is the
+// sweep is allowed to enqueue. `runBackup` below is the manual OVERRIDE — the
+// north star keeps one too — and `automaticBackupCandidates` is the
 // consent-gated default path.
 
 import { File } from "expo-file-system";

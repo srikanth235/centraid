@@ -6,9 +6,9 @@ import { build } from "esbuild";
 
 import { toCss } from "@centraid/design";
 
-// PHOTOS ON THE GRANT PLANE, in a real browser (#825, wave 6).
+// PHOTOS ON THE GRANT PLANE, in a real browser (#825).
 //
-// The wave-4 spec proved the KIT. This one proves the APP: the shipped album
+// This proves the APP, not the kit: the shipped album
 // bar (`apps/photos/components/AlbumBar.tsx`) is mounted whole, over the
 // shipped tokens and `kit.css`, with nothing stubbed below the two seams the
 // app genuinely owns — the host bridge (`window.centraid`) and the frame's one
@@ -23,7 +23,7 @@ import { toCss } from "@centraid/design";
 // is why album co-contribution is a deferred v1 non-goal and not a hidden
 // button), and the outcome lands on the app's status line rather than a toast.
 //
-// The capture is the #825 wave-6 UI-impact evidence.
+// The capture is the Photos UI-impact evidence (#825).
 
 declare global {
   interface Window {

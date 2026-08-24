@@ -1,6 +1,6 @@
 import { Store } from "../store.js";
 
-// Which vault each conversation belongs to (issue #599, Decision 14).
+// Which vault each conversation belongs to (#599, Decision 14).
 //
 // A conversation reads and writes exactly ONE vault for its whole life: the
 // assistant answers from a single set of shapes, and a thread that silently

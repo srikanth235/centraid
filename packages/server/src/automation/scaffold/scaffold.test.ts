@@ -89,8 +89,8 @@ describe(scaffoldApp, () => {
   it("validates ids", () => {
     expect(() => validateId("has space")).toThrow(AppScaffoldError);
     expect(() => validateId("_leading")).toThrow(AppScaffoldError);
-    // Automation apps use a plain slug id now (kind marks them, not a
-    // dotted prefix) — a dotted id is rejected, a slug accepted.
+    // Automation apps use a plain slug id (kind marks them, not a dotted
+    // prefix) — a dotted id is rejected, a slug accepted.
     expect(() => validateAppId("auto.ok")).toThrow(AppScaffoldError);
     validateAppId("standup-bot");
   });

@@ -21,7 +21,7 @@ import type { BearingLayout, ViewTransform } from "./atlasOrreryGeometry.js";
 
 import styles from "./AtlasRelationsTab.module.css";
 
-// The orrery's inline-SVG chart body (issue #441 B2) — a presentational leaf of
+// The orrery's inline-SVG chart body (#441) — a presentational leaf of
 // AtlasRelationsTab. It draws the graticule, pack sectors, FK edge layer, the
 // authored-link overlay, the brass centre plate, and the clickable kind nodes
 // from fully-computed geometry handed down as props. All layout maths and the

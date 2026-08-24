@@ -1,4 +1,4 @@
-// Orphan-grace GC invariant (issue #439 R4). Two halves: the OrphanTombstoneIndex
+// Orphan-grace GC invariant (#439). Two halves: the OrphanTombstoneIndex
 // (first-observed-orphaned bookkeeping) and reconcileCustody's grace gate — a
 // genuine orphan is HELD for the recovery window N before the client-owned CAS
 // delete may evict it, so a PITR that lands between two snapshots can still reach

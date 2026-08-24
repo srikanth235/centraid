@@ -1,4 +1,4 @@
-// The gateway's raster preview codec (issue #405 §2): the concrete, npm-dep
+// The gateway's raster preview codec (#405): the concrete, npm-dep
 // side of the `PreviewCodec` interface the vault package declares
 // dependency-free. The vault runtime deliberately carries no raster decoder
 // (packages/vault stays dep-light), so the gateway — which already holds
@@ -10,7 +10,7 @@
 // oracle. Production selects native sharp/libvips for the daemon and the
 // wasm-vips implementation for Electron through BuildGatewayOptions.
 //
-// Scope (issue #405 §2): JPEG and PNG in, JPEG out. GIF / WebP / video →
+// Scope (#405): JPEG and PNG in, JPEG out. GIF / WebP / video →
 // `null` (unsupported → the browse surface's placeholder contract, issue
 // #404, covers the miss). Gateway-side VIDEO decode is deliberately out of v0
 // — poster frames are client-only where cheap.
@@ -26,7 +26,7 @@ import { rgbaToThumbHash } from "./thumbhash.js";
 const THUMBHASH_EDGE = 100;
 
 /**
- * Refuse inputs whose decoded raster would blow memory (issue #405 §2: "cap
+ * Refuse inputs whose decoded raster would blow memory (#405 §2: "cap
  * input dimensions to bound memory"). 12k on either edge, and a total-pixel
  * ceiling so a pathological 12000×12000 (576 MB of RGBA) is still refused.
  * A refused input returns `null` — the same "unsupported, render a
@@ -36,7 +36,7 @@ const THUMBHASH_EDGE = 100;
 const MAX_INPUT_EDGE = 12_000;
 const MAX_INPUT_PIXELS = 40_000_000; // ~40 MP — comfortably above phone cameras
 
-/** Output JPEG quality (issue #405 §2): ~0.8 for both rungs. jpeg-js is 0-100. */
+/** Output JPEG quality (#405): ~0.8 for both rungs. jpeg-js is 0-100. */
 const OUTPUT_QUALITY = 80;
 
 /** A decoded RGBA raster — the common shape both decoders normalize to. */
@@ -72,14 +72,14 @@ function decode(source: Buffer, mediaType: string): Raster | null {
     }
   } catch {
     // A corrupt or truncated file is a miss, not a crash — the placeholder
-    // contract (issue #404) covers it.
+    // contract (#404) covers it.
     return null;
   }
-  // GIF / WebP / video / anything else — unsupported in v0 (issue #405 §2).
+  // GIF / WebP / video / anything else — unsupported in v0 (#405).
   return null;
 }
 
-/** Both dimension caps in one predicate (issue #405 §2 memory bound). */
+/** Both dimension caps in one predicate (#405 §2 memory bound). */
 function withinCaps(width: number, height: number): boolean {
   if (width <= 0 || height <= 0) return false;
   if (width > MAX_INPUT_EDGE || height > MAX_INPUT_EDGE) return false;
@@ -190,7 +190,7 @@ function perceptualHash(src: Raster): string {
 }
 
 /**
- * The injected codec (issue #405 §2). Decode → area-average downscale to
+ * The injected codec (#405). Decode → area-average downscale to
  * `maxEdge` → re-encode as JPEG q≈0.8. `null` for anything unsupported,
  * over-cap or corrupt — the sweep treats that as "skip, the placeholder
  * covers it". The output is always JPEG regardless of input type (a PNG

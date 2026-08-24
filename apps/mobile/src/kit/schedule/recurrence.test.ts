@@ -181,8 +181,8 @@ describe("recurrence", () => {
   );
 
   test("an exhausted series terminates the walk instead of spinning to the guard", () => {
-    // Regression for the old 10k-step outer walk: an anchored-far-past COUNT=1
-    // series must return immediately once its single occurrence is consumed.
+    // An anchored-far-past COUNT=1 series must return immediately once its
+    // single occurrence is consumed, never spin out a 10k-step outer walk.
     const formatToParts = vi.spyOn(
       Intl.DateTimeFormat.prototype,
       "formatToParts"

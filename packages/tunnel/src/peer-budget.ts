@@ -1,5 +1,5 @@
 /*
- * Per-link hygiene budget for the peer plane (issue #726 P3, threat 7).
+ * Per-link hygiene budget for the peer plane (#726 P3, threat 7).
  *
  * A link is a standing invitation to spend this gateway's CPU, disk and
  * bandwidth. The budget is hygiene, not authorization: it bounds how fast a

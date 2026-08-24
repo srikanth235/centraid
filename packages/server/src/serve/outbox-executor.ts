@@ -1,8 +1,8 @@
 /**
- * The outbox executor (issue #306 decision 3) — the ONLY path from an
+ * The outbox executor (#306 decision 3) — the ONLY path from an
  * outbox artifact to the network, and the only holder of the broker's
  * `allowWrites` lane. It runs OUTSIDE the fire loop: connector fires stage
- * items and stay read-only (issue #304's ceiling, untouched); the executor
+ * items and stay read-only (#304's ceiling, untouched); the executor
  * drains only items the owner approved (or a standing grant matched), one
  * receipted `outbox.record_result` per drain — loop-safe by construction.
  *
@@ -19,7 +19,7 @@
  *   - auth-dead (401 after refresh / scope-flavored 403) → needs-auth flips
  *     with a note and the item stays approved until the owner reconnects.
  *
- * Two consent-freshness bounds ride the drain (issue #308 A7/A8):
+ * Two consent-freshness bounds ride the drain (#308 A7/A8):
  *   - an approved item older than the staleness window reparks to pending
  *     via `outbox.repark` instead of draining — consent to the thing never
  *     silently becomes consent to any future moment;
@@ -38,14 +38,14 @@ import type { VaultPlane } from "./vault-plane.js";
 
 const CONNECTION_REF_RE = /\{\{connection:(?<name>[a-z_]+)\}\}/gu;
 const BODY_SNIPPET_CHARS = 300;
-/** Approval staleness window (issue #308 A7): older approvals repark. */
+/** Approval staleness window (#308): older approvals repark. */
 const DEFAULT_STALE_AFTER_MS = 24 * 60 * 60 * 1000;
-/** Per-pass drain bound (issue #308 A8): the surplus waits, logged. */
+/** Per-pass drain bound (#308): the surplus waits, logged. */
 const DEFAULT_MAX_ITEMS_PER_DRAIN = 25;
-/** Per-actor bound within one pass (issue #308 A8). */
+/** Per-actor bound within one pass (#308). */
 const DEFAULT_MAX_ITEMS_PER_ACTOR = 10;
 /**
- * Bound on one external write (issue #351 Tier 4 hygiene) — a hung
+ * Bound on one external write (#351 Tier 4 hygiene) — a hung
  * third-party endpoint would otherwise wedge the whole drain pass (drains
  * run one item at a time, see `drainPass`). A timeout rejects the `fetch`
  * exactly like a dropped connection, so it lands in `drainItem`'s existing
@@ -86,7 +86,7 @@ export interface OutboxExecutorOptions {
   maxItemsPerDrain?: number;
   /** Max items drained in one pass per staging actor. */
   maxItemsPerActor?: number;
-  /** Per-write timeout to the external endpoint (issue #351). */
+  /** Per-write timeout to the external endpoint (#351). */
   writeTimeoutMs?: number;
 }
 
@@ -103,7 +103,7 @@ export interface DrainReport {
   failed: number;
   /** Items left approved for a later pass (needs-auth, transient upstream, caps). */
   deferred: number;
-  /** Stale approvals parked back to pending for a fresh decision (#308 A7). */
+  /** Stale approvals parked back to pending for a fresh decision (#308). */
   reparked: number;
 }
 
@@ -158,7 +158,7 @@ export class OutboxExecutor {
     const perActor = new Map<string, number>();
     let drained = 0;
     await drainApprovedRowsInOrder(rows, async (row) => {
-      // A stale approval never drains (issue #308 A7): the owner said yes to
+      // A stale approval never drains (#308): the owner said yes to
       // a send NOW, not to whenever the provider recovers. Repark first so
       // staleness is judged even when the caps would have deferred the item.
       const decidedAtMs = row.decided_at
@@ -176,7 +176,7 @@ export class OutboxExecutor {
         report.reparked += 1;
         return;
       }
-      // Bounded passes (issue #308 A8): the surplus stays approved and the
+      // Bounded passes (#308): the surplus stays approved and the
       // next pass (event kick or the 60s clock) continues — no silent drop,
       // but no unbounded flush under a standing grant either.
       const actorCount = perActor.get(row.actor_id) ?? 0;
@@ -327,7 +327,7 @@ export class OutboxExecutor {
         ...(spec.headers ? { headers: spec.headers } : {}),
         ...(spec.body === undefined ? {} : { body: spec.body }),
         // Injected requests never auto-follow: a cross-host Location would
-        // carry the Authorization header past the pin (issue #304).
+        // carry the Authorization header past the pin (#304).
         redirect: "manual",
         signal: timeoutSignal(this.writeTimeoutMs),
       });

@@ -1,12 +1,10 @@
-// Pure display formatters + small shared data for the React screens. Mirror
-// the same-named helpers in app-format.ts / app-automations-ui.ts (which reach
-// ambient globals the React island's tsconfig doesn't carry) — kept as tiny
-// self-contained copies so the React bundle stays decoupled from the vanilla
-// shell. Keep the two in step.
+// Pure display formatters + small shared data for the React screens.
+// Deliberate copies of the same-named helpers in app-format.ts, which reaches
+// ambient globals the React island's tsconfig does not carry. Keep the two in
+// step; do not collapse them into one import.
 import { formatRelativeTime } from "@centraid/design";
 
-/** Integration name → app-icon hue. Mirrors INTEGRATION_HUES in
- * app-automations-ui.ts. */
+/** Integration name → app-icon hue (a `--c-*` token suffix). */
 export const INTEGRATION_HUES: Readonly<Record<string, string>> = {
   Datadog: "violet",
   Gmail: "rose",

@@ -2,8 +2,8 @@
 /*
  * `buildGateway()` — construct the host-agnostic centraid gateway core.
  *
- * Issue #280 made the vault the unit; issue #289 made (gateway, vault) the
- * address. The gateway core is one stable object graph (runtime, dispatcher,
+ * The vault is the unit and (gateway, vault) is the address (#280, #289).
+ * The gateway core is one stable object graph (runtime, dispatcher,
  * prefs, route chain) whose PERSONAL surfaces all resolve through the vault
  * the CURRENT REQUEST is addressed to: `composedHandler` resolves the
  * request's vault (explicit `x-centraid-vault` header, else the default
@@ -25,7 +25,7 @@
  * store, draft resolver, unified chat runner, store-backed route handlers,
  * cron scheduler) is built lazily per vault and cached by vault id. The
  * returned `start(publicBaseUrl)` mounts every vault's workspace and
- * starts + reconciles each vault's scheduler (issue #149), so automations
+ * starts + reconciles each vault's scheduler (#149), so automations
  * in every vault fire regardless of which vault any client looks at.
  */
 
@@ -382,8 +382,8 @@ export interface BuildGatewayOptions {
    */
   experimental?: Partial<ExperimentalFeatureSet>;
   /**
-   * The cron scheduler (issue #149) is gateway-owned and in-process: one
-   * scheduler PER VAULT (issue #289 — every vault's automations fire, not
+   * The cron scheduler (#149) is gateway-owned and in-process: one
+   * scheduler PER VAULT (#289 — every vault's automations fire, not
    * just the vault a client happens to look at), each a minute-boundary
    * timer firing enabled cron automations through the same `runAutomation`
    * path as "run now". There is no OS scheduler; missed minutes during
@@ -408,7 +408,7 @@ export interface BuildGatewayOptions {
    */
   sessionIdFor?: (appId: string) => string;
   /**
-   * Device-plane access control (issue #289 phase 2). The composed handler
+   * Device-plane access control (#289). The composed handler
    * always resolves a real enrollment. A loopback embed that omits this seam
    * receives a persisted host enrollment keyed by the gateway endpoint id.
    */
@@ -418,7 +418,7 @@ export interface BuildGatewayOptions {
   /**
    * A host device EndpointId whose loopback requests are resolved by the
    * supplied deviceAccess seam. It is enrolled as the owner of the vaults a
-   * fresh data dir auto-creates at construction (issue #603).
+   * fresh data dir auto-creates at construction (#603).
    */
   hostDeviceEndpointId?: string;
   /**
@@ -428,15 +428,14 @@ export interface BuildGatewayOptions {
    * and the cross-vault scopes listing.
    */
   isHostCustody?: (req: IncomingMessage) => boolean;
-  /** Optional Rust byte-plane X-Sendfile handoff (issue #456 N3). */
+  /** Optional Rust byte-plane X-Sendfile handoff (#456). */
   dataPlaneHttp?: DataPlaneHttpOptions;
   /** Auth callback used only by the native iroh relay on loopback. */
   dataPlaneControl?: DataPlaneControlOptions;
   /** Host-selected preview engine; daemon defaults to native sharp/libvips. */
   previewCodec?: PreviewCodec;
   /**
-   * Enrollment/ticket plane used by proved iroh callers. HTTP ticket
-   * redemption and per-device bearers were removed by issue #555.
+   * Enrollment/ticket plane used by proved iroh callers.
    */
   devicePairing?: {
     enrollments: EnrollmentStore;
@@ -482,7 +481,7 @@ export interface BuildGatewayOptions {
     blobPullIntervalMs?: number;
   };
   /**
-   * Durable PWA control sessions (issue #376). When `controlsFile` is set,
+   * Durable PWA control sessions (#376). When `controlsFile` is set,
    * `WebControlSessions` persists CONTROL cookies there so a web pairing
    * survives a gateway restart / the sliding 30-day idle window instead of
    * forcing a fresh pairing ticket every 12h. `isDeviceValid` propagates
@@ -499,7 +498,7 @@ export interface BuildGatewayOptions {
    * Turn driver for the unified builder/chat runner. Defaults to real
    * `runTurn` (ACP harnesses). Tests inject a stub so HTTP lifecycle paths
    * (e.g. headless automation compile) finish without spawning a coding
-   * harness — issue #504 check:pr green on harnessless CI/local hosts.
+   * harness — #504 check:pr green on harnessless CI/local hosts.
    */
   runTurn?: RunTurnFn;
   /**
@@ -553,7 +552,7 @@ export interface RoutePrefixRegistration {
   readonly handler: RouteHandler;
 }
 
-/** Register a handler in the immutable prefix table built at gateway boot (#456 R1). */
+/** Register a handler in the immutable prefix table built at gateway boot (#456). */
 export function forRoutePrefixes(
   prefixes: string | readonly string[],
   handler: RouteHandler
@@ -780,8 +779,8 @@ export interface BuiltGateway {
    */
   composedHandler: RouteHandler;
   /**
-   * The `/_centraid-hook/<id>` webhook-trigger route (issue #96), mounted
-   * ahead of the bearer check (issue #304's `publicPathPrefixes`) — the
+   * The `/_centraid-hook/<id>` webhook-trigger route (#96), mounted
+   * ahead of the bearer check (#304's `publicPathPrefixes`) — the
    * shared secret in the request IS the auth. Resolves the slug to its
    * OWNING vault across every mounted vault (webhook ids are globally
    * unique), durably accepts authenticated ingress, and nudges that vault's
@@ -818,7 +817,7 @@ export async function buildGateway(
   const instanceId = crypto.randomUUID();
   // Every log line tees through the gateway log store (realtime Logs
   // surface) before reaching the console/host logger — see logs-routes.ts.
-  // Persistence (issue #351) is opt-in via `paths.logsDir` — omitted, this
+  // Persistence (#351) is opt-in via `paths.logsDir` — omitted, this
   // is exactly the prior in-memory-only store (tests, disposable embeds).
   const logStore = new GatewayLogStore(
     undefined,
@@ -836,7 +835,7 @@ export async function buildGateway(
   // never-exercised registration is invisible to the R3 expected-list drill.
   health.registerExpectedPushComponents();
   const performanceMonitor = new GatewayPerformanceMonitor();
-  // Per-route duration histograms (issue #659 R5) — recorded in
+  // Per-route duration histograms (#659) — recorded in
   // `composedHandler` below, read only when a health snapshot is taken.
   const routeLatency = new RouteLatencyMetrics();
   health.setPerformanceMetricsSource(
@@ -894,7 +893,7 @@ export async function buildGateway(
     optionsMode: options.resourceMode,
     prefsMode: earlyPrefs[RESOURCE_MODE_PREF_KEY],
   });
-  // Durable per-knob UI overrides (#528 Phase F). The resolver keeps env > prefs
+  // Durable per-knob UI overrides (#528). The resolver keeps env > prefs
   // > preset per knob; a knob change is durable and applies on the next serve,
   // identical to mode. Running-vs-desired legibility is the client comparing
   // health's structured profile with saved prefs — nothing extra here.
@@ -916,7 +915,7 @@ export async function buildGateway(
       `CENTRAID_EXPERIMENTAL names no known experimental feature: "${token}"`
     );
   }
-  // Ground-truth sizing (#528 Phase E): probe cgroup CPU/memory quotas and one
+  // Ground-truth sizing (#528): probe cgroup CPU/memory quotas and one
   // cumulative CPU-steal sample so the resolver sizes the granted share of the
   // host, not the raw machine. All reads are failure-tolerant → nulls on a
   // plain host, which resolve to today's unchanged numbers.
@@ -959,7 +958,7 @@ export async function buildGateway(
       WebControlSessionStore.open(gatewayDatabase),
   });
 
-  // Bundled blueprint apps (issue #434): the main client compiles their UI
+  // Bundled blueprint apps (#434): the main client compiles their UI
   // directly, while the gateway reads their shipped directories for metadata,
   // declared scopes, and generic opaque-app compatibility. Their ids are
   // RESERVED — a code-store app must never shadow one. The set is fixed for
@@ -1022,18 +1021,18 @@ export async function buildGateway(
     options.backup?.enabled === true ||
     (await storageConnections.list()).length > 0;
   const recoveryKit = new RecoveryKitStateStore(gatewayDatabase);
-  // Provider usage cache (issue #367 §D1) — cache-with-TTL + stale-while-
+  // Provider usage cache (#367) — cache-with-TTL + stale-while-
   // refresh in front of a provider connection's optional `usage` capability
   // (PROTOCOL.md § Usage). Never polls on its own timer; see storage-usage.ts.
   const storageUsage = new StorageUsagePoller({ storageConnections });
-  // The owner's two local-disk limits (issue #544), stored beside the
+  // The owner's two local-disk limits (#544), stored beside the
   // connections for the same reason. Loaded ONCE here so every later reader
   // — the routes, the `storage-limit` probe, and each vault plane's sweep —
   // shares one instance and sees a change without a restart.
   const storageLimits = new StorageLimitsStore(gatewayDatabase);
   await storageLimits.load();
 
-  // Model price catalog (issue #445) — seed the app-engine pricing seam from a
+  // Model price catalog (#445) — seed the app-engine pricing seam from a
   // fresh-enough disk cache and kick a background LiteLLM refresh. Costing works
   // from the bundled snapshot regardless; this only overlays fresher rates. The
   // cache file sits beside `model-catalog.json` when the host pins one.
@@ -1057,7 +1056,7 @@ export async function buildGateway(
   // commit-time doorbell closes over this late-bound host callback. A write
   // during bootstrap simply drops the hint; the standing poll remains the
   // crash/startup correctness backstop.
-  // Per-subsystem resource ACTUALS (#528 Phase C): a boot-time accounting
+  // Per-subsystem resource ACTUALS (#528): a boot-time accounting
   // instance every background subsystem reports completions to. Honest measured
   // proxies only — counts, bytes, wall-clock, OS-reported CPU/RSS. Harness-run
   // usage is MEASURED and labeled here, never throttled. Published on the health
@@ -1067,7 +1066,7 @@ export async function buildGateway(
     workerPoolStats: workerAdmissionStats,
   });
 
-  // Host power-context posture (#528 Phase D): a third, independent "not now"
+  // Host power-context posture (#528): a third, independent "not now"
   // signal composed into the SAME safe-loop gate as the owner pause and the
   // load-shed — never a durable mode flip, never touching the owner's pause.
   // The boot probe reads the host battery; the Electron desktop pushes live
@@ -1086,7 +1085,7 @@ export async function buildGateway(
   health.reportOk("power-posture", formatPowerPostureNormalDetail());
 
   // Wrap a turn driver so every harness turn's wall-clock (spawn→exit) is
-  // MEASURED and labeled (#528 Phase C) — recorded on success and failure
+  // MEASURED and labeled (#528) — recorded on success and failure
   // alike, since the host consumed the time either way. This ONLY accounts;
   // it never gates, defers, or throttles a run.
   const accountRunTurn =
@@ -1150,10 +1149,7 @@ export async function buildGateway(
     rootDir: paths.vaultDir,
     synchronous: hardwareProfile.sqliteSynchronous,
     replicationConcurrency: hardwareProfile.replicationConcurrency,
-    // One memory ceiling for ALL mounted planes, divided among them (#659 L8).
-    // Previously mmap window and page cache were per-FILE constants, so a
-    // household with five vaults paid five times the memory of one — linear in
-    // vault count on exactly the small always-on box that cannot afford it.
+    // One memory ceiling for ALL mounted planes, divided among them (#659).
     // A single mounted vault still gets the default budget in full, so the
     // common case is byte-identical; what changes is that the second vault no
     // longer doubles the bill. A standard host gets twice the ceiling of a
@@ -1188,7 +1184,7 @@ export async function buildGateway(
     // Network mounts may not honor the local SQLite lock cross-host. Serving
     // remains available, but destructive orphan GC fails safe.
     skipOrphanDelete: () => gatewayDatabase.networkFileSystem,
-    // Storage-connection-backed credential resolution (issue #367 §C3):
+    // Storage-connection-backed credential resolution (#367):
     // supersedes the legacy `CENTRAID_S3_*` env-var lane for any vault whose
     // `blob_store.connectionId` is set; vaults without one keep working off
     // the env-var default (`vault-plane.ts`'s `defaultEnvS3Credentials`).
@@ -1213,14 +1209,14 @@ export async function buildGateway(
       notificationsEvents.publish(vaultId, wake);
       if (wake) requestNotificationsWake(vaultId);
     },
-    // Preview backstop codec (issue #405 §2): the gateway holds plaintext on
+    // Preview backstop codec (#405): the gateway holds plaintext on
     // ingest inside the owner's trust boundary, so generating tiny/medium
     // derivatives here leaks nothing to the provider. One shared stateless
     // codec instance fans out to every mounted plane's blob sweep, closing the
     // "no raster codec in the runtime" gap for imported / weak-client /
     // server-ingested images (capable clients still generate at capture).
     previewCodec: options.previewCodec ?? createImagePreviewCodec(),
-    // Resource actuals (#528 Phase C): a vault lifecycle sweep is both a sweep
+    // Resource actuals (#528): a vault lifecycle sweep is both a sweep
     // pass and a background timer fire; detached blob replication reports its
     // own bytes/busyMs. Accounting only — never gates the sweep.
     onSweepPass: (info) => {
@@ -1228,14 +1224,14 @@ export async function buildGateway(
       resourceAccounting.recordBackgroundTimerFire();
     },
     onReplicationPass: (info) => resourceAccounting.recordReplicationPass(info),
-    // Size-triggered ledger archive (issue #544). Read through the shared
+    // Size-triggered ledger archive (#544). Read through the shared
     // store's in-memory copy so a limit change applies on the next sweep of
     // every mounted plane without a remount, and without the sweep awaiting
     // a file read inside its synchronous block.
     journalLimitBytes: () => storageLimits.current().journalLimitBytes,
   });
   /*
-   * Auto-found (issue #603). A gateway whose data dir carries no vault is
+   * Auto-found (#603). A gateway whose data dir carries no vault is
    * not a state a human should have to resolve: there is no ceremony, no
    * ticket, and no first-run wall. Constructing over a fresh dir creates the
    * founder's one personal vault synchronously, before any route can observe a
@@ -1277,7 +1273,7 @@ export async function buildGateway(
   // Vault mounts are pull-checked at snapshot time — nothing pushes when a
   // plane silently fails to open, so the probe asks the registry directly.
   // `rescan()` here is what turns a failed mount from "gone until process
-  // restart" into "retried on the next health tick" (issue #351) — the
+  // restart" into "retried on the next health tick" (#351) — the
   // backoff that keeps that cheap lives in `VaultRegistry` itself.
   // A mounted plane whose directory carried a restore-quarantine marker
   // (FORMAT.md restore rule 4) stays flagged here until an operator
@@ -1285,7 +1281,7 @@ export async function buildGateway(
   // are NOT, deliberately (see that module's header).
   //
   // "ok" here is not merely "the plane object is in memory": that never
-  // proves the SQLite file behind it is still readable (issue #351). Each
+  // proves the SQLite file behind it is still readable (#351). Each
   // tick runs one trivial statement against every mounted plane's
   // `vault.db` handle; a plane whose file was corrupted or closed out from
   // under the process (disk failure, external `rm`) fails this and flips
@@ -1333,7 +1329,7 @@ export async function buildGateway(
       : { status: "error", detail: "no vault is mounted" };
   });
 
-  // Disk watermark (issue #351): free space on the vault volume, plus a
+  // Disk watermark (#351): free space on the vault volume, plus a
   // cheap per-vault DB size so "which vault is eating the disk" doesn't
   // need a shell. Thresholds live in disk-health.ts.
   health.registerProbe(
@@ -1347,7 +1343,7 @@ export async function buildGateway(
     })
   );
 
-  // Local footprint by component (issue #544) — the other half of the disk
+  // Local footprint by component (#544) — the other half of the disk
   // story: `disk` above says how much room is LEFT, this says where Centraid's
   // own bytes went. One scanner instance shared by `GET storage/local` and the
   // `storage-limit` probe below, so the page and the health badge can never
@@ -1369,7 +1365,7 @@ export async function buildGateway(
     }),
   });
 
-  // The owner's disk budget (issue #544). Warn-only by design — see
+  // The owner's disk budget (#544). Warn-only by design — see
   // storage-limits.ts for why a soft budget must never refuse a write. With
   // no limit set this is a permanent `ok`, so an owner who never opted in
   // gains no new noise in their component list.
@@ -1428,7 +1424,7 @@ export async function buildGateway(
     };
   });
 
-  // Broker credential health (issue #351 tier 2): narrower than `connections`
+  // Broker credential health (#351 tier 2): narrower than `connections`
   // above — specifically the ConnectionBroker's own custody of
   // broker-carried (oauth2/api_key) credentials, naming which ones are dead
   // or sitting on an overdue token nobody has refreshed yet. See
@@ -1453,7 +1449,7 @@ export async function buildGateway(
     return journalConversationStore(plane.workspace.journalDbFile);
   };
 
-  // Scheduler ledger (issue #351 tier 2): written from each vault's scheduler
+  // Scheduler ledger (#351 tier 2): written from each vault's scheduler
   // `onTick` hook below; read by the `scheduler` liveness probe and by
   // `automations`'s reconcile push. Memoized so a health poll or a scheduler
   // tick never reconstructs it.
@@ -1470,7 +1466,7 @@ export async function buildGateway(
     return ledger;
   };
 
-  // Per-vault scheduler liveness + missed-run visibility (issue #351 tiers
+  // Per-vault scheduler liveness + missed-run visibility (#351 tiers
   // 2/3) — see scheduler-health.ts. Reads the SAME ledger `onTick` writes.
   health.registerProbe(
     "scheduler",
@@ -1483,7 +1479,7 @@ export async function buildGateway(
     })
   );
 
-  // Enricher run health (issue #351 wave 4) — see enrichment-health.ts for
+  // Enricher run health (#351) — see enrichment-health.ts for
   // why this is narrower than `automations`/`automation-runs`. Run history
   // reads the shared per-vault journal store; it never reaches into
   // scheduler-ledger.ts's private state.
@@ -1514,7 +1510,7 @@ export async function buildGateway(
     })
   );
 
-  // Blob custody-sweep health (issue #351 wave 4, #367 prep) — see
+  // Blob custody-sweep health (#351 wave 4, #367 prep) — see
   // blob-sweep-health.ts. `s3Configured`/`counts` are cheap synchronous
   // reads (settings JSON + a GROUP BY over the custody mirror); `sweepStatus`
   // reads `BlobCustody`'s own in-memory record of its last `reconcile()`.
@@ -1531,13 +1527,13 @@ export async function buildGateway(
     })
   );
 
-  // On-disk integrity (issue #374 tier 5b) — see vault-integrity-health.ts.
+  // On-disk integrity (#374 tier 5b) — see vault-integrity-health.ts.
   // Self-throttled per vault at a SIZE-SCALED cadence, one vault per tick
-  // (#659 L6); distinct from the `vaults` probe above, which only proves the
+  // (#659); distinct from the `vaults` probe above, which only proves the
   // file still opens. The startup grace keeps a full-file read out of boot —
   // the first minutes after start are when the owner is actually waiting on the
   // gateway, and corruption that has been there since the last shutdown will
-  // still be there five minutes later (#659 G10).
+  // still be there five minutes later (#659).
   health.registerProbe(
     "vault-integrity",
     createVaultIntegrityHealthProbe({
@@ -1551,7 +1547,7 @@ export async function buildGateway(
     })
   );
 
-  // Storage quota watermark (issue #367 §D2) — degraded/error off a
+  // Storage quota watermark (#367) — degraded/error off a
   // provider-reported quota only (see storage-quota-health.ts); reads the
   // SAME cache `GET storage/usage` serves, so this never issues its own
   // network call beyond what that poller's TTL already allows.
@@ -1568,12 +1564,12 @@ export async function buildGateway(
     })
   );
 
-  // Numeric signals (issue #351 tier 3): outbox backlog, summed across
+  // Numeric signals (#351 tier 3): outbox backlog, summed across
   // mounted vaults — cheap COUNT(*) at snapshot time, same style as the
   // `connections` probe above. `rssBytes`/`uptimeMs` need no wiring (see
   // `HealthRegistry.snapshot`). `sseClients` sums three production SSE
   // surfaces' live subscriber counts — `logsEventsSubscriberCount` /
-  // `turnEventsSubscriberCount` (issue #351's SSE subscriber-cap change,
+  // `turnEventsSubscriberCount` (#351's SSE subscriber-cap change,
   // `sse-cap.ts`), each backed by the SAME `SseSubscriberCap` instance
   // `makeLogsRouteHandler`/`makeAutomationsRouteHandler` admit through below,
   // plus `@centraid/server/engine`'s `changesSubscriberCount()` — the per-appId
@@ -1600,18 +1596,18 @@ export async function buildGateway(
         logsEventsSubscriberCount() +
         turnEventsSubscriberCount() +
         changesSubscriberCount(),
-      // The denominator for rssBytes (#659 L8): plane memory RESERVATIONS are
-      // now flat in vault count, but residency is not, so this is what makes
+      // The denominator for rssBytes (#659): plane memory RESERVATIONS are
+      // flat in vault count, but residency is not, so this is what makes
       // "five vaults cost more than one" visible rather than inferred.
       mountedVaults: vaultRegistry.planesList().length,
       hardwareProfileClass: hardwareProfile.class,
       resourceMode: hardwareProfile.resourceMode,
       resourceProfile: toStructuredResourceProfile(hardwareProfile),
-      // Measured per-subsystem actuals (#528 Phase C) — CPU/RSS read lazily
+      // Measured per-subsystem actuals (#528) — CPU/RSS read lazily
       // here at the health-poll cadence, subsystem counters accumulated at
       // their completion hooks.
       resourceUsage: resourceAccounting.snapshot(),
-      // Host power-context posture (#528 Phase D) — battery/mains/server and
+      // Host power-context posture (#528) — battery/mains/server and
       // whether background work is being courteously deferred right now.
       powerContext: powerContext.snapshot(),
     };
@@ -1638,16 +1634,16 @@ export async function buildGateway(
     recoveryKit,
     storageConnections,
     // Retention/reconciliation is a safe loop — yield to host power-context
-    // posture too (#528 Phase D). Threaded as a predicate so BackupService
+    // posture too (#528). Threaded as a predicate so BackupService
     // never imports the monitor. The WAL drain stays ungated (RPO durability).
     shouldDeferPosture: () => powerContext.isDeferringBackgroundWork(),
-    // Resource actuals (#528 Phase C): each WAL drain is a backup pass and a
+    // Resource actuals (#528): each WAL drain is a backup pass and a
     // backup-scheduler timer fire. Accounting only.
     onDrainAccounted: (info) => {
       resourceAccounting.recordBackupDrain(info);
       resourceAccounting.recordBackgroundTimerFire();
     },
-    // Owner-held backup (#726 P1): skip + report a vault this machine's
+    // Owner-held backup (#726): skip + report a vault this machine's
     // backup configuration is not authorized for, instead of silently
     // shipping someone else's data. `enrollmentStore`/`hostOwnerEndpointId`
     // are declared below — safe, since these closures only run once a
@@ -1661,7 +1657,7 @@ export async function buildGateway(
 
   const enrollmentStore =
     options.devicePairing?.enrollments ?? EnrollmentStore.open(gatewayDatabase);
-  // The same-machine link ceremony a cross-owner edge needs (#726 P2 §3).
+  // The same-machine link ceremony a cross-owner edge needs (#726).
   // The listener is what makes a link answerable from a VAULT query (#821):
   // every settled link reconciles `share_party_vault_binding` in whichever
   // side of it is mounted here. `vaultLinksStore` is captured by the closure
@@ -1702,7 +1698,7 @@ export async function buildGateway(
         // peer forwarder also delivers to loopback, so without this check a
         // linked gateway would resolve to the HOST's device key and inherit
         // owner-tier reach. A link's reach is the peer plane or nothing —
-        // the same refusal the daemon's `deviceKeyFor` makes (#726 P3).
+        // the same refusal the daemon's `deviceKeyFor` makes (#726).
         deviceKeyFor: (req) =>
           isLoopbackRequest(req) &&
           req.headers[PEER_ENDPOINT_HEADER] === undefined
@@ -1716,7 +1712,7 @@ export async function buildGateway(
     options.hostDeviceEndpointId ?? embeddedEndpointId;
   if (autoFoundedVaults.length > 0 && hostOwnerEndpointId) {
     // One founding owner, owner of the auto-founded personal vault, in ONE
-    // transaction (issue #603): the host that just founded it is its owner,
+    // transaction (#603): the host that just founded it is its owner,
     // and a fresh install has exactly one owner with zero unassigned bindings.
     gatewayDatabase.transaction(() =>
       enrollmentStore.enrollWithinTransaction({
@@ -1730,7 +1726,7 @@ export async function buildGateway(
   }
 
   /*
-   * Every owner owns at least one vault (#726 P1). The host-custody
+   * Every owner owns at least one vault (#726). The host-custody
    * `POST /owners` lane creates the person but not a vault, so boot mints
    * "<label>'s vault" on THIS machine for anyone still ownerless. Naturally
    * idempotent — an owner who already owns a vault (including one just
@@ -1754,10 +1750,9 @@ export async function buildGateway(
   const prefs = prefsEarly;
   const journalProvider = () => currentWorkspace().journal();
   const harnessHealthStore = new HarnessHealthStore(journalProvider);
-  // `harness-failover` is reported degraded when a rung hands off. Nothing used
-  // to report it healthy again, so a single failover left `/health` degraded
-  // forever. A later harness turn that actually succeeded is the honest signal
-  // that the component recovered, so it is cleared here — and only when it was
+  // `harness-failover` is reported degraded when a rung hands off. A later
+  // harness turn that actually succeeded is the honest signal that the
+  // component recovered, so it is cleared here — and only when it was
   // degraded, so a healthy gateway never registers the component at all.
   let failoverDegraded = false;
   const reportFailoverError = (detail: string): void => {
@@ -1801,7 +1796,7 @@ export async function buildGateway(
   );
   const analyticsStore = new AnalyticsStore(journalProvider);
   const insightsStore = new InsightsStore(journalProvider);
-  // Lazy archive rehydration (issue #438 wave 3): opening a conversation whose
+  // Lazy archive rehydration (#438): opening a conversation whose
   // cold ranges were custody-gated-pruned reads the sealed segment blobs back
   // through the ACTIVE vault's CAS door (`db.blobs.open` — local hit or remote
   // fetch → unseal → verify → promote). Resolved per call via `current()` — the
@@ -1820,11 +1815,9 @@ export async function buildGateway(
   //
   // Harness selection is PER SUBSYSTEM: `harness.<subsystem>` pins one
   // register (assistant/ask/builder/automations) to a harness; unpinned
-  // registers inherit `harness.kind`, which is now "the default harness"
-  // rather than "the one active harness". Callers that don't name a
-  // subsystem get the default harness — byte-identical to the old behavior,
-  // which is what keeps a prefs file with no `harness.*` keys working
-  // exactly as it did.
+  // registers inherit `harness.kind` — the DEFAULT harness, not "the one
+  // active harness". Callers that don't name a subsystem get it, so a prefs
+  // file with no `harness.*` keys works unchanged.
   const prefsLoader = async (
     subsystem?: ModelSubsystem,
     requestedHarness?: HarnessKind
@@ -1910,8 +1903,7 @@ export async function buildGateway(
   // harness — shared by the boot probe and the status routes so concurrent
   // warms dedupe (a client Refresh mid-boot joins the boot warm). The
   // enumerator honors the active harness's binPath/extraArgs; inactive harnesss
-  // enumerate with defaults. (The tool surface this warmer once also tracked
-  // went away with the `ctx.tool` rail — issue #484.)
+  // enumerate with defaults.
   const catalogPath = paths.modelCatalogFile;
   // Catalog warms are best-effort; failures record as tagged warn events
   // (visible in `_gateway/health`) without flipping any component red.
@@ -1943,8 +1935,8 @@ export async function buildGateway(
   //
   // The `hasWarmed` guard is load-bearing: a harness that self-reports no
   // models (opencode, grok) leaves the cache empty forever, and re-kicking a
-  // warm on every poll kept `isWarming` true at read time — `loading` that
-  // never resolved. Once the question has been asked, an empty cache reports
+  // warm on every poll keeps `isWarming` true at read time — `loading` that
+  // never resolves. Once the question has been asked, an empty cache reports
   // `empty` and an explicit Refresh is the way to ask again.
   const resolveCatalogSurface = async <T>(
     surface: CatalogSurface,
@@ -2060,14 +2052,14 @@ export async function buildGateway(
   // route resolve code paths through these between requests (all only run
   // post-start, when every boot-time vault is mounted).
   const settledHosts = new Map<string, VaultHost>();
-  // In-process bus for live run streaming (issue #158): a fire publishes via
+  // In-process bus for live run streaming (#158): a fire publishes via
   // `onRunEvent`; the `run/events` SSE endpoint subscribes by runId.
   const runEventBus = new RunEventBus();
   const automationConversationLocks = new Map<string, Promise<void>>();
   // Detached automation lifecycle work started behind a 202 (compile,
   // revision). `stop()` drains this before the vault registry closes its
   // databases, so shutdown cannot land mid-`closeItem` or orphan an ACP
-  // child (issue #541 review).
+  // child (#541 review).
   const detachedAutomationTasks = new Set<Promise<void>>();
   const trackDetachedAutomationTask = (
     task: Promise<void>,
@@ -2085,7 +2077,7 @@ export async function buildGateway(
     detachedAutomationTasks.add(tracked);
   };
 
-  // The connection broker (issue #304): resolves a connector's broker-carried
+  // The connection broker (#304): resolves a connector's broker-carried
   // credential (oauth2/api_key sealed on the connection row) per fire —
   // refresh under a per-connection single-flight, values injected transport-
   // side, never handed to handler code. Resolves the CURRENT vault's plane at
@@ -2099,7 +2091,7 @@ export async function buildGateway(
     health.loggerFor("connections", logger)
   );
 
-  // The outbox executor (issue #306): the only writer on the broker's
+  // The outbox executor (#306): the only writer on the broker's
   // `allowWrites` lane, draining owner-approved / grant-matched items. It
   // runs OUTSIDE the fire loop — kicked after owner approvals, after each
   // fire (grant-matched items a connector just staged), and on a slow clock.
@@ -2118,7 +2110,7 @@ export async function buildGateway(
       });
   };
 
-  // Install-time scopes (issue #306 decision 2): enrolling an app grants the
+  // Install-time scopes (#306 decision 2): enrolling an app grants the
   // vault block its manifest declares — installing IS the consent. Read off
   // the app's live `main` app.json; malformed or absent blocks grant nothing.
   const grantScopesFromDir = async (
@@ -2155,7 +2147,7 @@ export async function buildGateway(
       await store.resolveActiveAppDir(appId)
     );
   };
-  // Installed bundled apps (issue #434) declare their scopes in the shipped
+  // Installed bundled apps (#434) declare their scopes in the shipped
   // blueprint's app.json — read it there, not from the (empty) code store.
   const grantDeclaredBundledScopes = (
     plane: VaultPlane,
@@ -2171,7 +2163,7 @@ export async function buildGateway(
     outboxTimer.unref();
   };
   const runOutboxSweep = async (): Promise<void> => {
-    // Resource actuals (#528 Phase C): the outbox scheduler fired.
+    // Resource actuals (#528): the outbox scheduler fired.
     resourceAccounting.recordBackgroundTimerFire();
     if (health.shouldDeferBackgroundWork()) {
       scheduleOutboxSweep(hardwareProfile.outboxIdleIntervalMs);
@@ -2404,7 +2396,7 @@ export async function buildGateway(
                 laneFor: () => request.lane,
               })?.egress,
             // The same registry, asked the OTHER half of the profile: which
-            // engine computes this capability (#807 Wave 5). The fire path
+            // engine computes this capability (#807). The fire path
             // reads it only after the gate allowed the run, and turns it into
             // the handler's `variant` — so binding `ocr` to a harness profile
             // selects the delegate step, and no manifest is edited to do it.
@@ -2413,7 +2405,7 @@ export async function buildGateway(
                 laneFor: () => request.lane,
               })?.engine,
             // The egress ANSWER, read from the same owner-plane vault handle
-            // and never from the automation's grants (#807 Wave 3). A read
+            // and never from the automation's grants (#807). A read
             // only: `enrich_consent` has exactly one writer, and it is the
             // journalled `enrich.record_consent` command inside the vault.
             egressConsent: (egress) =>
@@ -2453,7 +2445,7 @@ export async function buildGateway(
         },
         harness: harnessSelection.harness,
         // Manifests are harness-writable, so a `requires.harness` pin that names
-        // a provider the user never chose is NOT consent for egress (#567 D13).
+        // a provider the user never chose is NOT consent for egress (#567).
         harnessSelectionSource: harnessSelection.selectionSource,
         triggerKind: opts.triggerKind,
         triggerOrigin: opts.triggerOrigin,
@@ -2492,7 +2484,7 @@ export async function buildGateway(
       );
       recordEnrichRefusalNotice(result.outcome.enrichRefusal);
       // Grant-matched outbox items the fire just staged drain now, not
-      // on the next clock tick (issue #306 phase 3).
+      // on the next clock tick (#306).
       drainOutbox(vaultRegistry.current());
       health.reportOk("automation-runs");
       return { turnId: runId, outcome: result.outcome, record: result.record };
@@ -2551,7 +2543,7 @@ export async function buildGateway(
         vaultRegistry.enrollApp(appId);
         await grantDeclaredAppScopes(plane, host.store, appId);
       });
-      // Every first-party app ships INSTALLED (issue #708). No catalogue hands
+      // Every first-party app ships INSTALLED (#708). No catalogue hands
       // them out one at a time, so a vault does not
       // ACQUIRE its first-party apps — it has them, the way a phone has its
       // camera. Mount is the right seam rather than vault creation: it is the
@@ -2616,7 +2608,7 @@ export async function buildGateway(
   };
 
   /**
-   * Install a BUNDLED app into an EXPLICIT vault (issue #599 Phase 4) — the
+   * Install a BUNDLED app into an EXPLICIT vault (#599) — the
    * auto-mount seam behind `/centraid/_vault/scopes`: an app an owner already
    * uses follows them into an audience vault they were added to.
    *
@@ -2680,7 +2672,7 @@ export async function buildGateway(
     await store.init();
     const codeAppsDir = (): string =>
       path.join(store.getActiveMainLink(), "apps");
-    // The ext band (issue #286 phase 2): publish applies an app's declared
+    // The ext band (#286): publish applies an app's declared
     // extension tables to THIS vault; drafts branch a scratch band there.
     const ext: ExtBandOps = {
       applyAppExt: (appId, tables) => plane.applyAppExt(appId, tables),
@@ -2698,7 +2690,7 @@ export async function buildGateway(
     // with the draft manifest there.
     const draftCodeDir = makeDraftCodeDirResolver(store, ext);
 
-    // Unified chat (issue #141, Phase 3): every chat turn runs in the app's
+    // Unified chat (#141): every chat turn runs in the app's
     // draft worktree with the union of native file tools + the vault
     // register (`vault_sql`/`vault_invoke`, #286 phase 2) — one surface
     // that both tweaks the app's code and looks at the real data it
@@ -2713,7 +2705,7 @@ export async function buildGateway(
       ...makeVaultToolRunners(vaultRegistry),
       ...(options.sessionIdFor ? { sessionIdFor: options.sessionIdFor } : {}),
       // Test inject: finish headless compile without spawning a harness.
-      // Either way the driver is wrapped for resource accounting (#528 Phase C).
+      // Either way the driver is wrapped for resource accounting (#528).
       runTurn: accountedRunTurn,
       harnessLadder,
       harnessHealth,
@@ -2768,7 +2760,7 @@ export async function buildGateway(
     // The headless compile, as an AWAITABLE task. Two callers need it: the
     // fire-and-forget `compileAutomation` route seam, and `reviseAutomation`,
     // which cannot know whether the compiled handler still matches the
-    // published prompt unless it sees the outcome (issue #541 review).
+    // published prompt unless it sees the outcome (#541 review).
     const runAutomationCompileTask = async (input: {
       automationRef: string;
       runId: string;
@@ -2987,12 +2979,12 @@ export async function buildGateway(
         // rejection so a failed data-cursor bootstrap cannot look ready.
         void reconcileScheduler(vaultId).catch(() => undefined);
       },
-      // Bundled ids are reserved (issue #434): a scaffold/clone must never
+      // Bundled ids are reserved (#434): a scaffold/clone must never
       // mint one, or a code-store app would shadow the shipped blueprint.
       isBundledAppId,
       isSystemManagedAutomation: isSystemRecognitionRef,
       isSystemManagedApp: (appId) => recognitionTemplateIds.has(appId),
-      // Install a bundled blueprint in place (issue #434): its UI is already
+      // Install a bundled blueprint in place (#434): its UI is already
       // part of the main client, so enroll with origin 'installed', register
       // the data plane, and grant declared scopes — no git or id minting.
       // Idempotent — an already-installed app returns its existing
@@ -3015,7 +3007,7 @@ export async function buildGateway(
           alreadyInstalled,
         };
       },
-      // Per-vault rename for an installed bundled app (issue #434): the code
+      // Per-vault rename for an installed bundled app (#434): the code
       // is read-only, so the name lands on the enrollment record, not app.json.
       // Returns false when the id isn't an installed bundled app, so the meta
       // route falls through to its code-store app.json rewrite.
@@ -3319,7 +3311,7 @@ export async function buildGateway(
           await deregisterAndCleanup(appId);
           await reconcileScheduler(vaultId);
         },
-        // The listing union half (issue #434): installed bundled apps, with
+        // The listing union half (#434): installed bundled apps, with
         // their metadata read from the shipped blueprint dir + the per-vault
         // rename. Merged with the git code-store apps in GET /_apps.
         bundledApps: async () =>
@@ -3344,10 +3336,10 @@ export async function buildGateway(
           ),
         ext,
       }),
-      // App lifecycle over HTTP (issue #141, Phase 2): the gateway owns
+      // App lifecycle over HTTP (#141): the gateway owns
       // scaffold / clone / update-meta / automation create+toggle+delete.
       makeLifecycleRouteHandler(lifecycleOpts),
-      // Automation runtime ops over HTTP (issue #141): list/read/turn-now,
+      // Automation runtime ops over HTTP (#141): list/read/turn-now,
       // the run feed + per-run detail, and insights — all over THIS
       // vault's conversation ledger (the journal.db ledger band).
       makeAutomationsRouteHandler({
@@ -3788,14 +3780,14 @@ export async function buildGateway(
               health.reportError("automation-runs", message);
               logger.warn(message);
             },
-            // This legacy ledger now carries liveness only. Missed/source
+            // This ledger carries liveness only. Missed/source
             // position and gap truth live solely in automation_trigger_cursor.
             onTick: (at) => schedulerLedgerFor(vaultId).recordTick(at),
             onDormancyChange: (dormant, at) =>
               runWithVaultContext({ vaultId }, () => {
                 schedulerLedgerFor(vaultId).setDormant(dormant, at);
               }),
-            // Issue #570: gateway default cron zone (tier 2). Re-read prefs each
+            // Gateway default cron zone (#570). Re-read prefs each
             // register/reconcile so Settings changes apply without a restart.
             defaultCronTimeZone: () => {
               const raw =
@@ -3900,7 +3892,7 @@ export async function buildGateway(
         // Every automation app acts through an enrolled consent.agent (duaility
         // §12) — enroll identities in THIS vault as the desired set settles,
         // and grant each automation's DECLARED scopes at the same moment
-        // (issue #306 decision 2: installing was the consent).
+        // (#306 decision 2: installing was the consent).
         const plane = vaultRegistry.get(vaultId);
         const nameByOwnerApp = new Map(rows.map((r) => [r.ownerApp, r.name]));
         for (const appId of new Set(rows.map((r) => r.ownerApp))) {
@@ -4067,7 +4059,7 @@ export async function buildGateway(
     return webhookHandlerForVault(targetVaultId)(req, res);
   };
 
-  // Turn backpressure (issue #420, Wave 6): a modest per-vault ceiling on
+  // Turn backpressure (#420): a modest per-vault ceiling on
   // concurrently-running turns, shared by BOTH the per-app `_turn` route
   // (via Runtime) and the vault-assistant route. One limiter per vault id so
   // busy tabs on vault A never starve vault B; the auto-titler yields to it.
@@ -4094,8 +4086,8 @@ export async function buildGateway(
     conversationHistoryStore,
     conversationRunner: {
       // Facade over the request vault's unified runner (#280) — builder-
-      // capable, so turns persist as `kind='build'` (issue #181). EVERY
-      // ask turn rides the vault register (issue #286 phase 2: the vault
+      // capable, so turns persist as `kind='build'` (#181). EVERY
+      // ask turn rides the vault register (#286 phase 2: the vault
       // is the only store) — the owner assistant wearing the app lens.
       runKind: "build",
       run: async (input) => {
@@ -4154,7 +4146,7 @@ export async function buildGateway(
       return status;
     },
     logger,
-    // Compatibility resolver (issue #434): bundled system UI is compiled into
+    // Compatibility resolver (#434): bundled system UI is compiled into
     // the main client, but the generic opaque-app route can still resolve an
     // installed blueprint's shipped directory (no per-vault copy). Everything
     // else — compiled automations or future opaque app sources — resolves to
@@ -4208,7 +4200,7 @@ export async function buildGateway(
     subsystem: "assistant",
     getDispatcher,
     vaults: vaultRegistry,
-    // Measure + label every assistant harness run (#528 Phase C); never throttled.
+    // Measure + label every assistant harness run (#528); never throttled.
     runTurn: accountedRunTurn,
     harnessLadder,
     harnessHealth,
@@ -4217,7 +4209,7 @@ export async function buildGateway(
     onFailover: onConversationRunnerFailover,
   });
 
-  // LLM auto-title (issue #420, Wave 3): after the first turn of a new
+  // LLM auto-title (#420): after the first turn of a new
   // assistant thread settles, a cheap one-shot inference names it — the
   // claude.ai affordance that beats first-message truncation. Fire-and-forget:
   // this closure returns void immediately and self-schedules; any failure is
@@ -4234,7 +4226,7 @@ export async function buildGateway(
   }): void => {
     void (async () => {
       try {
-        // Yield to interactive turns (issue #420, Wave 6): the titler is a
+        // Yield to interactive turns (#420): the titler is a
         // nice-to-have one-shot, so it skips generation whenever the vault is at
         // its turn ceiling rather than competing for a slot.
         if (turnLimiterForCurrentVault().atCapacity()) return;
@@ -4330,7 +4322,7 @@ export async function buildGateway(
     });
   };
 
-  // Ask-register lens metadata (issue #286 phase 2): the app copilot's
+  // Ask-register lens metadata (#286): the app copilot's
   // `register: 'ask'` turns ARE the owner assistant wearing the app lens —
   // name + description bias the prompt, never a permission boundary.
   // Resolved per turn off the live `main` manifest so a publish lands
@@ -4367,7 +4359,7 @@ export async function buildGateway(
     subsystem: "ask",
     getDispatcher,
     vaults: vaultRegistry,
-    // Measure + label every ask-register harness run (#528 Phase C); never throttled.
+    // Measure + label every ask-register harness run (#528); never throttled.
     runTurn: accountedRunTurn,
     harnessLadder,
     harnessHealth,
@@ -4385,10 +4377,10 @@ export async function buildGateway(
     },
   });
 
-  // Diagnostics bundle assembly (issue #351): a closure so the route
+  // Diagnostics bundle assembly (#351): a closure so the route
   // handler (`diagnostics-routes.ts`) stays thin wiring.
   //
-  // The document IS the shareable support bundle (#846 P8) — one document,
+  // The document IS the shareable support bundle (#846) — one document,
   // not a second hand-assembled structure beside it. `support-bundle.ts` is
   // allowlist-by-construction: every field is emitted
   // through a declared leaf policy, so a field nobody added on purpose is
@@ -4454,7 +4446,7 @@ export async function buildGateway(
       ["/centraid/_web", "/centraid/_apps"],
       webControlSessions.handler
     ),
-    // Gateway identity + version handshake (issue #289): cheap static
+    // Gateway identity + version handshake (#289): cheap static
     // JSON, mounted first — health polling hits it every few seconds.
     forRoutePrefixes(
       "/centraid/_gateway/info",
@@ -4493,7 +4485,7 @@ export async function buildGateway(
       : []),
     ...(options.devicePairing
       ? [
-          // Paired-device roster + revoke (issue #376): the wire twin of
+          // Paired-device roster + revoke (#376): the wire twin of
           // `cli/device-admin.ts`'s list/revoke. Every request is scoped to
           // the caller's proved EndpointId and persisted enrollments.
           forRoutePrefixes(
@@ -4514,7 +4506,7 @@ export async function buildGateway(
                 vaultRegistry.list().map((vault) => vault.vaultId),
               onEndpointRevoked: options.devicePairing.onEndpointRevoked,
               vaultName: (id) => vaultRegistry.get(id)?.name,
-              // *Add someone* (#726 P1): mints the new vault (identity
+              // *Add someone* (#726): mints the new vault (identity
               // keypair included — `VaultRegistry.create` mints it).
               mintVaultForPerson: (name) => vaultRegistry.create(name),
               // Cleanup twin (#750): a failed provision removes the vault it
@@ -4592,7 +4584,7 @@ export async function buildGateway(
       "/centraid/_gateway/health",
       makeHealthRouteHandler(health)
     ),
-    // Owner "pause background work" control (#528 Phase B): hot-applied,
+    // Owner "pause background work" control (#528): hot-applied,
     // in-memory only, never a durable Resource-mode flip. Same bearer gate
     // and owner-facing family as health.
     forRoutePrefixes(
@@ -4621,7 +4613,7 @@ export async function buildGateway(
       "/centraid/_gateway/diagnostics",
       makeDiagnosticsRouteHandler(buildDiagnostics)
     ),
-    // Backup status + manual "run now" (issue #351): thin wiring over
+    // Backup status + manual "run now" (#351): thin wiring over
     // `BackupService`. `backupService` is `undefined` when
     // `options.backup?.enabled` is false — the handler answers
     // `{configured: false}` rather than 404 in that case. Same bearer
@@ -4638,7 +4630,7 @@ export async function buildGateway(
           : {}),
       })
     ),
-    // Gateway-level storage connections (issue #367 §C1): CRUD + real
+    // Gateway-level storage connections (#367): CRUD + real
     // connectivity probe + per-vault replication status. Same bearer gate,
     // same owner-facing-diagnostics family as backup/health.
     forRoutePrefixes(
@@ -4661,8 +4653,7 @@ export async function buildGateway(
       })
     ),
     // Due task/event reminders, computed live — the desktop main process
-    // polls this to fire OS notifications (issue: Tasks/Agenda comparison
-    // flagged "no time-based alerts, anywhere").
+    // polls this to fire OS notifications.
     forRoutePrefixes(
       ["/centraid/_reminders", "/centraid/_brief"],
       makeRemindersRouteHandler(vaultRegistry, options.devicePairing)
@@ -4685,7 +4676,7 @@ export async function buildGateway(
         limiter: turnLimiterForCurrentVault,
       })
     ),
-    // Scenario seeds (issue #290 phase 1): load/reset an app's demo data.
+    // Scenario seeds (#290): load/reset an app's demo data.
     // Mounted BEFORE the generic `_vault` handler (same prefix family).
     forRoutePrefixes(
       "/centraid/_vault/demo",
@@ -4704,12 +4695,12 @@ export async function buildGateway(
         },
       })
     ),
-    // File-drop imports (issue #290 phase 2): stage → review → publish.
+    // File-drop imports (#290): stage → review → publish.
     forRoutePrefixes(
       "/centraid/_vault/imports",
       makeImportRouteHandler(vaultRegistry)
     ),
-    // Semantic photo search (issue #721 E3). Mounted BEFORE the generic
+    // Semantic photo search (#721). Mounted BEFORE the generic
     // `_vault` handler — and deeper than the owner's enrichment-settings
     // surface at `/centraid/_vault/enrich`, which the generic handler still
     // owns.
@@ -4751,14 +4742,14 @@ export async function buildGateway(
         host: grantFulfillmentHost,
       })
     ),
-    // Blob custody (issue #296): staged uploads in, consent-checked +
+    // Blob custody (#296): staged uploads in, consent-checked +
     // Range-capable bytes out. Mounted BEFORE the generic `_vault`
     // handler (same prefix family).
     forRoutePrefixes(
       "/centraid/_vault/blobs",
       makeBlobRouteHandler(vaultRegistry, options.dataPlaneHttp)
     ),
-    // Broker-carried connection credentials (issue #304): health list,
+    // Broker-carried connection credentials (#304): health list,
     // configure, pause/resume, and the PKCE consent ceremony. Mounted
     // BEFORE the generic `_vault` handler (same prefix family).
     ...(experimental.connectors
@@ -4807,7 +4798,7 @@ export async function buildGateway(
           ? { deviceAccess: effectiveDeviceAccess }
           : {}),
         onOutboxDecided: drainOutbox,
-        // Storage-connection attach flow (issue #367 §C1/§C4/§C10): resolves
+        // Storage-connection attach flow (#367 §C1/§C4/§C10): resolves
         // `blob_store.connectionId` and gates on the recovery-kit nudge.
         storageConnections,
         recoveryKit,
@@ -4820,7 +4811,7 @@ export async function buildGateway(
         notificationsEvents,
         fenceVaultForErase: (vaultId) =>
           backupService.fenceVaultForErase(vaultId),
-        // fix (this session): agent-grant approval can be the FIRST enrollment
+        // Agent-grant approval can be the FIRST enrollment
         // touch for an automation's agent — resolve its real manifest name
         // the same way reconcileScheduler does, so `approveAgentGrant` never
         // has to fall back to a bare id-derived name.
@@ -4832,7 +4823,7 @@ export async function buildGateway(
         },
       })
     ),
-    // Template catalog (issue #141): the gateway owns it, so the renderer
+    // Template catalog (#141): the gateway owns it, so the renderer
     // reads `GET /centraid/_templates` directly. Templates are SEEDS —
     // gateway-level, read-only material instantiated INTO a vault (#280).
     forRoutePrefixes(
@@ -4841,7 +4832,7 @@ export async function buildGateway(
         ...(paths.templatesCacheDir
           ? { cacheDir: paths.templatesCacheDir }
           : {}),
-        // Catalog installed-state (issue #434): whether each bundled app is
+        // Catalog installed-state (#434): whether each bundled app is
         // already installed in the request's vault, so the Discover card shows
         // "Open" instead of "Install". Degrades to "nothing installed" if no
         // vault is addressed — the catalog is readable before any vault exists.
@@ -4854,7 +4845,7 @@ export async function buildGateway(
         },
       })
     ),
-    // Engine profiles (issue #807): the derived built-ins plus whatever the
+    // Engine profiles (#807): the derived built-ins plus whatever the
     // member created, read straight off gateway prefs. Writes ride the generic
     // prefs API, whose `validatePatch` below is the one gate.
     forRoutePrefixes(
@@ -5150,7 +5141,7 @@ export async function buildGateway(
     enrollments: enrollmentStore,
     vaultFor: (vaultId) => vaultRegistry.get(vaultId)?.db,
     // Successor invitations ride the same peer push the ordinary commons
-    // door uses (issue #750), so the ceremony ends with members invited
+    // door uses (#750), so the ceremony ends with members invited
     // rather than with a steward of one.
     invitePeer: async (invitation) => {
       const link = vaultLinksStore.peerForVault(
@@ -5216,7 +5207,7 @@ export async function buildGateway(
       })),
     dial: () => options.peerPlane?.dial,
     /*
-     * Route re-assertion retry (issue #750 invariant 3). The eager push runs
+     * Route re-assertion retry (#750 invariant 3). The eager push runs
      * where the EndpointId is first learned (the daemon's endpoint host);
      * this tick is the RETRY path — `announceLocalRoutes` is a no-op until
      * the endpoint changes, and stays armed while any linked peer has not
@@ -5262,7 +5253,7 @@ export async function buildGateway(
 
   const composedHandler: RouteHandler = async (req, res) => {
     const url = new URL(req.url ?? "/", "http://gateway.local");
-    // Duration histogram per route (issue #659 R5). Recorded on response
+    // Duration histogram per route (#659). Recorded on response
     // 'close' rather than on return, so a streamed body (SSE, blob range) is
     // measured to the byte and not just to the handler's first await.
     const startedAt = performance.now();
@@ -5270,7 +5261,7 @@ export async function buildGateway(
       routeLatency.record(url.pathname, performance.now() - startedAt)
     );
     /*
-     * The peer lane, before anything else can look at this request (#726 P3).
+     * The peer lane, before anything else can look at this request (#726).
      *
      * TWO steps, and they are not the same guard. The handler matches on the
      * RAW `req.url`, so `/centraid/_peer/../_gateway/devices` still reaches
@@ -5336,7 +5327,7 @@ export async function buildGateway(
       req.headers[VAULT_HEADER] = decodeURIComponent(encodedVaultId);
       req.url = `/centraid/_vault/blobs/${encodedContentId}${url.search}`;
     }
-    // Resolve the request's vault (issue #289): a proved device enrollment
+    // Resolve the request's vault (#289): a proved device enrollment
     // scopes what it may address; the header picks within it. No identity is a
     // hard refusal. Loopback embeds use the persisted host enrollment created
     // above, not wildcard reach.
@@ -5344,7 +5335,6 @@ export async function buildGateway(
     // Device-key resolution has one host-owned seam. The daemon endpoint host
     // accepts either its per-boot proved iroh headers or the explicitly
     // injected desktop EndpointId on a kernel-observed loopback socket.
-    // Direct bearer/device-token identity was removed in #555.
     delete req.headers[COMPANION_GRANTS_HEADER];
     const rawHeader = req.headers[VAULT_HEADER];
     const requested = Array.isArray(rawHeader) ? rawHeader[0] : rawHeader;
@@ -5505,14 +5495,14 @@ export async function buildGateway(
     });
     pushWakeRelay.start();
     // Web/control session expiry reclamation on the gateway clock instead of
-    // on every HTTP request (issue #659 G3).
+    // on every HTTP request (#659).
     webControlSessions.startSweeping();
     // Peer-plane background delivery (#726 P3 gaps 2 & 3) on the gateway clock.
     peerPlaneSweep.start();
 
     // Start the per-vault in-process cron schedulers as they mount. Under
     // n8n semantics they only fire while running — downtime is not
-    // backfilled (issue #149). The schedulers run REGARDLESS of the
+    // backfilled (#149). The schedulers run REGARDLESS of the
     // automations experiment: system recognition recipes (photo OCR, faces,
     // embeddings, transcripts) ride the same cursor engine, so photos keep
     // indexing with the experiment off. The gate lives in reconcile's row
@@ -5601,7 +5591,7 @@ export async function buildGateway(
     // Drain detached automation lifecycle work (compiles, revisions) and any
     // in-flight interactive/steering turn before the vault databases close —
     // otherwise shutdown can land mid-`store.closeItem` or orphan an ACP
-    // child (issue #541 review).
+    // child (#541 review).
     // Snapshotted before awaiting: each task's `finally` removes itself from
     // the live set, and a queued lock tail can still append behind us.
     const detached = Array.from(detachedAutomationTasks);
@@ -5642,13 +5632,8 @@ export async function buildGateway(
 }
 
 /**
- * Validate a manifest's declared vault block into an install-scope block
- * (issue #306). Manifests are app-authored input: anything malformed grants
- * nothing rather than something surprising.
- */
-/**
  * Display metadata for a bundled blueprint app, read from its shipped
- * `app.json` (issue #434). Mirrors the shape
+ * `app.json` (#434). Mirrors the shape
  * `WorktreeStore.listAppsWithMeta` produces for code-store apps so the two
  * origins merge into one listing. A malformed/absent app.json degrades to
  * id-only — the app still lists, just without pretty metadata.

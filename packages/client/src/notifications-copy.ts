@@ -1,4 +1,4 @@
-// What a notification SAYS, on either surface (issue #805, slice C).
+// What a notification SAYS, on either surface (#805).
 //
 // `notifications-model.ts` composes the web push payloads and mobile's
 // `lib/notifications-plan.ts` composes the native ones from the same

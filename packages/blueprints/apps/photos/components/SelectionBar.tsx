@@ -19,15 +19,13 @@
 // it opens the ONE grant kit over the selected photograph, so the bar carries
 // no destination list, no scope reading and no share call of its own.
 //
-// INTEGRATION NOTE (not this file's to fix): `SelectionBarView` is rendered
-// into the app's `#selectionBar` overlay region (Chrome.tsx), not literally
-// inside the toolbar row's own DOM node — that seam belongs to whoever wires
-// Chrome.tsx/app-root.tsx, both off limits to this change. `shelfKind` and
-// `readOnlyReason` likewise need the current shelf and the selected assets'
-// write grants, which only app-root.tsx's closure holds; selection.tsx
-// exposes optional getters for both so wiring them up later is additive.
-// `SelectionBottomBar` is written and tested but not yet mounted anywhere —
-// the phone band is Chrome.tsx's to claim.
+// WHERE THE BAR ACTUALLY RENDERS: `SelectionBarView` goes into the app's
+// `#selectionBar` overlay region (Chrome.tsx), not literally inside the
+// toolbar row's own DOM node. `shelfKind` and `readOnlyReason` need the
+// current shelf and the selected assets' write grants, which only
+// app-root.tsx's closure holds; selection.tsx exposes optional getters for
+// both, so wiring them is additive. `SelectionBottomBar` is mounted nowhere
+// yet — the phone band is Chrome.tsx's to claim.
 import { useRef } from "react";
 import type { FC } from "react";
 
@@ -253,7 +251,7 @@ export function SelectionBarView({
     count,
     shelfKind,
     // Who there is to share with is still the sheet's asynchronous question
-    // (#726 P6) — the control never disables on a guess about the roster.
+    // (#726) — the control never disables on a guess about the roster.
     // HOW MANY is not a guess, though: a grant stands over one subject, so a
     // multi-selection refuses here with the sentence that names the album.
     copyLabel: "Share",

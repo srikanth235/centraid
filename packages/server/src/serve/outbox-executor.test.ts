@@ -590,7 +590,7 @@ describe("outbox-executor", () => {
     });
 
     // The review feed carries acts with their salience marker, and widens
-    // actorKind / grantId for the Approvals activity surface (issue #552).
+    // actorKind / grantId for the Approvals activity surface (#552).
     const feed = plane.reviewFeed(10);
     expect(feed.length).toBeGreaterThan(0);
     expect(feed.every((e) => e.action.startsWith("act "))).toBe(true);
@@ -630,7 +630,7 @@ describe("outbox-executor", () => {
           objectType: "locker.item",
           context: { kind: "fill", origin: "https://example.test" },
           // Owner-direct reveals have no agent invocation — actorId null and
-          // refined fields stay null (issue #552).
+          // refined fields stay null (#552).
           actorId: null,
           actorKind: null,
           actor: null,

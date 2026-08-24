@@ -1,5 +1,5 @@
 /*
- * Gateway ops (issue #351) — electron wiring around the pure core in
+ * Gateway ops (#351) — electron wiring around the pure core in
  * gateway-ops-core.ts. The only seam this file adds over the core is real
  * `dialog.showSaveDialog` / `fs.writeFile` / `loadSettings` — see
  * gateway-ops-core.ts for the testable orchestration and local-gateway.ts

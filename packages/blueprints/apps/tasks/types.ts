@@ -62,7 +62,7 @@ export interface TaskTag {
  */
 export interface Task {
   task_id: string;
-  /** Which mounted scope this row is shown FROM (issue #726 D11), stamped by
+  /** Which mounted scope this row is shown FROM (#726), stamped by
    *  the cross-scope merge (apps/_shared/scope-merge.ts) — absent on a
    *  single-scope surface or a row app-root.tsx never ran through the merge
    *  (the logbook, still own-scope-only). */

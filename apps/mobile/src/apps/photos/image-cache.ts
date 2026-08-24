@@ -1,4 +1,4 @@
-// An app-wide ceiling on expo-image's in-memory bitmap cache (#659 M6).
+// An app-wide ceiling on expo-image's in-memory bitmap cache (#659).
 //
 // expo-image ships with no memory budget: `maxMemoryCost` and `maxMemoryCount`
 // both default to 0, which the docs spell as "no limit". A long scroll through

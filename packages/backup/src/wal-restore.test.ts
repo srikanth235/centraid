@@ -1,7 +1,7 @@
 import fss, { promises as fs } from "node:fs";
 // governance: allow-repo-hygiene file-size-limit (#408) the replay e2e suite drives one real mini-shipper fixture through every damage/PITR/coordination case; sharding would duplicate the shipper per file
 /*
- * End-to-end WAL replay tests (FORMAT.md § WAL segments — /1, issue #408).
+ * End-to-end WAL replay tests (FORMAT.md § WAL segments — /1, #408).
  *
  * These tests run the REAL pipeline: a mini shipper drives a real
  * `node:sqlite` database in WAL mode (autocheckpoint off, TRUNCATE-only
@@ -828,7 +828,7 @@ describe("replayWalSegments — coordinated two-database restore (G8)", () => {
 });
 
 // ───────────────────────────────────────────────────────────────────────────
-// The receipt pair: what coordination is actually FOR (issue #408 G8).
+// The receipt pair: what coordination is actually FOR (#408).
 // ───────────────────────────────────────────────────────────────────────────
 
 /**

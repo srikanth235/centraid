@@ -1,4 +1,4 @@
-// Home's cross-surface copy (issue #708, section A).
+// Home's cross-surface copy (#708, section A).
 //
 // Desktop (packages/client/src/react/screens/HomeSpringboard.tsx) and mobile
 // (apps/mobile/src/screens/home/FirstRunGrid.tsx) draw the SAME Home in two

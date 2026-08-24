@@ -1,11 +1,11 @@
 /**
- * WHO THE DOCS SEAT CAN NAME IN A GRANT (issue #825), native side.
+ * WHO THE DOCS SEAT CAN NAME IN A GRANT (#825), native side.
  *
  * The share kit draws the sheet; the roster is the HOST's obligation, and on
  * this seat the host is Docs. Everything below is already the native seat's
  * own reading of People — the replica party rows, the approved links, the
  * named circles — so this hook composes those readers rather than adding a
- * second directory that could disagree with the one the old share sheet used.
+ * second directory that could disagree with them.
  * The MAPPING from those rows to audiences is not restated here either:
  * `_shared/grant-audiences.ts` owns it for every app and both seats.
  *

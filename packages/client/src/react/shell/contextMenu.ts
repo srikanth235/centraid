@@ -16,8 +16,7 @@ export type ShellMenuAnchor =
   | { kind: "point"; x: number; y: number }
   | { kind: "rect"; rect: DOMRect };
 
-// Context menu — the generic anchored popup menu, ported from the vanilla
-// app-cards.ts openMenu/closeContextMenu. A body-portal overlay with the same
+// Context menu — the generic anchored popup menu. A body-portal overlay with
 // edge-flip positioning, callable from any surface. The item lists + the
 // picked-action dispatch (app menu, template menu) are the caller's — this
 // owns only the popup mechanics.

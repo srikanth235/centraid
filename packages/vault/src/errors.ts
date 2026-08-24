@@ -1,5 +1,5 @@
 /* oxlint-disable max-classes-per-file -- domain error and disk-full classifier are one error surface (#408) */
-// Disk-full classification (issue #351 wave 4): a vault that runs out of
+// Disk-full classification (#351): a vault that runs out of
 // free space must fail closed — never corrupt vault.db (SQLite's own
 // atomicity already guarantees that: a failed transaction auto-rolls-back
 // and the connection stays usable, verified in db.test.ts) and never leave a
@@ -66,7 +66,7 @@ export function asVaultDiskFullError(context: string, err: unknown): Error {
 }
 
 /**
- * Ingest backpressure (issue #405 §3/§5): the bounded storage tier's spool is
+ * Ingest backpressure (#405 §3/§5): the bounded storage tier's spool is
  * at its cache budget AND the pass could free nothing — everything local is
  * either pinned (tinies), un-replicated (deleting it would lose the last
  * copy), or still in staging. This is BACKPRESSURE, never loss: the caller
@@ -149,7 +149,7 @@ export class VaultBlobRemoteUnavailableError extends Error {
 }
 
 /**
- * A share-by-placement projection (issue #599 decision 11) could not be
+ * A share-by-placement projection (#599 decision 11) could not be
  * carried out: the item does not exist in the origin vault, its bytes are not
  * readable there, or the requested item kind is not shareable at v0. Raised
  * BEFORE anything is written to the audience vault wherever the fact is

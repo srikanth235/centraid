@@ -1,30 +1,26 @@
-// THE BACKUP SURFACE — a FRAME screen now, beside Phone storage (#712, B2).
+// THE BACKUP SURFACE — a FRAME screen, beside Phone storage (#712).
 //
-// The previous version of this file said, at the top: "WHERE THIS SCREEN GOES
-// NEXT: frame Settings, beside Phone storage. It sits in the Photos stack today
-// only because that is where a member can reach it… When it moves, this file
-// moves whole." This is that move. The file moved whole; what it shed is
-// everything that was Photos-shaped about reaching it:
+// NOTHING PHOTOS-SHAPED BELONGS HERE:
 //
-//   * `PhotosScreen` (the claimed band) → the Settings back-chevron header,
-//     the same pattern `PhoneStorage.tsx` uses one row above it.
-//   * `useAutomaticPhotoBackup` → gone. The sweep that ENQUEUES newly-taken
-//     camera-roll photographs belongs to Photos and already runs there
-//     (`PhotosHome`); mounting it here again would have been a second sweep
-//     over one queue. What is left on this screen is the frame's half: the
-//     DURABLE QUEUE's own state, and the policy that governs whether it may
-//     drain at all.
-//   * the tile-legend for Photos' custody mark → gone with it. It was a
-//     sentence about a mark in the Photos grid, and `kit`/`screens` may not
-//     import an app (`scripts/check-import-boundaries.ts`). The custody
-//     vocabulary is still taught here, in the frame's own words: the rollup's
-//     buckets are named and explained under "Where your originals are".
+//   * the chrome is the Settings back-chevron header, the same pattern
+//     `PhoneStorage.tsx` uses one row above it — never `PhotosScreen`'s
+//     claimed band.
+//   * no `useAutomaticPhotoBackup`. The sweep that ENQUEUES newly-taken
+//     camera-roll photographs belongs to Photos and runs there
+//     (`PhotosHome`); mounting it here too would be a second sweep over one
+//     queue. This screen carries the frame's half: the DURABLE QUEUE's own
+//     state, and the policy that governs whether it may drain at all.
+//   * no tile-legend for Photos' custody mark — that is a sentence about a
+//     mark in the Photos grid, and `kit`/`screens` may not import an app
+//     (`scripts/check-import-boundaries.ts`). The custody vocabulary is
+//     taught here in the frame's own words: the rollup's buckets are named
+//     and explained under "Where your originals are".
 //
 // Photos reaches it by deep link — the More sheet's "Backup" row resolves to
 // `{ screen: "Settings", params: { screen: "BackupHealth" } }` — so there is
 // exactly one Backup surface on the phone, not one per app.
 //
-// EVERY NUMBER ON THIS SCREEN IS READ, NEVER INVENTED (#712, B3). Two sources,
+// EVERY NUMBER ON THIS SCREEN IS READ, NEVER INVENTED (#712). Two sources,
 // and the screen is explicit about which is speaking:
 //
 //   * the DURABLE QUEUE on this phone (`kit/transfer/transfer-queue.ts`) —
@@ -259,7 +255,7 @@ export default function BackupHealth({
             </Text>
           </View>
         ) : null}
-        {/* THE VERDICT (#712, P5): complete · pending · failing · unreadable.
+        {/* THE VERDICT (#712): complete · pending · failing · unreadable.
             Only `failing` takes the `net` rule, and it takes it as an EDGE and
             ink — never a fill, never a red plate (§18). */}
         <View
@@ -457,7 +453,7 @@ export default function BackupHealth({
         </Text>
         {TRANSFER_POLICY_SWITCHES.map((rule) => {
           const inert = rule.inert(policy);
-          // THE REFUSAL GRAMMAR, RENDERED (issue #712 E1). Four of these five
+          // THE REFUSAL GRAMMAR, RENDERED (#712). Four of these five
           // switches go inert depending on the other four, and until now the
           // screen said nothing about why — a member who turned on "Wi-Fi
           // only" watched two rules below it fade with no account given, which

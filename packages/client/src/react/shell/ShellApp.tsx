@@ -45,7 +45,7 @@ export interface ShellNav {
 }
 
 /**
- * What a screen says in the app bar (issue #708, invariant 3).
+ * What a screen says in the app bar (#708, invariant 3).
  *
  * The brief models this as per-app configuration — a title, a meta line, and
  * at most two actions, of which at most one is the filled ink. It is data
@@ -106,7 +106,7 @@ const DEFAULT_FULL_BLEED = (r: ShellRoute): boolean =>
   r.kind === "app" || r.kind === "automation-builder";
 
 /**
- * A real component boundary around a render-prop outlet (issue #659).
+ * A real component boundary around a render-prop outlet (#659).
  *
  * `renderScreen(nav)` and `renderStem(nav)` were plain function calls, so
  * every re-render of the shell root rebuilt the whole route's element tree —

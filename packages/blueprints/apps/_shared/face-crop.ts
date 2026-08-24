@@ -1,4 +1,4 @@
-// The face-review crop math (issue #711, v4 4307 "the face crop"). There is
+// The face-review crop math (#711, v4 4307 "the face crop"). There is
 // no server-cropped thumbnail for a face region — `media_face_region` only
 // carries `bbox_json` as a fraction of the FULL photograph (x, y, w, h, each
 // 0..1, top-left origin; see `enrich-publishers.ts`'s `FaceRegionPayload` and

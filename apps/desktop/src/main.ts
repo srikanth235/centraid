@@ -34,7 +34,7 @@ import { loadWindowState, trackWindowState } from "./main/window-state.js";
 const __dirname = import.meta.dirname;
 
 /*
- * Single-instance lock (issue #351). Without this, launching a second copy
+ * Single-instance lock (#351). Without this, launching a second copy
  * of the desktop app would boot a SECOND embedded gateway against the same
  * on-disk vault — two processes fighting over the same SQLite files. This
  * has to be the very first thing the process does, before crash-handler
@@ -98,10 +98,10 @@ if (gotSingleInstanceLock) {
       minWidth: 1100,
       titleBarStyle: "hiddenInset",
       trafficLightPosition: { x: 16, y: 16 },
-      // Deferred until the renderer has something to paint (issue #659).
-      // Showing at construction meant the first thing launch put on screen was
-      // an empty `backgroundColor` rectangle that sat there for the whole of
-      // module init + first render — a flash of nothing, read as a slow app.
+      // Deferred until the renderer has something to paint (#659). Showing at
+      // construction puts an empty `backgroundColor` rectangle on screen for
+      // the whole of module init + first render — a flash of nothing, read as
+      // a slow app.
       show: false,
       webPreferences: {
         contextIsolation: true,
@@ -173,22 +173,18 @@ if (gotSingleInstanceLock) {
     // with the same message this catch logs, so the error reaches a surface
     // the user can read, retry, and copy from.
     createWindow();
-    // Boot the active gateway (issue #351). Before this, a `serve()` failure
-    // during lazy startup only surfaced as a failed IPC invoke the FIRST time
-    // the renderer called `getSettings()`, and (pre-supervision) every
-    // subsequent settings read just retried the same failing start
-    // immediately. `loadSettings()` resolves the active gateway (starting the
+    // Boot the active gateway. `loadSettings()` resolves it (starting the
     // local runtime when it's the active one) and local-gateway.ts's
     // supervisor owns backed-off background retries — this is just the
     // "get the gateway up at launch" call, not itself a retry loop.
     //
     // On a TRUE first run `loadSettings()` deliberately does NOT start the
-    // local gateway (issue #603 — no keychain prompt before the user has
+    // local gateway (#603 — no keychain prompt before the user has
     // chosen anything), so `gatewayUrl` comes back empty and the tray says
     // "not running" until the first-run chooser's local-connect starts it.
     try {
       const settings = await loadSettings();
-      // Launch-at-login (issue #351, tier 4) — apply on every launch, not
+      // Launch-at-login (#351, tier 4) — apply on every launch, not
       // just when the setting changes, so an OS-level login-item reset (or
       // a settings.json hand-edit) reconciles instead of drifting silently.
       applyLaunchAtLogin(settings.launchAtLogin);
@@ -208,7 +204,7 @@ if (gotSingleInstanceLock) {
     // per-launch uptime history, and fire the OS down-alert. Lives in main
     // so it survives navigation and alerts land while backgrounded.
     startGatewayMonitor();
-    // Host power-context push (#528 Phase D): the desktop owns the battery, so
+    // Host power-context push (#528): the desktop owns the battery, so
     // a battery/AC/thermal transition nudges an immediate gateway-monitor tick
     // (which carries the push); the 5s heartbeat keeps it fresh otherwise.
     registerPowerContextListeners(() => nudgeGatewayMonitor());
@@ -216,20 +212,19 @@ if (gotSingleInstanceLock) {
     // alerts and fire an OS notification for each new one. Same "lives in
     // main so it survives backgrounding" posture as the gateway monitor above.
     startReminderMonitor();
-    // Phone link (issue #263): bring the iroh endpoint up front so paired
+    // Phone link (#263): bring the iroh endpoint up front so paired
     // phones reconnect without any UI open. Failures surface in the
     // Settings → Phone panel via PHONE_STATUS; they must not block launch.
     ensurePhoneLink().catch((error) => {
       process.stdout.write(`[phone-link] failed to start: ${String(error)}\n`);
     });
-    // Remote template refresh now runs inside the embedded gateway (issue
-    // #141, Phase 5): `local-gateway` passes the configured remote manifest
-    // URL into `serve()`, and the gateway's `/centraid/_templates` route
-    // fires a one-time best-effort fetch into its cache. The desktop main
-    // process no longer touches `@centraid/blueprints`.
-    // Harness detection moved to the gateway (`GET /centraid/_harnesses/status`):
-    // it's colocated with the harness and probes its own host on demand, so the
-    // desktop no longer runs a first-launch credential probe.
+    // Remote template refresh belongs to the embedded gateway (#141):
+    // `local-gateway` passes the configured remote manifest URL into
+    // `serve()`, and the gateway's `/centraid/_templates` route fires a
+    // one-time best-effort fetch into its cache — main must not touch
+    // `@centraid/blueprints`. Harness detection likewise lives on the gateway
+    // (`GET /centraid/_harnesses/status`), colocated with the harness and
+    // probing its own host on demand — no first-launch probe here.
     app.on("activate", () => {
       if (BrowserWindow.getAllWindows().length === 0) {
         createWindow();
@@ -244,7 +239,7 @@ if (gotSingleInstanceLock) {
   });
 
   /**
-   * Graceful quit (issue #351 / #468 H1). Embedded (in-process) gateways
+   * Graceful quit (#351 / #468 H1). Embedded (in-process) gateways
    * get a WAL checkpoint + close so SQLite doesn't see a crash. Detached
    * gateway children intentionally outlive the UI — `shutdownAllLocalGatewaysExcept`
    * skips `mode: 'detached'` handles so pairing, the browser extension,
@@ -263,7 +258,7 @@ if (gotSingleInstanceLock) {
     if (quitting) return;
     quitting = true;
     event.preventDefault();
-    // Flush window bounds before async teardown (issue #468 K13).
+    // Flush window bounds before async teardown (#468).
     flushWindowState?.();
 
     // Stop taking on new supervised-restart work first — a scheduled
@@ -275,7 +270,7 @@ if (gotSingleInstanceLock) {
     stopReminderMonitor();
 
     const teardown = Promise.allSettled([
-      // Embedded local gateways only — detached outlive the UI (#468 H1).
+      // Embedded local gateways only — detached outlive the UI (#468).
       shutdownAllLocalGatewaysExcept(),
       // The iroh phone tunnel holds its own endpoint + device store.
       shutdownPhoneLink(),

@@ -1,4 +1,4 @@
-// The capability registry (issue #807): enrichment capabilities as versioned
+// The capability registry (#807): enrichment capabilities as versioned
 // CONTRACTS rather than features.
 //
 // WHAT A CAPABILITY IS. A typed contract — input kind → output schema — and
@@ -22,10 +22,10 @@
 // DEFAULT ENGINE, NOT ONLY ENGINE. `defaultTemplateId` names the bundled
 // automation that implements the capability today — the app id under
 // `packages/blueprints/automations`, whose automation ref is `<id>/<id>`. It
-// is the built-in profile's implementation; Wave 1's engine profiles add
+// is the built-in profile's implementation; engine profiles (#807) add
 // others without touching this table.
 //
-// The domain stays the closed `photos | docs` union (issue #807 Q1): domains
+// The domain stays the closed `photos | docs` union (#807): domains
 // are DATA-SHAPE scopes, not app scopes. Tally receipts are documents and ride
 // `docs`; per-app differentiation is what the policy cascade's app/collection
 // scopes are for.
@@ -41,14 +41,13 @@ export const CAPABILITY_INPUT_KINDS = [
   "document",
   "audio-video",
   // A latitude/longitude pair on a row that has one — `core_place.geo_lat/lng`
-  // today (issue #816). A coordinate is its own data shape: no bytes are read,
+  // today (#816). A coordinate is its own data shape: no bytes are read,
   // no content item is involved, and a capability over it consumes a FACT the
   // vault already holds rather than material it has to fetch.
   "coordinate",
 ] as const;
 export type CapabilityInputKind = (typeof CAPABILITY_INPUT_KINDS)[number];
 
-/** One capability contract. */
 export interface CapabilityContract {
   /** Stable key — manifests, policy rules, consent and queue rows use it. */
   readonly id: string;
@@ -108,7 +107,7 @@ export const ENRICH_CAPABILITIES: readonly CapabilityContract[] = [
     delegateCapable: false,
   },
   {
-    // A coordinate yields the nearest settlement's name (issue #816). Photos
+    // A coordinate yields the nearest settlement's name (#816). Photos
     // because a place is where a photograph was taken; the contract says
     // nothing about the bundled GeoNames table that answers it today, which is
     // exactly the point of the registry — a later engine with better data

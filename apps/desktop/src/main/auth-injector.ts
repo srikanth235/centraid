@@ -5,7 +5,7 @@
 // `auth.mode: "token"`. A request that already carries an Authorization
 // header (every `gateway-client` fetch) is left exactly as it is.
 //
-// This renderer frames nothing (issue #799), so it needs no CSP
+// This renderer frames nothing (#799), so it needs no CSP
 // `frame-ancestors` response rewrite.
 //
 // The hook is scoped to the configured gateway origin, so other traffic in

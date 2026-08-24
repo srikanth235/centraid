@@ -7,7 +7,7 @@ import RowsBlock from "../ui/RowsBlock.js";
 import type { RowDef } from "../ui/RowsBlock.js";
 import SectionBlock from "../ui/SectionBlock.js";
 
-// Settings → Enrichment, EXCEPTIONS (issue #807).
+// Settings → Enrichment, EXCEPTIONS (#807).
 //
 // A rule says what ONE scope decides about ONE capability; everything it leaves
 // unset is inherited, and the gateway's single resolver folds the chain. This

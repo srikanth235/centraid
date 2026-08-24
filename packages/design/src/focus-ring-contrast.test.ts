@@ -1,4 +1,4 @@
-// The focus ring on a filled-ink control (issue #708 §B.3).
+// The focus ring on a filled-ink control (#708).
 //
 // How the ring is actually drawn (packages/design/src/elements/kit.css, e.g. line
 // ~334-337, and `themeProps()` in css.ts):

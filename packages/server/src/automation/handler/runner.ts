@@ -103,10 +103,10 @@ export interface DelegateCall {
   readonly harness?: string;
   readonly model?: string;
   readonly configPins?: Readonly<Record<string, string>>;
-  /** Vault derivatives to hand the model with the prompt (issue #299). */
+  /** Vault derivatives to hand the model with the prompt (#299). */
   readonly attachments?: readonly DelegateAttachment[];
   /**
-   * Token-stream sink (issue #158, Phase 2). When a harness routes
+   * Token-stream sink (#158). When a harness routes
    * `ctx.delegate` through the streaming turn plane, each `TurnStreamEvent`
    * is forwarded here; the harness wraps it as an `item.delta` on the owning
    * delegate item. Absent for dispatchers still on the collect-on-exit path.
@@ -139,7 +139,7 @@ export interface RunHandlerOptions {
   /** Absolute path to the generated `handler.js`. */
   handlerFile: string;
   /**
-   * Containment lane from the automation's manifest (#846 P9). Absent is the
+   * Containment lane from the automation's manifest (#846). Absent is the
    * strict `automation-handler` floor, which is what the worker installs when
    * this is not set — never "no sandbox".
    */
@@ -194,12 +194,12 @@ export interface RunHandlerOptions {
   history?: HistoryConfig;
   timeoutMs?: number;
   /**
-   * Connector confinement (issue #290 phase 4). When present, this run is a
+   * Connector confinement (#290). When present, this run is a
    * published connector: `ctx.delegate` is forbidden entirely (agents write
    * code, not data — the LLM appears at authoring/repair time, never in the
    * per-sync loop), and `ctx.fetch` is the connector's only external rail.
    *
-   * `secrets` (issue #293) is the allowlist for `{{secret:…}}` placeholders
+   * `secrets` (#293) is the allowlist for `{{secret:…}}` placeholders
    * in `ctx.fetch` — `locker:<item_id>:<column>` refs the manifest declared.
    */
   connector?: {
@@ -216,14 +216,14 @@ export interface RunHandlerOptions {
     readonly connectionId?: string;
   };
   /**
-   * Host-injected secret resolution for connector `ctx.fetch` (issue #293):
+   * Host-injected secret resolution for connector `ctx.fetch` (#293):
    * ref → plaintext, backed by the automation agent's `reveal` grant. The
    * value substitutes into the request at THIS side of the worker boundary
    * and is scrubbed from every recorded string as a backstop.
    */
   resolveSecret?: (ref: string) => Promise<string>;
   /**
-   * Broker-resolved connection credential (issue #304): the values behind
+   * Broker-resolved connection credential (#304): the values behind
    * `{{connection:…}}` placeholders in `ctx.fetch`, plus the host pin they
    * may be injected toward. Provided by the gateway's connection broker when
    * the connector's connection carries an `oauth2`/`api_key` credential;
@@ -238,7 +238,7 @@ export interface RunHandlerOptions {
 }
 
 /**
- * A broker-resolved connection credential riding one fire (issue #304).
+ * A broker-resolved connection credential riding one fire (#304).
  * The token itself never crosses the worker boundary: `values` substitute
  * into the request parent-side (like `{{secret:…}}`), `allowedHosts` is the
  * anti-exfiltration pin (injection refuses any other destination), and the
@@ -273,7 +273,7 @@ export interface ConnectionAuth {
    * #304 phase 5). Default (unset) = read-only: a POST/PUT/PATCH/DELETE
    * injected request is refused. Connector fires never set this — external
    * writes ride `outbox.stage` → the gateway executor's `allowWrites` lane
-   * (issue #306), never raw ctx.fetch.
+   * (#306), never raw ctx.fetch.
    */
   readonly allowWrites?: boolean;
   /**
@@ -462,7 +462,7 @@ export async function runHandler(
   const toolBatches = 0;
   let delegateCalls = 0;
 
-  // Secret values resolved for ctx.fetch this run (issue #293). Substitution
+  // Secret values resolved for ctx.fetch this run (#293). Substitution
   // is transport-level; this set powers the backstop scrub over everything
   // the run RECORDS — logs, summary, output, errors.
   const resolvedSecretValues = new Set<string>();
@@ -506,7 +506,7 @@ export async function runHandler(
         }
         out = out.replaceAll(`{{secret:${ref}}}`, resolved.get(ref)!);
       });
-      // Broker-injected connection values (issue #304): the placeholder
+      // Broker-injected connection values (#304): the placeholder
       // names what the credential carries (`access_token` / `api_key`);
       // an unknown name — or no broker credential at all — is a handler
       // bug surfaced as an error, never an empty substitution.
@@ -546,7 +546,7 @@ export async function runHandler(
     };
   };
 
-  // The anti-exfiltration pin (issue #304 decision 2): an injected request
+  // The anti-exfiltration pin (#304 decision 2): an injected request
   // may only point where the CONNECTION says its credential may go. Exact
   // hostnames or `*.suffix` wildcards; https only, loopback excepted (tests
   // and the desktop's local bridges).
@@ -578,9 +578,9 @@ export async function runHandler(
         `host "${url.hostname}" is outside this connection's allowed_hosts — the credential is pinned to ${(opts.connectionAuth?.allowedHosts ?? []).join(", ")} (issue #304)`
       );
     }
-    // Read-only ceiling (issue #304 phase 5): a broker credential injects
+    // Read-only ceiling (#304): a broker credential injects
     // toward SAFE methods only inside a fire. The write half shipped as the
-    // outbox (issue #306) — the error names the actual path (issue #308 B1)
+    // outbox (#306) — the error names the actual path (#308)
     // so a model that hits the ceiling can self-correct instead of retrying.
     const normalizedMethod = method.toUpperCase();
     if (
@@ -650,7 +650,7 @@ export async function runHandler(
   };
 
   /**
-   * The failure taxonomy for broker-injected fetches (issue #304 decision 5):
+   * The failure taxonomy for broker-injected fetches (#304 decision 5):
    * 429/5xx → bounded backoff retry; 401 → one forced token refresh, then
    * retry; 401 again (or with nothing to refresh) → the credential is dead,
    * flip needs-auth and hand the response back; 403 that names scopes →
@@ -757,7 +757,7 @@ export async function runHandler(
     startedAt,
   });
   // The trigger payload is the inbound `message_in` item (ordinal 0) — the
-  // same shape a chat turn records (issue #190, criterion 4). Trace items
+  // same shape a chat turn records (#190, criterion 4). Trace items
   // (tool/delegate) then start at ordinal 1.
   if (opts.input !== undefined) {
     audit.store.insertMessageIn({
@@ -950,7 +950,7 @@ export async function runHandler(
       if (state.resolved) return;
       state.resolved = true;
       if (timeoutHandle) clearTimeout(timeoutHandle);
-      // Backstop scrub (issue #293): nothing a run RECORDS may carry a
+      // Backstop scrub (#293): nothing a run RECORDS may carry a
       // resolved secret — transport injection is the mechanism, this is the
       // net under it.
       if (resolvedSecretValues.size > 0) {
@@ -1060,7 +1060,7 @@ export async function runHandler(
     worker.on("message", (msg: WorkerToParentMessage) => {
       if (msg.type === "delegate") {
         // Connectors are deterministic code — no LLM turn ever runs inside
-        // a sync loop (issue #290: agents write code, not data).
+        // a sync loop (#290: agents write code, not data).
         if (opts.connector) {
           send({
             type: "delegate-reply",
@@ -1089,7 +1089,7 @@ export async function runHandler(
         return;
       }
       if (msg.type === "fetch") {
-        // Transport-level secret injection (issue #293): connector-only —
+        // Transport-level secret injection (#293): connector-only —
         // the recorded spec keeps its placeholders; substitution happens
         // here, past the worker boundary, and the response rides back to
         // the handler without ever being journaled.

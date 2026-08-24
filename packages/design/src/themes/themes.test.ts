@@ -28,9 +28,9 @@ describe("theme registry", () => {
   });
 
   test("a registry key equals its kind, so `[data-theme='dark']` is exact", () => {
-    // Load-bearing: `toast.module.css` and `SettingsConnectionsScreen
-    // .module.css` select on the theme NAME but mean the theme KIND. While
-    // the two coincide, no dark preset can slip past those rules.
+    // Load-bearing: `SettingsConnectionsScreen.module.css` and
+    // `RecoverScreen.module.css` select on the theme NAME but mean the theme
+    // KIND. While the two coincide, no dark preset can slip past those rules.
     for (const [name, theme] of Object.entries(themes)) {
       expect(theme.kind, `theme '${name}' declares kind '${theme.kind}'`).toBe(
         name

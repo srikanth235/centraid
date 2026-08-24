@@ -28,7 +28,7 @@ type Subscriber = {
   feed?: VaultFeed;
   listener: (message: VaultChangeMessage) => void;
   /**
-   * The scope this subscriber is PINNED to. A multi-scope mount (issue #599)
+   * The scope this subscriber is PINNED to. A multi-scope mount (#599)
    * holds one replica session per scope, and each session's feed must follow
    * that session — not the shell's ambient "focused vault" pointer. Only an
    * unpinned (ambient) subscriber is re-bound when the pointer moves.
@@ -381,7 +381,7 @@ function detach(subscriber: Subscriber): void {
  * The focused-scope pointer moved. Only AMBIENT subscribers follow it: a
  * subscriber pinned to an explicit scope belongs to a replica session that is
  * still mounted, and tearing its stream down would silently stop delivering
- * changes for every scope but the focused one (issue #599).
+ * changes for every scope but the focused one (#599).
  */
 function rescopeSubscribers(): void {
   for (const subscriber of subscribers) {

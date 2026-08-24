@@ -1,4 +1,4 @@
-// Memories, full screen (issue #724 W7, "Memories v0").
+// Memories, full screen (#724, "Memories v0").
 //
 // Reached from Collections' "Memories" heading (`PhotosCollectionsView.tsx`'s
 // `open()`). Three sections — On this day, Trips, Similar moments — read
@@ -15,7 +15,7 @@
 // empty shelves — the same law `photos-collections.ts`'s Memories shelf has
 // always kept, extended to cover Trips and Similar moments too.
 
-// A TRIP IS NAMED AND SKETCHED (issue #816). The block is headed by the phrase
+// A TRIP IS NAMED AND SKETCHED (#816). The block is headed by the phrase
 // ladder's own sentence, computed in `trips.ts` and therefore identical to the
 // web strip's — never the place row's raw name, which is the coordinate
 // `findOrCreatePlaceTx` mints until somebody renames it, and never a bare

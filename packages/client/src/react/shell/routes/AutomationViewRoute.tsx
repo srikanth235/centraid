@@ -164,7 +164,7 @@ async function askAutomationWithConsent(input: {
   }) => Promise<boolean>;
 }): Promise<string | null> {
   let live = createAutomationLiveTrace(input.text);
-  // Reference-stable rows for the memoized transcript (issue #659): a streamed
+  // Reference-stable rows for the memoized transcript (#659): a streamed
   // event rebuilds the whole projection, but only the rows that actually moved
   // should reach React.
   const projectLive = createKeyedMessageProjection();

@@ -1,7 +1,7 @@
 /*
- * Launch-at-login (issue #351, tier 4).
+ * Launch-at-login (#351, tier 4).
  *
- * With the detached gateway (#468 H1) the child can outlive the UI, but it
+ * With the detached gateway (#468) the child can outlive the UI, but it
  * still does not survive logout/reboot unless the user opts into the OS
  * service (H5, `offerGatewayService` / `centraid-gateway service install`).
  * Launch-at-login remains the cheap 80% fix for bringing the app UI (and a

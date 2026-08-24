@@ -1,5 +1,5 @@
 /**
- * Renderer leak probe (issue #842, W3.5).
+ * Renderer leak probe (#842).
  *
  * The shell is a long-lived document: the desktop app and an installed PWA are
  * opened once and left open for days, and every app open is a route swap

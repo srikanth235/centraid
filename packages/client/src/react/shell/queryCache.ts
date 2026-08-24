@@ -1,4 +1,4 @@
-// The shell's one stale-while-revalidate cache (issue #659, doctrine D4).
+// The shell's one stale-while-revalidate cache (#659, doctrine D4).
 //
 // What it replaces. `useAsyncData` is per-mount and blanks to `loading` on any
 // deps change, so three separate things went wrong on every screen that used
@@ -9,7 +9,7 @@
 // string, so a value outlives the component that fetched it and a refetch runs
 // BEHIND whatever is already on screen.
 //
-// The model is the gateway switcher (App.tsx's `openGatewayPicker`): paint
+// The model is the gateway switcher (App.tsx's `openGatewaySwitcher`): paint
 // immediately from whatever a prior open cached, then probe and patch rows in
 // place as they settle. This generalises that.
 //

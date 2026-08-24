@@ -3,7 +3,7 @@
 // base extends HTMLElement at module scope — a DOM has to exist to import it.)
 //
 // The editor's meta line has to be true about lineage, not decorative
-// (issue #711). An edited copy is dated the day it was SAVED, so the only
+// (#711). An edited copy is dated the day it was SAVED, so the only
 // thing that can honestly place it in time is its recorded source — and when
 // there is no source, or the source is not loaded, the line must say so
 // rather than reading a save date back as a capture date.
@@ -81,7 +81,7 @@ describe(editorSourceLine, () => {
   });
 });
 
-// PER-COPY PROVENANCE (issue #712 P6a). The panel's one prose sentence about
+// PER-COPY PROVENANCE (#712). The panel's one prose sentence about
 // where the original lives gives each custody state its own answer. A trailing
 // `return` catching three different worlds — `local-only`, `pending-offsite`,
 // and NO custody row at all — is the defect pinned here: with the gateway's

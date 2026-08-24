@@ -1,4 +1,4 @@
-// Bidirectional provider continuation (issue #630): a local edit of a row
+// Bidirectional provider continuation (#630): a local edit of a row
 // that came from Google becomes an already-approved outbox artifact. The
 // edit itself is the user's consent to update that same provider object;
 // credentials remain executor-only, and revoke/needs-auth leaves the durable

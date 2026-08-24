@@ -1,5 +1,5 @@
 /**
- * Scaffold a new automation app (issue #98 unified folder model).
+ * Scaffold a new automation app (#98 unified folder model).
  *
  * An automation is never standalone — it is one app folder under
  * `appsDir`, an *automation app*: a folder whose `app.json` declares
@@ -185,7 +185,7 @@ function starterManifest(name: string, opts: ScaffoldOptions): Manifest {
     opts.triggers === undefined
       ? [{ kind: "cron", expr: opts.cronExpr?.trim() || "0 9 * * *" }]
       : opts.triggers;
-  // Emit the `requires` slots the builder may fill (issue #167): `model` is the
+  // Emit the `requires` slots the builder may fill (#167): `model` is the
   // ctx.delegate capability tier (`provider/model-id`) — picked for the cheapest
   // tier that does the inference (e.g. a small/cheap tier for summarization).
   // It is left out until chosen so it is never a misleading default; a handler
@@ -216,7 +216,7 @@ function starterManifest(name: string, opts: ScaffoldOptions): Manifest {
 }
 
 /**
- * Filesystem-free variant (issue #141): build the file map for a new
+ * Filesystem-free variant (#141): build the file map for a new
  * automation app — `app.json` plus a single automation under
  * `automations/<autoId>/` (manifest + handler). The caller PUTs these
  * into a git-store session and publishes.
@@ -237,8 +237,8 @@ export function scaffoldAppFiles(
     manifestVersion: 1,
     id: appId,
     name,
-    // Marks this as a UI-less automation app (replaces the legacy `auto.`
-    // id prefix) — the desktop surfaces it on the Automations page.
+    // Marks this as a UI-less automation app — the desktop surfaces it on the
+    // Automations page.
     kind: "automation",
     version: "0.1.0",
     actions: [],
@@ -284,7 +284,7 @@ export function setEnabledInFiles(
 }
 
 /**
- * Remove one automation from a draft file map (issue #141). Returns the
+ * Remove one automation from a draft file map (#141). Returns the
  * surviving files plus the removed paths (everything under
  * `automations/<automationId>/`) so the caller can DELETE them in the
  * git-store session.

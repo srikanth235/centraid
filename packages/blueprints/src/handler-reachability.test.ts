@@ -1,4 +1,4 @@
-// Permanent reachability gate for issue #630. A handler file and a manifest
+// Permanent reachability gate for #630. A handler file and a manifest
 // entry are not product: every capability must have a real UI dispatch on each
 // shipped surface, or one of the three explicitly permitted markings below.
 //

@@ -7,7 +7,7 @@
 // The split is structural, not stylistic. Electron's preload runs in the
 // sandboxed renderer, where `require("node:path")` does not resolve — a single
 // module carrying both halves takes the whole preload down with it, and with
-// the preload goes the entire desktop app (issue #707). A build-time-only
+// the preload goes the entire desktop app (#707). A build-time-only
 // consumer can reach past this into `./fonts`; anything that ships to a
 // browser, a renderer, or an app surface behind a strict CSP imports HERE.
 
@@ -48,9 +48,6 @@ export interface FontFile {
 /**
  * Every vendored file, and only those. The one face carries the ramp's two
  * weights. Code uses the platform stack and ships no bytes.
- *
- * Four files, down from six. v8 withdraws Source Serif 4 and replaces the
- * barely-visible 500 step with Instrument Sans 600.
  */
 export const FONT_FILES: readonly FontFile[] = (
   [

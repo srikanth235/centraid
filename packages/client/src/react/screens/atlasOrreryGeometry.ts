@@ -1,4 +1,4 @@
-// Pure, deterministic geometry for the Relations orrery (issue #441 B2). Kept
+// Pure, deterministic geometry for the Relations orrery (#441). Kept
 // out of the component so tests can hit the maths directly — bearing
 // allocation, hop BFS, ring radius, fill→width mapping and edge paths are all
 // side-effect-free functions of their inputs. The one invariant everything here

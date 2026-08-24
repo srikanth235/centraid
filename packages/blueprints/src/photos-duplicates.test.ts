@@ -1,8 +1,8 @@
 // @vitest-environment jsdom
-// The Duplicates shelf's member-facing copy and cluster header (issue #711
+// The Duplicates shelf's member-facing copy and cluster header (#711
 // review, v4 handoff proto :4437-:4439):
 //
-//   1. NO ISSUE ID EVER REACHES A MEMBER. A lede printing "(issue #352)" is
+//   1. NO ISSUE ID EVER REACHES A MEMBER. A lede printing "(#352)" is
 //      an implementation detail, not something a member reads.
 //      Sabotage-verified below: re-adding any
 //      `#<digits>` to the shelf's rendered copy fails this file.

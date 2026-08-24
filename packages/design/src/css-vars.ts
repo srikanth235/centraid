@@ -1,13 +1,11 @@
 /**
- * Custom-property reading for hand-written stylesheets (issue #686).
+ * Custom-property reading for hand-written stylesheets (#686).
  *
  * A `var(--x)` with NO fallback that names nothing declared is invalid at
  * computed-value time: the declaration is dropped and the property falls back
  * to inherited/initial. Nothing throws, nothing logs — the rule just silently
- * does not apply, which is how a stale rename survives review. `packages/
- * blueprints` gained a gate for that class in #686; the same defect existed
- * unmeasured in `packages/client` (13 names, including four `--ink-*` phantoms
- * that #677's token rename carried forward as `--text-*`).
+ * does not apply, which is how a stale rename survives review. Both
+ * `packages/blueprints` and `packages/client` gate for that class (#686).
  *
  * These are the shared, pure halves of both gates — no filesystem, no contract
  * baked in — so the two packages cannot drift into disagreeing about what

@@ -1,5 +1,5 @@
 /**
- * Static handler lint for automation `handler.js` (issue #167).
+ * Static handler lint for automation `handler.js` (#167).
  *
  * An automation fire is a chat whose brain is `handler.js`. Its outside effects
  * must go through the `ctx.*` surface (`ctx.vault` / `ctx.fetch` / `ctx.delegate` /

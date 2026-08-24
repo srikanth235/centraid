@@ -6,9 +6,9 @@
  * (a `bun run build` in a checkout, or a pulled release artifact). The
  * running Electron process keeps executing the code it loaded at launch;
  * picking the new build up is a relaunch, exactly like Claude Code's
- * "Relaunch to update" pill. Packaged builds will swap this detection for
- * electron-updater later — the renderer surface (status + relaunch IPC)
- * stays the same.
+ * "Relaunch to update" pill. Packaged builds detect through electron-updater
+ * instead (update-watcher.ts) and share the same renderer surface (status +
+ * relaunch IPC).
  *
  * Detection: stat a fixed set of build outputs (one per build step, so any
  * of tsc / preload-bundle / assets / vite touching dist flips the print),

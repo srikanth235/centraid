@@ -76,7 +76,7 @@ function stewardLine(entry: CommonsRecoveryGrant): string {
 
 /**
  * The steward-absence section of the People panel: the surface the recovery
- * ceremony is reachable from (issue #750). The button appears only for a
+ * ceremony is reachable from (#750). The button appears only for a
  * proven `absent` — a seat parked on an unverified history must never be
  * re-founded from state it could not verify, and a `degraded` steward may
  * still come back on its own.

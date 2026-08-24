@@ -1,5 +1,5 @@
 /*
- * Host power-context posture (#528 Phase D) — courtesy & energy, NEVER a
+ * Host power-context posture (#528) — courtesy & energy, NEVER a
  * silent durable mode flip. This reports whether the host is running on
  * battery, mains, or as a headless server, and whether a courteous gateway
  * should DEFER (not stop) its safe background loops right now. It composes
@@ -16,7 +16,7 @@
  *     and pushes live `onBattery`/`charging`/thermal state on `powerMonitor`
  *     events and its 5s poll. Fresher than the probe; goes STALE after 120s.
  *
- * Idle wakeup target (#528 Phase D): the measured proxy is
+ * Idle wakeup target (#528): the measured proxy is
  * `resourceUsage.backgroundTimerFiresLastHour` (Phase C). Target: ≤ 120
  * background timer fires/hour while idle. Audited gateway timer inventory —
  * all already adaptive/unref'd, no fix needed: outbox drain (60s idle,
@@ -77,7 +77,7 @@ const CLIENT_PUSH_STALE_MS = 120_000;
 const READ_REFRESH_MS = 60_000;
 
 /**
- * Pure posture rule (#528 Phase D). Deterministic single `reason`, precedence
+ * Pure posture rule (#528). Deterministic single `reason`, precedence
  * low-battery > thermal > on-battery so the most urgent courtesy wins. All
  * deferring reasons set `deferringBackgroundWork`; `reason:null` never defers.
  * `battery` is null exactly when no battery is present — the UI's gate.

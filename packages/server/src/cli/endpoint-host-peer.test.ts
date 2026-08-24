@@ -1,5 +1,5 @@
 /*
- * TRAP 2 at the daemon seam (issue #726 P3): a linked gateway must never be
+ * TRAP 2 at the daemon seam (#726): a linked gateway must never be
  * able to become a paired owner device.
  *
  * The two lanes meet in exactly one file — `endpoint-host.ts` — and each of

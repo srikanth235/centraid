@@ -5,8 +5,7 @@
 // `edit` seed app.tsx built in `openNew()`/`openEdit()`. The password
 // generator is a sibling overlay, not a child — `onOpenGenerator` hands it a
 // callback that writes the generated value straight into this component's
-// own `fields` state, the same bridge app.js's `genTarget` gave the
-// module-level `state.edit.fields`.
+// own `fields` state.
 import { useState } from "react";
 
 import { CAT_ORDER, TYPE_LABEL } from "../format.ts";
@@ -210,7 +209,7 @@ export function EditModal({
           // The title/hint are direct children of the label, not wrapped in a
           // <span> flex item (the label is a two-column grid, see
           // EditModal.module.css), so the label's own text is its accessible
-          // name rather than sitting two elements deep (issue #573).
+          // name rather than sitting two elements deep (#573).
           <label className={styles.matchPolicy}>
             <input
               type="checkbox"

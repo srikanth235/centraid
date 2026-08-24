@@ -51,14 +51,14 @@ export interface OutboxItem {
   note: string | null;
   /**
    * Whether the gateway has a request rebuilder for this item's verb
-   * (issue #308 A5 UI slice) — the owner surface can only offer "edit
+   * (#308 A5 UI slice) — the owner surface can only offer "edit
    * before approve" when this is `true`; otherwise editing isn't wired for
    * the verb yet and approving sends exactly what's staged.
    */
   canEdit: boolean;
 }
 
-/** A standing `(actor, verb, target)` rule minted by "always allow" (issue #306 phase 3). */
+/** A standing `(actor, verb, target)` rule minted by "always allow" (#306). */
 export interface OutboxGrant {
   grantId: string;
   actor: string | null;
@@ -88,7 +88,7 @@ export interface OutboxScopeTriple {
   fieldMask?: string[];
 }
 
-/** A manifest asking beyond its last owner consent (issue #308 A3). */
+/** A manifest asking beyond its last owner consent (#308). */
 export interface OutboxScopeRequest {
   requestId: string;
   plane: "app" | "agent";
@@ -277,14 +277,14 @@ export interface ReviewEntry {
   /**
    * Refined actor kind (`app` / `agent` / `assistant` / `owner`) — same path
    * as outbox (VaultPlane.refineActorKind). Null when no actor is on the
-   * receipt (issue #552).
+   * receipt (#552).
    */
   actorKind: string | null;
   /** Display name for the actor when the gateway resolved one. */
   actor: string | null;
   /**
    * Standing outbox grant that auto-allowed this receipt, when present —
-   * drives "Auto-allowed by standing grant" + inline Revoke (issue #552).
+   * drives "Auto-allowed by standing grant" + inline Revoke (#552).
    */
   grantId: string | null;
   context: { kind: "fill"; origin: string } | null;
@@ -329,7 +329,7 @@ export async function listOutboxItems(
 /**
  * The owner's decision on one staged item — approve (optionally minting a
  * standing "always allow" grant), approve-with-edits, or discard (zero
- * egress). `outbox.decide`'s atomicity rule (issue #308 A5) requires the
+ * egress). `outbox.decide`'s atomicity rule (#308) requires the
  * artifact AND the injectable request replace together, and this surface
  * never exposes the request half to the owner (it may carry
  * `{{connection:…}}` placeholders) — so an edit passes only the revised
@@ -341,7 +341,7 @@ export async function listOutboxItems(
 export async function decideOutboxItem(input: {
   itemId: string;
   decision: "approve" | "discard";
-  /** Edit-then-approve (issue #308 A5 UI slice): only valid with `decision: 'approve'`. */
+  /** Edit-then-approve (#308 A5 UI slice): only valid with `decision: 'approve'`. */
   artifact?: Record<string, unknown>;
   alwaysAllow?: boolean;
   note?: string;
@@ -380,7 +380,7 @@ export async function listOutboxGrants(): Promise<OutboxGrant[]> {
   return body.grants ?? [];
 }
 
-/** Revoke a standing grant — any undrained rider it approved reparks (issue #308 A8). */
+/** Revoke a standing grant — any undrained rider it approved reparks (#308). */
 export async function revokeOutboxGrant(
   grantId: string
 ): Promise<OutboxOutcome> {
@@ -396,7 +396,7 @@ export async function revokeOutboxGrant(
   return readOutcome(res, "revoke outbox grant");
 }
 
-/** Open manifest scope-widening asks (issue #308 A3). */
+/** Open manifest scope-widening asks (#308). */
 export async function listScopeRequests(): Promise<OutboxScopeRequest[]> {
   const { baseUrl, token } = await auth();
   const res = await doFetch(baseUrl, "/centraid/_vault/scope-requests", {

@@ -113,7 +113,7 @@ const UNREACHABLE_FACTS: readonly (readonly [string, string])[] = [
 ];
 
 /** One embedding-scored hit, straight off `POST …/enrich/semantic-search`
- *  (issue #721 B4) — the shape `search-hits.ts`'s `SearchHitSources.
+ *  (#721) — the shape `search-hits.ts`'s `SearchHitSources.
  *  semanticHits` carries. */
 interface SemanticHit {
   assetId: string;
@@ -155,7 +155,7 @@ export function PhotosSearchView({
   const [contentIds, setContentIds] = useState<Set<string>>();
   const [searching, setSearching] = useState(false);
   const [unreachable, setUnreachable] = useState(false);
-  // Derived data enriches, never gates (issue #721 B4): `undefined` covers
+  // Derived data enriches, never gates (#721): `undefined` covers
   // every reason the semantic row might have nothing to show — nothing typed
   // yet, no gateway, the model saying `"unavailable"`, or the request simply
   // failing — and every one of those reads the same to `search-hits.ts`. This
@@ -242,7 +242,7 @@ export function PhotosSearchView({
   // rather than folded into it: this is a SEPARATE gateway route
   // (`enrich/semantic-search`), and its outcome must never touch `searching`/
   // `unreachable` — a member with no semantic model configured still gets a
-  // fully working person/place/album/caption search (issue #721 B4).
+  // fully working person/place/album/caption search (#721).
   useEffect(() => {
     let cancelled = false;
     const trimmed = term.trim();
@@ -374,7 +374,7 @@ export function PhotosSearchView({
       navigation.navigate("AlbumDetail", target.params);
     else if (target.screen === "PhotoLightbox")
       navigation.navigate("PhotoLightbox", target.params);
-    // The no-location bucket (issue #816) opens the same asset list a card on
+    // The no-location bucket (#816) opens the same asset list a card on
     // the Places shelf opens — it has no pin to send the member to a map for.
     else if (target.screen === "PlaceDetail")
       navigation.navigate("PlaceDetail", target.params);

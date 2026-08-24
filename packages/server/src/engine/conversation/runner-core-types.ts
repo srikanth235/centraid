@@ -77,7 +77,7 @@ export interface ConversationRunnerCoreOptions {
    * When true, `resolveCwd` returns a draft session worktree (code + its
    * branched `data.sqlite`), so the turn's `ToolContext.overrideCodeDir` is
    * pinned to it: the harness's `centraid_*` tools then hit the draft's
-   * handlers and branched data, not live (issue #144). Builder chat sets it;
+   * handlers and branched data, not live (#144). Builder chat sets it;
    * the data-only conversation driver leaves it false (cwd is the live data dir, no
    * draft to override to).
    */
@@ -93,18 +93,18 @@ export interface ConversationRunnerCoreOptions {
   vaultSql?: () => VaultSqlRunner;
   /** The write half of the vault register — resolved per turn like `vaultSql`. */
   vaultInvoke?: () => VaultInvokeRunner;
-  /** Document-text access (issue #299) — resolved per turn like `vaultSql`. */
+  /** Document-text access (#299) — resolved per turn like `vaultSql`. */
   vaultContent?: () => VaultContentRunner;
   /**
-   * The model turn driver. The historical agent-runtime package injects its
-   * harness transport `runTurn`; tests inject a stub. Required — this spine is
-   * harness-agnostic and never imports a concrete harness runtime.
+   * The model turn driver. The harness package injects its transport
+   * `runTurn`; tests inject a stub. Required — this spine is harness-agnostic
+   * and never imports a concrete harness runtime.
    */
   runTurn: RunTurnFn;
   /**
    * The ledger `RunKind` turns through this harness persist as, surfaced on
    * the built `ConversationRunner` for the route to read. Builder chat sets `'build'`;
-   * data chat leaves it unset (the route defaults to `'chat'`) — issue #181.
+   * data chat leaves it unset (the route defaults to `'chat'`) — #181.
    */
   runKind?: RunKind;
   /**

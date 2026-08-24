@@ -1,5 +1,5 @@
 /*
- * Server-side outbox edit support (issue #308 A5 UI slice — "edit before
+ * Server-side outbox edit support (#308 A5 UI slice — "edit before
  * send"). `outbox.decide` (packages/vault/src/commands/outbox.ts) requires
  * the artifact and its injectable wire request to replace TOGETHER — an
  * edit that swaps only the human-readable artifact while the original

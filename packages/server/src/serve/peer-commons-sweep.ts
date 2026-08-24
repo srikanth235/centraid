@@ -158,7 +158,7 @@ export async function sweepPeerCommons(input: {
   );
   for (const local of input.vaults) {
     if (progressed >= input.limit) break;
-    // Bounded parked-intent life (issue #731 goal 2): expire before this
+    // Bounded parked-intent life (#731 goal 2): expire before this
     // seat's own retry pass, so a request that has waited past its review
     // window stops being retried and instead surfaces as terminal. Cheap
     // (one indexed UPDATE) and idempotent — the sweep is this overlay's only
@@ -169,7 +169,7 @@ export async function sweepPeerCommons(input: {
     });
     // Steward absence and consent-growth are conditions this seat already has
     // the evidence for; the sweep is the periodic tick that turns them into
-    // the notices an owner actually sees (issue #750). A card must never cost
+    // the notices an owner actually sees (#750). A card must never cost
     // the sweep its real work, so a failure here is logged, not thrown.
     try {
       raiseCommonsNotices({
@@ -388,7 +388,7 @@ export async function sweepPeerCommons(input: {
           now,
         });
         // A refusal the member cannot fix by editing the command: their vault
-        // identity is not the one this commons pinned (issue #750). Name it
+        // identity is not the one this commons pinned (#750). Name it
         // where they will see it, pointing at re-invitation.
         if (isCommonsIdentityRefusal(answer.reason))
           raiseCommonsIdentityNotice({

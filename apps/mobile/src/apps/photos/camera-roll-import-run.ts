@@ -1,4 +1,4 @@
-// The network half of the first-run camera-roll import (issue #724 A2). The
+// The network half of the first-run camera-roll import (#724). The
 // pure batching/resume logic lives in `camera-roll-import.ts` — this file is
 // the one `attempt` that logic is handed: open one device original, stage it
 // on the vault's existing file-drop route, publish the draft it creates, and

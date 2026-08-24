@@ -1,5 +1,5 @@
 // Conformance between the DECLARED commons routing table and the REAL
-// registered command schemas (issue #750). The defect this test exists for:
+// registered command schemas (#750). The defect this test exists for:
 // routing decided by string heuristics over the command name and a
 // hand-maintained list of container-id keys lets a renamed input key silently
 // bypass the commons rail — the write lands private and the next compile

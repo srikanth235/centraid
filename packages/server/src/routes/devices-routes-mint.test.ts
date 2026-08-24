@@ -1,14 +1,14 @@
 /*
  * *Add someone* — the mint ceremony on `POST /centraid/_gateway/devices/ticket`
- * (issue #726 P1): `body.forPerson` creates a new owner, mints them a vault
+ * (#726): `body.forPerson` creates a new owner, mints them a vault
  * of their own (identity keypair included — `VaultRegistry.create`), claims
  * it, and mints a ticket bound to that NEW owner. Mutually exclusive with
  * the P0 self-pair `ownerId`/`vaultIds` lane.
  *
- * Issue #750 hardened the lane into a durable PROVISION: the endpoint/ticket
- * capability preflights BEFORE anything is created, the workflow is
- * idempotent under a client-chosen `operationId`, and a failed attempt
- * leaves ZERO owners/vaults/ownership rows/tickets behind.
+ * The lane is a durable PROVISION (#750): the endpoint/ticket capability
+ * preflights BEFORE anything is created, the workflow is idempotent under a
+ * client-chosen `operationId`, and a failed attempt leaves ZERO
+ * owners/vaults/ownership rows/tickets behind.
  */
 
 import { describe, afterEach, expect, test, vi } from "vitest";
@@ -91,7 +91,7 @@ describe("devices-routes mint-for-person scenarios (#726 P1)", () => {
 
   // Exit evidence #1: add someone → ticket redeems → their device reaches
   // EXACTLY their vault (never the founder's) — "a family member scans one
-  // code and has their own Photos library" (issue #726).
+  // code and has their own Photos library" (#726).
   test("add someone: redemption lands the new person's device in exactly their new vault", async () => {
     const stub = mintStub();
     const f = await harness({

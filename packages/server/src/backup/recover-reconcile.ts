@@ -1,5 +1,5 @@
 /*
- * Adopt-time inventory reconcile (issue #439 R5) — a recover()-internal step
+ * Adopt-time inventory reconcile (#439) — a recover()-internal step
  * that runs ALWAYS, immediately after the staging dir becomes the live vault
  * (`recover.ts`, right at the `onAdopted` position), never gated on a caller
  * passing a hook.

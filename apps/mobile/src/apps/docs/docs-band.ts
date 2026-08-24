@@ -1,5 +1,5 @@
 // The phone's bottom band, as Docs claims it (Binding Layer v12 handoff,
-// Part 2 §"The band"; issue #821).
+// Part 2 §"The band"; #821).
 //
 // Docs claims the band with FIVE destinations — `All · Folders · Coming due ·
 // Search · More` — which is the invariant's exact cap (five destinations, of

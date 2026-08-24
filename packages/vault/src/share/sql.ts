@@ -1,4 +1,4 @@
-// Row plumbing shared by the two halves of a share (issue #726).
+// Row plumbing shared by the two halves of a share (#726).
 //
 // Both halves read and write tables whose shape is not worth restating in
 // TypeScript (`tally_expense`, `core_collection_entry`, `locker_item`): the

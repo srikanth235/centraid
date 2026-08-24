@@ -1,10 +1,10 @@
-// File-drop customs (issue #290 phase 2): one door for every dropped file.
+// File-drop customs (#290): one door for every dropped file.
 // The extension routes to a parser, parsers produce StageCandidates, and the
 // staging spine dispositions them into a reviewable draft batch. A Takeout
 // zip is just a bag of the same file kinds — entries route recursively and
 // land in ONE batch on one `file.takeout` connection.
 //
-// TWO ROUTES, NOT ONE (issue #721 A1). Text entries decode and parse; media
+// TWO ROUTES, NOT ONE (#721). Text entries decode and parse; media
 // entries never touch `decodeImportText` at all — their bytes go straight
 // into the CAS through the same blob staging band mbox attachments use, and
 // the payload carries only the sha plus what the archive says ABOUT the
@@ -169,7 +169,7 @@ function partyCandidates(text: string): StageCandidate[] {
 }
 
 /**
- * Email attachments go through the blob staging band (issue #296): bytes
+ * Email attachments go through the blob staging band (#296): bytes
  * hash into the CAS NOW (the spool pipeline sniffs/extracts on the way),
  * the payload carries shas, and the message publisher claims them at
  * publish. A batch hold (applied after the batch id exists) pins the stage
@@ -210,7 +210,7 @@ function messageCandidates(
 }
 
 /**
- * A media EXTENSION is a claim; the bytes settle it (issue #721) — the same
+ * A media EXTENSION is a claim; the bytes settle it (#721) — the same
  * content-wins rule `csvCandidates` applies to a `.csv`. Ten bytes of text in
  * a file called `photo.heic` is not a photograph, and letting it become one
  * would put a `kind = 'scan'` row with no pixels in the owner's library. It
@@ -223,9 +223,9 @@ function isMediaFile(filename: string, bytes: Buffer): boolean {
 }
 
 /**
- * One photo or video (issue #721). The bytes hash into the CAS NOW — same
+ * One photo or video (#721). The bytes hash into the CAS NOW — same
  * band, same batch hold, same claim-at-publish contract as mbox attachments
- * (issue #296) — and the payload carries the sha plus the archive's own
+ * (#296) — and the payload carries the sha plus the archive's own
  * testimony. Nothing here reads pixels: `stageBlobBytes` runs the spool
  * pipeline, so EXIF and dimensions are already on the staging row by the time
  * the publisher claims it.
@@ -383,7 +383,7 @@ function candidatesFor(
 /**
  * Stage a dropped file into a reviewable draft batch. Publishing is the
  * separate explicit act (`publishBatch`) — first contact with real data is
- * always staged (issue #290 decision 2).
+ * always staged (#290 decision 2).
  */
 export function stageFile(
   db: VaultDb,
@@ -397,7 +397,7 @@ export function stageFile(
   let kind: string;
   const candidates: StageCandidate[] = [];
   // Blob shas the parsers staged (email attachments) — pinned to the batch
-  // below so the review pause never races the staging TTL (issue #296).
+  // below so the review pause never races the staging TTL (#296).
   const stagedShas: string[] = [];
 
   const keepLocation = mediaLocationPolicy(db) !== "strip";

@@ -1,4 +1,4 @@
-// The typed inline-app render registry (issue #505). Each bundled app that has
+// The typed inline-app render registry (#505). Each bundled app that has
 // been converted to an inline route maps its id to a dynamic import of its
 // `app-inline` descriptor. The `import()` is a code-split point: every app is
 // its own lazy chunk, so converting apps never grows the shell's initial-load

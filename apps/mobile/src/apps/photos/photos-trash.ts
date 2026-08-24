@@ -2,7 +2,7 @@
 //
 // The two facts worth their own module, both pure and both tested:
 //
-//  1. ORDER. `media_asset.source_asset_id` (issue #711) is a real FK, so
+//  1. ORDER. `media_asset.source_asset_id` (#711) is a real FK, so
 //     the vault REFUSES to delete a photograph forever while an edited copy
 //     still names it as its source — NULLing the copy's lineage would forge
 //     "camera original", and cascading would destroy something the member

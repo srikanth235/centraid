@@ -1,12 +1,13 @@
 // Every string a Photos view says about ITSELF: the app-bar title, what the
 // count counts, and how each shelf is empty on its own terms (v4 handoff §5,
-// §14). Extracted from the orchestrator because copy is a product decision
-// that changes on its own schedule, and because "each shelf is empty on its
-// own terms" is a table, not a chain of ternaries in a render function.
+// §14). It lives here rather than in the orchestrator because copy is a
+// product decision that changes on its own schedule, and because "each shelf
+// is empty on its own terms" is a table, not a chain of ternaries in a render
+// function.
 //
 // The copy here is FINAL — the handoff's strings, compressed to DESIGN.md's
 // `## Copy` budgets where the handoff wrote two sentences and one would do
-// (issue #805). It never names the storage noun for a scope: what a member
+// (#805). It never names the storage noun for a scope: what a member
 // reads for a vault is `scope.label`, which the shell owns and the owner may
 // rename.
 import { ALBUMS, DUPLICATES, FAVORITES, TRASH } from "./constants.ts";
@@ -87,12 +88,12 @@ const EMPTY_COPY: Readonly<Record<string, string>> = {
  *
  * ONE WORD DIVERGES FROM THE HANDOFF, deliberately. The prototype writes
  * "held in this vault"; this app may never print the storage noun for a scope
- * (issue #599 — what a member reads for a scope is `scope.label`, which the
+ * (#599 — what a member reads for a scope is `scope.label`, which the
  * owner is free to rename, and `src/photos-vocabulary.test.ts` enforces it).
  * "your library" is this app's own word for the same place and is what every
  * other line here already calls it.
  *
- * ONE SENTENCE, NOT TWO (issue #805). The handoff's second clause — that
+ * ONE SENTENCE, NOT TWO (#805). The handoff's second clause — that
  * nothing is copied anywhere unasked — is defensive reassurance, and the
  * enrichment consent is where an egress promise is actually made. What
  * survives is the fact a member is deciding on: where the bytes land.
@@ -195,7 +196,7 @@ export function peoplePendingNote(unmatchedCount: number | null): string {
 }
 
 /**
- * WHO AGREED THIS IS THEM (issue #712 P6b). A person's group is assembled
+ * WHO AGREED THIS IS THEM (#712). A person's group is assembled
  * from confirmations, and in a shared library those confirmations can come
  * from more than one member — `media_face_region` records the subject
  * (`party_id`) and the answerer (`confirmed_by_party_id`) as two separate
@@ -227,7 +228,7 @@ export function peopleConfirmedByNote(
  *
  * The prototype's own title names the owner ("Tom's library"); this one names
  * the scope by the label the shell publishes, which its owner may rename, and
- * never by a storage noun (issue #599).
+ * never by a storage noun (#599).
  */
 export const DOWNLOAD_PRIMARY = "Download";
 export function downloadPrimaryTitle(scopeLabel: string): string {
@@ -256,7 +257,7 @@ export const OFFLINE_COPY = {
   status:
     "Offline · meaning renders from the local replica; bytes stay on the gateway",
   /** The bordered banner's body — one sentence: the state, then what the
-   *  grid will look like because of it (issue #805; proto 4871 said the same
+   *  grid will look like because of it (#805; proto 4871 said the same
    *  in three). */
   banner:
     "Gateway unreachable — meaning reads from this device, uncached photographs show shape and colour.",
@@ -279,7 +280,7 @@ export const EMPTY_ACTIONS = {
  * right now — what is missing, what Photos can see meanwhile (nothing), and
  * what happens if the grant comes back.
  *
- * TWO FACTS, NOT THREE — A SANCTIONED DEVIATION (issue #765).
+ * TWO FACTS, NOT THREE — A SANCTIONED DEVIATION (#765).
  * The v9 permission screen carries a third row ahead of these two: "What is
  * true right now" / "6,214 photographs, all still in the vault" / meta
  * "unchanged". This surface cannot say it honestly, and a fact row that
@@ -433,7 +434,7 @@ export const SEARCH_EXAMPLES: readonly string[] = [
 
 /** The Search shelf's four states (§9, ~4256-4276), verbatim except one
  *  deviation: the handoff's unreachable eyebrow/title name "the vault", which
- *  `src/photos-vocabulary.test.ts` (issue #599) forbids in Photos copy. The
+ *  `src/photos-vocabulary.test.ts` (#599) forbids in Photos copy. The
  *  same fact — the index lives on the gateway and could not be reached —
  *  survives without the word. */
 export const SEARCH_COPY = {
@@ -442,7 +443,7 @@ export const SEARCH_COPY = {
     title: "Search the whole library",
     body: "Not only what is loaded here — try one of these.",
   },
-  // Moved here from SearchShelf.tsx's own JSX (issue #712 S1), alongside
+  // Moved here from SearchShelf.tsx's own JSX (#712), alongside
   // `unreachable.body` below, so `_shared/SearchScaffold.tsx` can source
   // every state's copy from this one object.
   searching: {
@@ -457,7 +458,7 @@ export const SEARCH_COPY = {
     // (`src/photos-shelves-v4.test.ts` asserts its exact wording), so this
     // shelf's own title lives here instead of changing shared behavior.
     title: (query: string) => `Nothing matches “${query}”`,
-    // ALIGNED WITH MOBILE (issue #711 reconciliation), not the earlier
+    // ALIGNED WITH MOBILE (#711 reconciliation), not the earlier
     // "Titles, captions, people, places, things and album names were all
     // searched.": mobile's search reaches a replica with no tag/label entity
     // at all, so its honest miss body is "Nothing in captions, people,
@@ -473,7 +474,7 @@ export const SEARCH_COPY = {
     // Deliberate deviation from the handoff's "Cannot reach the vault" (§599).
     eyebrow: "Cannot reach the gateway",
     title: "Search needs the gateway",
-    // Moved here from SearchShelf.tsx's own JSX (issue #712 S1) when that
+    // Moved here from SearchShelf.tsx's own JSX (#712) when that
     // component started sourcing its unreachable panel from the shared
     // `SearchScaffold` — copy now lives with the rest of SEARCH_COPY instead
     // of half in this object and half inline in the component.

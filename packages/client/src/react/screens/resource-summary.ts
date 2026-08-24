@@ -1,12 +1,12 @@
 // Pure formatting helpers for the Resource card's progressive-disclosure
-// ladder (issue #528 Phase A+B). Kept free of React so the L1 budget summary
+// ladder (#528 Phase A+B). Kept free of React so the L1 budget summary
 // and L2 "how we sized this" math stay unit-testable, and so ResourceModeCard
 // + ResourceCardDetails stay under the 500-line governance cap.
 
 import { formatBytes } from "../../format.js";
 
 /**
- * The owner resource mode (issue #521). Home for the union so the card, the
+ * The owner resource mode (#521). Home for the union so the card, the
  * Compare dialog, and the prefs parser all import one definition — no cycle.
  */
 export type ResourceMode = "auto" | "conserve" | "balanced" | "performance";
@@ -30,42 +30,42 @@ export interface ResourceProfileResolved {
   outboxIdleIntervalMs: number;
 }
 
-/** Knob keys the resolver derives; all are owner-tunable (issue #528 Phase F). */
+/** Knob keys the resolver derives; all are owner-tunable (#528). */
 export type ResourceKnobKey =
   | "workerMaxConcurrent"
   | "workerMaxOldGenerationMb"
   | "workerPoolSize"
   | "replicationConcurrency";
 
-/** Provenance of one resolved knob, from `resourceProfile.sources` (issue #528 Phase F). */
+/** Provenance of one resolved knob, from `resourceProfile.sources` (#528). */
 export interface ResourceKnobSource {
   source: "env" | "prefs" | "preset";
   /** The environment variable name when `source === 'env'`. */
   envVar?: string;
 }
 
-/** Accepted inclusive range for one knob, from `resourceProfile.bounds` (issue #528 Phase F). */
+/** Accepted inclusive range for one knob, from `resourceProfile.bounds` (#528). */
 export interface ResourceKnobBounds {
   min: number;
   max: number;
 }
 
-/** Structured resource profile on `health.metrics.resourceProfile` (issue #528). */
+/** Structured resource profile on `health.metrics.resourceProfile` (#528). */
 export interface ResourceProfileDTO {
   class: "constrained" | "standard";
   mode: "auto" | "conserve" | "balanced" | "performance";
   host: ResourceProfileHost;
   resolved: ResourceProfileResolved;
   /**
-   * Per-knob provenance (issue #528 Phase F). Additive — absent on older
+   * Per-knob provenance (#528). Additive — absent on older
    * gateways, in which case the L3 "Tune" rung does not render at all.
    */
   sources?: Record<ResourceKnobKey, ResourceKnobSource>;
-  /** Per-knob accepted range (issue #528 Phase F). Additive — see `sources`. */
+  /** Per-knob accepted range (#528). Additive — see `sources`. */
   bounds?: Record<ResourceKnobKey, ResourceKnobBounds>;
 }
 
-/** Background-work pause state on `health.metrics.backgroundPause` (issue #528). */
+/** Background-work pause state on `health.metrics.backgroundPause` (#528). */
 export interface BackgroundPauseDTO {
   paused: boolean;
   /** ISO timestamp the pause lifts, or `null` for indefinite / not paused. */
@@ -79,7 +79,7 @@ export interface ResourceFactRow {
 }
 
 /**
- * Measured resource actuals on `health.metrics.resourceUsage` (issue #528
+ * Measured resource actuals on `health.metrics.resourceUsage` (#528
  * Phase C). Mirrors `CentraidResourceUsage` (centraid-api.d.ts) field for
  * field — proxies only (CPU time, bytes, activity), never wattage.
  */

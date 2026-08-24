@@ -127,8 +127,8 @@ const GATEWAY_PORT = 9587;
 const S3_PORT = 9099;
 const GATEWAY_URL = `http://127.0.0.1:${GATEWAY_PORT}`;
 const BUCKET = "clawgnition-vault-backups-dev";
-// Clawgnition auth is routed-key based (`sk-claw_v1_<cell>_<keyId>_<secret>`):
-// flat seeded keys no longer authenticate. The suite signs in as the
+// Clawgnition auth is routed-key based (`sk-claw_v1_<cell>_<keyId>_<secret>`);
+// a flat seeded key does not authenticate. The suite signs in as the
 // predev-seeded operator and mints a routed key over the real HTTP surface
 // (`POST /v1/keys`) in beforeAll — the same path the dashboard takes.
 const OPERATOR_EMAIL = "operator@clawgnition.local";
@@ -446,7 +446,7 @@ describe.skipIf(SKIP_REASON !== null)(SUITE_TITLE, () => {
       "%s",
       async (_name, c) => {
         await c.run();
-        // Conformance kit uses node:assert (framework-agnostic); pin a vitest expect for requireAssertions (#496 E5).
+        // Conformance kit uses node:assert (framework-agnostic); pin a vitest expect for requireAssertions (#496).
         expect(c.name.length).toBeGreaterThan(0);
       },
       90_000
@@ -501,9 +501,8 @@ describe.skipIf(SKIP_REASON !== null)(SUITE_TITLE, () => {
       // at 1.5 MiB, one part). Incompressible on purpose: it stores RAW under
       // the keep-if-smaller gate (each part costs the 1 frame byte, no
       // inflation) while still exercising many-object seal/upload/restore
-      // reassembly against the real S3 server. (Fixed 16 MiB parts — centraid
-      // no longer content-defined-chunks, so size, not entropy, sets the part
-      // count.)
+      // reassembly against the real S3 server. (Fixed 16 MiB parts — size, not
+      // entropy, sets the part count.)
       await fs.writeFile(
         path.join(sourceDir, "blobs", "big.bin"),
         pseudoRandomBuffer(33 * 1024 * 1024, 4)

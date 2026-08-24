@@ -6,9 +6,9 @@ import { build } from "esbuild";
 
 import { toCss } from "@centraid/design";
 
-// DOCS ON THE GRANT PLANE, in a real browser (#825, wave 5).
+// DOCS ON THE GRANT PLANE, in a real browser (#825).
 //
-// Wave 4 proved the SHEET; this proves the APP. What is at stake here is the
+// This proves the APP, not the sheet. What is at stake here is the
 // exit condition — "docs app share/unshare through the one shared kit on both
 // seats; no app-private share plumbing remains in docs" — so the harness
 // mounts the shipped details rail, not the sheet, and stubs the grant plane at
@@ -22,7 +22,7 @@ import { toCss } from "@centraid/design";
 // leaves through the app's single status line rather than a second one the
 // rail paints for itself.
 //
-// The capture is the #825 Docs UI-impact evidence.
+// The capture is the Docs UI-impact evidence (#825).
 
 declare global {
   interface Window {
@@ -210,7 +210,7 @@ test("Docs shares a document through the one shared grant kit", async ({
   await dialog.getByRole("button", { name: "Share", exact: true }).click();
 
   // The outcome leaves through the APP's single status line. The rail keeps no
-  // share status of its own any more, so this is the only place it can appear.
+  // share status of its own, so this is the only place it can appear.
   await expect
     .poll(() => page.evaluate(() => window.__docsStatus))
     .toStrictEqual(["Ravi can see it"]);

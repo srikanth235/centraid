@@ -1,13 +1,12 @@
-// Memories, as a model (issue #724 W7, "Memories v0").
+// Memories, as a model (#724, "Memories v0").
 //
-// WHAT CHANGED. `photos-collections.ts`'s "Memories" shelf has always been an
-// honest explainer over ONE kind, computed purely client-side from whatever
-// is currently loaded in the timeline (`timeline-model.ts#onThisDay`): today's
-// month-day, filtered to years strictly before this one. That still works —
-// it is untouched — but it can only ever know about the day the app happens
-// to be open on, and it has no notion of "Trips" or "Similar moments" at all,
-// because those need signals (place history, phash/burst grouping) the
-// timeline's loaded window does not carry consistently.
+// NOT THE CLIENT-SIDE SHELF. `photos-collections.ts`'s "Memories" is an
+// honest explainer over ONE kind, computed from whatever is currently loaded
+// in the timeline (`timeline-model.ts#onThisDay`): today's month-day, filtered
+// to years strictly before this one. It can only ever know about the day the
+// app happens to be open on, and it has no notion of "Trips" or "Similar
+// moments" at all, because those need signals (place history, phash/burst
+// grouping) the timeline's loaded window does not carry consistently.
 //
 // This module reads the REAL projection instead:
 // `packages/vault/src/enrich/memories.ts`'s standing sweep, which lands rows
@@ -37,7 +36,7 @@
 // assert every rule directly (the same posture `photos-collections.ts` and
 // `duplicate-clusters.ts` both take).
 
-// WHAT A TRIP IS CALLED is not decided here either (issue #816). The vault's
+// WHAT A TRIP IS CALLED is not decided here either (#816). The vault's
 // hint is `"3-day trip"`, a measurement; the phrase ladder in
 // `@centraid/blueprints/apps/photos/trips` turns it into "Weekend in South Lake
 // Tahoe, CA" and hands back the route to sketch. Deep subpath, the established
@@ -76,7 +75,7 @@ export interface TripMemory {
   /**
    * The place the title names, or null when no place the trip visited has a
    * name worth printing. Read from the places its own MEMBERS were photographed
-   * at (issue #816) rather than looked up from the row's `place_id` alone: a
+   * at (#816) rather than looked up from the row's `place_id` alone: a
    * coordinate-shaped label is not a name, and the gazetteer's settlement name
    * is the rung below it. Still no I/O — the caller passes the rows in.
    */
@@ -84,7 +83,7 @@ export interface TripMemory {
   /** e.g. "3-day trip" — straight off `media_memory.title_hint`. */
   titleHint: string | null;
   /**
-   * What the block is HEADED (issue #816): the phrase ladder's answer over the
+   * What the block is HEADED (#816): the phrase ladder's answer over the
    * trip's own members — "Weekend in South Lake Tahoe, CA" — falling back to
    * the vault's bare hint when no place the trip visited has a name worth
    * printing. Never a coordinate and never relative to home; see `trips.ts`.
@@ -112,9 +111,7 @@ export interface MemoriesModel {
 /** A raw `media.memory` row, exactly as `useReplicaQuery` hands it back —
  *  string-keyed, values not yet cast. */
 export type RawMemoryRow = Readonly<Record<string, unknown>>;
-/** A raw `media.memory_member` row. */
 export type RawMemoryMemberRow = Readonly<Record<string, unknown>>;
-/** A raw `core.place` row, as the replica hands it over. */
 export type RawPlaceRow = Readonly<Record<string, unknown>>;
 
 /** A place a trip visited, plus whether it is the one the member calls home. */

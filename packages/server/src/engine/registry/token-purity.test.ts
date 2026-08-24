@@ -1,4 +1,4 @@
-// Token-purity scanner for authored app CSS (issue #686 D3). The gateway
+// Token-purity scanner for authored app CSS (#686). The gateway
 // publish gate runs this over every `.css` in an app dir; these tests pin the
 // detection rules and — just as importantly — the instructiveness of the
 // messages, since an LLM app author reads them as its only feedback.

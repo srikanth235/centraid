@@ -1,4 +1,4 @@
-// THE FRAME'S TRANSFER POLICY — one record, every byte-bearing app (#711, S4).
+// THE FRAME'S TRANSFER POLICY — one record, every byte-bearing app (#711).
 //
 // ONE owner for one member decision. A private second copy of this interface
 // inside an app or inside `lib/upload/native-policy.ts` is wrong the moment a
@@ -14,10 +14,9 @@
 // `src/apps/*`, which nothing here does — the whole point of this module is
 // that it knows about no app at all.
 //
-// The switches now render on the FRAME's own Backup screen
-// (`screens/BackupHealth.tsx`, issue #712 B2/P5) — the move
-// docs/blueprint-seats.md's open follow-up asked for. Photos deep-links to it
-// and renders none of them.
+// The switches render on the FRAME's own Backup screen
+// (`screens/BackupHealth.tsx`, #712). Photos deep-links to it and renders none
+// of them.
 
 import { Store } from "../../storage";
 
@@ -39,7 +38,7 @@ export interface TransferPolicy {
   allowRoaming: boolean;
   chargerOnly: boolean;
   /**
-   * NEVER — the floor of the whole table (issue #712, P5). Every other switch
+   * NEVER — the floor of the whole table (#712). Every other switch
    * narrows WHEN this device may move bytes; this one says it may not, at all,
    * on any connection, charging or not.
    *
@@ -97,7 +96,7 @@ export interface TransferPolicySwitch {
    * WHY it is inert, in the member's words, or `undefined` when it is not.
    * REQUIRED, not optional: the comment above this interface has always
    * claimed an inert switch is "shown disabled and explained", and until
-   * issue #712 E1 nothing on any surface actually said the second half —
+   * #712 nothing on any surface actually said the second half —
    * four of the five switches went grey in silence. Making the reason part of
    * the switch's own shape means a sixth rule cannot be added without one.
    * `scripts/lint-engine-conformance.mjs` gates the rendering half.

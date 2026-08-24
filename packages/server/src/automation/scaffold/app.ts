@@ -14,7 +14,7 @@
  * Callers pass the live git-store `main` worktree's `apps/` dir (the
  * gateway's cron scheduler / turn-now / webhook fire paths); the
  * draft builder passes its session worktree's `apps/` dir. Code lives in
- * the worktree (issue #137); the per-app DATA dir is resolved separately.
+ * the worktree (#137); the per-app DATA dir is resolved separately.
  *
  * An automation's globally-unique handle is `<appId>/<id>` — see
  * `formatRef`. This module lists, reads, and mutates manifests

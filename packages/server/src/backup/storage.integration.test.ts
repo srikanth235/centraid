@@ -1,7 +1,7 @@
 import crypto from "node:crypto";
 import path from "node:path";
 /*
- * End-to-end coverage for issue #367 §C — the vault blob CAS's S3-compatible
+ * End-to-end coverage for #367 §C — the vault blob CAS's S3-compatible
  * remote tier — against a REAL S3-compatible HTTP server
  * (`@centraid/backup`'s committed `S3TestServer`, the same one
  * `remote-provider.test.ts`/`interop-clawgnition.test.ts` use). No moto, no

@@ -1,4 +1,4 @@
-// Add to Docs (Docs handoff Part 2 §13; issue #821) — four ways in on a
+// Add to Docs (Docs handoff Part 2 §13; #821) — four ways in on a
 // phone: Upload, a blank document, a folder, and Scan. Drag and paste are
 // pointer-only and absent here, deliberately.
 //

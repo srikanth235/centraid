@@ -1,7 +1,7 @@
 /**
  * The People-journal marker, and the one bounded read that resolves it.
  *
- * An owner journal entry is not a row of its own (issue #450): it is a
+ * An owner journal entry is not a row of its own (#450): it is a
  * `knowledge.note` carrying exactly one `core.tag` → concept whose
  * `notation` is `entry` inside the concept scheme
  * `https://centraid.dev/schemes/people-journal`. Notes' library, search and

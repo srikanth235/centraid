@@ -7,13 +7,12 @@
 // the sharing plane could not be read, because an empty `Not linked yet.` over
 // a denied read answers a question nobody could ask.
 //
-// `Share` AND `Revoke` ARE HERE, AND THEY ARE LIVE (#825). Both were withheld
-// while a share could only be a share of a container People does not own; a
-// share is now a standing grant over an audience × subject × capability, so
-// this screen is the grant dashboard the ruling names it — every live grant
-// reaching this party, `Revoke` on each row and `Share` on the section that
-// lists them (`PersonGrants.tsx`). `Link vault` is gone rather than withheld:
-// linking is no longer an act a member performs.
+// `Share` AND `Revoke` ARE HERE, AND THEY ARE LIVE (#825). A share is a
+// standing grant over an audience × subject × capability, so this screen is
+// the grant dashboard the ruling names it — every live grant reaching this
+// party, `Revoke` on each row and `Share` on the section that lists them
+// (`PersonGrants.tsx`). There is no `Link vault`: linking is not an act a
+// member performs.
 //
 // ADDING IS A FIELD WHERE THE ROW WILL BE, never a new screen (handoff
 // deviation 3): each record section's `Add` opens an inline composer.

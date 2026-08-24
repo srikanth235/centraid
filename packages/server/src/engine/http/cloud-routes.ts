@@ -14,10 +14,9 @@ import { readBody, sendError, sendJson } from "./http-utils.js";
 
 /**
  * Handlers for the Cloud-panel logs route and the per-app settings.json
- * surface. The row-browser and SQL-editor routes died with the per-app
- * data.sqlite (issue #286 phase 2) — app data lives in the vault and is
- * browsed through the vault surfaces; what remains per-app is runtime
- * STATE (logs, settings).
+ * surface. App data lives in the vault and is browsed through the vault
+ * surfaces (#286); what remains per-app is runtime STATE (logs,
+ * settings).
  */
 
 /**

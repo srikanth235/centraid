@@ -1,5 +1,5 @@
 /*
- * Pricing catalog types (issue #445).
+ * Pricing catalog types (#445).
  *
  * A `PricingEntry` carries the per-token USD price fields verbatim from
  * LiteLLM's `model_prices_and_context_window.json` (BerriAI/litellm, MIT) —

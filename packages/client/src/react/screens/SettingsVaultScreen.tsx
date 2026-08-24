@@ -15,7 +15,7 @@ import SectionBlock from "../ui/SectionBlock.js";
 // GatewayModal.tsx / ConnectFlowModal.tsx / RenameGatewayModal.tsx set for
 // the shared dialog chrome, extended here to a plain (non-modal) form
 // section so name/icon/color/blurb edits look identical everywhere they
-// appear (issue #382).
+// appear (#382).
 import vaultModalStyles from "../shell/routes/VaultModal.module.css";
 import controlsCss from "../styles/controls.module.css";
 import drawerGroupCss from "../styles/drawerGroup.module.css";
@@ -30,7 +30,7 @@ export interface SettingsVaultScreenProps {
     blurb: string;
   }) => Promise<void> | void;
   onDelete?: () => void;
-  /** Drop this vault's connection from this device (issue #665). Present only
+  /** Drop this vault's connection from this device (#665). Present only
    *  for a vault on a REMOTE connection — the local host is this machine. */
   onDisconnect?: () => void;
   /**
@@ -89,7 +89,7 @@ function Avatar({
 }
 
 /**
- * Settings → Vault (issue #382) — edits ONLY the active vault's
+ * Settings → Vault (#382) — edits ONLY the active vault's
  * presentation (name/icon/color/blurb) plus a danger-zone delete.
  *
  * Nothing here has a Save button: icon and colour write on the pick, name and

@@ -33,9 +33,9 @@ export interface ChromeSlots {
   /**
    * THE DAY-CONTEXT SEAM. The rail's third section: the labelled home for the
    * layers that decorate a day without occupying it — birthdays from People,
-   * due tasks from Tasks, subscribed holidays. This wave draws the labelled
-   * section and hands it whatever the orchestrator passes, which is a single
-   * explanatory line; the layer toggles mount here unchanged.
+   * due tasks from Tasks, subscribed holidays. The section is labelled here
+   * and carries whatever the orchestrator passes into it; the layer toggles
+   * mount in this slot.
    *
    * Layers are NOT calendars, which is why they are a section of their own
    * rather than four more rows under Calendars: nothing in them can be

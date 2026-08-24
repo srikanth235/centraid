@@ -1,11 +1,11 @@
 /**
- * Shared read/join helpers for the docs app's queries (issue #352 phase 4) —
+ * Shared read/join helpers for the docs app's queries (#352) —
  * pulled out once drive.ts and search.ts both needed the SAME bounded joins
  * over the same windowed document/content ids: free-form labels
  * (core.tag_item/untag_item over the shared "Tags" scheme —
  * packages/vault/src/commands/tags.ts, shared with notes/tasks) and the
  * blob custody projection
- * (blob.custody_state, blob/custody.ts) and, since issue #821, who a document
+ * (blob.custody_state, blob/custody.ts) and, since #821, who a document
  * is shared with (the share.circle_grant × social.circle_member ×
  * share.commons_member_state join that packages/vault/src/share/
  * commons-lifecycle.ts runs steward-side, here scoped to the windowed
@@ -20,12 +20,6 @@
  * handlers/dispatcher.ts), so a plain helper module beside the handlers is
  * invisible to it and to build-manifest.mjs's install-copy walk; nothing
  * needs to know this file exists besides the two callers that import it.
- *
- * TS conversion note: the vault read surface returns `Record<string, unknown>`
- * rows (see HandlerCtx.vault), so each raw row set is cast once to a typed
- * shape (`as unknown as X[]`) at its read site — the only place unknown vault
- * columns become named fields. Handler logic is otherwise byte-for-byte the
- * pre-conversion JS.
  */
 
 const TAGS_SCHEME_URI = "centraid:tags:v1";
@@ -147,7 +141,7 @@ export async function readCustodyByContent({
 }
 
 // ───────────────────────────────────────────────────────────────────────────
-// Who a document is shared with (issue #821)
+// Who a document is shared with (#821)
 // ───────────────────────────────────────────────────────────────────────────
 //
 // GRACEFUL DENIAL is why this read is a seam of its own. Docs' `share.*` and

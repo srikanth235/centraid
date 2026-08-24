@@ -1,5 +1,5 @@
 /*
- * Peer-plane connection loop for the pure-JS gateway endpoint (issue #726 P3).
+ * Peer-plane connection loop for the pure-JS gateway endpoint (#726).
  *
  * Deliberately NOT the device loop:
  *

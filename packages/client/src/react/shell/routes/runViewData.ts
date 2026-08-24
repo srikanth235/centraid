@@ -1,7 +1,6 @@
-// Run-view snapshot derivation — ports the vanilla app-automations-runview.ts
-// `buildRunSnapshot`. Pure: turns the live run model (row + run record + node
-// map + streamed text) into the RunViewSnapshot the RunViewScreen renders in
-// both timeline + log modes, so the screen imports no vanilla formatters.
+// Run-view snapshot derivation. Pure: turns the live run model (row + run
+// record + node map + streamed text) into the RunViewSnapshot the RunViewScreen
+// renders in both timeline + log modes, so the screen formats nothing itself.
 import {
   fmtTokens,
   formatDuration,

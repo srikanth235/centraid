@@ -236,7 +236,7 @@ describe("the top bar's flexible title", () => {
 });
 
 describe("labels are a function of bar width, not of surface", () => {
-  // The copy action's caption is per-destination (issue #726): the caller
+  // The copy action's caption is per-destination (#726): the caller
   // resolves the sole other writable scope and hands `Copy to ⟨label⟩` in.
   const specs: ActionSpec[] = [
     { id: "favorite", icon: Mark },

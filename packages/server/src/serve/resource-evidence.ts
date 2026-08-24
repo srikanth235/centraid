@@ -1,5 +1,5 @@
 /*
- * Mobile resource evidence ledger (#842 W8.2).
+ * Mobile resource evidence ledger (#842).
  *
  * The claim "Centraid is well-behaved on a phone" needs numbers, and most
  * of the numbers that matter — battery drain per hour of foreground use,

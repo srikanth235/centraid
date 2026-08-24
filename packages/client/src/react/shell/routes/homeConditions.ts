@@ -1,4 +1,4 @@
-// The vault-level conditions Home reports (issue #708, section A).
+// The vault-level conditions Home reports (#708, section A).
 //
 // Two of the four designed states are conditions of the VAULT rather than of a
 // screen, so they belong on the front door: "out of room" and "two devices

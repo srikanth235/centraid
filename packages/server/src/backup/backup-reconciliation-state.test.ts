@@ -1,5 +1,3 @@
-// Reconciliation state pure helpers (issue #545 B7).
-
 import { describe, expect, test } from "vitest";
 
 import {

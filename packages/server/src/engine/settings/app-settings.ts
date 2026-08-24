@@ -3,9 +3,9 @@
  *
  * Settings live in `settings.json` at the app's persistent root
  * (`<appsDir>/<id>/settings.json`) — runtime state beside `logs.jsonl`,
- * NOT owner data (that's the vault's). The per-app `data.sqlite` silo is
- * gone (issue #286 phase 2); this file is what remains of it: a flat
- * `{ key: value }` JSON object with two writers, partitioned by prefix:
+ * NOT owner data (that's the vault's). There is no per-app `data.sqlite` silo
+ * (#286); this file is the whole of an app's runtime state: a
+ * flat `{ key: value }` JSON object with two writers, partitioned by prefix:
  *
  *   - **App-owned keys** (no reserved prefix): per-instance customization
  *     (aesthetic knob choices). `readAppSettings` is the runtime's bulk

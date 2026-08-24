@@ -20,7 +20,7 @@ import type { BarDatum } from "../ui/BarsBlock.js";
 //
 // COLUMNS ARE PROBES, NOT MINUTES. Above `HEARTBEAT_COLUMNS` the ring folds
 // into equal-sized groups of consecutive probes rather than equal stretches of
-// time, because the poll is suspended while the window is hidden (issue #659)
+// time, because the poll is suspended while the window is hidden (#659)
 // and a time axis would then draw a long flat nothing where the app was simply
 // closed. Grouping by probe keeps every column carrying the same weight of
 // evidence; the axis states the elapsed span beside it so neither reading is

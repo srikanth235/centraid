@@ -1,7 +1,7 @@
-// THE ENRICHMENT CONSENT MOMENT, NATIVE (v4 handoff §8, issue #711).
+// THE ENRICHMENT CONSENT MOMENT, NATIVE (v4 handoff §8, #711).
 //
-// Two rules are load-bearing, and both were BROKEN on this client before this
-// suite existed — this is a privacy regression net, not a styling snapshot:
+// Two rules are load-bearing, and both are cheap to break — this is a privacy
+// regression net, not a styling snapshot:
 //
 //   1. NO ENRICHMENT WRITE MAY BE ISSUED WITHOUT AN EXPLICIT ANSWER. Library's
 //      `Enrichment` row may not call `request-enrichment` straight from its

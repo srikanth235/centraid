@@ -1,4 +1,4 @@
-// Real content for the Home springboard tiles (issue #708, section A).
+// Real content for the Home springboard tiles (#708, section A).
 //
 // Two sources, both already the shell's own:
 //
@@ -44,7 +44,7 @@ export interface HomeTileReader {
   ) => Promise<{ rows: readonly { values: Record<string, unknown> }[] }>;
 }
 
-// TRAP (issue #708): `purpose` on a replica read is NOT an audit label — it is
+// TRAP (#708): `purpose` on a replica read is NOT an audit label — it is
 // a SHAPE SELECTOR. `ReplicaShellSession.resolveShapeId` filters the catalog by
 // `shape.purpose === purpose`, so a value the catalog has never heard of
 // matches no shape and the read throws `No offline shape for <app>/<entity>`.
@@ -96,7 +96,7 @@ async function rowsOf(
  * asks for exactly the bytes Photos would.
  *
  * ...and falls back to the ORIGINAL when that derivative does not exist yet
- * (issue #708). `resolveServableBlob` answers `no-variant` → 404 for a photo
+ * (#708). `resolveServableBlob` answers `no-variant` → 404 for a photo
  * whose thumb the preview backstop has not generated, which is the state EVERY
  * photo is in for a while after it is imported. The mosaic rendered blank on a
  * library of ten pictures for exactly this reason. The fallback is the Photos

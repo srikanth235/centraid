@@ -1,4 +1,4 @@
-// The claimed band's model rules (handoff Part 2 §"The band"; issue #821).
+// The claimed band's model rules (handoff Part 2 §"The band"; #821).
 import { describe, expect, it } from "vitest";
 
 import { MORE_ROWS } from "@centraid/blueprints/apps/docs/view-copy";

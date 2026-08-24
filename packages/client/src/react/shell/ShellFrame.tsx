@@ -14,7 +14,7 @@ import {
 
 import chrome from "./chrome.module.css";
 
-// The window frame (issue #707, invariant 1).
+// The window frame (#707, invariant 1).
 //
 //   stem  |  app bar
 //         |  content
@@ -102,7 +102,7 @@ export interface ShellFrameProps {
   appCount?: ReactNode;
   /** The app's own mark, leading the title in the bar lockup. */
   appMark?: ReactNode;
-  /** Makes the title itself a control (issue #708). Home's title is the vault
+  /** Makes the title itself a control (#708). Home's title is the vault
    *  name, and a vault name that names a CHOICE should be the thing you press
    *  to change it — one switcher, at the size the brief already gives the
    *  title, rather than a second identity row competing with it. */

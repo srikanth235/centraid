@@ -1,4 +1,4 @@
-// The engine-profile read surface (issue #807, Wave 1).
+// The engine-profile read surface (#807).
 //
 //   GET /centraid/_enrich/profiles → { profiles: EngineProfile[] }
 //

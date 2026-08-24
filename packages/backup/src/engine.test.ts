@@ -615,7 +615,7 @@ describe(verifySnapshot, () => {
 });
 
 // ───────────────────────────────────────────────────────────────────────────
-// /1 WAL format (issue #408): anchored db entries, format gating,
+// /1 WAL format (#408): anchored db entries, format gating,
 // point-in-time row selection, deterministic objects.
 // ───────────────────────────────────────────────────────────────────────────
 

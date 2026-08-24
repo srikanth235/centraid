@@ -105,7 +105,7 @@ export function applyProbeOutcome(
 
 function transportBadgeFor(gw: RegistryGateway): GatewayTransportBadge {
   // Every remote gateway is reached over iroh — the SSH admin channel and its
-  // chip were deleted with the SSH connect method (issue #603).
+  // chip were deleted with the SSH connect method (#603).
   return gw.gatewayKind === "local" ? "This Mac" : "iroh";
 }
 
@@ -194,7 +194,7 @@ export function gatewayStatusCopy(row: GatewayRow): string {
 }
 
 /**
- * Confirm copy for disconnecting a vault from THIS DEVICE (issue #665).
+ * Confirm copy for disconnecting a vault from THIS DEVICE (#665).
  *
  * The underlying primitive drops the whole connection, so every vault the same
  * host serves goes with it — the copy has to say so, and it says so by NAMING
@@ -229,7 +229,7 @@ export function railStatus(row: GatewayRow): "ready" | "loading" | "error" {
 }
 
 /**
- * Flatten every registered gateway's vaults into ONE list (issue #665).
+ * Flatten every registered gateway's vaults into ONE list (#665).
  *
  * The active gateway's vaults come from the owner's scope registry; every
  * other gateway contributes whatever its `listGatewayVaults` probe last

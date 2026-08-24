@@ -19,8 +19,8 @@
  * file is just as much a "this vault needs an operator" signal as the model
  * data.
  *
- * Issue #659 L6 made the cadence and the per-tick budget scale, because a fixed
- * hourly full-file scan per vault does not: quick_check reads every page, so its
+ * The cadence and the per-tick budget SCALE (#659), because a fixed hourly
+ * full-file scan per vault does not: quick_check reads every page, so its
  * cost grows with the vault while its VALUE (catching silent corruption before
  * a backup captures it) does not. So:
  *
@@ -29,7 +29,7 @@
  *   · at most `maxChecksPerTick` vaults are scanned in any one tick, so N
  *     mounted vaults can never line up into one N-file scan; and
  *   · nothing is scanned during the startup grace, keeping a full read of every
- *     mounted vault off the boot path (#659 G10).
+ *     mounted vault off the boot path (#659).
  */
 
 import type { DatabaseSync } from "node:sqlite";
@@ -53,11 +53,11 @@ export interface VaultIntegrityHealthOptions {
   readonly now?: () => number;
   /** How many failure lines to surface in `detail`, per vault. Defaults to 3. */
   readonly maxFailureLines?: number;
-  /** Vaults scanned in any one tick. Defaults to 1 (issue #659 L6). */
+  /** Vaults scanned in any one tick. Defaults to 1 (#659). */
   readonly maxChecksPerTick?: number;
   /**
    * Delay before the first scan may run, measured from construction. The
-   * gateway sets this so a full-file read is never part of boot (#659 G10).
+   * gateway sets this so a full-file read is never part of boot (#659).
    */
   readonly startupGraceMs?: number;
 }
@@ -66,7 +66,7 @@ interface CachedCheck {
   ok: boolean;
   lines: string[];
   checkedAt: number;
-  /** Size-scaled cadence chosen when this result was produced (#659 L6). */
+  /** Size-scaled cadence chosen when this result was produced (#659). */
   intervalMs: number;
 }
 

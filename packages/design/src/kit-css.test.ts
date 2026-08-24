@@ -84,7 +84,7 @@ describe("element stylesheet contract", () => {
     );
     // `prefers-reduced-motion` is honoured in ONE global rule (toCss()'s
     // emitted sheet, packages/design/src/css.ts) — kit.css itself declares no
-    // per-component `@media` copy of its own (issue #708 §"One motion and
+    // per-component `@media` copy of its own (#708 §"One motion and
     // feedback grammar"). Explanatory comments in kit.css mention the term in
     // prose, so this checks for a live media rule, not the bare substring.
     expect(KIT_CSS).not.toContain("@media (prefers-reduced-motion");

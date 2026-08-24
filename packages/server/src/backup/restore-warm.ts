@@ -1,5 +1,5 @@
 /*
- * Previews-first warm pass (issue #405 §5). After a lazy restore materializes
+ * Previews-first warm pass (#405). After a lazy restore materializes
  * the vault.db + WAL replay and DEFERS every blob the remote CAS already holds
  * (see `backup-service.ts` restore), the grid is only usable once its TINY
  * derivatives — the `thumb` rung — are readable locally. This module pulls ALL
@@ -31,7 +31,7 @@ export interface PreviewsWarmResult {
   /** Tinies the remote could not serve (missing/failed) — a degraded grid. */
   tiniesFailed: number;
   /**
-   * Time-to-usable-grid (issue #405 §5 acceptance metric): milliseconds from
+   * Time-to-usable-grid (#405 §5 acceptance metric): milliseconds from
    * restore-complete (`startedAtMs`) to the moment every tiny had been pulled.
    */
   timeToUsableGridMs: number;
@@ -63,7 +63,7 @@ const DEFAULT_WARM_CONCURRENCY = 6;
 /** Every DISTINCT `thumb` sha the restored vault references — the tinies whose
  * presence makes the grid usable. Read straight off the restored (already
  * WAL-replayed) vault.db, read-only; mediums/originals are deliberately NOT
- * collected here (issue #405 §5 keeps them remote-only). */
+ * collected here (#405 §5 keeps them remote-only). */
 function collectThumbShas(destDir: string): string[] {
   const db = new DatabaseSync(path.join(destDir, "vault.db"), {
     readOnly: true,

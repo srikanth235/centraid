@@ -1,5 +1,5 @@
 /*
- * The mounted-plane memory budget (issue #659 L8).
+ * The mounted-plane memory budget (#659).
  *
  * `mmap_size` and `cache_size` are a HOST budget, not per-FILE constants: at
  * per-file numbers every mounted vault opens two databases at the full figure

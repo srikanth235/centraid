@@ -1,5 +1,5 @@
 /*
- * Cross-language ALPN + peer-prefix pin (issue #726 P3).
+ * Cross-language ALPN + peer-prefix pin (#726).
  *
  * The Rust relay is the PRODUCTION listener and the TypeScript endpoint is the
  * fallback; each declares the ALPN strings independently. Nothing but this

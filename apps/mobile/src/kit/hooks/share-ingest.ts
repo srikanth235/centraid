@@ -1,6 +1,5 @@
 // Share-target ingest core, kept free of React and native modules so the
-// vitest rig can drive it with fake producers and a fake share intent (the M0
-// injection lesson). The hook in `ShareIntentIngest.tsx` is a thin wrapper that
+// vitest rig can drive it with fake producers and a fake share intent. The hook in `ShareIntentIngest.tsx` is a thin wrapper that
 // wires the real producers, `expo-file-system`, `Alert`, and reset in.
 
 import type { MobileReplicaSession } from "../../lib/replica/native-session";
@@ -24,7 +23,7 @@ export interface SharedIntentLike {
   webUrl?: string | null;
 }
 
-// The producer input carries the #431 F10 flag: share-container copies are
+// The producer input carries the #431 flag: share-container copies are
 // ephemeral app-group files, so they must be deleted once the upload settles.
 // The flag is optional on the producer input the upload-queue agent owns; until
 // that lands it is simply ignored, so passing it now is forward-compatible.
@@ -67,7 +66,7 @@ function mediaKind(mimeType: string): DeviceMediaInput["kind"] {
 function isDeviceMedia(mimeType: string): boolean {
   // Audio is a first-class media kind end-to-end (media.add_asset accepts
   // 'audio', backupDeviceMedia skips derivatives for it), so shared audio goes
-  // through the media producer rather than the docs shape (#431 F14e).
+  // through the media producer rather than the docs shape (#431).
   return (
     mimeType.startsWith("image/") ||
     mimeType.startsWith("video/") ||
@@ -140,7 +139,7 @@ export async function processShareIntent(
 
 /**
  * Re-entrancy guard: a re-render (or a second intent) while an ingest is still
- * in flight must not start a second pass over the same files (#431 F9 test).
+ * in flight must not start a second pass over the same files (#431 test).
  * The hook holds one gate across renders via a ref.
  */
 export class ShareIntentGate {

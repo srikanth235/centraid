@@ -1,9 +1,9 @@
-// React entry for the renderer — issue #325.
+// React entry for the renderer (#325).
 //
 // React owns `#root`: this module mounts the App shell (via the first-run
 // onboarding gate below). A dev-only component gallery renders on the
-// `#ui-preview` hash. No vanilla↔React bridge remains — every screen, the
-// builder included, is a React component the shell mounts directly.
+// `#ui-preview` hash. Every screen is a React component the shell mounts
+// directly.
 //
 // Bundled by Vite (see vite.config.ts) into dist/renderer/react-boot.js and
 // loaded as a plain <script type="module"> — no dev server, so the strict
@@ -34,7 +34,7 @@ void import("../replica/shell-session.js")
   .catch(() => undefined);
 
 // Opted-in paired devices contribute PDF text and video posters only while
-// charging + unmetered. THE FETCH WAITS, not just the work (issue #838).
+// charging + unmetered. THE FETCH WAITS, not just the work (#838).
 //
 // Dynamic and immediate are different things, and a dynamic import does NOT by
 // itself keep PDF.js off the shell's startup path: a bare `void import(…)` at
@@ -160,7 +160,7 @@ async function readSettings(): Promise<SettingsRead> {
 
 // ── The shell (#325 flip) ────────────────────────────────────────────────
 // React owns #root: one root on #root renders either the first-run gate or
-// the App shell. First paint does not probe the gateway (issue #603): the gate
+// the App shell. First paint does not probe the gateway (#603): the gate
 // decides on platform + the persisted onboarding stamp alone.
 void (async (): Promise<void> => {
   const shell = document.querySelector<HTMLElement>(SHELL_SELECTOR);

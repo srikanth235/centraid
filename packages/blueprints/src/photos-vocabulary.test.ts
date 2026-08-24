@@ -1,4 +1,4 @@
-// Vocabulary guard for the Photos app (issue #599). A multi-scope app mounts
+// Vocabulary guard for the Photos app (#599). A multi-scope app mounts
 // over the member's own scope AND shared audience scopes, so app-facing copy
 // speaks of scopes by their human label ("Library", "Family") — the storage
 // noun "vault" must never reach a user-visible string except for the small,

@@ -1,5 +1,5 @@
 /**
- * The custody rollup for ONE scope (issue #711) — what the Storage screen
+ * The custody rollup for ONE scope (#711) — what the Storage screen
  * needs and the library window cannot give it.
  *
  * `queries/library.ts` deliberately reads a bounded recent window, so the

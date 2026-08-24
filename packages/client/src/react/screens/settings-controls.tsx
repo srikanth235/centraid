@@ -6,9 +6,9 @@ import drawerGroupCss from "../styles/drawerGroup.module.css";
 import segCss from "../styles/seg.module.css";
 import styles from "./settings-controls.module.css";
 
-// Shared Settings control primitives — React ports of the vanilla
-// drawerGroup / drawerRowH / makeSegmented (app-settings.ts),
-// emitting the same classes so the global styles.css renders them identically.
+// Shared Settings control primitives. They emit the class names global
+// styles.css targets — renaming a class here silently unstyles every Settings
+// pane.
 
 export function DrawerGroup({
   label,

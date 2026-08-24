@@ -1,8 +1,7 @@
 /*
  * Runner-core: turn-boundary failover + provider egress consent.
  *
- * Split from runner-core.test.ts (repo-hygiene 500-line cap): this file owns
- * the ladder loop — breaker-gated rung selection, per-rung resume/hydration
+ * This file owns the ladder loop — breaker-gated rung selection, per-rung resume/hydration
  * planning, and the attended cross-provider consent gate.
  */
 

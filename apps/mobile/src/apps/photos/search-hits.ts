@@ -26,7 +26,7 @@
 //   `media.asset_phash`, and nothing else. There is nothing to count, so there
 //   is no row. Add it here the moment an enrichment publisher lands labels.
 //
-// SEMANTIC (issue #721 B4) is not that publisher, and not a THINGS row either
+// SEMANTIC (#721) is not that publisher, and not a THINGS row either
 // — it does not name discrete labels a photograph carries, it ranks the whole
 // library against the query by a gateway embedding model
 // (`POST …/enrich/semantic-search`) and hands back scored photograph ids. One
@@ -37,7 +37,7 @@
 // simply is not here" (`semanticEntityHits`, below) — the other four rows and
 // the grid beneath them are exactly as capable either way.
 //
-// ORDERING AND CAPPING (issue #712 S1) route through the web blueprints'
+// ORDERING AND CAPPING (#712) route through the web blueprints'
 // shared `groupSearchHits` combinator — the same "find, then cap, then
 // order" the web scaffold's Photos and Tally consumers use
 // (`packages/blueprints/apps/_shared/search-scaffold.ts`) — instead of a
@@ -56,7 +56,7 @@ import {
   assetsWithNoPlace,
 } from "./places-model";
 // WHICH WORDS STAND FOR A PLACE, and what it is called once found, live in
-// their own leaf (issue #816) — the deepest readers of a raw `core.place` row,
+// their own leaf (#816) — the deepest readers of a raw `core.place` row,
 // and the one part of this file that both clients' phrase ladder decides.
 // `rowText` comes back out of it because it is the reader every row shape here
 // shares; see that module's header.
@@ -75,8 +75,8 @@ type Row = Record<string, unknown>;
 
 /**
  * The groups the phone can actually answer. The first four are proto:4258-
- * 4265's order; `semantic` (issue #721 B4) is a fifth, added after them —
- * see `SEARCH_HIT_ENTITIES` for why it is broadest and therefore last.
+ * 4265's order; `semantic` (#721) is the fifth — see `SEARCH_HIT_ENTITIES`
+ * for why it is broadest and therefore last.
  */
 export type SearchHitKind =
   | "person"
@@ -154,7 +154,7 @@ export interface SearchHitSources {
    *  exactly what a caption hit hit. */
   contentTitles: ReadonlyMap<string, string>;
   /**
-   * The gateway's embedding match for this query (issue #721 B4), present
+   * The gateway's embedding match for this query (#721), present
    * only once `POST …/enrich/semantic-search` has answered `status: "ok"`.
    * `undefined` covers every other reason there is nothing to show — no
    * gateway, the model reporting `"unavailable"`, or the request simply
@@ -390,7 +390,7 @@ function placeHits(
   }
 
   // Which words this query could match, and what a match is called: both are
-  // `search-place-vocabulary.ts`'s answers (issue #816), so a place is findable
+  // `search-place-vocabulary.ts`'s answers (#816), so a place is findable
   // by its gazetteer name or by "near home" and is still titled with the
   // member's own name for it.
   const anchors = namedPlaceAnchors(sources.places);
@@ -428,9 +428,10 @@ function placeHits(
 }
 
 /**
- * THE NO-LOCATION BUCKET as a search answer (issue #816): the photographs that
- * carry no place at all, reachable by the words a member would actually type for
- * them. Before this the set was findable only by scrolling the whole timeline.
+ * THE NO-LOCATION BUCKET as a search answer (#816): the photographs that
+ * carry no place at all, reachable by the words a member would actually type
+ * for them — otherwise the set is findable only by scrolling the whole
+ * timeline.
  *
  * Which words ask for it is `noLocationAsked`'s answer, matched as a phrase
  * rather than by token — see that function.
@@ -547,7 +548,7 @@ function captionHits(
 }
 
 /**
- * The ONE semantic row (issue #721 B4) — "Photos that look like …", standing
+ * The ONE semantic row (#721) — "Photos that look like …", standing
  * for the gateway's whole ranked set rather than one row per scored hit
  * (unlike person/place/album, which are genuinely many named things; a
  * ranked list of photographs is one thing, scored).

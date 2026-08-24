@@ -1,11 +1,9 @@
 // The Duplicates SHELF, phone-shaped (Photos v4 handoff §5, proto:4436-4442).
 //
-// WHAT WAS MISSING. The More sheet's `Duplicates` row landed straight on
-// `DuplicateReview` — a flat grid of every photograph carrying a hash hint,
-// with no clusters in it. That grid answers "which photographs are suspect";
-// the question the member has is "which of THESE copies do I keep", and it is
-// unanswerable when the copies are scattered across a timeline. The prototype's
-// shelf is the missing half: one labelled row per cluster
+// WHY A SHELF AND NOT THE FLAT GRID. `DuplicateReview`'s grid answers "which
+// photographs are suspect"; the question the member has is "which of THESE
+// copies do I keep", and it is unanswerable when the copies are scattered
+// across a timeline. This shelf is the other half: one labelled row per cluster
 // (`Cluster 1 · 3 near-identical` / `within 2 seconds · 4.1 MB each`), the
 // shelf's own note above them, and `Review duplicates` as the way into the
 // cluster-at-a-time flow (proto:4800-4803 — the shelf's primary action IS the

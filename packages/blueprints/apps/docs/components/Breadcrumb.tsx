@@ -12,7 +12,7 @@
 // and this row all have to agree about where a folder sits, and four surfaces
 // deriving that independently is four chances to disagree.
 //
-// THE TRAILING MENU IS THE PLACE'S MENU, and it is now the only way a pointer
+// THE TRAILING MENU IS THE PLACE'S MENU, and it is the only way a pointer
 // surface reaches the destinations that are off the shelf strip — Add, Scan,
 // Storage, what Docs may read, proposed filing, who a document names, and the
 // Locker boundary. The compact band reaches them through its More sheet; the
@@ -51,12 +51,11 @@ export function Breadcrumb({
   menu?: readonly PlaceMenuItem[];
   onSelectShelf: (shelf: ShelfId) => void;
 }): ReactNode {
-  // EVERY ROW CARRIES ITS SHAPE, AND THE GROUPS CARRY A RULE. This was seven
-  // bare words in one undifferentiated column — the same seven destinations,
-  // but a member had to read all of them to find any of them, and nothing said
-  // that "Storage" answers a different question from "Docs and Locker". The
-  // glyphs come from `PLACE_ICONS` at the row menu's own 15/1.6, so the two
-  // popovers in this app draw their rows at one weight.
+  // EVERY ROW CARRIES ITS SHAPE, AND THE GROUPS CARRY A RULE: seven bare words
+  // in one undifferentiated column would make a member read all of them to find
+  // any of them, and would not say that "Storage" answers a different question
+  // from "Docs and Locker". The glyphs come from `PLACE_ICONS` at the row
+  // menu's own 15/1.6, so the two popovers draw their rows at one weight.
   const openMenu = (anchor: HTMLElement): void => {
     openPopover(anchor, (box) => {
       for (const item of menu ?? []) {

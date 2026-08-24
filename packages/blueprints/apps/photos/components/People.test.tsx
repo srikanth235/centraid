@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-// THE PEOPLE SHELF'S CONSENT GATE (issue #712 C2).
+// THE PEOPLE SHELF'S CONSENT GATE (#712).
 //
 // The face-detection consent question lives in THIS shelf's empty state, not
 // behind a toolbar icon and a `<dialog>` a member would have to go looking
@@ -119,7 +119,7 @@ describe("the People shelf's consent gate", () => {
   });
 });
 
-// A FACE GROUP MAY SPAN TWO PEOPLE'S CONFIRMATIONS (issue #712 P6b).
+// A FACE GROUP MAY SPAN TWO PEOPLE'S CONFIRMATIONS (#712).
 //
 // `media_face_region` records the subject (`party_id`) and the answerer
 // (`confirmed_by_party_id`) as two separate columns, so a group assembled from

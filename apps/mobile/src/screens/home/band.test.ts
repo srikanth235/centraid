@@ -6,8 +6,8 @@
 // — an app added "just for convenience", or a sixth destination that looks fine
 // on a tablet and puts every tab under 44pt on a phone.
 //
-// `bandTabs` is now a function of the member's pinned places rather than a
-// static list (./places), so most of this file feeds it different pin sets —
+// `bandTabs` is a function of the member's pinned places rather than a static
+// list (./places), so most of this file feeds it different pin sets —
 // the default (an out-of-box member), an empty set (nobody pinned anything,
 // so only Home shows), and an over-full set (more than four pinned, which has
 // to overflow rather than grow the band).

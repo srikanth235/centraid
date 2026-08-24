@@ -9,7 +9,7 @@ export {
   type OpenVaultOptions,
   type BlobStoreSettings,
 } from "./db.js";
-// The per-vault memory budget and its division (issue #659 L8). One owner for
+// The per-vault memory budget and its division (#659). One owner for
 // the split: `openVaultDb` applies it at open, a host's registry re-applies it
 // to live planes on every mount/create/delete.
 export {
@@ -74,7 +74,7 @@ export {
   type MoveOutOfVaultInput,
   type ShareOriginRecord,
 } from "./share/placement.js";
-// The two halves of a share (issue #726). `readShareClosure` is origin-side
+// The two halves of a share (#726). `readShareClosure` is origin-side
 // and read-only; `projectShareClosure` is audience-side and opens the single
 // transaction. `WireClosure` between them is plain JSON — the shape P3 puts a
 // tunnel under.
@@ -347,10 +347,10 @@ export {
   type BlobSweepStatus,
   type RemoteTier,
 } from "./blob/custody.js";
-// The custody ROLLUP projection (issue #711) — the aggregate every owner-facing
+// The custody ROLLUP projection (#711) — the aggregate every owner-facing
 // storage surface reads. Exported so the gateway's `storage/status` route can
 // answer with the same buckets an app reads through `blob.custody_rollup`,
-// rather than each client deriving its own idea of "freeable" (issue #712 B3).
+// rather than each client deriving its own idea of "freeable" (#712).
 export {
   custodyRollup,
   refreshCustodyRollup,
@@ -1022,7 +1022,7 @@ export {
   type ArchivedSegmentRows,
   type ArchiveVerification,
 } from "./journal-archive.js";
-// Conversation-ledger band GC roots (issue #438 decision 6) + the prune
+// Conversation-ledger band GC roots (#438 decision 6) + the prune
 // custody latch (decision 3) — vault-side helpers the gateway composes so the
 // app-engine archival engine and every CAS GC path stay correct without the
 // vault importing app-engine.
@@ -1044,7 +1044,7 @@ export {
   type InlineBodyViolationScan,
 } from "./commands/inline-body-guard.js";
 
-// Bounded vault-side retention and its size ladder (issue #659 L1/L3/L4).
+// Bounded vault-side retention and its size ladder (#659 L1/L3/L4).
 // `runVaultMaintenance` is the single hookpoint a host sweep calls;
 // `decideVaultMaintenance` is the pure policy in front of it, shaped like
 // journal-limit.ts's ladder for `journal.db`.
@@ -1073,7 +1073,7 @@ export {
   type VaultMaintenanceDecision,
   type VaultMaintenanceResult,
 } from "./vault-limit.js";
-// The batched, resumable data-rewrite primitive for migration rungs (#659 L7).
+// The batched, resumable data-rewrite primitive for migration rungs (#659).
 export {
   DEFAULT_MIGRATION_BATCH_SIZE,
   runBatchedMigration,

@@ -18,13 +18,12 @@ import {
 // its row as pending in the production app, and BOTH survive a full Electron
 // reload while still offline.
 //
-// It drove Tally, Tasks and Agenda until those three interfaces were removed
-// pending a ground-up redesign, and is rebuilt here on Docs — the remaining
-// app whose production rows render the shared pending overlay
-// (`apps/docs/components/List.tsx` → `_shared/PendingWriteActions.tsx`). The
-// contract asserted is unchanged and app-agnostic: replica ⊕ outbox recovery
-// across a reload, with the pending state visible to the member the whole
-// time. Nothing here is mocked; the local gateway is the real one.
+// It runs on Docs — the app whose production rows render the shared pending
+// overlay (`apps/docs/components/List.tsx` →
+// `_shared/PendingWriteActions.tsx`). The contract asserted is app-agnostic:
+// replica ⊕ outbox recovery across a reload, with the pending state visible to
+// the member the whole time. Nothing here is mocked; the local gateway is the
+// real one.
 //
 // The offline write is issued through `window.centraid.write` rather than a
 // toolbar control ON PURPOSE. Docs' only rename affordances live in the

@@ -1,6 +1,6 @@
 /*
  * Generic ACP model enumeration — the ONE way every harness kind reports its
- * model catalog (issue #484).
+ * model catalog (#484).
  *
  * There is no bespoke claude/codex enumerator any more. ACP already carries
  * the answer: an harness advertises its model selector as a `configOptions`

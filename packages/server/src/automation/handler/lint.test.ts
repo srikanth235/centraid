@@ -64,7 +64,7 @@ describe(lintHandlerSource, () => {
       "const r = await fetch('https://x');"
     );
     expect(fetchFindings[0]!.rule).toBe("no-raw-fetch");
-    // The steer names the actual external-write path (issue #308 B6).
+    // The steer names the actual external-write path (#308).
     expect(fetchFindings[0]!.message).toContain("outbox.stage");
     // ctx.fetch is the audited connector rail, not ambient I/O — exempt…
     expect(

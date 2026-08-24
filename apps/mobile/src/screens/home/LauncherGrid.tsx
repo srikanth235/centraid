@@ -1,8 +1,7 @@
-// The Home springboard — Tier-1 CONTENT tiles (issue #708 A).
+// The Home springboard — Tier-1 CONTENT tiles (#708 A).
 //
 // The brief's model: Home is made of content, not of app icons, and each tile
-// is a window into the app it opens. The former four-up icon launcher had no
-// live caller and was removed with its standalone icon component.
+// is a window into the app it opens.
 //
 // The INVARIANT is the header — app icon in its identity chip, app name at the
 // UI role, count in the tabular numeric register, in that order, at the same
@@ -14,7 +13,7 @@
 // press curve and Light haptic the icon grid had, and it routes through the
 // same `onOpen(item)` Home already owned. Nothing about navigation moved.
 //
-// Home itself takes NO identity hue (issue #707): the hue on a tile belongs to
+// Home itself takes NO identity hue (#707): the hue on a tile belongs to
 // the app the tile previews, and it appears only on the icon chip and the one
 // place a body needs a mark (the Tasks tick). The card is paper.
 

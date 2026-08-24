@@ -9,7 +9,7 @@ import type { OpsPage, OpsState } from "./opsBar.js";
 import { setRouteHealth } from "./statusChannel.js";
 import type { RouteHealthNote } from "./statusChannel.js";
 
-// The app bar's DYNAMIC half for the six operational routes (issue #765).
+// The app bar's DYNAMIC half for the six operational routes (#765).
 //
 // `opsBar.ts` holds what a page always says; this holds what it says about the
 // data it just read — the count line under the title, and the state that

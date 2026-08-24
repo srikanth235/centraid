@@ -1,4 +1,4 @@
-// The Data route's derivations (v9 §6, issue #765) — census, pulse, graph and
+// The Data route's derivations (v9 §6, #765) — census, pulse, graph and
 // browse payloads turned into the block list's rows, sub lines, count line and
 // health sentence. Pure: no React, no network, so every sentence the page says
 // about the vault is testable on its own.

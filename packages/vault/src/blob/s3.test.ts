@@ -1,4 +1,4 @@
-// S3 driver units for issue #405 §6 (storage class) and §4 (retry/backoff),
+// S3 driver units for #405 §6 (storage class) and §4 (retry/backoff),
 // exercised against an in-process fake S3 endpoint (real HTTP, SigV4-signed
 // requests, no SDK). The fake here is a superset of blob.test.ts's private
 // `startFakeS3` — it also speaks multipart, captures the `x-amz-storage-class`
@@ -66,7 +66,7 @@ function startFakeS3(): Promise<FakeS3> {
     const chunks: Buffer[] = [];
     req.on("data", (c: Buffer) => chunks.push(c));
     req.on("end", () => {
-      // Injected transient faults (issue #405 §4) take precedence over the
+      // Injected transient faults (#405) take precedence over the
       // real behavior so the driver's retry loop is what's under test.
       if (state.failNext > 0) {
         state.failNext -= 1;
@@ -184,7 +184,7 @@ describe("s3", () => {
     const put = fake.requests.find((r) => r.method === "PUT");
     expect(put?.storageClass).toBe("GLACIER");
     // The header is not merely present — it is part of the SigV4 signature, so
-    // a proxy that dropped it would break the signature (issue #405 §6 accept).
+    // a proxy that dropped it would break the signature (#405 §6 accept).
     expect(signedHeadersOf(put!.authorization)).toContain(
       "x-amz-storage-class"
     );

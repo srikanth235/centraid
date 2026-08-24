@@ -1,5 +1,5 @@
 import { mkdir, writeFile } from "node:fs/promises";
-// The dispatcher after issue #286 phase 2: declared-handler routing ONLY.
+// The dispatcher after #286 phase 2: declared-handler routing ONLY.
 // What must hold: manifest lookup + Ajv validation + worker hand-off work;
 // `_sql` and every other underscore name is just an unknown handler now;
 // describe returns the manifest (there is no per-app schema to read).

@@ -1,5 +1,5 @@
 /*
- * Local crash/anomaly ledger (#842 W8.1).
+ * Local crash/anomaly ledger (#842).
  *
  * `gateway-log-store.ts` answers "what was the gateway saying"; it is a
  * ring of prose, rotated and bounded, and a crash three restarts ago is

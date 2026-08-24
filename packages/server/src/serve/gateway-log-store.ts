@@ -1,10 +1,10 @@
 /*
  * Gateway log store — the capture point behind the realtime Logs surface.
  *
- * Every gateway log line today goes straight to `console.*` via the
+ * Without it a gateway log line goes straight to `console.*` via the
  * `RuntimeLogger` threaded through `buildGateway` and dies there: when
  * something goes wrong on a user's machine there is nothing the UI can
- * show. This store fixes that with the same shape as `RunEventBus`
+ * show. This store has the same shape as `RunEventBus`
  * (subscribe/fan-out, ephemeral) plus a bounded ring buffer so a client
  * that opens the Logs screen AFTER the interesting lines fired still
  * sees them.
@@ -15,7 +15,7 @@
  * monotonic `seq` so clients resume (`?after=`) and dedupe across
  * reconnects.
  *
- * Persistence (issue #351, Tier 3 — "logs don't survive restart, exactly
+ * Persistence (#351, Tier 3 — "logs don't survive restart, exactly
  * when you want a post-mortem") is OPTIONAL: pass `{ dir }` and every
  * appended entry is also appended as one JSON line to
  * `<dir>/gateway.jsonl`, rotated at ~4 MiB with 3 generations kept
@@ -29,7 +29,7 @@
  * dir, full disk) are swallowed and counted (`droppedWrites`) — logging
  * must never itself crash or recurse into logging.
  *
- * Disk-full (issue #351 wave 4) gets one extra step beyond "swallow and
+ * Disk-full (#351) gets one extra step beyond "swallow and
  * count": once `fs.appendFileSync` reports an ENOSPC/SQLITE_FULL-shaped
  * error (`isDiskFullError`), persistence stops hammering the full disk on
  * every subsequent line — `DISK_FULL_RETRY_MS` throttles retries to once

@@ -1,5 +1,5 @@
 /*
- * The CRON time zoo (issue #839, gap G12).
+ * The CRON time zoo (#839, gap G12).
  *
  * `cron-match.test.ts` states the DST doctrine on ONE zone
  * (America/New_York) at its two pinned 2026 transitions. That is the doctrine
@@ -389,8 +389,8 @@ describe("cron DST zoo", () => {
 
   describe("a continuously-running gateway across a fall-back", () => {
     /**
-     * REGRESSION LOCK for #846 P2, formerly a pin against docs/cron-timezone.md
-     * § "DST policy", Overlap row: "fires once for that wall-clock minute".
+     * REGRESSION LOCK for #846 P2 — docs/cron-timezone.md § "DST policy",
+     * Overlap row: "fires once for that wall-clock minute".
      *
      * The dedupe that delivers that promise lives in `dueInstants`
      * (cron-cursor.ts), and its `seen` set is local to ONE call. A gateway that

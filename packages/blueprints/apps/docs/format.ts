@@ -260,7 +260,7 @@ export function isTextKind(doc: DocFields): boolean {
 
 // Decode a data: URI's text payload directly, without a network round trip.
 // The stage's paper sheet (components/QuickLookText.tsx) needs this for any document
-// whose bytes stayed inline (issue #296: small text bodies never rewrite to
+// whose bytes stayed inline (#296: small text bodies never rewrite to
 // a blob: route) — `fetch()`-ing a data: URI is blocked by the app's own
 // CSP (`connect-src` inherits `default-src 'self'`; only `img-src`
 // explicitly allows `data:`, which is why an `<img src="data:...">` works
@@ -290,7 +290,7 @@ export function decodeDataUri(uri: string | null | undefined): string | null {
 /**
  * The document's OWN prose, when the bytes are already in hand client-side.
  *
- * A small text body never rewrites to a blob route (issue #296), so it rides
+ * A small text body never rewrites to a blob route (#296), so it rides
  * along on `content_uri` as a `data:` URI — the same bytes the Download link
  * hands the owner. Reading it costs no round trip and no consent beyond the
  * read that produced the row, which is why the card and the quick look can
@@ -393,17 +393,16 @@ export function tintBg(cv: string, pct: number): string {
   return `color-mix(in oklab, var(${fillVar(cv)}) ${pct}%, transparent)`;
 }
 
-// The row list's empty-state copy USED to live here as `emptyStateFor`: one
-// flat cascade of nav/search/type combinations, rendered through `.kit-empty`.
-// It is gone. §4.6 says there are exactly FIVE empty states and that they are
-// distinguishable — a new drive, an empty folder, an empty shelf, a filter
-// with no matches, a search with no matches — and only the first is a
-// whole-screen state. That model lives in `view-copy.ts` (the copy),
-// `view-state.ts` (which variant, and whether a read has even landed) and
-// `components/EmptyState.tsx` (the block). Nothing here needed to know about
-// `AppState` any more, which is why this module is pure again.
+// NO EMPTY-STATE COPY LIVES HERE. §4.6 says there are exactly FIVE empty
+// states and that they are distinguishable — a new drive, an empty folder, an
+// empty shelf, a filter with no matches, a search with no matches — and only
+// the first is a whole-screen state. That model lives in `view-copy.ts` (the
+// copy), `view-state.ts` (which variant, and whether a read has even landed)
+// and `components/EmptyState.tsx` (the block); a flat cascade of nav/search/
+// type combinations here would be a sixth answer, and would drag `AppState`
+// into a module that is pure.
 
-// The blob custody projection (issue #352 phase 4, blob/custody.ts) in
+// The blob custody projection (#352 phase 4, blob/custody.ts) in
 // owner-facing words + a tone the CSS keys off (custody-ok/custody-warn/
 // custody-danger) — mirrors the photos app's own custodyMeta exactly.
 // Returns null for a custody-less row (an inline `data:` document whose
@@ -448,7 +447,7 @@ export function custodyRowMark(
   return CUSTODY_META[state] ?? null;
 }
 
-// Real activity (issue #352 phase 4, queries/activity.ts): consent.provenance
+// Real activity (#352 phase 4, queries/activity.ts): consent.provenance
 // stamps `prov_activity` as `command.<command name>` (execution.ts) — this is
 // the owner-facing gloss for every command documents.ts registers. An
 // unrecognized activity (a future command this map hasn't caught up with

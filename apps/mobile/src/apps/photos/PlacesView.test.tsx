@@ -1,9 +1,9 @@
 // @vitest-environment jsdom
-// The Places shelf's own wiring (issue #781) — what `places-model.test.ts`
+// The Places shelf's own wiring (#781) — what `places-model.test.ts`
 // cannot see: the sentence in the head, the label a card publishes, and which
 // screen a tap opens.
 //
-// Three claims, each a defect this seat has shipped before:
+// Three claims, each a defect class this seat is prone to:
 //
 //   1. THE HEAD COUNTS PLACES, NOT PHOTOGRAPHS (proto:3939). "N of M
 //      geotagged" belongs to the map; on the shelf it answers a question
@@ -11,7 +11,7 @@
 //   2. A CARD OPENS ITS OWN PLACE. The card carries the place key AND the
 //      name it printed, so the screen it opens cannot be titled one place and
 //      filtered by another — the "labelled destination opens something else"
-//      class issue #711 found in People.
+//      class #711 found in People.
 //   3. THE MAP IS A CONTROL IN THE HEAD, not the shelf itself. This screen
 //      is not the map: the handoff inverts map-first on the phone, and the one
 //      chip that reaches it must reach the map rather than a place.
@@ -166,7 +166,7 @@ vi.mock(
     }) as unknown as Partial<TimelineSourceModule>
 );
 
-// The shell (issue #712 P8) owns the band; this file owns the shelf inside it,
+// The shell (#712) owns the band; this file owns the shelf inside it,
 // and `PhotosScreen.test.tsx` already owns the frame's own contract.
 vi.mock(import("./PhotosScreen"), async () => {
   const ReactModule = await import("react");
@@ -281,7 +281,7 @@ describe("the Places shelf (native)", () => {
     expect(container!.textContent).toContain("Places · 0");
   });
 
-  // THE TRAILING "NO LOCATION" CARD (issue #816). The photographs nobody told
+  // THE TRAILING "NO LOCATION" CARD (#816). The photographs nobody told
   // where they were taken were in the library and on no shelf: every other card
   // stands at a coordinate.
   it("cards the photographs with no place at all, after the places, without counting them as places", () => {

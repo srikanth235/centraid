@@ -9,21 +9,20 @@
  *
  * Plus the automation domain that surrounds the fire spine: the manifest
  * format, the on-disk automation-app model, the `<appId>/<id>` handle, webhook
- * ingress, the `Host` interface + in-process scheduler, the
- * mock-LLM server + persistent session, and the scaffolders.
+ * ingress, the `Host` interface + in-process scheduler, and the scaffolders.
  *
  * Backend-agnostic by construction: the model turn (`runTurn`), execution
  * (`openDispatch`), and scheduling (`fire`) are injected callbacks, so this
  * package depends on `@centraid/server/engine` (the per-app engine, the shared
  * delegate-run ledger, and the turn-driver contract) but never on any harness
- * implementation. `agent-runtime` provides the local codex/claude harnesses;
- * `gateway` wires it.
+ * implementation. `@centraid/server/acp` provides the harnesses; the gateway
+ * wires them.
  */
 
 // Manifest — the source of truth for an automation app, shared between
 // producers (scaffolding / re-prompt) and consumers (the local automation
 // harness runtime in `@centraid/server/acp`, the gateway's reconciliation pass,
-// and the desktop UI). See issue #91.
+// and the desktop UI). See #91.
 export {
   ManifestError,
   HANDLER_FILE,
@@ -59,7 +58,7 @@ export {
   type HistoryKeep,
 } from "./manifest/manifest.js";
 
-// Cron timezone resolution (issue #570) — pure helpers shared by the matcher,
+// Cron timezone resolution (#570) — pure helpers shared by the matcher,
 // cursor reader, and gateway prefs wiring.
 export {
   CRON_DEFAULT_TIMEZONE_PREF,
@@ -72,9 +71,8 @@ export { cronMatches } from "./fire/cron-match.js";
 
 // Condition/data cursor sources — the engine reads one consented query per
 // gate tick and delivers unseen rows (duaility: time semantics live in the
-// data). These are the only trigger evaluators; the pre-cursor `evaluate*`
-// pair is retired, so no caller can advance a watermark past rows it never
-// delivered.
+// data). These are the only trigger evaluators: no caller can advance a
+// watermark past rows it never delivered.
 export {
   readConditionCursor,
   readDataCursor,
@@ -83,10 +81,10 @@ export {
 } from "./fire/condition.js";
 
 // Automation identity — the `<appId>/<id>` handle that scheduler labels,
-// webhook routing, and `onFailure` address an automation by (issue #98).
+// webhook routing, and `onFailure` address an automation by (#98).
 export { parseRef, type Ref } from "./manifest/ref.js";
 
-// Automation apps on disk (issue #98 unified model). An automation
+// Automation apps on disk (#98 unified model). An automation
 // always lives inside an app folder at `<appCodeDir>/automations/<id>/`;
 // `list` scans every app's active version. The directory is
 // the source of truth (no SQLite definition table).
@@ -103,7 +101,7 @@ export {
 // implements — the local in-process scheduler (gateway) satisfies it.
 export type { Host, ReconcileResult } from "./fire/host.js";
 
-// In-process cron scheduler (issue #149, n8n semantics): the gateway-owned
+// In-process cron scheduler (#149, n8n semantics): the gateway-owned
 // always-on minute timer that fires enabled cron automations while it runs.
 // No OS scheduler; missed minutes during downtime are skipped (no backfill).
 export {
@@ -126,9 +124,9 @@ export {
 } from "./fire/cursor-engine.js";
 export { dueInstants, type CronSchedule } from "./fire/cron-cursor.js";
 
-// Missed-automation-run ledger (issue #351 tier 2): the honest record a
-// downtime leaves behind now that the scheduler's "no backfill" silence is
-// legible instead of invisible. `InProcessScheduler`'s `onTick` hook is the
+// Missed-automation-run ledger (#351 tier 2): the honest record a
+// downtime leaves behind, which makes the scheduler's "no backfill" silence
+// legible. `InProcessScheduler`'s `onTick` hook is the
 // host's seam into this; the gateway wires `recordSchedulerTick` there and
 // exposes `SchedulerLedgerStore`/`parseSchedulerLedgerSnapshot` to its
 // health probes (scheduler liveness, missed-window counts).
@@ -145,7 +143,7 @@ export {
   type RecordSchedulerTickOptions,
 } from "./fire/scheduler-ledger.js";
 
-// Webhook trigger dispatch (issue #96). A `webhook` trigger fires an
+// Webhook trigger dispatch (#96). A `webhook` trigger fires an
 // automation on an inbound HTTP POST; the gateway mounts the route
 // built by `makeWebhookRouteHandler`. Secret helpers are shared by the
 // desktop's create flow (hash at scaffold time) and the route (verify).
@@ -168,7 +166,7 @@ export {
   type WebhookRouteOptions,
 } from "./scaffold/webhook.js";
 
-// Automation handler runtime (issue #91). A fire executes the app's
+// Automation handler runtime (#91). A fire executes the app's
 // generated `handler.js` in a worker thread; the host supplies the
 // tool / delegate dispatchers. `runHandler` owns the ledger
 // side — opening the `runs` row and recording the trace.
@@ -184,7 +182,7 @@ export {
 // Shared `ctx.delegate` answer coercion — every host ends a delegate turn with a
 // blob of text and must turn it into the value the handler awaits the same way.
 export { coerceDelegateAnswer } from "./handler/delegate-answer.js";
-// Authoring-time handler lint (issue #167): a static scan that flags ambient
+// Authoring-time handler lint (#167): a static scan that flags ambient
 // I/O and nondeterminism (`Date.now`, `Math.random`, raw `fetch`/`fs`, …) in a
 // handler — effects that bypass the audited `ctx.*` rails or make a re-run
 // diverge. The builder grounds on this so a handler is rejected at publish
@@ -194,7 +192,7 @@ export {
   formatHandlerLintError,
   type HandlerLintFinding,
 } from "./handler/lint.js";
-// The per-fire orchestration spine (issue #147, Concern 2): resolve the
+// The per-fire orchestration spine (#147, Concern 2): resolve the
 // automation, open its ledger, run the handler against a host-injected
 // dispatch surface, cascade `onFailure`. agent-runtime's `runAutomation`
 // is a thin wrapper that injects a mock-LLM + host-delegate dispatch surface.

@@ -1,4 +1,4 @@
-// THE PRIVATE SKETCH — the map that asks nobody anything (issue #816).
+// THE PRIVATE SKETCH — the map that asks nobody anything (#816).
 //
 // Every pixel here comes from `place-map.ts`'s arithmetic over coordinates the
 // vault already holds: a graticule, a scale bar, north, and the photographs

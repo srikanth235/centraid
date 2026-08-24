@@ -1,5 +1,5 @@
 /*
- * Capability map for C1 feature detection (issue #504 / docs/protocol.md).
+ * Capability map for C1 feature detection (#504 / docs/protocol.md).
  *
  * The map is structural (C3): no transforms. Clients detect capabilities in
  * exactly one place via `judgeGatewayInfo` / the info response — not re-derived

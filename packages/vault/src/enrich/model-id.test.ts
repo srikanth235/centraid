@@ -1,4 +1,4 @@
-// Model identity (issue #721 E1) — see model-id.ts for why the version rides
+// Model identity (#721) — see model-id.ts for why the version rides
 // inside the `enrich_embedding.model` key instead of a column.
 
 import { describe, expect, test } from "vitest";

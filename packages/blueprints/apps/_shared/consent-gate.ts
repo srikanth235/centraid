@@ -1,5 +1,5 @@
 /**
- * THE §8 CONSENT GATE — SHARED SHAPE (issue #712 C1/C4).
+ * THE §8 CONSENT GATE — SHARED SHAPE (#712 C1/C4).
  *
  * Two instances of the same product law live in this repo: Photos' face
  * detection (`apps/photos/enrichment-consent.ts`) and Docs' capture-time OCR
@@ -66,7 +66,7 @@ export const ENRICH_DOMAINS = ["photos", "docs"] as const;
 export type EnrichDomain = (typeof ENRICH_DOMAINS)[number];
 
 /**
- * The gate's full prop shape (issue #712 C1). `domain` is required and typed
+ * The gate's full prop shape (#712). `domain` is required and typed
  * as `EnrichDomain` — a structural exclusion, not a policy (C4): Locker has
  * no `"photos" | "docs"` value to supply, so a Locker consent gate is a type
  * error at the call site, the same way `PLACEMENT_REGISTRY` structurally

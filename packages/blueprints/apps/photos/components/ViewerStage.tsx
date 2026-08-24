@@ -71,7 +71,7 @@ const FIT_ZOOM: Zoom = { scale: FIT, x: 0, y: 0 };
 
 /**
  * The media element. Every branch names the scope its bytes live in
- * (issue #599): the viewer steps through a MERGED list, and content ids are
+ * (#599): the viewer steps through a MERGED list, and content ids are
  * per-scope, so an unstamped reference renders the wrong photograph rather
  * than failing.
  */

@@ -13,7 +13,7 @@
  * `endpoint-key.bin` yields lasting loopback HTTP admin, which is why that
  * key sits behind OS custody (`daemonKeyStore`) rather than a bare file.
  * Rotating it means rotating the gateway's permanent EndpointId, so it is
- * deliberately not a routine operation (see SECURITY.md, issue #568 item J).
+ * deliberately not a routine operation (see SECURITY.md, #568 item J).
  */
 
 import { createHmac } from "node:crypto";
@@ -38,7 +38,7 @@ export function landlordBearerForEndpointSecret(secret: Uint8Array): string {
  * The desktop needs this to talk to a gateway it did not spawn: without it
  * the desktop probes with its own safeStorage-minted token, never matches,
  * and `decideControl` reports `'foreign'` forever after the user opts into
- * the OS service that onboarding offers (issue #568 item F).
+ * the OS service that onboarding offers (#568).
  *
  * Returns `undefined` when the endpoint identity is not readable — no keys
  * yet, or custody this process cannot open. Never CREATES the key: deriving

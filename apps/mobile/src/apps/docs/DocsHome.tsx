@@ -1,4 +1,4 @@
-// The Docs stack's home (Binding Layer v12 handoff Part 2; issue #821).
+// The Docs stack's home (Binding Layer v12 handoff Part 2; #821).
 //
 // The claimed band's four shelf destinations — All, Folders, Coming due,
 // Search — all live on this one screen, so a band tap from a pushed route

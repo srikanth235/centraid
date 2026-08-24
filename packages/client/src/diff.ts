@@ -1,7 +1,6 @@
-// Unified line diff (LCS) that drives the Code view's Diff toggle — extracted
-// from the builder god-file for unit testing (TESTING.md §2). Pure: it maps two
-// strings to a row list, no DOM. O(mn) time/space is fine here because
-// `readAppFiles` caps app files at 256 KB.
+// Unified line diff (LCS). Pure: it maps two strings to a row list, no DOM.
+// O(mn) time/space is acceptable only because callers cap their input at
+// 256 KB — do not point this at unbounded text.
 
 export type DiffRow = {
   type: "same" | "add" | "del";

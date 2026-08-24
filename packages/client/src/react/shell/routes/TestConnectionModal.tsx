@@ -18,7 +18,7 @@ export interface TestConnectionModalProps {
   onClose: () => void;
 }
 
-/** The switcher overflow menu's "Test connection…" action (issue #382) — the
+/** The switcher overflow menu's "Test connection…" action (#382) — the
  *  same handshake-ladder moment ConnectFlow's test step uses, run standalone
  *  against an already-registered gateway (`{kind:'gateway', gatewayId}`). */
 export default function TestConnectionModal({

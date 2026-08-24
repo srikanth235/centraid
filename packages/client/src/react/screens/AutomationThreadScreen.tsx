@@ -545,7 +545,7 @@ function nodeIconFor(run: ThreadRunDTO): IconName {
 // summary is the message body, and a quiet footer carries the telemetry. A
 // failed run speaks as an error you can retry in place; either way "Details"
 // opens the full step-by-step run-view. This is the compact register turned
-// into a conversation, over the same `ThreadRunDTO` (issue #539).
+// into a conversation, over the same `ThreadRunDTO` (#539).
 function RunTurn({
   run,
   tokens,

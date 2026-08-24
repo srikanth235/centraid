@@ -1,5 +1,5 @@
 /*
- * Composer autocomplete helpers (issue #420, Wave 3) — the pure, framework-free
+ * Composer autocomplete helpers (#420) — the pure, framework-free
  * core of the shell assistant composer's @-mentions + slash-commands.
  *
  * Why shell-local React rather than a shared control: the imperative
@@ -29,7 +29,7 @@ const MAX_MENTION_LEN = 40;
 /**
  * The `@mention` token immediately left of `caret`, or null. Fires only at a
  * word boundary (start-of-text or after whitespace / `(`), rejects tokens with
- * whitespace/newlines, and caps length — mirrors the kit's `tokenAtCaret`.
+ * whitespace/newlines, and caps length.
  */
 export function mentionTokenAt(text: string, caret: number): CaretToken | null {
   const upto = text.slice(0, caret);

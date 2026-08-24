@@ -34,7 +34,7 @@ import {
 
 import styles from "./AtlasRecordsSection.module.css";
 
-// The records section of the Data route (issue #441 B3, restructured for v9 in
+// The records section of the Data route (#441 B3, restructured for v9 in
 // #765, restored to the full grid in #775). One kind's records as
 // `ui/GridBlock` — every column the store declares, sortable by any of them —
 // with the row editor, the dependent-aware delete dialog and the machinery

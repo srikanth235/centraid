@@ -23,7 +23,7 @@
 // identity to the Centraid harness on every commit-producing call.
 // That way the host's `~/.gitconfig` user.name/email never leak
 // into the app repo's history — every commit is attributable to the
-// harness identity per the issue's "Commit authorship" decision.
+// harness identity.
 
 import { spawn } from "node:child_process";
 

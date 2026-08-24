@@ -1,4 +1,4 @@
-// THE BACKUP VERDICT — complete, pending, or FAILING (issue #712, P5).
+// THE BACKUP VERDICT — complete, pending, or FAILING (#712).
 //
 // The design handoff (§12) gives the Backup surface three dynamic states, and
 // the third is the one nothing in this repo could say before: **failing**. The
@@ -116,8 +116,8 @@ export function backupVerdictCopy(
     detail: "The durable queue is empty.",
     net: false,
     // The registry's own name, not a hyphenated alias: `icon-resolver.ts`
-    // carries no `check-circle` entry and throws on an unknown name, which is
-    // exactly what the old Backup screen did on its healthy branch.
+    // carries no `check-circle` entry and throws on an unknown name, taking
+    // the healthy branch down with it.
     icon: "CheckCircle",
   };
 }

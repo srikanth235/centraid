@@ -1,6 +1,6 @@
 // The upload action is a thin forwarder onto `media.add_asset` — this file
 // exists because it was NOT forwarding everything its own schema declared
-// (issue #724 audit): `tz_offset_min`, `capture_group_id` and `thumbhash` all
+// (#724 audit): `tz_offset_min`, `capture_group_id` and `thumbhash` all
 // passed the action's `additionalProperties: false` schema, arrived in
 // `body`, and were silently dropped before reaching the vault command. A
 // Live Photo pair uploaded from the camera roll shares a `capture_group_id`
@@ -23,7 +23,7 @@ function ctxWith(invoke: (call: unknown) => unknown) {
       error: () => undefined,
     },
     app: { id: "photos", dir: "" },
-    // Bracket-keyed via a const (issue #599's vocabulary scan reads app-facing
+    // Bracket-keyed via a const (#599's vocabulary scan reads app-facing
     // SOURCE, not just user copy, and a bare `vault:` object key at line-start
     // reads the same as the forbidden storage noun to that naive scanner):
     // this is the property name `HandlerCtx.vault` requires, spelled so

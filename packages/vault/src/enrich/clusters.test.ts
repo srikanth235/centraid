@@ -1,4 +1,4 @@
-// Near-duplicate clustering (issue #352 phase 3/4) — see clusters.ts header
+// Near-duplicate clustering (#352 phase 3/4) — see clusters.ts header
 // for the app-plane gap this closes (media_asset_phash was unreachable from
 // consent.app_view: no SQL functions, no registered logical entity).
 

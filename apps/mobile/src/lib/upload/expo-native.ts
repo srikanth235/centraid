@@ -1,8 +1,8 @@
-// The device-only half of the uploader (#419 M0.4).
+// The device-only half of the uploader (#419.4).
 //
 // Everything here imports a native module, so nothing under test may import
-// this file — the drainer takes both of these by injection (the M0.2 lesson:
-// a statically-imported native module breaks the vitest rig).
+// this file — the drainer takes both of these by injection: a
+// statically-imported native module breaks the vitest rig.
 
 import { File, Paths, UploadType } from "expo-file-system";
 

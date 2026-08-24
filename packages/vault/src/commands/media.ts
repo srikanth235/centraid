@@ -1,15 +1,15 @@
 // governance: allow-repo-hygiene file-size-limit one command pack per domain is the vault contract (registered as a unit, read wholesale); media owns the whole library loop (9 commands with their contracts), so it is large by design.
-// Media domain commands (§08): the command pack the Photos projection was
-// parked on. An asset is meaning over bytes — media_asset decorates a
+// Media domain commands (§08): the command pack behind the Photos
+// projection. An asset is meaning over bytes — media_asset decorates a
 // canonical core_content_item (sha256-deduped data: URI, same custody as
 // attachments) with capture time and dimensions; an album is a surface view
-// over core_collection, the one owner-curation mechanism (issue #274) — the
+// over core_collection, the one owner-curation mechanism (#274) — the
 // album commands keep their contracts while storage unifies, so a
 // collection may also hold documents and notes. Deleting an asset removes
 // the meaning rows and
 // soft-deletes the bytes only when nothing else (an attachment, a note body,
 // an avatar) still rents them — content items are canonical and shared, so
-// the last reference decides, not the first delete. Purging (issue #711) is
+// the last reference decides, not the first delete. Purging (#711) is
 // the owner's way to end that grace window early — see PURGE_ASSET for what
 // it destroys, what it refuses, and why the bytes go to the sweep.
 
@@ -109,7 +109,7 @@ function purgeAt(now: string): string {
  * Round to ~11m precision (4 decimal places) for find-or-create IDENTITY —
  * photos taken a few meters apart at "the same place" share one core_place
  * row instead of minting a new one per shutter click. The row itself keeps
- * the PRECISE coordinates of whichever asset created it (issue #352).
+ * the PRECISE coordinates of whichever asset created it (#352).
  */
 function roundCoord(v: number): number {
   return Math.round(v * 10_000) / 10_000;
@@ -281,7 +281,7 @@ export function insertMediaAssetTx(
  * capture group learned later COALESCE-merges onto it, which is how a Live
  * Photo whose video half arrives in a second import completes its pair.
  *
- * Deliberately does NOT stamp `source_asset_id` (issue #711): these bytes
+ * Deliberately does NOT stamp `source_asset_id` (#711): these bytes
  * already ARE that asset, so this call created nothing to have a lineage.
  * Overwriting an existing asset's provenance from a later arrival would
  * rewrite history, and the honest record of a dedupe is that it deduped.
@@ -334,7 +334,7 @@ const CONTENT_REFERENCES: {
 }[] = [
   { table: "core_attachment", column: "content_id" },
   { table: "core_party", column: "avatar_content_id" },
-  // A trashed note is not a rental (issue #308 A6) — its body releases with
+  // A trashed note is not a rental (#308) — its body releases with
   // it, and knowledge.restore_note un-trashes both.
   {
     table: "knowledge_note",
@@ -352,7 +352,7 @@ const CONTENT_REFERENCES: {
     column: "content_id",
     onlyLive: "deleted_at IS NULL",
   },
-  // A document's CURRENT content is a rental like any other (issue #352).
+  // A document's CURRENT content is a rental like any other (#352).
   // Superseded revisions are NOT covered here — they are protected by the
   // dedicated chain-aware check the document purge pass runs instead
   // (gateway/duties.ts), because "still part of some live document's
@@ -427,11 +427,11 @@ const ADD_ASSET: CommandDefinition = {
       staged_sha: { type: "string", minLength: 64, maxLength: 64 },
       kind: { type: "string", enum: ["photo", "video", "audio", "scan"] },
       captured_at: { type: "string" },
-      // Capture-local UTC offset in minutes (issue #419): the client reads it
+      // Capture-local UTC offset in minutes (#419): the client reads it
       // off the same EXIF the capture time came from.
       tz_offset_min: { type: "integer", minimum: -1080, maximum: 1080 },
       capture_group_id: { type: "string", minLength: 1, maxLength: 200 },
-      // Edit lineage (issue #711): the asset these bytes were derived FROM.
+      // Edit lineage (#711): the asset these bytes were derived FROM.
       // The photo editor saves an edit as a new asset dated today, and this
       // is what makes that copy's provenance a fact instead of a promise.
       source_asset_id: { type: "string", minLength: 1, maxLength: 200 },
@@ -456,7 +456,7 @@ const ADD_ASSET: CommandDefinition = {
       // explicit input takes precedence, same as every field above.
       latitude: { type: "number", minimum: -90, maximum: 90 },
       longitude: { type: "number", minimum: -180, maximum: 180 },
-      // Perceptual hash (issue #299 §2, Tier 0) — hex, producer-agnostic:
+      // Perceptual hash (#299 §2, Tier 0) — hex, producer-agnostic:
       // the client canvas computes a dHash beside its thumb today.
       phash: {
         type: "string",
@@ -464,7 +464,7 @@ const ADD_ASSET: CommandDefinition = {
         maxLength: 64,
         pattern: "^[0-9a-f]+$",
       },
-      // ThumbHash placeholder (issue #419) — unpadded base64, produced beside
+      // ThumbHash placeholder (#419) — unpadded base64, produced beside
       // the client's thumb from the same decode; lands as an inline derivative.
       thumbhash: {
         type: "string",
@@ -509,7 +509,7 @@ const ADD_ASSET: CommandDefinition = {
       value: 1,
     },
     {
-      // The inline door is for SMALL payloads (issue #296): a 4K video takes
+      // The inline door is for SMALL payloads (#296): a 4K video takes
       // the staging route, never command JSON (the journal records inputs).
       name: "within_size_cap",
       sql: `SELECT CASE WHEN :data_uri IS NULL THEN 1 ELSE (length(:data_uri) <= ${MAX_INLINE_DATA_URI_CHARS}) END AS n`,
@@ -527,7 +527,7 @@ const ADD_ASSET: CommandDefinition = {
       value: 1,
     },
     {
-      // A claimed source must be a real asset in THIS vault (issue #711).
+      // A claimed source must be a real asset in THIS vault (#711).
       // Named here rather than left to the FK so a caller that mistypes a
       // lineage gets a refusal that says which precondition failed, not a
       // raw constraint error from the middle of the insert.
@@ -573,7 +573,7 @@ function addAsset(ctx: HandlerCtx): Record<string, unknown> {
     latitude?: number;
     longitude?: number;
   };
-  // Staged claims carry spool metadata (issue #296 §4): the gateway sniffed
+  // Staged claims carry spool metadata (#296): the gateway sniffed
   // the type and read EXIF server-side, so capture time and dimensions no
   // longer depend on the caller supplying them. Explicit input still wins.
   const spoolMeta = input.staged_sha
@@ -625,7 +625,7 @@ function addAsset(ctx: HandlerCtx): Record<string, unknown> {
       (meta as { tz_offset_min?: number }).tz_offset_min ??
       null,
     captureGroupId: input.capture_group_id ?? null,
-    // Edit lineage (issue #711). Only the caller knows it — nothing in the
+    // Edit lineage (#711). Only the caller knows it — nothing in the
     // bytes or the EXIF says "I was cropped out of that one" — so there is
     // no spool fallback here on purpose.
     sourceAssetId: input.source_asset_id ?? null,
@@ -635,7 +635,7 @@ function addAsset(ctx: HandlerCtx): Record<string, unknown> {
     durationS: input.duration_s ?? meta.duration_s ?? null,
     exifJson: exifJsonForMeta(meta),
   });
-  // Perceptual hash (issue #299 §2, Tier 0): producer-agnostic like thumbs —
+  // Perceptual hash (#299 §2, Tier 0): producer-agnostic like thumbs —
   // the client canvas computes a dHash beside its thumbnail today. Derived
   // data in a sidecar; near-duplicates are one vault_hamming JOIN away.
   const contributedPhash = ctx.db
@@ -653,7 +653,7 @@ function addAsset(ctx: HandlerCtx): Record<string, unknown> {
       )
       .run(assetId, phash, ctx.now);
   }
-  // Device-contributed ThumbHash (issue #419): lands ONLY in the inline
+  // Device-contributed ThumbHash (#419): lands ONLY in the inline
   // derivative row (no sidecar). Canonicalize through the same validator the
   // staging door uses so a client-supplied value is exactly the stored form.
   if (input.thumbhash) {
@@ -700,7 +700,7 @@ const UPDATE_ASSET: CommandDefinition = {
       captured_at: { type: "string" },
       // The caption lives on the canonical content item as its title.
       title: { type: "string" },
-      // First-class asset state (issue #419): favorite and archive are now
+      // First-class asset state (#419): favorite and archive are now
       // boolean columns on the asset itself so the replica shape is
       // self-contained — no core_tag reconstruction. set_favorite/set_archived
       // are the focused toggles; update_asset stays the general editor.
@@ -743,7 +743,7 @@ const UPDATE_ASSET: CommandDefinition = {
     },
     {
       // When this edit touched favorite, the column and the canonical starred
-      // tag must agree (issue #441 A2.1); a no-op when favorite was untouched.
+      // tag must agree (#441); a no-op when favorite was untouched.
       name: "favorite_mirrors_tag",
       sql: `SELECT (CASE WHEN :favorite IS NULL THEN 1
                     ELSE (SELECT count(*) FROM media_asset a
@@ -805,7 +805,7 @@ const SET_ASSET_PLACE: CommandDefinition = {
     additionalProperties: false,
     properties: {
       asset_id: { type: "string", minLength: 1 },
-      // Omitted place_id clears the asset's place (issue #352) — the same
+      // Omitted place_id clears the asset's place (#352) — the same
       // "omit to reset" convention core.move_document uses for folder_id.
       place_id: { type: "string", minLength: 1 },
     },
@@ -880,7 +880,7 @@ function setAssetPlace(ctx: HandlerCtx): Record<string, unknown> {
 const PLACE_KINDS = ["home", "work", "venue", "city", "region", "other"];
 
 /**
- * A member names a place (issue #816).
+ * A member names a place (#816).
  *
  * THE ONE WRITE THAT MAKES A COORDINATE INTO A LOCATION. `findOrCreatePlaceTx`
  * mints a row labelled with its own coordinates when it knows nothing better,
@@ -1019,7 +1019,7 @@ const DELETE_ASSET: CommandDefinition = {
   ],
   postconditions: [
     {
-      // The standard soft-delete pair (issue #274): the asset carries its
+      // The standard soft-delete pair (#274): the asset carries its
       // own grace window even when its bytes stay rented elsewhere.
       name: "asset_trashed",
       sql: `SELECT count(*) AS n FROM media_asset
@@ -1156,7 +1156,7 @@ function restoreAsset(ctx: HandlerCtx): Record<string, unknown> {
 
 /**
  * `media.purge_asset` — destroy one ALREADY-TRASHED asset now, instead of
- * waiting out its 30-day grace window (issue #711). This is the only
+ * waiting out its 30-day grace window (#711). This is the only
  * owner-driven hard delete in the media pack, and everything about its shape
  * follows from that:
  *
@@ -1180,8 +1180,8 @@ function restoreAsset(ctx: HandlerCtx): Record<string, unknown> {
  *    this — the photograph leaves the library at once, the bytes are
  *    reclaimed by the next storage sweep. Bytes still rented by an
  *    attachment, an avatar or a note body are left alone: asset meaning and
- *    byte custody have independent lifecycles (issue #274).
- *  * EDIT LINEAGE. `media_asset.source_asset_id` (issue #711) is a
+ *    byte custody have independent lifecycles (#274).
+ *  * EDIT LINEAGE. `media_asset.source_asset_id` (#711) is a
  *    self-FK, and a purge that broke it would have to either forge or destroy
  *    a fact. NULLing the child's column is a forgery: the schema says NULL
  *    means "camera original or import", so a cropped copy would start
@@ -1250,7 +1250,7 @@ const PURGE_ASSET: CommandDefinition = {
       value: 0,
     },
     {
-      // Nothing may still point at the row (issue #441 A1). Engine FKs, the
+      // Nothing may still point at the row (#441). Engine FKs, the
       // self-FK, and every polymorphic mechanism in one predicate: a sweep
       // clause quietly dropped in a later edit fails here rather than in a
       // member's library six months on.
@@ -1315,7 +1315,7 @@ function purgeAsset(ctx: HandlerCtx): Record<string, unknown> {
   }
   // Face regions have no ON DELETE CASCADE (the phash sidecar does), so they
   // go by hand — the same pair the lifecycle sweep deletes in duties.ts, with
-  // the same face-region poly sweep (issue #724 W5) so no orphan face vector
+  // the same face-region poly sweep (#724) so no orphan face vector
   // outlives the photograph it was cut from.
   const faceRegions = ctx.db
     .prepare("SELECT region_id FROM media_face_region WHERE asset_id = ?")
@@ -1375,7 +1375,7 @@ const SET_FAVORITE: CommandDefinition = {
     },
     {
       // The column and the canonical starred tag must never disagree — the
-      // column is a mirror, the tag is the truth (issue #441 A2.1).
+      // column is a mirror, the tag is the truth (#441).
       name: "favorite_mirrors_tag",
       sql: `SELECT count(*) AS n FROM media_asset a
              WHERE a.asset_id = :asset_id
@@ -1966,7 +1966,7 @@ function removeFromAlbum(ctx: HandlerCtx): Record<string, unknown> {
 }
 
 /**
- * THE FACE-DELETE GATE (issue #724 W5; SECURITY.md, "Derived data and
+ * THE FACE-DELETE GATE (#724 W5; SECURITY.md, "Derived data and
  * sensitive enrichments"). Face data is the most sensitive derived class this
  * product holds, and the condition for shipping face detection at all was that
  * "delete this person" provably cascades through every derived row keyed to
@@ -2111,7 +2111,6 @@ function forgetPerson(ctx: HandlerCtx): Record<string, unknown> {
   };
 }
 
-/** Register the media domain's commands on a gateway. */
 export function registerMediaCommands(gateway: Gateway): void {
   gateway.registerCommand(ADD_ASSET);
   gateway.registerCommand(UPDATE_ASSET);

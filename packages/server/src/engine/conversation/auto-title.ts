@@ -1,5 +1,5 @@
 /*
- * LLM auto-titles (issue #420, Wave 3). After the first turn of a new
+ * LLM auto-titles (#420). After the first turn of a new
  * conversation settles, a cheap one-shot inference names the thread — the
  * claude.ai/ChatGPT affordance that replaces first-message truncation
  * (`deriveTitle`) with something a human would actually call the conversation.

@@ -1,11 +1,9 @@
 /**
- * A document's REAL activity trail (issue #352 phase 4): the app-plane read
+ * A document's REAL activity trail (#352): the app-plane read
  * over consent.provenance — journal.db already records one provenance row
  * per command write, keyed by (entity_type, entity_id)
  * (packages/vault/src/gateway/evidence.ts's writeProvenance, called from
- * execution.ts on every executed command). This replaces Details.tsx's old
- * synthesized timeline, which only ever fabricated two events from the
- * document's own created_at/updated_at — this ships what actually happened,
+ * execution.ts on every executed command). It ships what actually happened,
  * per row: which command (`prov_activity`, e.g. "command.core.rename_document"),
  * who ran it (`agent_kind`: owner/app/ai_agent/import), and when
  * (`occurred_at`).

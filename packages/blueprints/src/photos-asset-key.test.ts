@@ -1,4 +1,4 @@
-// Cross-scope asset identity in Photos (issue #599, apps/photos/asset-key.ts).
+// Cross-scope asset identity in Photos (#599, apps/photos/asset-key.ts).
 //
 // `asset_id` is minted per vault, so two mounted scopes can legitimately carry
 // the SAME id for two unrelated photos. Everything in the UI that means "this

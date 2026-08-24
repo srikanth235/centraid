@@ -1,5 +1,5 @@
 /*
- * Durable PWA control sessions (issue #555).
+ * Durable PWA control sessions (#555).
  *
  * Cookie hashes live in gateway.db and join device enrollments with
  * ON DELETE CASCADE. A source-less store remains in-memory for isolated tests.
@@ -52,9 +52,9 @@ function toSession(row: StoredSessionRow): ControlSessionRow {
 }
 
 /**
- * SQL prepared once per store (issue #659 G3). `GatewayDatabase.db` is a
+ * SQL prepared once per store (#659). `GatewayDatabase.db` is a
  * `readonly` handle for the process lifetime, so a statement compiled here
- * stays valid; re-preparing on every authorize() re-parsed six statements per
+ * stays valid; re-preparing on every authorize() re-parses six statements per
  * HTTP request.
  */
 interface SessionStatements {
@@ -169,7 +169,7 @@ export class WebControlSessionStore {
    * Look a live session up by its cookie hash.
    *
    * The row is fetched by PRIMARY KEY rather than by scanning every live
-   * session (issue #659 G3): the scan was O(sessions) SQL on every authorized
+   * session (#659): that scan is O(sessions) SQL on every authorized
    * request. The constant-time comparison is kept on the returned row, and the
    * value being matched is already a SHA-256 of the cookie — `touch()` and
    * `remove()` have always looked it up by key, so the index lookup exposes

@@ -1,5 +1,5 @@
-// The Vault Atlas — Browse's relations-aware half (issue #441 Part B, B3),
-// split from atlas-browse.ts to stay within the repo's file-size cap: the FK
+// The Vault Atlas — Browse's relations-aware half (#441), kept out of
+// atlas-browse.ts to stay within the repo's file-size cap: the FK
 // reference-picker search and the dependent preview a delete confirmation
 // needs. The dependent preview is the shared seam with Part A: engine FKs are
 // found by a reverse `PRAGMA foreign_key_list` walk, and the polymorphic
@@ -107,7 +107,7 @@ export interface BrowseDependentsResult {
  * index (a `PRAGMA foreign_key_list` walk over every vault table) AND the A1
  * `POLY_REF_REGISTRY` matched on the row's LOGICAL entity name. Engine FKs
  * block a delete; polymorphic dependents are reported so the confirmation
- * dialog never lies by omission (issue #441 B3).
+ * dialog never lies by omission (#441).
  */
 export function browseDependents(
   vault: DatabaseSync,

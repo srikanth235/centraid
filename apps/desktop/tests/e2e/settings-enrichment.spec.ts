@@ -15,7 +15,7 @@ import {
 } from "./fixtures";
 import type { MockGateway, TestEnv } from "./fixtures";
 
-/** §12 Settings → Enrichment (issue #807). */
+/** §12 Settings → Enrichment (#807). */
 
 /** Open Settings from the All apps sheet — same route as settings-gateways. */
 async function gotoSettings(page: Page): Promise<void> {
@@ -66,7 +66,7 @@ test.beforeEach(async () => {
     },
   ];
   // The page asks the ONE resolver per capability rather than folding the
-  // cascade itself (issue #814), so the mock has to answer for each built-in
+  // cascade itself (#814), so the mock has to answer for each built-in
   // the profiles above declare.
   gateway.state.enrichEffective = {
     faces: {
@@ -162,7 +162,7 @@ test("12.9 — Settings → Enrichment states what runs, and says when a stored 
     // The answered egress question is on the record as a declined answer.
     await expect(pane).toContainText("Declined · built-in engine only");
 
-    // The UI-receipt evidence for issue #814 (check:ui-receipt): the
+    // The UI-receipt evidence for #814 (check:ui-receipt): the
     // Enrichment page as a first run finds it.
     const evidenceDir = path.resolve(
       import.meta.dirname,

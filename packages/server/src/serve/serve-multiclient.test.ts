@@ -6,7 +6,7 @@ import crypto from "node:crypto";
  * gateway via the existing remote-gateway path.
  *
  * Scenario:
- *   1. An app is published onto the git-store `main` (issue #137).
+ *   1. An app is published onto the git-store `main` (#137).
  *   2. Client A fetches GET /centraid/_apps and sees it in the registry.
  *   3. Client B reads back the app's `index.html` via the `/centraid/<id>/`
  *      static-serve path (proves static serving works through the daemon

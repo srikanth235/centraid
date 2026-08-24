@@ -1,5 +1,5 @@
 /*
- * Target-independent remote-CAS reconciliation (issue #414 D14).
+ * Target-independent remote-CAS reconciliation (#414).
  *
  * A vault may keep its primary bytes in provider/BYO S3 without configuring
  * the separate snapshot-backup store. This pass deliberately models that as
@@ -110,7 +110,7 @@ export async function runCasOnlyReconciliation(
   let cas = unavailableStore(result.configured, result.error);
   if (result.collection) {
     // Live GC roots = liveBlobShas ∪ archivedSegmentShas ∪ retained-snapshot
-    // roots (issue #436 §6). The third term is provably EMPTY on this path:
+    // roots (#436). The third term is provably EMPTY on this path:
     // `runCasOnlyReconciliation` runs ONLY when no backup store/provider is
     // configured (see BackupService.doRunReconciliation), so no snapshot
     // manifest exists to reference a blob — there is nothing to open and no
@@ -118,7 +118,7 @@ export async function runCasOnlyReconciliation(
     // reconciliation runs through `runBackupReconciliation`, which computes the
     // root set from the provider's retained manifests. Kept explicit so the
     // invariant is visible at both forks of the diff, not silently absent here.
-    // The base live set is SHARED and read-only (issue #659 L5): several
+    // The base live set is SHARED and read-only (#659): several
     // consumers derive it in the same tick, and `liveBlobShasCached` memoizes
     // it per vault write position. The two archive-root families are this
     // caller's own extra roots, so they are unioned into a local copy rather
@@ -128,7 +128,7 @@ export async function runCasOnlyReconciliation(
     for (const sha of conversationArchiveShas(opts.db.journal)) live.add(sha);
     const index = new ReplicaIndex(opts.db.vault);
     for (const sha of result.authenticatedFailures ?? []) index.unmark(sha);
-    // Scope the cas diff to `store='cas'` rows (issue #425 Wave 2).
+    // Scope the cas diff to `store='cas'` rows (#425).
     const rows = index.rows().filter((row) => row.store === "cas");
     cas = reconcileCasInventory({
       collection: result.collection,

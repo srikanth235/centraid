@@ -40,7 +40,7 @@ export interface ShareSheetProps {
   /**
    * The label of a named circle (`ShareCircle.label`) to preselect the
    * moment circles finish loading — for a container that reuses its OWN
-   * named circle, i.e. a group sharing itself (issue #731 M3). A container
+   * named circle, i.e. a group sharing itself (#731). A container
    * like that is bound to that circle's exact stored roster + capabilities
    * server-side regardless of what this sheet submits, so leaving the
    * picker on "choose people individually" (every new pick defaulting to

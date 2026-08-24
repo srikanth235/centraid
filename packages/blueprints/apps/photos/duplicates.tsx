@@ -6,7 +6,7 @@ import {
   triageCurrent,
 } from "../_shared/triage-session.ts";
 import type { TriageSession } from "../_shared/triage-session.ts";
-// The duplicates surfaces' render orchestrator (issue #352 phase 3) — same
+// The duplicates surfaces' render orchestrator (#352) — same
 // shape as toolbar.jsx: owns its own private state (the loaded clusters, which
 // asset ids are checked, where the review has got to) and renders into the
 // SAME `gridRoot` the library/trash views use, since selecting the Duplicates
@@ -28,7 +28,7 @@ import type { DuplicateCluster } from "./types.ts";
 
 type Root = { render: (node: ReactNode) => void };
 
-// Duplicates stay OWN-SCOPE (issue #599): near-duplicate clusters are computed
+// Duplicates stay OWN-SCOPE (#599): near-duplicate clusters are computed
 // by a query that walks one scope's assets, and "which copy do I keep?" is only
 // a meaningful question inside the space the member controls. The shelf's one
 // write therefore lands in the member's own scope, which `ownScope` resolves.

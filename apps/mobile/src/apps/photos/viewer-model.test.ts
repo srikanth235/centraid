@@ -67,10 +67,9 @@ describe("the phone's bottom row", () => {
   });
 
   test("the labels are the phone's short forms — the accessible name of every target", () => {
-    // The row no longer DRAWS these (the chip/capsule arrangement has nowhere
-    // to put a word without turning a 44 target into a 70 one), but every
-    // target still takes its `accessibilityLabel` from this same field, so a
-    // screen reader hears exactly what it always heard.
+    // The row does not DRAW these (the chip/capsule arrangement has nowhere to
+    // put a word without turning a 44 target into a 70 one), but every target
+    // takes its `accessibilityLabel` from this same field.
     expect(VIEWER_BOTTOM_ACTIONS.map((action) => action.label)).toStrictEqual([
       "Copy to another place",
       "Favorite",
@@ -433,9 +432,8 @@ describe("slideshow is a different mode", () => {
     expect(SLIDESHOW.info).toBe(false);
   });
 
-  // THE MODEL MUST NOT DESCRIBE CONTROLS THAT DO NOT RENDER. This used to
-  // claim a transport and a pause the phone has never drawn — and the one
-  // control it did draw wore a pause glyph while exiting the slideshow.
+  // THE MODEL MUST NOT DESCRIBE CONTROLS THAT DO NOT RENDER: the phone draws
+  // no transport and no pause in slideshow.
   test("it claims no transport and no pause, because it draws neither", () => {
     expect(SLIDESHOW.transports).toBe(0);
     expect(SLIDESHOW.pause).toBe(false);
@@ -480,8 +478,7 @@ describe("the viewer's floating stamp", () => {
       capturedAt: "2026-07-30T17:42:00Z",
       placeName: "Lyme Regis",
     });
-    // The date is a date and nothing else — the clock has moved off it, which
-    // is the whole difference between this and the old one-line capture line.
+    // The date is a date and nothing else — the clock lives on the second line.
     expect(stamp.date).toContain("2026");
     expect(stamp.date).not.toContain(":");
     expect(stamp.date).not.toContain("Lyme Regis");

@@ -1,5 +1,5 @@
 /*
- * Devices → people (issue #726).
+ * Devices → people (#726).
  *
  * Every enrollment carries an `ownerId` — it is a schema invariant, not an
  * optional column — so this grouping is total by construction and there is no

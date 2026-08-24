@@ -946,7 +946,7 @@ export async function openReplicaShellSession(
         ? { indexedDbFactory: options.indexedDbFactory }
         : {}),
       ...(options.idFactory ? { idFactory: options.idFactory } : {}),
-      // Every feed call names THIS session's scope explicitly (issue #599). The
+      // Every feed call names THIS session's scope explicitly (#599). The
       // ambient overloads would bind all N mounted sessions to whichever vault is
       // focused, so the non-focused scopes would silently stop seeing changes.
       changeFeed: {
@@ -1123,7 +1123,7 @@ export async function getReplicaShellSessionFor(
   return entryFor(await gatewayAuthForIdentity(identity)).promise;
 }
 
-/** Hold one scope open for as long as a mount needs it (issue #599). */
+/** Hold one scope open for as long as a mount needs it (#599). */
 export async function acquireReplicaShellSession(
   identity: ReplicaIdentity
 ): Promise<ReplicaScopeLease> {
@@ -1164,7 +1164,7 @@ export async function purgeCurrentReplicaDevice(): Promise<void> {
   forgetAllAddressedVaults();
   addressedFallback = undefined;
   // Revoking THIS device revokes every scope it holds, so the sweep fans across
-  // all mounted identities — not just the focused one (issue #599).
+  // all mounted identities — not just the focused one (#599).
   const identities = new Map<string, ReplicaIdentity>(
     [...sessions.values()].map((entry) => [entry.key, entry.identity])
   );
@@ -1207,7 +1207,7 @@ export async function closeReplicaShellSession(): Promise<void> {
 }
 
 /**
- * Only genuinely TERMINAL events tear replicas down (issue #599).
+ * Only genuinely TERMINAL events tear replicas down (#599).
  *
  * The focused-scope pointer moving is NOT one of them any more. It used to
  * purge every session and every remembered store outside the newly focused
@@ -1335,7 +1335,7 @@ function purgeBrowserReplicaCaches(): void {
 /**
  * `auth()`, with the addressed vault filled in when the client left it unset.
  *
- * An undefined `vaultId` means "let the gateway pick" (issue #289) — fine over
+ * An undefined `vaultId` means "let the gateway pick" (#289) — fine over
  * HTTP, where the composed handler resolves one per request, but the replica
  * keys its local store by `(gatewayId, vaultId)` and needs a concrete id up
  * front. We ask the gateway instead of guessing: `_vault/status` answers for
@@ -1498,7 +1498,7 @@ function shapeId(shape: ReplicaShape): string {
  * "unless the caller set one" (gateway-client-core `withVaultHeader`). That is
  * right for ordinary shell HTTP, and catastrophic here: a session is keyed by
  * `(gatewayId, vaultId)` and owns an OPFS store for exactly that pair, so once
- * more than one scope is mounted (issue #599) an unstamped bootstrap/changes/
+ * more than one scope is mounted (#599) an unstamped bootstrap/changes/
  * intent request would be answered from whichever vault happens to be FOCUSED
  * and the rows would land in another vault's store. Every session therefore
  * stamps its own scope, and `withVaultHeader` then leaves the request alone.

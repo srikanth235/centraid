@@ -1,5 +1,5 @@
 /**
- * IPC channel names + pure broadcast payloads (issue #545 C2).
+ * IPC channel names + pure broadcast payloads.
  *
  * Electron-free: both `ipc.ts` (main) and `preload.ts` import the same
  * `Channel` map so the bridge stays lockstep. Broadcast payload builders
@@ -117,7 +117,7 @@ export function vaultChangedPayload(next: {
 }
 
 /**
- * Will starting the local gateway pop an OS credential prompt? (issue #603)
+ * Will starting the local gateway pop an OS credential prompt? (#603)
  *
  * The gateway's first start writes this device's wrapping key + loopback
  * token through `safeStorage` (`gateway-secrets.ts` `writeSecrets` is the
@@ -152,7 +152,7 @@ export function keychainPromptExpected(host: {
  * Host-capability snapshot the preload exposes. Pure so the capability
  * flags stay unit-testable.
  *
- * `compute.transcript` is a permanent `false` (issue #724 W6): the desktop
+ * `compute.transcript` is a permanent `false` (#724): the desktop
  * carries no on-device file-ASR adapter and exposes no transcription IPC
  * channel — transcription runs on the gateway's deterministic `transcript`
  * automation, never on a member's desktop. The key ITSELF stays in the

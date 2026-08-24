@@ -5,10 +5,8 @@
  *   - the standalone daemon's `composedHandler`
  *   - `startRuntimeHttpServer` for the desktop's embedded local runtime
  *
- * The store itself lives in `history.ts`. This module is split
- * out purely for file-size reasons — keeping the store, its schema, and its
- * SQL prepared statements in one file (where the per-user scoping rules
- * are easier to audit at a glance) is the more important constraint.
+ * The store itself lives in `history.ts`, together with its schema and SQL —
+ * one file, where the per-user scoping rules can be audited at a glance.
  */
 
 import type { IncomingMessage, ServerResponse } from "node:http";
@@ -21,7 +19,7 @@ import type {
 import { sendJsonNegotiated } from "./compression.js";
 
 /**
- * `?turns=<n>&beforeSeq=<seq>` → a {@link TranscriptWindow} (issue #659 G5).
+ * `?turns=<n>&beforeSeq=<seq>` → a {@link TranscriptWindow} (#659).
  * Absent parameters mean "the whole transcript", so an existing caller's
  * request is unchanged. A malformed value is REJECTED rather than ignored: a
  * silently dropped `beforeSeq` would serve the newest page to a client paging
@@ -86,7 +84,7 @@ function sendError(res: ServerResponse, status: number, message: string): void {
  * process (route handlers don't fire in harness-worker contexts), avoiding
  * stray DB handles in subprocesses that never touch chat history.
  *
- * Chat is app-scoped (issue #98): every route carries the owning `appId`,
+ * Chat is app-scoped (#98): every route carries the owning `appId`,
  * which the store uses to resolve that app's `runtime.sqlite`. Per-user
  * scoping is still enforced inside the store via its `userIdProvider`.
  *
@@ -101,7 +99,7 @@ function sendError(res: ServerResponse, status: number, message: string): void {
  *                                                              set 👍/👎  body: {feedback: 'up'|'down'|null}
  *
  * The transcript is not appended over HTTP — a chat turn is recorded as a
- * `runs` row by the `/centraid/<id>/_turn` route's runner (issue #90 fold).
+ * `runs` row by the `/centraid/<id>/_turn` route's runner (#90 fold).
  */
 export function makeConversationRouteHandler(
   getStore: () => ConversationHistoryStore
@@ -118,7 +116,7 @@ export function makeConversationRouteHandler(
     const store = getStore();
 
     try {
-      // Attachment blob CAS (issue #190):
+      // Attachment blob CAS (#190):
       //   POST /apps/<appId>/blobs            upload bytes → { hash, sizeBytes, url }
       //   GET  /apps/<appId>/blobs/<hash>     download bytes
       const blobMatch = sub.match(
@@ -165,7 +163,7 @@ export function makeConversationRouteHandler(
         return true;
       }
 
-      // Per-turn message feedback (issue #420):
+      // Per-turn message feedback (#420):
       //   PATCH /apps/<appId>/sessions/<id>/turns/<turnId>/feedback  body {feedback}
       const fb = sub.match(
         /^\/apps\/(?<appId>[^/]+)\/sessions\/(?<sessionId>[^/]+)\/turns\/(?<turnId>[^/]+)\/feedback\/?$/u
@@ -198,7 +196,7 @@ export function makeConversationRouteHandler(
         return true;
       }
 
-      // Lightweight turn-settle poll (issue #420, Wave 6): the client's
+      // Lightweight turn-settle poll (#420): the client's
       // reconnect catch-up path polls this after a mid-stream drop to learn
       // whether the turn finished server-side (its `turnCount` climbed) before
       // reloading the full transcript. Cheap — one conversations-row read, no
@@ -226,7 +224,7 @@ export function makeConversationRouteHandler(
         return true;
       }
 
-      // Conversation FTS search (issue #420) — matched BEFORE the generic
+      // Conversation FTS search (#420) — matched BEFORE the generic
       // sessions/<id> route so "search" isn't read as a session id:
       //   GET /apps/<appId>/sessions/search?q=<query>&limit=<n>  → { results }
       const searchMatch = sub.match(
@@ -279,9 +277,9 @@ export function makeConversationRouteHandler(
       }
 
       if (method === "GET") {
-        // Archive-aware read (issue #438 wave 3): serves live rows and merges
+        // Archive-aware read (#438): serves live rows and merges
         // any custody-gated-pruned history back from the CAS, read-only.
-        // Transcript paging (issue #659 G5). No parameters ⇒ the whole thread,
+        // Transcript paging (#659). No parameters ⇒ the whole thread,
         // exactly as before. `turns` windows to the NEWEST N — the end a reader
         // opens to — and `beforeSeq` walks strictly backwards from a previous
         // response's `oldestSeq`. A paged response carries ONLY that page's
@@ -297,7 +295,7 @@ export function makeConversationRouteHandler(
           return true;
         }
         // The one genuinely large response on this router — a whole transcript,
-        // JSON, highly repetitive. Negotiated compression (issue #659 G5); the
+        // JSON, highly repetitive. Negotiated compression (#659); the
         // opaque-tunnel transports never send Accept-Encoding and so still get
         // raw bytes (see compression.ts).
         await sendJsonNegotiated(req, res, 200, full);
@@ -307,7 +305,7 @@ export function makeConversationRouteHandler(
         const body = (await readJsonBody(req)) as
           | { title?: unknown; pinned?: unknown; archived?: unknown }
           | undefined;
-        // One PATCH surface for rename + pin + archive (issue #420). Any subset
+        // One PATCH surface for rename + pin + archive (#420). Any subset
         // of fields may be present; each provided field is applied in turn and
         // the last successful update's fresh summary is returned.
         let updated: ConversationSummary | undefined;

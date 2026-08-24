@@ -1,5 +1,5 @@
 // governance: allow-repo-hygiene file-size-limit — the app's orchestration is one React tree by design (#505). The v4 frame rewrite pulled the shelf model (shelves.ts), the filters (filters.ts), the copy (view-copy.ts), the member preferences (member-prefs.ts) and the frame contribution (frame.tsx) out of it; what is left is the wiring those five modules are wired BY, and splitting it further would split one closure across files.
-// Photos — query-free React tree (issue #505), as a ROUTE INSIDE THE FRAME
+// Photos — query-free React tree (#505), as a ROUTE INSIDE THE FRAME
 // (v4 handoff §3). Holds the `Root` component and the orchestration that does
 // NOT depend on the node-side `./queries/*` handler modules.
 //
@@ -9,7 +9,7 @@
 // the toolbar row, the grid and the overlay regions. There is no hamburger,
 // no in-pane search field, no zoom pair, no slideshow button and no drawer.
 //
-// MULTI-SCOPE (issue #599, v4 §H). This app mounts over N scopes at once — the
+// MULTI-SCOPE (#599, v4 §H). This app mounts over N scopes at once — the
 // member's own vault, the shared one the account was founded with, and every
 // household audience — and paints them as ONE timeline. Which scopes are IN
 // that timeline is `vaultsOn`; whether a photograph is marked as shared is
@@ -140,7 +140,7 @@ import { createVisibility } from "./visibility.ts";
 import styles from "./Chrome.module.css";
 
 // The vault tables the library projection reads — the change-subscription
-// filter AND the onChange refetch gate (issue #404).
+// filter AND the onChange refetch gate (#404).
 export const PHOTOS_READ_TABLES_LIST = [
   "media.asset",
   "core.content_item",
@@ -151,7 +151,7 @@ export const PHOTOS_READ_TABLES_LIST = [
   "core.concept",
   "core.tag",
   "blob.custody_state",
-  // The Storage screen's whole-library rollup (issue #711) — a sweep rewrites
+  // The Storage screen's whole-library rollup (#711) — a sweep rewrites
   // it, and this app should repaint when it does.
   "blob.custody_rollup",
 ];
@@ -269,7 +269,7 @@ export function Root({
     let searchResults: Asset[] | null = null;
     /** Which of §9's four states the search shelf is in (search.ts). */
     let searchStatus: SearchStatus = "resting";
-    /** Per-scope reach for the current answer (issue #726 D10/D11) — one
+    /** Per-scope reach for the current answer (#726 D10/D11) — one
      *  `{label, value}` fact per mounted scope that did not answer, named
      *  BESIDE whatever other scopes' hits are still on screen. */
     let searchReachFacts: readonly { label: string; value: string }[] = [];
@@ -509,7 +509,7 @@ export function Root({
       return target.disabled ? target.reason : undefined;
     }
     /** What the member calls their own library — the SHELL's label, which its
-     *  owner may rename, never a storage noun (issue #599). */
+     *  owner may rename, never a storage noun (#599). */
     function ownScopeLabel(): string {
       const own = ownId();
       return scopesNow().find((scope) => scope.id === own)?.label ?? "Library";
@@ -581,7 +581,7 @@ export function Root({
      *  reason albums are (a place id minted in one scope means nothing in
      *  another). */
     function sections(): ReturnType<typeof placeSections> {
-      // The places, then the no-location bucket (issue #816) — the shelf as it
+      // The places, then the no-location bucket (#816) — the shelf as it
       // is drawn, so the search groups over it and the lightbox's walk order
       // read the same list the member is looking at.
       return placeSectionsWithNoLocation(ownAssets);
@@ -767,7 +767,7 @@ export function Root({
                     // The prototype's own `primaryTitle` — help on an ENABLED
                     // control, not a refusal hidden in a tooltip. The library
                     // is named by its scope's label, which its owner may
-                    // rename, never by a storage noun (issue #599).
+                    // rename, never by a storage noun (#599).
                     title={downloadPrimaryTitle(ownScopeLabel())}
                     onClick={handleDownloadAll}
                   >
@@ -1053,7 +1053,7 @@ export function Root({
         void people.ensureLoaded();
         const roster = people.list();
         const proposalRoster = people.proposalList() ?? [];
-        // The consent gate (issue #712 C2) is the empty state's body only
+        // The consent gate (#712) is the empty state's body only
         // while there is truly nothing to browse — a roster with unconfirmed
         // proposal cards has content the gate would hide, not an invitation
         // to ask the question again.
@@ -1518,7 +1518,7 @@ export function Root({
       },
     });
 
-    // The face-detection consent gate (issue #712 C2), re-homed from a
+    // The face-detection consent gate (#712), re-homed from a
     // toolbar icon + dialog into the People shelf's own empty state — see
     // enrichment-gate.ts and components/People.tsx's `gate` prop.
     const enrichGate = createEnrichmentGate({

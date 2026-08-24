@@ -3,7 +3,7 @@
 // exactly why every action module and every component that needs to fire a
 // command imports it directly instead of threading it through props.
 //
-// MULTI-SCOPE (issue #599). Mounted over N scopes, a write has to say WHICH
+// MULTI-SCOPE (#599). Mounted over N scopes, a write has to say WHICH
 // one, and there are exactly two ways to know:
 //
 //  * A write ABOUT an existing asset goes to the scope that asset is shown

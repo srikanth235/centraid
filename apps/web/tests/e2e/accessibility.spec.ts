@@ -1,10 +1,10 @@
 // Web accessibility browser lane (#781, closing a #587 D21 gap).
 //
-// The repo's only accessibility owners before this were static scanners —
+// The repo's other accessibility owners are static scanners —
 // scripts/accessibility-contract.test.mjs greps source for pinned aria
-// attributes and scripts/lint-aria-labels.mjs walks JSX text — so no gate ever
-// asked a real browser what the accessibility tree actually contains. This
-// spec runs axe-core (WCAG 2.0/2.1 A + AA rulesets) inside the same Chromium
+// attributes and scripts/lint-aria-labels.mjs walks JSX text — so neither asks
+// a real browser what the accessibility tree actually contains. This spec runs
+// axe-core (WCAG 2.0/2.1 A + AA rulesets) inside the same Chromium
 // harness the other web e2e journeys use, against the two highest-traffic web
 // surfaces: the cold connect screen (the first thing every web user sees) and
 // the connected Home shell (the springboard every session lands on, #708).

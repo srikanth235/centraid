@@ -1,5 +1,5 @@
 /*
- * EDIT fulfillment (issue #825, ruling G-edit): where an audience's write
+ * EDIT fulfillment (#825, ruling G-edit): where an audience's write
  * goes. The grant plane does not grow a second write rail — the commons
  * machinery IS the edit strategy — so this module only answers the routing
  * question and hands the write to `commonsGrantForCommand`. Steward
@@ -7,7 +7,7 @@
  * before the grant plane existed; nothing here authorizes anything.
  *
  * The container a command addresses is decided by the DECLARED routing table
- * (commons-routing.ts, issue #750) and never by the command's name. What this
+ * (commons-routing.ts, #750) and never by the command's name. What this
  * module adds is the same resolution read against `share_grant` instead of
  * `share_circle_grant`, so a standing grant can answer "does this write land
  * inside something I shared, and may the writer make it".
@@ -40,7 +40,7 @@ import { listShareGrantsForSubject } from "./grant-store.js";
 /**
  * Commands that INTRODUCE an item into the container they address, as opposed
  * to editing the content of one already inside it. Declared, not inferred: a
- * name-shaped guess ("starts with add_") is the heuristic #750 deleted.
+ * name-shaped guess ("starts with add_") is forbidden (#750).
  */
 export const SHARE_GRANT_CO_CONTRIBUTION_COMMANDS: readonly string[] = [
   "core.add_document",

@@ -1,5 +1,5 @@
 /**
- * ESCAPE TESTS for the handler sandbox (issue #842 W7.1).
+ * ESCAPE TESTS for the handler sandbox (#842).
  *
  * Every case here runs a genuinely hostile handler in a REAL worker thread
  * driven by the REAL runner entry point and asserts the refusal. A test that
@@ -477,26 +477,13 @@ describe("automation lane: model-runtime read confinement", () => {
 
 describe("an automation worker given no lane gets the strict floor", () => {
   /*
-   * This replaces the CHARACTERIZATION block that stood here (#846 P9).
-   *
-   * That block pinned what an automation worker could still reach when
-   * `automation/worker/runner.ts` was handed no `sandboxLane`: the filesystem
-   * outside any root, subprocesses, and the environment. It was today's
-   * default and it contradicted SECURITY.md's "app handlers are
-   * consent-scoped" framing for the automation plane — consent scopes the
-   * `ctx` rails, and an unsandboxed handler does not have to use them.
-   *
-   * The reason it stood was one builtin. The ONNX recognition bundles resolved
-   * `runtime/node_modules` through `node:module`'s `createRequire`, which every
-   * lane refuses (correctly — a `createRequire` in the graph resolves through
-   * Node's own loader and skips these hooks), so no recognition automation
-   * could run under any lane and the plane ran everything under none.
-   * `packages/model-runtime/src/onnx.ts` no longer needs it, so the floor now
-   * applies to every handler and one that needs more asks for it in its
-   * manifest, where the ask is reviewable.
-   *
-   * Deleting the pin without these assertions would have erased the record.
-   * These are the refusal assertions it promised in its place.
+   * An automation worker handed NO `sandboxLane` still gets the strict floor
+   * (#846): the filesystem outside every root, subprocesses, and the
+   * environment are all refused. A handler that needs more asks for it in its
+   * manifest, where the ask is reviewable. Without these assertions an
+   * unsandboxed automation plane would contradict SECURITY.md's "app handlers
+   * are consent-scoped" framing — consent scopes the `ctx` rails, and an
+   * unsandboxed handler does not have to use them.
    */
   test("reads outside every root are refused with no lane requested", async () => {
     const file = await handler(

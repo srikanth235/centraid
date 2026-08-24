@@ -1,4 +1,4 @@
-// PHOTOS' WAY INTO THE GRANT SHEET, native seat (issue #825, wave 6).
+// PHOTOS' WAY INTO THE GRANT SHEET, native seat (#825).
 //
 // The kit draws the sheet and owns the whole write door; the HOST says who is
 // in the room and where an outcome is spoken. That is all this module is.

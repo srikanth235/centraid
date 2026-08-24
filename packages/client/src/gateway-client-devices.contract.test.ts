@@ -45,7 +45,7 @@ describe("pairing-ticket mint seam", () => {
       forPerson: { label: "Priya" },
       ttlMinutes: 60,
     });
-    // Mutually exclusive with the self-pair lane (#726 P1): no vaultId/vaultIds
+    // Mutually exclusive with the self-pair lane (#726): no vaultId/vaultIds
     // rides alongside a forPerson mint.
     expect(sent.vaultId).toBeUndefined();
     expect(sent.vaultIds).toBeUndefined();

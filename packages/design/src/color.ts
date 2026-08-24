@@ -239,15 +239,10 @@ export const AA_SOLVED_TEXT = 4.8;
 // ── Semantic states as TEXT ────────────────────────────────────────────────
 //
 // `--danger` / `--success` / `--warning` are documented as states, but what
-// they overwhelmingly ARE in this repo is `color:` on small prose: 100
-// `color: var(--danger)` rules, 23 `--success`, 8 `--warning`, essentially all
-// of them between 9px and 13.7px — under every large-text exemption. They were
-// hand-picked rather than solved, and nothing pinned them: `contrast.test.ts`
-// measured the three roles at the 3:1 NON-TEXT floor, on `--bg` only. Measured
-// against the emitted CSS, the shipped picks missed the body floor on the
-// surfaces they actually land on — shell `--danger` at 3.74:1 on dark
-// `--bg-elev`, blueprint `--danger` at 3.98:1 on the dark track — while the
-// root DESIGN.md claimed "clears AA on both ramps".
+// they overwhelmingly ARE in this repo is `color:` on small prose — hundreds
+// of rules between 9px and 13.7px, under every large-text exemption. So they
+// owe the BODY floor on every surface they land on, and they are SOLVED rather
+// than hand-picked: a hand-picked state lands under its floor silently.
 //
 // Same machinery as the palette rung, and for the same reason: a state on type
 // is usually on a weak tint of ITSELF (`color-mix(in oklab, var(--danger) 12%,

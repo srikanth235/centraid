@@ -1,6 +1,6 @@
-// `resolveIdentity` decides the replica DB namespace. These tests exist because
-// it once derived that namespace from a display name and an ephemeral tunnel
-// port, so every launch quietly abandoned the replica the last launch built.
+// `resolveIdentity` decides the replica DB namespace. It must not derive that
+// namespace from a display name or an ephemeral tunnel port: either one makes
+// every launch quietly abandon the replica the last launch built.
 //
 // Everything native is mocked outright rather than partially: the default
 // `@centraid/mobile` vitest project carries no react-native transform (see
@@ -120,8 +120,8 @@ describe("resolveIdentity picks a durable gateway namespace", () => {
 
   // THE FIRST BOOTSTRAP AFTER PAIRING lands in the fallback branch, because
   // pairing stores a real gateway id with `vaultId: ""` for the probe to fill
-  // in. The old order put `getDesktopName()` first, so this exact moment
-  // DEMOTED a durable endpoint id to the desktop's display name and wrote it
+  // in. Put `getDesktopName()` first in that order and this exact moment
+  // DEMOTES a durable endpoint id to the desktop's display name and writes it
   // back through `noteActiveIdentity`.
   test("a freshly paired vault keeps its endpoint id, not the desktop name", async () => {
     resolveGatewayBase.mockResolvedValue("http://127.0.0.1:51890");

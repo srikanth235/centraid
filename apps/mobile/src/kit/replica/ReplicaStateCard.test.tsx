@@ -1,9 +1,9 @@
-// Regression net for issue #711's two ReplicaStateCard defects.
+// Regression net for ReplicaStateCard (#711).
 //
-// Sabotage-verified: reverting the `connection === "offline"` branch back to
-// the old `connection !== "unavailable" && !error` guard makes the offline
-// test below fail (the card renders `null` for the offline case, same as the
-// shipped bug — README:333, "a grey mosaic with no explanation is a bug").
+// Sabotage-verified: replacing the `connection === "offline"` branch with a
+// `connection !== "unavailable" && !error` guard makes the offline test below
+// fail — the card renders `null` for the offline case (README:333, "a grey
+// mosaic with no explanation is a bug").
 //
 // react-native is mocked to plain DOM elements (the same approach
 // `EnrichmentConsent.test.tsx` uses) so this can run under jsdom without a

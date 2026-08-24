@@ -1,15 +1,15 @@
 /*
- * Pure settings-patch merge, extracted from settings.ts so it's unit-testable
- * without pulling in electron (settings.ts imports `electron` at module load).
+ * Pure settings-patch merge. Keep it electron-free so it stays unit-testable —
+ * settings.ts imports `electron` at module load.
  *
  * Merge rules per field:
  *   - `undefined` in the patch  → preserve the current value
  *   - a value in the patch       → set it
  *
- * Chat-model selection no longer lives here — it moved to the gateway prefs
+ * Chat-model selection does not belong here: it lives in the gateway prefs
  * store (`model.<harnessKind>.<slot>` keys via `GET/PUT /_centraid-user/prefs`,
  * see `settingsHarnessesData.ts`), so every client sharing a gateway sees the
- * same picks instead of each desktop install keeping its own.
+ * same picks rather than each desktop install keeping its own.
  */
 
 import { clampAlertSeconds } from "./gateway-monitor-core.js";
@@ -19,7 +19,7 @@ import type { PersistedSettings } from "./settings.js";
 export interface PersistedSettingsPatch {
   activeGatewayId?: string;
   /**
-   * Client-owned active vault per gateway (issue #289). Set as a whole map
+   * Client-owned active vault per gateway (#289). Set as a whole map
    * (preserve when `undefined`). The dedicated `setActiveVaultId` path
    * writes it directly; this merge just carries it through so an unrelated
    * `saveSettings` never wipes it.
@@ -32,10 +32,10 @@ export interface PersistedSettingsPatch {
   gatewayAlertsEnabled?: boolean;
   /** Changelog version last shown by "What's new" (preserve-or-set string). */
   changelogSeenVersion?: string;
-  /** Launch Centraid at OS login (issue #351). Preserve-or-set boolean. */
+  /** Launch Centraid at OS login. Preserve-or-set boolean. */
   launchAtLogin?: boolean;
   /**
-   * Offer OS service install for the detached gateway (issue #468 H5).
+   * Offer OS service install for the detached gateway (H5).
    * Preserve-or-set boolean; default off when never set.
    */
   offerGatewayService?: boolean;

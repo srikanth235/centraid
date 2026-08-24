@@ -317,7 +317,7 @@ export interface GridSortData {
  *    would invite a caller to ask for a 26px titlebar control on a touch
  *    surface.
  *
- *  * `commit` (#708, C7) is the shell's, and this one is NOT an oversight on
+ *  * `commit` (#708) is the shell's, and this one is NOT an oversight on
  *    the phone. On the shell a commit control disables itself while the gateway
  *    is down, because a shell write goes THROUGH the gateway and would simply
  *    fail. A phone write does not: it lands in the local replica and is

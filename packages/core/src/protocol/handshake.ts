@@ -1,5 +1,5 @@
 /*
- * Version handshake (issue #289 / #468 K10 / #504 / #512).
+ * Version handshake (#289 / #468 K10 / #504 / #512).
  *
  * Pure core for desktop, web, CLI, and extension. On connect the client reads
  * `GET /centraid/_gateway/info` and judges **protocol version only**.
@@ -34,7 +34,7 @@ export interface GatewayInfo {
   /** Process uptime ms — additive runtime clock. */
   uptimeMs?: number;
   /**
-   * Did the gateway resolve a credential for THIS request (issue #603)?
+   * Did the gateway resolve a credential for THIS request (#603)?
    *
    * `/centraid/_gateway/info` is public so a client can read the version
    * handshake before it holds anything, but the auth-gated fields below

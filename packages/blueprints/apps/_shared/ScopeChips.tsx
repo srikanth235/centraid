@@ -1,4 +1,4 @@
-// The scope selector for multi-scope apps (issue #599): `All · <own> ·
+// The scope selector for multi-scope apps (#599): `All · <own> ·
 // <audiences…>` as a row of kit chips. Presentational and stateless — the
 // selection lives in the app, which also decides what "All" means for its own
 // projection (see write-target.ts for what it means for writes).

@@ -241,7 +241,7 @@ describe("backup-admin", () => {
 
   // ── Issue #439 R2/R3 — lazy-by-default, --full, metered gate, restore-to-side ──
 
-  /** A local provider that declares itself `metered-egress` (issue #439 R2),
+  /** A local provider that declares itself `metered-egress` (#439),
    *  standing in for a hosted home without a real remote server. The SAME
    *  instance must back both the `run` and `restore` calls — LocalBackupProvider
    *  caches its registry per-instance and never re-reads another instance's

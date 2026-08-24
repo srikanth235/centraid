@@ -412,9 +412,9 @@ const makeStyles = (colors: ThemeColors) =>
       paddingTop: 12,
       textTransform: "uppercase",
     },
-    // Elevated ground + a hairline all round (:5976-5978) — the panel used to
-    // sit on the page's own `colors.bg` with no border at all, which made it
-    // read as part of the page rather than a surface floating over it.
+    // Elevated ground + a hairline all round (:5976-5978). On the page's own
+    // `colors.bg` with no border the panel reads as part of the page rather
+    // than a surface floating over it.
     sheet: {
       backgroundColor: colors.bgElev,
       borderColor: colors.line,

@@ -1,4 +1,4 @@
-// Tasks on the phone (Tasks spec §1–§7; issue #834).
+// Tasks on the phone (Tasks spec §1–§7; #834).
 //
 // The claimed band's four destinations — Today, Upcoming, Inbox, Projects — all
 // live on this ONE screen, because the navigator gives Tasks one route; the

@@ -1,10 +1,10 @@
 /**
  * The People shelf's roster (v4 handoff §5): every person the member has
  * CONFIRMED on a face, with how many photographs carry them and which ones —
- * PLUS, since issue #711's review, the unconfirmed proposals sitting beside
- * them (v4 handoff proto :3760 `PPEOPLE`: named cards next to "Unnamed"
- * cards, each with its own count — "People as a browsable set. Unnamed
- * people are shown as unnamed, not hidden.").
+ * PLUS the unconfirmed proposals sitting beside them (#711; v4 handoff
+ * proto :3760 `PPEOPLE`: named cards next to "Unnamed" cards, each with its
+ * own count — "People as a browsable set. Unnamed people are shown as
+ * unnamed, not hidden.").
  *
  * The two stay in SEPARATE arrays (`people` / `proposals`), never merged
  * into one list, because they answer different questions with different
@@ -25,7 +25,7 @@
  * however many photographs). A region with no candidate at all is its own
  * proposal of one — which is *every* region today: no shipped producer of
  * face regions sets `party_id` at all. (There is no `face-proposer`
- * automation writing them, issue #712 — face detection is the Photos app's
+ * automation writing them, #712 — face detection is the Photos app's
  * own, and identity-blind for the same reason:
  * naming a person is the owner's assertion, made in the app.) That is not
  * this query approximating anything: there is no face-similarity signal in
@@ -36,7 +36,7 @@
  *
  * `unmatchedTotal` is the same count `queries/face-queue.ts` derives for the
  * Face Review surface (same entity, same `review_state = 'proposed'` filter,
- * issue #712 — an answered region, rejected or deliberately left unnamed, is
+ * #712 — an answered region, rejected or deliberately left unnamed, is
  * not pending on either surface) — computed once here so the People shelf's
  * pending note no longer needs its own separate read of a different query to
  * say a true number.
@@ -59,7 +59,7 @@ interface RawRegion {
   bbox_json?: unknown;
   party_id?: string | null;
   confirmed_by_party_id?: string | null;
-  /** `proposed` | `confirmed` | `rejected` | `dismissed` (issue #712). */
+  /** `proposed` | `confirmed` | `rejected` | `dismissed` (#712). */
   review_state?: string | null;
 }
 

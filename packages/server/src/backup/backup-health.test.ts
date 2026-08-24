@@ -1,4 +1,4 @@
-// evaluateBackupHealth — the WAL foreign-checkpoint degraded signal (issue #411
+// evaluateBackupHealth — the WAL foreign-checkpoint degraded signal (#411
 // action 1). A foreign checkpoint is a churn/perf event the shipper detected and
 // self-healed (generation break), so it surfaces as DEGRADED, not error, and
 // ages out on its last occurrence.

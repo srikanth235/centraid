@@ -1,5 +1,5 @@
 /*
- * GC-pins-snapshots reachability (issue #436 §6).
+ * GC-pins-snapshots reachability (#436).
  *
  * NORMATIVE INVARIANT. A client that owns CAS garbage collection MUST treat
  * every blob referenced by any RETAINED (unpruned, still inside the retention

@@ -1,4 +1,4 @@
-// Browser-only PDF text extraction (issue #414). PDF.js is a normal client
+// Browser-only PDF text extraction (#414). PDF.js is a normal client
 // dependency: Vite emits its display chunk and worker asset with the inline
 // Docs app instead of relying on same-origin files in the shared kit.
 

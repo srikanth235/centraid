@@ -1,6 +1,6 @@
 import crypto from "node:crypto";
 /*
- * (gateway, vault) addressing over HTTP (issue #289).
+ * (gateway, vault) addressing over HTTP (#289).
  *
  * Proves the landlord model end-to-end against a real `serve()` daemon:
  *

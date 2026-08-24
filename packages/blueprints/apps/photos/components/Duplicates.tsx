@@ -1,7 +1,7 @@
 import { armConfirm, fmtBytes } from "@centraid/design/elements";
 
 import { Skeleton } from "../../_shared/LoadingSkeleton.tsx";
-// The duplicates shelf (issue #352 / #299's deferred duplicates shelf): one
+// The duplicates shelf (#352 / #299's deferred duplicates shelf): one
 // row per cluster, its assets laid out side by side so the owner can eyeball
 // which copy to keep, checkbox-select the redundant ones, and trash them in
 // one batch. Pure view — `duplicates.tsx` (the app-root orchestrator) owns

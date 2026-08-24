@@ -3,8 +3,8 @@
 // This lives in the kit, not in an app, because the band belongs to the FRAME.
 // What the two bands share is the PLATE: a 12-radius rectangle with a 1pt
 // `lineStrong` edge on an opaque `bgElev` ground, held 12pt off the side and
-// bottom edges of the stage and 8pt clear of the content above it. When this
-// lived under `apps/photos/`, the claimed band floated and Home's band was a
+// bottom edges of the stage and 8pt clear of the content above it. An
+// app-local copy is how the claimed band ends up floating while Home's is a
 // flush edge-to-edge bar with a top rule — two bands, visibly different, which
 // is exactly what invariant 1 forbids. One definition, imported by both, makes
 // that drift unrepresentable.
@@ -67,7 +67,7 @@ export const BAND_ACTIVE_RULE_INSET = 14;
  *
  * The band's own floor, derived from its parts rather than typed as a number:
  * top gap + tallest tab + both edges + the bottom inset. It is a floor, not a
- * reserve — no scroll surface subtracts it any more. A band is a FLEX SIBLING
+ * reserve — no scroll surface subtracts it. A band is a FLEX SIBLING
  * of the content slot (handoff `appBandStyle` :4955 — `flex:none` below the
  * scroll region), so the viewport is short by the band's real measured height
  * and nothing can pass under it. A reserve padded onto every scroll surface

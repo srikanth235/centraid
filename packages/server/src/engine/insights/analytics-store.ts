@@ -1,6 +1,6 @@
 /*
  * AnalyticsStore — a read-only lens over the per-vault `run_summary` VIEW
- * (issue #98, decision 4; moved into the vault's own `journal.db` by #280).
+ * (#98, decision 4; moved into the vault's own `journal.db` by #280).
  *
  * `run_summary` is a VIEW, not a denormalized table maintained by a
  * best-effort write-through at run completion — that is justified only while
@@ -17,14 +17,14 @@
  * the handle can change across calls (a vault switch); `ensureReady`
  * re-prepares when it does.
  *
- * ROW-GRAIN, LIVE-ONLY (issue #438). The Executions feed is a list of
+ * ROW-GRAIN, LIVE-ONLY (#438). The Executions feed is a list of
  * individual runs, so it reads live `run_summary` rows exactly as before —
  * `conversation_digest` is an AGGREGATE rollup and cannot reconstitute
  * per-run rows, so no digest-derived rows are fabricated here. A run whose
  * raw turn was archived-and-pruned (≥90d idle) drops out of `listSummaries`
  * and `getSummary` returns `undefined` for it — acceptable in v1: the aggregate
  * dashboards (InsightsStore) stay whole via the digest union, and lazy
- * rehydration (wave 3) serves an archived run's transcript on demand.
+ * rehydration serves an archived run's transcript on demand.
  */
 
 import type { DatabaseSync, StatementSync } from "node:sqlite";
@@ -39,7 +39,7 @@ export interface ListSummariesOptions {
   /**
    * Drop rows whose `automation_ref` is one of these handles — applied in
    * SQL, before `LIMIT`, so a flood of runs on an excluded handle can never
-   * crowd everything else out of the window (issue #731 M2: a 500-photo
+   * crowd everything else out of the window (#731 M2: a 500-photo
    * import filled the whole `turns` window with recognition runs and left
    * the member's own "Recent activity" empty). Ignored when `automationRef`
    * is also set (a single-ref scope has nothing left to exclude).
@@ -185,7 +185,6 @@ export class AnalyticsStore {
     return stmt;
   }
 
-  /** One run's summary by id, or `undefined`. */
   getSummary(runId: string): RunSummary | undefined {
     const { getOne } = this.ensureReady();
     const raw = getOne.get(runId) as RawSummary | undefined;

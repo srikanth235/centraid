@@ -198,7 +198,7 @@ export function buildGrantRow(row: OutboxGrant): ApprovalsGrantRowDTO {
 }
 
 /**
- * Humanize a review-feed verb for the activity row label (issue #552).
+ * Humanize a review-feed verb for the activity row label (#552).
  * Locker reveal/fill copy is special-cased; everything else strips the
  * `act ` prefix and sentence-cases separators so unmapped verbs still read
  * as English (`act sync.remove_connection` → `Sync remove connection`).
@@ -251,7 +251,7 @@ export function formatActivityDetail(
   return objectType;
 }
 
-/** Map one wire `ReviewEntry` to the screen's activity row DTO (issue #552). */
+/** Map one wire `ReviewEntry` to the screen's activity row DTO (#552). */
 export function buildActivityRow(row: ReviewEntry): ApprovalsActivityRowDTO {
   const label = humanizeActivityLabel(
     row.action,
@@ -292,7 +292,7 @@ export function buildActivityRow(row: ReviewEntry): ApprovalsActivityRowDTO {
 
 /**
  * Collapse adjacent consecutive activity rows that share verb + object +
- * decision into one row with a `×N` marker (issue #552). Non-adjacent
+ * decision into one row with a `×N` marker (#552). Non-adjacent
  * repeats do not collapse. Pure adjacency — no time window.
  */
 export function collapseAdjacentActivity(
@@ -318,7 +318,7 @@ export function collapseAdjacentActivity(
 }
 
 /*
- * The egress-consent ledger's rows (issue #807, Wave 3).
+ * The egress-consent ledger's rows (#807).
  *
  * The Privacy page reads the vault's answers back; it does not re-ask them.
  * So this maps a stored answer to words and nothing else: no "revoke" verb, no

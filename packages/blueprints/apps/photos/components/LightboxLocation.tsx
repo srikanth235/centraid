@@ -2,12 +2,11 @@
 // row, the thumbnail map under it, and the one action in the app that spells a
 // coordinate out.
 //
-// Extracted from `LightboxInfo.tsx` (issue #816) when that file crossed the
-// 625-line hygiene ceiling. It is a cohesive block and not an arbitrary cut:
-// every line here answers one question the panel asks once — "whereabouts is
-// this" — and each of the three parts depends on the same two derived values
-// (`assetCoords`, and the phrase the ladder resolves from them). Nothing else on
-// the panel reads either, which is why the helpers came with it.
+// A cohesive block of `LightboxInfo.tsx` and not an arbitrary cut (issue
+// #816): every line here answers one question the panel asks once —
+// "whereabouts is this" — and each of the three parts depends on the same two
+// derived values (`assetCoords`, and the phrase the ladder resolves from them).
+// Nothing else on the panel reads either, which is why the helpers live here.
 //
 // A PHRASE, NOT A NUMBER. The row prints whatever `place-phrase.ts` resolves:
 // the member's own name for the place, else a gazetteer name, else a phrase

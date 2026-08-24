@@ -234,7 +234,7 @@ const ICON_DATA = {
     { d: "M2 7h18v10H2z" },
     { d: "M22 11v2M11 10l-2 3h3l-1 3 4-5h-3l1-1z" },
   ],
-  // Profile / space switcher glyphs (issue: profiles feature).
+  // Profile / space switcher glyphs.
   User: [
     { d: "M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8z" },
     { d: "M4.5 20.5a7.5 7.5 0 0 1 15 0" },
@@ -479,7 +479,7 @@ const ICON_DATA = {
     { d: "m9 9 6 6M15 9l-6 6" },
   ],
 
-  // Photos v4 handoff (issue #711/#707, "New icon keys" — CHANGELOG v4 -
+  // Photos v4 handoff (#711/#707, "New icon keys" — CHANGELOG v4 -
   // Photos.md §B2): the shelves, the selection set and the viewer bar. Same
   // contract as every other mark — single-tone stroke on a 24 grid, fill:
   // none, round caps and joins; the caller sets stroke-width (1.6, 1.75 below

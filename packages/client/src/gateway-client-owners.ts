@@ -1,5 +1,5 @@
 /*
- * Renderer-side client for the gateway's owner surface (issue #726 —
+ * Renderer-side client for the gateway's owner surface (#726 —
  * `packages/server/src/routes/owners-routes.ts`).
  * Backs the Devices card's own-person header and the profile rename flow.
  *
@@ -15,7 +15,7 @@
  * Creating or removing a PERSON is the host-custody (L0) lane on this
  * gateway — a device caller always gets refused, so those verbs have no
  * client here. *Add someone* mints a person their own vault in a later
- * phase (#726 P1); until then the invite lane is self-pair only
+ * phase (#726); until then the invite lane is self-pair only
  * (`gateway-client-devices.ts`'s `createGatewayDeviceTicket`).
  *
  * A gateway with no device plane (the desktop embed) has no owner surface —

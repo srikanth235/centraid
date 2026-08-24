@@ -1,4 +1,4 @@
-// The capture-time OCR consent latch (issue #712 C3). Mirrors
+// The capture-time OCR consent latch (#712). Mirrors
 // `kit/transfer/transfer-consent.test.ts`'s shape: the gate is tested as a
 // predicate, because if `scanOcrExtractionAllowed` can ever say yes to a
 // device that never answered, no amount of screen review makes the product

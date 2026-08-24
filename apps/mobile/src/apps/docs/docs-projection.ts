@@ -1,4 +1,4 @@
-// The drive, projected from the phone's replica rows (issue #821).
+// The drive, projected from the phone's replica rows (#821).
 //
 // The web app's `drive` query performs these joins gateway-side
 // (packages/blueprints/apps/docs/queries/drive.ts, _shared.ts); the phone

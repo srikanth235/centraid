@@ -1,4 +1,4 @@
-// The `_centraid-conversations/apps/<id>/…` route builders (issue #420) — the
+// The `_centraid-conversations/apps/<id>/…` route builders (#420) — the
 // persisted-conversation surface the shell's conversation client reads and
 // writes. These stay here rather than in `@centraid/core/protocol` because they are
 // a flat top-level name with no plane prefix, which the protocol table forbids
@@ -18,7 +18,7 @@ export function conversationPath(appId: string, sessionId: string): string {
   return `${conversationsPath(appId)}/${enc(sessionId)}`;
 }
 
-/** FTS search over this app's conversations (issue #420). `q` is the raw query. */
+/** FTS search over this app's conversations (#420). `q` is the raw query. */
 export function conversationSearchPath(
   appId: string,
   query: string,
@@ -31,7 +31,7 @@ export function conversationSearchPath(
 }
 
 /**
- * Lightweight turn-settle poll for a conversation (issue #420). The reconnect
+ * Lightweight turn-settle poll for a conversation (#420). The reconnect
  * catch-up path GETs this after a mid-stream drop to learn whether the turn
  * finished server-side (`turnCount` climbed) before reloading the transcript.
  */

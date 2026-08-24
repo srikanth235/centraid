@@ -1,6 +1,6 @@
 /*
  * `GET/DELETE /centraid/_gateway/devices` — the paired-device roster + its
- * revoke gesture over HTTP (issue #376), the wire twin of `cli/device-admin.ts`'s
+ * revoke gesture over HTTP (#376), the wire twin of `cli/device-admin.ts`'s
  * `devices list` / `devices revoke`. Backs the desktop's Gateway → Devices card.
  *
  * `POST /centraid/_gateway/devices/ticket` — the inverse of revoke: MINT a
@@ -81,14 +81,14 @@ export interface DevicesRouteDeps {
   /** Resolves a vault id to its owner-facing name; undefined when unknown. */
   vaultName: (vaultId: string) => string | undefined;
   /**
-   * *Add someone* (#726 P1): create + mount a fresh vault for a newly minted
+   * *Add someone* (#726): create + mount a fresh vault for a newly minted
    * person (the registry mints its identity keypair at creation). Wired to
    * `VaultRegistry.create`. Undefined ⇒ `forPerson` requests are refused
    * (never silently downgraded to a self-pair).
    */
   mintVaultForPerson?: (name: string) => { vaultId: string };
   /**
-   * Cleanup twin of `mintVaultForPerson` (issue #750): remove a vault the
+   * Cleanup twin of `mintVaultForPerson` (#750): remove a vault the
    * *Add someone* workflow minted before its gateway.db transaction failed —
    * the dir, the keys inside it, and the registry mount. Wired to
    * `VaultRegistry.delete`. Undefined ⇒ a failed mint leaves an orphan dir
@@ -166,9 +166,9 @@ export function makeDevicesRouteHandler(deps: DevicesRouteDeps): RouteHandler {
     }
 
     // POST /centraid/_gateway/devices/ticket — mint a one-time pairing ticket,
-    // including the *Add someone* `forPerson` mint lane (#726 P1). Matched
-    // BEFORE the DELETE `/:id` branch so `ticket` isn't read as an id. Split
-    // into `device-ticket-mint.ts` to keep this file under the size cap.
+    // including the *Add someone* `forPerson` mint lane (#726). Matched
+    // BEFORE the DELETE `/:id` branch so `ticket` isn't read as an id.
+    // Handled in `device-ticket-mint.ts`.
     if (url.pathname === DEVICES_TICKET_PATH) {
       return handleTicketMint(
         req,

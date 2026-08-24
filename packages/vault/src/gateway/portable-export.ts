@@ -1,4 +1,4 @@
-// Portable vault bundle (issue #630): the canonical JSON-LD restore artifact,
+// Portable vault bundle (#630): the canonical JSON-LD restore artifact,
 // human-readable adapters, every external content byte, and one hash manifest.
 // Schema/export audit #679 L2: the sealed enforcement/leak registries are
 // policy metadata only; SEALED_COLUMNS remains exported through the canonical
@@ -15,11 +15,17 @@
 // Schema/export audit #801: the schema fingerprint moved on import remaps
 // (`@centraid/time-engine` → `@centraid/core/time`) with no table or adapter
 // change.
-// Schema/export audit #861: the schema fingerprint moved on comment-only
-// edits across schema/*.ts (the current-state comment sweep: narration
-// converted to present tense, banners normalized). No table, column, index,
-// or CHECK changed anywhere in the schema directory, so export completeness
-// is unchanged; the canonical table walk carries exactly what it carried.
+// Schema/export audit #861 (both phases): the schema fingerprint moved on
+// comment-only edits across schema/*.ts — phase 1 converted narration to
+// present tense and normalized banners; phase 2 (comments face forward)
+// rewrote surviving narration to forward-facing obligations (five files by
+// hand: time-organize.ts, blob.ts, journal.ts, atlas-browse-refs.ts,
+// domains-people.ts) and normalized citations to bare #N across the
+// directory's comments. In both phases no table, column, index, trigger, or
+// CHECK changed anywhere in the schema directory — phase 2 verified by a
+// TypeScript-parser comment-stripped comparison, which also proves no DDL
+// template literal changed — so export completeness is unchanged; the
+// canonical table walk carries exactly what it carried.
 // Schema/export audit #721: the schema fingerprint moved on comment-only edits
 // to schema/enrich.ts (the model-versioning convention is documented in its
 // header; no table, column, or CHECK changed). `enrich_embedding` and its

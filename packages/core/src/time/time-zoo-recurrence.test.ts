@@ -1,5 +1,5 @@
 /*
- * The RECURRENCE time zoo (issue #839, gap G12).
+ * The RECURRENCE time zoo (#839, gap G12).
  *
  * `recurrence.test.ts` and `recurrence-properties.test.ts` state the civil-time
  * laws over ordinary calendars. This file states the same laws over the three

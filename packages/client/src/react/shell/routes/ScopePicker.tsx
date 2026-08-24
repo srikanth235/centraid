@@ -4,7 +4,7 @@ import type { OwnerScope } from "../ownerScope.js";
 
 import styles from "./ScopePicker.module.css";
 
-// "Which vault?" — the explicit target every creation flow names (issue #599,
+// "Which vault?" — the explicit target every creation flow names (#599,
 // Decision 14).
 //
 // The switcher this replaces made the answer AMBIENT: whatever vault the

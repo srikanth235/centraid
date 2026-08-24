@@ -49,7 +49,7 @@ describe("templatesData", () => {
   describe("templatesData", () => {
     it("pins the exact six-template v0 automation gallery", () => {
       // Was eight. `screenshot-extractor` and `photo-captioner` were deleted
-      // in issue #712 along with the other two photos-domain enrichers —
+      // in #712 along with the other two photos-domain enrichers —
       // that work is becoming the Photos app's own rather than a gallery
       // automation taking a model turn over a member's photographs.
       expect(V0_AUTOMATION_TEMPLATE_IDS).toStrictEqual([

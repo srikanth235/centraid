@@ -1,10 +1,9 @@
 // The rule §F argues for, held by a test: EVERY non-lightbox Photos surface
 // renders the band, and the band always carries the frame's Home capsule.
 //
-// Before this shell existed the band was rendered by exactly one screen, so
-// the Library index, one album, Backup, Duplicates and Trash were dead ends —
-// the OS back gesture was the only way out. The two assertions here are the
-// ones that would have caught that:
+// A band rendered by one screen alone leaves the Library index, one album,
+// Backup, Duplicates and Trash as dead ends, with the OS back gesture the only
+// way out. The two assertions here are the ones that catch that:
 //
 //   (a) a screen wrapped in the shell renders the band, with a Home capsule
 //       whose one tap goes Home (never `goBack()`, which is a no-op when
@@ -303,7 +302,7 @@ describe("a live selection replaces the band", () => {
     );
     // The five labels are the engine's own (`buildSelectionActions`) — read
     // from the same table `SelectionBottomBar` renders, so a label renamed
-    // there (e.g. the share target's, issue #726) cannot strand this test.
+    // there (e.g. the share target's, #726) cannot strand this test.
     const labels = buildSelectionActions(props).map((action) => action.label);
     expect(labels).toHaveLength(5);
     for (const label of labels) expect(control(label)).toBeTruthy();

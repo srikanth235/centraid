@@ -1,5 +1,5 @@
 import { statSync } from "node:fs";
-// Share-by-placement (issue #599 decision 11). Two real on-disk vaults under
+// Share-by-placement (#599 decision 11). Two real on-disk vaults under
 // one root — never mocked fs — because the load-bearing claims are filesystem
 // facts: a share HARDLINKS (same inode, link count 2, zero bytes copied), each
 // vault's GC unlinks only its own directory entry, and the inode is freed only

@@ -7,8 +7,8 @@
  * process with the same argv/cwd — the relaunched Electron loads the new
  * bundles.
  *
- * Issue #468 I4–I6 / #501: every announce path gates through {@link admitUpdate}
- * (pure staged-rollout math). Unpackaged dev still uses dist mtime detection;
+ * Every announce path gates through {@link admitUpdate} (pure staged-rollout
+ * math, #501). Unpackaged dev uses dist mtime detection;
  * packaged builds call {@link startPackagedUpdateChecker} which downloads after
  * admit and only then marks ready-to-install (quitAndInstall).
  */

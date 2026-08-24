@@ -1,4 +1,4 @@
-// THE PERSON SCREEN AS THE GRANT DASHBOARD (issue #825, ruling G-audience).
+// THE PERSON SCREEN AS THE GRANT DASHBOARD (#825, ruling G-audience).
 //
 // People owns *who*, so "everything Priya can reach" is its question to ask:
 // one read, `GET …/grants?partyId=`, through the shared door

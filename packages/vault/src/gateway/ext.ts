@@ -1,5 +1,5 @@
 // governance: allow-repo-hygiene file-size-limit the ext band is one lifecycle (apply/diff, draft seed/drop, retain/purge, the write trio) sharing the registry-row and fk-resolver internals — splitting would export private seams
-// The ext band's imperative half (issue #286 phase 2): DDL apply + diff,
+// The ext band's imperative half (#286): DDL apply + diff,
 // the draft band lifecycle (seed / drop / publish), uninstall semantics
 // (retain by default, purge on demand), and the per-app typed write commands
 // (`ext.<appId>.insert|update|delete`) that keep "typed commands are the
@@ -144,7 +144,7 @@ function fkResolver(
 /**
  * Rows of a dropped table are gone, so classification and curation on them
  * go too, and live links end-date — the same hygiene duties.ts applies to
- * purged content (issue #272/#274 rules, ext-shaped).
+ * purged content (#272/#274 rules, ext-shaped).
  */
 function sweepDroppedType(db: VaultDb, logical: string, now: string): void {
   db.vault
@@ -338,7 +338,7 @@ function alterExtTable(
     db.vault.exec(extFtsDdl(physical, extPk(spec), spec.searchable ?? []));
   }
   // A column newly declared sealed must seal the rows already sitting in it
-  // (issue #298 item 9) — otherwise the declaration would protect future
+  // (#298) — otherwise the declaration would protect future
   // writes while leaving today's plaintext readable. Fresh writes are sealed
   // by the command seal sweep; this closes the at-declaration gap.
   const oldSealed = new Set(oldSpec.sealed);

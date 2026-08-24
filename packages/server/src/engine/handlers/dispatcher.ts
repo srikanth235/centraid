@@ -1,11 +1,11 @@
 // governance: allow-repo-hygiene file-size-limit dispatcher gained the ctx.vault bridge threading (duaility §12); the follow-up split of validation + envelope helpers into a sibling module is tracked separately
 /**
- * Declared-handler dispatcher (issue #107, narrowed by issue #286 phase 2).
+ * Declared-handler dispatcher (#107, narrowed by #286 phase 2).
  * Every non-chat caller (UI buttons, webhooks, automations) flows through
  * here: reads `app.json`, validates `input` against the declared JSON
  * Schema with Ajv, then hands off to the `handler-runner` worker. That is
- * ALL it routes — the `_sql` built-ins died with the per-app data.sqlite
- * (apps are projections; handlers reach data via ctx.vault only).
+ * ALL it routes — there are no `_sql` built-ins (apps are projections;
+ * handlers reach data via ctx.vault only).
  * Errors are MCP-shaped: `{ isError, content, structuredContent }`; the
  * HTTP shim maps `structuredContent.code` to a 4xx/5xx status.
  */
@@ -46,7 +46,7 @@ export type ToolErrorCode =
   | "NO_ACTIVE_VERSION"
   | "HANDLER_ERROR"
   /**
-   * The worker-admission gate refused a slot (issue #351): too many
+   * The worker-admission gate refused a slot (#351): too many
    * app-handler workers already running/queued. Distinct from
    * HANDLER_ERROR — nothing ran, the caller should just retry shortly.
    */
@@ -133,7 +133,7 @@ export interface DispatcherOptions {
   /** Write-notification callback per app — feeds the `_changes` SSE stream. */
   readonly onWriteFor?: (appId: string) => (tables: string[]) => void;
   /**
-   * Code-dir resolver (issue #137). The git store owns all code; this
+   * Code-dir resolver (#137). The git store owns all code; this
    * resolves an app id to its live code dir (the materialized `main`
    * worktree). An app it can't resolve is not live. When absent, no app
    * has servable code.
@@ -631,7 +631,7 @@ function manifestErrorToResult(appId: string, err: unknown): ToolErrorResult {
 }
 
 // ────────────────────────────────────────────────────────────────────────────
-// HTTP-status mapping for the app RPC routes (issue #505).
+// HTTP-status mapping for the app RPC routes (#505).
 // ────────────────────────────────────────────────────────────────────────────
 
 /** Map a `ToolErrorCode` to an HTTP status code for the app RPC routes. */

@@ -1,7 +1,7 @@
 import { randomBytes } from "node:crypto";
 import { rmSync } from "node:fs";
-// Direct-to-IA storage class for large media originals (issue #425 Wave 3
-// Part B) — the remote-primary ingress doors, where the CAS object is minted
+// Direct-to-IA storage class for large media originals (#425) — the
+// remote-primary ingress doors, where the CAS object is minted
 // BEFORE the staging row exists, so the class is resolved from a media hint the
 // door hands in directly:
 //   - the low-level S3 CopyObject unit (direct-upload promotion), and

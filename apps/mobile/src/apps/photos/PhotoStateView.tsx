@@ -47,7 +47,7 @@ import { READ_ONLY_VAULT_REASON } from "./viewer-model";
 
 /**
  * What `Empty trash` does, and what it costs. The control fires the `purge-asset`
- * action (`media.purge_asset`, issue #711), which destroys the asset row, its
+ * action (`media.purge_asset`, #711), which destroys the asset row, its
  * faces, tags, annotations and album membership NOW and hands the bytes to the
  * gateway's next storage sweep — instead of waiting out the 30-day window.
  *
@@ -77,7 +77,7 @@ export default function PhotoStateView({
     "photos",
     useMemo(() => ({ entity: "media.face_region" }), [])
   );
-  // Edit lineage, for the purge ORDER alone (issue #711). The timeline model
+  // Edit lineage, for the purge ORDER alone (#711). The timeline model
   // carries no `source_asset_id`, and the vault refuses to destroy a
   // photograph an edited copy still names as its source, so the shelf reads
   // the lineage column straight off the trashed rows — bounded by the same
@@ -116,7 +116,7 @@ export default function PhotoStateView({
       timeline.assets.filter((asset) => {
         if (mode === "favorites") return asset.favorite && !asset.deleted;
         if (mode === "archive") return asset.archived && !asset.deleted;
-        // Issue #721 B3 — Collections' Videos shelf, opened here: the same
+        // #721 — Collections' Videos shelf, opened here: the same
         // `PhotoAsset.kind` fact `photos-collections.ts` filters on.
         if (mode === "videos") return asset.kind === "video" && !asset.deleted;
         if (mode === "person")
@@ -285,7 +285,7 @@ export default function PhotoStateView({
       : blocked,
   };
   return (
-    // People is off the band (issue #712): a person's shelf is reached from
+    // People is off the band (#712): a person's shelf is reached from
     // Collections or the Library shelf list, never from the band itself, so
     // `more` is the destination marked current for every mode this screen
     // takes — including "person" — same as `PlacesView`/`FaceReview`.

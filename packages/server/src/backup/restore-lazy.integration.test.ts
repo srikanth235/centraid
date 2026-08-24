@@ -1,6 +1,6 @@
 import crypto, { randomBytes } from "node:crypto";
 /*
- * Previews-first, lazy/partial restore (issue #405 §5) — the end-to-end story
+ * Previews-first, lazy/partial restore (#405) — the end-to-end story
  * for restoring a library LARGER than the local disk, scaled down to tiny
  * in-memory buffers. A real seeded vault (image content + `thumb` derivatives)
  * is snapshotted through the REAL BackupService/LocalBackupProvider; a subset

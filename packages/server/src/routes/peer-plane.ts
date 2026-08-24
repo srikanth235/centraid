@@ -1,5 +1,5 @@
 /*
- * The peer plane (issue #726 P3 decision 6) — `/centraid/_peer/*`.
+ * The peer plane (#726 P3 decision 6) — `/centraid/_peer/*`.
  *
  * Everything a LINKED gateway may reach lives under this prefix and nothing
  * else does. Three invariants hold here regardless of what the transport did:

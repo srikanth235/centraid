@@ -9,8 +9,8 @@
  * Issue #280 — the vault is the unit. Everything personal lives INSIDE a
  * vault's directory (`<vaultDir>/<vaultId>/`): the sovereign pair
  * (`vault.db` + `journal.db` — the journal carrying both the audit stream
- * and the conversation ledger + run rollup, the old `transcripts.db`
- * folded in), the per-app data dirs (`apps/`), the app code store
+ * and the conversation ledger + run rollup), the per-app data dirs
+ * (`apps/`), the app code store
  * (`code/` — a bare git repo + worktrees), and the harness scratch
  * (`harness-sessions/`). Gateway-level mutable state is gateway.db;
  * long-lived secrets are KeyStore envelopes under keys/; cache and logs are
@@ -49,7 +49,7 @@ export interface GatewayPaths {
   cacheDir?: string;
 
   /**
-   * Optional per-gateway template cache dir (issue #141). When set, the
+   * Optional per-gateway template cache dir (#141). When set, the
    * `GET /centraid/_templates` route resolves bundle-or-cache, letting a
    * newer per-template copy shadow the bundled one. Omit for bundle-only
    * resolution (the standalone daemon / tests).
@@ -58,7 +58,7 @@ export interface GatewayPaths {
 
   /**
    * Optional path to the gateway-owned model catalog (`model-catalog.json`,
-   * issue #188). When set, the default `harnessStatus` reporter persists the
+   * #188). When set, the default `harnessStatus` reporter persists the
    * chat picker's per-harness model list here and re-enumerates it on Refresh.
    * Omit to enumerate without persistence; there is no hardcoded default seed.
    */
@@ -66,7 +66,7 @@ export interface GatewayPaths {
 
   /**
    * Optional path to the disk-cached model PRICE table (`model-pricing.json`,
-   * issue #445) — the pricing warmer's filtered LiteLLM fetch, kept fresh with
+   * #445) — the pricing warmer's filtered LiteLLM fetch, kept fresh with
    * a 24h TTL. Omit to default to a sibling of `modelCatalogFile`; without
    * either, the warmer refreshes in-memory only and costing falls back to the
    * bundled snapshot.
@@ -75,7 +75,7 @@ export interface GatewayPaths {
 
   /**
    * Optional directory for rotated JSONL persistence of the gateway's
-   * log ring (issue #351 — "logs don't survive restart, exactly when
+   * log ring (#351 — "logs don't survive restart, exactly when
    * you want a post-mortem"). This has NO implicit
    * default sibling: omitting it keeps `GatewayLogStore` in-memory-only
    * (today's behavior), which is what tests and disposable embeds want.

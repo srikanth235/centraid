@@ -1,4 +1,4 @@
-// Google Takeout's metadata layer, on its own (issue #721 A1). Every rule in
+// Google Takeout's metadata layer, on its own (#721). Every rule in
 // takeout-sidecar.ts is a heuristic about undocumented behaviour, so each one
 // is pinned here against the archive shapes Google has actually shipped.
 

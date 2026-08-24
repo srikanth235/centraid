@@ -141,9 +141,9 @@ export interface TargetInfo {
  *  per store class it's granted for — `u/{id}/backup/`, `u/{id}/cas/`. */
 export interface S3Grant {
   endpoint: string;
-  /** REQUIRED — the data plane's real SigV4 region. `"auto"` remains a
-   *  valid value (Cloudflare R2's profile); it is no longer a client-side
-   *  hardcode (see `s3-store.ts`). */
+  /** REQUIRED — the data plane's real SigV4 region, never a client-side
+   *  hardcode (see `s3-store.ts`). `"auto"` is a valid value (Cloudflare
+   *  R2's profile). */
   region: string;
   bucket: string;
   prefix: string;

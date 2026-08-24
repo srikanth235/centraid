@@ -7,12 +7,12 @@
 // screens live in `components/`; the recipes they are built from live in
 // `components/shared.module.css`, declared exactly once.
 //
-// THE VAULT LINK IS DRAWN, as far as the contract lets it be. `queries/*` now
+// THE VAULT LINK IS DRAWN, as far as the contract lets it be. `queries/*`
 // answer the sharing plane (`queries/_shared.ts`), so the ring, the two filter
 // chips, the vault-counting tiles and status lines, and the person screen's
 // `Vaults` + `Shared with them` sections are all here — and all of them fall
-// back to wave 1's link-free rendering when `links_available` is false, which
-// is what a parked `share.*` scope looks like from in here.
+// back to link-free rendering when `links_available` is false, which is what a
+// parked `share.*` scope looks like from in here.
 //
 // THE GRANT PLANE IS THE PERSON SCREEN'S OWN READ (#825). `Share` and
 // `Revoke` are live there, and neither travels through `logic.ts` or

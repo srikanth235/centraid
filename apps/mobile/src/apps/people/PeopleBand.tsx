@@ -58,7 +58,7 @@ export default function PeopleBand({
   const band = resolvePeopleBand(owner);
   if (band.owner !== "app") {
     // Handed back, but never stranded: the tab group is what the member handed
-    // back, not the frame's way out — the capsule stays (issue #712 E3).
+    // back, not the frame's way out — the capsule stays (#712).
     return (
       <View
         style={[styles.band, { paddingBottom: BAND_INSET + insets.bottom }]}

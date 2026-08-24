@@ -1,4 +1,4 @@
-// WHO OWNS THE BAND, PER APP — the frame's latch (issue #712 E3).
+// WHO OWNS THE BAND, PER APP — the frame's latch (#712).
 //
 // THE NAMESPACE IS `shell.bandOwner.<appId>`. The key names the owner of the
 // concept — the shell — because the decision is one the FRAME makes: the phone
@@ -85,9 +85,7 @@ export function useBandOwner(appId: string): BandOwnerState {
   // Starts at the DEFAULT and hydrates, rather than reading the store's warm
   // cache synchronously. A band that flickered to nothing while an await
   // resolved would be worse than one that starts claimed and stays claimed,
-  // and this is the behaviour the two Photos screens already had before the
-  // latch moved here — the move is about ownership and the key, not about
-  // changing what the first frame paints.
+  // so the first frame paints the claimed band either way.
   const [owner, setOwner] = useState<BandOwner>(DEFAULT_BAND_OWNER);
   useEffect(() => {
     let live = true;

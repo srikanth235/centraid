@@ -1,9 +1,9 @@
 // The bottom navigation band (the Binding Layer, invariant 1).
 //
-// One band, never themed by an app, never scrolled away, never a drawer. What
-// changed with the v4 Home is WHAT IT CARRIES: the frame's own destinations —
-// Home plus up to four of the member's pinned places, plus More — and never
-// the installed apps, which live on Home's springboard and in All apps. See
+// One band, never themed by an app, never scrolled away, never a drawer. It
+// carries the frame's own destinations — Home plus up to four of the member's
+// pinned places, plus More — and never the installed apps, which live on
+// Home's springboard and in All apps. See
 // ./band for why, and ./places for the eleven-row table the pins come from.
 //
 // Because none of these is an app, none of them earns a tinted identity chip:

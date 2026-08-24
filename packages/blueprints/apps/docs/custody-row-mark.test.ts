@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 //
-// The per-row custody altitude (issue #712 B4, docs/blueprint-seats.md "Byte
+// The per-row custody altitude (#712 B4, docs/blueprint-seats.md "Byte
 // custody vocabulary"): List/Grid rows mark the EXCEPTION only, never the
 // norm. `custodyMeta` still tells the full four-state story for Details.tsx's
 // per-item chip — this file pins `custodyRowMark`, the row-scale narrowing of

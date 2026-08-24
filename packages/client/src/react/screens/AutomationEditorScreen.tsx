@@ -46,7 +46,7 @@ type TriggerDraft = {
   key: string;
   kind: TriggerKind;
   expr: string;
-  /** Optional IANA timezone for cron triggers (issue #570). Empty = gateway default / host-local. */
+  /** Optional IANA timezone for cron triggers (#570). Empty = gateway default / host-local. */
   tz: string;
   entity: string;
   whereRows: WhereRowDraft[];

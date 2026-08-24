@@ -5,7 +5,7 @@ import path from "node:path";
 import { describe, afterEach, beforeEach, expect, test } from "vitest";
 
 /**
- * Authz matrix smoke (#496 G1): table-driven role/session × critical routes
+ * Authz matrix smoke (#496): table-driven role/session × critical routes
  * against a real `serve()` daemon. Complements the denser per-route suites
  * with one compact cross-surface table the matrix can own.
  */
@@ -100,7 +100,7 @@ describe("authz-matrix.smoke scenarios", () => {
       expect: (s) => s !== 401 && s !== 403 && s < 500,
     },
     /*
-     * `publicPaths` regression guard (issue #568 item L). Only the handshake
+     * `publicPaths` regression guard (#568). Only the handshake
      * route is bearer-free; every capability-granting verb must 401 without a
      * credential. Re-adding one to `serve()`'s `publicPaths` fails CI here
      * rather than shipping an anonymous path to a capability.

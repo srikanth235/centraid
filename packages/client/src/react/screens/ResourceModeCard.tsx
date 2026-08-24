@@ -29,7 +29,7 @@ import styles from "./GatewayScreen.module.css";
 // device prefs store; the gateway reads it at serve boot and reports the active
 // mode on the hardware-profile health component + metrics. The card is a
 // compact choose-and-glance surface: pick a mode, read the one-line budget, and
-// open a dialog to Compare all modes or see How we sized this (issue #528
+// open a dialog to Compare all modes or see How we sized this (#528
 // follow-up) — the dense tables no longer stack in the card body.
 
 export type { ResourceMode } from "./resource-summary.js";
@@ -112,7 +112,7 @@ export interface ResourceModeCardProps {
    */
   backgroundPause?: BackgroundPauseDTO;
   /**
-   * Power-context posture from `health.metrics.powerContext` (issue #528 Phase
+   * Power-context posture from `health.metrics.powerContext` (#528 Phase
    * D). Present on modern gateways only.
    */
   powerContext?: PowerContextState;
@@ -123,7 +123,7 @@ export interface ResourceModeCardProps {
   /** Lift a background-work pause; absent ⇒ no pause control. */
   onResume?: () => Promise<{ paused: boolean }>;
   /**
-   * Load saved knob overrides for the L3 "Tune" rung (issue #528 Phase F),
+   * Load saved knob overrides for the L3 "Tune" rung (#528),
    * shown inside the "How we sized this" dialog. Absent (or a profile without
    * `sources`/`bounds`) hides the Advanced section.
    */
@@ -173,7 +173,7 @@ export default function ResourceModeCard({
   // second for uptime counters).
   const busyRef = useRef(false);
 
-  // ── Pause background work (L0, issue #528) ──
+  // ── Pause background work (L0, #528) ──
   const [pauseState, setPauseState] = useState<BackgroundPauseDTO | null>(
     backgroundPause ?? null
   );

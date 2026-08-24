@@ -15,8 +15,7 @@
 // thing rather than by knowing this footnote.
 //
 // The prop is deliberately the SAME shape `SafeAreaView` takes, so a screen
-// migrates by changing the element name and nothing else — and so a reader
-// comparing the two forms sees that only the mechanism changed.
+// migrates by changing the element name and nothing else.
 
 import React from "react";
 import { View } from "react-native";

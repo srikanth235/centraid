@@ -1,4 +1,4 @@
-// The shell's one feedback channel (issue #707, invariant 5).
+// The shell's one feedback channel (#707, invariant 5).
 //
 // A toast is a message that appears somewhere else, covers something, and then
 // leaves before it can be re-read; the Binding Layer bans it outright.
@@ -42,7 +42,7 @@ export interface StatusNote {
 }
 
 /**
- * The STANDING note for the route you are on (issue #765).
+ * The STANDING note for the route you are on (#765).
  *
  * It is the same shape as a transient note plus a tone, and it is a second slot
  * rather than a longer-lived note because the two have different lifetimes: a
@@ -156,9 +156,8 @@ let activeFinish: ((undone: boolean) => void) | null = null;
 /**
  * A deferred-destructive grace window, on the status line.
  *
- * Replaces `showUndoToast` with the same contract: the caller does the
- * destructive work optimistically, this owns the window and calls `onUndo` if
- * the member reverts or `onExpire` when it lapses.
+ * The caller does the destructive work optimistically; this owns the window
+ * and calls `onUndo` if the member reverts, or `onExpire` when it lapses.
  */
 export function showUndoStatus(
   message: string,

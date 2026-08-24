@@ -200,7 +200,7 @@ export type StateOverlay =
        * the tile; `seam` takes the `--seam` role for the text alone; `normal`
        * is one quiet mono line on the page colour.
        *
-       * `seam` is the expiring register (issue #765). The design system names
+       * `seam` is the expiring register (#765). The design system names
        * the role for precisely this — "not yet, and not wrong: pending,
        * expiring, invited" — which is what a purge countdown is: nothing has
        * failed, and something is going to happen. It is the reason the

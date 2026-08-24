@@ -1,5 +1,5 @@
 // The timeline's day sub-label, on the one point no cheaper layer holds: a
-// coordinate is not a place name (issue #816).
+// coordinate is not a place name (#816).
 //
 // `photos-tile.test.ts` already owns the sub-label's grammar over named places
 // (one place names the day, two places name nothing) and the month bucketing.

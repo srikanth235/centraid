@@ -21,7 +21,7 @@ import Icon from "./Icon";
 // on the frame's own page colour, a hairline edge and a 12px radius — and
 // nothing else. No BlurView, no tint film, no sheen, no shadow, no elevation,
 // and no teal wash: the v4 Binding Layer is paper, not glass, and the accent is
-// no longer a brand colour to wash chrome with. A key that blurs what is behind
+// not a brand colour to wash chrome with. A key that blurs what is behind
 // it would read as a floating pane over the page instead of an object seated on
 // it — and over unpredictable content its glyph contrast would depend on what
 // happens to be underneath.

@@ -4,7 +4,7 @@ import type {
   GrantWireCalls,
 } from "@centraid/blueprints/apps/_shared/grant-door";
 import type { GrantRequest } from "@centraid/blueprints/apps/_shared/grant-plane";
-// The NATIVE seat's transport into the grant plane (issue #825) —
+// The NATIVE seat's transport into the grant plane (#825) —
 // `packages/server/src/routes/grant-routes.ts`, reached the same way
 // `lib/replica/links-transport.ts` reaches `/links`.
 //

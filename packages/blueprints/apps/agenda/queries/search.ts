@@ -65,7 +65,7 @@ function attachmentsBySubject(
   attachments: RawAttachment[],
   contentById: Map<string, RawContent>
 ): Map<string, DecoratedAttachment[]> {
-  // Blob-backed bytes serve as same-origin URLs (issue #296).
+  // Blob-backed bytes serve as same-origin URLs (#296).
   const srcOf = (c: RawContent | undefined): string | undefined =>
     typeof c?.content_uri === "string" && c.content_uri.startsWith("blob:")
       ? `/centraid/_vault/blobs/${c.content_id}`
@@ -156,7 +156,7 @@ export default async function searchHandler({ input, ctx }: HandlerArgs) {
     // Joins are `in`-bounded by the matched ids — the event→calendar edge
     // in schedule.event_ext, the attachment edges, and the guest list
     // (schedule.attendee, joined to core.party for names below); the owner's
-    // own party (core.vault) drives the `is_you` RSVP row (issue #337).
+    // own party (core.vault) drives the `is_you` RSVP row (#337).
     const [exts, attachments, attendeesRes, vaultRes] = await Promise.all([
       ctx.vault.read({
         entity: "schedule.event_ext",

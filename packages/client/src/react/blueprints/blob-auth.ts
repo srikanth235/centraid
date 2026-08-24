@@ -1,4 +1,4 @@
-// Lightweight vault-blob authorizer (issue #505 Phase 4 / boot-size fix).
+// Lightweight vault-blob authorizer (#505 / boot-size fix).
 //
 // A leaf module on purpose: `inline-blob-images.ts` is eager (InlineAppRoute →
 // App), so anything it imports lands in the shell's boot chunk. Reaching
@@ -25,7 +25,7 @@ export const SCOPE_ATTR = "data-scope";
  *
  * A blob path carries a content id, and content ids are minted PER VAULT — the
  * same photo shared into an audience has the same sha in two vaults, and two
- * unrelated items can collide across vaults by design (issue #599). Without the
+ * unrelated items can collide across vaults by design (#599). Without the
  * scope the request falls through to the shell's ambient focused vault, which
  * either 404s or, worse, renders the WRONG bytes. Every blob fetch on a
  * multi-scope surface therefore names its scope.

@@ -16,7 +16,7 @@ import controlsCss from "../styles/controls.module.css";
 import buttonCss from "../ui/Button.module.css";
 import styles from "./StorageLimitsPanel.module.css";
 
-// Capacity → the ledger limit (issue #544).
+// Capacity → the ledger limit (#544).
 //
 // ONE LIMIT, because only one of them is a limit. Offering two side by side,
 // in identical form, leaves the copy carrying the whole difference:
@@ -26,7 +26,7 @@ import styles from "./StorageLimitsPanel.module.css";
 //   Ledger limit — actuating. It makes conversation/audit archival run early
 //                  and reach further back. Archival seals cold rows into the
 //                  content-addressed store; the delete half is already gated
-//                  behind proven custody (issue #438), and it never reaches
+//                  behind proven custody (#438), and it never reaches
 //                  inside the last 7 days.
 //
 // A control that looks exactly like a ceiling and is not one is worse than no

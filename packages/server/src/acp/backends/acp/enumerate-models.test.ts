@@ -1,4 +1,4 @@
-// The generic ACP model probe (issue #484). Driven against the scripted
+// The generic ACP model probe (#484). Driven against the scripted
 // `fake-acp-harness.mjs`, the same fixture the turn backend uses — so happy
 // path, no-model-option, AUTH_REQUIRED, and missing-binary are all exercised
 // against a real launch → initialize → session/new exchange, not a mock.

@@ -365,7 +365,7 @@ export function typeForSurface(touch: boolean): Record<TypeKey, TypeStyle> {
 export const REM_BASE_PX = 16;
 
 /** CSS `font` shorthand for one semantic style, in host-relative `rem` units
- *  (issue #708 §"Implementation notes for the port" — "Emit `rem`, not `px`,
+ *  (#708 §"Implementation notes for the port" — "Emit `rem`, not `px`,
  *  so 200% OS text scale works"). `toRemStyle` is the single ÷16 conversion
  *  both the shell and the 11px-floor gate reason from. */
 export function typeShorthand(styleValue: TypeStyle): string {

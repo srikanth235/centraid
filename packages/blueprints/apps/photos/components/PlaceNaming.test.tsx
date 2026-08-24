@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-// THE NAMING CONVERSATION (issue #816), on the web.
+// THE NAMING CONVERSATION (#816), on the web.
 //
 // `place-phrase.test.ts` proves the ladder; this proves the app ASKS. Four
 // claims, and each of them is a way the surface could regress into printing a

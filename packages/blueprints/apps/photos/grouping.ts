@@ -53,7 +53,7 @@ export function monthCount(assets: readonly Asset[]): string {
  * has no single place to claim, and guessing one would be a lie about where
  * the member was.
  *
- * A NAME, NOT A COORDINATE (issue #816). This line must not print
+ * A NAME, NOT A COORDINATE (#816). This line must not print
  * `asset.place.name` raw: every place minted from GPS carries the digits
  * `findOrCreatePlaceTx` wrote as its name until somebody renames it, so a
  * scrolled timeline would print `12 · 39.09680, -120.03240` beside a day at

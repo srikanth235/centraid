@@ -1,4 +1,4 @@
-// Scenario-seed routes (issue #290 phase 1) — the owner's "load demo data /
+// Scenario-seed routes (#290) — the owner's "load demo data /
 // reset demo data" surface. A blueprint that ships a `seed.js` generator can
 // populate a fresh vault with realistic, relative-dated rows; every write
 // rides the demo register (owner credential + `demo: {appId}`), so the data
@@ -34,13 +34,13 @@ export interface DemoRouteDeps {
    * Directories a BUNDLED app serves from, by id — the shipped
    * `@centraid/blueprints` trees, which are not under `codeAppsDir` at all.
    *
-   * Without this the whole demo plane was dead for exactly the apps it was
-   * written for. Issue #434 made a bundled install serve IN PLACE (no per-vault
-   * code copy), and #708 made every first-party app installed by default — so
-   * `GET /demo` scanned the git store, found nothing, and answered `{apps:[]}`
-   * while `POST /demo/tasks` 404'd, on a vault that owned all eight seedable
-   * apps. The resolver mirrors `codeDirOverride` in build-gateway: bundled and
-   * installed wins, everything else is the code store.
+   * Without this the whole demo plane is dead for exactly the apps it was
+   * written for: a bundled install serves IN PLACE (no per-vault code copy,
+   * #434) and every first-party app is installed by default (#708), so a git-
+   * store scan finds nothing and `GET /demo` answers `{apps:[]}` while `POST
+   * /demo/tasks` 404s on a vault that owns all eight seedable apps. The
+   * resolver mirrors `codeDirOverride` in build-gateway: bundled and installed
+   * wins, everything else is the code store.
    */
   bundledAppDirs: () => ReadonlyMap<string, string>;
 }
@@ -53,7 +53,7 @@ function appDirsFor(deps: DemoRouteDeps): Map<string, string> {
     for (const entry of readdirSync(codeAppsDir))
       dirs.set(entry, path.join(codeAppsDir, entry));
   } catch {
-    /* a vault with no code store yet is the normal case now */
+    /* a vault with no code store yet is the normal case */
   }
   // Bundled last so an installed blueprint wins over a same-named store entry,
   // which is the same precedence the listing union and the compat route use.

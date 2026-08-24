@@ -1,10 +1,9 @@
-// Minimal, self-contained 5-field cron evaluator for the automation builder —
-// extracted from the builder god-file so it can be unit-tested (TESTING.md §2).
-// No cron library ships to the renderer, so this covers exactly what the config
-// pane needs: `*`, `?`, `*/n` steps, comma lists, `a-b` ranges, and the named
-// day/month tokens a manifest may carry. Pure: value→value.
+// Minimal, self-contained 5-field cron evaluator for automations. No cron
+// library ships to the renderer, so this covers exactly what the trigger
+// editors need: `*`, `?`, `*/n` steps, comma lists, `a-b` ranges, and the
+// named day/month tokens a manifest may carry. Pure: value→value.
 //
-// Zone model (issue #570): optional IANA `timeZone` matches the engine's
+// Zone model (#570): optional IANA `timeZone` matches the engine's
 // resolved zone (trigger `tz` → gateway default → host-local). Absent zone
 // keeps host-local Date getters so preview stays aligned with #569.
 

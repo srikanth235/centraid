@@ -7,7 +7,7 @@ import type { ActiveVaultData } from "../shell/routes/settingsAccountData.js";
 import SettingsVaultScreen from "./SettingsVaultScreen.js";
 
 // Settings → Vault is where the owner acts on the vault they are in, including
-// leaving it behind on this device (issue #665). The gate is the CONNECTION
+// leaving it behind on this device (#665). The gate is the CONNECTION
 // being a remote one — the
 // primordial local host is this machine, and it has nothing to disconnect from.
 

@@ -323,9 +323,9 @@ export async function createSnapshot(
         // the (key, nonce) pair can never repeat with different content. Both id
         // and nonce derive from the RAW plaintext, so entropy-gated compression
         // (below) is invisible to identity: it changes only the sealed byte
-        // count, never where the object lands (#405 §1).
+        // count, never where the object lands (#405).
         const nonce = deriveNonce(dataKey, `centraid-backup:chunk-nonce:${id}`);
-        // /2 (#405 §1): compress-then-seal. The sealed plaintext is the framed
+        // /2 (#405): compress-then-seal. The sealed plaintext is the framed
         // payload `[algo-id][possibly-compressed body]`, not the raw part —
         // keep-if-smaller, so incompressible parts cost at most one extra byte.
         const encrypted = encryptWithNonce(
@@ -473,7 +473,7 @@ export interface RestoreSnapshotOptions {
   destDir: string;
   current: RestoreCurrentVersions;
   /**
-   * Lazy/partial restore predicate (issue #405 §5). Consulted ONCE per `blob`
+   * Lazy/partial restore predicate (#405). Consulted ONCE per `blob`
    * entry, keyed by the blob's content sha (parsed from its
    * `blobs/sha256/<fan>/<sha>` path). Return true to SKIP materializing that
    * blob's bytes to disk — its chunks are never downloaded and no file is
@@ -499,7 +499,7 @@ export interface RestoreResult {
   /** WAL replay outcome for the authenticated coordinated base pair. */
   walReplay: WalReplayOutcome;
   /**
-   * Blob shas the `skipBlob` predicate held back (issue #405 §5) — materialized
+   * Blob shas the `skipBlob` predicate held back (#405) — materialized
    * remotely-only, to be served on demand by the vault's custody read-through.
    * Empty on a full restore (no predicate, or nothing skipped).
    */
@@ -523,7 +523,7 @@ const MIN_SUPPORTED_VAULT_USER_VERSION = "1";
 const MIN_SUPPORTED_ONTOLOGY_VERSION = "1.0";
 
 /**
- * Registry-row-level compatibility gate (issue #439 R1): does a snapshot's
+ * Registry-row-level compatibility gate (#439): does a snapshot's
  * `appMeta` (the versions it was written under) fall within what the running
  * gateway can read? Exported so `recover()` can refuse an incompatible
  * snapshot from the registry row ALONE — before a manifest, a chunk, or a
@@ -696,7 +696,7 @@ export async function restoreSnapshot(
     if (!isSafeEntryPath(entry.path)) {
       throw new Error(`restoreSnapshot: entry path rejected: "${entry.path}"`);
     }
-    // Lazy/partial restore (issue #405 §5): a blob the caller says the remote
+    // Lazy/partial restore (#405): a blob the caller says the remote
     // CAS already holds is left remote-only — never downloaded, never written.
     // The custody read-through serves it on demand later. Only `blob` entries
     // are ever eligible; the sha is the file name of the content-addressed path.
@@ -1065,10 +1065,8 @@ function sampleWithoutReplacement<T>(items: readonly T[], count: number): T[] {
 // ───────────────────────────────────────────────────────────────────────────
 // Recovery-kit target rows
 //
-// `writeRecoveryKit` (a plaintext kit emitter) was deleted in issue #568 item
-// J: it had zero production callers after #555 moved kit authorship to
-// `wrapRecoveryKit`, and keeping a plaintext writer alive alongside a reader
-// that now REFUSES unwrapped kits would have been a live footgun.
+// Kit authorship goes through `wrapRecoveryKit` only — never add a plaintext
+// kit emitter beside a reader that refuses unwrapped kits (#568).
 // ───────────────────────────────────────────────────────────────────────────
 
 export interface RecoveryKitTarget {
@@ -1079,7 +1077,7 @@ export interface RecoveryKitTarget {
   /** Per-vault DEK, base64. Present only in a wrapped owner-held kit. */
   sealKey?: string;
   /**
-   * The vault's Ed25519 identity seed, base64 (issue #726 P1). Present only
+   * The vault's Ed25519 identity seed, base64 (#726). Present only
    * in a wrapped owner-held kit, alongside `sealKey` — same custody, same
    * recovery path. `recover()` restores both.
    */

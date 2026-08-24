@@ -52,9 +52,8 @@ describe("app-format", () => {
     });
   });
 
-  // Shared by the builder's trigger form (BuilderAutomationTriggers, which
-  // re-exports this) and the automation view screen's condition-detail
-  // rendering (automationsData.ts) — one formatter, one compact shape.
+  // Shared with the automation view screen's condition-detail rendering
+  // (automationsData.ts) — one formatter, one compact shape.
   describe(formatWhereClauses, () => {
     it("returns null for an empty/absent where", () => {
       expect(formatWhereClauses(undefined)).toBeNull();

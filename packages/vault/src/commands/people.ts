@@ -9,10 +9,10 @@
 // #274): notes are knowledge.annotation on the party (annotate), favorites are
 // the flags-scheme star on the party (setStarred), and the owner files people
 // into `lists` — SKOS concepts in the owner's `lists` scheme with membership
-// one core.tag per person, the same mechanism Docs folders use. These were
-// named "circles" until issue #441 A2.4 found the name collided with
+// one core.tag per person, the same mechanism Docs folders use. Do not name
+// this classification "circles" (#441): that name collides with
 // social_circle (the AUDIENCE mechanism shares and Tally groups target); the
-// classification is renamed to "lists" end-to-end, social_circle keeps its
+// classification is "lists" end-to-end, social_circle keeps its
 // "circle" name. Logging an interaction is what clears "overdue": it stamps
 // profile.last_contacted_at = now. Every write is a typed command —
 // consent-checked, receipted, all risk low.
@@ -1127,7 +1127,7 @@ const ADD_IMPORTANT_DATE: CommandDefinition = {
     },
     {
       // A birthday label must leave core_party.birth_date's MM-DD agreeing with
-      // this row (issue #441 A2.3); a no-op for non-birthday dates.
+      // this row (#441); a no-op for non-birthday dates.
       name: "birthday_reconciled",
       sql: `SELECT (CASE WHEN :label NOT LIKE '%birthday%' THEN 1
                     ELSE EXISTS(SELECT 1 FROM core_party
@@ -1165,7 +1165,7 @@ const ADD_IMPORTANT_DATE: CommandDefinition = {
         ctx.now
       );
     ctx.wrote("people.important_date", dateId);
-    // A birthday is one logical fact (issue #441 A2.3): write it through to the
+    // A birthday is one logical fact (#441): write it through to the
     // canonical party spine so core_party.birth_date and this row cannot
     // disagree. Preserve a known birth year if one is already recorded;
     // otherwise store the year-less ISO 8601 form (--MM-DD), since a birthday's
@@ -1844,7 +1844,6 @@ const ADD_JOURNAL_ENTRY: CommandDefinition = {
   },
 };
 
-/** Register the People commands on a gateway. */
 export function registerPeopleCommands(gateway: Gateway): void {
   registerPeopleOrganizeCommands(gateway);
   gateway.registerCommand(ADD_PERSON);

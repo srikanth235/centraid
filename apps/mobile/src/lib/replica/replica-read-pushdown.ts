@@ -9,7 +9,7 @@
 // `evaluateReplicaRead` would keep *and* every row that would make it throw. The
 // JavaScript evaluator still runs unchanged on the reduced set, so filter
 // semantics — BINARY text ordering, mixed-type `OnlineOnlyError`, oversized and
-// undisclosed-field escalation — are exactly what they were. Pushdown only
+// undisclosed-field escalation — are unaffected. Pushdown only
 // decides which rows are worth parsing.
 
 import { ReplicaProtocolError } from "@centraid/client/replica/native";

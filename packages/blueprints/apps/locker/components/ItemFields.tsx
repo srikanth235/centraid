@@ -1,6 +1,5 @@
 // Field descriptors + rows for the detail pane's read view, keyed by the
-// vault's field names — the per-type shape app.js's `fieldDescriptors()` /
-// `fieldRowTpl()` rendered. `secret` fields hide behind a reveal toggle and
+// vault's field names. `secret` fields hide behind a reveal toggle and
 // carry copy; the password field grows a strength meter on reveal; the OTP
 // row runs the real client-side TOTP tick via totp.ts's `useTotp` hook.
 import { armConfirm } from "@centraid/design/elements";

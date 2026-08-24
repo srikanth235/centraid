@@ -55,7 +55,7 @@ import {
   buildScopeRequestRow,
 } from "./approvalsData.js";
 
-/** Initial review-feed page size; "See all" raises the in-place cap (issue #552). */
+/** Initial review-feed page size; "See all" raises the in-place cap (#552). */
 const REVIEW_LIMIT_DEFAULT = 20;
 const REVIEW_LIMIT_SEE_ALL = 200;
 
@@ -65,13 +65,13 @@ interface Approvals {
   notifications: Awaited<ReturnType<typeof getNotifications>>;
   grants: Awaited<ReturnType<typeof listOutboxGrants>>;
   review: Awaited<ReturnType<typeof getReview>>;
-  /** The store-ledger's raw ingredients (issue #708 A2) — kept as the wire
+  /** The store-ledger's raw ingredients (#708) — kept as the wire
    *  shapes here; `groupGrantsByStore` reshapes them at render time so a
    *  revoke's optimistic edit (below) only has to splice one grant out of
    *  one app/agent's list, not re-derive the whole grouping. */
   apps: Awaited<ReturnType<typeof vaultApps>>;
   agents: Awaited<ReturnType<typeof listAgents>>;
-  /** The enrichment egress answers on record (issue #807, Wave 3) — read
+  /** The enrichment egress answers on record (#807) — read
    *  only; the page shows them and never re-asks the question here. `null`
    *  when this gateway is older than the consent ledger. */
   enrichConsent: Awaited<ReturnType<typeof listEnrichEgressConsent>> | null;
@@ -117,7 +117,7 @@ export default function ApprovalsRoute(): JSX.Element {
   // place both can see, and a nonce makes a repeat press a fresh request.
   const [reviewAll, setReviewAll] = useState<{ nonce: number } | null>(null);
 
-  // The outbox decision an `outbox` notice deep-links to (#647 D10). The
+  // The outbox decision an `outbox` notice deep-links to (#647). The
   // nonce makes a repeat tap a fresh request; the screen owns the resulting
   // chip/expansion move.
   const [focusOutbox, setFocusOutbox] = useState<{
@@ -136,7 +136,7 @@ export default function ApprovalsRoute(): JSX.Element {
   /** Refusal count, so a second refusal of the SAME item is a fresh event. */
   const refusals = useRef(0);
 
-  // Cached and stale-while-revalidate (issue #659). Two things follow. An SSE
+  // Cached and stale-while-revalidate (#659). Two things follow. An SSE
   // doorbell or a decision revalidates BEHIND the rendered page, so nothing the
   // owner is in the middle of — half-edited outbox artifact text, the expanded
   // row, the "always allow" checkbox, the active chip — is thrown away. And
@@ -223,7 +223,7 @@ export default function ApprovalsRoute(): JSX.Element {
 
   /**
    * Run one decision. The row leaves the page the moment the owner decides
-   * (issue #659) — `apply` is the local edit describing that — and the wire
+   * (#659) — `apply` is the local edit describing that — and the wire
    * call confirms it; a rejection restores the page exactly as it was and says
    * why. `apply` is omitted where the decision has no single obvious local
    * consequence, in which case this is a plain commit-then-revalidate.
@@ -391,7 +391,7 @@ export default function ApprovalsRoute(): JSX.Element {
   };
 
   /**
-   * Revoke one store-ledger holder (issue #708 A2). The ledger's "switch"
+   * Revoke one store-ledger holder (#708). The ledger's "switch"
    * strikes the row through rather than removing it — that local
    * revoked-state bookkeeping lives in `ApprovalsScreen`, so this handler's
    * only job is the wire call plus splicing the grant out of `apps`/`agents`
@@ -559,7 +559,7 @@ export default function ApprovalsRoute(): JSX.Element {
           } else if (typeof notice.detail.enrichDomain === "string") {
             navigate({ kind: "automations" });
           } else if (notice.kind === "gateway-health") {
-            // Legacy rows only (issue #665): health no longer projects into the
+            // Legacy rows only (#665): health no longer projects into the
             // Notifications, but cards written by an earlier build survive in vault.db
             // until archived, and Alerts is still exactly where they point.
             navigate({ kind: "gateway", tab: "alerts" });

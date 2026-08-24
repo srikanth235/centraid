@@ -1,9 +1,7 @@
 /*
  * Live `ctx.delegate` dispatch for the local automation harness.
  *
- * Split out of `run-automation.ts` so that file can stay focused on the
- * per-fire lifecycle (manifest load, audit store, onFailure cascade). This
- * module owns the one billed rail — `ctx.delegate`, a bounded one-shot turn
+ * This module owns the one billed rail — `ctx.delegate`, a bounded one-shot turn
  * against the user's real provider.
  *
  * Issue #743 — `ctx.delegate` honours every registered harness kind through
@@ -75,7 +73,7 @@ export interface LiveDispatchOptions {
    * How the user authored this rung's harness: `direct` = their automations
    * primary, `ladder` = current failover membership (validated against the
    * live ladder before anything egresses). Both are user-authored consent
-   * (#567 D13). Omit when the harness came from a source the user did not
+   * (#567). Omit when the harness came from a source the user did not
    * author — a manifest `requires.harness` pin naming a provider absent from
    * their settings — so the fire is denied unless a real grant already exists.
    */
@@ -204,7 +202,7 @@ export async function startLiveDispatch(
     scratchReady = true;
   };
 
-  // Vault-derivative attachments (issue #299): the harness already resolved
+  // Vault-derivative attachments (#299): the harness already resolved
   // and receipted them; here they become scratch files the harness's native
   // multimodal Read path picks up — one mechanism for every harness, no
   // per-harness wire format. The scratch dir materializes only on first use.
@@ -259,7 +257,7 @@ export async function startLiveDispatch(
       });
     }
     const harness = call.harness ?? opts.harness;
-    // Unattended egress is never prompted (#567 D5) — it is authorized at
+    // Unattended egress is never prompted (#567) — it is authorized at
     // authoring time. So derive the grant honestly rather than minting one:
     // `recordDerived` refuses to resurrect a revoked provider and refuses a
     // ladder source the user's live settings do not contain. A controller

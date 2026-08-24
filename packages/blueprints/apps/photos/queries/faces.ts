@@ -1,11 +1,11 @@
 /**
- * Face proposals for one asset (issue #299 phase 3): the enricher's
+ * Face proposals for one asset (#299): the enricher's
  * media.face_region rows — unanswered proposals with confidence, plus
  * whatever the owner already confirmed — and a bounded people list for
  * the confirm picker. A consent denial is a first-class outcome the UI
  * renders as the ask-for-access state.
  *
- * ANSWERED REGIONS NEVER COME BACK (issue #712). A rejection does not DELETE
+ * ANSWERED REGIONS NEVER COME BACK (#712). A rejection does not DELETE
  * the row — that would make "gone from this list" and "gone from the vault"
  * the same thing. The row survives carrying its answer, and it is this filter
  * that keeps the lightbox's mini-loop from re-offering a face the owner already
@@ -22,7 +22,7 @@ interface RawRegion {
   party_id?: string | null;
   confidence?: number | null;
   confirmed_by_party_id?: string | null;
-  /** `proposed` | `confirmed` | `rejected` | `dismissed` (issue #712). */
+  /** `proposed` | `confirmed` | `rejected` | `dismissed` (#712). */
   review_state?: string | null;
 }
 

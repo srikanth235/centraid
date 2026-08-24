@@ -1,5 +1,5 @@
 /*
- * An edge's SCOPE, parsed rather than asserted (issue #750 abstraction 5).
+ * An edge's SCOPE, parsed rather than asserted (#750 abstraction 5).
  *
  * `scope_json` reaches the reconcilers and the receipt writer through this
  * module and never through a `JSON.parse(row.scope_json ?? "[]") as string[]`
@@ -13,7 +13,7 @@
  * a parked edge with a reason) rather than degraded into an empty set.
  *
  * The payload is a DISCRIMINATED union on `mode` even though `mode` admits
- * exactly one value today: live lending was removed in #731 and the
+ * exactly one value today: there is no live lending (#731) and the
  * `share_edges` CHECK constraint is what keeps it structurally absent, so the
  * absence is asserted at the boundary here too. Nothing in this file re-adds
  * a live scope — a snapshot scope is a fixed, non-empty set of item ids, and

@@ -1,4 +1,4 @@
-// Engine profiles (issue #807) — that the built-ins are derived rather than
+// Engine profiles (#807) — that the built-ins are derived rather than
 // stored, that egress is computed from the engine and unreachable from input,
 // and that the write gate refuses out loud everything the reader drops.
 

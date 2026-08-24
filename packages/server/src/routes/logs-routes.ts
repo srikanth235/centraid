@@ -41,7 +41,7 @@ const MAX_LIMIT = 2000;
  */
 const defaultSubscriberCap = new SseSubscriberCap();
 
-/** Live subscriber count on the gateway-logs SSE stream (issue #351). */
+/** Live subscriber count on the gateway-logs SSE stream (#351). */
 export function logsEventsSubscriberCount(): number {
   return defaultSubscriberCap.current();
 }
@@ -78,7 +78,7 @@ export function makeLogsRouteHandler(
       Connection: "keep-alive",
       "X-Accel-Buffering": "no",
     });
-    // Bounded writer (issue #659 G6): the log feed is the highest-rate stream
+    // Bounded writer (#659): the log feed is the highest-rate stream
     // the gateway serves and a paused viewer must not turn it into RSS.
     const stream = new SseStream(res);
     stream.comment("gateway logs");

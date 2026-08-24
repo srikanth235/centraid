@@ -1,13 +1,12 @@
 /**
- * Missed-automation-run ledger (issue #351 tier 2) — the honest record of what
+ * Missed-automation-run ledger (#351 tier 2) — the honest record of what
  * downtime skipped.
  *
  * The in-process cron scheduler (`in-process-scheduler.ts`) fires enabled
  * cron automations only while it runs; minutes the timer slept through are
- * silently skipped, by design (n8n semantics, no backfill — issue #149).
- * That's a defensible product stance, but until now it left NO record
- * anywhere that anything was missed — an outage and a quiet day looked
- * identical from the outside. The outbox, by contrast, self-heals on its
+ * silently skipped, by design (n8n semantics, no backfill — #149).
+ * Without a record, an outage and a quiet day are indistinguishable from
+ * the outside. The outbox, by contrast, self-heals on its
  * next drain pass because its queue survives downtime; a cron fire has no
  * queue, so a missed minute is gone for good — the least this module can do
  * is say so.

@@ -218,7 +218,7 @@ describe("grant/grant-store", () => {
         deliveredAt: now,
       },
     ]);
-    // Wave 1 does not propagate removal — the delivery state is left alone.
+    // Removal is not propagated — the delivery state is left alone.
     expect(listFulfillment(db, grant.grantId)[0]?.state).toBe("delivered");
     expect(readShareGrant(db, grant.grantId)?.revokedAt).toBe(
       "2031-02-03T00:00:00.000Z"

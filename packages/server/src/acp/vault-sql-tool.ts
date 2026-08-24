@@ -1,6 +1,6 @@
 /*
- * The `vault_sql` tool, shared by both backends (claude MCP tool + codex
- * dynamic tool): name, description, schema, and the one dispatch function.
+ * The `vault_sql` tool: name, description, schema, and the one dispatch
+ * function.
  * The actual execution rides `ToolContext.vaultSql` — an owner-credentialed
  * runner the gateway threads in per turn — so this module stays a thin,
  * backend-neutral adapter exactly like the `centraid_*` trio's dispatcher

@@ -1,5 +1,5 @@
 /*
- * The host seam for the grant plane's fulfillment engine (issue #825).
+ * The host seam for the grant plane's fulfillment engine (#825).
  *
  * The engine in `@centraid/vault` knows how to keep one grant true; it does
  * not know which vaults this host has mounted, and it must not. This file is

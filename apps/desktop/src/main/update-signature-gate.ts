@@ -23,7 +23,7 @@ import type {
 /**
  * Release keys this build will accept an update from.
  *
- * BLOCKED-EXTERNAL (#842 W6.1): empty until a release signing key is generated
+ * BLOCKED-EXTERNAL (#842): empty until a release signing key is generated
  * and its public half enrolled here in a reviewed commit. While it is empty
  * `resolveUpdateTrust` refuses every packaged update with `no-trust-anchor` —
  * which is the correct posture, not a gap: today's desktop lane ships

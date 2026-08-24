@@ -1,4 +1,4 @@
-// Recoverable React error boundary for the shell root (issue #468 K1).
+// Recoverable React error boundary for the shell root (#468).
 // Class component required by React's error-boundary contract.
 
 import { Component } from "react";
@@ -97,4 +97,4 @@ export default class ErrorBoundary extends Component<
     );
   }
 }
-/* eslint-enable react/no-set-state, react/state-in-constructor */
+/* oxlint-enable react/no-set-state, react/state-in-constructor */

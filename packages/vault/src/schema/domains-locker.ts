@@ -16,7 +16,7 @@
 // The gestures the ontology already models are reused, not re-invented (issue
 // #274): favorites are the flags-scheme star on the item (target_type
 // 'locker.item'), the same star Docs/Photos write. Tags went the same way
-// (issue #310 S3): free-form labels are SKOS concepts in the locker-tags
+// (#310): free-form labels are SKOS concepts in the locker-tags
 // scheme carried by core_tag rows — the second tagging mechanism the old
 // locker_item_tag table re-introduced is gone.
 //
@@ -73,7 +73,7 @@ CREATE INDEX locker_item_type_idx ON locker_item(type);
 CREATE INDEX locker_item_connection_idx ON locker_item(connection_id);
 `;
 
-// A stable, owner-assigned alias for an item (issue #298 item 4). A
+// A stable, owner-assigned alias for an item (#298). A
 // connector binds `locker:@<alias>:<column>` instead of the raw UUID, so
 // the natural rotation gesture — trash the old login, add the new one —
 // heals the binding the moment the owner puts the same alias on the
@@ -91,7 +91,7 @@ CREATE TABLE IF NOT EXISTS locker_item_alias (
 CREATE INDEX IF NOT EXISTS locker_item_alias_item_idx ON locker_item_alias(item_id);
 `;
 
-// Locker's user-presence credential store (issue #630). The verifier is
+// Locker's user-presence credential store (#630). The verifier is
 // derived from a vault-key HMAC of the credential before scrypt, so a copied
 // vault database is not an offline passphrase oracle: verification also needs
 // the separately-custodied seal key. Live unlock and per-item permits are

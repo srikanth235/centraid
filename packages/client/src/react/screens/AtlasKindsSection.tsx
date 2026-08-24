@@ -75,7 +75,7 @@ export interface AtlasKindsSectionProps {
   onToggle?: () => void;
 }
 
-// The rule this page explains once lives in `../../data-copy.js` (issue #805)
+// The rule this page explains once lives in `../../data-copy.js` (#805)
 // — mobile's Data screen says it too, and one sentence has one home.
 
 export default function AtlasKindsSection({

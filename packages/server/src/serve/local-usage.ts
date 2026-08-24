@@ -1,5 +1,5 @@
 /*
- * Local disk accounting by component (issue #544) — "how much of THIS
+ * Local disk accounting by component (#544) — "how much of THIS
  * machine's disk is Centraid using, and where did it go?".
  *
  * The `disk` health probe (disk-health.ts) already answers "how much room is

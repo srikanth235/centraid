@@ -7,14 +7,12 @@
  * legitimately exceeds the 500-line file cap. Split into a data module before
  * it doubles, not per added kind.
  *
- * Before this existed, three sites hardcoded a per-kind switch: `runTurn`
- * (a two-arm `if`), `preflight` (`MIN_VERSIONS` / `defaultBinFor` /
- * `hintFor`), and `models/enumerators` (a `switch`). They now all read
- * from `HARNESSES` below, so adding a harness kind is one entry here
- * plus its `HarnessKind` literal in `@centraid/server/engine` — nothing else
- * branches on the kind.
+ * Nothing else branches on the kind: `runTurn`, `preflight` (default binary,
+ * minimum version, install hint) and `models/enumerators` all read from
+ * `HARNESSES` below, so adding a harness kind is one entry here plus its
+ * `HarnessKind` literal in `@centraid/server/engine`.
  *
- * Since issue #479 there is exactly ONE integration path: the generic ACP
+ * Since #479 there is exactly ONE integration path: the generic ACP
  * client in `./backends/acp/backend.ts`. Every kind is a `makeAcpHarness`
  * entry; kinds differ only in how the ACP-speaking process is launched.
  *
@@ -115,8 +113,7 @@ interface AcpHarnessSpec {
    * the probe spawns the harness, and the boot warmer warms EVERY detected
    * harness, so a universal default would spawn a process per installed native
    * kind at boot — many of which just answer `AUTH_REQUIRED`. The two
-   * adapter-backed kinds that had bespoke enumerators before #484 (codex,
-   * claude-code) opt in; every native kind stays on "Gateway default" and
+   * adapter-backed kinds (codex, claude-code) opt in; every native kind stays on "Gateway default" and
    * still pins a model per-session at turn time. See `./backends/acp/
    * enumerate-models.ts`.
    */
@@ -274,8 +271,7 @@ const codexHarness = makeAcpHarness({
     binPathEnvVar: "CODEX_PATH",
   },
   // The codex-acp adapter advertises a `model` config option on session/new
-  // (its `createModelConfigOption`), so the generic probe replaces the old
-  // `codex app-server model/list` enumerator.
+  // (its `createModelConfigOption`), which the generic probe reads.
   probeModels: true,
 });
 
@@ -304,8 +300,7 @@ const claudeHarness = makeAcpHarness({
   // matching against the concrete model ids the adapter advertises.
   resolveModel: resolveClaudeModel,
   // The claude-agent-acp adapter advertises a `model` config option on
-  // session/new (its `buildConfigOptions`), so the generic probe replaces the
-  // old Agent-SDK `supportedModels()` enumerator.
+  // session/new (its `buildConfigOptions`), which the generic probe reads.
   probeModels: true,
 });
 

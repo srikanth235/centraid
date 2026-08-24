@@ -3,7 +3,7 @@ import { fileURLToPath } from "node:url";
 import react from "@vitejs/plugin-react";
 import { defineConfig } from "vite";
 
-// Builds the React coexistence island (issue #325, Phase 0) into the same
+// Builds the React coexistence island (#325) into the same
 // dist/renderer directory the vanilla tsc output lands in, as a single ES
 // module — `react-boot.js` — that the renderer loads via
 // <script type="module">. Production build only (no dev server), so React is
@@ -47,7 +47,7 @@ export default defineConfig({
     ],
   },
   css: {
-    // CSS Modules for co-located `*.module.css` (issue #325, Phase 4 — CSS
+    // CSS Modules for co-located `*.module.css` (#325, Phase 4 — CSS
     // refactor away from the monolithic global `styles.css`). Component-private
     // classes live next to their component and are scoped here; `styles.foo`
     // in the .tsx resolves to a build-time hash. `localsConvention:

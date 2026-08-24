@@ -1,4 +1,4 @@
-// Pure SigV4 unit tests (issue #545 B6) — no live S3 endpoint.
+// Pure SigV4 unit tests (#545) — no live S3 endpoint.
 
 import { createHash, createHmac } from "node:crypto";
 

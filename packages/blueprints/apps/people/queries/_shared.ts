@@ -24,10 +24,6 @@
  * its own denial and returns `null`, meaning "the link facts are absent",
  * which callers surface as `links_available: false` / null-valued fields while
  * the rest of the answer stays whole.
- *
- * TS conversion note: the vault read surface returns `Record<string, unknown>`
- * rows (see HandlerCtx.vault), so each raw row set is cast once to a typed
- * shape (`as unknown as X[]`) at its read site.
  */
 
 const PURPOSE = "dpv:ServiceProvision";

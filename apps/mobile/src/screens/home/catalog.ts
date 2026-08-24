@@ -1,11 +1,11 @@
-// The Home launcher catalog + merge logic (issue #498, Slice B change #4).
+// The Home launcher catalog + merge logic (#498, Slice B change #4).
 //
 // The springboard shows all eight first-party apps always, whether or not a
 // desktop is paired: the three native covers (Photos / Docs / Agenda) plus the
 // five native domain covers (Tasks / Notes / People / Locker / Tally). All
 // eight ship in the binary and read the encrypted replica, so the grid fills
-// offline and there is no gateway-hosted app to merge in (issue #799 retired
-// the WebView cover, and with it the served-app plane on the phone).
+// offline and there is no gateway-hosted app to merge in (#799: no WebView
+// cover, and no served-app plane on the phone).
 //
 // This module is pure (no React / navigation imports) so the merge rule stays
 // unit-testable and the routing decision lives in exactly one place.

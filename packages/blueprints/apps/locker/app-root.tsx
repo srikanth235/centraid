@@ -1,7 +1,7 @@
 // governance: allow-repo-hygiene file-size-limit — Locker's authentication,
 // inactivity/background erasure, and mutable UI state form one React lifecycle;
 // splitting those invariants across owners would make secret cleanup fail-open.
-// Locker — query-free React tree (issue #505). Holds the `Root` component and
+// Locker — query-free React tree (#505). Holds the `Root` component and
 // every constant, helper and type it needs that does NOT depend on the
 // node-side `./queries/*` handler modules. The shell's InlineAppModule
 // descriptor imports `Root` and `CHANGE_TABLES` from here and adds the query
@@ -224,7 +224,7 @@ export function Root({ rootRef }: InlineAppProps): ReactNode {
     data.items = next?.items ?? [];
     data.truncated = Boolean(next?.truncated);
 
-    // Watchtower counts come free with the items read (issue #404): that query
+    // Watchtower counts come free with the items read (#404): that query
     // already unseals passwords once to derive weak/reused, so it returns the
     // summary rather than a second full read + receipted unseal.
     if (next?.watchtower) {
@@ -467,7 +467,7 @@ export function Root({ rootRef }: InlineAppProps): ReactNode {
   // is-narrow pre-render from clientWidth; here observeWidth in the mount effect
   // below only fires post-paint, so without this the sidebar would paint as an
   // in-flow pane and then the reused Sidebar.module.css `transition: transform`
-  // would slide it out — a visible flash at narrow widths (issue #505). Runs in
+  // would slide it out — a visible flash at narrow widths (#505). Runs in
   // useLayoutEffect (after commit, before paint) and bumps synchronously, so the
   // FIRST painted frame is already narrow with the drawer hidden. The slide
   // transition stays gated on `.ready` (set one frame later) so this snap is

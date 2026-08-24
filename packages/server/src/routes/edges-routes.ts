@@ -145,8 +145,8 @@ export function makeEdgesRouteHandler(deps: EdgesRouteDeps): RouteHandler {
       });
 
     // Only the SAME-OWNER pair survives the refusal above, so both vaults are
-    // on this machine by construction: the remote lane this route used to
-    // carry left with copy-as-share.
+    // on this machine by construction: this route carries no remote lane
+    // (#825).
     const origin = deps.vaultFor(input.originVaultId);
     const audience = deps.vaultFor(input.audienceVaultId);
     if (!origin || !audience) return sendJson(res, 404, { error: "not_found" });

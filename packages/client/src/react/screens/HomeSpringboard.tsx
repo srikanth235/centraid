@@ -1,4 +1,4 @@
-// The Home springboard (issue #708, section A).
+// The Home springboard (#708, section A).
 //
 // Tier-1 CONTENT tiles, not an icon launcher. The header is invariant — app
 // mark, app name at the UI role, count in the numeric register — and the body
@@ -293,11 +293,11 @@ function FirstMove({
  *
  * The copy is the brief's, verbatim, out of the shared constants (mobile draws
  * the same two sentences from the same module, because one state may not have
- * two spellings). What sits under it changed: the four dashed rectangles used to
- * open the empty app they were named after, which is a dead end wearing an
- * invitation. They are now the four things that actually put something on this
- * page — and the copy finally offers what it promises, since "bring your
- * photographs and documents in" now has a control that does it.
+ * two spellings). What sits under it is the four things that actually put
+ * something on this page — NOT four rectangles opening the empty app they are
+ * named after, which is a dead end wearing an invitation. The copy offers what
+ * it promises: "bring your photographs and documents in" has a control that
+ * does it.
  */
 function DayOne({
   moves,
@@ -498,7 +498,7 @@ export default function HomeSpringboard({
   sample,
   justFilled = false,
 }: HomeSpringboardProps): JSX.Element {
-  // Graded, not binary (issue #708). A tile earns the grid by having something
+  // Graded, not binary (#708). A tile earns the grid by having something
   // to show; everything else becomes an invitation. So Home is never a wall of
   // apologies, and it FILLS IN — the same page, one tile richer — rather than
   // switching between two unrelated layouts at the first piece of content.
@@ -550,13 +550,13 @@ export default function HomeSpringboard({
             ))}
           </div>
           {moves.length > 0 ? <StartBand moves={moves} onPick={pick} /> : null}
-          {/* The offer belongs to BOTH treatments (issue #708). It used to hang
-              off day one alone, which quietly made it unreachable: a vault has
-              a People row for its own owner the moment it exists, so one live
-              tile ends day one before the member has added anything — and
-              clearing the sample then left them with no way back to it. The
-              condition that matters is "there is something to seed and it is
-              not seeded", not which layout Home happens to be drawing. */}
+          {/* The offer belongs to BOTH treatments (#708) — do not hang it off
+              day one alone, which makes it unreachable: a vault has a People
+              row for its own owner the moment it exists, so one live tile ends
+              day one before the member has added anything, and clearing the
+              sample then leaves no way back to it. The condition that matters
+              is "there is something to seed and it is not seeded", not which
+              layout Home happens to be drawing. */}
           {offer}
         </>
       )}

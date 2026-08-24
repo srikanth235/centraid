@@ -1,4 +1,4 @@
-// Scope-set resolution for an inline app mount (issue #599, ownership #726).
+// Scope-set resolution for an inline app mount (#599, ownership #726).
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import type * as TypeImport_nod2nz from "../../../gateway-client-core.js";

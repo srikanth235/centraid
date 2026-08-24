@@ -1,4 +1,4 @@
-// Schema migrations for the durable upload queue (#419 M0.4).
+// Schema migrations for the durable upload queue (#419.4).
 //
 // The queue is unreplicated source-of-truth: a migration that half-applies and
 // then bricks every subsequent open would strand a photo that exists nowhere

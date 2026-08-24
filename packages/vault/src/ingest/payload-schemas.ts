@@ -1,4 +1,4 @@
-// Runtime schema gate for ingest publisher payloads (issue #374 Tier 3).
+// Runtime schema gate for ingest publisher payloads (#374 Tier 3).
 // Every DECLARED command's input runs through gateway/json-schema.ts's
 // validateJson before it reaches SQLite (execution.ts ~line 316) — the
 // staging spine's publishers (publishers.ts, enrich-publishers.ts) were the
@@ -128,7 +128,7 @@ const SCHEMAS: Record<string, JsonSchema> = {
       path: { type: "string", minLength: 1 },
     },
   },
-  // Photo-library import (issue #721). Only the fields that can never be
+  // Photo-library import (#721). Only the fields that can never be
   // null carry a `type`: `capturedAt`, the coordinates, `caption`,
   // `captureGroupId` and `album` are all legitimately NULL — an archive that
   // says nothing about a photo must publish it, not fail it.
@@ -237,7 +237,7 @@ const SCHEMAS: Record<string, JsonSchema> = {
 /**
  * Validate `payload` against the named schema and return it typed as `T`,
  * else throw with every field-level violation — the same failure shape
- * `applyBatchTx` already catches per-row (issue #290): the row lands in
+ * `applyBatchTx` already catches per-row (#290): the row lands in
  * `failed`, the rest of the batch still publishes.
  */
 export function assertPayload<T>(

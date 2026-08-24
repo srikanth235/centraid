@@ -110,7 +110,7 @@ export interface GatewayScreenProps {
   loadResourceMode?: () => Promise<ResourceMode>;
   saveResourceMode?: (mode: ResourceMode) => Promise<void>;
   /**
-   * Pause / resume background work (issue #528 Phase B). Optional so older
+   * Pause / resume background work (#528). Optional so older
    * hosts/tests keep rendering; the pause control also gates on the health
    * snapshot carrying `metrics.backgroundPause`.
    */
@@ -119,7 +119,7 @@ export interface GatewayScreenProps {
   ) => Promise<{ paused: boolean; until: string | null }>;
   onResumeBackgroundWork?: () => Promise<{ paused: boolean }>;
   /**
-   * L3 "Tune" rung knob overrides (issue #528 Phase F). Optional so older
+   * L3 "Tune" rung knob overrides (#528). Optional so older
    * hosts/tests keep rendering; the Advanced section also gates on the health
    * profile carrying `sources` + `bounds`.
    */
@@ -466,12 +466,11 @@ export default function GatewayScreen(props: GatewayScreenProps): JSX.Element {
         </div>
       </div>
 
-      {/* NO BACK ROW. A drill-in used to open its own "‹ System · Back" row at
-          the top of the page — a second back control, three inches below the
-          frame's own back arrow and pointing at the same place. The drill-ins
-          are routes now (`onOpenTab`), so the arrow in the chrome already
-          returns to the overview and the page keeps its first screenful for
-          what it is actually about. */}
+      {/* NO BACK ROW. The drill-ins are routes (`onOpenTab`), so the arrow in
+          the chrome already returns to the overview. A page-level
+          "‹ System · Back" row would be a second back control three inches
+          below it pointing at the same place, and would spend the page's first
+          screenful on navigation instead of on what it is about. */}
 
       {tab === "overview" ? (
         <>
@@ -600,13 +599,11 @@ export default function GatewayScreen(props: GatewayScreenProps): JSX.Element {
             <RowsBlock ariaLabel="Look closer" rows={lookCloser} />
           </div>
 
-          {/* NO CLOSING NOTE. It was two paragraphs of commentary ABOUT the
-              page — one explaining that this seat withholds verbs, one
-              explaining that System is never pinned in the band. Neither is a
-              fact about the gateway, and the first was doing real work in the
-              wrong place: a row whose verb is withheld should say so ON THE
-              ROW, where the reader is already looking, which is what the
-              Identity row and the read-only rows now do. */}
+          {/* NO CLOSING NOTE. Commentary ABOUT the page — that this seat
+              withholds verbs, that System is never pinned in the band — is not
+              a fact about the gateway and does not belong here. A row whose
+              verb is withheld says so ON THE ROW, where the reader is already
+              looking, as the Identity row and the read-only rows do. */}
         </>
       ) : null}
 

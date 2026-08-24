@@ -13,7 +13,7 @@
 //      must not repeat (see PR review notes on FaceReview.tsx's old
 //      `partyId ? <Confirm/> : null`): a proposal with no proposed person
 //      still offers Not this person / Someone else / Unknown person / Skip.
-//   4. THE QUEUE CAN BE FINISHED (issue #712) — "Keep unnamed" writes a real
+//   4. THE QUEUE CAN BE FINISHED (#712) — "Keep unnamed" writes a real
 //      `dismiss` answer instead of setting an apologetic note, Skip is the
 //      only control that still writes nothing, and an empty queue reaches
 //      "No faces need review right now." rather than cycling the ones the
@@ -183,7 +183,7 @@ describe("Face review surface", () => {
 
   it("a fully answered library reaches the zero-remaining state", async () => {
     // Nothing left to review is a state this surface must be able to REACH —
-    // before issue #712 a skipped stranger had no answer that removed it, so
+    // before #712 a skipped stranger had no answer that removed it, so
     // the queue was only ever empty on a vault that had never proposed a face.
     const { container } = await mount([]);
     expect(container.textContent).toMatch(/No faces need review right now\./u);

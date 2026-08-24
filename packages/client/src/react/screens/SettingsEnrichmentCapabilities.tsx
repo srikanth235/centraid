@@ -27,7 +27,7 @@ import {
 
 import styles from "./SettingsEnrichmentScreen.module.css";
 
-// Settings → Enrichment, THE CAPABILITY LIST (issue #807; reshaped again for
+// Settings → Enrichment, THE CAPABILITY LIST (#807; reshaped again for
 // the v11 binding layer).
 //
 // WHY THE CAPABILITY IS THE ROW. The member's questions here are "what is

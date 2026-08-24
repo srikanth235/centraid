@@ -41,7 +41,7 @@ export interface PlaceSection {
   lat: number | null;
   lng: number | null;
   /** `core_place.kind` — `'home'` marks the one place a relative phrase is
-   *  anchored to, and the one search can answer "near home" with (issue #816,
+   *  anchored to, and the one search can answer "near home" with (#816,
    *  `search-groups.ts`). */
   kind?: string | null;
   /** The settlement name the opt-in gazetteer automation derived, if any. A
@@ -51,7 +51,7 @@ export interface PlaceSection {
 }
 
 /**
- * The reserved key of the trailing "no location" section (issue #816).
+ * The reserved key of the trailing "no location" section (#816).
  *
  * Not a place id and never confusable with one: place ids are uuids, and this
  * carries a hyphen and no digits. Both surfaces spell it the same way
@@ -92,7 +92,7 @@ export function placeSections(assets: readonly Asset[]): PlaceSection[] {
 
 /**
  * The trailing bucket: everything in the loaded window that carries NO place
- * (issue #816). Null when there is nothing in it — an empty section would be a
+ * (#816). Null when there is nothing in it — an empty section would be a
  * heading standing over nothing.
  *
  * This is not the section above's "a place with no name": there is no place
@@ -122,7 +122,7 @@ export function noLocationSection(
 
 /**
  * The Places shelf as it is actually drawn: the places, newest first, then the
- * no-location bucket (issue #816).
+ * no-location bucket (#816).
  *
  * A sibling of `placeSections` rather than a widening of it, because that
  * function answers "which places are in this window" and its answer is still

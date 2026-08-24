@@ -7,7 +7,7 @@ import AppEnrichmentSurface from "./AppEnrichmentSurface.js";
 import type { AppEnrichmentSurfaceProps } from "./AppEnrichmentSurface.js";
 
 /*
- * The app popover's Enrichment surface (issue #807). It is a projection: every
+ * The app popover's Enrichment surface (#807). It is a projection: every
  * line is the gateway's effective answer, the deep link is the only route to a
  * change, and the one-shot states plainly when nothing can enqueue it.
  */
