@@ -17,8 +17,8 @@ with the honesty gate untouched.
 - [x] Authored CSS layers stay hex-free and `var()`-resolvable; the rendered page stays fully self-contained (`data:` URIs only, no external links)
 - [x] Test files evolved to the new structure with every #853 property preserved, and the report package gates green (`test:ratchet:unit`, `typecheck`, `format`, `lint:site-tokens`, `test:report:smoke`)
 - [x] `docs/design-divergences.md` and `docs/decisions.md` updated; superseded bespoke dimensions recorded
-- [ ] Receipt `receipts/issue-862-nightly-report-night-watch.md` complete with independent `## Audit`
-- [ ] Both-theme rendered screenshots compared against the mockup before push
+- [x] Receipt `receipts/issue-862-nightly-report-night-watch.md` complete with independent `## Audit`
+- [x] Both-theme rendered screenshots compared against the mockup before push
 
 ## What changed
 
@@ -28,7 +28,9 @@ with the honesty gate untouched.
 carrying name, light value, dark value, so the three theme blocks cannot drift
 from each other — and appends the lowered layer to the report sheet only; the
 two public-site sheets are untouched. `scripts/test-report/report-tokens.css`
-is regenerated (purely additive) and now declares the nineteen rungs three
+is regenerated — additive when the palette lands, and by the end of the branch
++78/−6, the six deletions being comment lines W5 rewrote — and declares the
+nineteen rungs three
 times: light on `:root`, dark under both the `prefers-color-scheme` media
 block and `[data-theme="dark"]`. The rungs are prefixed `--nw-` because
 `--line`, `--danger` and `--link` already name product tokens in the sheet.
@@ -192,12 +194,20 @@ grows from five rows to eleven. The row describing eight states as a recessed
 trough and four as a fill is replaced by the cell register, marked as
 superseding #853's treatment: the argument for why a heat map may depart from
 DESIGN.md survives and gets stronger, since a tint behind a word is further
-from a fill than the trough was. Six rows are new, each naming a departure a
+from a fill than the trough was. Eight rows are new. Seven name a departure a
 future agent might otherwise "fix" by mistake — the `--nw-` palette and why the
 prefix is forced, §2/§3's declaration alphabet on neutral rungs, §6 as suite ×
 budget, §5's absent simulation numerics, §7 as three per-row ledgers, the
 ledgers' second verdict vocabulary, and the inspector taking neither the Sheet
 recipe's ground nor a `--shadow-*` rung.
+
+The eighth is a debt this pass created and leaves **Open**: twenty-three of the
+twenty-eight `--st-*` status rungs are still emitted and are now painted by
+nothing, the cell register having replaced the fills that used them. They are
+not deleted here, because `--st-solid` is `verifySheet`'s wholeness marker and
+because retiring a rung from the emitter is a decision about the ramp rather
+than about this page's layout. The row says both: do not delete them, and do not
+re-point cells at them.
 
 The open `lint:design-tokens` row keeps its verdict and loses its stale reason.
 The 40px cell, 98px header band and 230px surface column it cited are gone with
@@ -215,12 +225,26 @@ and no scale of its own" — a page read at a glance in ink that bottoms out at
 `--nw-*` rung appears on any other surface, and it generalises the honesty rule
 from the matrix to every section.
 
+### W6 — the receipt is audited, and repaired where it was wrong
+
+Receipt `receipts/issue-862-nightly-report-night-watch.md` complete with
+independent `## Audit`: a fresh-context auditor read the whole branch against
+this receipt and issue #862, and **refuted** the faithfulness check. Its three
+findings are repaired above rather than argued with — `grey`'s prior contrast
+was 2.06:1 light and 2.17:1 dark, not the single 2.19:1 figure claimed; the
+register gained eight rows, not the six claimed against a list of seven; and
+the emitted sheet is +78/−6 across the branch rather than purely additive. The
+two gaps it named — the unregistered `--st-*` surplus and the uncommitted CI
+wiring for the slot link — are now carried in `## Decisions` and
+`## Out of scope`.
+
 ### W5 — the palette clears AA, which the mockup did not
 
 The mockup's `ghost` rung measured 3.49:1 light and 3.30:1 dark against the page
 ground, below the 4.5:1 WCAG AA floor for text — and it is not decorative: it
 inks the `n/a` cell word, the footer, the section tags, the severity labels and
-the skipped result. `grey` was 2.19:1. Two rungs moved in `NIGHT_WATCH_RAMP`,
+the skipped result. `grey` was 2.06:1 light and 2.17:1 dark. Two rungs moved in
+`NIGHT_WATCH_RAMP`,
 the only place these literals live: `ghost` to `#757572` light and `#7B7B79`
 dark, `grey` to `#8B8A87` and `#666664`. Every other rung is untouched, and the
 sheet was regenerated from the table rather than edited.
@@ -241,7 +265,12 @@ both are corrected, and the file stays at 624 lines against the 625 cap.
   the report sheet (`--line`, `--danger`, `--link`), so all nineteen rungs are
   uniformly prefixed `--nw-` rather than splitting the namespace.
 - The `--st-*` status ramp from #853 stays in the sheet alongside the Night
-  Watch rungs; `verifySheet` guards both.
+  Watch rungs, and `verifySheet` guards both — but the cell register replaced
+  the fills that used it, so twenty-three of its twenty-eight rungs are now
+  emitted and painted by nothing. They are kept rather than retired in this
+  pass: `--st-solid` is the sheet's wholeness marker, and thinning the ramp is a
+  decision about the ramp, not about this page's layout. Registered Open in
+  `docs/design-divergences.md`.
 - §6 renders **suite × budget**, not the mockup's app × platform. No flow-to-app
   registry exists and platform is a per-evidence-item property rather than a
   declared axis, so the mockup's grid could only have been filled by inventing
@@ -286,6 +315,14 @@ both are corrected, and the file stays at 624 lines against the 625 cap.
   page renders what is real (suite × budget) and names the gap; building the
   source is product work, not report work. (§4's consent ledger, by contrast,
   already had eight real layers behind it.)
+- Wiring the masthead's immutable-slot link in CI. The link renders only when
+  `TEST_REPORT_RUN_SLUG` and `TEST_REPORT_PUBLIC_URL` both reach the generator,
+  and today neither does: no workflow sets the slug, and the public URL reaches
+  only `write-job-summary.mjs`. The generator omits the link rather than
+  guessing, so the page is honest as it stands; `.github/workflows/e2e.yml` must
+  pass `steps.slot.outputs.slug` for the link to appear, and that workflow is
+  deliberately not in this change set. The mockup's separate "history" link is
+  not rendered at all, for the same reason.
 - Two defects an auditor found in merged main while this branch's change set
   was misattributed to it, both outside this issue and neither repaired here:
   PR #832 (#831) deleted `apps/mobile/src/apps/tally/PendingRestartJourney.test.tsx`
@@ -311,71 +348,188 @@ pre-compaction sheet, oxfmt and oxlint clean, theme tests 9/9 against a clean
 checkout-index tree (the working tree carried a sibling slice's in-flight
 edit at verification time).
 
+The whole report lane and the push gate:
+
+```sh
+bunx vitest run --config scripts/test-report/vitest.config.ts
+bun run test:ratchet:unit
+bun run check:push
+```
+
+436 tests over 30 files, none failing; coverage 53.48 / 49.27 / 53.64 / 54.45
+against floors of 35 / 30 / 30 / 35, no floor moved. `check:push` clears 46 of
+its 47 gates. The one failure is `design:gallery`, which dies at
+`chromium.launch` — the sandbox provides `chromium_headless_shell-1194` while
+this Playwright expects `-1234`. It is an environment gap, not a defect in the
+diff: `scripts/design-gallery.mjs` is not in the change set, the failure
+precedes any page load, and the environment's own guidance is not to install
+browsers over the preinstalled set. CI runs the same gate with matching
+browsers.
+
+**Both-theme rendered screenshots compared against the mockup before push.**
+The page was generated and opened in Chromium at 1180px under each colour
+scheme. Light ground `rgb(253, 253, 252)` on ink `rgb(20, 20, 20)`, dark
+`rgb(14, 14, 14)` on `rgb(237, 237, 236)`, Instrument Sans resolving in both;
+`h1` "Night watch" at 26px; section ids in document order `queue, product,
+states, consent, joins, journeys, adv, infra, shelf`; `#inspector` computing to
+`position: fixed`; `scrollWidth` equal to `clientWidth`, so nothing overflows
+horizontally. Against the mockup the masthead, verdict bar, sticky index,
+`§`-tagged headings with their rationale lines, and the queue's chip/owner/age/
+action columns all match. The render carried no evidence artifacts, so every
+cell is honestly grey and the delta reads "first recorded night".
+
 ## Audit
 
-Fresh-context audit of the **W1 milestone change set only** — the four staged
-files in `git diff --cached`, not the finished umbrella. It will be superseded
-by a final-state audit before #862 closes; the unchecked Checklist rows are
-W2–W4 work and were not judged. The working tree carried sibling slices'
-in-flight edits at audit time (`generate.mjs`, `render-briefing.mjs`,
-`report-verdict.mjs`, `history-point.mjs`, and a second unstaged layer on
-`report-theme.mjs`), so every command below was re-run in a throwaway worktree
-built from the index alone (`git write-tree` → `commit-tree` → detached
-worktree, removed afterwards) and nothing unstaged is credited to W1.
+Fresh-context audit of the **complete branch** — all five commits in
+`origin/main...HEAD` plus the staged receipt edit in `git diff --cached`. It
+supersedes the W1-milestone audit that stood here, which judged four staged
+files and one checklist row and explicitly deferred the rest. Every command
+below was run against the working tree as it stands (clean but for the staged
+receipt); the two sabotage probes edited `generate.mjs` in place and restored
+it from a byte copy, and `git status` is unchanged by this audit.
 
-**(1) `## What changed` describes the diff faithfully — PASS.** All four
-staged files are accounted for and nothing is described that the diff does not
-contain (`--numstat`: receipt +92/-0, `scripts/site-tokens.mjs` +129/-116,
-`scripts/test-report/report-theme.mjs` +13/-0,
-`scripts/test-report/report-tokens.css` +74/-0). `NIGHT_WATCH_RAMP` is one
-`name light dark` text table read by a single named-group regex
-(`NW_RUNG`/`nightWatchDecls`) and interpolated three times into the tail of
-`REPORT_LAYER` — as described, and only into `reportSheet()`: the two site
-sheets are absent from the diff and contain zero `--nw-` (`grep -c`).
-The regenerated `report-tokens.css` hunk is `@@ -603,3 +603,77 @@` — purely
-additive, no deletions — and carries 57 `--nw-` declarations, i.e. **19 rungs
-× 3 blocks**: `:root` light, `@media (prefers-color-scheme: dark)
-:root:not([data-theme="light"])`, and `:root[data-theme="dark"]`. All 38
-values were compared against the issue's inlined light and dark lists and
-match rung-for-rung; the `--nw-` prefix and its stated reason
-(`--line`/`--danger`/`--link` already in the sheet) are borne out.
-The `verifySheet` hunk sits after the linked-face throw, as claimed. The
-compaction narrative also holds: staged `wc -l scripts/site-tokens.mjs` is
-**624** against `FILE_SIZE_LIMIT=625` in
+**(1) `## What changed` describes the diff faithfully — REFUTED.** The section
+is accurate almost everywhere, and three statements in it are not.
+
+*The wrong figure.* W5 says the mockup's `grey` rung "was 2.19:1". Recomputing
+WCAG 2.x contrast over the values commit `1db07dff` actually replaced —
+`#B4B3B0` light, `#4A4A48` dark — gives **2.06:1** light and **2.17:1** dark
+against `--nw-ground`. No pairing of `grey` with any rung the page declares
+(`ground`, `greybg`, `surf`, `sunken`, either theme) yields 2.19. The argument
+is unaffected — both figures are far under the 3:1 mark rung floor — but the
+number as written is reproducible from nothing.
+
+*The undercount, and the row nobody described.* W4 says the register's
+"nightly test report" section "grows from five rows to eleven" (true: 5 → 11)
+and that "**Six** rows are new" — then enumerates **seven** (`--nw-` palette,
+the §2/§3 declaration alphabet, §6, §5, §7, the ledgers' second verdict
+vocabulary, the inspector). The diff adds **eight** new rows plus the one
+replacement it names. The eighth — "Twenty-three of the twenty-eight `--st-*`
+status rungs are declared by the emitter and painted by nothing", verdict
+**Open**, do not delete and do not re-point — appears nowhere in the receipt.
+It is the most consequential row added: a standing debt this pass created by
+taking the fills off the cells, and the Decisions bullet that comes closest
+("the `--st-*` status ramp from #853 stays in the sheet") records the opposite
+emphasis — that the ramp survives, not that five of its twenty-eight rungs are
+all that still paint. Verified: the authored layers reference exactly
+`--st-solid-text`, `--st-failed-text`, `--st-flaky-text`, `--st-na-text` and
+`--st-absent-text` (four in `BRIEFING_CSS`, one in `prepare-pages-site.mjs`),
+against 28 `--st-` declarations in the sheet.
+
+*The stale adjective.* W1 calls the regenerated `report-tokens.css` "purely
+additive". It was, at the W1 milestone. Across the branch the file is
+**+78/−6**: the W5 comment corrections in the emitter rewrote six comment lines
+inside the emitted sheet. True then, not true of the change set this receipt
+now describes.
+
+Everything else in the section reproduces. All sixteen files in `--numstat` are
+accounted for and nothing is described that the diff does not contain. The
+whole W5 contrast table was recomputed from `NIGHT_WATCH_RAMP` and matches to
+the digit — ink 18.10/16.48, ink2 6.79/6.85, ink3 5.18/5.36, ghost 4.54/4.55,
+link 7.69/9.10, ok-on-okbg 5.46/6.44, attn 4.88/6.26, danger 5.92/6.64, ink3
+on greybg 4.63/4.84, grey 3.39/3.35 — as do the mockup's 3.49/3.30 for `ghost`
+and the claim that only those two rungs moved (a rung-for-rung compare against
+the issue's inlined lists shows `ghost` and `grey` differing and the other
+seventeen identical, in both themes). The `--nw-grey` "no text" justification
+holds: its three call sites are `.quality-light`'s 9px dot, `.dot`'s 7px dot
+and border, and `.cell.expected-grey`'s 1px dashed rule — no text, so 3:1 is
+the right bar. `624` lines against `FILE_SIZE_LIMIT=625` in
 `.governance/conf/governance-kit/foundation/repo-hygiene.conf`, which the diff
-does not touch — the budget was not moved. Each named compaction move is
-present (`faceBytes`, `settle`, `SITE_ROOTS`/`SITE_FILES` walked once,
-`declaredProps`, the dissolved layer function). "The emitted sheets are
-byte-identical" is confirmed indirectly but decisively: `bun run
-lint:site-tokens` is green on the index tree, which is a byte compare of all
-three emitted sheets against this emitter.
+does not touch. The ledger column templates match the issue's contract byte for
+byte (queue `84px 1fr 190px 70px 120px`, consent `170px 1fr 150px 110px 90px`,
+joins `240px 1fr 120px 90px`, adversaries `200px 90px 90px 110px 1fr`), and the
+eight consent layers and ten join laws are the real registry counts.
+`BRIEFING_CSS` is five rules. The "34 raw font sizes across ten literal steps
+(26px down to 10px)" is exact: 34 `font-size` literals, steps 26/17/15/14/13/
+12/11.5/11/10.5/10.
 
-**(2) Every `- [x]` item is realized in the diff — PASS.** One item is
-checked. "Palette declared in the generated report sheet for both themes" —
-the `report-tokens.css` hunk above, both themes, dark spelled twice.
-"`lint:site-tokens` green" — reproduced on the index tree (`site tokens: home
-+ docs + the report match @centraid/design`, exit 0). "`verifySheet` refuses a
-sheet missing it" — reproduced by probe against the staged module: the full
-sheet is accepted; a sheet with the palette renamed away, a light-half-only
-truncation, and a sheet with the dark rungs gutted are each refused with the
-`declares no Night Watch palette` error. The Verification block's other claims
-also reproduce on the index tree: theme tests **9/9**, `bun run
-test:report:smoke` → `test report smoke: ok`, exit 0.
+Every `## Verification` number reproduces: `bunx vitest run --config
+scripts/test-report/vitest.config.ts` → **436 tests over 30 files, 0 failing**;
+`bun run test:ratchet:unit` → **53.48 / 49.27 / 53.64 / 54.45** against the
+thresholds `35 / 30 / 30 / 35` declared in `scripts/test-report/vitest.config.ts`,
+a file outside the change set; `bun run lint:site-tokens` and `bun run
+test:report:smoke` green. `check:push` does list **47** gates. The
+`design:gallery` explanation is confirmed rather than taken on faith:
+`playwright-core@1.62.0`'s `browsers.json` pins chromium revision **1234** and
+the sandbox carries only `/opt/pw-browsers/chromium_headless_shell-1194`.
+
+**(2) Every `- [x]` item is realized in the diff — PASS.** Nine rows are
+checked; the tenth (this audit) is honestly left open. Each was attacked
+rather than read.
+
+- *Palette / `lint:site-tokens` / `verifySheet`* — the sheet carries **57**
+  `--nw-` declarations, 19 rungs × 3 blocks (`:root`, the
+  `prefers-color-scheme` block, `[data-theme="dark"]`); no other sheet in the
+  tree contains `--nw-`, so the ruling's non-goal holds; `verifySheet` throws on
+  a missing or light-only palette, after the linked-face throw.
+- *Running order* — a real render (`node scripts/test-report/generate.mjs`)
+  emits `<h2 id>` in exactly `queue, product, states, consent, joins, journeys,
+  adv, infra, shelf`, each reachable from `nav.toc`, `<main class="page">`,
+  `<footer class="foot">`, and `<div id="inspector">` after `</main>`.
+- *Twelve states, two collapses* — the register gives ten pairwise-distinct
+  treatments; inside a family the states separate by weight, slope or the
+  dashed rule. The word claim was sabotage-tested, not read: stubbing
+  `stateWord` to a constant fails **3 of 4** tests in
+  `report-state-words.test.mjs` (the aria test survives, since the label reads
+  the same stub — exactly as the receipt says), and transposing `gap`/`stale`
+  fails **the first only**. Both claims are literally true.
+- *Geometry* — queue, four ledgers, journeys, the fixed sheet
+  (`position: fixed` confirmed in a browser) and 96×22 sparklines with a
+  trailing dot, stroke and dot taken from `.spark` rules rather than SVG
+  presentation attributes.
+- *Honesty gate unchanged* — the nightly `cellsMissing > 0` exit-1 block is
+  untouched by the diff; the only edit near the banner is the hero's deletion.
+- *Self-contained* — measured on a real 793 KB render, not on the `<style>`
+  block alone: **0** `<link>`, **0** `<script src>`, **0** non-`data:` `url()`,
+  no `googleapis`. The only absolute hrefs are GitHub issue links, which are
+  hyperlinks and not resource loads. All **33** `var()` names in the authored
+  layers resolve against the sheet; both layers carry zero six-digit hex.
+- *Gates green* — reproduced here: `format:check`, `lint`, `knip`,
+  `test:ratchet:unit`, `test:report:smoke`, `lint:site-tokens`, `lint:css`,
+  `lint:design-tokens`, `lint:hairline`, `lint:motion-rule`, `lint:type-floor`,
+  `lint:aria-labels`, `lint:logical-insets`, `lint:container-opacity`,
+  `test:hygiene-ratchet`, `lint:design-md`, `typecheck:affected`.
+- *Screenshots* — every measurement in the closing paragraph was reproduced by
+  driving the available headless shell over the rendered page at 1180px: light
+  `rgb(253, 253, 252)` on `rgb(20, 20, 20)`, dark `rgb(14, 14, 14)` on
+  `rgb(237, 237, 236)`, Instrument Sans first in the resolved stack, `h1` 26px
+  "Night watch", `#inspector` `fixed`, `nav.toc` `sticky`, `scrollWidth` 1180 =
+  `clientWidth` in both themes.
+
+**No gate, budget, floor, allowlist or test was weakened.** The change set
+touches no configuration file at all — not the vitest thresholds, not
+`repo-hygiene.conf`, not an oxlint or knip config, not the `check:push` gate
+list. Every assertion the restructure displaced came back stronger and was
+verified as such: the two app-grid checks now pin class **and** word together,
+smoke's two hero strings became regexes pinning count beside label, the
+briefing's shelf test was measuring a heading that had moved out of the shelf
+and now anchors on `id="shelf"`, and `report-theme.test.mjs` **dropped** its
+`--row` escape hatch rather than gaining one. `report-state-words.test.mjs` is
+282 lines of new property nothing previously held. The line cap was met by
+compacting the emitter to 624, not by raising 625; the divergence register
+gained an **Open** debt row rather than losing one. This is the opposite of
+going green by policy.
 
 **(3) `## Checklist` mirrors the issue's acceptance criteria — PASS.** Issue
-#862 was read live via the GitHub API. Its "## Acceptance criteria" list has
-ten items; the receipt's Checklist has ten, and a normalized `diff` of the two
-lists (collapsing the single `[x]` to `[ ]`) is empty — verbatim identical,
-same order, no additions, no droppings, no rewording.
+#862 was read live through the GitHub API. Its "## Acceptance criteria" list
+has ten items; the receipt's Checklist has ten; a normalized `diff` of the two
+(collapsing every box to `[ ]`) is empty — verbatim, same order, nothing added,
+dropped or reworded.
 
-Two observations that do not refute the above, recorded rather than softened:
-`verifySheet` keys on `--nw-ground:` alone, so a sheet declaring that one rung
-in all three blocks while missing the other eighteen would pass — a sentinel
-check, which is what the checklist row asks for, but it does not guard the
-ramp's completeness the way `lint:site-tokens` byte-freshness does. And five
-operator-visible strings in `site-tokens.mjs` were shortened by the compaction
-(the two `facesInline` throws, the `--write` and success logs, the scanned-zero
-error); the receipt names the compaction but not that its output text changed.
+Three things judged questionable and left standing rather than softened. The
+masthead cannot render the design contract's **immutable-slot** link as CI is
+wired today: `TEST_REPORT_RUN_SLUG` is set in no workflow, and
+`TEST_REPORT_PUBLIC_URL` is passed only to `write-job-summary.mjs`, never to the
+generate step — the Decisions bullet says the workflow "must pass the slot slug
+for it to appear", but `.github/workflows/e2e.yml` is not in the change set and
+the gap is recorded under Decisions rather than under `## Out of scope`, where
+the issue asks for it. The contract's **history** link is likewise absent from
+`.runmeta`; the receipt never claims it, so this refutes nothing, but the
+masthead is one element short of the design it is measured against. And
+`verifySheet` still keys on `--nw-ground:` alone, so a sheet declaring that one
+rung in all three blocks while missing the other eighteen would pass it — a
+sentinel, which is what the checklist row asks for, with `lint:site-tokens`
+byte-freshness carrying the ramp's completeness.
 
 ## Session
 
