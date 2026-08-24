@@ -8,20 +8,20 @@
 "use strict";
 
 window.FLAT = (() => {
-  const cvs = document.getElementById("flat");
+  const cvs = document.querySelector("#flat");
   const g = cvs.getContext("2d");
-  const HUE = ISLE.HUE,
-    MAP = ISLE.MAP,
-    ANCHORS = ISLE.ANCHORS;
+  const ANCHORS = ISLE.ANCHORS,
+    HUE = ISLE.HUE,
+    MAP = ISLE.MAP;
   const hex = (n) => "#" + n.toString(16).padStart(6, "0");
 
-  const anim = [];
+  const _anim = [];
   const frameHooks = [];
-  const W = 6,
-    INK = "#0d0e14";
+  const _INK = "#0d0e14",
+    _W = 6;
 
   /* ---------- camera ---------- */
-  let cam = { x: -6, y: 10, z: 3.4 }; // y here is world -z (north up)
+  const cam = { x: -6, y: 10, z: 3.4 }; // y here is world -z (north up)
   let goal = { ...cam };
   const FOCI = {
     isle: { x: -6, y: 10, z: 3.2 },
@@ -53,17 +53,17 @@ window.FLAT = (() => {
   }
 
   /* ---------- state ---------- */
-  let night = false,
-    buildP = 1;
+  let buildP = 1,
+    night = false;
   const pulses = new Map();
   const parcels = new Map();
-  let parcelSeq = 0;
+  const _parcelSeq = 0;
   const tethers = {};
-  let outboxN = 0,
-    scopesN = 0,
+  let copiedN = 0,
+    outboxN = 0,
     packOn = false,
-    copiedN = 0,
-    syncOn = false;
+    scopesN = 0;
+  const _syncOn = false;
 
   function resize() {
     const dpr = Math.min(2, devicePixelRatio || 1);
@@ -365,7 +365,7 @@ window.FLAT = (() => {
     g.strokeStyle = "#4a4e6a";
     g.lineWidth = 3;
     g.beginPath();
-    let prev = toScreen(0, 57);
+    const prev = toScreen(0, 57);
     g.moveTo(prev[0], prev[1]);
     for (let i = 1; i < 9; i++) {
       const q = toScreen(0, 57 + i * 4.2);
@@ -380,7 +380,7 @@ window.FLAT = (() => {
       [0, 97, 10.5, HUE.slate],
       [-80, 46, 5, HUE.rose],
     ];
-    islets.forEach(([ix, iz, ir, c]) => {
+    islets.forEach(([ix, iz, ir, _c]) => {
       ring(ix, iz, ir, "#4a4e6a", 0.9, 2);
       dot(ix, iz, ir * 0.5, "#20222e", 1);
     });
@@ -452,7 +452,7 @@ window.FLAT = (() => {
       web1: [[36, 28], [60, 36], HUE.relay],
       web2: [[60, 36], [69, 32], HUE.relay],
     };
-    for (const name in tetherDefs) {
+    for (const name of Object.keys(tetherDefs)) {
       const [x1, z1, x2, z2, c] = [
         tetherDefs[name][0][0],
         tetherDefs[name][0][1],
@@ -478,8 +478,8 @@ window.FLAT = (() => {
       if (!cut) {
         const n = 9;
         for (let i = 1; i < n; i++) {
-          const u = i / n,
-            iu = 1 - u;
+          const iu = 1 - i / n,
+            u = 1 - iu;
           const px = iu * iu * ax2 + 2 * iu * u * mx + u * u * bx2;
           const py = iu * iu * ay2 + 2 * iu * u * my + u * u * by2;
           const tw = 0.35 + 0.5 * Math.max(0, Math.sin(t * 2.2 - i * 0.45));
@@ -497,9 +497,9 @@ window.FLAT = (() => {
     // ── parcels ──
     for (const r of parcels.values()) {
       const u = ((perfNow / 1000 - r.t0) * r.speed + r.phase) % 1;
-      const seg = u * (r.pts.length - 1),
-        i = Math.min(Math.floor(seg), r.pts.length - 2),
-        f = seg - i;
+      const seg = u * (r.pts.length - 1);
+      const i = Math.min(Math.floor(seg), r.pts.length - 2);
+      const f = seg - i;
       const px = r.pts[i][0] + (r.pts[i + 1][0] - r.pts[i][0]) * f;
       const pz = r.pts[i][2] + (r.pts[i + 1][2] - r.pts[i][2]) * f;
       const fade = Math.min(1, Math.sin(u * Math.PI) * 3);
@@ -520,7 +520,7 @@ window.FLAT = (() => {
   }
 
   /* ---------- chips (x-ray) ---------- */
-  const chips = MAP.map(([x, y, z, t, n, xr, cls]) => {
+  const chips = MAP.map(([x, _y, z, t, n, xr, cls]) => {
     const el = document.createElement("div");
     el.className = "lbl " + (cls || "");
     el.innerHTML =
@@ -551,7 +551,7 @@ window.FLAT = (() => {
     g.fillRect(0, 0, innerWidth, innerHeight);
     g.save();
     if (buildP < 0.999) {
-      const e = 1 - Math.pow(1 - buildP, 3);
+      const e = 1 - (1 - buildP) ** 3;
       g.translate(innerWidth / 2, innerHeight / 2);
       g.scale(Math.max(0.001, e), Math.max(0.001, e));
       g.translate(-innerWidth / 2, -innerHeight / 2 + (1 - e) * 60);
@@ -581,8 +581,8 @@ window.FLAT = (() => {
         );
       cand.sort((a, b) => (a.c.sm ? 1 : 0) - (b.c.sm ? 1 : 0));
       for (const { c, q } of cand) {
-        const w = c.el.offsetWidth || 120,
-          h = c.el.offsetHeight || 40;
+        const h = c.el.offsetHeight || 40,
+          w = c.el.offsetWidth || 120;
         const r1 = {
           x: q.x - w / 2 - 6,
           y: q.y - h / 2 - 4,

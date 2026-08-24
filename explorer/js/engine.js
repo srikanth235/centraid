@@ -7,7 +7,7 @@
 (() => {
   const REDUCED = matchMedia("(prefers-reduced-motion: reduce)").matches;
   let R = window.ISLE; // active renderer: ISLE (3D) or FLAT (2D)
-  const calloutsEl = document.getElementById("callouts");
+  const calloutsEl = document.querySelector("#callouts");
 
   /* ---------- beat-scoped world state ---------- */
   const spawned = []; // parcel ids created by beats
@@ -61,8 +61,7 @@
     r.textContent = (tone === "in" ? "> " : "· ") + text;
     ledgerEl.appendChild(r);
     ledgerRows.push(text);
-    while (ledgerEl.children.length > 7)
-      ledgerEl.removeChild(ledgerEl.children[1]);
+    while (ledgerEl.children.length > 7) ledgerEl.children[1].remove();
   }
   function clearLedger() {
     if (ledgerEl) {
@@ -142,7 +141,8 @@
         break;
       case "pulse":
         R.pulse(op.el, op.on);
-        op.on ? pulsed.add(op.el) : pulsed.delete(op.el);
+        if (op.on) pulsed.add(op.el);
+        else pulsed.delete(op.el);
         break;
       case "callout":
         addCallout(op);
@@ -204,21 +204,21 @@
   }
 
   /* ---------- journey / beat control ---------- */
-  const tabsEl = document.getElementById("journeyTabs");
-  const railEl = document.getElementById("rail");
-  const narrT = document.getElementById("narrTitle");
-  const narrX = document.getElementById("narrText");
-  const narrS = document.getElementById("narrSrc");
-  const stepPos = document.getElementById("stepPos");
+  const tabsEl = document.querySelector("#journeyTabs");
+  const railEl = document.querySelector("#rail");
+  const narrT = document.querySelector("#narrTitle");
+  const narrX = document.querySelector("#narrText");
+  const narrS = document.querySelector("#narrSrc");
+  const stepPos = document.querySelector("#stepPos");
 
-  let curJourney = null,
+  let beatStart = 0,
     curBeat = -1,
+    curJourney = null,
     fxQueue = [],
-    beatStart = 0,
     playing = false;
 
   function fmtText(s) {
-    return esc(s).replace(/`([^`]+)`/g, "<code>$1</code>");
+    return esc(s).replace(/`(?<code>[^`]+)`/gu, "<code>$<code></code>");
   }
 
   function renderTabs() {
@@ -227,7 +227,7 @@
       const b = document.createElement("button");
       b.className = "pill" + (curJourney === j.id ? " on" : "");
       b.innerHTML = "<b>" + j.tab + "</b>";
-      b.onclick = () => go(j.id, 0);
+      b.addEventListener("click", () => go(j.id, 0));
       tabsEl.appendChild(b);
     });
   }
@@ -260,7 +260,7 @@
         "</span><span>" +
         esc(b.t) +
         "</span>";
-      bt.onclick = () => go(curJourney, i);
+      bt.addEventListener("click", () => go(curJourney, i));
       railEl.appendChild(bt);
     });
   }
@@ -303,7 +303,7 @@
       narrS.textContent = "SOURCE · " + b.src.label;
     } else narrS.hidden = true;
     stepPos.textContent = "BEAT " + (curBeat + 1) + "/" + j.beats.length;
-    document.getElementById("prevBtn").disabled = curBeat === 0;
+    document.querySelector("#prevBtn").disabled = curBeat === 0;
     renderRail();
     history.replaceState(null, "", "#j/" + j.id + "/" + curBeat);
     b._dwell = beatDwell(b);
@@ -366,52 +366,50 @@
   }
 
   /* ---------- autoplay ---------- */
-  const playBtn = document.getElementById("playBtn");
+  const playBtn = document.querySelector("#playBtn");
   function updatePlayBtn() {
     playBtn.textContent = playing ? "❚❚ PAUSE" : "▶ PLAY";
     playBtn.classList.toggle("on", playing);
   }
-  playBtn.onclick = () => {
-    if (!curJourney) go(JOURNEYS[0].id, 0);
-    else {
+  playBtn.addEventListener("click", () => {
+    if (curJourney) {
       playing = !playing;
       updatePlayBtn();
-    }
-  };
+    } else go(JOURNEYS[0].id, 0);
+  });
   function stopPlay() {
     playing = false;
     updatePlayBtn();
   }
 
   /* ---------- input ---------- */
-  document.getElementById("prevBtn").onclick = prev;
-  document.getElementById("nextBtn").onclick = next;
-  document.getElementById("homeBtn").onclick = () => {
+  document.querySelector("#prevBtn").addEventListener("click", prev);
+  document.querySelector("#nextBtn").addEventListener("click", next);
+  document.querySelector("#homeBtn").addEventListener("click", () => {
     closeModal();
     enterOverview();
-  };
+  });
 
   addEventListener("keydown", (e) => {
     if (e.target.tagName === "INPUT") return;
     if (e.key === "ArrowRight") {
       stopPlay();
-      next();
+      return next();
     } else if (e.key === "ArrowLeft") {
       stopPlay();
       prev();
     } else if (e.key === "Escape") {
-      if (!document.getElementById("modal").hidden) closeModal();
-      else {
+      if (document.querySelector("#modal").hidden) {
         stopPlay();
         enterOverview();
-      }
+      } else closeModal();
     } else if (e.key.toLowerCase() === "x") {
-      xrayBtn.onclick();
+      cycleMode();
     }
   });
 
   // progressive disclosure: STORY → MECHANISM → FULL
-  const xrayBtn = document.getElementById("xrayBtn");
+  const xrayBtn = document.querySelector("#xrayBtn");
   const MODES = [
     ["story", "X-RAY · STORY"],
     ["mech", "X-RAY · MECH"],
@@ -425,22 +423,23 @@
     xrayBtn.textContent = label;
     xrayBtn.classList.toggle("on", modeIx > 0);
   }
-  xrayBtn.onclick = () => {
+  function cycleMode() {
     modeIx = (modeIx + 1) % MODES.length;
     if (curJourney) userMode = modeIx;
     applyMode();
-  };
+  }
+  xrayBtn.addEventListener("click", cycleMode);
   applyMode();
 
   /* ---------- 2D / 3D toggle ---------- */
-  const dimBtn = document.getElementById("dimBtn");
-  const flatCvs = document.getElementById("flat");
+  const dimBtn = document.querySelector("#dimBtn");
+  const flatCvs = document.querySelector("#flat");
   let dim2d = false;
   function setDim(v) {
     dim2d = v;
     R = v ? window.FLAT : window.ISLE;
     flatCvs.hidden = !v;
-    R_3D = R_3D || document.querySelector("body > canvas");
+    R_3D ||= document.querySelector("body > canvas");
     R_3D.style.display = v ? "none" : "block";
     dimBtn.textContent = v ? "3D" : "2D";
     dimBtn.classList.toggle("on", v);
@@ -449,11 +448,11 @@
     else enterOverview();
   }
   let R_3D = null;
-  dimBtn.onclick = () => setDim(!dim2d);
+  dimBtn.addEventListener("click", () => setDim(!dim2d));
 
   /* ---------- modal ---------- */
-  const modal = document.getElementById("modal"),
-    mContent = document.getElementById("modalContent");
+  const mContent = document.querySelector("#modalContent"),
+    modal = document.querySelector("#modal");
   function openModal(html) {
     mContent.innerHTML = html;
     modal.hidden = false;
@@ -461,12 +460,12 @@
   function closeModal() {
     modal.hidden = true;
   }
-  document.getElementById("modalClose").onclick = closeModal;
+  document.querySelector("#modalClose").addEventListener("click", closeModal);
   modal.addEventListener("click", (e) => {
     if (e.target === modal) closeModal();
   });
 
-  document.getElementById("mappingBtn").onclick = () => {
+  document.querySelector("#mappingBtn").addEventListener("click", () => {
     const rows = MAPPING.map(
       (m) =>
         "<tr><td>" +
@@ -484,8 +483,8 @@
         rows +
         "</table>"
     );
-  };
-  document.getElementById("glossBtn").onclick = () => {
+  });
+  document.querySelector("#glossBtn").addEventListener("click", () => {
     const items = GLOSSARY.map(
       (t) =>
         "<div class='gterm'><dt>" +
@@ -501,8 +500,8 @@
         "<p class='lead'>Binding vocabulary from docs/glossary.md. If a term here drifts from that file, the file wins and this is a bug.</p>" +
         items
     );
-  };
-  document.getElementById("mapBtn").onclick = () => {
+  });
+  document.querySelector("#mapBtn").addEventListener("click", () => {
     openModal(
       "<h2>THE WORKSPACE AS DISTRICTS</h2>" +
         "<p class='lead'>The monorepo drawn as towns: a package exists only when distribution, a hard technical wall, or an independently published contract requires it. Roads are declared dependencies; the broken crossings are law.</p>" +
@@ -516,13 +515,13 @@
         "<p>Seams that used to be package.json edges are import-boundary rules: <code>automation</code> never imports <code>acp</code>; <code>engine</code> imports neither. — ARCHITECTURE.md · Dependency shape</p>" +
         "</div>"
     );
-  };
+  });
 
   /* ---------- hash routing ---------- */
   function fromHash() {
-    const m = location.hash.match(/^#j\/([\w-]+)\/(\d+)/);
-    if (m && JOURNEYS.some((j) => j.id === m[1])) {
-      go(m[1], +m[2]);
+    const m = location.hash.match(/^#j\/(?<jid>[\w-]+)\/(?<beat>\d+)/u);
+    if (m && JOURNEYS.some((j) => j.id === m.groups.jid)) {
+      go(m.groups.jid, +m.groups.beat);
       return true;
     }
     return false;
@@ -539,7 +538,7 @@
         applyOp(fxQueue.shift().op);
       if (playing) {
         const b = JOURNEYS.find((x) => x.id === curJourney).beats[curBeat];
-        if (now - beatStart > (b._dwell || 6) * 1000) next();
+        if (now - beatStart > (b._dwell || 6) * 1000) return next();
       }
     }
     requestAnimationFrame(tick);

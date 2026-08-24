@@ -14,7 +14,7 @@ const srcOf = (file, anchor) => ({
 });
 
 /* ── progressive disclosure: acts per journey (rail headers) ─────────────── */
-const ACTS = {
+window.ACTS = {
   boot: [
     [0, "WATCH"],
     [2, "MECHANISM"],
@@ -65,7 +65,7 @@ const ACTS = {
   ],
 };
 
-const JOURNEYS = [
+window.JOURNEYS = [
   /* ── welcome ─────────────────────────────────────────────────────────────── */
   {
     id: "welcome",
@@ -325,7 +325,7 @@ const JOURNEYS = [
           focus: "custom",
           r: 110,
           theta: 0.35,
-          phi: 1.0,
+          phi: 1,
           target: [-20, -2, 62],
         },
         fx: [
@@ -648,7 +648,7 @@ const JOURNEYS = [
           focus: "custom",
           r: 70,
           theta: 0.95,
-          phi: 1.0,
+          phi: 1,
           target: [40, 4, 0],
         },
         fx: [
@@ -749,7 +749,7 @@ const JOURNEYS = [
         cam: {
           focus: "custom",
           r: 80,
-          theta: 1.0,
+          theta: 1,
           phi: 0.9,
           target: [70, 20, -20],
         },
@@ -1088,7 +1088,7 @@ const JOURNEYS = [
           focus: "custom",
           r: 90,
           theta: 0.35,
-          phi: 1.0,
+          phi: 1,
           target: [-20, -2, 60],
         },
         fx: [
@@ -1235,7 +1235,7 @@ const JOURNEYS = [
           focus: "custom",
           r: 60,
           theta: 0.3,
-          phi: 1.0,
+          phi: 1,
           target: [10, 4, 36],
         },
         fx: [
@@ -1332,7 +1332,7 @@ const JOURNEYS = [
           focus: "custom",
           r: 80,
           theta: -0.3,
-          phi: 1.0,
+          phi: 1,
           target: [-38, 2, 30],
         },
         fx: [
@@ -1518,7 +1518,7 @@ const JOURNEYS = [
 ];
 
 /* ── mapping table (appendix) ── */
-const MAPPING = [
+window.MAPPING = [
   [
     "The isle itself",
     "One person's vault — self-contained, with a visible edge",
@@ -1627,7 +1627,7 @@ const MAPPING = [
 ];
 
 /* ── glossary rail terms ── */
-const GLOSSARY = [
+window.GLOSSARY = [
   [
     "vault",
     "on disk: vault/<id>/",

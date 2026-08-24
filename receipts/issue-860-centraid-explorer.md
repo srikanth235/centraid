@@ -2,6 +2,16 @@
 
 GitHub issue: [#860](https://github.com/srikanth235/centraid/issues/860)
 
+## Session
+
+<!-- Session identifiers are maintained by the agent-session-identity pre-commit hook. -->
+
+### Identifiers
+
+| date | harness | session |
+| --- | --- | --- |
+| 2026-08-24 | opencode | - |
+
 ## Checklist
 
 - [x] Self-contained static site under `explorer/`
@@ -119,13 +129,3 @@ python3 -m http.server -d explorer 4174   # http://localhost:4174
 
 Not run — single-session authoring pass; the diff is additive static content
 with no runtime surface for CI gates to exercise.
-
-## Session
-
-<!-- Session identifiers are maintained by the agent-session-identity pre-commit hook. -->
-
-### Identifiers
-
-| date | harness | session |
-| --- | --- | --- |
-| 2026-08-24 | opencode | - |

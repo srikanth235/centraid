@@ -45,7 +45,7 @@ window.ISLE = (() => {
     if (Math.abs(buildTarget - buildP) < 0.001) {
       buildP = buildTarget;
     } else buildP += (buildTarget - buildP) * Math.min(1, dt * 2.2);
-    const e = 1 - Math.pow(1 - buildP, 3); // easeOutCubic
+    const e = 1 - (1 - buildP) ** 3; // easeOutCubic
     const s = Math.max(0.0001, e);
     world.scale.set(s, s, s);
     world.position.y = (1 - e) * -26; // rises from below
@@ -59,18 +59,18 @@ window.ISLE = (() => {
   function inkSky(night) {
     const g = skyCv.getContext("2d"),
       gr = g.createLinearGradient(0, 0, 0, 512);
-    if (!night) {
-      gr.addColorStop(0.0, "#07070f");
-      gr.addColorStop(0.42, "#181a2e");
-      gr.addColorStop(0.66, "#3a3350");
-      gr.addColorStop(0.82, "#8a5a52");
-      gr.addColorStop(1.0, "#c98d63");
-    } else {
-      gr.addColorStop(0.0, "#04040a");
+    if (night) {
+      gr.addColorStop(0, "#04040a");
       gr.addColorStop(0.45, "#0b0c18");
       gr.addColorStop(0.7, "#1c1a30");
       gr.addColorStop(0.86, "#3a2c3e");
-      gr.addColorStop(1.0, "#57404a");
+      gr.addColorStop(1, "#57404a");
+    } else {
+      gr.addColorStop(0, "#07070f");
+      gr.addColorStop(0.42, "#181a2e");
+      gr.addColorStop(0.66, "#3a3350");
+      gr.addColorStop(0.82, "#8a5a52");
+      gr.addColorStop(1, "#c98d63");
     }
     g.fillStyle = gr;
     g.fillRect(0, 0, 4, 512);
@@ -118,7 +118,8 @@ window.ISLE = (() => {
   // ── primitives ──
   const glowTex = (() => {
     const c = document.createElement("canvas");
-    c.width = c.height = 128;
+    c.width = 128;
+    c.height = 128;
     const g = c.getContext("2d"),
       rg = g.createRadialGradient(64, 64, 2, 64, 64, 64);
     rg.addColorStop(0, "rgba(255,255,255,1)");
@@ -173,8 +174,8 @@ window.ISLE = (() => {
 
   // ── THE ISLE ═══ one person's vault: self-contained, with a visible edge ════
   const R = 74;
-  const stoneTop = mat(0x33354a, { r: 0.95 }),
-    stoneDark = mat(0x232430);
+  const stoneDark = mat(0x232430),
+    stoneTop = mat(0x33354a, { r: 0.95 });
   cyl(0, -7, 0, R + 3, R - 2, 7, mat(0x2b2d3a));
   cyl(0, -15, 0, R - 6, R - 16, 8, stoneDark);
   cyl(0, -24, 0, R - 20, R - 34, 9, mat(0x1b1c26));
@@ -227,9 +228,9 @@ window.ISLE = (() => {
   }
   function cluster(cx, cz, w, d, n, base, litColor, litProb = 0.5) {
     for (let i = 0; i < n; i++) {
-      const bw = 1.6 + rnd() * 2.6,
-        bd = 1.6 + rnd() * 2.6,
-        bh = 1.8 + rnd() * rnd() * 7.5;
+      const bd = 1.6 + rnd() * 2.6,
+        bh = 1.8 + rnd() * rnd() * 7.5,
+        bw = 1.6 + rnd() * 2.6;
       const x = cx + (rnd() - 0.5) * (w - bw),
         z = cz + (rnd() - 0.5) * (d - bd);
       box(
@@ -307,7 +308,7 @@ window.ISLE = (() => {
   }
   halo(0, 6.8, 9.8, HUE.warm, 7, 0.5);
   anim.push((t) => {
-    const p = 3.0 + Math.sin(t * 0.7) * 0.7;
+    const p = 3 + Math.sin(t * 0.7) * 0.7;
     for (const m of seams) m.emissiveIntensity = p;
     oculus.material.opacity = 0.7 + Math.sin(t * 0.7) * 0.14;
   });
@@ -331,7 +332,7 @@ window.ISLE = (() => {
   }
   // the portcullis: the one doorway, barred and lit
   {
-    const lintel = box(0, 11.4, 52.5, 11.2, 1.4, 3.0, mat(0x4a5478));
+    const _lintel = box(0, 11.4, 52.5, 11.2, 1.4, 3, mat(0x4a5478));
     const bars = [];
     for (let i = -2; i <= 2; i++) {
       const b = box(
@@ -369,7 +370,7 @@ window.ISLE = (() => {
     halo(0, 8, 52.5, HUE.slate, 9, 0.4);
   }
   // KEY CABINET ═══ keys/ — the only secret-bearing directory, beside its gate ══
-  const keycabGlow = halo(15.5, 6.4, 46, HUE.warm, 5, 0.5);
+  const _keycabGlow = halo(15.5, 6.4, 46, HUE.warm, 5, 0.5);
   box(15.5, 3.1, 46, 2.2, 2.6, 1.4, mat(0x3a3d52, { r: 0.6 }));
   box(
     15.5,
@@ -440,9 +441,9 @@ window.ISLE = (() => {
       8.5,
       24,
       6.3,
-      1.0,
+      1,
       1.4,
-      mat(0x14151e, { e: HUE.violet, ei: 2.0 }),
+      mat(0x14151e, { e: HUE.violet, ei: 2 }),
       false
     );
     box(0, 3.1, 27, 3.4, 3.2, 2.2, mat(0x4a4258));
@@ -486,7 +487,8 @@ window.ISLE = (() => {
       mat(0x4a3a22, { r: 0.6 })
     );
     cover.position.y = 0.35;
-    cover.castShadow = cover.receiveShadow = true;
+    cover.castShadow = true;
+    cover.receiveShadow = true;
     book.add(cover);
     const spine = new THREE.Mesh(
       new THREE.BoxGeometry(1.4, 1.1, 13.8),
@@ -503,7 +505,8 @@ window.ISLE = (() => {
       );
       page.position.set(side * 5.05, 0.95, 0);
       page.rotation.z = -side * 0.2;
-      page.castShadow = page.receiveShadow = true;
+      page.castShadow = true;
+      page.receiveShadow = true;
       book.add(page);
       for (let i = 0; i < 6; i++) {
         const row = new THREE.Mesh(
@@ -545,7 +548,8 @@ window.ISLE = (() => {
         new THREE.BoxGeometry(4.6, 2.6, 3.4),
         mat(0x3a3d52, { r: 0.7 })
       );
-      body.castShadow = body.receiveShadow = true;
+      body.castShadow = true;
+      body.receiveShadow = true;
       g.add(body);
       const roof = new THREE.Mesh(
         new THREE.ConeGeometry(3.2, 1.6, 4),
@@ -560,7 +564,7 @@ window.ISLE = (() => {
         new THREE.SphereGeometry(0.75, 20, 14),
         mat(0x111218, { e: hue, ei: 2.4 })
       );
-      core.position.set(0, 1.0, 1.75);
+      core.position.set(0, 1, 1.75);
       g.add(core);
       const glow = halo(hx, 4.2, hz + 1.8, hue, 4.5, 0.5);
       harnessSheds.push({
@@ -620,7 +624,7 @@ window.ISLE = (() => {
   // the clockwork: one great gear driving a small counter-gear — cron ticks
   {
     const gearMat = mat(0x584868, { e: HUE.violet, ei: 0.8, r: 0.5, m: 0.3 });
-    function gear(x, y, z, r, teeth) {
+    const gear = (x, y, z, r, teeth) => {
       const g = new THREE.Group();
       g.position.set(x, y, z);
       world.add(g);
@@ -650,7 +654,7 @@ window.ISLE = (() => {
         g.add(tooth);
       }
       return g;
-    }
+    };
     const big = gear(-40, 13.4, -4, 3.1, 10);
     const small = gear(-35.6, 10.4, -4, 1.7, 7);
     anim.push((t) => {
@@ -736,25 +740,33 @@ window.ISLE = (() => {
 
   // ── PARCELS ═══ a moving parcel IS a row in flight. ═════════════════════════
   const parcels = new Map();
-  let parcelSeq = 0;
+  const _parcelSeq = 0;
   function addParcel(id, path, color, s = 1.2, speed = 0.06, phase = 0) {
     removeParcel(id);
     const m = box(0, 0, 0, s, s, s, mat(0x111218, { e: color, ei: 2.6 }));
     const h = halo(0, 0, 0, color, s * 4.2, 0.75);
     const pts = path.map((p) => new THREE.Vector3(...p));
     const legs = pts.length - 1;
-    const rec = { m, h, pts, legs, speed, phase, t0: null };
-    rec.upd = (t) => {
-      if (rec.t0 === null) rec.t0 = t;
-      const u = (((t - rec.t0) * speed + phase) % 1) * legs,
-        i = Math.min(Math.floor(u), legs - 1);
-      const p = pts[i].clone().lerp(pts[i + 1], u - i);
-      m.position.copy(p);
-      m.rotation.y = t * 0.9;
-      h.position.set(p.x, p.y + s / 2, p.z);
-      const fade = Math.min(1, Math.sin((u / legs) * Math.PI) * 3);
-      m.material.emissiveIntensity = 2.6 * fade;
-      h.material.opacity = 0.75 * fade;
+    const rec = {
+      m,
+      h,
+      pts,
+      legs,
+      speed,
+      phase,
+      t0: null,
+      upd(t) {
+        if (rec.t0 === null) rec.t0 = t;
+        const u = (((t - rec.t0) * speed + phase) % 1) * legs;
+        const i = Math.min(Math.floor(u), legs - 1);
+        const p = pts[i].clone().lerp(pts[i + 1], u - i);
+        m.position.copy(p);
+        m.rotation.y = t * 0.9;
+        h.position.set(p.x, p.y + s / 2, p.z);
+        const fade = Math.min(1, Math.sin((u / legs) * Math.PI) * 3);
+        m.material.emissiveIntensity = 2.6 * fade;
+        h.material.opacity = 0.75 * fade;
+      },
     };
     anim.push(rec.upd);
     parcels.set(id, rec);
@@ -810,7 +822,7 @@ window.ISLE = (() => {
 
   // ── BRIDGE + ISLETS ═══ a device is its own ground, joined by a thread. ═════
   for (let i = 0; i < 9; i++)
-    box(0, 1.0 - 0.32 * i, 57 + i * 4.2, 7 - i * 0.25, 1.1, 3.6, mat(0x2b2d3a));
+    box(0, 1 - 0.32 * i, 57 + i * 4.2, 7 - i * 0.25, 1.1, 3.6, mat(0x2b2d3a));
   avenue([0, 58], [0, 93], HUE.slate, 10, 2.2);
 
   function islet(x, y, z, r) {
@@ -857,7 +869,7 @@ window.ISLE = (() => {
 
   // MOBILE — Expo; embeds no gateway, talks HTTP to one
   islet(-34, -6, 74, 9);
-  const phoneScreen = box(
+  const _phoneScreen = box(
     -34,
     -3.4,
     74.75,
@@ -925,7 +937,7 @@ window.ISLE = (() => {
     if (g) g.visible = false;
     const pos = g ? g.position : new THREE.Vector3(-30, -5, 70);
     revokeFlash = halo(pos.x, pos.y + 1.5, pos.z, HUE.net, 7, 0.9);
-    anim.push((t) => {
+    anim.push((_t) => {
       if (revokeFlash) {
         revokeFlash.material.opacity -= 0.008;
         if (revokeFlash.material.opacity <= 0) {
@@ -1022,7 +1034,7 @@ window.ISLE = (() => {
   ).rotation.x = -0.12;
   box(
     -2.2,
-    -5.0,
+    -5,
     97.2,
     5.6,
     3.6,
@@ -1107,7 +1119,7 @@ window.ISLE = (() => {
     mat(0x14151e, { e: HUE.warm, ei: 2.6 }),
     false
   );
-  const kitHalo = halo(-105, 6.4, 0.5, HUE.warm, 5, 0.45);
+  const _kitHalo = halo(-105, 6.4, 0.5, HUE.warm, 5, 0.45);
 
   // ── THE EIGHT APPS ═══ packages/blueprints, each in its identity hue. ═══════
   const APPS = [
@@ -1121,7 +1133,7 @@ window.ISLE = (() => {
     ["agenda", HUE.forest],
   ];
   function pavilion(id, hue, px, pz) {
-    cyl(px, 2.7, pz, 3.6, 4.0, 0.7, mat(0x3a3d52));
+    cyl(px, 2.7, pz, 3.6, 4, 0.7, mat(0x3a3d52));
     const trim = new THREE.Mesh(
       new THREE.TorusGeometry(3.4, 0.14, 8, 48),
       mat(0x111218, { e: hue, ei: 2.4 })
@@ -1141,7 +1153,7 @@ window.ISLE = (() => {
           px,
           3.4,
           pz,
-          3.0,
+          3,
           2.6,
           0.22,
           mat(0xd8cdb2, { e: hue, ei: 0.25 })
@@ -1158,7 +1170,7 @@ window.ISLE = (() => {
             mat(0x111218, { e: hue, ei: 1.8 }),
             false
           ).rotation.y = 0.3;
-        const pin = cyl(px, 6.05, pz - 0.2, 0.14, 0.2, 0.35, e);
+        const _pin = cyl(px, 6.05, pz - 0.2, 0.14, 0.2, 0.35, e);
         const pencil = cyl(px + 1.4, 3.55, pz + 0.9, 0.1, 0.1, 1.7, b);
         pencil.rotation.z = 1.2;
         pencil.rotation.y = 0.5;
@@ -1198,7 +1210,7 @@ window.ISLE = (() => {
           0.24,
           mat(new THREE.Color(hue).multiplyScalar(0.4).getHex(), { r: 0.6 })
         );
-        const shot = box(
+        const _shot = box(
           px,
           3.55,
           pz + 0.16,
@@ -1214,7 +1226,7 @@ window.ISLE = (() => {
         );
         mtn.position.set(px - 0.5, 3.9, pz + 0.24);
         mtn.rotation.y = Math.PI / 4;
-        mtn.rotation.z = 0.0;
+        mtn.rotation.z = 0;
         scene.add(mtn);
         const mtn2 = new THREE.Mesh(
           new THREE.ConeGeometry(0.6, 0.75, 4),
@@ -1285,7 +1297,7 @@ window.ISLE = (() => {
         box(
           px - 0.45,
           5.42,
-          pz + 1.0,
+          pz + 1,
           0.55,
           0.14,
           0.1,
@@ -1295,7 +1307,7 @@ window.ISLE = (() => {
         box(
           px - 0.1,
           5.3,
-          pz + 1.0,
+          pz + 1,
           0.8,
           0.14,
           0.1,
@@ -1460,15 +1472,7 @@ window.ISLE = (() => {
     [41.5, 10, 46.1, "TALLY", "", "blueprints/apps/tally · record-only", "sm"],
     [34.7, 10, 51.4, "TASKS", "", "blueprints/apps/tasks · record-only", "sm"],
     [27.2, 10, 55.7, "DOCS", "", "blueprints/apps/docs · byte-bearing", "sm"],
-    [
-      19.2,
-      10,
-      59.0,
-      "AGENDA",
-      "",
-      "blueprints/apps/agenda · record-only",
-      "sm",
-    ],
+    [19.2, 10, 59, "AGENDA", "", "blueprints/apps/agenda · record-only", "sm"],
     [9, 3, 99, "DESKTOP", "", "Electron shell · runs the local daemon", "sm"],
     [72, -2, 34, "WEB PWA", "", "relay-only tunnel · replica ⊕ outbox", "sm"],
     [60, 49, 36, "RELAY", "", "browsers have no UDP", "sm"],
@@ -1510,17 +1514,17 @@ window.ISLE = (() => {
     gate: { r: 70, theta: 0.12, phi: 1.02, target: [0, 8, 48] },
     keycab: { r: 34, theta: 0.55, phi: 1.08, target: [13, 5, 46] },
     clerk: { r: 38, theta: 0.05, phi: 1.08, target: [0, 5, 28] },
-    ledger: { r: 62, theta: 0.85, phi: 1.0, target: [34, 7, 4] },
-    automation: { r: 62, theta: -0.55, phi: 1.0, target: [-35, 7, 2] },
+    ledger: { r: 62, theta: 0.85, phi: 1, target: [34, 7, 4] },
+    automation: { r: 62, theta: -0.55, phi: 1, target: [-35, 7, 2] },
     harness: { r: 52, theta: 1.05, phi: 1.02, target: [53, 5, -8] },
     commons: { r: 55, theta: -0.75, phi: 1.05, target: [-40, 6, -22] },
     cellar: { r: 55, theta: 0.95, phi: 1.05, target: [26, 5, -30] },
-    apps: { r: 60, theta: 0.95, phi: 1.0, target: [47, 7, 47] },
+    apps: { r: 60, theta: 0.95, phi: 1, target: [47, 7, 47] },
     mobile: { r: 46, theta: 0.35, phi: 1.1, target: [-34, 0, 74] },
     web: { r: 52, theta: 1.1, phi: 1.05, target: [68, -4, 34] },
     desktop: { r: 48, theta: 0.05, phi: 1.1, target: [0, -2, 97] },
     companion: { r: 36, theta: -0.5, phi: 1.15, target: [-80, 0, 46] },
-    warehouse: { r: 60, theta: -1.1, phi: 1.0, target: [-108, 8, -6] },
+    warehouse: { r: 60, theta: -1.1, phi: 1, target: [-108, 8, -6] },
     bridge: { r: 60, theta: 0.2, phi: 1.15, target: [0, 0, 68] },
   };
   const orb = {
@@ -1534,8 +1538,8 @@ window.ISLE = (() => {
     const v = FOCI[k] ? FOCI[k] : k === "custom" ? tweak : FOCI.isle;
     goal = {
       r: (tweak && tweak.r) || v.r,
-      theta: (tweak && tweak.theta) != null ? tweak.theta : v.theta,
-      phi: (tweak && tweak.phi) != null ? tweak.phi : v.phi,
+      theta: (tweak && tweak.theta) == null ? v.theta : tweak.theta,
+      phi: (tweak && tweak.phi) == null ? v.phi : tweak.phi,
       fov: (tweak && tweak.fov) || v.fov || 38,
       target: new THREE.Vector3(...((tweak && tweak.target) || v.target)),
     };
@@ -1605,8 +1609,8 @@ window.ISLE = (() => {
     if (!a) return;
     let p = pulses.get(name);
     if (on && !p) {
-      const h = halo(a[0], a[1], a[2], a[3] || HUE.warm, a[4] || 14, 0.0);
-      let ph = pulses.size * 1.7;
+      const h = halo(a[0], a[1], a[2], a[3] || HUE.warm, a[4] || 14, 0);
+      const ph = pulses.size * 1.7;
       const upd = (t) => {
         h.material.opacity = 0.22 + Math.max(0, Math.sin(t * 2.4 + ph)) * 0.4;
       };
@@ -1688,8 +1692,8 @@ window.ISLE = (() => {
   }
 
   function resize() {
-    const w = innerWidth,
-      h = innerHeight;
+    const h = innerHeight,
+      w = innerWidth;
     renderer.setSize(w, h);
     cam.aspect = w / h;
     cam.updateProjectionMatrix();
@@ -1704,7 +1708,7 @@ window.ISLE = (() => {
     requestAnimationFrame(frame);
     const dt = Math.min(clock.getDelta(), 0.05);
     t += dt;
-    const k = 1 - Math.pow(0.001, dt);
+    const k = 1 - 0.001 ** dt;
     orb.r += (goal.r - orb.r) * k;
     orb.theta += (goal.theta - orb.theta) * k;
     orb.phi += (goal.phi - orb.phi) * k;
@@ -1738,8 +1742,8 @@ window.ISLE = (() => {
         })
         .sort((a, b) => prio(a.c.el) - prio(b.c.el));
       for (const { c, q } of cand) {
-        const w = c.el.offsetWidth || 120,
-          h = c.el.offsetHeight || 40;
+        const h = c.el.offsetHeight || 40,
+          w = c.el.offsetWidth || 120;
         const r1 = {
           x: q.x - w / 2 - 6,
           y: q.y - h / 2 - 4,
