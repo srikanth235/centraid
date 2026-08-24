@@ -116,6 +116,14 @@ hand-off; `web-e2e-cross-browser` to launch its chromium project. None of
 these has run yet at the time of writing — the checklist row above stays
 unchecked until the dispatch returns.
 
+First dispatch (suite=mobile, run 32692436530) cleared the build — the
+MapLibre wall is gone — but every flow then failed on the NEXT first-run
+interruption: expo-dev-client's one-time "This is the developer menu"
+explainer sheet, which CI hits every run because the dev build is
+reinstalled fresh, sat over the fully-painted `"Connect your gateway."`
+screen in every failure screenshot. `CONFIRM_SYSTEM_OPEN` gained an
+optional `^Continue$` tap right after the `^Open$` one.
+
 ## Audit
 
 **Verdict: PASS**
