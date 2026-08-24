@@ -16,7 +16,7 @@ with the honesty gate untouched.
 - [x] Every section renders real evidence or an honest absence state; the nightly honesty gate is unchanged
 - [x] Authored CSS layers stay hex-free and `var()`-resolvable; the rendered page stays fully self-contained (`data:` URIs only, no external links)
 - [x] Test files evolved to the new structure with every #853 property preserved, and the report package gates green (`test:ratchet:unit`, `typecheck`, `format`, `lint:site-tokens`, `test:report:smoke`)
-- [ ] `docs/design-divergences.md` and `docs/decisions.md` updated; superseded bespoke dimensions recorded
+- [x] `docs/design-divergences.md` and `docs/decisions.md` updated; superseded bespoke dimensions recorded
 - [ ] Receipt `receipts/issue-862-nightly-report-night-watch.md` complete with independent `## Audit`
 - [ ] Both-theme rendered screenshots compared against the mockup before push
 
@@ -171,6 +171,37 @@ inline per-cell stagger is gone with the old animation, so the two
 token-resolution tests were carrying an escape hatch that would have accepted a
 `var(--row)` nothing declares — precisely the silent-drop failure that suite
 exists to catch. The generated sheet is now the whole vocabulary.
+
+### W4 — the docs describe the page that ships
+
+**`docs/design-divergences.md` and `docs/decisions.md` updated; superseded
+bespoke dimensions recorded.** The register's "nightly test report" section
+grows from five rows to eleven. The row describing eight states as a recessed
+trough and four as a fill is replaced by the cell register, marked as
+superseding #853's treatment: the argument for why a heat map may depart from
+DESIGN.md survives and gets stronger, since a tint behind a word is further
+from a fill than the trough was. Six rows are new, each naming a departure a
+future agent might otherwise "fix" by mistake — the `--nw-` palette and why the
+prefix is forced, §2/§3's declaration alphabet on neutral rungs, §6 as suite ×
+budget, §5's absent simulation numerics, §7 as three per-row ledgers, the
+ledgers' second verdict vocabulary, and the inspector taking neither the Sheet
+recipe's ground nor a `--shadow-*` rung.
+
+The open `lint:design-tokens` row keeps its verdict and loses its stale reason.
+The 40px cell, 98px header band and 230px surface column it cited are gone with
+the old layout. Measured against the same metrics the gate uses, the report's
+whole residue is now 34 raw font sizes across ten literal steps (26px down to
+10px, below the shell's smallest rung), and the gate walks `.css` files while
+`REPORT_CSS` lives in a `.mjs` template literal it cannot see. The row stays
+open; no budget was widened.
+
+`docs/decisions.md` gains a dated ruling for 2026-08-24 in the file's existing
+voice, and a row in its superseded-pointers table retiring #853's fill-and-
+trough register. The ruling records the bounded reopening of #853's "no palette
+and no scale of its own" — a page read at a glance in ink that bottoms out at
+10px needs tones and steps the shell has no rung for — with the non-goal that no
+`--nw-*` rung appears on any other surface, and it generalises the honesty rule
+from the matrix to every section.
 
 ## Decisions
 
