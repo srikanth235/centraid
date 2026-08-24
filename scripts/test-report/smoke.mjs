@@ -89,12 +89,16 @@ try {
   );
   await access(output);
   const html = await readFile(output, "utf8");
-  for (const required of [
+  requireAll(html, [
     "Surface × quality dimension",
     "Coverage vs ratchet floor",
     "Environment-gated",
-    "unproven cells",
-    "unhandled errors",
+    // The nine-tile hero that labelled this "unproven cells" is gone (#862).
+    // The number is not: it is the verdict bar's grey stat, the same
+    // GREY_CELL_STATES tally `summary.cellsMissing` reports. Count and word are
+    // pinned in one match — a bar that keeps the word and drops the number says
+    // nothing, and the stale stat next to it wears the same class.
+    /<span class="vstat grey"><b class="num">\d+<\/b>grey<\/span>/u,
     "product failed",
     "partial passed",
     "evidence unmatched",
@@ -104,9 +108,7 @@ try {
     "report-data",
     '"status":"stale"',
     "Environment-gated matrix owners",
-  ]) {
-    if (!html.includes(required)) throw new Error(`report missing ${required}`);
-  }
+  ]);
   const summaryJson = path.join(path.dirname(output), "summary.json");
   const summaryMd = path.join(path.dirname(output), "summary.md");
   await access(summaryJson);
@@ -244,15 +246,37 @@ try {
     { stdio: "inherit" }
   );
   const unhandledHtml = await readFile(unhandledOut, "utf8");
-  if (!unhandledHtml.includes("Unhandled Vitest errors")) {
-    throw new Error("report did not surface unhandled Vitest errors banner");
-  }
-  if (!unhandledHtml.includes("write EPIPE")) {
-    throw new Error("report did not include unhandled error message");
-  }
+  // The other half of the deleted hero: "unhandled errors" was a tile that
+  // printed a zero every night. Since #862 the count only renders when there is
+  // one to render, so it is pinned against the run that HAS one — banner, count
+  // and message in a single match, plus the verdict the count is supposed to
+  // drive. A page that banners the errors while still calling itself shippable
+  // is the failure the old always-on tile could never catch.
+  requireAll(unhandledHtml, [
+    /<p class="lede urgent">Unhandled Vitest errors: 1 — [^<]*write EPIPE/u,
+    '<div class="verdictbar verdict-red"',
+    "1 unhandled error(s)",
+  ]);
   console.log("test report smoke: ok");
 } finally {
   await rm(temp, { recursive: true, force: true });
+}
+
+/**
+ * Assert every required fragment is on a rendered page. A `RegExp` entry pins
+ * markup whose shape carries the meaning (a count beside the word it is filed
+ * under); a string entry pins literal copy.
+ * @param {string} page The rendered HTML.
+ * @param {(string | RegExp)[]} required Fragments that must be present.
+ */
+function requireAll(page, required) {
+  for (const fragment of required) {
+    const present =
+      typeof fragment === "string"
+        ? page.includes(fragment)
+        : fragment.test(page);
+    if (!present) throw new Error(`report missing ${fragment}`);
+  }
 }
 
 function rootForFixture() {

@@ -15,7 +15,7 @@ with the honesty gate untouched.
 - [x] Attention queue, consent/joins/adversaries ledgers, journeys grid, fixed bottom-sheet inspector, and SVG sparklines implemented per the mockup geometry
 - [x] Every section renders real evidence or an honest absence state; the nightly honesty gate is unchanged
 - [x] Authored CSS layers stay hex-free and `var()`-resolvable; the rendered page stays fully self-contained (`data:` URIs only, no external links)
-- [ ] Test files evolved to the new structure with every #853 property preserved, and the report package gates green (`test:ratchet:unit`, `typecheck`, `format`, `lint:site-tokens`, `test:report:smoke`)
+- [x] Test files evolved to the new structure with every #853 property preserved, and the report package gates green (`test:ratchet:unit`, `typecheck`, `format`, `lint:site-tokens`, `test:report:smoke`)
 - [ ] `docs/design-divergences.md` and `docs/decisions.md` updated; superseded bespoke dimensions recorded
 - [ ] Receipt `receipts/issue-862-nightly-report-night-watch.md` complete with independent `## Audit`
 - [ ] Both-theme rendered screenshots compared against the mockup before push
@@ -135,6 +135,42 @@ states and the zero-grey exit-1 contract are untouched.
 stays fully self-contained (`data:` URIs only, no external links).** The
 mockup's Google Fonts `<link>` is deliberately not carried over — the faces stay
 inlined from the sheet. A real render was scanned for both properties.
+
+### W3 — the tests follow the structure, and get stricter doing it
+
+**Test files evolved to the new structure with every #853 property preserved,
+and the report package gates green (`test:ratchet:unit`, `typecheck`, `format`,
+`lint:site-tokens`, `test:report:smoke`).** No assertion was deleted or loosened
+to reach green; each was repointed at the same property in the new layout and
+most came back stronger.
+
+`scripts/test-report/generate-app-grids.test.mjs` pinned `class="metric
+axis-declared"` and a regex requiring an en-dash glyph before the `#831`
+citation badge. Both now match the state class and the cell's word together, so
+a cell that keeps its tint and loses its text fails — something the old
+class-only assertions could not catch.
+
+`scripts/test-report/smoke.mjs` required two strings that lived on the deleted
+hero: `unproven cells` and `unhandled errors`. The first is now pinned as the
+verdict bar's grey stat, which counts the same `GREY_CELL_STATES` tally; the
+second moved to the render that actually produces it, where label, count and
+message are matched in one expression alongside the red verdict they should
+drive. Both replacements were sabotage-checked — dropping the count or the
+message fails them. A required entry may now be a `RegExp` where the shape of
+the markup carries the meaning.
+
+`scripts/test-report/generate-briefing.test.mjs` had a test named for the split
+between briefing and detail shelf that measured a heading since promoted out of
+the shelf, so it passed while checking nothing; it now anchors on the shelf's
+own id. It also gains the test that pins the deliverable: the nine section ids
+in document order, every one reachable from the sticky table of contents, and
+`#inspector` outside `</main>` as the fixed sheet.
+
+`scripts/test-report/report-theme.test.mjs` dropped its `--row` allowance. The
+inline per-cell stagger is gone with the old animation, so the two
+token-resolution tests were carrying an escape hatch that would have accepted a
+`var(--row)` nothing declares — precisely the silent-drop failure that suite
+exists to catch. The generated sheet is now the whole vocabulary.
 
 ## Decisions
 
