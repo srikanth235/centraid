@@ -173,7 +173,7 @@ const SITE_LAYER = `
  * scanning fifteen surfaces at a glance, before coffee — and the ground, the
  * three ink steps and the two rule weights it needs are finer than the shell's,
  * which is solved for reading-size prose in a window. That is a departure, and
- * it is bounded the same way the fill departure below is: see
+ * it is bounded the same way the ramp below is: see
  * docs/design-divergences.md#the-nightly-test-report.
  *
  * A rung is spelled ONCE — a `name light dark` triple, in emission order, read
@@ -182,13 +182,18 @@ const SITE_LAYER = `
  * three of the mockup's bare names (`--line`, `--danger`, `--link`) are already
  * product tokens in this sheet, and a report rule has to be able to say which
  * of the two it means.
+ *
+ * Type rungs clear 4.5:1 against the surface they sit on, in both themes, and
+ * mark rungs clear 3:1. `ghost` inks the "n/a" cell, the section tags and the
+ * footer, and `grey` is the whole of the quality light: both sit at that floor
+ * rather than at the mockup's lighter greys, which cleared neither.
  */
 const NIGHT_WATCH_RAMP = `
   ground   #FDFDFC #0E0E0E  ink    #141414 #EDEDEC  ink2   #5A5A58 #9A9A98
-  ink3     #6C6C69 #878785  ghost  #888885 #656563  line   #E5E4E1 #232322
+  ink3     #6C6C69 #878785  ghost  #757572 #7B7B79  line   #E5E4E1 #232322
   lineS    #EFEEEB #1B1B1A  surf   #F5F4F2 #171716  sunken #F9F8F6 #121211
   danger   #9A3B2E #E08878  attn   #B4441F #E0864F  link   #2D4BA8 #9DB0F0
-  ring     #4A67C8 #8098E8  ok     #3E6B45 #7FA886  grey   #B4B3B0 #4A4A48
+  ring     #4A67C8 #8098E8  ok     #3E6B45 #7FA886  grey   #8B8A87 #666664
   dangerbg #F7EBE8 #241614  attnbg #F8EFE7 #231A12  okbg   #EDF2EE #151D16
   greybg   #F1F0EE #1A1A19
 `;
@@ -208,39 +213,35 @@ function nightWatchDecls(indent, theme) {
  * theme and a followed one agree. One template: the second reads the table.
  *
  * The nightly report is a heat map: fifteen product surfaces by eleven quality
- * dimensions, and a cell's whole job is to say which of eleven states it is in
- * at a glance. It had answered that with a palette of its own — `--green`,
- * `--red`, `--amber`, `--blue`, `--violet`, `--cyan`, `--grey` over a
- * near-black ground, in Inter — so the page carried a second design system on
- * the same origin as the two sites #841 had just unified.
+ * dimensions, and a cell's whole job is to say which of twelve states it is in
+ * at a glance. It answers in product tokens — every rung below resolves from
+ * one — rather than in the palette of its own (`--green`, `--red`, `--amber`,
+ * `--blue`, `--violet`, `--cyan`, `--grey` over a near-black ground, in Inter)
+ * that carried a second design system on the same origin as the two sites #841
+ * unified. The ramp introduces no colour, no face and no scale of its own;
+ * what it introduces is NAMES, one per state, so a rule says which state it is
+ * painting rather than which hue.
  *
- * Every rung below now resolves from a product token. The ramp introduces no
- * colour, no face and no scale of its own; what it introduces is NAMES, one
- * per state, so a rule says which state it is painting rather than which hue.
+ * Each state is named twice, once per role — a FILL rung and a TYPE rung —
+ * because the two do not always want the same value: the `--c-*` identity hues
+ * carry a solved `-text` sibling for exactly this, while the semantic roles are
+ * already solved against the surfaces they land on. One name per state per role
+ * means a rule never has to know which of the two cases it is in.
  *
- * The pairs are deliberate. A state is painted twice — as a FILL under ink on
- * the matrix cell and the legend dot, and as TYPE on the page ground in the
- * evidence inspector and the grid tables — and the two do not always want the
- * same rung: the `--c-*` identity hues carry a solved `-text` sibling for
- * exactly this, while the semantic roles are already solved against the
- * surfaces they land on. One name per state per role means a rule never has to
- * know which of the two cases it is in.
- *
- * The departure this takes from DESIGN.md — a hue and three system-signal
- * tones (`--attention`, `--seam`, `--warning`) used as a FILL, on a mark that
- * is also a focusable target — is registered with what bounds it in
- * docs/design-divergences.md, under "The nightly test report".
+ * A matrix cell paints no fill: it is the state's WORD on a quiet family tint
+ * from the Night Watch palette above, so the fill rungs are declared and
+ * unpainted while the `-text` half carries the Pages landing page and the
+ * briefing's metric words. docs/design-divergences.md bounds both.
  */
 const REPORT_LAYER = `
 /* ---------------------------------------------------------------------------
    Report layer — the matrix status ramp. One name per state, per role; every
    value resolves from a product token above. See
-   docs/design-divergences.md#the-nightly-test-report for the fill departure
-   and its bound.
+   docs/design-divergences.md#the-nightly-test-report for what bounds it.
    --------------------------------------------------------------------------- */
 
 :root {
-  /* Fills: the matrix cell, the legend dot, the verdict rule. */
+  /* The fill half — one rung per state, declared and currently unpainted. */
   --st-solid: var(--success);
   --st-partial: var(--c-teal);
   --st-failed: var(--danger);
@@ -254,9 +255,8 @@ const REPORT_LAYER = `
 
   /* The ink a fill carries. \`--text-inv\` is the PAGE colour rather than
      white, and it inverts with the theme exactly as the ramp under it does:
-     the identity hues sit at oklch L .50 in light and L .72 in dark, so the
-     ink on them has to move the other way or every cell loses its label at
-     one theme or the other. */
+     the identity hues sit at oklch L .50 in light and L .72 in dark, so ink
+     on them has to move the other way to hold a label at either theme. */
   --st-on-fill: var(--text-inv);
 
   /* Type: the same states named on the page ground. The three hue states take

@@ -215,6 +215,26 @@ and no scale of its own" — a page read at a glance in ink that bottoms out at
 `--nw-*` rung appears on any other surface, and it generalises the honesty rule
 from the matrix to every section.
 
+### W5 — the palette clears AA, which the mockup did not
+
+The mockup's `ghost` rung measured 3.49:1 light and 3.30:1 dark against the page
+ground, below the 4.5:1 WCAG AA floor for text — and it is not decorative: it
+inks the `n/a` cell word, the footer, the section tags, the severity labels and
+the skipped result. `grey` was 2.19:1. Two rungs moved in `NIGHT_WATCH_RAMP`,
+the only place these literals live: `ghost` to `#757572` light and `#7B7B79`
+dark, `grey` to `#8B8A87` and `#666664`. Every other rung is untouched, and the
+sheet was regenerated from the table rather than edited.
+
+Recomputed over the shipped values, every pair carrying text clears AA in both
+themes — ink 18.10/16.48, ink2 6.79/6.85, ink3 5.18/5.36, ghost 4.54/4.55, link
+7.69/9.10, and the four word-on-tint pairs 5.46/6.44 (ok), 4.88/6.26 (attn),
+5.92/6.64 (danger), 4.63/4.84 (grey cell). `grey` sits at 3.39/3.35, which is
+the right floor for what it actually draws: a dashed rule and two dots, no text.
+
+`scripts/site-tokens.mjs`'s comments described a fill under ink on the matrix
+cell and counted eleven states. The page paints no fill and there are twelve;
+both are corrected, and the file stays at 624 lines against the 625 cap.
+
 ## Decisions
 
 - The mockup's bare token names collide with three product tokens already in
@@ -239,6 +259,11 @@ from the matrix to every section.
   tonight; `holds` would assert more than the evidence supports.
 - The inspector's shadow is `color-mix(in oklab, var(--nw-ink) 14%, transparent)`
   rather than the mockup's `rgba(0,0,0,.08)`, so it reads in both themes.
+- Two palette rungs deliberately depart from the mockup's values. `ghost` and
+  `grey` as drawn there fail WCAG AA against the page ground while inking real
+  text, and matching a reference exactly is not worth shipping text a reader
+  cannot read. The hues are kept; only the lightness moved, and only far enough
+  to clear the floor.
 - The masthead's immutable-slot link needs a new `TEST_REPORT_RUN_SLUG` env
   alongside the existing public URL; the slug is computed outside the generator
   and cannot be reconstructed from `generatedAt` on a re-run. Absent either, the
