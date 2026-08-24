@@ -13,7 +13,7 @@
 # rustup + bun install layers warm under registry-backed BuildKit cache.
 # Base images are digest-pinned (multi-arch index) to match Action SHA pins.
 
-FROM oven/bun:1.3.14-slim@sha256:d56a2534ffd262e92c12fd3249d3924d296d97086da773f821d7d0477435ea04 AS build
+FROM oven/bun:1.4.0-slim@sha256:e0ee68d16ccb9927bf02aa7dd8fd4bf3369ee6d46da04faa72b05ce8bfd135f6 AS build
 WORKDIR /src
 
 # Native tunnel (napi + data-plane): rustc 1.91 matches packages/tunnel/*/Cargo.toml.
@@ -52,7 +52,7 @@ RUN bunx turbo run build --filter=@centraid/server \
 RUN node scripts/gateway-package/assemble-runtime.mjs --root=/src --out=/runtime --packages-only
 
 # Fresh production install against the lean workspace (resolves esbuild, ajv, sharp, …).
-FROM oven/bun:1.3.14-slim@sha256:d56a2534ffd262e92c12fd3249d3924d296d97086da773f821d7d0477435ea04 AS deps
+FROM oven/bun:1.4.0-slim@sha256:e0ee68d16ccb9927bf02aa7dd8fd4bf3369ee6d46da04faa72b05ce8bfd135f6 AS deps
 WORKDIR /app
 COPY --from=build /runtime/ /app/
 # Gateway-only workspace + stripped devDependencies — monorepo bun.lock is not
