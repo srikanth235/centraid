@@ -1061,7 +1061,9 @@
     "mobile.correctness": "apps/mobile has no coverage floor scope, so nothing gates the replica session code these unit owners exercise. Tracked under #864 (originally #656).",
     "mobile.durability": "apps/mobile/src/lib/upload/crash.test.ts proves upload crash recovery, but apps/mobile has no coverage floor gating the storage code around it. Tracked under #864 (originally #656).",
     "mobile.journey": "tests/agent-e2e-mobile/flows/home-loads.mjs runs on iOS only, so the Android journey is unproven and the flow declares three checks. Tracked under #864 (originally #656).",
-    "app-admission": "The named claims an app satisfies to sit in the shell are docs/blueprint-seats.md#app-admission-contract; the appSeats, appStates and appEngines blocks here are that contract's ledger, and scripts/test-report/validate-app-axes.mjs is what refuses an app that goes quiet about one of them."
+    "app-admission": "The named claims an app satisfies to sit in the shell are docs/blueprint-seats.md#app-admission-contract; the appSeats, appStates and appEngines blocks here are that contract's ledger, and scripts/test-report/validate-app-axes.mjs is what refuses an app that goes quiet about one of them.",
+    "appStates.offline-as-stale": "notes.offline and tasks.offline are owned by the reachability verdict deliberately surfacing as the app's STALE notice rather than a second offline banner, so the one reachability-driven sentence proves both the offline and the stale cell.",
+    "appSeats.desktop-nightly-only": "The six custodian desktop e2e owners newly wired under #864 (agenda, notes, tasks, people and photos plus docs' pending-overlay reuse) are nightly-validated only, because the authoring container has neither an Electron binary nor a Secret Service to run them at PR time."
   },
   "cellOwners": {
     "vault-core.correctness": {
@@ -2489,12 +2491,14 @@
             "tier": "e2e"
           },
           "custodian": {
-            "status": "gap",
-            "trackingIssue": "864"
+            "status": "owned",
+            "owner": "apps/desktop/tests/e2e/agenda.spec.ts",
+            "tier": "e2e"
           },
           "viewer": {
-            "status": "gap",
-            "trackingIssue": "864"
+            "status": "owned",
+            "owner": "apps/web/tests/e2e/agenda.spec.ts",
+            "tier": "e2e"
           }
         }
       },
@@ -2547,12 +2551,14 @@
             "tier": "e2e"
           },
           "custodian": {
-            "status": "gap",
-            "trackingIssue": "864"
+            "status": "owned",
+            "owner": "apps/desktop/tests/e2e/notes.spec.ts",
+            "tier": "e2e"
           },
           "viewer": {
-            "status": "gap",
-            "trackingIssue": "864"
+            "status": "owned",
+            "owner": "apps/web/tests/e2e/notes.spec.ts",
+            "tier": "e2e"
           }
         }
       },
@@ -2560,12 +2566,14 @@
         "id": "people",
         "seats": {
           "origin": {
-            "status": "gap",
-            "trackingIssue": "864"
+            "status": "owned",
+            "owner": "tests/agent-e2e-mobile/flows/people-roster.mjs",
+            "tier": "e2e"
           },
           "custodian": {
-            "status": "gap",
-            "trackingIssue": "864"
+            "status": "owned",
+            "owner": "apps/desktop/tests/e2e/people.spec.ts",
+            "tier": "e2e"
           },
           "viewer": {
             "status": "owned",
@@ -2583,8 +2591,9 @@
             "tier": "e2e"
           },
           "custodian": {
-            "status": "gap",
-            "trackingIssue": "864"
+            "status": "owned",
+            "owner": "apps/desktop/tests/e2e/photos.spec.ts",
+            "tier": "e2e"
           },
           "viewer": {
             "status": "owned",
@@ -2622,12 +2631,14 @@
             "tier": "e2e"
           },
           "custodian": {
-            "status": "gap",
-            "trackingIssue": "864"
+            "status": "owned",
+            "owner": "apps/desktop/tests/e2e/tasks.spec.ts",
+            "tier": "e2e"
           },
           "viewer": {
-            "status": "gap",
-            "trackingIssue": "864"
+            "status": "owned",
+            "owner": "apps/web/tests/e2e/tasks.spec.ts",
+            "tier": "e2e"
           }
         }
       }
@@ -2670,20 +2681,24 @@
         "id": "agenda",
         "states": {
           "dayone": {
-            "status": "gap"
+            "status": "owned",
+            "owner": "packages/blueprints/apps/agenda/states.test.tsx"
           },
           "pending": {
             "status": "owned",
             "owner": "packages/blueprints/src/app-boot/agenda.test.ts"
           },
           "offline": {
-            "status": "gap"
+            "status": "owned",
+            "owner": "packages/blueprints/apps/agenda/states.test.tsx"
           },
           "stale": {
-            "status": "gap"
+            "status": "owned",
+            "owner": "packages/blueprints/apps/agenda/states.test.tsx"
           },
           "conflict": {
-            "status": "gap"
+            "status": "owned",
+            "owner": "packages/blueprints/apps/agenda/states.test.tsx"
           },
           "parked": {
             "status": "owned",
@@ -2703,7 +2718,8 @@
             "owner": "packages/blueprints/src/docs-shelves.test.ts"
           },
           "pending": {
-            "status": "gap"
+            "status": "owned",
+            "owner": "apps/desktop/tests/e2e/pending-overlay.spec.ts"
           },
           "offline": {
             "status": "owned",
@@ -2713,10 +2729,12 @@
             "status": "gap"
           },
           "conflict": {
-            "status": "gap"
+            "status": "owned",
+            "owner": "packages/blueprints/apps/docs/states.test.tsx"
           },
           "parked": {
-            "status": "gap"
+            "status": "owned",
+            "owner": "packages/blueprints/apps/docs/states.test.tsx"
           },
           "denied": {
             "status": "owned",
@@ -2728,7 +2746,8 @@
         "id": "locker",
         "states": {
           "dayone": {
-            "status": "gap"
+            "status": "owned",
+            "owner": "packages/blueprints/apps/locker/states.test.tsx"
           },
           "pending": {
             "status": "owned",
@@ -2764,17 +2783,20 @@
             "owner": "packages/blueprints/apps/notes/view-copy.test.ts"
           },
           "offline": {
-            "status": "gap"
+            "status": "owned",
+            "owner": "packages/blueprints/apps/notes/states.test.tsx"
           },
           "stale": {
             "status": "owned",
             "owner": "packages/blueprints/apps/notes/view-copy.test.ts"
           },
           "conflict": {
-            "status": "gap"
+            "status": "owned",
+            "owner": "packages/blueprints/apps/notes/states.test.tsx"
           },
           "parked": {
-            "status": "gap"
+            "status": "owned",
+            "owner": "packages/blueprints/apps/notes/states.test.tsx"
           },
           "denied": {
             "status": "owned",
@@ -2786,10 +2808,12 @@
         "id": "people",
         "states": {
           "dayone": {
-            "status": "gap"
+            "status": "owned",
+            "owner": "packages/blueprints/apps/people/states.test.tsx"
           },
           "pending": {
-            "status": "gap"
+            "status": "owned",
+            "owner": "packages/blueprints/apps/people/states.test.tsx"
           },
           "offline": {
             "status": "gap"
@@ -2801,7 +2825,8 @@
             "status": "gap"
           },
           "parked": {
-            "status": "gap"
+            "status": "owned",
+            "owner": "packages/blueprints/apps/people/states.test.tsx"
           },
           "denied": {
             "status": "owned",
@@ -2817,7 +2842,8 @@
             "owner": "packages/blueprints/src/photos-view-state.test.ts"
           },
           "pending": {
-            "status": "gap"
+            "status": "owned",
+            "owner": "packages/blueprints/apps/photos/states.test.tsx"
           },
           "offline": {
             "status": "owned",
@@ -2827,10 +2853,12 @@
             "status": "gap"
           },
           "conflict": {
-            "status": "gap"
+            "status": "owned",
+            "owner": "packages/blueprints/apps/photos/states.test.tsx"
           },
           "parked": {
-            "status": "gap"
+            "status": "owned",
+            "owner": "packages/blueprints/apps/photos/states.test.tsx"
           },
           "denied": {
             "status": "owned",
@@ -2883,16 +2911,20 @@
             "owner": "packages/blueprints/apps/_shared/pending-overlay.test.ts"
           },
           "offline": {
-            "status": "gap"
+            "status": "owned",
+            "owner": "packages/blueprints/apps/tasks/states.test.tsx"
           },
           "stale": {
-            "status": "gap"
+            "status": "owned",
+            "owner": "packages/blueprints/apps/tasks/states.test.tsx"
           },
           "conflict": {
-            "status": "gap"
+            "status": "owned",
+            "owner": "packages/blueprints/apps/tasks/states.test.tsx"
           },
           "parked": {
-            "status": "gap"
+            "status": "owned",
+            "owner": "packages/blueprints/apps/tasks/states.test.tsx"
           },
           "denied": {
             "status": "owned",
@@ -3322,7 +3354,7 @@
         "label": "Home apps",
         "runner": "tests/agent-e2e-mobile/run-home-apps-suite.mjs",
         "budgetDoc": "tests/agent-e2e-mobile/flows/home-apps-budget.md",
-        "budgetMinutes": 10,
+        "budgetMinutes": 11,
         "flows": [
           {
             "id": "docs-drive",
@@ -3346,6 +3378,12 @@
             "id": "tasks-board",
             "label": "Tasks board",
             "owner": "tests/agent-e2e-mobile/flows/tasks-board.mjs",
+            "flow": null
+          },
+          {
+            "id": "people-roster",
+            "label": "People roster",
+            "owner": "tests/agent-e2e-mobile/flows/people-roster.mjs",
             "flow": null
           },
           {

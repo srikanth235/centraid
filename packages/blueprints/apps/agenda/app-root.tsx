@@ -36,6 +36,7 @@ import type { ReadSubscription } from "@centraid/design/elements";
 
 import { LoadingSkeleton } from "../_shared/LoadingSkeleton.tsx";
 import { readPendingOverlay } from "../_shared/pending-overlay.ts";
+import { libraryReachability } from "../_shared/view-state-kit.ts";
 import type { InlineAppProps } from "../inline-types.ts";
 import { Chrome } from "./Chrome.tsx";
 import { DayRibbon, DayShelf, LayerToggles } from "./components/DayContext.tsx";
@@ -631,7 +632,20 @@ export function Root({
 
   // The second control row: what is true about this read. It renders only
   // where there is something to declare — an empty band is chrome.
-  const offline = typeof navigator !== "undefined" && !navigator.onLine;
+  //
+  // OFFLINE IS READ, NEVER INVENTED (`_shared/view-state-kit.ts`). This asked
+  // the browser's own online flag until #864: on the desktop the gateway is a
+  // local child process, so a device with no network reaches it perfectly well
+  // and that banner was simply untrue. The two honest signals are the host's own
+  // `data-gateway-status` stamp and a read that actually came back failed —
+  // and `readFailedState` still takes precedence below, because "the vault
+  // could not be reached" with a Refresh is the sharper thing to say than
+  // "showing this device's copy".
+  const offline =
+    libraryReachability({
+      hostStatus: rootElRef.current?.dataset.gatewayStatus ?? null,
+      readFailed: readFailedState,
+    }) === "unreachable";
   const stateRow: ReactNode =
     readFailedState || offline || deniedCalendars.length > 0 ? (
       <>

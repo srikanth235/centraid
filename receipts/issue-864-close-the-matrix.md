@@ -17,7 +17,14 @@ about what is still open.
 - [x] Wire test:citations into package.json and a nightly e2e.yml step
 - [x] Start the receipt with an independent Audit
 
-### Waves 1–7
+### Wave 1 (landed)
+
+- [x] Own the fireable app-axis state cells with co-located jsdom tests
+- [x] Own the nine seat cells with desktop and web e2e and a mobile flow
+- [x] Leave nine state cells as honest product-surface gaps
+- [x] Apply the matrix owner-edits and keep validate-matrix green
+
+### Waves 2–5, 7
 
 - [ ] _placeholder — the root agent appends each wave's checklist as it lands_
 
@@ -26,7 +33,7 @@ about what is still open.
 | wave | subject | state |
 | --- | --- | --- |
 | W0 | re-home closed-issue citations to #864; add the open-citation gate | landed |
-| W1 | _placeholder — root agent appends_ | pending |
+| W1 | own the app-axis state and seat cells; leave nine as product-surface gaps | landed |
 | W2 | _placeholder — root agent appends_ | pending |
 | W3 | _placeholder — root agent appends_ | pending |
 | W4 | _placeholder — root agent appends_ | pending |
@@ -123,7 +130,63 @@ last under `always()` means it cannot suppress the report it follows, and
 stale citation files the nightly red issue with no further wiring. Nothing
 existing in the workflow was reordered, relaxed or removed.
 
-### W1–W6
+### W1 — the app-axis grids stop declaring gaps the code can already prove
+
+Wave 1 closed the app-axis gaps the report's §2/§3 grids declared. Twenty-one
+designed-state cells gained co-located jsdom owners that mount the production
+`Root`/row components over a stubbed `window.centraid` and reach each state
+through the app's own derivation, never a copy table: agenda dayone/offline/
+stale/conflict, notes conflict/parked/offline, tasks stale/offline/parked/
+conflict, docs parked/conflict (with pending re-pointed at the existing Electron
+overlay spec), locker dayone, people dayone/pending/parked, photos pending/
+parked/conflict. This did **own the fireable app-axis state cells with
+co-located jsdom tests**.
+
+The nine seat cells gained e2e owners — agenda/notes/tasks viewer (web
+Playwright, executed green in the authoring container) and custodian (desktop
+Playwright, nightly-validated-only), people origin (a new `people-roster.mjs`
+Maestro flow, wired into the home-apps suite at index 4 with the budget
+re-derived 10→11 min) and custodian, photos custodian — so this did **own the
+nine seat cells with desktop and web e2e and a mobile flow**. The agenda seat
+was repaired to the shared `libraryReachability` kit (it alone consulted
+`navigator.onLine`, which the kit forbids because a local gateway is reachable
+with no network).
+
+Nine cells stay `gap` because no product surface renders them — this did **leave
+nine state cells as honest product-surface gaps**: docs.stale, locker.offline/
+stale/parked/conflict, people.offline/stale/conflict, photos.stale. A test must
+not invent copy for a state the app cannot show; these keep the grid-level #864
+tracker.
+
+The matrix owner-edits (21 state cells, 9 seat cells, the journey entry, two
+notes recording the offline-as-stale derivation and the nightly-only desktop
+specs) were applied and `validate-matrix` stays exit 0; the People states test
+was moved off `toHaveBeenCalled*` onto recorded-array `toStrictEqual` (the
+hygiene budget is down-only), and the Photos states test's internal recording
+string dropped the storage noun that tripped the photos-vocabulary rule. This
+did **apply the matrix owner-edits and keep validate-matrix green**.
+
+Wave 1 paths: `tests/matrix.json`; `packages/blueprints/manifest.json` (lists
+the new per-app test files); `packages/blueprints/apps/agenda/app-root.tsx`
+(the reachability repair); the co-located state owners
+`packages/blueprints/apps/agenda/states.test.tsx`,
+`packages/blueprints/apps/notes/states.test.tsx`,
+`packages/blueprints/apps/tasks/states.test.tsx`,
+`packages/blueprints/apps/docs/states.test.tsx`,
+`packages/blueprints/apps/locker/states.test.tsx`,
+`packages/blueprints/apps/people/states.test.tsx`,
+`packages/blueprints/apps/photos/states.test.tsx`; the viewer specs
+`apps/web/tests/e2e/agenda.spec.ts`, `apps/web/tests/e2e/notes.spec.ts`,
+`apps/web/tests/e2e/tasks.spec.ts`; the custodian specs
+`apps/desktop/tests/e2e/agenda.spec.ts`, `apps/desktop/tests/e2e/notes.spec.ts`,
+`apps/desktop/tests/e2e/tasks.spec.ts`, `apps/desktop/tests/e2e/people.spec.ts`,
+`apps/desktop/tests/e2e/photos.spec.ts`; and the origin flow
+`tests/agent-e2e-mobile/flows/people-roster.mjs` with its contract
+`tests/agent-e2e-mobile/flows/people-roster.md`, wired through
+`tests/agent-e2e-mobile/run-home-apps-suite.mjs` and
+`tests/agent-e2e-mobile/flows/home-apps-budget.md`.
+
+### W2–W6
 
 _Placeholder — the root agent appends the remaining waves here._
 
