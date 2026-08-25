@@ -1,21 +1,8 @@
 /*
- * The enrichment tier, end to end: OWNER CONTROL → vault → mirror → gate.
- *
- * The gate (decision S9) is enforced on the execution path, and the
- * `off | device | gateway` axis (#712) is the whole of what it
- * enforces — there is no
- * separate `provider` tier; provider egress is gated per call (#567) and
- * per capability (S9's own consent read), independently of this tier. That
- * enforcement is only honest if the owner can actually move the tier, so the
- * law this file states is the whole loop: what the owner-only vault policy
- * writes is what `decideEnrichmentGate` later reads, with the app-readable
- * mirror in between. Gateway is the one package that depends on BOTH halves,
- * which is why the loop is pinned here rather than in vault or automation
- * alone.
- *
- * `updateEnrichSettings` is exercised directly — it is the authoritative
- * writer that `PUT /centraid/_vault/enrich` calls, and the client control
- * reaches it through no other path.
+ * Enrichment tier end to end: owner control → vault → mirror → gate.
+ * Axis is `off | device | gateway` (#712); no separate `provider` tier
+ * (provider egress is per-call #567). Gateway is the one package that
+ * depends on both halves.
  */
 
 import { beforeEach, describe, expect, it } from "vitest";
@@ -38,7 +25,6 @@ import type { Notice } from "./notices.js";
 
 let db: VaultDb;
 
-/** The gate as the fire spine applies it: tier read off the vault, not passed in. */
 function gateFor(lane: EnrichLane): ReturnType<typeof decideEnrichmentGate> {
   const tier = readEnrichPolicyTier(db.vault, "photos");
   return decideEnrichmentGate({
@@ -57,11 +43,6 @@ describe("enrichment tier control", () => {
   });
 
   it("law: a fresh scope's seeded gateway tier already allows gateway-lane enrichment", () => {
-    // The bootstrap default is `gateway` — the domain may reach the lane a
-    // manifest declares — not `device`, which refuses every gateway-lane
-    // enricher (#712). Each shipped enricher still starts
-    // `enabled: false` in its own manifest, so this tier widens what an
-    // install COULD run, not what runs unasked.
     expect(readEnrichPolicyTier(db.vault, "photos")).toBe("gateway");
     expect(gateFor("gateway")).toStrictEqual({
       allowed: true,
@@ -92,8 +73,7 @@ describe("enrichment tier control", () => {
     updateEnrichSettings(db, { photos: "device" });
 
     expect(gateFor("gateway").allowed).toBe(false);
-    // Device-lane work is untouched by the drop — `device` still permits the
-    // deterministic and device-lease lane, with model turns sealed.
+    // Device-lane is untouched: `device` still permits it, with model turns sealed.
     expect(gateFor("device")).toStrictEqual({
       allowed: true,
       sealModelTurns: true,
@@ -104,7 +84,6 @@ describe("enrichment tier control", () => {
     updateEnrichSettings(db, { photos: "gateway" });
 
     expect(readEnrichPolicyTier(db.vault, "photos")).toBe("gateway");
-    // `docs` still carries the bootstrap default, unmoved by the photos write.
     expect(readEnrichPolicyTier(db.vault, "docs")).toBe("gateway");
     updateEnrichSettings(db, { docs: "off" });
     expect(readEnrichPolicyTier(db.vault, "docs")).toBe("off");
@@ -118,38 +97,24 @@ describe("enrichment tier control", () => {
     expect(gateFor("gateway").allowed).toBe(false);
   });
 
-  // [C5 SABOTAGE TEST] the gate half of the migration law pinned in
-  // `packages/vault/src/enrich/enrich.test.ts` ("a legacy 'local' row reads
-  // as device, not gateway"). That file proves the READ; this proves the
-  // READ actually reaches the ENFORCED gate, end to end, because this is
-  // the one package that depends on both `@centraid/vault` and
-  // `@centraid/server/automation`.
+  // [C5 SABOTAGE TEST] pinned with `packages/vault/src/enrich/enrich.test.ts`
+  // ("a legacy 'local' row reads as device, not gateway"). That file proves
+  // the READ; this proves the READ reaches the ENFORCED gate.
   //
-  // THE SABOTAGE TARGET: map `LEGACY_TIER.local` to `"gateway"` in
-  // `packages/vault/src/enrich/policy.ts` (or in `host.ts`'s copy) and the
-  // first assertion below goes green when it must be red — a vault that
-  // said "local" (no model turn, ever) would silently start allowing
-  // gateway-lane fires the instant this build was deployed, with no owner
-  // action and no consent gate in between.
+  // SABOTAGE: map `LEGACY_TIER.local` to `"gateway"` in
+  // `packages/vault/src/enrich/policy.ts` (or `host.ts`'s copy) and the first
+  // assertion goes green when it must be red — a vault that said "local"
+  // would silently allow gateway-lane fires with no owner action.
   it("[C5 sabotage] a vault at the legacy 'local' tier produces no gateway-lane fire until the owner raises it", () => {
-    // Simulate a vault that predates the #712 rename: write the pre-rename
-    // value straight into the mirror row, standing in for a physical file
-    // whose last write happened under the old build.
     db.vault
       .prepare(
         "UPDATE enrich_policy SET tier = 'local' WHERE domain = 'photos'"
       )
       .run();
 
-    // No face proposal path runs: the migrated read is the conservative
-    // `device`, and `device` cannot reach the `gateway` lane a real
-    // the enricher manifest declares.
     const before = gateFor("gateway");
     expect(before.allowed).toBe(false);
 
-    // The one gate that IS wired on this execution path today is the
-    // domain tier, and it is answered by an explicit owner write, not a
-    // migration default.
     updateEnrichSettings(db, { photos: "gateway" });
 
     const after = gateFor("gateway");

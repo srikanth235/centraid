@@ -82,16 +82,7 @@ function fileSizeOf(path: string): number {
   }
 }
 
-/**
- * Pull the bytes one manifest still needs, over ONE transfer session (#750
- * defect b): the steward authorizes the pull once and every chunk validates
- * against that session — no per-chunk closure export or signing on either
- * side. Chunks stream into the vault's own promotion temp file, so
- * member-side peak memory is one chunk
- * plus the hash state, not the whole blob; a store without the temp seam (the
- * in-memory test tier) falls back to whole-blob assembly, bounded by the
- * blob's declared size.
- */
+/** One transfer session per pull (#750); stream into promotion temp, not whole-blob RAM. */
 async function pullManifestBlobs(
   reached: Reached,
   input: {
@@ -188,11 +179,7 @@ interface PullFrameBody {
   pages?: number;
 }
 
-/**
- * Fetch one sync frame, reassembling paginated responses (#750 defect d): a
- * frame past the steward's page budget arrives as bounded, resumable slices
- * instead of one response serializing the whole commons.
- */
+/** Reassemble paginated frames (#750). */
 async function fetchFrameBody(
   reached: Reached,
   input: {
@@ -250,17 +237,11 @@ export interface PullPeerCommonsInput {
   memberVaultId: string;
   grantId: string;
   seat: VaultDb;
-  /** Owner consent: atomically join at the steward before first bootstrap. */
   acceptInvitation?: boolean;
-  /** The metadata footprint the owner reviewed before accepting. */
   expectedSizeBytes?: number;
-  /** This member's own per-response budget (#750 defect d): a full frame past
-   * it arrives as bounded pages. The steward clamps it to its own ceiling. */
+  /** Member page budget (#750); steward clamps to its ceiling. */
   pageBytes?: number;
-  /** This seat's own gateway and host-held owner credential. Together they
-   * are the replica executor an increment's command tail is replayed through
-   * (#750 invariant 7); without them every increment is unusable and this
-   * member catches up through the full frame instead. */
+  /** Replica executor for increment tails (#750.7); without it, full-frame catch-up. */
   gateway?: VaultGateway;
   credential?: Credential;
   now?: string;
@@ -270,13 +251,10 @@ type PullAttempt =
   | {
       state: "current";
       sequence: number;
-      /** Which shape the member had to accept — the fixed-window-sync signal. */
       kind: "tail" | "snapshot" | "tombstone";
     }
   | { state: "noop"; sequence: number }
-  // A named history fault, distinct from a transport failure: the steward's
-  // log diverged from what this seat verified, so the sweep must REPORT it
-  // rather than retry-loop. The replica is untouched.
+  // History fault, not transport: report, do not retry-loop; replica untouched.
   | { state: "parked"; fault: CommonsHistoryFaultTag }
   | { state: "unavailable" };
 
@@ -286,20 +264,11 @@ export type PullPeerCommonsResult = (
   | { state: "parked"; fault: CommonsHistoryFaultTag }
   | { state: "unavailable" }
 ) & {
-  /**
-   * The escalating steward-absence status this seat now holds for the grant
-   * (#731). It rides on EVERY outcome, including `unavailable`, because the
-   * whole point is that a member with a dead steward can render "Alice's
-   * device hasn't been reachable for 9 days" instead of nothing.
-   */
+  /** Steward-absence status on every outcome, including `unavailable` (#731). */
   steward: CommonsStewardStatus;
 };
 
-/**
- * One pull attempt, unaware of instrumentation. Every dial that RESOLVES —
- * whatever it answered — records this device's own link evidence, so a
- * genuinely offline device can never be mistaken for a dead steward.
- */
+/** Record this device's link evidence on every resolved dial. */
 async function attemptPullPeerCommons(
   input: PullPeerCommonsInput,
   now: string
@@ -315,9 +284,7 @@ async function attemptPullPeerCommons(
     recordCommonsDeviceReach(input.seat.vault, now);
     return response;
   };
-  // The seat's own canonical rail, seeded so a replayed command mints exactly
-  // the ids the steward minted. Host-only: the executor is built here from
-  // locally held material and never travels.
+  // Canonical rail, host-only: replayed commands mint the steward's ids.
   const gateway = input.gateway;
   const credential = input.credential;
   const replicaExecutor =
@@ -388,10 +355,7 @@ async function attemptPullPeerCommons(
       input.grantId,
       input.memberVaultId
     );
-    // The ack always travels — it is what lets the steward compact and answer
-    // "you are caught up". A seat with no replica executor additionally asks
-    // for the full frame, because an increment it cannot replay would only be
-    // refetched a round trip later.
+    // Ack always travels. No replica executor → ask for the full frame.
     if (cursor) params.set("afterSequence", String(cursor.sequence));
     if (!replicaExecutor) params.set("full", "1");
     let body = await fetchFrameBody(reached, input, params);
@@ -404,12 +368,8 @@ async function attemptPullPeerCommons(
         kind: "tombstone",
       };
     }
-    // Already-current no-op: the steward acked our cursor and has nothing new.
-    // Skip the destructive scrub+re-project entirely and report a non-progress
-    // state so the sweep does not treat a caught-up pull as work done.
     if (body.state === "current" && typeof body.currentSequence === "number") {
-      // "Caught up" is only true if the steward's head is the head we verified
-      // (#731). A fork at an already-verified sequence hides here otherwise.
+      // Caught up only if the steward's head is the head we verified (#731).
       const verified = readCommonsVerified(input.seat.vault, input.grantId);
       if (
         verified?.sequence === body.currentSequence &&
@@ -418,12 +378,7 @@ async function attemptPullPeerCommons(
         return { state: "parked", fault: "history-diverged" };
       return { state: "noop", sequence: body.currentSequence };
     }
-    // Ops-since-cursor increment (#750 invariant 7): this seat's cursor sits
-    // on the chain, so only the operations it missed travel and the member
-    // re-executes them — unchanged items and their seat-local derived rows
-    // are never touched. A tail this replica cannot replay falls back to the
-    // full frame; a chain that does not verify parks, exactly like a bad
-    // full frame.
+    // Increment (#750.7): replay missed ops; unusable tail falls back to full frame.
     if (body.state === "increment" && body.increment && replicaExecutor) {
       const increment = body.increment;
       if (!(await pullManifestBlobs(reached, input, increment.blobs)))
@@ -460,9 +415,6 @@ async function attemptPullPeerCommons(
     return {
       state: "current",
       sequence: wire.currentSequence,
-      // A frame whose snapshot already sits past what this seat had applied
-      // forced a full re-baseline; anything else was appliable as a tail. That
-      // split is the fixed-window-sync plan's laggard signal.
       kind:
         (cursor?.sequence ?? 0) >= wire.snapshotSequence ? "tail" : "snapshot",
     };
@@ -480,12 +432,7 @@ function outcomeOf(attempt: PullAttempt): CommonsPullOutcome {
   return "unreachable";
 }
 
-/**
- * Pull this member seat forward, and fold the attempt into the durable
- * steward-contact record so the result can say WHY nothing moved. The status
- * is derived from elapsed silence plus this device's own link evidence, so an
- * unreachable steward and an unreachable device are never the same answer.
- */
+/** Pull this seat forward; steward vs device unreachability are distinct. */
 export async function pullPeerCommons(
   input: PullPeerCommonsInput
 ): Promise<PullPeerCommonsResult> {
@@ -522,11 +469,7 @@ export async function sendPeerCommonsCommand(input: {
   command: string;
   commandInput: Record<string, unknown>;
   memberSignature: CommonsMemberSignature;
-  /** The grant sequence the member had projected locally when it composed
-   * this command (#731 goal 1). Required on the wire in v0 — a remote
-   * intent must be classified on the same basis as a local one, so there is
-   * no defaulting/compat branch for an omitted value; see
-   * `handlePeerCommonsCommand` for the receiving side's hard refusal. */
+  /** Required on the wire; no omitted-value compat (#731). */
   basedOnSequence: number;
   intentId: string;
 }): Promise<

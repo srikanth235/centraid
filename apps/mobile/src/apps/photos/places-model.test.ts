@@ -1,15 +1,5 @@
-// The arithmetic the phone's three Places surfaces share (#781).
-//
-// The projection has its own tests (`place-map.test.ts` owns the pixels, the
-// graticule and the scale bar) and its arithmetic is deliberately NOT restated
-// here. This file's claims are the seat's: which rows become a card, which
-// become a pin, and that the count on a card matches the screen it opens.
-//
-// The law worth naming is the third one: `placeCards` and `assetsAtPlace` are
-// two readers of one key, and a card whose detail opens empty is the exact
-// "labelled destination opens something else" defect the Photos seat has hit
-// before. It is provable in milliseconds without a renderer, which is why it
-// lives here rather than in a component test.
+// Places seat arithmetic (#781). `placeCards` and `assetsAtPlace` are two
+// readers of one key — a card whose detail opens empty is the defect.
 import { describe, expect, it } from "vitest";
 
 import { PLACE_UNNAMED } from "@centraid/blueprints/apps/photos/shared-copy";
@@ -33,8 +23,6 @@ import {
 import type { PlaceRow } from "./places-model";
 import type { PhotoAsset } from "./timeline-model";
 
-// One deterministic corpus row, re-keyed per case — every field a Places
-// surface reads (id, placeId, previewUri, uri, deleted) is set explicitly.
 const [BASE] = makePhotosFixture("place-tagged").assets;
 
 function photo(
@@ -55,9 +43,6 @@ function photo(
   return asset;
 }
 
-/** Lake Tahoe and a house on the same lake, ~1.5km apart: two ledger rows,
- *  one 0.1° cell. The columns are `geo_lat`/`geo_lng` because that is what
- *  `core_place` ships and the mobile timeline hands rows raw (#787). */
 const TAHOE: PlaceRow = {
   place_id: "place-tahoe",
   name: "Lake Tahoe",
@@ -94,9 +79,6 @@ describe("the Places shelf's cards", () => {
   });
 
   it("merges two place rows inside one 0.1° cell into a single card", () => {
-    // Two rows in the ledger, ~1.5km apart. A shelf that listed both would
-    // ask a member to choose between "Lake Tahoe" and "The cabin" for one
-    // weekend; the card is the cell, and its name is the first row read.
     const cards = placeCards(
       [photo("a", "place-tahoe"), photo("b", "place-cabin")],
       [TAHOE, TAHOE_CABIN]
@@ -114,8 +96,6 @@ describe("the Places shelf's cards", () => {
   });
 
   it("covers a card with the newest photograph taken there", () => {
-    // The timeline hands assets over newest first, so the first one seen for
-    // a cell is the most recent — not an arbitrary member of the group.
     const cards = placeCards(
       [photo("newest", "place-tahoe"), photo("older", "place-tahoe")],
       [TAHOE]
@@ -136,8 +116,6 @@ describe("the Places shelf's cards", () => {
   });
 
   it("draws no card for a place whose row records no coordinates", () => {
-    // A room, or a venue someone typed: the record knows the name and no
-    // geography, and a card for it would stand somewhere nobody measured.
     const roomOnly: PlaceRow = { place_id: "place-room", name: "The kitchen" };
     expect(placeCardKey(roomOnly)).toBeNull();
     expect(placeCards([photo("a", "place-room")], [roomOnly])).toStrictEqual(
@@ -146,9 +124,6 @@ describe("the Places shelf's cards", () => {
   });
 });
 
-// A place minted from GPS is labelled with its own coordinate until a member
-// names it. Both halves of that fact are this block's subject: the label is
-// never printed as a name, and it is exactly the case the ask exists for.
 describe("naming a place (issue #816)", () => {
   const COORD: PlaceRow = {
     place_id: "place-coord",
@@ -188,9 +163,6 @@ describe("naming a place (issue #816)", () => {
   });
 
   it("names the row the card took its title from, not a neighbour in the cell", () => {
-    // Two rows in one 0.1° cell: the card is titled from the NEWEST
-    // photograph's row, so the ask must be about that same row — otherwise a
-    // member answers a question about a name they were never shown.
     const assets = [
       photo("newest", "place-coord"),
       photo("older", "place-cabin"),
@@ -232,9 +204,6 @@ describe("naming a place (issue #816)", () => {
 
 describe("the place a card opens", () => {
   it("hands the detail screen exactly the photographs its card counted", () => {
-    // THE LAW: card and detail are two readers of one key. A card reading "2"
-    // that opens an empty screen is this seat's worst defect class, and it is
-    // the only thing here neither the projection nor a renderer can falsify.
     const assets = [
       photo("a", "place-tahoe"),
       photo("b", "place-cabin"),
@@ -267,9 +236,6 @@ describe("the place a card opens", () => {
 
 describe("the points the map plots", () => {
   it("keeps two nearby places apart, leaving the merge to the drawing", () => {
-    // The shelf folds these two rows into one card; the map does NOT fold
-    // them here, because whether two pins collide depends on the box being
-    // drawn and `projectPlaces` answers that in pixels.
     const points = placePoints(
       [photo("a", "place-tahoe"), photo("b", "place-cabin")],
       [TAHOE, TAHOE_CABIN]
@@ -330,9 +296,6 @@ describe("the points the map plots", () => {
 });
 
 describe("the columns a place's coordinates arrive in (#787)", () => {
-  // `core_place` ships `geo_lat`/`geo_lng` and the mobile timeline hands rows
-  // raw; the shelf shipped reading `latitude ?? lat` while the map read
-  // `geo_lat` first — pins without cards. These cases pin the shared chain.
   it("cards, opens, and plots one vault-shaped row through one key", () => {
     const assets = [photo("a", "place-tahoe"), photo("b", "place-tahoe")];
     const cards = placeCards(assets, [TAHOE]);
@@ -348,9 +311,6 @@ describe("the columns a place's coordinates arrive in (#787)", () => {
   });
 
   it("gives a row whose geo columns are explicit NULLs neither card nor pin", () => {
-    // The vault stores "no geography" as NULL columns; the web handler drops
-    // them by type (`typeof === "number"` in readPlaces), and the phone must
-    // agree — not coerce NULL and hope the NaN falls out.
     const noGeo: PlaceRow = {
       place_id: "place-room",
       name: "The kitchen",
@@ -363,8 +323,6 @@ describe("the columns a place's coordinates arrive in (#787)", () => {
   });
 
   it("drops a coordinate that is not a number, even when it would coerce", () => {
-    // Number("39.1") is finite, so a coercing read would card this row; the
-    // type guard the web applies refuses it instead.
     const stringy: PlaceRow = {
       place_id: "place-string",
       name: "Typed in",
@@ -416,8 +374,6 @@ describe("what a pin says and how big it is", () => {
   });
 
   it("scales a pin by AREA, so four photographs read as twice one", () => {
-    // sqrt(1)/sqrt(4) = 0.5 of the ramp — the smaller pin sits halfway
-    // between the floor and the busiest pin, not a quarter of the way.
     const busiest = pinSize(4, 4);
     const quiet = pinSize(1, 4);
     expect(quiet - PIN_MIN).toBe(Math.round((busiest - PIN_MIN) / 2));
@@ -450,8 +406,6 @@ describe("what a pin says and how big it is", () => {
   });
 
   it("refuses to read a coordinate out as a place name", () => {
-    // A place named "39.0968, -120.0324" has a name in the database and none
-    // a person would recognise; printing it looks like an answer.
     expect(
       pinLabel({
         key: "k",
@@ -465,12 +419,6 @@ describe("what a pin says and how big it is", () => {
   });
 });
 
-// THE NO-LOCATION BUCKET (#816). The photographs nobody told where they
-// were taken were in the library and on no shelf: every card on Places stands
-// at a coordinate, so the whole set was reachable only by scrolling the
-// timeline. It is a card at the end of the shelf now, and the same reserved key
-// resolves it wherever a surface asks — which is what makes the card's count and
-// the screen it opens one number rather than two.
 describe("the photographs that carry no place at all", () => {
   it("is exactly the rows with no place id, trash excluded", () => {
     const assets = [
@@ -486,8 +434,6 @@ describe("the photographs that carry no place at all", () => {
   });
 
   it("keeps a photograph at a coordinate-less place OUT of the bucket — it has a place", () => {
-    // "The kitchen" is unplottable, not unknown. Calling it "no location"
-    // would be a false sentence about the photograph.
     const roomOnly: PlaceRow = { place_id: "place-room", name: "The kitchen" };
     expect(placeCardKey(roomOnly)).toBeNull();
     expect(assetsWithNoPlace([photo("a", "place-room")])).toStrictEqual([]);
@@ -505,7 +451,6 @@ describe("the photographs that carry no place at all", () => {
       count: 2,
       coverUri: "https://fixture.invalid/thumb/scan",
     });
-    // The name is a name, not the unnamed-place fallback and not a coordinate.
     expect(card?.name).toBe("No location yet");
   });
 
@@ -514,8 +459,6 @@ describe("the photographs that carry no place at all", () => {
   });
 
   it("opens the same set the card counted, through the reserved key", () => {
-    // The law this file exists for, extended to the bucket: one key, two
-    // readers, one number.
     const assets = [
       photo("scan", undefined),
       photo("screenshot", undefined),

@@ -1,37 +1,6 @@
-// The people roster (Photos v4 handoff §3.1, §14, proto:4432-4433). Not a
-// shelf on `PhotosCollectionsView`, which serves Albums only.
-//
-// People is OFF THE BAND (#712): a band destination `PhotosHome` renders
-// inline costs the band a fifth slot for a shelf most visits never open. This
-// is a pushed route like `PlacesView` and
-// `FaceReview` — reached from Collections' own People section heading
-// (`PhotosCollectionsView.tsx`'s `open()`) and from the Library shelf list's
-// People row alongside `FaceReview` — so it draws its own band via
-// `PhotosScreen`, `current="more"`, the same as every other More-reachable
-// shelf.
-//
-// Three rules this view exists to hold the line on:
-//
-//   1. Everyone shows, including unnamed people. README:217 and proto:3760
-//      are explicit: an unconfirmed-but-grouped party reads as "Unnamed",
-//      never as a silently dropped card — hiding it would lose a match the
-//      member already made by confirming a face onto that party.
-//   2. Tapping a card opens THAT PERSON'S PHOTOGRAPHS (`PhotoStateView`,
-//      mode "person"), never Face review. Face review is proposal triage;
-//      a person card is a browsable identity, and the two are not the same
-//      destination even though both start from `media.face_region`.
-//   3. THE CONSENT GATE (#712). The face-detection consent moment
-//      does not sit behind a "Face detection" row + modal on PhotosLibrary,
-//      which would be built, correct and nearly unreachable. An empty
-//      People shelf IS the
-//      gate's natural body: a member who opens People and sees nothing has
-//      exactly the question "why is this empty, and can I do something about
-//      it" the gate answers. So when the roster is empty AND the question
-//      has not been answered this session, the gate renders in the empty
-//      state instead of a modal reached from elsewhere. Once answered (either
-//      way) or once the roster has faces to show, the empty state reverts to
-//      the plain "no people yet" copy — the gate is a way IN to the question,
-//      not a permanent fixture of an empty shelf.
+// People roster, off the band (#712): unnamed cards still render; a person
+// card opens that person's photographs, never Face review. Empty roster is
+// the consent gate until answered this session.
 
 import React, { useMemo, useState } from "react";
 import { FlatList, Pressable, StyleSheet, View } from "react-native";
@@ -63,10 +32,7 @@ import type { PhotosScreenProps } from "../../navigation";
 import { buildPeopleShelf } from "./people-model";
 import PhotosScreen from "./PhotosScreen";
 
-/** A party's identity colour, lowered to the solid tile finish — the same
- *  treatment `PhotosCollectionsView` used, kept because a person's card
- *  keeps its identity colour (a party HAS an identity in this system) while
- *  an unloaded album cover does not. */
+/** Identity colour on a person card; unloaded album covers do not keep one. */
 function tintFor(key: string): string {
   return tileFinish(identityColor(key), "solid").backgroundColor;
 }
@@ -90,15 +56,11 @@ export default function PhotosPeopleView({
     "photos",
     useMemo(() => ({ entity: "media.face_cluster" }), [])
   );
-  // The tier comes from the replica's `enrich.policy` mirror — the shared
-  // `deviceAnswerFor` decides whether the on-device promise is even true for
-  // this vault, so web and native cannot disagree about it.
   const policies = useReplicaQuery(
     "photos",
     useMemo(() => ({ entity: "enrich.policy" }), [])
   );
 
-  // ──── the consent question, re-homed from PhotosLibrary's footer row ────
   const [enrichBusy, setEnrichBusy] = useState(false);
   const [enrichAnswered, setEnrichAnswered] = useState<
     "device" | "declined" | null
@@ -109,8 +71,7 @@ export default function PhotosPeopleView({
     : ((enrichPolicy?.tier as string | undefined) ?? "off");
   const deviceAnswer = deviceAnswerFor(enrichTier);
   const runOnDevice = async (): Promise<void> => {
-    // Belt and braces: the button is already unavailable in both of these
-    // cases. A write this consequential does not rely on a disabled prop.
+    // Do not rely on a disabled prop for this write.
     if (!session || enrichBusy || enrichAnswered) return;
     if (!deviceAnswer.available) return;
     setEnrichBusy(true);
@@ -162,21 +123,14 @@ export default function PhotosPeopleView({
     [clusters.rows, faces.rows, parties.rows, policies.loading, policies.rows]
   );
 
-  // The gate is the empty state's body only while the question is still open
-  // — an empty roster the member has already answered (either way) falls
-  // back to the plain copy below instead of re-asking.
+  // Gate only while unanswered; an answered empty roster uses the plain copy.
   const showGate =
     shelf.people.length === 0 && shelf.unnamed.length === 0 && !enrichAnswered;
 
   return (
-    // The band, via the shell (#712). People is off the band, so this
-    // screen draws the shell like every other pushed shelf, `current="more"`
-    // — the same call `PlacesView` and `PhotoStateView`'s "person" mode make.
     <PhotosScreen current="more">
       <View style={styles.header}>
-        {/* No back chevron, same reasoning as `PlacesView`'s: the band below
-            is the way out, and a second spelling of "leave" in the head is
-            the duplicate affordance §F's one-navigation rule forbids. */}
+        {/* No back chevron — the band is the way out (§F). */}
         <Text style={styles.title}>People</Text>
       </View>
       <FlatList

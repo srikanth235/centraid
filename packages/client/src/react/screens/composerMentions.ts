@@ -1,36 +1,12 @@
-/*
- * Composer autocomplete helpers (#420) — the pure, framework-free
- * core of the shell assistant composer's @-mentions + slash-commands.
- *
- * Why shell-local React rather than a shared control: the imperative
- * @-mention popover this once had to coexist with poked an *uncontrolled* DOM
- * textarea through a body-appended layer, hard-coded a cookie-auth
- * `fetch('/centraid/_vault/picker')` with no injectable search hook, and styled
- * itself with global kit.css classes. The shell composer is a *controlled*
- * React textarea authed by a bearer token through `searchVaultEntities`, styled
- * with CSS modules. Per the Wave-0 audit, a React reimplementation over the
- * same endpoints is the right call (#799); the genuinely shareable bits are
- * these tiny pure functions (token detection + the `@[label](ref:type/id)`
- * splice). The
- * emitted ref string exactly matches what the shared renderer parses
- * (assistant-rich's ref regex).
- */
+// Composer @-mentions + slash-commands (#420). Ref matches assistant-rich.
 
-/** A detected token under the caret: the `@`/`/` position and the text after it. */
 export interface CaretToken {
-  /** Index of the trigger char (`@` or `/`) in the text. */
   start: number;
-  /** The query text between the trigger and the caret. */
   query: string;
 }
 
 const MAX_MENTION_LEN = 40;
 
-/**
- * The `@mention` token immediately left of `caret`, or null. Fires only at a
- * word boundary (start-of-text or after whitespace / `(`), rejects tokens with
- * whitespace/newlines, and caps length.
- */
 export function mentionTokenAt(text: string, caret: number): CaretToken | null {
   const upto = text.slice(0, caret);
   const at = upto.lastIndexOf("@");
@@ -43,11 +19,6 @@ export function mentionTokenAt(text: string, caret: number): CaretToken | null {
   return { start: at, query };
 }
 
-/**
- * The leading `/command` token, or null. Only fires when `/` is the very first
- * character of the message and the caret is within the command word (no spaces
- * yet) — a slash mid-sentence is just a slash.
- */
 export function slashCommandAt(text: string, caret: number): CaretToken | null {
   if (text[0] !== "/") return null;
   const upto = text.slice(0, caret);
@@ -56,18 +27,12 @@ export function slashCommandAt(text: string, caret: number): CaretToken | null {
   return { start: 0, query };
 }
 
-/** The canonical inline-ref string the shared renderer hydrates into a chip. */
 export function refString(label: string, type: string, id: string): string {
   // Labels can't contain `]`; strip it so the `@[label](...)` bracket stays valid.
   const safeLabel = label.replace(/[\]]/gu, "").trim() || `${type} ${id}`;
   return `@[${safeLabel}](ref:${type}/${id})`;
 }
 
-/**
- * Splice a chosen entity's ref into `text`, replacing the `@…` token that runs
- * from `start` to `caret`. Returns the new text and the caret position just
- * after the inserted ref (with a trailing space).
- */
 export function insertRef(
   text: string,
   start: number,
@@ -79,7 +44,6 @@ export function insertRef(
   return { text: next, caret: start + ref.length };
 }
 
-/** Remove a leading `/command` token (through the caret) — after it runs. */
 export function clearSlash(text: string, caret: number): string {
   return text.slice(0, 0) + text.slice(caret);
 }

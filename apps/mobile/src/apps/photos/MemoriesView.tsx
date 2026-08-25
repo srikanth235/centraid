@@ -1,27 +1,8 @@
-// Memories, full screen (#724, "Memories v0").
-//
-// Reached from Collections' "Memories" heading (`PhotosCollectionsView.tsx`'s
-// `open()`). Three sections — On this day, Trips, Similar moments — read
-// straight off the vault's
-// `media.memory` / `media.memory_member` projection (`memories-model.ts`
-// does the pure grouping; this file is only its frame).
-//
-// BROWSE ONLY, ON PURPOSE. Unlike `DuplicatesShelf.tsx`, this screen has no
-// selection mode and no batch actions — a memory is something you look at,
-// not something you triage. A tile tap opens the lightbox, full stop.
-//
-// HONEST EMPTY STATE. When every section comes back empty
-// (`hasNoMemories`), the screen shows one explainer sentence instead of three
-// empty shelves — the same law `photos-collections.ts`'s Memories shelf has
-// always kept, extended to cover Trips and Similar moments too.
+// Memories, full screen (#724). Browse only — no selection, no batch actions.
+// Honest empty: one explainer when every section is empty, not three empty shelves.
+// A trip is named by the phrase ladder (`trips.ts`), never the place row's raw
+// name, and sketched from `projectPlaces` with no basemap and no URL (#816).
 
-// A TRIP IS NAMED AND SKETCHED (#816). The block is headed by the phrase
-// ladder's own sentence, computed in `trips.ts` and therefore identical to the
-// web strip's — never the place row's raw name, which is the coordinate
-// `findOrCreatePlaceTx` mints until somebody renames it, and never a bare
-// "Away from home". It carries a small route sketch drawn from `projectPlaces`:
-// the same arithmetic the Places map runs, with no basemap, no tile request and
-// no URL of any kind in it.
 import React, { useMemo } from "react";
 import {
   Pressable,
@@ -66,9 +47,6 @@ import PhotoTile from "./PhotoTile";
 import type { PhotoAsset } from "./timeline-model";
 import { usePhotoTimeline } from "./timeline-source";
 
-/** No trip, on-this-day year, or similar moment ever surfaces below this
- *  many photographs to browse — reads oddly small otherwise, and the point
- *  of a rail is that it can be tapped open for the rest. */
 const RAIL_PREVIEW_LIMIT = 30;
 
 const NOTHING_YET =
@@ -152,23 +130,14 @@ function OnThisDayYearBlock({
   );
 }
 
-/** The sketch's drawing box. Small on purpose — it situates the trip beside
- *  its own name, it is not a map to be read. */
+/** Small on purpose — situates the trip beside its name; not a map to be read. */
 const SKETCH_WIDTH = 96;
 const SKETCH_HEIGHT = 56;
 
 /**
- * WHERE THE TRIP WENT, as a line.
- *
- * `projectPlaces` is the same arithmetic `PlacesMap.tsx` draws the whole map
- * with, so the sketch and the map agree about the shape of a trip because they
- * run one projection rather than because somebody kept two in step. Drawn with
- * `react-native-svg` for the same reason that screen is: a projection is
- * arithmetic and needs no map vendor, and asking one would tell it where the
- * member has been.
- *
- * A single-stop trip draws its dot and no line — a polyline through one point
- * is not a route, and stretching it into one would invent travel.
+ * Same `projectPlaces` arithmetic as `PlacesMap.tsx`. Drawn with
+ * `react-native-svg` — a projection needs no map vendor (that would be told
+ * where the member has been). A single-stop trip draws its dot and no line.
  */
 function RouteSketch({
   route,
@@ -182,14 +151,12 @@ function RouteSketch({
   const { pins } = projectPlaces(route, {
     width: SKETCH_WIDTH,
     height: SKETCH_HEIGHT,
-    // Clear of the plate's edge by a dot's radius and a hair; no merging,
-    // because two stops the eye cannot separate at this size are still two
-    // stops the LINE has to pass through.
+    // Clear of the plate's edge by a dot's radius. No merging: two stops the
+    // eye cannot separate are still two stops the LINE has to pass through.
     padding: 7,
     mergeDistance: 0,
   });
-  // Back into the trip's own order: `projectPlaces` sorts by count for its
-  // merge pass, and the line follows the trip, not the tally.
+  // `projectPlaces` sorts by count; the line follows the trip's own order.
   const stops = route.flatMap((point) => {
     const pin = pins.find((candidate) => candidate.key === point.key);
     return pin ? [pin] : [];
@@ -236,8 +203,7 @@ function TripBlock({
     <View style={styles.block}>
       <View style={styles.tripHead}>
         <View style={styles.tripWords}>
-          {/* The ladder's sentence, never a coordinate and never a bearing
-              from home — see `trips.ts`. */}
+          {/* Ladder sentence from trips.ts, never a coordinate. */}
           <Text style={styles.blockTitle} numberOfLines={1}>
             {trip.title}
           </Text>
@@ -291,16 +257,12 @@ export default function MemoriesView({
     useMemo(() => ({ entity: "core.place" }), [])
   );
 
-  // The place FACTS, not just the names: a trip's title reads the member's own
-  // name then the gazetteer's, and its route needs the coordinates (#816).
   const placeFacts = useMemo(
     () => memoryPlacesById(places.rows as readonly RawPlaceRow[]),
     [places.rows]
   );
 
-  // `now` is stable for the screen's lifetime — recomputing it per render
-  // would let "today" silently shift under a member mid-scroll if the app
-  // happened to cross midnight while this screen was open.
+  // Stable for the screen's lifetime — "today" must not shift under a mid-scroll midnight.
   const now = useMemo(() => new Date(), []);
 
   const model = useMemo(
@@ -426,8 +388,6 @@ const makeStyles = (colors: ThemeColors) =>
       paddingHorizontal: spacing[4],
     },
     section: { marginTop: spacing[4] },
-    // A sunken plate, like every other plan view in this app — something
-    // looked INTO rather than a card lying on the page.
     sketch: {
       backgroundColor: colors.bgSunken,
       borderRadius: radii.md,
@@ -441,8 +401,6 @@ const makeStyles = (colors: ThemeColors) =>
       paddingHorizontal: spacing[4],
     },
     title: { ...t("bodyStrong"), color: colors.text, flex: 1 },
-    // The words take the room the sketch does not: a long place name shortens
-    // rather than pushing the sketch off the screen.
     tripHead: { alignItems: "center", flexDirection: "row" },
     tripWords: { flex: 1 },
   });

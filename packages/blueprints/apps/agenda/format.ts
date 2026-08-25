@@ -1,13 +1,5 @@
-// Pure, JSX-free projections: time and date text, the local-input round trip,
-// the calendar hue dot, and the FTS snippet split. No app state and no vault
-// IO, so the orchestrator and the components can both call these without a
-// circular import.
-//
-// NUMERICS. Every string here that a member reads as a NUMBER — a time, an
-// hour label, a day number — is rendered inside an element carrying the
-// tabular/bidi-isolate pair (`.num` in the component stylesheets). The text is
-// produced here; the isolation is applied where it is painted, because
-// `unicode-bidi: isolate` is a property of the box, not of the string.
+// Pure, JSX-free projections. Numeric strings are painted inside `.num`;
+// `unicode-bidi: isolate` is a property of the box, not the string.
 
 import { identityColor } from "@centraid/design";
 import { localDayKey } from "@centraid/design/elements";
@@ -18,13 +10,11 @@ import { UNTITLED } from "./view-copy.ts";
 export const DAY_MS = 24 * 60 * 60 * 1000;
 export const HOUR_MS = 60 * 60 * 1000;
 
-/** A datetime-local value ("YYYY-MM-DDTHH:MM", viewer's zone) as an instant. */
 export function toIsoUtc(local: string): string {
   const d = new Date(local);
   return Number.isNaN(d.getTime()) ? "" : d.toISOString();
 }
 
-/** An instant as the value a datetime-local input wants, in local time. */
 export function toLocalInput(dateish: string | number | Date): string {
   const d = dateish instanceof Date ? dateish : new Date(dateish);
   if (Number.isNaN(d.getTime())) return "";
@@ -32,14 +22,8 @@ export function toLocalInput(dateish: string | number | Date): string {
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
 }
 
-// LOCALE. Every formatter below reads the HOST's locale by default — that is
-// the product behaviour and it does not change: `locale` is an optional last
-// argument that defaults to `undefined`, which is exactly what
-// `toLocale*String` is handed today. It exists so the option bags here can be
-// pinned against a NAMED locale (a 12-hour locale reads "2:05 PM" where a
-// 24-hour one reads "14:05"), instead of against whatever ICU default the
-// machine running the suite happens to carry. See the time-zoo suite in
-// `format-locale.test.ts` (#839).
+// `locale` is an optional last argument so option bags can be pinned against a
+// NAMED locale in tests, not the machine's ICU default (`format-locale.test.ts`, #839).
 
 export function fmtTime(
   iso: string | number | Date,
@@ -55,7 +39,6 @@ export function fmtTime(
   }
 }
 
-/** An hour of the day as the grid's rail label ("09", "14"). */
 export function fmtHour(hour: number, locale?: Intl.LocalesArgument): string {
   return new Date(2000, 0, 1, hour).toLocaleTimeString(locale, {
     hour: "numeric",
@@ -75,7 +58,6 @@ export function fmtDay(key: string, locale?: Intl.LocalesArgument): string {
   }
 }
 
-/** The heading over whichever range the current view is showing. */
 export function rangeLabel(
   view: string,
   anchor: Date,
@@ -110,12 +92,10 @@ export function startOfWeek(d: Date): Date {
   return new Date(d.getFullYear(), d.getMonth(), d.getDate() - back);
 }
 
-/** Midnight of `d`, local. */
 export function startOfDay(d: Date): Date {
   return new Date(d.getFullYear(), d.getMonth(), d.getDate());
 }
 
-/** The clicked day at the next round hour of the current time. */
 export function nextRoundHourOn(date: Date): Date {
   const now = new Date();
   const hour = Math.min(
@@ -127,21 +107,12 @@ export function nextRoundHourOn(date: Date): Date {
   return new Date(date.getFullYear(), date.getMonth(), date.getDate(), hour);
 }
 
-/** What a row reads as. A vault summary can be empty; a row still has a name. */
 export function eventTitle(ev: AgEvent): string {
   const summary = String(ev.summary ?? "").trim();
   return summary === "" ? UNTITLED : summary;
 }
 
-/**
- * The calendar's hue dot — a CONTENT MARKER and never a control colour.
- *
- * A calendar that carries its own colour keeps it; everything else takes a
- * slot on the shared identity wheel, the same deterministic deriver People
- * and the launcher read, so two surfaces cannot disagree about which hue a
- * calendar has. There is no app-local palette here on purpose: a hash table
- * of hex literals in an app is how the product grows a second palette.
- */
+/** Content marker, never a control colour. No app-local palette. */
 export function calendarHue(
   calendar: Calendar | undefined,
   calendarId: string | null | undefined
@@ -151,7 +122,6 @@ export function calendarHue(
   return identityColor(calendarId);
 }
 
-/** Split a vault FTS `⟦hit⟧`-marked snippet into `[{ text, hit }]` segments. */
 export function snippetSegments(
   snippet: string | null | undefined
 ): { text: string; hit: boolean }[] {

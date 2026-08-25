@@ -1,16 +1,4 @@
-// The two blocks the Backup screen's numbers live in (#712) — the gateway's
-// CUSTODY ROLLUP, and the free-up OFFER derived from one bucket of it.
-//
-// Separate from `BackupHealth.tsx` because they are the half of that screen
-// that speaks for the GATEWAY. The screen proper speaks for this phone: the durable
-// upload queue, the transfer policy, the consent latch. Two sources, two
-// voices, and the split makes it hard to accidentally print one's number under
-// the other's heading.
-//
-// EVERY NUMBER HERE CAME OFF `blob.custody_rollup`. Nothing on these blocks is
-// derived from what the phone happens to have cached, and an unrun sweep says
-// so rather than rendering zeroes — see `custody-status.ts` for why null is
-// carried all the way from the vault projection to this file.
+// Backup screen's gateway numbers (#712): custody rollup + free-up offer. Phone-side lives in BackupHealth.tsx.
 
 import React from "react";
 import { Pressable, View } from "react-native";
@@ -33,26 +21,9 @@ import type { FreeUpOffer } from "../kit/storage/free-up-space";
 import { useTheme } from "../kit/theme";
 import { styles } from "./BackupHealth.styles";
 
-/**
- * WHICH APPS A FREE-UP PASS MAY RELEASE ORIGINALS FOR (#712).
- *
- * The list lives HERE, in the caller, and not inside `kit/storage` — that
- * module enumerates no apps on purpose, so nothing can be opted in by a
- * registry nobody reads. Two structural exclusions:
- *
- *   * LOCKER is absent because the bytes ARE the secret. There is no preview
- *     to fall back to, so releasing the local copy is not a degradation, it is
- *     losing the thing (docs/blueprint-seats.md, and the A7 ruling that keeps
- *     `locker.item` unrepresentable in the placement registry for the same
- *     reason).
- *   * RECORD-ONLY apps (Tasks, People, Notes bodies, Tally, Agenda) are absent
- *     because they hold no originals at all — the seat table calls free-up
- *     "meaningless" for them, and offering it would be a control over nothing.
- */
+// Locker and record-only apps are absent: locker bytes ARE the secret; record-only hold no originals.
 export const FREE_UP_APPS: readonly string[] = ["photos", "docs"];
 
-/** The rollup buckets this screen prints, worst last — a reader scanning down
- *  ends on the thing that needs them, not on the thing that is fine. */
 const CUSTODY_ROWS: ReadonlyArray<{
   bucket: CustodyBucket;
   label: string;
@@ -88,11 +59,6 @@ const CUSTODY_ROWS: ReadonlyArray<{
   },
 ];
 
-/**
- * The rollup, or the honest reason there is none. Every count and every byte
- * here came off `blob.custody_rollup`; nothing on this block is derived from
- * what the phone happens to have cached.
- */
 export function CustodyBlock({
   custody,
   online,
@@ -163,8 +129,6 @@ export function CustodyBlock({
   );
 }
 
-/** Cause, consequence, one action — and never an offer to release bytes the
- *  rollup has not proven are held somewhere else. */
 export function FreeUpBlock({
   offer,
 }: {
@@ -196,12 +160,7 @@ export function FreeUpBlock({
         {FREE_UP_CONSEQUENCE}
       </Text>
       <View style={styles.actions}>
-        {/* Outlined, never filled — "Back up now" above is the one commit on
-            this surface (§18). Releasing bytes is reached from the app that
-            owns them, where the per-copy revalidation runs
-            (`kit/storage/free-up-space.ts`'s `revalidateBackedUp`, wired in
-            `apps/photos/PhotosLibrary.tsx`): this frame surface states the
-            offer and its size, and never deletes a device original itself. */}
+        {/* Outlined, never filled — this surface never deletes a device original. */}
         <Pressable
           accessibilityLabel={FREE_UP_ACTION}
           accessibilityRole="button"
@@ -222,19 +181,9 @@ export function FreeUpBlock({
   );
 }
 
-/**
- * Why the control on THIS screen does not delete anything. The frame can prove
- * how much is releasable — that is what the rollup is for — but the second
- * gate, re-hashing each device copy before it is deleted, needs the app that
- * holds the copies. Saying so beats a button that silently does less than its
- * label.
- */
 const FREE_UP_WHERE =
   "Release the copies from the app that holds them — Photos re-hashes each device original before deleting it.";
 
-/** Shared with the screen's header, which prints the last successful sync in
- *  the same register. Local to this pair of files by design: a date format is
- *  a rendering choice, not a fact the kit should own. */
 export function formatSyncTime(value: string): string {
   const timestamp = Date.parse(value);
   return Number.isNaN(timestamp)

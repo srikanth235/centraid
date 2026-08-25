@@ -12,13 +12,8 @@ import type {
   ShellReplicaReadRequest,
   ShellReplicaSearchRequest,
 } from "../../replica/shell-session.js";
-// Local-query execution for the inline app path, backed directly by the shell
-// replica session. A blueprint query module
-// (`queries/<name>.ts`) is a pure function of `{ input, ctx }`; here `ctx.vault`
-// reads/searches the local replica, shapes the wire envelopes into the
-// `{ rows, receiptId }` the query expects, and marks an online-only guard the
-// instant a query touches a field the shape does not carry — so the caller
-// (centraid-inline) can fall back to the gateway with the SAME error contract.
+// Inline query ctx over the shell replica. Touching a field the shape does
+// not carry marks ONLINE_ONLY so the caller can fall back with the same error.
 import type {
   ReplicaReadWireResult,
   ReplicaRowEnvelope,
@@ -26,7 +21,6 @@ import type {
   ReplicaValue,
 } from "../../replica/types.js";
 
-/** The slice of the replica session an inline query context needs. */
 export interface InlineReplicaSession {
   read: (
     appId: string,
@@ -44,7 +38,6 @@ export interface OnlineOnlyError extends Error {
 
 export interface InlineOnlineGuard {
   error: OnlineOnlyError | null;
-  /** Records (once) that the query needs the online vault and returns the error. */
   mark: (reason: string) => OnlineOnlyError;
 }
 
@@ -66,10 +59,8 @@ export function createOnlineGuard(): InlineOnlineGuard {
   return guard;
 }
 
-// A row proxy that throws the online-only guard the moment a query reads an
-// oversized (masked) or undisclosed field — verbatim behaviour port of the
-// bridge's `guardedRow`, so an inline read escalates to the gateway on exactly
-// the same conditions the iframe path did.
+// Throws ONLINE_ONLY on oversized or undisclosed fields — same conditions as
+// the iframe path's `guardedRow`.
 const PENDING_ROW_PROVENANCE = Symbol("centraid.pending-row-provenance");
 
 function guardedRow(
@@ -81,9 +72,7 @@ function guardedRow(
   for (const key of envelope.oversizedFields ?? [])
     missing.set(key, `oversized field ${key}`);
   const undisclosed = envelope.hasUnavailableFields === true;
-  // An enumerable symbol follows ordinary object spreads performed by query
-  // modules, but cannot leak onto the JSON-shaped result. It gives decorated
-  // rows exact provenance even when they also contain pending foreign keys.
+  // Enumerable symbol follows object spreads but cannot leak onto JSON.
   const values: Record<string, unknown> & {
     [PENDING_ROW_PROVENANCE]?: PendingRowMarker;
   } = { ...(envelope.values as Record<string, unknown>) };
@@ -130,10 +119,8 @@ function receiptIdFor(result: {
 export interface InlineCtxOptions {
   session: InlineReplicaSession;
   appId: string;
-  /** Whether the gateway is currently reachable (default `navigator.onLine`). */
   isOnline?: () => boolean;
   signal?: AbortSignal;
-  /** Mounted scope stamped onto carried pending rows for scoped recovery. */
   scopeId?: string;
 }
 
@@ -178,10 +165,8 @@ function carriedPendingMarker(
   const exact = source[PENDING_ROW_PROVENANCE];
   if (exact && typeof exact === "object") return exact as PendingRowMarker;
 
-  // Explicit query projections do not preserve the symbol. Their first
-  // source-identity field is the row they are presenting; later `*_id`
-  // values are relationships. Match the field as well as its value and refuse
-  // ambiguity instead of ever assigning a parent's controls to its child.
+  // Projections drop the symbol. Match field+value; refuse ambiguity — never
+  // assign a parent's controls to its child.
   for (const [field, value] of Object.entries(carried)) {
     if (field !== "id" && !field.endsWith("_id")) continue;
     const candidates = markers.filter(
@@ -194,12 +179,8 @@ function carriedPendingMarker(
   return undefined;
 }
 
-/**
- * Query modules may decorate or join a replica row and legitimately select
- * only product fields. Pending identity/status is shell-owned metadata, so the
- * shell carries it across that projection by stable row identity. Apps still
- * declare only action→row projection; they never copy overlay fields by hand.
- */
+// Pending identity is shell-owned: carry it across product-field projections
+// by row identity. Apps never copy overlay fields by hand.
 function carryPendingRows(
   value: unknown,
   markers: readonly PendingRowMarker[],
@@ -224,12 +205,7 @@ function carryPendingRows(
   };
 }
 
-/**
- * The `ctx` an inline query handler receives. `read`/`search` project the local
- * replica; `resolve` NEVER rejects (offline or online it returns `{ cards: [] }`
- * when no cards can be produced locally — a rejection would blank the board);
- * every other vault effect is online-only and rejects with the bridge's codes.
- */
+// `resolve` NEVER rejects — `{ cards: [] }` rather than blanking the board.
 export function buildInlineCtx(
   options: InlineCtxOptions,
   guard: InlineOnlineGuard,
@@ -268,8 +244,7 @@ export function buildInlineCtx(
         receiptId: receiptIdFor(result),
       };
     },
-    // No client-side card resolver exists; inline apps render without far-end
-    // mention cards rather than blanking (see runInlineQuery / #505 P4).
+    // No client-side card resolver; empty cards, never blank (#505 P4).
     resolve(): Promise<{ cards: ReplicaValue[] }> {
       return Promise.resolve({ cards: [] });
     },
@@ -288,10 +263,7 @@ export function buildInlineCtx(
     fetch: (): Promise<never> =>
       Promise.reject(guard.mark("fetch is online-only")),
     vault,
-    // The same civil-time engine the gateway worker mounts (engine/worker/
-    // runner.ts). It is pure and dependency-free, so the inline path runs it
-    // in-process rather than escalating a recurrence query to the gateway —
-    // and both planes therefore summarise a rule identically.
+    // Same civil-time engine as the gateway worker — in-process, identical summary.
     time: {
       applyRecurrenceExceptions,
       collapseMissedOccurrences,
@@ -302,12 +274,6 @@ export function buildInlineCtx(
   };
 }
 
-/**
- * Run one blueprint query module against the local replica. Resolves with the
- * query's value, or rejects with the online-only guard error (code
- * `ONLINE_ONLY`) if the query touched a field the shape does not carry — the
- * caller escalates to the gateway on that signal.
- */
 export async function runInlineQuery(
   module: InlineQueryModule,
   options: InlineCtxOptions & { input?: Record<string, unknown> }

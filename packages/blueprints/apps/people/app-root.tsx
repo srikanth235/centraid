@@ -1,29 +1,4 @@
-// People, rebuilt from the Binding Layer v12 handoff: the orchestrator.
-//
-// This file wires the app and draws none of it. It owns the two mutable bags
-// (`state`, `data`), builds the read factory (`logic.ts`) and the write
-// factory (`writes.ts`) once, feeds the frame (title, count, verbs, band,
-// status line), and hands each screen the props `types.ts` freezes. The
-// screens live in `components/`; the recipes they are built from live in
-// `components/shared.module.css`, declared exactly once.
-//
-// THE VAULT LINK IS DRAWN, as far as the contract lets it be. `queries/*`
-// answer the sharing plane (`queries/_shared.ts`), so the ring, the two filter
-// chips, the vault-counting tiles and status lines, and the person screen's
-// `Vaults` + `Shared with them` sections are all here — and all of them fall
-// back to link-free rendering when `links_available` is false, which is what a
-// parked `share.*` scope looks like from in here.
-//
-// THE GRANT PLANE IS THE PERSON SCREEN'S OWN READ (#825). `Share` and
-// `Revoke` are live there, and neither travels through `logic.ts` or
-// `writes.ts`: the plane is the gateway's door, not one of this app's vault
-// queries, so `components/PersonGrants.tsx` holds it and this file supplies
-// only the two things a host owes it — the roster, which is where a party id
-// has a name, and the frame's one status line.
-//
-// STILL ABSENT, and absence rather than omission: the six record sections the
-// handoff itself excludes (lists, journal, tasks, gifts, debts, typed
-// relationships, edit history).
+// People orchestrator: wires state/data, logic, writes, and the frame. Draws none of it.
 import {
   useCallback,
   useEffect,
@@ -70,12 +45,6 @@ import type {
 import { DEFAULT_CADENCE, makeData, makeState } from "./view-state.ts";
 import { createWrites } from "./writes.ts";
 
-/**
- * Vault entities this app's queries read — the doorbell filter. Restored in
- * full from the list the wall preserved: an app that declared fewer would
- * sleep through a change it renders, and one that declared more would wake on
- * every unrelated write.
- */
 export const CHANGE_TABLES = [
   "people.profile",
   "people.important_date",
@@ -114,8 +83,6 @@ export function Root({
   const stateRef = useRef<AppState>(makeState());
   const dataRef = useRef<AppData>(makeData());
   const coreRef = useRef<Core | null>(null);
-  /** The status line is carrying a write's OUTCOME, so the ambient sentence
-   *  stays out of the way until the member navigates. */
   const outcomeHeld = useRef(false);
 
   if (!coreRef.current) {
@@ -147,9 +114,7 @@ export function Root({
   const state = stateRef.current;
   const data = dataRef.current;
 
-  // Seed the compact layout BEFORE the first paint. `observeWidth` in the
-  // mount effect below only fires post-paint, so without this the phone form
-  // factor would paint at desktop metrics for one frame.
+  // Compact layout before first paint: observeWidth fires post-paint.
   useLayoutEffect(() => {
     const element = rootElRef.current;
     if (!element) return;
@@ -187,15 +152,11 @@ export function Root({
     // oxlint-disable-next-line react-hooks/exhaustive-deps -- mount-once wiring, stable deps via refs (#505)
   }, []);
 
-  // OFFLINE IS READ, NEVER INVENTED (`_shared/view-state-kit.ts`): the host's
-  // own knob first, then the evidence of a read that actually came back failed.
   const offline =
     libraryReachability({
       hostStatus: rootElRef.current?.dataset.gatewayStatus ?? null,
       readFailed: readFailedState,
     }) === "unreachable";
-
-  // ──── navigation + screen handlers ────
 
   const navigate = useCallback(
     (shelf: typeof state.shelf, personId?: string | null) => {
@@ -205,9 +166,6 @@ export function Root({
     [logic]
   );
 
-  // The screens take handlers by name, so the few that are `logic`'s own
-  // functions are bound here rather than passed through raw — one naming
-  // convention for every callback a route receives.
   const handleTermChange = logic.setSearch;
   const handleClearSearch = logic.clearSearch;
   const handleToggleSection = logic.toggleSection;
@@ -307,11 +265,6 @@ export function Root({
     [state]
   );
 
-  // ──── the route ────
-
-  // `loading` is passed at every call site rather than folded into `base`:
-  // "a read has not landed yet" is the gate every empty state in the app sits
-  // behind, and the honesty test for it reads the JSX (`src/state-honesty.test.ts`).
   const routeBody = (
     <PeopleRouteBody
       data={data}
@@ -378,9 +331,6 @@ export function Root({
       onRestore={(person) => void writes.restorePerson(person)}
       onSelectFilter={selectFilter}
       onSelectTile={(tile) => {
-        // Every tile lands on the roster under the filter it names — the
-        // two link tiles included, which is what makes `Vaults` and
-        // `To link` navigations rather than badges.
         if (tile === "starred") selectFilter("starred");
         else if (tile === "reconnect") selectFilter("due");
         else if (tile === "linked") selectFilter("linked");
@@ -389,8 +339,6 @@ export function Root({
         navigate(null);
       }}
       onStatus={(message) => {
-        // A share or a revoke is an OUTCOME, so it holds the line exactly as
-        // a People write's own outcome does, until the member navigates.
         outcomeHeld.current = true;
         publishOutcome(frame, { text: message });
       }}
@@ -413,8 +361,6 @@ export function Root({
       state={state}
     />
   );
-
-  // ──── the two modal confirms ────
 
   const confirm = state.confirm;
   const confirmSubject = logic.personRow(confirm?.party_id ?? null);
@@ -448,8 +394,6 @@ export function Root({
     />
   );
 
-  // ──── the frame ────
-
   const counts = logic.rosterCounts();
   const barCountValue =
     state.shelf === null
@@ -460,9 +404,6 @@ export function Root({
           ? (state.searchResults?.length ?? 0)
           : null;
   const handedOff = narrow;
-  // The roster's bar carries `<k> of <m> linked` on a pointer surface, where
-  // there is room for the pair. On the compact surface the plain people count
-  // stands — the handoff gives the phone the shorter meta.
   const linkedMeta =
     state.shelf === null && data.linksAvailable && !handedOff
       ? STATUS.barLinked(counts.linked, counts.people)
@@ -505,8 +446,6 @@ export function Root({
     );
   }, [frame, state.shelf, narrow, navigate, state]);
 
-  // The AMBIENT sentence, replaced in place by any write's own outcome until
-  // the member navigates (`writes.ts` holds the line; `navigate` releases it).
   useEffect(() => {
     if (outcomeHeld.current) return;
     const text = logic.ambientStatus();
@@ -524,7 +463,6 @@ export function Root({
     data.linksAvailable,
   ]);
 
-  // Hand the bar, the band and the line back when People stops being the route.
   useEffect(() => {
     return () => {
       frame.setAppBar(null);

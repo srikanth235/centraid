@@ -1,20 +1,6 @@
-// GFM block + inline parser for the rich-answer renderer (#420).
-// Dependency-free; assistant-rich.ts is its only consumer.
-//
-// SECURITY (see assistant-rich.ts for the full contract): every text path runs
-// through `escapeHtml` FIRST, so the parser only ever pattern-matches over
-// already-escaped text and injects a fixed, closed set of tags (p, h3–h6, ul,
-// ol, li, blockquote, hr, table, a, img, strong, em, del, code, and the ref
-// button). URLs for links/images pass through `sanitizeUrl`, which allowlists
-// http/https(/mailto) + relative gateway paths and rejects javascript:/data:/
-// protocol-relative. Attribute injection is structurally impossible because the
-// URL is drawn from the escaped string (quotes are already `&#34;`).
+// GFM parser for the rich-answer renderer (#420). Escape first, then match;
+// `sanitizeUrl` allowlists http/https(/mailto) + relative paths.
 
-/**
- * The subset of the renderer's resolved class map this parser reads. Declared
- * structurally so `AssistantRichClasses` (the full slot list) satisfies it
- * without either module depending on the other's shape.
- */
 export interface GfmClasses {
   asstP: string;
   asstH: string;
@@ -39,12 +25,10 @@ interface ElementAttrs {
 
 type ElementChild = Node | string | false | null | undefined;
 
-/** Join truthy class names (a tiny `cx`). */
 export function cx(...names: Array<string | false | null | undefined>): string {
   return names.filter(Boolean).join(" ");
 }
 
-/** DOM helper — string/element children; `trustedHtml` sets innerHTML. */
 export function el(
   tag: string,
   attrs: ElementAttrs = {},
@@ -61,56 +45,39 @@ export function el(
   return node;
 }
 
-/** HTML-escape a string (numeric entities for the five dangerous chars). */
 export function escapeHtml(s: string): string {
   return String(s).replace(/[&<>"']/gu, (c) => `&#${c.charCodeAt(0)};`);
 }
 
-/** Sentinel wrapping an extracted inline-code span (control chars: never in escaped text). */
 const CODE_OPEN = "\u0000";
 const CODE_CLOSE = "\u0001";
 
-/**
- * Allowlist a link/image URL drawn from ALREADY-ESCAPED markdown. Returns the
- * safe URL string, or `null` to reject (the caller then renders plain text /
- * alt). Strips control + whitespace chars first so `java\tscript:` can't slip
- * past scheme detection, rejects protocol-relative `//host`, and permits only
- * http/https(+ mailto for links) schemes or scheme-less relative paths.
- */
 export function sanitizeUrl(url: string, isImage: boolean): string | null {
-  // Strip control + whitespace chars browsers ignore during scheme detection.
   const cleaned = String(url).replace(/[\p{Cc}\s]+/gu, "");
   if (!cleaned) return null;
-  if (cleaned.startsWith("//")) return null; // protocol-relative → external
+  if (cleaned.startsWith("//")) return null;
   const scheme = cleaned.match(/^(?<scheme>[a-z][a-z0-9+.-]*):/iu);
   if (scheme) {
     const s = (scheme.groups?.scheme ?? "").toLowerCase();
     const ok = s === "http" || s === "https" || (!isImage && s === "mailto");
     return ok ? cleaned : null;
   }
-  return cleaned; // scheme-less → relative gateway path / fragment / query
+  return cleaned;
 }
 
-/**
- * Inline markdown → HTML string. `raw` is escaped first; then ref-chips,
- * images, links, strikethrough, bold, italic, and inline code are applied.
- * Inline code is extracted before the others so its contents stay literal.
- */
 export function inlineHtml(raw: string, C: GfmClasses): string {
   let s = escapeHtml(raw);
-  // Extract inline code so `*`/`[` etc. inside it are not re-interpreted.
+  // Extract inline code first so `*`/`[` inside it stay literal.
   const codes: string[] = [];
   s = s.replace(/`(?<code>[^`]+)`/gu, (_m, code: string) => {
     codes.push(code);
     return `${CODE_OPEN}${codes.length - 1}${CODE_CLOSE}`;
   });
-  // Vault ref chips (@[Title](ref:type/id)).
   s = s.replace(
     /@\[(?<label>[^\]]+)\]\(ref:(?<type>[a-z_]+\.[a-z_]+)\/(?<id>[A-Za-z0-9_-]+)\)/gu,
     (_m, label: string, type: string, id: string) =>
       `<button type="button" class="${C.asstRef}" data-ref-type="${type}" data-ref-id="${id}">${label}</button>`
   );
-  // Images ![alt](url) — before links (the leading `!` disambiguates).
   s = s.replace(
     /!\[(?<alt>[^\]]*)\]\((?<url>[^)\s]+)(?:\s+&#34;[^)]*)?\)/gu,
     (_m, alt: string, url: string) => {
@@ -120,7 +87,6 @@ export function inlineHtml(raw: string, C: GfmClasses): string {
         : alt;
     }
   );
-  // Links [text](url).
   s = s.replace(
     /\[(?<text>[^\]]+)\]\((?<url>[^)\s]+)(?:\s+&#34;[^)]*)?\)/gu,
     (_m, text: string, url: string) => {
@@ -132,7 +98,6 @@ export function inlineHtml(raw: string, C: GfmClasses): string {
       return `<a class="${C.asstA}" href="${safe}"${attrs}>${text}</a>`;
     }
   );
-  // Strikethrough, bold, italic.
   s = s.replace(
     /~~(?<struck>[^~]+)~~/gu,
     `<del class="${C.asstDel}">$<struck></del>`
@@ -142,7 +107,6 @@ export function inlineHtml(raw: string, C: GfmClasses): string {
     /(?<lead>^|[\s(>])\*(?<italic>[^*\n]+)\*/gu,
     "$<lead><em>$<italic></em>"
   );
-  // Restore inline code.
   s = s.replace(
     new RegExp(`${CODE_OPEN}(\\d+)${CODE_CLOSE}`, "gu"),
     (_m, i: string) => `<code>${codes[Number(i)]}</code>`
@@ -154,7 +118,6 @@ const HR_RE = /^ {0,3}(?<rule>[-*_])(?: *\k<rule>){2,} *$/u;
 const LIST_RE = /^(?<indent>\s*)(?<marker>[-*+]|\d+[.)])\s+(?<content>.*)$/u;
 const HEADING_RE = /^(?<hashes>#{1,6})\s+(?<text>.*)$/u;
 
-/** Cells of a pipe-table row, trimmed, outer pipes stripped. */
 function tableCells(row: string): string[] {
   return row
     .replace(/^\s*\|/u, "")
@@ -163,7 +126,6 @@ function tableCells(row: string): string[] {
     .map((c) => c.trim());
 }
 
-/** Is `sep` a table delimiter row (dashes/colons/pipes, at least one dash + pipe/colon)? */
 function isTableSep(sep: string | undefined): sep is string {
   return (
     sep !== undefined &&
@@ -240,10 +202,6 @@ interface ListItem {
   content: string;
 }
 
-/**
- * Build a (possibly nested, mixed ul/ol) list from parsed marker rows. `items`
- * is never empty — the caller only calls this after matching at least one row.
- */
 function buildList(
   items: [ListItem, ...ListItem[]],
   C: GfmClasses
@@ -270,11 +228,6 @@ function buildList(
   return build(items[0].indent);
 }
 
-/**
- * GFM block parser: prose text (with code fences already split out upstream) →
- * an array of block-level DOM nodes. Handles headings, hr, blockquotes, nested
- * lists, pipe tables, and paragraphs.
- */
 export function blockNodes(text: string, C: GfmClasses): HTMLElement[] {
   const lines = text.split("\n");
   const out: HTMLElement[] = [];
@@ -293,7 +246,6 @@ export function blockNodes(text: string, C: GfmClasses): HTMLElement[] {
       i += 1;
       continue;
     }
-    // Table (header line has a pipe, next line is a delimiter).
     if (/\|/u.test(line) && isTableSep(lines[i + 1])) {
       flushPara();
       const built = buildTable(lines, i, C);
@@ -303,7 +255,6 @@ export function blockNodes(text: string, C: GfmClasses): HTMLElement[] {
         continue;
       }
     }
-    // Horizontal rule.
     if (HR_RE.test(line)) {
       flushPara();
       out.push(el("hr", { class: C.asstHr }));
@@ -322,7 +273,6 @@ export function blockNodes(text: string, C: GfmClasses): HTMLElement[] {
       i += 1;
       continue;
     }
-    // Blockquote (collect the run, strip one `>`, recurse).
     if (/^\s*>/u.test(line)) {
       flushPara();
       const inner: string[] = [];
@@ -339,7 +289,6 @@ export function blockNodes(text: string, C: GfmClasses): HTMLElement[] {
       );
       continue;
     }
-    // List (collect the contiguous run, build nested).
     if (LIST_RE.test(line)) {
       flushPara();
       const items: ListItem[] = [];
@@ -357,7 +306,6 @@ export function blockNodes(text: string, C: GfmClasses): HTMLElement[] {
       if (first) out.push(buildList([first, ...rest], C));
       continue;
     }
-    // Paragraph line.
     para.push(line.trim());
     i += 1;
   }

@@ -4,40 +4,17 @@ import { listAppScopes, listVaults } from "../../gateway-client.js";
 import type { OwnerScope } from "./ownerScope.js";
 import { useAsyncData } from "./useAsyncData.js";
 
-// The owner's scope registry (#726) feeds Household, explicit target
-// pickers, and the combined sidebar switcher.
-//
-// An owner owns their own vault and every audience vault the household added
-// them to. `GET /_vault/scopes` answers that set for the CALLING OWNER,
-// already sourced from ownership (`canWrite` comes straight off the gateway's
-// answer), so it is the right source for both the Household page and every
-// "which vault?" picker. An older gateway with no scopes plane degrades to
-// `listVaults()`, whose entries carry no ownership info — those are reported
-// as writable, matching the single-owner world that gateway lives in.
-//
-// The DEFAULT scope pointer is also the visible active vault. `useShellApps`'
-// per-vault home pins, the vault/pairing flows, the enrichment worker, and
-// ambient request headers all resolve through it; creation flows still name
-// their target explicitly and Household still shows every scope at once.
+// Owner scope registry (#726). `GET /_vault/scopes` is the source; an older
+// gateway degrades to `listVaults()` and those entries are treated writable.
 
 export interface OwnerScopesController {
-  /** Every vault this owner owns, own vault first. */
   scopes: OwnerScope[];
-  /** The owner's own (primary) vault — the default target for anything new. */
   primary: OwnerScope | undefined;
-  /** The scope named by the shell's current default pointer. */
   active: OwnerScope | undefined;
-  /**
-   * The shell's default/active scope pointer. Per-vault home pins and ambient
-   * request headers resolve through it when a surface has no explicit target.
-   */
   defaultScopeId: string;
-  /** The gateway this client addresses. Undefined only while loading, or when
-   *  `getSettings` is unavailable (stubbed test bridges). */
   gatewayId: string | undefined;
   gatewayLabel: string | undefined;
   gatewayKind: "local" | "remote" | undefined;
-  /** True until the first fetch settles (success or failure). */
   loading: boolean;
 }
 
@@ -50,10 +27,7 @@ interface ScopesSnapshot {
 }
 
 async function loadScopes(): Promise<OwnerScope[]> {
-  // Both sources are wrapped rather than `.catch`-ed: a host (or a route test)
-  // that never wired the vault client makes the CALL itself throw, not the
-  // promise reject, and an unreachable registry must degrade to "no vaults
-  // known" instead of taking the whole shell down with it.
+  // Wrap the CALL: an unwired host throws synchronously, not as a rejection.
   let fromPlane: Awaited<ReturnType<typeof listAppScopes>>;
   try {
     fromPlane = await listAppScopes();
@@ -109,9 +83,7 @@ export function useOwnerScopes(): OwnerScopesController {
     const api = window.CentraidApi as typeof window.CentraidApi | undefined;
     const offVault = api?.onVaultChanged?.(refresh);
     const offGateway = api?.onGatewayChanged?.(refresh);
-    // Metadata-only changes (a vault rename/retheme) are a separate broadcast
-    // so a save there refreshes this registry WITHOUT tripping App.tsx's
-    // `reScope` (which treats onVaultChanged as "the default pointer moved").
+    // Metadata-only: do not trip App.tsx `reScope` (onVaultChanged = pointer moved).
     const offMetadata = api?.onVaultMetadataChanged?.(refresh);
     return () => {
       offVault?.();
@@ -123,8 +95,6 @@ export function useOwnerScopes(): OwnerScopesController {
   const ready = state.status === "ready" ? state.data : undefined;
   const scopes = ready?.scopes ?? [];
   const defaultScopeId = ready?.defaultScopeId ?? "";
-  // The owner's own vault is the gateway's first, oldest scope; fall back to
-  // whatever the default pointer names when the list is ordered otherwise.
   const primary = scopes[0] ?? scopes.find((s) => s.id === defaultScopeId);
   const active = scopes.find((scope) => scope.id === defaultScopeId) ?? primary;
 

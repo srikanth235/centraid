@@ -1,16 +1,7 @@
 /*
- * Maps the gateway's backup-status + storage-usage DTOs onto the ONE normative
- * five-metric derivation (`deriveStorageMetrics`, #436 §6) — computed a
- * single time here so the Backups health surface never re-derives a slightly
- * different story per readout. Pure and framework-free: given the same DTOs +
- * clock it always returns the same metrics.
- *
- * The four freshness clocks are aggregated across every mounted vault: for each
- * clock the OLDEST vault wins (min), and a clock any vault has never reached is
- * `null` — an unproven protection edge across the fleet can't be called fresh.
- * The declared cadence is the SLOWEST of the policies' three protection
- * cadences (RPO, snapshot, verify), so a fleet that is on-schedule for its
- * slowest promise still reads green rather than false-red on the oldest clock.
+ * Maps backup-status + usage DTOs onto one `deriveStorageMetrics` call
+ * (#436 §6). Oldest vault wins each clock; a clock any vault never reached
+ * is `null`. Declared cadence is the slowest of RPO/snapshot/verify.
  */
 
 import type { StorageConnectionUsageDTO } from "../../gateway-client.js";
@@ -31,16 +22,13 @@ function parseIso(iso: string | undefined): number | null {
   return Number.isNaN(at) ? null : at;
 }
 
-/** The oldest non-null across a fleet, or `null` if ANY vault is missing it. */
+/** Oldest non-null, or `null` if any vault is missing it. */
 function oldestOrMissing(values: (number | null)[]): number | null {
   if (values.length === 0) return null;
   if (values.some((v) => v === null)) return null;
   return Math.min(...(values as number[]));
 }
 
-/** One vault's declared protection cadence — the slowest of its three
- *  cadences, so the min-of-clocks freshness edge stays green when every clock
- *  is within its own schedule. Defaults mirror `DEFAULT_BACKUP_POLICY`. */
 function vaultCadenceMs(vault: BackupVaultStatusDTO): number {
   const rpoSeconds = vault.policy?.rpoSeconds ?? 60;
   const snapshotIntervalHours = vault.policy?.snapshotIntervalHours ?? 24;
@@ -52,21 +40,9 @@ function vaultCadenceMs(vault: BackupVaultStatusDTO): number {
   );
 }
 
-/**
- * "If this device died right now, what would I lose?" (#708 A2 — the
- * Backup screen leads with loss, not exposure). Derived from the same
- * `computeStorageMetrics` output every other part of this surface reads, so
- * the loss line and the freshness metric can never disagree with each other.
- *
- * `tone` drives the headline; the caller formats `exposedMs`/`pendingBytes`
- * with `formatDuration`/`formatBytes` (kept out of this module so it stays
- * numbers-in, numbers-out like the rest of `storage-metrics.ts`).
- */
 export interface LossSummary {
   tone: "unconfigured" | "unknown" | "safe" | "exposed";
-  /** Age of the worst freshness clock; `null` when unconfigured/unknown. */
   exposedMs: number | null;
-  /** Bytes staged for offsite but not yet sent, summed across vaults. */
   pendingBytes: number;
   pendingCount: number;
 }
@@ -93,10 +69,8 @@ export function deriveLossSummary(
       pendingCount,
     };
   }
-  // Pending offsite bytes are a KNOWN loss (data that hasn't left this
-  // machine yet), even though a nonzero pending count also blanks the
-  // outbox-drain clock and would otherwise read as "unknown" below — the
-  // one fact we do have is more useful than folding it into "can't tell."
+  // Pending offsite is a known loss — don't fold it into "unknown" just
+  // because a nonzero pending count also blanks the outbox-drain clock.
   if (pendingBytes > 0) {
     return {
       tone: "exposed",
@@ -120,8 +94,6 @@ export function deriveLossSummary(
   };
 }
 
-/** Sum provider-reported usage across every home connection into the aggregate
- *  per-store shape the cost metric reads. `null` before the first poll. */
 export function aggregateUsage(
   connections: StorageConnectionUsageDTO[] | null
 ): UsageInput | null {
@@ -148,7 +120,6 @@ export function aggregateUsage(
   return sawAny ? out : null;
 }
 
-/** The single normative five-metric derivation for the Backups health surface. */
 export function computeStorageMetrics(
   status: BackupStatusDTO,
   usage: UsageInput | null,
@@ -158,8 +129,7 @@ export function computeStorageMetrics(
   const snapshotClocks = vaults.map((v) => parseIso(v.lastBackupAt));
   const verifyClocks = vaults.map((v) => parseIso(v.lastVerifyAt));
   const walClocks = vaults.map((v) => parseIso(v.lastWalDrainAt));
-  // The outbox is only provably drained when nothing is pending offsite; its
-  // watermark is then the newest WAL drain, else the edge is unproven (null).
+  // Outbox is drained only when nothing is pending; else the edge is unproven.
   const outboxClocks = vaults.map((v) =>
     (v.pendingOffsite?.count ?? 0) === 0 ? parseIso(v.lastWalDrainAt) : null
   );

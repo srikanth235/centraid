@@ -27,52 +27,21 @@ import EnrichmentRules from "./SettingsEnrichmentRules.js";
 
 import controlsCss from "../styles/controls.module.css";
 
-// Settings → Enrichment (#807) — the one place the whole enrichment
-// policy is authored, and a PROJECTION of two stores rather than a third one:
-// tiers, scoped rules and egress answers live in the vault; engine profiles
-// live in gateway prefs. Every control below writes through the owner route
-// that already owns its path and re-renders what came back, so a refused write
-// can never show as applied.
-//
-// THE PAGE IS ORGANISED BY THE MEMBER'S QUESTION, NOT BY THE STORES. Do not
-// regroup it into four groups named after four objects — ceilings, engines,
-// scoped rules, egress answers — which is the schema wearing a UI. Nobody
-// arrives wanting to name an engine. They arrive asking: what is this doing
-// with my photos, can I
-// stop it, and does any of it leave my devices. So each DOMAIN is a group whose
-// head counts its own rows, and each row is a plain name, a switch, and the one
-// fact worth stating.
-//
-// THE PER-DOMAIN CEILING CONTROL IS GONE (v11 handoff, "Deliberate
-// relocations"): enrichment always runs on the gateway, and where it runs is
-// not a member's choice, so it is not offered as one. The vault's stored
-// ceiling still gates the runtime, so a row it stops still says so — removing
-// the control must not turn a refusal back into silence.
-//
-// The two remaining groups are the ones that answer a different question:
-// exceptions (places you decided differently, listed only when some exist), and
-// the record of what you have already been asked about sharing.
+// Settings → Enrichment (#807). Projection of two stores, not a third.
+// Organised by the member's question, not the four store objects. No
+// per-domain ceiling control: enrichment always runs on the gateway; the
+// stored ceiling still gates runtime — a stopped row still says so.
 
-/** Everything the page renders, read in one pass. */
 export interface EnrichmentSettingsData {
   rules: EnrichPolicyRule[];
   profiles: EnrichEngineProfile[];
   consent: EnrichConsentRecord[];
-  /** The harnesses this gateway can run — the row engine pickers' options. */
   cards: HarnessCardDTO[];
-  /** Settings → Agents' own model pin per harness. Shared, never a second copy. */
   modelByHarness: Record<string, string>;
-  /** Settings → Agents' own level pin per harness. Shared, never a second copy. */
   effortByHarness: Record<string, string>;
-  /**
-   * What the gateway's ONE resolver folds per capability. Read from
-   * `/_vault/enrich/effective` rather than computed here; a capability whose
-   * domain this build does not know is absent, and its row says so.
-   */
   effective: Record<string, ResolvedEnrichPolicy | null>;
 }
 
-/** One member-authored engine profile, as the row's agent pick states it. */
 export interface EngineProfileInput {
   id: string;
   label: string;
@@ -82,7 +51,6 @@ export interface EngineProfileInput {
   configPins?: Record<string, string>;
 }
 
-/** One scope's decision about one capability; `null` is inherit. */
 export interface EnrichRuleInput {
   scope: EnrichScopeType;
   ref: string;
@@ -95,9 +63,7 @@ export interface EnrichRuleInput {
 export interface SettingsEnrichmentScreenProps {
   load: () => Promise<EnrichmentSettingsData>;
   saveProfile: (input: EngineProfileInput) => Promise<void>;
-  /** Write the harness model pin Settings → Agents reads; the gateway's text on refusal. */
   setEngineModel: (harness: string, modelId: string) => Promise<string | null>;
-  /** Write the harness level pin Settings → Agents reads; the gateway's text on refusal. */
   setEngineEffort: (harness: string, value: string) => Promise<string | null>;
   setRule: (rule: EnrichRuleInput) => Promise<void>;
   deleteRule: (
@@ -108,25 +74,16 @@ export interface SettingsEnrichmentScreenProps {
   showToast: (message: string) => void;
 }
 
-/** What the gateway answered, or why it could not. */
 type Load =
   | { kind: "loading" }
   | { kind: "ready"; data: EnrichmentSettingsData }
-  /** `reason` is the underlying failure, stated rather than smoothed over. */
   | { kind: "failed"; reason: string };
 
 function errorText(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
 }
 
-/**
- * One recorded egress answer as a row — a receipted fact, never a control.
- *
- * `off` is what says so: the row is present, readable and inert, and it carries
- * no verb, because the answer is on the record and this page cannot rewrite the
- * record. A declined answer is `net`: the question it answered was whether work
- * may leave the member's own machines.
- */
+/** Receipted fact, never a control. `off`: present and inert. Declined is `net`. */
 function consentRow(row: EnrichConsentRecord): RowDef {
   const declined = row.decision === "declined";
   return {

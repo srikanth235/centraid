@@ -1,18 +1,4 @@
 // governance: allow-repo-hygiene file-size-limit prepared-statement block + row mappers for every conversation-ledger column; splitting the statement table from its mappers would decouple the two halves that must change together
-/*
- * Prepared-statement block + raw-row mappers for `ConversationStore`.
- *
- * The SQL targets the vault's `journal.db` conversation ledger
- * (`conversations`, `turns`, `items`, `attachments`, `automation_state` — see
- * `gateway-db.ts` RUNTIME_MIGRATIONS).
- *
- * Issue #190: the conversation is the spine. `turns.conversation_id` is a
- * NOT NULL same-file FK (CASCADE). Each automation FIRE is its own execution
- * conversation (`kind='automation'`, `automation_id=<ref>`, fresh id), so an
- * automation's run history is `conversations WHERE automation_id = ?` — each
- * row a single independent execution — and `automation_state` (keyed by
- * `automation_id`) is the only thing that persists across them.
- */
 
 import type { DatabaseSync, StatementSync } from "node:sqlite";
 
@@ -134,7 +120,7 @@ export function conversationFromRaw(raw: RawConversation): Conversation {
         raw.harness_usage_json
       ) as HarnessUsageSnapshot;
     } catch {
-      // A corrupt optional accounting snapshot must not hide the conversation.
+      // Corrupt optional snapshot must not hide the conversation.
     }
   }
   return {
@@ -329,8 +315,6 @@ export interface PreparedStatements {
   deleteStateByAutomation: StatementSync;
 }
 
-// Reconstructed transcript length = total items across the conversation's
-// turns (one `message_in` per turn + each step/tool item).
 const CONV_COLS = `c.id, c.kind, c.user_id, c.app_id, c.automation_id, c.title,
         c.harness_kind, c.harness_session_id, c.harness_usage_json,
         c.hydration_count, c.last_hydrated_at, c.turn_count, c.pinned, c.archived,
@@ -358,10 +342,6 @@ export function prepare(db: DatabaseSync): PreparedStatements {
         c.item_count AS msg_count
       FROM conversations c WHERE c.id = ? AND c.user_id = ?
     `),
-    // App scoping is a column filter (`?3 IS NULL OR c.app_id = ?`): the
-    // ledger file is per VAULT, one shared `journal.db` (#280). Pinned threads
-    // sort first (#420); archived rows still come back so the sidebar can
-    // group them, they're just ordered last within their pin bucket.
     listConversations: db.prepare(`
       SELECT ${CONV_COLS},
         c.item_count AS msg_count
@@ -371,9 +351,6 @@ export function prepare(db: DatabaseSync): PreparedStatements {
       ORDER BY c.archived ASC, c.pinned DESC, c.updated_at DESC
       LIMIT ?
     `),
-    // FTS5 search over titles + inbound message text (#420),
-    // mirroring the vault's search: rank order + snippet() for match context.
-    // Archived threads are out of the way, so they stay out of results.
     searchConversations: db.prepare(`
       SELECT ${CONV_COLS},
         c.item_count AS msg_count,
@@ -446,8 +423,6 @@ export function prepare(db: DatabaseSync): PreparedStatements {
          retry_of, idempotency_key, note, hydration_tokens, started_at, ok)
       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0)
     `),
-    // Σ over this turn's own step/delegate items; step/tool counts. SUM over an
-    // empty set yields NULL — correct in-flight semantics.
     finishTurn: db.prepare(`
       UPDATE turns SET
         ended_at = $endedAt, ok = $ok, error = $error, summary = $summary,
@@ -472,9 +447,6 @@ export function prepare(db: DatabaseSync): PreparedStatements {
       WHERE id = $tid
     `),
     getTurn: db.prepare(`SELECT * FROM turns WHERE id = ?`),
-    // Scoped + guarded (see `ConversationStore.deleteTurn`): only an UNFINISHED
-    // turn, and only within the caller's user scope when one is supplied
-    // (`NULL` = no owner filter, for callers that hold just a run id).
     deleteTurn: db.prepare(`
       DELETE FROM turns
       WHERE id = ? AND ended_at IS NULL
@@ -483,35 +455,12 @@ export function prepare(db: DatabaseSync): PreparedStatements {
           WHERE c.id = turns.conversation_id AND (? IS NULL OR c.user_id = ?)
         )
     `),
-    // Idempotency lookup (#420): the most recent recorded turn on a
-    // conversation carrying the given key. A key is written once per user send;
-    // newest-first is defensive against any accidental reuse.
     getTurnByIdempotency: db.prepare(`
       SELECT * FROM turns
       WHERE conversation_id = ? AND idempotency_key = ?
       ORDER BY seq DESC LIMIT 1
     `),
-    /*
-     * The transcript window (#659): the NEWEST `?3` turns strictly
-     * older than the `?2` cursor, returned oldest-first so the fold is
-     * unchanged.
-     *
-     * `ORDER BY seq DESC` in the subquery is load-bearing. The first cut of
-     * this was `ORDER BY seq ASC LIMIT ?`, which caps materialization but
-     * returns the OLDEST N — so paginating with it would have shown a reader
-     * the beginning of their conversation and silently hidden the recent part.
-     * A transcript opens to its tail; that is the end the limit must keep.
-     *
-     * A NULL cursor means "from the live end". One row past the limit is
-     * fetched so `hasMore` is answered by the same query rather than a second
-     * COUNT.
-     *
-     * Anonymous `?` with the cursor bound TWICE, matching every other statement
-     * in this file (see `listTurnsFiltered`). Numbered `?N` placeholders are not
-     * positionally bindable on the pinned Node's `node:sqlite` — it throws
-     * "column index out of range" — so the repeated value is the portable form,
-     * not a stylistic preference.
-     */
+    // Newest N older than the cursor (#659). Subquery ORDER BY seq DESC is load-bearing. Cursor bound twice: numbered `?N` is not positionally bindable on pinned node:sqlite.
     listTurnsWindow: db.prepare(`
       SELECT * FROM (
         SELECT * FROM turns
@@ -527,7 +476,6 @@ export function prepare(db: DatabaseSync): PreparedStatements {
         AND (? IS NULL OR ok = ?)
       ORDER BY started_at DESC LIMIT ?
     `),
-    // An automation's history is the turns of its one stable conversation.
     listTurnsByAutomation: db.prepare(`
       SELECT t.* FROM turns t JOIN conversations c ON t.conversation_id = c.id
       WHERE c.automation_id = ?
@@ -541,12 +489,9 @@ export function prepare(db: DatabaseSync): PreparedStatements {
       ORDER BY t.started_at DESC LIMIT ?
     `),
     setTurnPinned: db.prepare(`UPDATE turns SET pinned = ? WHERE id = ?`),
-    // Message-level 👍/👎 (#420). `?1` is 'up' | 'down' | NULL (clear).
     setTurnFeedback: db.prepare(
       `UPDATE turns SET feedback = ? WHERE id = ? AND conversation_id = ?`
     ),
-    // Retention is per turn within the automation's stable conversation.
-    // Deleting a turn cascades its items and attachments; pinned turns survive.
     pruneAutomationByCount: db.prepare(`
       DELETE FROM turns
       WHERE conversation_id IN (SELECT id FROM conversations WHERE automation_id = ?)
@@ -561,7 +506,6 @@ export function prepare(db: DatabaseSync): PreparedStatements {
       WHERE conversation_id IN (SELECT id FROM conversations WHERE automation_id = ?)
         AND started_at < ? AND pinned = 0
     `),
-    // keep='errors': drop the successful fires, keep failures (+ pinned).
     pruneAutomationErrorsOnly: db.prepare(`
       DELETE FROM turns
       WHERE conversation_id IN (SELECT id FROM conversations WHERE automation_id = ?)
@@ -576,13 +520,10 @@ export function prepare(db: DatabaseSync): PreparedStatements {
         ok, error, started_at, ended_at, duration_ms
       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `),
-    // The inbound message (#190) — ordinal 0 of the turn. Attachments
-    // hang off the returned item id.
     insertMessageIn: db.prepare(`
       INSERT INTO items (id, turn_id, ordinal, kind, role, text, ok, started_at)
       VALUES (?, ?, ?, 'message_in', ?, ?, 1, ?)
     `),
-    // Ledger-tail hybrid (#158): durable "running" row, ended_at NULL.
     openItem: db.prepare(`
       INSERT INTO items (
         id, turn_id, ordinal, call_id, batch_id, kind, app_id, name, args_json, raw_json,
@@ -604,13 +545,6 @@ export function prepare(db: DatabaseSync): PreparedStatements {
     listItems: db.prepare(`
       SELECT * FROM items WHERE turn_id = ? ORDER BY ordinal ASC, started_at ASC
     `),
-    // Every item of a conversation — or of one WINDOW of it — in ONE query
-    // (#659). Without it, rendering a transcript runs one listItems
-    // per turn, so a 200-turn thread costs 200 round trips through the
-    // prepared-statement + row-mapping path. The optional seq bounds let the
-    // batching and the windowing compose instead of fight: a page reads one
-    // page's rows, not the conversation's. The ordering matches listItems
-    // within a turn, so the folded transcript is byte-identical either way.
     listItemsForConversation: db.prepare(`
       SELECT i.* FROM items i JOIN turns t ON t.id = i.turn_id
       WHERE t.conversation_id = ?
@@ -633,10 +567,6 @@ export function prepare(db: DatabaseSync): PreparedStatements {
       SELECT a.* FROM attachments a JOIN items i ON a.item_id = i.id
       WHERE i.turn_id = ? ORDER BY a.created_at ASC
     `),
-    // The conversation-wide companion to listItemsForConversation (#659):
-    // one query instead of one per message-bearing item. Most threads have no
-    // attachments at all, which is exactly why the per-item query was pure
-    // overhead.
     listAttachmentsForConversation: db.prepare(`
       SELECT a.* FROM attachments a
         JOIN items i ON a.item_id = i.id
@@ -646,12 +576,6 @@ export function prepare(db: DatabaseSync): PreparedStatements {
         AND (? IS NULL OR t.seq <= ?)
       ORDER BY a.created_at ASC
     `),
-    // The blob-GC live set (#190) UNIONED with every hash an archived
-    // segment references (#438 decision 4) — both unpruned AND pruned
-    // conversation_archive rows, because archived history still points at those
-    // attachment bytes forever (archiving changes temperature, never existence).
-    // Deleting the conversation CASCADE-drops its archive rows and releases the
-    // hashes on the one true-deletion path.
     referencedHashes: db.prepare(`
       SELECT DISTINCT hash FROM (
         SELECT hash FROM attachments WHERE workspace_path IS NULL
@@ -660,10 +584,6 @@ export function prepare(db: DatabaseSync): PreparedStatements {
           FROM conversation_archive ca, json_each(ca.attachment_hashes_json) j
       )
     `),
-    // Wave-3 rehydration (#438 decision 9): the archive-index rows for a
-    // conversation, ordered by seq. `pruned_at` distinguishes a sealed-AND-pruned
-    // range (raw rows gone → must fetch the segment blob to render it) from an
-    // archived-but-not-yet-pruned range (raw rows still live → served as today).
     listArchiveSegments: db.prepare(`
       SELECT id, seq_from, seq_to, segment_sha256, pruned_at
         FROM conversation_archive

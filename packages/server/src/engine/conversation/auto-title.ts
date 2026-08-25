@@ -1,30 +1,13 @@
 /*
- * LLM auto-titles (#420). After the first turn of a new
- * conversation settles, a cheap one-shot inference names the thread — the
- * claude.ai/ChatGPT affordance that replaces first-message truncation
- * (`deriveTitle`) with something a human would actually call the conversation.
- *
- * Design contract (enforced by the caller in the gateway):
- *   - fire-and-forget: this never blocks or fails the turn; every error is
- *     swallowed and the derived truncation simply stays;
- *   - provider-agnostic: the caller passes a capability TIER token (`fast`),
- *     never a concrete model id — the harness resolves the tier at turn time
- *     (governance directive no-hardcoded-model-ids);
- *   - tool-less: no `toolContext`, so the titler can't touch the vault — it
- *     only reads the two strings it's handed;
- *   - user-rename-wins: the caller only applies the result when the stored
- *     title is still the exact `deriveTitle` output.
- *
- * This module owns only the generation + cleanup; it enters `TurnPlane` over
- * the shared host driver (agent-runtime's `runTurn` in production, a stub in
- * tests) so it never imports a concrete harness runtime.
+ * LLM auto-titles (#420). Fire-and-forget; caller passes a TIER token
+ * (`fast`), never a model id; tool-less; user-rename-wins (apply only while
+ * the stored title is still the exact `deriveTitle` output).
  */
 
 import type { TurnStreamEvent } from "./runner.js";
 import { TurnPlane } from "./turn-plane.js";
 import type { RunTurnFn, HarnessPrefs, TurnInput } from "./turn.js";
 
-/** Longest title we keep — matches the ledger's derived-title budget. */
 const MAX_TITLE_CHARS = 60;
 
 const TITLE_SYSTEM_PROMPT = [
@@ -35,34 +18,20 @@ const TITLE_SYSTEM_PROMPT = [
 ].join(" ");
 
 export interface GenerateTitleDeps {
-  /** Accounted host turn driver — wrapped by `TurnPlane` before dispatch. */
   runTurn: RunTurnFn;
-  /** Active harness prefs (kind + optional binPath/extraArgs). */
   harnessPrefs: HarnessPrefs;
-  /** Working dir for the one-shot harness turn (the assistant cwd). */
   cwd: string;
-  /** Capability tier or model alias for the titler — a TIER token like `fast`. */
+  /** TIER token like `fast`, never a concrete model id. */
   model: string;
-  /** The first user message of the conversation. */
   userMessage: string;
-  /** The assistant's answer to that message. */
   assistantText: string;
-  /** Optional cap on how long the one-shot may run before it's abandoned. */
   timeoutMs?: number;
-  /** Host-owned provider-egress proof, rechecked at the TurnPlane door. */
   egressConsent: () => boolean | Promise<boolean>;
 }
 
-/**
- * Collapse a raw model title into a clean sidebar label: strip wrapping
- * quotes / a leading `Title:` marker, flatten whitespace, drop trailing
- * punctuation, and cap length. Returns undefined when nothing usable remains.
- */
 export function cleanTitle(raw: string): string | undefined {
   let t = raw.trim();
-  // Model sometimes echoes a leading marker despite the instruction.
   t = t.replace(/^title\s*[:\-–]\s*/iu, "");
-  // Strip a single layer of wrapping quotes (straight or curly).
   const first = t[0];
   const last = t[t.length - 1];
   if (
@@ -74,7 +43,7 @@ export function cleanTitle(raw: string): string | undefined {
   ) {
     t = t.slice(1, -1).trim();
   }
-  // Keep only the first line — a stray explanation never becomes the title.
+  // First line only — a stray explanation never becomes the title.
   const nl = t.indexOf("\n");
   if (nl >= 0) t = t.slice(0, nl).trim();
   t = t
@@ -86,11 +55,7 @@ export function cleanTitle(raw: string): string | undefined {
   return `${t.slice(0, MAX_TITLE_CHARS - 1).trimEnd()}…`;
 }
 
-/**
- * Drive one tool-less inference to name a conversation. Resolves to a cleaned
- * title, or undefined when the model produced nothing usable. Rejections
- * propagate — the caller is responsible for the fire-and-forget swallow.
- */
+/** Rejections propagate — the caller owns the fire-and-forget swallow. */
 export async function generateConversationTitle(
   deps: GenerateTitleDeps
 ): Promise<string | undefined> {

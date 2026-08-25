@@ -3,41 +3,11 @@ import type { JSX } from "react";
 
 import styles from "./GatewayServiceTip.module.css";
 
-/**
- * The H5 "keep the gateway up when Centraid is closed" offer.
- *
- * This is NOT a blocking onboarding step, which would ask a first-time user to
- * decide about installing a background OS service before they had seen a single
- * screen of the product. It is an informational tip on the Gateway page, where
- * the question is actually motivated — the user is already looking at gateway
- * uptime when they read it.
- *
- * Onboarding leaves `offerGatewayService` unset, and `shouldOfferServiceInstall`
- * (apps/desktop/src/main/detached-gateway-core.ts) treats unset as
- * still-offerable — so this component is what keeps the capability reachable.
- * It is the ONLY caller of `installGatewayService` in the client; deleting it
- * would strand the feature.
- *
- * Which is exactly why it renders TWO things, not one. "Dismiss" writes
- * `offerGatewayService: false`, and that write is permanent by design — the
- * promotion must not return on every relaunch. But with the promotion as the
- * only control, one click would retire a real capability with no way back. So a
- * dismissal demotes instead of deleting: the tip is replaced by a standing
- * one-line control that lives on the Gateway screen from then on. Dismiss
- * dismisses the *promotion*; the *feature* keeps a home.
- */
-type Decision =
-  /** Settings not read yet — render nothing rather than flash a tip. */
-  | "loading"
-  /** `offerGatewayService` absent: never asked. Show the promotion. */
-  | "unset"
-  /** Explicit false: asked and declined. Show the standing control only. */
-  | "dismissed"
-  /** Explicit true: the service is installed. Nothing left to offer. */
-  | "installed";
+// Dismiss demotes the promotion; the standing control remains the feature's home. Await saveSettings; clear busy.
+
+type Decision = "loading" | "unset" | "dismissed" | "installed";
 
 export interface GatewayServiceTipProps {
-  /** Test seam: defaults to the desktop bridge. */
   api?: typeof window.CentraidApi;
 }
 
@@ -48,7 +18,6 @@ export default function GatewayServiceTip({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // Web has no local gateway to keep alive, so the bridge method is absent.
   const install = api?.installGatewayService;
 
   useEffect(() => {
@@ -62,8 +31,6 @@ export default function GatewayServiceTip({
         );
       })
       .catch(() => {
-        // An unreadable setting must not hide the offer forever; treat it as
-        // undecided so the user can still reach the feature.
         if (!cancelled) setDecision("unset");
       });
     return () => {
@@ -89,12 +56,7 @@ export default function GatewayServiceTip({
             return;
           }
         }
-        // Awaited: an un-awaited save hides a rejection, so a dismissal would
-        // silently not stick and the offer would come back.
         await api?.saveSettings?.({ offerGatewayService: accept });
-        // Clearing `busy` is load-bearing: a dismissal leaves the standing
-        // control behind, and a stuck `busy` would render it permanently
-        // disabled and mid-install.
         setBusy(false);
         setDecision(accept ? "installed" : "dismissed");
       } catch (caughtError) {
@@ -114,8 +76,6 @@ export default function GatewayServiceTip({
     </p>
   ) : null;
 
-  // Declined: the promotion is gone for good, the capability is not. One quiet
-  // line naming the real consequence of leaving it off, and the action itself.
   if (decision === "dismissed") {
     return (
       <div className={styles.standing} data-testid="gateway-service-standing">

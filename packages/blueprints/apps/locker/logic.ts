@@ -1,10 +1,3 @@
-// Non-visual business logic: vault IO (write/act), item CRUD, nav/search,
-// the clipboard-clear timer and the pure list/sidebar derivations.
-// `createLogic` closes over app.tsx's own `state`/`data` (mutated in place,
-// never reassigned) plus the render/refresh entry points app.tsx defines —
-// the same factory shape tasks/notes/agenda's logic.ts use. The pure
-// derivations (`currentPool`/`sidebarCounts`/`catCounts`/`sidebarTags`) need
-// no closure and are exported standalone so components can call them too.
 import {
   debounce,
   outcomeMessage,
@@ -42,8 +35,6 @@ export function createLogic({ state, data, render, refresh }: LogicDeps) {
     (el as HTMLElement).hidden = !text;
   }
 
-  // Returns true when the write executed; otherwise narrates parked / failed
-  // / denied honestly and returns false.
   function narrate(outcome: VaultOutcome | undefined): boolean {
     if (outcome?.status === "executed") {
       notice("");
@@ -79,8 +70,6 @@ export function createLogic({ state, data, render, refresh }: LogicDeps) {
     state.detail = null;
     render();
   }
-
-  // ────────── Item writes ──────────
 
   async function toggleFav(sel: LockerDetail) {
     const outcome = await act(sel.favorite ? "unstar-item" : "star-item", {
@@ -132,7 +121,6 @@ export function createLogic({ state, data, render, refresh }: LogicDeps) {
     await refresh();
   }
 
-  // { mode: 'new'|'edit', id?, type, title, tags: string, alias, fields, allowedKeys }
   async function saveItem({
     mode,
     id,
@@ -149,8 +137,6 @@ export function createLogic({ state, data, render, refresh }: LogicDeps) {
       .split(",")
       .map((t) => t.trim())
       .filter(Boolean);
-    // Only the fields belonging to the chosen type (the backend drops the
-    // rest too, but keep the payload clean).
     const allowed = new Set(allowedKeys);
     const input: Record<string, unknown> = {
       title: title.trim(),
@@ -160,9 +146,7 @@ export function createLogic({ state, data, render, refresh }: LogicDeps) {
     for (const [k, v] of Object.entries(fields)) {
       if (allowed.has(k) && v != null && v !== "") input[k] = v;
     }
-    // Alias is write-safe from the UI: a non-empty value sets/changes it; a
-    // blank field is left untouched (never clobbers an existing binding).
-    // Clearing or reassigning is an assistant/CLI gesture.
+    // Blank alias is left untouched — never clobber an existing binding.
     const aliasTrimmed = (alias || "").trim();
     if (aliasTrimmed) input.alias = aliasTrimmed;
     let outcome: VaultOutcome | undefined;
@@ -184,8 +168,7 @@ export function createLogic({ state, data, render, refresh }: LogicDeps) {
       mode === "edit" ? "Saved · receipted." : "Item saved · receipted."
     );
     await refresh();
-    // Do not retain or immediately re-fetch the secret-bearing detail. Opening
-    // the saved item is a fresh per-item user-presence gesture (#630).
+    // Don't re-fetch secrets here — opening is a fresh presence gesture (#630).
     if (savedId) {
       state.selectedId = null;
       state.detail = null;
@@ -195,11 +178,6 @@ export function createLogic({ state, data, render, refresh }: LogicDeps) {
     return outcome;
   }
 
-  // ────────── Selection / navigation ──────────
-
-  // Open an item: fetch its FULL fields (the only place secrets arrive) and
-  // show the detail pane. Secrets stay in state.detail, never in the list
-  // array.
   async function selectItem(
     id: string,
     authSession: string,
@@ -233,7 +211,6 @@ export function createLogic({ state, data, render, refresh }: LogicDeps) {
       applyDenied(res.vaultDenied);
       return;
     }
-    // Ignore a stale open if the user moved on.
     if (state.selectedId !== id) return;
     state.detail = res?.item ?? null;
     render();
@@ -252,13 +229,9 @@ export function createLogic({ state, data, render, refresh }: LogicDeps) {
   }
 
   function toggleReveal(fid: string) {
-    // A fresh `state.reveal` object each time so the unmasked value never
-    // lingers once the field/item that owned it is gone.
     state.reveal = { ...state.reveal, [fid]: !state.reveal[fid] };
     render();
   }
-
-  // ────────── Generator ──────────
 
   function regen() {
     state.genValue = genPassword({
@@ -269,10 +242,6 @@ export function createLogic({ state, data, render, refresh }: LogicDeps) {
     render();
   }
 
-  // `applyFn`, when given, is called with the generated password once the
-  // owner hits Copy — the bridge back into whichever field (in the edit
-  // modal) opened the generator, without the generator needing to know
-  // about the modal's own local React state.
   function openGenerator(applyFn?: ((password: string) => void) | null) {
     state.gen = true;
     state.genApply = applyFn ?? null;
@@ -284,8 +253,6 @@ export function createLogic({ state, data, render, refresh }: LogicDeps) {
     state.genApply = null;
     render();
   }
-
-  // ────────── Search ──────────
 
   let searchSeq = 0;
   const applySearchInput = debounce(async (raw: string) => {
@@ -347,15 +314,8 @@ export function createLogic({ state, data, render, refresh }: LogicDeps) {
   };
 }
 
-// ────────── Clipboard copy (standalone — no closure over app state) ──────────
-
-// Seconds a copied secret is allowed to live on the clipboard before we wipe
-// it (#298): copy-password legitimately crosses into the OS
-// clipboard, and from there into clipboard-history tools. We can't reach the
-// native `org.nspasteboard.ConcealedType` mark from a browser context
-// (navigator.clipboard only speaks text/html/png), so the portable
-// mitigation is a timed clear — and we only clear if the clipboard STILL
-// holds the value we put there, never clobbering a later copy.
+// Timed clipboard wipe (#298). Clear only if the clipboard still holds our
+// value — never clobber a later copy.
 const CLIP_CLEAR_S = 30;
 let clipClearTimer: ReturnType<typeof setTimeout> | null = null;
 let lastSecretCopied: string | null = null;
@@ -366,8 +326,6 @@ function scheduleClipboardClear(secret: string) {
   clipClearTimer = setTimeout(() => {
     clipClearTimer = null;
     if (!navigator.clipboard.readText) {
-      // No read permission → leave the clipboard alone rather than risk
-      // wiping something the user copied since.
       return;
     }
     void navigator.clipboard
@@ -377,12 +335,11 @@ function scheduleClipboardClear(secret: string) {
         if (lastSecretCopied === secret) lastSecretCopied = null;
       })
       .catch(() => {
-        /* clipboard permissions changed — leave its current value alone */
+        /* clipboard permissions changed — leave current value */
       });
   }, CLIP_CLEAR_S * 1000);
 }
 
-/** Lock-time hygiene: clear the exact secret Locker most recently copied. */
 export function clearSecretClipboard(): void {
   if (clipClearTimer) {
     clearTimeout(clipClearTimer);
@@ -397,8 +354,6 @@ export function clearSecretClipboard(): void {
       current === secret ? navigator.clipboard.writeText("") : undefined
     )
     .catch((error: unknown) => {
-      // Clipboard wipe is best-effort under missing permissions; still log so
-      // a policy denial is visible when debugging secret residual lifetime.
       console.warn(
         "locker clipboard wipe failed",
         error instanceof Error ? error.message : error
@@ -407,11 +362,7 @@ export function clearSecretClipboard(): void {
 }
 
 export function copy(text: string, label?: string, secret?: boolean) {
-  // writeText returns a promise — a sync try/catch never sees its rejection
-  // (it surfaced as an unhandled NotAllowedError pageerror under the retired
-  // iframe host, whose permissions policy withheld clipboard-write). Update the
-  // status line only once the write actually lands; otherwise say so instead
-  // of claiming a copy that never happened.
+  // writeText is a promise — a sync try/catch never sees its rejection.
   const okStatus = () =>
     statusLine(
       (label || "Copied") +
@@ -431,9 +382,6 @@ export function copy(text: string, label?: string, secret?: boolean) {
     .catch(() => statusLine("Copy is unavailable here."));
 }
 
-// ────────── Pure derivations (no closure — components may call directly) ──────────
-
-// The rows for the current nav → search → filter → sort by title.
 export function currentPool(state: AppState, data: AppData): LockerRow[] {
   if (state.nav.kind === "trash") return [...state.trashRows].sort(byTitle);
   let pool =

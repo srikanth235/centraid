@@ -1,11 +1,5 @@
-/*
- * Gateway control plane (#555).
- *
- * `gateway.db` is both the complete gateway-level state store and the
- * single-process lock. Vault existence is deliberately absent from this
- * schema: the filesystem registry remains authoritative, so no second
- * catalog can disagree with it.
- */
+// Gateway control plane (#555). Vault existence is absent: the filesystem
+// registry remains authoritative.
 
 import { spawnSync } from "node:child_process";
 import { chmodSync, mkdirSync, statfsSync } from "node:fs";
@@ -31,7 +25,6 @@ export class GatewayLockError extends Error {
 
 export interface OpenGatewayDatabaseOptions {
   lock?: GatewayDbLockMode;
-  /** Detection override for deterministic host-safety integration tests. */
   networkFileSystem?: boolean;
 }
 
@@ -83,12 +76,8 @@ export class GatewayDatabase {
         chmodSync(file, 0o600);
       }
       if (lockMode === "exclusive") acquireExclusiveLifetimeLock(db, file);
-      // A `read-only` open against an EXCLUSIVE-locked database SUCCEEDS —
-      // the constructor and the pragmas above never touch a page, so the
-      // lock is not observed until the first real read. Probe here so the
-      // caller's `GatewayLockError` handling gets its chance, instead of a
-      // raw `ERR_SQLITE_ERROR: database is locked` escaping from whatever
-      // SELECT happens to run first (#568).
+      // read-only open against EXCLUSIVE succeeds until a page is touched —
+      // probe here so GatewayLockError wins over a raw locked SELECT (#568).
       if (lockMode === "read-only")
         db.prepare("SELECT 1 FROM sqlite_schema LIMIT 1").get();
       const opened = new GatewayDatabase(
@@ -97,11 +86,6 @@ export class GatewayDatabase {
         lockMode,
         options.networkFileSystem ?? detectNetworkFileSystem(root)
       );
-      // Durable rows can outlive the transport that created them. A gateway
-      // upgraded across #825's copy-as-share retirement still holds queued
-      // obligations whose verb no longer exists; they are drained here, once,
-      // at the same door the schema is installed at, so no drainer ever sees
-      // one. A fresh gateway finds nothing and pays one indexed read.
       if (lockMode !== "read-only") retireDeadShareEffects(opened);
       return opened;
     } catch (error) {
@@ -176,8 +160,7 @@ function acquireExclusiveLifetimeLock(db: DatabaseSync, file: string): void {
     if (row?.locking_mode?.toLowerCase() !== "exclusive") {
       throw new Error(`SQLite refused exclusive locking_mode for ${file}`);
     }
-    // A completed write transaction makes EXCLUSIVE mode retain the OS lock
-    // until this handle closes. No long-running transaction is needed.
+    // One write transaction: EXCLUSIVE retains the OS lock until this handle closes.
     db.exec(
       `BEGIN EXCLUSIVE;
        INSERT INTO gateway_meta (key, value) VALUES ('schema', '1')
@@ -196,7 +179,6 @@ function isBusy(error: unknown): boolean {
   return code === "ERR_SQLITE_ERROR" && /busy|locked/iu.test(error.message);
 }
 
-/** Remote filesystem names as BSD `statfs.f_fstypename` reports them. */
 const DARWIN_NETWORK_FS_TYPES = new Set([
   "nfs",
   "smbfs",
@@ -205,22 +187,12 @@ const DARWIN_NETWORK_FS_TYPES = new Set([
   "ftpfs",
 ]);
 
-/**
- * macOS has no filesystem magic to read: `statfsSync().type` is a BSD
- * `f_type` index, not a Linux magic number. The filesystem NAME lives in
- * `statfs.f_fstypename`, which `/sbin/mount` prints per mount point.
- *
- * `/usr/bin/stat -f '%T'` is not an alternative: BSD `stat -f` takes a FORMAT
- * STRING and `%T` is the `ls -F` type indicator (`@`, `/`, empty), never a
- * filesystem type. It exits 0 with a value the regex cannot match, and that
- * success also short-circuits the Linux `statfsSync` fallback, making darwin
- * detection a guaranteed `false` (#568).
- */
+// Do not use `stat -f '%T'`: BSD `%T` is the ls -F marker, not a filesystem
+// type — it exits 0 and would make darwin detection a guaranteed false (#568).
 export function parseDarwinFileSystemType(
   mountOutput: string,
   root: string
 ): string | undefined {
-  // `mount` lines read: `<source> on <mount point> (<fstype>, <opts…>)`.
   let best: { mountPoint: string; type: string } | undefined;
   for (const line of mountOutput.split("\n")) {
     const match = /^.* on (?<mountPoint>.+) \((?<type>[^,)]+)[,)]/u.exec(
@@ -233,14 +205,12 @@ export function parseDarwinFileSystemType(
       root === mountPoint ||
       root.startsWith(mountPoint === "/" ? "/" : `${mountPoint}${path.sep}`);
     if (!contains) continue;
-    // Longest matching mount point wins — `/Volumes/share` beats `/`.
     if (!best || mountPoint.length > best.mountPoint.length)
       best = { mountPoint, type };
   }
   return best?.type.trim().toLowerCase();
 }
 
-/** True/false when the mount table answered; `undefined` when it could not. */
 export function darwinNetworkFileSystem(
   root: string,
   readMountTable: () => string | undefined = defaultMountTable
@@ -265,14 +235,11 @@ function detectNetworkFileSystem(root: string): boolean {
   try {
     if (process.platform === "darwin") {
       const remote = darwinNetworkFileSystem(root);
-      // Fall through to `statfsSync` when the mount table is unreadable
-      // rather than early-returning `false` — an undetected remote mount is
-      // the failure mode this whole probe exists to prevent.
+      // Unreadable mount table: fall through, never return false (missed remote).
       if (remote !== undefined) return remote;
     }
     const type = Number(statfsSync(root).type);
-    // Linux NFS, SMB/CIFS. ZFS is intentionally local: treating its magic as
-    // remote permanently disabled orphan collection on ordinary local pools.
+    // Linux NFS, SMB/CIFS. ZFS is local — treating it remote disabled orphan collection.
     return new Set([0x6969, 0x517b, 0xff534d42]).has(type);
   } catch {
     return false;

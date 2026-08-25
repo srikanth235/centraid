@@ -1,25 +1,11 @@
-// The policy cascade's rule STORE (#807) — reads and writes of
-// `enrich_policy_rule`, and nothing else.
-//
-// WHAT THIS MODULE DELIBERATELY DOES NOT DO: resolve. There is no
-// `mayThisRun(...)` here and there must not be. `decideEnrichmentGate`
-// (packages/server/src/automation/fire/enrich-gate.ts) is the one gate on the
-// execution path; a storage-level answer to the same question would be a
-// second policy path, and the two would diverge the first time either grew a
-// rule the other did not. What this module offers is the material that
-// resolver reads: the rule at one scope, and every rule along a scope chain
-// in cascade order.
-//
-// A rule states ONLY what its scope decides — `null` fields mean inherit (see
-// the DDL's CHECK: a row that decides nothing is unrepresentable). Ordering
-// least-specific-first is a property of the STORE, not a resolution: it is
-// the order a resolver folds, and the order an audit view lists.
+// Rule STORE for the policy cascade (#807). Does not resolve —
+// `decideEnrichmentGate` is the one gate on the execution path. `null`
+// fields mean inherit; a row that decides nothing is unrepresentable (DDL).
 
 import type { DatabaseSync } from "node:sqlite";
 
 import { nowIso, uuidv7 } from "../ids.js";
 
-/** The cascade levels, least to most specific — the DDL CHECKs this set. */
 export const ENRICH_SCOPE_TYPES = [
   "vault",
   "domain",
@@ -28,22 +14,19 @@ export const ENRICH_SCOPE_TYPES = [
 ] as const;
 export type EnrichScopeType = (typeof ENRICH_SCOPE_TYPES)[number];
 
-/** When a capability's work is offered for a scope. */
 export const ENRICH_TRIGGERS = ["on-ingest", "on-view", "on-demand"] as const;
 export type EnrichTrigger = (typeof ENRICH_TRIGGERS)[number];
 
-/** One level of the cascade. `ref` is `''` at vault scope (DDL-enforced). */
+/** `ref` is `''` at vault scope (DDL-enforced). */
 export interface EnrichScope {
   type: EnrichScopeType;
   ref: string;
 }
 
-/** What one scope decides about one capability; `null` is inherit. */
 export interface EnrichPolicyRule {
   scope: EnrichScope;
   capability: string;
   enabled: boolean | null;
-  /** The engine profile this scope points the capability at. */
   profile: string | null;
   trigger: EnrichTrigger | null;
   updatedAt: string;
@@ -76,9 +59,8 @@ const SCOPE_RANK = new Map(
 );
 
 /**
- * Least-specific first. SQL cannot supply this order — `ORDER BY scope_type`
- * is alphabetical ('collection' before 'vault'), which reads as a cascade and
- * is not one.
+ * Least-specific first. `ORDER BY scope_type` is alphabetical
+ * ('collection' before 'vault') and is not a cascade.
  */
 function byCascade(a: EnrichPolicyRule, b: EnrichPolicyRule): number {
   return (
@@ -98,14 +80,7 @@ function toRule(row: RuleRow): EnrichPolicyRule {
   };
 }
 
-/**
- * Write the rule for one (scope, capability), replacing whatever that scope
- * decided before. Fields left undefined are stored as `null` — a rewrite
- * states the whole decision, so "stop deciding the trigger here" is expressible
- * without a second call. Rejected by the DDL when the result decides nothing.
- *
- * The caller owns the transaction, like every other vault-side writer here.
- */
+/** Whole-decision rewrite; undefined stores as `null`. Caller owns the transaction. */
 export function putEnrichPolicyRule(
   vault: DatabaseSync,
   input: EnrichPolicyRuleInput
@@ -135,7 +110,6 @@ export function putEnrichPolicyRule(
     );
 }
 
-/** Drop one scope's rule for a capability — that scope stops deciding. */
 export function deleteEnrichPolicyRule(
   vault: DatabaseSync,
   scope: EnrichScope,
@@ -149,7 +123,6 @@ export function deleteEnrichPolicyRule(
     .run(scope.type, scope.ref, capability);
 }
 
-/** The rule one scope states for one capability, or `null` when it states none. */
 export function readEnrichPolicyRule(
   vault: DatabaseSync,
   scope: EnrichScope,
@@ -164,12 +137,7 @@ export function readEnrichPolicyRule(
   return row ? toRule(row) : null;
 }
 
-/**
- * Every rule for `capability` along an explicit scope chain, ordered
- * least-specific first. The caller supplies the chain because only it knows
- * which collection an item is in; this module never guesses an item's scopes.
- * Scopes with no rule are simply absent — inheritance is the absence.
- */
+/** Caller supplies the chain; this module never guesses an item's scopes. */
 export function readEnrichPolicyRuleChain(
   vault: DatabaseSync,
   chain: readonly EnrichScope[],
@@ -183,7 +151,6 @@ export function readEnrichPolicyRuleChain(
     .sort(byCascade);
 }
 
-/** Every rule mentioning one capability — the audit view's read. */
 export function listEnrichPolicyRules(
   vault: DatabaseSync,
   capability: string

@@ -1,15 +1,5 @@
-// The CBSF sealer's crypto seam (#419.4).
-//
-// CBSF v2 needs AES-256-GCM (frames + directory) and HMAC-SHA-256 (nonce
-// derivation). Hermes ships neither: `expo-crypto` is digest + random only,
-// and RN 0.81 has no `crypto.subtle`. So the sealer takes its crypto by
-// injection: a native module imported statically into a logic module breaks
-// under vitest.
-//
-// The default implementation targets the WebCrypto `SubtleCrypto` API. That
-// makes it real (not a stub) in node/vitest today, and on device it needs only
-// a `globalThis.crypto.subtle` polyfill installed at boot — see `index.ts`. No
-// sealing logic changes between the two.
+// CBSF sealer crypto seam (#419.4). Hermes has no AES-GCM/HMAC; inject
+// WebCrypto (node today; device polyfill at boot).
 
 export interface UploadCrypto {
   /** AES-256-GCM. Returns `ciphertext || tag(16)`, matching WebCrypto. */
@@ -19,7 +9,6 @@ export interface UploadCrypto {
     additionalData: Uint8Array,
     plain: Uint8Array
   ) => Promise<Uint8Array>;
-  /** HMAC-SHA-256 over the concatenated parts. */
   hmacSha256: (
     key: Uint8Array,
     ...parts: readonly Uint8Array[]
@@ -36,12 +25,6 @@ export class UploadCryptoUnavailableError extends Error {
   }
 }
 
-/**
- * Exactly the WebCrypto surface the sealer touches — spelled out structurally
- * rather than as the DOM's `SubtleCrypto`, which RN's lib does not ship. This
- * doubles as the contract a device polyfill has to satisfy: raw key import for
- * AES-GCM and HMAC-SHA-256, `encrypt`, and `sign`.
- */
 /* oxlint-disable typescript/method-signature-style -- This interface is a
    structural stand-in for the DOM's `SubtleCrypto`, and must stay assignable
    FROM it: the real `importKey`/`encrypt` accept much wider `format` and
@@ -74,10 +57,8 @@ export interface SubtleCryptoLike {
 }
 /* oxlint-enable typescript/method-signature-style */
 
-/** An opaque imported key handle; never inspected on this side. */
 export type CryptoKeyLike = object;
 
-/** Bind the sealer to a WebCrypto implementation (node, or a device polyfill). */
 export function webCryptoUploadCrypto(subtle?: SubtleCryptoLike): UploadCrypto {
   const impl = subtle ?? globalThis.crypto?.subtle;
   if (!impl) throw new UploadCryptoUnavailableError();
@@ -124,11 +105,7 @@ export function webCryptoUploadCrypto(subtle?: SubtleCryptoLike): UploadCrypto {
   };
 }
 
-/**
- * Hand WebCrypto a standalone ArrayBuffer. Views into a larger pooled buffer
- * (which `subarray` returns) are read whole by some polyfills, so slicing to
- * the exact window is the portable call.
- */
+/** Standalone ArrayBuffer — pooled `subarray` views are read whole by some polyfills. */
 function bufferOf(bytes: Uint8Array): ArrayBuffer {
   return bytes.byteOffset === 0 && bytes.byteLength === bytes.buffer.byteLength
     ? (bytes.buffer as ArrayBuffer)

@@ -1,7 +1,4 @@
-// Custody-state projection helpers (#352 phase 3/4, #367 §C7). Split out
-// of custody.ts along the "rebuildable projection" seam so the facade stays
-// under the governance line-cap; custody.ts re-exports these, so every caller
-// that imports them from `./custody.js` (index.ts, gateway.ts) is untouched.
+// Rebuildable custody-state projection (#352, #367 §C7).
 
 import type { DatabaseSync } from "node:sqlite";
 
@@ -11,16 +8,8 @@ import type { CustodyState } from "./custody-types.js";
 import { shaOfBlobUri } from "./store.js";
 
 /**
- * Persist a custody-state snapshot into `blob_custody_state` (#352
- * phase 3/4) — the rebuildable projection apps read as `blob.custody_state`
- * (schema/tables.ts). Only LIVE content items' ORIGINAL bytes are covered —
- * derivatives (thumb/preview) are an implementation detail of serving, not
- * something an app needs custody visibility into. Called from the standing
- * blob sweep (gateway.ts `sweepBlobs`), right after `reconcile()` has already
- * brought both tiers to their steady state, so the snapshot reflects the
- * POST-sweep truth. A full delete+reinsert every run — cheap at personal-vault
- * scale, and it means a purged/trashed content item's stale row can never
- * linger (rebuildable projection, never a durable fact of its own).
+ * Snapshot live originals only (not derivatives) after `reconcile()`. Full
+ * delete+reinsert so a purged item's stale row cannot linger.
  */
 export async function refreshCustodyState(
   db: VaultDb
@@ -40,10 +29,7 @@ export async function refreshCustodyState(
     shas.add(sha);
   }
   const status = await db.blobs.statusFor(shas);
-  // An outbox row is the durable, explicit "not yet offsite" fact. It wins
-  // over the tier projection until provider custody has been HEAD-confirmed
-  // and the drainer removes it; this avoids showing a stale replica-index hit
-  // as durable while a replacement upload is still outstanding.
+  // Outbox wins over the tier projection until HEAD-confirmed and drained.
   const pending = new Set(
     (
       db.vault.prepare("SELECT sha256 FROM blob_outbox").all() as {
@@ -75,14 +61,6 @@ export async function refreshCustodyState(
   return { updated: byContent.size };
 }
 
-/**
- * Cheap per-vault custody breakdown (#351, #367): counts
- * `blob_custody_state` GROUP BY state — read-only, no tier I/O — so the
- * `blob-sweep` health probe (and #367's later Storage UI card) get
- * replicated-vs-backlog counts without re-listing the remote tier on every
- * poll. Zero-filled for states the mirror currently has no rows in, so
- * callers never need an `?? 0` per key.
- */
 export function custodyStateCounts(
   vault: DatabaseSync
 ): Record<CustodyState, number> {
@@ -102,15 +80,7 @@ export function custodyStateCounts(
   return counts;
 }
 
-/**
- * Byte-summed twin of `custodyStateCounts` (#367): the Storage
- * status route wants replicated/backlog progress in BYTES, not just object
- * counts — `core_content_item.byte_size` is already the authoritative size
- * per content id (schema/core.ts), so this is one more GROUP BY join, not a
- * second tier scan. Kept as a separate function rather than widening
- * `custodyStateCounts`'s return shape — the `blob-sweep` health probe (and
- * any other existing caller) only ever wanted counts.
- */
+/** Keep count vs byte return shapes separate. */
 export function custodyStateByteCounts(
   vault: DatabaseSync
 ): Record<CustodyState, number> {

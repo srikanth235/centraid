@@ -1,16 +1,4 @@
-// The ruled-row / four-state search body (#712), so a second app
-// does not redraw the same four sentences from scratch. This owns the
-// STATES — resting,
-// searching, unreachable, no-results, and the grouped-hit rows above the
-// caller's own results — never the search field itself: the field's
-// placement is chrome each app already owns (Photos draws it inline in the
-// shelf; Tally draws it in `Chrome.tsx`'s topbar), so forcing it in here
-// would be presentational surface this scaffold has no opinion about.
-//
-// Every string is copy the caller supplies (`SearchStateCopy`,
-// `search-scaffold.ts`) — this file contains no example queries, no eyebrow
-// text, no product nouns: pass an app's own strings in, get that app's own
-// sentences out.
+// Search body states (#712), never the search field — each app owns chrome.
 import type { ReactNode } from "react";
 
 import type {
@@ -23,39 +11,21 @@ import { searchOpenLabel } from "./search-scaffold.ts";
 import styles from "./SearchScaffold.module.css";
 
 export interface SearchScaffoldProps {
-  /** The current query text — an empty string is `resting` regardless of
-   *  `status`, the same rule Photos' `SearchShelf` enforces today. */
+  /** Empty query is `resting` regardless of `status`. */
   query: string;
   status: SearchStatus;
-  /** How many primary results the caller's own list/grid actually carries. */
   count: number;
-  /** The seat-honest scope string for the results footer, e.g. "the live
-   *  library" or "the whole replica on this device"
-   *  (docs/blueprint-seats.md §Worked example: search). */
   scope: string;
   copy: SearchStateCopy;
-  /** The resting panel's example queries, as literal chips a member can type
-   *  back verbatim. */
   examples: readonly string[];
-  /** The grouped hits above the primary results — real data only, already
-   *  capped (`groupSearchHits`). A group with nothing behind it is simply
-   *  absent from this array, never padded in here. */
+  /** Real grouped hits only; never pad empty groups. */
   groups?: readonly SearchGroupRow[];
   onQuery: (value: string) => void;
   onClear: () => void;
-  /** Re-run the search over the current query — the `unreachable` panel's
-   *  only control. */
   onRetry?: () => void;
   onOpenGroup?: (openTarget: string, row: SearchGroupRow) => void;
-  /**
-   * Per-scope reach for a multi-scope search (#726 D10/D11,
-   * `scopeReachFacts`) — a scope that could not be asked, named BESIDE the
-   * results the other scopes still have, never in place of them. Rendered
-   * whenever `status` is `ready` (with or without hits) and this is
-   * non-empty; absent/empty draws nothing, the single-scope-app default.
-   */
+  /** Unreachable scopes named beside remaining results, never instead (#726 D10/D11). */
   reachFacts?: readonly { label: string; value: string }[];
-  /** The caller's own primary results (photo grid, expense list, ...). */
   children?: ReactNode;
 }
 
@@ -81,18 +51,11 @@ export function SearchScaffold({
   const asked = Boolean(query);
   const searching = asked && status === "searching";
   const unreachable = asked && status === "unreachable";
-  // A miss means everything the miss body claims was checked came back
-  // empty — not just the primary list. `groups` matches its own entities
-  // independently of `count`, so a query that names a real entity with no
-  // primary-list hit still has a group row to show.
+  // Groups match independently of `count` — a named entity with no list hit still shows.
   const hasGroups = groups.length > 0;
   const none = asked && status === "ready" && count === 0 && !hasGroups;
   const showResults = asked && status === "ready" && (count > 0 || hasGroups);
-  // A PARTIAL reach still counts as `ready` (#726 D10/D11) — some
-  // scope's results are on screen, they are just not every mounted scope's.
-  // Drawn under EITHER the miss or the results panel, never instead of one:
-  // the point of naming a short scope is that it sits BESIDE what still
-  // answered, not that it replaces the honest count above it.
+  // Partial reach is still `ready`; name the short scope beside what answered (#726).
   const showPartialReach = asked && status === "ready" && reachFacts.length > 0;
 
   return (

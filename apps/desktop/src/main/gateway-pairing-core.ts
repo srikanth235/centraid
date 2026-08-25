@@ -1,39 +1,17 @@
-/*
- * Pure core for gateway pairing-ticket redemption (#376, desktop half).
- *
- * The wire format is minted by `centraid-gateway pair --vault <name>`
- * (packages/server/src/serve/pairing-store.ts's `encodePairingTicket`):
- * base64url JSON `{v:1, kind:'centraid-gw-pair', gw, t, s, vaultName, exp}`.
- * `decodePairingTicket` below is a LOCKSTEP mirror of that shape — the same
- * convention `apps/mobile/src/lib/phone-link.ts`'s `parsePairQr` uses for the
- * phone-pairing QR — rather than an import of gateway internals: desktop
- * main doesn't take `@centraid/server` as a dependency for a one-shot
- * decode, and the two copies are cheap to keep in sync (the payload is
- * frozen wire format, not an evolving API).
- *
- * Everything here is synchronous, side-effect-free, and electron-free, so it
- * unit-tests as plain data-in/data-out logic. `gateway-pairing.ts` wires the
- * real tunnel dial / HTTP fetch / gateway-store + settings calls around it,
- * the same "electron-free pure core" split as `gateway-ops-core.ts`.
- */
+// Pure pairing-ticket redemption (#376). `decodePairingTicket` is a lockstep
+// mirror of `encodePairingTicket` — not an import of `@centraid/server`.
 
-/** The pasteable one-line pairing token, decoded. */
 export interface PairingTicketPayload {
   v: 1;
   kind: "centraid-gw-pair";
-  /** The gateway's iroh EndpointTicket string — identity pin + relay hint. */
   gw: string;
-  /** Ticket id (public half of the one-time ticket). */
   t: string;
-  /** One-time secret (private half). */
   s: string;
-  /** Owner-facing vault name, so the client can label the pair before dialing. */
   vaultName: string;
-  /** Ticket expiry, epoch ms. */
   exp: number;
 }
 
-/** Decode + shape-validate a pasted pairing token. `undefined` on anything malformed. */
+/** `undefined` on anything malformed. */
 export function decodePairingTicket(
   raw: string
 ): PairingTicketPayload | undefined {
@@ -54,11 +32,7 @@ export function decodePairingTicket(
   }
 }
 
-/**
- * Client-side fast-feedback expiry check. The gateway re-checks on
- * redemption regardless, so this only exists to fail a stale paste instantly,
- * before ever dialing.
- */
+/** Fast-feedback only — the gateway re-checks on redemption regardless. */
 export function isTicketExpired(
   payload: Pick<PairingTicketPayload, "exp">,
   now = Date.now()
@@ -66,7 +40,6 @@ export function isTicketExpired(
   return payload.exp <= now;
 }
 
-/** Stable error codes `redeemGatewayPairing` can return — never a raw throw. */
 export type RedeemPairingErrorCode =
   | "invalid_ticket"
   | "ticket_expired"
@@ -102,13 +75,6 @@ type FoldedPairing =
     }
   | { error: RedeemPairingErrorCode; message: string };
 
-/**
- * Fold a `centraid/gw-pair/1` tunnel response (`GatewayPairResponse` from
- * `@centraid/tunnel`) into either the fields `gateway-pairing.ts` needs to
- * finish the iroh redemption, or a stable error. Pure — the tunnel dial and
- * the profile-side effects (addGateway / setActiveGatewayId / setActiveVaultId)
- * happen around this, not in it.
- */
 export function foldIrohPairResponse(response: {
   ok: boolean;
   error?: string;
@@ -168,18 +134,12 @@ export function foldIrohPairResponse(response: {
   };
 }
 
-/** True when `err` (as returned by the fold functions above) is the error arm. */
 export function isFoldError(
   folded: FoldedPairing
 ): folded is { error: RedeemPairingErrorCode; message: string } {
   return "error" in folded;
 }
 
-/**
- * Pick the profile — among already-added gateways — that a redemption
- * should reuse rather than duplicate. Pure so the "don't duplicate on
- * re-redeem" behavior is testable without touching disk.
- */
 export function findReusableProfile<P extends { endpointId?: string }>(
   profiles: readonly P[],
   endpointId: string

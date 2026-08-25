@@ -1,19 +1,8 @@
 /*
- * The vault assistant's conversation runner — the owner-register config
- * over `makeConversationRunnerCore` (the same spine app chat and builder
- * chat ride). What differs from the app registers:
- *
- *   - tools: `ToolContext.vaultSql` is set, so both backends swap the
- *     app-scoped `centraid_*` trio for the ONE `vault_sql` tool, executed
- *     host-side with the ACTIVE vault's owner-device credential;
- *   - cwd: an empty per-vault scratch dir (`harness-sessions/assistant-cwd`)
- *     — the assistant has no app worktree and its native file tools have
- *     nothing meaningful to touch;
- *   - prompt: the route assembles the full assistant preamble (register +
- *     answer format + live vault map); the harness passes it through.
- *
- * Provider-agnostic like every harness here: prefs pick codex/claude per
- * turn, and the injected `runTurn` drives whichever is configured.
+ * Vault-assistant config over `makeConversationRunnerCore`. Tools: host-side
+ * `vault_sql` with the active vault's owner credential. cwd: empty per-vault
+ * scratch (`harness-sessions/assistant-cwd`). Writes ride `_assistant` so
+ * confirm-gated commands park (#306).
  */
 
 import { promises as fs } from "node:fs";
@@ -39,28 +28,15 @@ import type {
 import type { VaultRegistry } from "../serve/vault-registry.js";
 
 export interface AssistantConversationRunnerOptions {
-  /** Per-turn harness prefs (kind + provider) — same loader app chat uses.
-   *  Receives `subsystem` so a host that pins a harness per subsystem answers
-   *  with THIS register's kind (assistant and ask are separate pins). */
   prefsLoader: (
     subsystem?: ModelSubsystem,
     harnessKind?: HarnessKind
   ) => Promise<HarnessPrefs | undefined>;
-  /** Which subsystem's harness/model prefs these turns ride. The gateway
-   *  builds this factory twice — `'assistant'` for the shell register and
-   *  `'ask'` for the per-app copilot; unset → the host's default harness. */
+  /** Gateway builds this twice: `'assistant'` (shell) and `'ask'` (per-app). */
   subsystem?: ModelSubsystem;
-  /** The shared dispatcher — required by ToolContext; unused on this register. */
   getDispatcher: () => Dispatcher;
-  /** The vault registry; every turn resolves the ACTIVE vault through it. */
   vaults: VaultRegistry;
-  /**
-   * Build the turn's preamble. The shell assistant route assembles its own
-   * and passes it through (the default); the per-app ask register injects
-   * one that composes the assistant prompt + the app lens per turn.
-   */
   buildPrompt?: (input: ConversationTurnInput) => Promise<string> | string;
-  /** Turn driver — defaults to `runTurn`; injected in tests. */
   runTurn?: RunTurnFn;
   harnessLadder?: (
     subsystem: ModelSubsystem | undefined,
@@ -72,7 +48,6 @@ export interface AssistantConversationRunnerOptions {
   onFailover?: Parameters<typeof makeConversationRunnerCore>[0]["onFailover"];
 }
 
-/** The active vault's scratch cwd for assistant turns. */
 export function assistantCwd(vaults: VaultRegistry): string {
   return path.join(
     vaults.currentWorkspace().harnessSessionDir,
@@ -80,13 +55,6 @@ export function assistantCwd(vaults: VaultRegistry): string {
   );
 }
 
-/**
- * The vault-register tool runners, shared by every register that carries
- * them (assistant, ask, and — #286 phase 2 — the builder): reads are
- * the owner's `vault_sql`; writes ride the enrolled `_assistant` agent,
- * so confirm-gated (Tier 3/4, #306) commands park for the owner
- * instead of executing.
- */
 export function makeVaultToolRunners(vaults: VaultRegistry): {
   vaultSql: () => VaultSqlRunner;
   vaultInvoke: () => VaultInvokeRunner;
@@ -95,7 +63,7 @@ export function makeVaultToolRunners(vaults: VaultRegistry): {
   return {
     vaultSql: () => (sql: string) => {
       const result = vaults.current().sqlAsOwner(sql);
-      // The receipt id stays gateway-side; the model gets rows + caps only.
+      // Receipt id stays gateway-side; the model gets rows + caps only.
       const { receiptId: _receiptId, ...rows } = result;
       return rows;
     },
@@ -105,8 +73,6 @@ export function makeVaultToolRunners(vaults: VaultRegistry): {
         input: call.input,
         purpose: "dpv:ServiceProvision",
       }),
-    // Document-text reads (#299): "walk me through this contract"
-    // resolves the text variant, receipted; the receipt id stays here.
     vaultContent: () => async (call) => {
       const result = (await vaults.current().contentAsOwner(call)) as Record<
         string,

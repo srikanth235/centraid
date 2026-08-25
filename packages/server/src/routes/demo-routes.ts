@@ -1,18 +1,5 @@
-// Scenario-seed routes (#290) — the owner's "load demo data /
-// reset demo data" surface. A blueprint that ships a `seed.js` generator can
-// populate a fresh vault with realistic, relative-dated rows; every write
-// rides the demo register (owner credential + `demo: {appId}`), so the data
-// is receipted, provenance-marked `seed.demo`, invisible to the automation
-// plane, and purgeable in one act.
-//
-//   GET    /centraid/_vault/demo           — per-app status {appId, rows, seedable}
-//   POST   /centraid/_vault/demo/<appId>   — run the app's seed.js generator
-//   DELETE /centraid/_vault/demo/<appId>   — purge that app's demo rows
-//   DELETE /centraid/_vault/demo           — purge every demo row
-//
-// Generators execute in the same worker sandbox as app handlers (trusted
-// local code; the worker is crash + timeout isolation), with `ctx.vault`
-// bound to the demo bridge — read/search/invoke/describe only.
+// Scenario-seed routes (#290). Writes ride the demo register (`seed.demo`),
+// invisible to automations, purgeable in one act.
 
 import { existsSync, readdirSync } from "node:fs";
 import type { IncomingMessage, ServerResponse } from "node:http";
@@ -28,24 +15,11 @@ const PREFIX = "/centraid/_vault/demo";
 const TIME_ENGINE_MODULE_URL = import.meta.resolve("@centraid/core/time");
 
 export interface DemoRouteDeps {
-  /** Live code root (`<main worktree>/apps`) of the ACTIVE vault's store. */
   codeAppsDir: () => string;
-  /**
-   * Directories a BUNDLED app serves from, by id — the shipped
-   * `@centraid/blueprints` trees, which are not under `codeAppsDir` at all.
-   *
-   * Without this the whole demo plane is dead for exactly the apps it was
-   * written for: a bundled install serves IN PLACE (no per-vault code copy,
-   * #434) and every first-party app is installed by default (#708), so a git-
-   * store scan finds nothing and `GET /demo` answers `{apps:[]}` while `POST
-   * /demo/tasks` 404s on a vault that owns all eight seedable apps. The
-   * resolver mirrors `codeDirOverride` in build-gateway: bundled and installed
-   * wins, everything else is the code store.
-   */
+  /** Bundled blueprint dirs by id. Without this, GET /demo is `{apps:[]}` (#434). */
   bundledAppDirs: () => ReadonlyMap<string, string>;
 }
 
-/** The directory an app's `seed.js` would live in, bundled tree first. */
 function appDirsFor(deps: DemoRouteDeps): Map<string, string> {
   const dirs = new Map<string, string>();
   const codeAppsDir = deps.codeAppsDir();
@@ -55,13 +29,11 @@ function appDirsFor(deps: DemoRouteDeps): Map<string, string> {
   } catch {
     /* a vault with no code store yet is the normal case */
   }
-  // Bundled last so an installed blueprint wins over a same-named store entry,
-  // which is the same precedence the listing union and the compat route use.
+  // Bundled last so an installed blueprint wins over a same-named store entry.
   for (const [appId, dir] of deps.bundledAppDirs()) dirs.set(appId, dir);
   return dirs;
 }
 
-/** Apps that ship a seed.js scenario generator, wherever they serve from. */
 function seedableApps(deps: DemoRouteDeps): Map<string, string> {
   const seedable = new Map<string, string>();
   for (const [appId, dir] of appDirsFor(deps)) {
@@ -118,9 +90,7 @@ export function makeDemoRouteHandler(
         },
         handlerFile: seedFile,
         handlerKind: "action",
-        // Deterministic-by-default: generators derive their randomness from
-        // `input.seed` and their dates from `input.now`, so the same load
-        // reproduces the same scenario (test fixtures ride this too).
+        // Generators derive randomness from `input.seed` and dates from `input.now`.
         args: { input: { seed: 1, now: new Date().toISOString() } },
         timeoutMs: 60_000,
         vault: vaults.demoBridgeFor(appId),

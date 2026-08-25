@@ -13,11 +13,7 @@ export interface PhotoAsset {
   captureGroupId?: string;
   liveVideoUri?: string;
   localId?: string;
-  /**
-   * Every device copy that resolves to this asset's sha. A backed-up photo the
-   * camera roll holds twice merges onto one timeline row; free-up-space must be
-   * able to reach all of them, so the identity is a set, not a single id.
-   */
+  /** Every device copy of this sha — free-up-space must reach all of them. */
   localIds?: string[];
   uri: string;
   previewUri: string;
@@ -26,12 +22,7 @@ export interface PhotoAsset {
   sha256?: string;
   phash?: string;
   thumbhash?: string;
-  /**
-   * `undefined` when the device's media store recorded neither a creation
-   * nor a modification time for this asset (see `device-media.ts`'s
-   * `capturedAtIso`). Every date-ordered feature — sectioning, Years/Months,
-   * "newest" comparisons — must treat that as "no fact", never as 1970.
-   */
+  /** `undefined` is no fact — never treat as 1970. */
   capturedAt?: string;
   tzOffsetMin?: number;
   kind: "photo" | "video" | "audio" | "scan";
@@ -43,22 +34,14 @@ export interface PhotoAsset {
   favorite: boolean;
   archived: boolean;
   deleted: boolean;
-  /**
-   * When the lifecycle sweep purges these bytes, straight off the asset's own
-   * `purge_at` (#274) with the content row as the fallback for vaults
-   * trashed before that pair landed. Present only for a trashed photograph;
-   * the tile's state slot turns it into the countdown Trash reads by
-   * (proto:4446-4449). Mirrors the web's derivation in
-   * `packages/blueprints/apps/photos/queries/library.ts`.
-   */
+  /** Trashed-only; from `purge_at` (#274), content row as fallback. */
   purgeAt?: string;
   backupState: BackupState;
   verifiedCasAck?: boolean;
   duplicateHint?: boolean;
   source: "device" | "replica" | "merged";
-  /** Vault whose payload supplied `assetId`; writes must keep this pair. */
+  /** Writes must keep this pair with `assetId`. */
   sourceVaultId?: string;
-  /** Vault provenance badges for a sha-deduped timeline item. */
   scopeIds?: string[];
   scopeLabels?: string[];
   writableScopeIds?: string[];
@@ -116,8 +99,6 @@ export function mergePhotoAssets(
       canWrite: current.canWrite === true || asset.canWrite === true,
     };
   }
-  // sha → position in `merged`, so a second device copy of one sha folds onto
-  // the same row instead of `indexOf(same)` returning -1 and dropping it. O(n).
   const indexBySha = new Map<string, number>();
   merged.forEach((asset, index) => {
     if (asset.sha256 !== undefined && !indexBySha.has(asset.sha256))
@@ -133,9 +114,7 @@ export function mergePhotoAssets(
       const existing = merged[index]!;
       merged[index] =
         existing.source === "merged"
-          ? // Already carries a device copy: keep the primary identity, just
-            // widen the set so every camera-roll duplicate is reachable.
-            {
+          ? {
               ...existing,
               localIds: withLocalId(existing.localIds, local.localId),
               verifiedCasAck: existing.verifiedCasAck || local.verifiedCasAck,
@@ -152,7 +131,6 @@ export function mergePhotoAssets(
             };
       continue;
     }
-    // A perceptual hash is review evidence, never identity.
     merged.push({
       ...local,
       localIds: withLocalId(undefined, local.localId),
@@ -171,11 +149,7 @@ export function mergePhotoAssets(
         asset.duplicateHint ||
         Boolean(asset.phash && (phashCounts.get(asset.phash) ?? 0) > 1),
     }))
-    // `capturedAt`, when present, is always an ISO-8601 UTC string, which
-    // sorts correctly by raw code-unit comparison — no per-comparison
-    // Date.parse across 50k rows. An asset with no capturedAt has no instant
-    // to compare, so it is treated as older than everything and sinks to the
-    // bottom rather than interleaving arbitrarily among dated rows.
+    // ISO-8601 UTC sorts by code unit. Undated sinks rather than interleaving.
     .sort((a, b) => {
       if (a.capturedAt === undefined && b.capturedAt === undefined) return 0;
       if (a.capturedAt === undefined) return 1;
@@ -218,14 +192,7 @@ function unique(values: readonly string[]): string[] {
   return [...new Set(values)];
 }
 
-/**
- * The calendar day a photo was taken, in the capture's own wall clock.
- *
- * Bucketing on the raw UTC slice files a 20:00 PDT photo under the next day.
- * When the vault carried the original `tzOffsetMin` we shift the instant into
- * that zone; otherwise we fall back to the viewing device's local day, which is
- * the same reference `onThisDay` uses — the two must always agree.
- */
+/** Capture-local day. Raw UTC would file a 20:00 PDT photo under the next day. */
 export function captureLocalDay(
   capturedAt: string,
   tzOffsetMin?: number
@@ -242,12 +209,7 @@ export function captureLocalDay(
   return `${year}-${month}-${day}`;
 }
 
-/**
- * The section `PhotoAsset`s with no `capturedAt` are filed under — see
- * `sectionPhotoAssets`. Exported so every other date-grained view (Years,
- * Months) can recognise and exclude it by the same key, rather than each
- * re-deriving its own notion of "the undated one".
- */
+/** Shared key so Years/Months exclude the undated bucket the same way. */
 export const UNDATED_SECTION_DAY = "undated";
 
 export function sectionPhotoAssets(
@@ -255,9 +217,6 @@ export function sectionPhotoAssets(
   now = new Date()
 ): PhotoSection[] {
   const sections = new Map<string, PhotoAsset[]>();
-  // Assets with no capturedAt cannot be placed in the calendar at all — they
-  // are collected separately and appended as one "Undated" section below,
-  // unconditionally last, rather than fabricating a day for them.
   const undated: PhotoAsset[] = [];
   for (const asset of assets.filter(
     (item) => !item.archived && !item.deleted
@@ -271,8 +230,6 @@ export function sectionPhotoAssets(
     bucket.push(asset);
     sections.set(day, bucket);
   }
-  // Build one formatter of each kind, not two per day section (50k assets can
-  // span thousands of days).
   const dayFormat = new Intl.DateTimeFormat(undefined, {
     weekday: "short",
     month: "short",
@@ -323,12 +280,7 @@ export function onThisDay(
   const month = now.getMonth() + 1;
   const day = now.getDate();
   return assets.filter((asset) => {
-    // An asset with no capture time cannot say which calendar day it belongs
-    // to, so it cannot be a memory of today — it is excluded rather than
-    // guessed into (or out of) the list.
     if (asset.capturedAt === undefined) return false;
-    // Same capture-local reference as sectioning, so a memory and its timeline
-    // row never disagree about which day the photo belongs to.
     const [year, capturedMonth, capturedDay] = captureLocalDay(
       asset.capturedAt,
       asset.tzOffsetMin
@@ -343,7 +295,6 @@ export function onThisDay(
   });
 }
 
-/** Accumulate a drag path without mutating the selection owned by React state. */
 export function addDragSelection(
   selection: ReadonlySet<string>,
   assetId: string

@@ -8,18 +8,8 @@ import type {
 } from "./connectFlow-core.js";
 import { connectGateway } from "./gatewayModals.js";
 
-/*
- * Impure IO for ConnectFlow (#382) — mirrors the
- * gatewayRegistry.ts pure-core / impure-glue split: every
- * `window.CentraidApi` call and error-shape decision lives here, so
- * `connectFlow-core.ts` and the component stay pure/presentational.
- *
- * `testGatewayConnection` is an IPC method the host bridge supplies. This
- * renderer half doesn't own centraid-api.d.ts, so the contract is declared
- * locally as `ConnectFlowBridge` and reconciled by the integration typecheck.
- */
+// Impure ConnectFlow IO (#382). `ConnectFlowBridge` is declared here; the renderer does not own centraid-api.d.ts.
 
-/** The one vault a fresh gateway auto-founds for its owner (#603). */
 const PERSONAL_VAULT_NAME = "Personal";
 
 export interface ConnectFlowBridge {
@@ -32,10 +22,7 @@ function bridge(): ConnectFlowBridge {
   return window.CentraidApi as unknown as ConnectFlowBridge;
 }
 
-/** Run the connectivity test for the current details. Never throws — a
- *  bridge that's missing (older build, unwired test double) or a rejecting
- *  call both fold to a single failed 'reach' stage, same posture as
- *  `redeemGatewayPairing`'s `{ok:false}` contract. */
+/** Never throws — missing bridge or reject both fold to failed `reach`. */
 export async function runConnectivityTest(
   input: ConnectTestInput
 ): Promise<ConnectivityReport> {
@@ -65,15 +52,7 @@ export async function runConnectivityTest(
   }
 }
 
-/**
- * The local gateway's existing vaults, shaped like a ConnectivityReport's
- * `vaults[]` so the vault step's rendering stays method-agnostic.
- *
- * The catch is a typed translation, not a swallow (#603): an
- * unreachable gateway must not fold into an empty list, which the vault step
- * would render as "this gateway has no vaults" and the onboarding host would
- * auto-commit a create against. The caller sees WHY the list is empty.
- */
+/** Do not fold unreachable into an empty list — the vault step would auto-commit a create (#603). */
 export async function loadLocalVaults(): Promise<LocalVaultsResult> {
   try {
     const vaults = await listVaults();
@@ -103,29 +82,16 @@ export async function loadLocalVaults(): Promise<LocalVaultsResult> {
   }
 }
 
-/**
- * First run's "Start fresh on this Mac" commit (#603). The embedded
- * gateway founds one marked personal vault at construction, so there is no
- * ceremony and no vault to create here — this only makes the local gateway
- * active and addresses the owner's own vault. Shared vaults are an explicit
- * later owner action. Throws with a user-facing message the onboarding host
- * renders inline.
- */
 export async function connectFreshLocalGateway(): Promise<ConnectFlowResult> {
   await ensureLocalGatewayActive();
   const loaded = await loadLocalVaults();
   if (!loaded.ok) throw new Error(loaded.message);
-  // The `personal` marker is written INTO the vault at founding. The name match
-  // is the fallback for data dirs founded before the marker existed (v0: no
-  // migrations).
+  // `personal` is written at founding; name match is fallback for pre-marker dirs.
   const personal =
     loaded.vaults.find((v) => v.personal) ??
     loaded.vaults.find((v) => v.name === PERSONAL_VAULT_NAME) ??
     null;
-  // Reinstalling over existing data may find no personal vault at all. Landing
-  // on the oldest remaining vault is still the right place to enter; profile
-  // and vault naming are explicit Settings actions, never an onboarding side
-  // effect.
+  // Reinstall may find no personal vault; oldest remaining is the entry.
   const target = personal ?? loaded.vaults[0] ?? null;
   if (!target) {
     throw new Error(
@@ -140,10 +106,6 @@ export async function connectFreshLocalGateway(): Promise<ConnectFlowResult> {
   };
 }
 
-/**
- * Commit the flow (design doc step D). Throws with a user-facing message on
- * failure — the component catches it and dispatches `commitFailed`.
- */
 export async function commitConnectFlow(
   state: ConnectFlowState
 ): Promise<ConnectFlowResult> {
@@ -157,12 +119,8 @@ export async function commitConnectFlow(
 }
 
 async function ensureLocalGatewayActive(): Promise<void> {
-  // Always the explicit call, even when 'local' is already the active id (it
-  // is the virgin-install default): on a true first run the desktop DEFERS
-  // starting the local gateway until this deliberate act (#603 — no
-  // keychain prompt before the user chooses), and `setActiveGateway` is what
-  // lifts that deferral. Skipping it when the id already matches would leave
-  // the gateway unstarted and every follow-up read hanging on an empty URL.
+  // Always the explicit call: first run defers starting the local gateway
+  // until this act (#603). Skipping when id already matches leaves it unstarted.
   await window.CentraidApi.setActiveGateway({ id: "local" });
 }
 

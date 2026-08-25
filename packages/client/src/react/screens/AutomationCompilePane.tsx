@@ -14,43 +14,15 @@ import type { ArtifactFile } from "./AutomationCompileArtifacts.js";
 import au from "../styles/automation.module.css";
 import styles from "./AutomationCompilePane.module.css";
 
-/*
- * The compiler readout — the right rail of the compile screen.
- *
- * Compiling is NOT a fire-and-forget side effect of Save that throws the
- * member onto the run screen — a compile that FAILS would then have nowhere to
- * be read. The loop closes in one place: compile → watch the steps land → read
- * the failure → edit the instructions → recompile → test the plan for real.
- *
- * The rail READS; it does not author. There is exactly one editable surface on
- * this screen — the instructions field in the left column — so a failure here
- * hands you back there rather than opening a second way to change the same
- * thing. (An earlier revision put a chat composer in this rail. Two writers on
- * one field is how you end up not knowing which text is live.)
- *
- * Three bands, in the order the loop runs:
- *   1. Verdict   — what the plan is right now, the failure text, and the one
- *                  button that changes it.
- *   2. Steps     — the compiler's working, live, one row per step.
- *   3. Artifacts — the deterministic handler.js / automation.json it produced.
- */
+// Compiler readout. The rail reads; it does not author. Compile is not a
+// fire-and-forget side effect of Save — a failure has to be readable here.
 
 export interface AutomationCompilePaneProps {
-  /** Create mode has no automation to compile yet — the rail explains itself
-   *  instead of offering dead buttons. */
   mode: "create" | "edit";
-  /** Instructions differ from the last compiled baseline: the plan is stale. */
   dirty: boolean;
-  /**
-   * Bumped by the editor after a successful save to compile the freshly
-   * persisted instructions. A nonce rather than a callback so the rail keeps
-   * sole ownership of the compile loop — Save asks for a compile, it does not
-   * perform one, and there is exactly one code path that starts a compile.
-   */
   compileNonce: number;
   onCompile: () => Promise<string | null>;
   onTestRun: () => Promise<string | null>;
-  /** Hand a failure back to the one editable surface: focus the instructions. */
   onEditInstructions: () => void;
   loadAttempts: () => Promise<CompileAttemptDTO[]>;
   loadTurnSteps: (turnId: string) => Promise<CompileStepDTO[]>;
@@ -68,8 +40,6 @@ export interface AutomationCompilePaneProps {
 }
 
 type Phase = "idle" | "compiling" | "testing";
-/** What the rail is currently watching — a compile attempt or a test run. The
- *  step list is shared; only the framing differs. */
 type Watched = { turnId: string; kind: "compile" | "test" } | null;
 
 function fmtDuration(ms: number): string {
@@ -110,13 +80,6 @@ function StepRow({ step }: { step: CompileStepDTO }): JSX.Element {
   );
 }
 
-/**
- * A live "m:ss" for a turn that is still open, or null when nothing is running.
- *
- * The interval only exists while `startedAt` is a number, so a settled rail
- * holds no timer. Seconds resolution is deliberate: this answers "is it moving
- * or wedged?", and a faster tick would only re-render the rail more often.
- */
 function useElapsedLabel(startedAt: number | null): string | null {
   const [now, setNow] = useState(() => Date.now());
   useEffect(() => {
@@ -124,9 +87,6 @@ function useElapsedLabel(startedAt: number | null): string | null {
     const id = setInterval(() => setNow(Date.now()), 1000);
     return () => clearInterval(id);
   }, [startedAt]);
-  // No re-read of the clock when a turn opens: `now` can only be older than a
-  // freshly-started turn, and the elapsed seconds are floored at zero — so the
-  // rail already reads "0:00" until the first tick lands.
   if (startedAt === null) return null;
   const secs = Math.max(0, Math.floor((now - startedAt) / 1000));
   return `${Math.floor(secs / 60)}:${String(secs % 60).padStart(2, "0")}`;
@@ -179,12 +139,6 @@ export default function AutomationCompilePane({
     [onReadSource]
   );
 
-  /**
-   * Follow one turn to settlement. `settled: false` means the stream dropped
-   * with the turn still open, so we fall back to a cold read rather than
-   * leaving the rail spinning — the same honesty rule the run thread follows,
-   * minus its rejoin ladder (a compile is short, and the owner is watching).
-   */
   const follow = useCallback(
     async (turnId: string, kind: "compile" | "test"): Promise<void> => {
       watchRef.current?.abort();
@@ -213,9 +167,6 @@ export default function AutomationCompilePane({
     [loadTurnSteps, refreshAttempts, refreshSource, watchTurnSteps]
   );
 
-  // On mount (edit mode), show the last attempt cold. A compile still running
-  // when the screen opens is joined live — otherwise reopening the compiler
-  // mid-compile showed a finished-looking empty list.
   useEffect(() => {
     if (isCreate) return;
     let active = true;
@@ -252,9 +203,7 @@ export default function AutomationCompilePane({
       .finally(() => setPhase("idle"));
   }, [follow, onCompile]);
 
-  // Save asks for a compile by bumping the nonce. Guarded on the seen value so
-  // a re-render (or the initial mount, where the nonce starts at 0) never
-  // fires a compile the owner didn't ask for.
+  // Save bumps the nonce; skip the initial 0 so mount never auto-compiles.
   const seenNonce = useRef(compileNonce);
   useEffect(() => {
     if (compileNonce === seenNonce.current) return;
@@ -271,21 +220,11 @@ export default function AutomationCompilePane({
       .finally(() => setPhase("idle"));
   };
 
-  // `phase` only knows about compiles THIS mount started. A compile that was
-  // already running when the rail loaded (reload mid-compile, or the compile
-  // the editor kicks off on create) shows up in `latest` instead — and a
-  // harness compile runs for minutes, so that window is wide. Keying
-  // "busy" off `phase` alone left Compile clickable during one, which starts a
-  // second concurrent compile of the same automation.
+  // `phase` is this mount; `latest.status` covers a compile already in flight.
   const attemptRunning = latest?.status === "running";
   const busy = phase !== "idle" || attemptRunning;
   const failure =
     latest?.status === "fail" ? (latest.error ?? "Compile failed.") : null;
-  // A compile is a real harness run and routinely takes minutes, not
-  // seconds. Without a clock, "Compiling…" over an indeterminate spinner is
-  // indistinguishable from a hang, and the honest answer ("it has been 4
-  // minutes, that is normal") is the one thing the rail can offer while it
-  // waits. Ticks only while a turn is open, so an idle rail re-renders never.
   const elapsed = useElapsedLabel(attemptRunning ? latest.startedAt : null);
   const verdict: { tone: string; label: string; detail: string } = isCreate
     ? {
@@ -375,8 +314,7 @@ export default function AutomationCompilePane({
             <pre className={styles.failureText} data-testid="compile-failure">
               {failure}
             </pre>
-            {/* The only cure is upstream. Rather than offer a second place to
-                type, send the owner back to the one field that authors this. */}
+            {/* Cure is upstream — send the owner back to the one authoring field. */}
             <button
               type="button"
               className={styles.failureFix}

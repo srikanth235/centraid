@@ -3967,6 +3967,208 @@ excluded): regenerate from `measureTree` sorted by chars-over-cap. Then:
    receipt, push.
 
 
+### Wave 5 — compression sweep, 160 unswept files (2026-08-25)
+
+Eight worker sub-agents, ownership-disjoint 20-file batches. Worklist regenerated
+from `measureTree` sorted by chars-over-cap, preferring files never touched in
+waves 1-4 (so already-swept honest floors are not re-chewed). Eligible unswept
+at dispatch: 1,320. Root restored two premature JSX closing `>` tokens
+(`frame.tsx` `<button`, `PersonGrants.tsx` `<Caption`) before the proof.
+
+| figure | after Wave 4 | after Wave 5 |
+| --- | --- | --- |
+| global character share | 16.47% | **15.34%** |
+| global line density | 9.44% | **8.70%** |
+| files over 15% cap | 1,570 | 1,425 |
+
+Verification (all green before commit):
+
+```
+bun scripts/comment-only-diff.mjs HEAD   # 160 changed file(s) — all comment-only
+bun run format && bun run format:check
+bun run lint
+bun scripts/check-comment-density-ratchet.mjs --write && bun scripts/check-comment-density-ratchet.mjs
+# ok comment-density — no pin rose, no unpinned file over cap
+```
+
+Allowlist rulings (1 accepted, allowlist now 55): `packages/core/src/protocol/capabilities.ts`
+(protocol capability map; optional/absent-tolerant experimental-flag semantics
+are the wire contract). Nominated but declined/unnecessary: placement-registry.ts
+and several nbl<40 leaves (cap no longer applies); fake-clock.ts (warnings on
+ordinary helpers, not a registry).
+
+Residues above 13% that stay cap-eligible without allowlist (honest floors):
+photos filters/media-observer/PlaceNaming, agenda Chrome/edits, egress-consent,
+birthday-notifications, token-purity, docs capabilities, PhotoEditor.styles,
+app-frame, fake-clock, skeleton-rows, focus-ring-contrast.test, crypto.ts
+(required oxlint-disable). All pins moved down; none rose.
+
+Files changed (full inventory):
+
+- `apps/desktop/src/main/changelog-core.ts`
+- `apps/desktop/src/main/gateway-monitor-notifications.test.ts`
+- `apps/desktop/src/main/gateway-pairing-core.ts`
+- `apps/desktop/src/main/ipc-core.ts`
+- `apps/desktop/src/main/update-check.ts`
+- `apps/desktop/src/preload.ts`
+- `apps/mobile/src/apps/automations/Automations.tsx`
+- `apps/mobile/src/apps/docs/docs-versions.ts`
+- `apps/mobile/src/apps/docs/editor-outcome.ts`
+- `apps/mobile/src/apps/insights/useInsights.ts`
+- `apps/mobile/src/apps/photos/MemoriesView.tsx`
+- `apps/mobile/src/apps/photos/PhotoEditor.styles.ts`
+- `apps/mobile/src/apps/photos/PhotoPicker.tsx`
+- `apps/mobile/src/apps/photos/PhotosPeopleView.tsx`
+- `apps/mobile/src/apps/photos/PhotosScreen.test.tsx`
+- `apps/mobile/src/apps/photos/photos-backup-copy.ts`
+- `apps/mobile/src/apps/photos/photos-trash.ts`
+- `apps/mobile/src/apps/photos/places-model.test.ts`
+- `apps/mobile/src/apps/photos/share-place-call-sites.test.ts`
+- `apps/mobile/src/apps/photos/skeleton-rows.ts`
+- `apps/mobile/src/apps/photos/timeline-model.ts`
+- `apps/mobile/src/apps/photos/video-scrub-strip-native.ts`
+- `apps/mobile/src/kit/components/RowsBlock.tsx`
+- `apps/mobile/src/kit/media/use-image-fallback.ts`
+- `apps/mobile/src/kit/share/GrantSheet.tsx`
+- `apps/mobile/src/lib/birthday-notifications.ts`
+- `apps/mobile/src/lib/replica/mobile-gateway-compatibility.ts`
+- `apps/mobile/src/lib/replica/op-sqlite-build-config.test.ts`
+- `apps/mobile/src/lib/upload/boot.ts`
+- `apps/mobile/src/lib/upload/crypto.ts`
+- `apps/mobile/src/screens/BackupHealth.custody.tsx`
+- `apps/mobile/src/screens/data/useData.ts`
+- `apps/mobile/src/screens/home/SearchOverlay.tsx`
+- `apps/mobile/src/screens/home/catalog.ts`
+- `apps/mobile/src/screens/home/home-status.ts`
+- `apps/web/tests/e2e/app-card-logical-insets.spec.ts`
+- `packages/backup/src/testing/s3-test-server.ts`
+- `packages/blueprints/apps/_shared/SearchScaffold.tsx`
+- `packages/blueprints/apps/_shared/app-frame.tsx`
+- `packages/blueprints/apps/_shared/placement-registry.ts`
+- `packages/blueprints/apps/_shared/write-target.ts`
+- `packages/blueprints/apps/agenda/Chrome.tsx`
+- `packages/blueprints/apps/agenda/edits.ts`
+- `packages/blueprints/apps/agenda/format.ts`
+- `packages/blueprints/apps/agenda/logic.ts`
+- `packages/blueprints/apps/docs/capabilities.ts`
+- `packages/blueprints/apps/docs/components/Breadcrumb.tsx`
+- `packages/blueprints/apps/locker/logic.ts`
+- `packages/blueprints/apps/notes/Chrome.tsx`
+- `packages/blueprints/apps/notes/logic.test-fixtures.ts`
+- `packages/blueprints/apps/people/app-root.tsx`
+- `packages/blueprints/apps/people/components/PersonGrants.tsx`
+- `packages/blueprints/apps/people/writes.ts`
+- `packages/blueprints/apps/photos/asset-key.ts`
+- `packages/blueprints/apps/photos/components/AlbumBar.tsx`
+- `packages/blueprints/apps/photos/components/Memories.tsx`
+- `packages/blueprints/apps/photos/components/PlaceMap.test.tsx`
+- `packages/blueprints/apps/photos/components/PlaceNaming.tsx`
+- `packages/blueprints/apps/photos/components/ViewerActions.tsx`
+- `packages/blueprints/apps/photos/components/ViewerStage.tsx`
+- `packages/blueprints/apps/photos/filters.ts`
+- `packages/blueprints/apps/photos/frame.tsx`
+- `packages/blueprints/apps/photos/grouping.ts`
+- `packages/blueprints/apps/photos/media-observer.ts`
+- `packages/blueprints/apps/photos/member-prefs.ts`
+- `packages/blueprints/apps/photos/queries/face-queue.ts`
+- `packages/blueprints/apps/photos/queries/storage.ts`
+- `packages/blueprints/apps/photos/selection-actions.ts`
+- `packages/blueprints/apps/photos/visibility.ts`
+- `packages/blueprints/apps/tasks/shelves.ts`
+- `packages/blueprints/apps/tasks/when.ts`
+- `packages/blueprints/src/photos-editor-guard.test.ts`
+- `packages/blueprints/src/photos-face-review.test.ts`
+- `packages/blueprints/src/photos-view-state.test.ts`
+- `packages/client/src/gateway-client-backup.ts`
+- `packages/client/src/gateway-client-core.ts`
+- `packages/client/src/gfm.ts`
+- `packages/client/src/react/blueprints/inlineQueryCtx.ts`
+- `packages/client/src/react/screens/AutomationCompilePane.tsx`
+- `packages/client/src/react/screens/GatewayServiceTip.tsx`
+- `packages/client/src/react/screens/LogsScreen.tsx`
+- `packages/client/src/react/screens/SettingsEnrichmentScreen.tsx`
+- `packages/client/src/react/screens/StorageLimitsPanel.tsx`
+- `packages/client/src/react/screens/VaultFootprintRows.tsx`
+- `packages/client/src/react/screens/atlasOrreryMotion.ts`
+- `packages/client/src/react/screens/backupMetrics.ts`
+- `packages/client/src/react/screens/composerMentions.ts`
+- `packages/client/src/react/screens/transcriptWindow.ts`
+- `packages/client/src/react/shell/App.test.tsx`
+- `packages/client/src/react/shell/commitAvailability.tsx`
+- `packages/client/src/react/shell/inlineFrame.ts`
+- `packages/client/src/react/shell/routes/VaultRoute.tsx`
+- `packages/client/src/react/shell/routes/appSettingsData.ts`
+- `packages/client/src/react/shell/routes/assistantProjection.ts`
+- `packages/client/src/react/shell/routes/automationEditorData.ts`
+- `packages/client/src/react/shell/routes/connectFlowIO.ts`
+- `packages/client/src/react/shell/routes/homeConditions.ts`
+- `packages/client/src/react/shell/routes/inlineAppFrame.tsx`
+- `packages/client/src/react/shell/routes/settingsAccountData.ts`
+- `packages/client/src/react/shell/routes/templatesData.ts`
+- `packages/client/src/react/shell/useCapabilities.tsx`
+- `packages/client/src/react/shell/useOwnerScopes.ts`
+- `packages/client/src/react/ui/GridBlock.tsx`
+- `packages/client/src/react/ui/MeterRows.tsx`
+- `packages/client/src/react/ui/RowsBlock.tsx`
+- `packages/client/src/surface-copy.ts`
+- `packages/core/src/protocol/capabilities.ts`
+- `packages/core/src/protocol/routes.ts`
+- `packages/core/src/protocol/version.ts`
+- `packages/design/src/contrast-shell-palette.test.ts`
+- `packages/design/src/css-vars.ts`
+- `packages/design/src/elements/host.ts`
+- `packages/design/src/elements/refresh.ts`
+- `packages/design/src/focus-ring-contrast.test.ts`
+- `packages/model-runtime/src/face-geometry.ts`
+- `packages/server/src/acp/conversation-driver.ts`
+- `packages/server/src/acp/multimodal.ts`
+- `packages/server/src/acp/preflight.ts`
+- `packages/server/src/cli/backup-admin.ts`
+- `packages/server/src/cli/landlord-auth.ts`
+- `packages/server/src/cli/service-unit.ts`
+- `packages/server/src/engine/conversation/auto-title.ts`
+- `packages/server/src/engine/conversation/reprice.ts`
+- `packages/server/src/engine/conversation/store-sql.ts`
+- `packages/server/src/engine/data/blob-store.ts`
+- `packages/server/src/engine/handlers/handler-runner.contract.test.ts`
+- `packages/server/src/engine/handlers/vault-bridge.ts`
+- `packages/server/src/engine/http/request-boundary.ts`
+- `packages/server/src/engine/http/router.ts`
+- `packages/server/src/engine/http/sse-stream.ts`
+- `packages/server/src/engine/registry/token-purity.ts`
+- `packages/server/src/engine/sandbox/confined-fs.test.ts`
+- `packages/server/src/enrich/egress-consent-lookup.ts`
+- `packages/server/src/lifecycle/automation-turn-context.ts`
+- `packages/server/src/lifecycle/lifecycle-over-http.test.ts`
+- `packages/server/src/routes/demo-routes.ts`
+- `packages/server/src/routes/enrich-search-routes.ts`
+- `packages/server/src/runs/assistant-conversation-runner.ts`
+- `packages/server/src/serve/commons-recovery-invites.ts`
+- `packages/server/src/serve/enrich-tier-control.test.ts`
+- `packages/server/src/serve/gateway-db.ts`
+- `packages/server/src/serve/peer-commons-client.ts`
+- `packages/server/src/serve/peer-dial.ts`
+- `packages/server/src/serve/peer-route-announce.ts`
+- `packages/server/src/serve/power-context.ts`
+- `packages/server/src/serve/route-latency.ts`
+- `packages/test-kit/src/fake-clock.ts`
+- `packages/vault/src/backup-policy.ts`
+- `packages/vault/src/blob/custody-state.ts`
+- `packages/vault/src/commands/attachments.ts`
+- `packages/vault/src/enrich/egress-consent.ts`
+- `packages/vault/src/enrich/policy-rules.ts`
+- `packages/vault/src/gateway/consent.ts`
+- `packages/vault/src/gateway/custody.ts`
+- `packages/vault/src/gateway/share-grant-seam.test.ts`
+- `packages/vault/src/ingest/publishers.ts`
+- `packages/vault/src/share/blobs.ts`
+- `packages/vault/src/share/commons-recovery.ts`
+- `packages/vault/src/share/commons-sim-world.test-fixtures.ts`
+- `packages/vault/src/share/project-closure.ts`
+- `receipts/issue-861-comment-current-state.md`
+- `tests/comment-density-ratchet.json`
+
+
 ## Session
 
 <!-- Session identifiers are maintained by the agent-session-identity pre-commit hook. -->

@@ -1,53 +1,30 @@
 import type { DatabaseSync } from "node:sqlite";
 
-/**
- * One owner-visible policy for every backup/custody clock and byte budget
- * (#414). The destination itself remains a separate storage-connection
- * choice; this document describes how that destination is used.
- */
+/** One owner-visible policy for every backup/custody clock and byte budget (#414). */
 export interface BackupPolicy {
-  /** Maximum intended offsite WAL lag. Also drives the vault WAL capture tick. */
+  /** Offsite WAL lag; also the vault WAL capture tick. */
   rpoSeconds: number;
   snapshotIntervalHours: number;
   verifyEveryDays: number;
-  /** Receipt is always durable locally; replicated waits for provider custody. */
+  /** Receipt is durable locally; replicated waits for provider custody. */
   casAck: "receipt" | "replicated";
-  /** Transit capacity for remote-primary fallback uploads. */
   outboxBudgetBytes: number;
-  /** Space reserved for WAL staging, snapshot assembly, journal writes, and the OS. */
   reservedHeadroomBytes: number;
   /** Omitted means derive a cache budget from the real volume. */
   cacheBudgetBytes?: number;
   /** Omitted/zero means unthrottled. */
   throttleBytesPerSec?: number;
-  /**
-   * Provider-defined S3 storage class applied to EVERY object-creating write.
-   * When set, it wins over the `directToColdOriginals` heuristic below: the
-   * owner named a class explicitly, so it applies to originals and everything
-   * else and the heuristic never engages. Unset ⇒ no per-instance class header
-   * and the heuristic may fill one in for eligible cold originals.
-   */
+  /** When set, wins over `directToColdOriginals`. Whitespace-only is unset. */
   storageClass?: string;
   /**
-   * Direct-to-cold heuristic for large media originals (#425):
-   * video/audio ORIGINALS at or above `minBytes` are PUT with the
-   * `STANDARD_IA` storage class instead of Standard, because a fresh
-   * full-bitrate original is predictably cold at birth (browse UX is served by
-   * pinned thumbs/posters/previews; a full-quality open is rare), so paying 60
-   * days of Standard before the provider's lifecycle rule demotes it is pure
-   * premium. Invisible to the owner by construction: absent ⇒ ON with a 25 MiB
-   * floor and `['video/', 'audio/']` prefixes. Never applies to binary
-   * derivatives, snapshot chunks, or WAL segments — none reach the resolver as
-   * originals — nor to small originals. Only engages when the target's declared
-   * `supportedStorageClasses` includes `STANDARD_IA`; a BYO-S3 target has no
-   * discovery so it never fires. An explicit `storageClass` above suppresses it.
+   * Direct-to-cold for large video/audio originals (#425). Unset ⇒ ON, 25 MiB,
+   * `['video/','audio/']`. Never derivatives/WAL/snapshots. Needs `STANDARD_IA`.
    */
   directToColdOriginals?: {
     enabled?: boolean;
     minBytes?: number;
     mimePrefixes?: string[];
   };
-  /** WAL generation base-roll controls. */
   walBaseRollBytes: number;
   walBaseRollHours: number;
 }
@@ -111,12 +88,6 @@ function optionalPositiveNumber(
   return positiveNumber(value, field);
 }
 
-/**
- * Validate the `directToColdOriginals` knob's shape (#425). Absent
- * ⇒ undefined (the resolver applies the default-ON config). Present sub-fields
- * are validated the same way as the rest of the policy; unknown/missing ones
- * simply fall back to the resolver's defaults at read time.
- */
 function optionalColdOriginals(
   value: unknown
 ):
@@ -157,7 +128,6 @@ function optionalColdOriginals(
   return out;
 }
 
-/** Validate and resolve a stored or request policy against the v0 defaults. */
 export function resolveBackupPolicy(value: unknown): BackupPolicy {
   const raw = record(value);
   const casAck = raw.casAck ?? DEFAULT_BACKUP_POLICY.casAck;
@@ -183,9 +153,8 @@ export function resolveBackupPolicy(value: unknown): BackupPolicy {
   ) {
     throw new BackupPolicyError("`storageClass` must be a string when set");
   }
-  // Empty/whitespace-only is treated as UNSET (not an error and not an explicit
-  // class): db.ts reads `storageClass` as falsy for the header, so normalizing it
-  // away here keeps the heuristic-precedence check downstream in agreement.
+  // Empty/whitespace-only is UNSET (not an error): db.ts treats falsy as no
+  // header, so the heuristic-precedence check downstream stays in agreement.
   const storageClass =
     typeof storageClassRaw === "string" && storageClassRaw.trim() !== ""
       ? storageClassRaw.trim()
@@ -257,11 +226,7 @@ export function readBackupPolicy(vault: DatabaseSync): BackupPolicy {
   });
 }
 
-/**
- * Merge a partial owner update. `null` clears an optional knob or restores a
- * required knob to its default. Validation happens before the settings row is
- * written, so a bad request cannot partially change policy.
- */
+/** `null` clears an optional knob or restores a required knob to its default. */
 export function updateBackupPolicy(
   vault: DatabaseSync,
   patch: BackupPolicyPatch

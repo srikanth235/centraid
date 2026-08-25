@@ -1,32 +1,13 @@
 /*
- * Host power-context posture (#528) — courtesy & energy, NEVER a
- * silent durable mode flip. This reports whether the host is running on
- * battery, mains, or as a headless server, and whether a courteous gateway
- * should DEFER (not stop) its safe background loops right now. It composes
- * into the SAME gate as the owner's explicit pause and the event-loop
- * load-shed — a third, independent "not now" signal. It never writes prefs,
- * never flips the Resource mode, and never mutates the owner's pause state.
+ * Host power-context posture (#528) — courtesy & energy, NEVER a silent
+ * durable mode flip. Reports battery/mains/server and whether a courteous
+ * gateway should DEFER (not stop) safe background loops. Same gate as the
+ * owner's pause and event-loop load-shed. Never writes prefs, never flips
+ * Resource mode, never mutates pause state.
  *
- * Two feeds converge:
- *   - BOOT PROBE (os-probe): a one-shot, failure-tolerant read of the host's
- *     battery at serve boot (darwin `pmset`, linux `/sys/class/power_supply`),
- *     re-read lazily at most every 60s. Establishes battery PRESENCE — the
- *     null that gates all battery chrome in the UI.
- *   - CLIENT PUSH (client-push): the Electron desktop hosts the real battery
- *     and pushes live `onBattery`/`charging`/thermal state on `powerMonitor`
- *     events and its 5s poll. Fresher than the probe; goes STALE after 120s.
- *
- * Idle wakeup target (#528): the measured proxy is
- * `resourceUsage.backgroundTimerFiresLastHour` (Phase C). Target: ≤ 120
- * background timer fires/hour while idle. Audited gateway timer inventory —
- * all already adaptive/unref'd, no fix needed: outbox drain (60s idle,
- * adaptive), backup retention (1h) + WAL drain
- * (RPO-derived), vault + outbox sweeps (1–2h), SSE heartbeats (15–30s per
- * OPEN stream only, unref'd). No standing sub-minute wakeup exists at idle.
- *
- * Pure/gateway-free: clock, platform, battery probe, and steal reader are all
- * injectable. NO timer of its own — snapshot() lazily re-evaluates staleness
- * and refreshes cached reads at most every 60s.
+ * Two feeds: BOOT PROBE (os-probe, ≤60s) establishes battery PRESENCE;
+ * CLIENT PUSH (Electron, stale after 120s) is fresher. No timer of its own —
+ * snapshot() lazily re-evaluates.
  */
 
 import { execFile } from "node:child_process";
@@ -42,12 +23,10 @@ export interface PowerContextState {
   deferringBackgroundWork: boolean;
   reason: "on-battery" | "low-battery" | "thermal" | null;
   source: "os-probe" | "client-push" | "none";
-  /** CPU steal percent measured between snapshot reads on Linux, null elsewhere/unknown */
   stealPercent: number | null;
   updatedAt: number | null;
 }
 
-/** Desktop-pushed live power state (validated at the route boundary). */
 export interface PowerContextPushBody {
   onBattery: boolean;
   batteryPercent?: number | null;
@@ -55,32 +34,27 @@ export interface PowerContextPushBody {
   thermalPressure?: ThermalPressure | null;
 }
 
-/** A resolved host battery read — `present:false` means "no battery on this host". */
+/** `present:false` means "no battery on this host". */
 export interface BatteryProbeResult {
   present: boolean;
   percent: number | null;
   charging: boolean | null;
-  /** true when drawing from the battery (discharging). */
   discharging: boolean | null;
 }
 
-/** One `/proc/stat` cumulative cpu-jiffies sample (linux steal math). */
 export interface CpuStealSample {
   steal: number;
   total: number;
 }
 
 const PERCENT_LOW_FLOOR = 20;
-/** Client push older than this is treated as absent (desktop refreshes every 5s). */
 const CLIENT_PUSH_STALE_MS = 120_000;
-/** Battery/steal reads refresh at most this often; snapshot() stays cheap. */
 const READ_REFRESH_MS = 60_000;
 
 /**
- * Pure posture rule (#528). Deterministic single `reason`, precedence
- * low-battery > thermal > on-battery so the most urgent courtesy wins. All
- * deferring reasons set `deferringBackgroundWork`; `reason:null` never defers.
- * `battery` is null exactly when no battery is present — the UI's gate.
+ * Pure posture (#528). Single `reason`, precedence low-battery > thermal >
+ * on-battery. `reason:null` never defers. `battery` is null exactly when no
+ * battery is present — the UI's gate.
  */
 export function evaluatePosture(input: {
   platform: NodeJS.Platform;
@@ -129,7 +103,7 @@ export function evaluatePosture(input: {
   };
 }
 
-/** Default host battery probe. Failure-tolerant: resolves `null` on any error/unknown platform. */
+/** Failure-tolerant: resolves `null` on any error/unknown platform. */
 export async function defaultBatteryProbe(
   platform: NodeJS.Platform
 ): Promise<BatteryProbeResult | null> {
@@ -251,10 +225,8 @@ export interface PowerContextMonitorOptions {
 }
 
 /**
- * Owns the boot probe + client-push state and assembles `PowerContextState`
- * on demand. No timer of its own; `snapshot()` re-evaluates staleness and
- * kicks a battery/steal re-read at most every 60s. Every read is
- * failure-tolerant — a missing probe just leaves the posture at `none`.
+ * Boot probe + client-push, assembled on demand. No timer of its own.
+ * Failure-tolerant — a missing probe leaves the posture at `none`.
  */
 export class PowerContextMonitor {
   private readonly platform: NodeJS.Platform;
@@ -281,7 +253,6 @@ export class PowerContextMonitor {
   private lastStealSample?: CpuStealSample;
   private stealReadAtMs?: number;
   private lastDeferring?: boolean;
-  /** Resolves after the one-shot boot probe settles (test seam). */
   readonly ready: Promise<void>;
 
   constructor(options: PowerContextMonitorOptions = {}) {
@@ -295,7 +266,6 @@ export class PowerContextMonitor {
     this.ready = this.refreshBattery(this.now());
   }
 
-  /** Store a desktop push, stamped with the current clock (drives 120s staleness). */
   applyClientPush(body: PowerContextPushBody): void {
     this.clientPush = {
       onBattery: body.onBattery,
@@ -306,12 +276,10 @@ export class PowerContextMonitor {
     };
   }
 
-  /** Drop pushed state; posture falls back to the boot probe / none. */
   clearClientPush(): void {
     this.clientPush = undefined;
   }
 
-  /** The composed "not now" bit background loops read — same shape as pause/load-shed. */
   isDeferringBackgroundWork(): boolean {
     return this.snapshot().deferringBackgroundWork;
   }

@@ -1,15 +1,5 @@
-// The rule §F argues for, held by a test: EVERY non-lightbox Photos surface
-// renders the band, and the band always carries the frame's Home capsule.
-//
-// A band rendered by one screen alone leaves the Library index, one album,
-// Backup, Duplicates and Trash as dead ends, with the OS back gesture the only
-// way out. The two assertions here are the ones that catch that:
-//
-//   (a) a screen wrapped in the shell renders the band, with a Home capsule
-//       whose one tap goes Home (never `goBack()`, which is a no-op when
-//       Photos was opened by deep link);
-//   (b) while a selection is live the band is REPLACED by the selection bar,
-//       and a disabled write target's handler does not fire.
+// Every non-lightbox Photos surface renders the band with the Home capsule
+// (`popTo`, never `goBack()`). A live selection replaces the band.
 import React, { act } from "react";
 import { createRoot } from "react-dom/client";
 import type { Root } from "react-dom/client";
@@ -31,9 +21,6 @@ const mocks = vi.hoisted(() => ({
 
 vi.mock(import("react-native"), async () => {
   const ReactModule = await import("react");
-  // The one style property the layout test is about, surfaced onto the DOM so
-  // an absolute band slot cannot come back unnoticed. Styles arrive as an
-  // object, an array, or a nested array, so this flattens all three.
   const positionOf = (style: unknown): string | undefined => {
     if (Array.isArray(style)) {
       for (const entry of style) {
@@ -61,9 +48,6 @@ vi.mock(import("react-native"), async () => {
         "button",
         {
           "aria-label": accessibilityLabel,
-          // The real `Pressable` refuses the press itself; jsdom's <button>
-          // does the same with `disabled`, so the mock keeps the property the
-          // sabotage assertion below is about.
           disabled,
           onClick: onPress,
           type: "button",
@@ -124,16 +108,12 @@ vi.mock(
   () =>
     ({
       borders: { hairline: 1 },
-      // The band's label carries state in its WEIGHT (:4975), so it names two
-      // families rather than taking the `control` role wholesale.
       family: { sansMedium: "sans-medium", sansRegular: "sans-regular" },
       radii: { lg: 12, md: 8, pill: 999, sm: 4, xl: 16, xs: 0 },
       t: () => ({}),
       useTheme: () => ({
         colors: {
           bg: "#bg",
-          // The claimed band's two plates: the capsule on the frame's neutral
-          // page (`bg`), the tab group on `bgElev`, both edged `lineStrong`.
           bgElev: "#elev",
           line: "#line",
           lineStrong: "#lineStrong",
@@ -205,13 +185,8 @@ describe("the band is on every Photos surface", () => {
   it("SABOTAGE: the capsule POPS home, never back and never navigate", () => {
     render(<PhotosScreen current="collections">{null}</PhotosScreen>);
     press("Home");
-    // `goBack()` is a no-op when Photos was entered by deep link, which left
-    // the one frame control on the surface doing nothing at all.
     expect(mocks.popTo).toHaveBeenCalledWith("Home");
-    // And `navigate` is the OTHER wrong answer: on React Navigation 7 it
-    // PUSHES a second Home above the Photos cover instead of returning to the
-    // one beneath, and UIKit presents a screen above a `fullScreenModal` as an
-    // inset card sheet — so Home arrived looking like a drawer.
+    // `navigate` PUSHES a second Home; UIKit then presents it as a card sheet.
     expect(mocks.navigate).not.toHaveBeenCalled();
   });
 
@@ -221,8 +196,6 @@ describe("the band is on every Photos surface", () => {
     expect(mocks.popTo).toHaveBeenCalledWith("PhotosHome", {
       destination: "library",
     });
-    // Same defect, one level down: `navigate` would stack a second
-    // `PhotosHome` on top of the album the member was in.
     expect(mocks.navigate).not.toHaveBeenCalled();
   });
 });
@@ -231,11 +204,9 @@ describe("the bar sits BESIDE the content, never over it", () => {
   beforeEach(mount);
   afterEach(unmount);
 
-  /** A stand-in for whatever scroll surface a screen puts in the slot. */
   const shelf = (): React.JSX.Element =>
     React.createElement("main", { "data-testid": "shelf" });
 
-  /** Every `position` an element inherits from its ancestors, frame included. */
   function positionsUpFrom(node: HTMLElement): (string | undefined)[] {
     const chain: (string | undefined)[] = [];
     let cursor: HTMLElement | null = node;
@@ -252,11 +223,8 @@ describe("the bar sits BESIDE the content, never over it", () => {
     const slot = container!.querySelector(
       '[data-testid="shelf"]'
     )!.parentElement!;
-    // The band's row is the parent of its tab group.
     const band = container!.querySelector('[role="tablist"]')!.parentElement!;
 
-    // Siblings under the frame's column, in that order — the band FOLLOWS the
-    // content slot instead of floating on top of it.
     expect(slot.parentElement).toBe(frame);
     expect(band.parentElement).toBe(frame);
     expect(slot.nextElementSibling).toBe(band);
@@ -268,10 +236,7 @@ describe("the bar sits BESIDE the content, never over it", () => {
     const slot = container!.querySelector(
       '[data-testid="shelf"]'
     )!.parentElement!;
-    // An absolute ancestor anywhere between the band and the frame is the bug:
-    // it takes the band out of flow, the slot grows back to full height, and
-    // content scrolls underneath again. Padding the slot cannot fix that —
-    // it only clears the END of the content, not the middle of a scroll.
+    // Absolute ancestor takes the band out of flow; slot padding cannot fix it.
     expect(positionsUpFrom(band)).not.toContain("absolute");
     expect(positionsUpFrom(slot)).not.toContain("absolute");
   });
@@ -300,13 +265,9 @@ describe("a live selection replaces the band", () => {
         {null}
       </PhotosScreen>
     );
-    // The five labels are the engine's own (`buildSelectionActions`) — read
-    // from the same table `SelectionBottomBar` renders, so a label renamed
-    // there (e.g. the share target's, #726) cannot strand this test.
     const labels = buildSelectionActions(props).map((action) => action.label);
     expect(labels).toHaveLength(5);
     for (const label of labels) expect(control(label)).toBeTruthy();
-    // Exactly one bar at the foot: the band is gone while selecting.
     expect(control("Home")).toBeNull();
     expect(control("Library")).toBeNull();
   });
@@ -320,13 +281,10 @@ describe("a live selection replaces the band", () => {
     );
     const favorite = control("Favorite");
     expect(favorite?.disabled).toBe(true);
-    // Dispatched straight at the element — past the pointer, past the
-    // `disabled` attribute a synthetic activation can ignore.
     act(() =>
       favorite!.dispatchEvent(new MouseEvent("click", { bubbles: true }))
     );
     expect(props.favorite.run).not.toHaveBeenCalled();
-    // …and the reason is on the surface, not only in a hint.
     expect(container!.textContent).toContain(
       "This vault is read-only for you."
     );

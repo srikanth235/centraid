@@ -1,7 +1,4 @@
-// S2 — Consent: may this caller see or do this? The RLS replacement: a chain
-// of checks, any of which can independently deny. A deny is an outcome, not
-// an exception — the caller of evaluateConsent turns a Denial into a
-// receipted deny row.
+// S2 — Consent: any check may deny; a deny is an outcome, not an exception.
 
 import type { DatabaseSync } from "node:sqlite";
 
@@ -27,14 +24,12 @@ export interface ScopeRow {
 
 export interface ConsentAllow {
   decision: "allow";
-  /** NULL for owner-direct action. */
   grantId: string | null;
   rowFilter: FilterClause[];
   fieldMask: string[] | null;
 }
 export interface ConsentDeny {
   decision: "deny";
-  /** Which check failed — recorded in the receipt detail. */
   failing: string;
   grantId: string | null;
 }
@@ -61,22 +56,10 @@ function intersectFieldMasks(
   return granted.filter((field) => clamp.has(field));
 }
 
-/**
- * Ops that pin a column to a value set. Two scopes pinning the SAME column to
- * DIFFERENT values are alternatives ("row A or row B"), and the clamp ANDs, so
- * their conjunction matches nothing. Range ops (`lt`/`gte`/`within-days`/…)
- * are not alternatives — two of them on one column is a legitimate window.
- */
+/** `eq`/`in` pins; two scopes pinning one column differently are a forbidden union. */
 const PINNING_OPS = new Set<FilterClause["op"]>(["eq", "in"]);
 
-/**
- * Reject a clamp that asks for a UNION. The clamp vocabulary has no OR: a
- * bounded union must be written as ONE scope with one `in` filter (see
- * `scopesForAutomationAnchors` in the gateway, which collapses same-table
- * anchors for exactly this reason). Two scopes pinning one column differently
- * are that union written wrong — refuse loudly rather than quietly read zero
- * rows or quietly honour whichever scope sorted first.
- */
+/** Clamp has no OR — a bounded union is one `in` filter, not two pin scopes. */
 function conflictingPin(
   candidates: readonly ExecutionScopeSpec[]
 ): string | undefined {
@@ -94,16 +77,8 @@ function conflictingPin(
 }
 
 /**
- * The execution clamp for one entity + verb: EVERY manifest scope covering it,
- * intersected. Row filters AND together and field masks intersect, so a second
- * declaration on the same table can only ever narrow the first — no declared
- * restriction is dropped, and the result does not depend on the order the host
- * happened to list its scopes in.
- *
- * Explicit row/field anchors therefore attenuate a schema-wide declaration for
- * the anchored table while that declaration can still cover unrelated tables.
- * `undefined` (no covering scope at all) is a deny; an absent clamp is "no
- * manifest attenuation" and leaves the durable grant untouched.
+ * Intersect every covering manifest scope: filters AND, masks intersect, order
+ * independent. No covering scope is deny; empty clamp leaves the grant untouched.
  */
 function executionClamp(
   identity: Identity,
@@ -153,8 +128,7 @@ function activeGrants(
       ? { column: "g.app_id", value: identity.callerId }
       : { column: "g.grantee_party_id", value: identity.partyId };
   if (selector.value === null) return [];
-  // Consent is first-match: preserve the owner's earliest still-active grant.
-  // rowid makes grants approved in the same clock tick deterministic.
+  // First-match: earliest still-active grant; rowid breaks same-tick ties.
   const rows = vault
     .prepare(
       `SELECT g.grant_id, c.notation AS purpose_notation, g.expires_at
@@ -185,12 +159,7 @@ function scopesFor(
     .all(grantId, schema, table) as unknown as ScopeRow[];
 }
 
-/**
- * consent.policy kind='minimization': a table under such a policy is excluded
- * from default (schema-wide) grant scopes — only a scope naming it explicitly
- * covers it. This is how "condition rows are excluded from default scopes"
- * (§03/§07) is data, not code.
- */
+/** Minimization policy: only an explicit table scope covers the table (§03/§07). */
 function requiresExplicitScope(
   vault: DatabaseSync,
   schema: string,
@@ -207,7 +176,6 @@ function requiresExplicitScope(
   return row.n > 0;
 }
 
-/** Standing consent.policy purpose rules: {"allowed_purposes": [...]}. */
 function purposePermitted(
   vault: DatabaseSync,
   schema: string,
@@ -235,11 +203,7 @@ function purposePermitted(
   return true;
 }
 
-/**
- * Evaluate the consent chain for one entity + verb. Owner-direct callers
- * bypass grants (they own the model) but still pass policy and still get
- * receipted by the caller of this function.
- */
+/** Owner-direct bypasses grants but still passes policy. */
 export function evaluateConsent(
   vault: DatabaseSync,
   identity: Identity,
@@ -249,19 +213,13 @@ export function evaluateConsent(
   declaredPurpose?: string,
   evaluatedAt = nowIso()
 ): ConsentDecision {
-  // Purposes are dormant, not deleted (#306 decision 4): an undeclared
-  // purpose evaluates as the default, so policy rules still bite either way.
+  // Undeclared purpose evaluates as default; policy still applies (#306.4).
   const purpose = declaredPurpose ?? DEFAULT_PURPOSE;
-  // Reveal is read-shaped but act-graded (#293): a readonly device may
-  // browse placeholders, never dump secrets.
+  // Reveal is read-shaped, act-graded; readonly devices cannot dump secrets (#293).
   if ((verb === "act" || verb === "reveal") && !identity.mayAct) {
     return { decision: "deny", failing: "device is readonly", grantId: null };
   }
-  // The on-behalf-of cap (#599 decision 7; #726): an agent turn is
-  // hard-capped at the authority of the owner it acts for, so Sid's
-  // assistant fails exactly where Sid would. Checked BEFORE grants, because
-  // no grant of the enrolled agent's own can exceed the human it is working
-  // for.
+  // On-behalf-of cap: agent cannot exceed the acting owner (#599.7, #726). Before grants.
   if (
     (verb === "act" || verb === "reveal") &&
     identity.onBehalfOfOwner?.mayAct === false
@@ -301,8 +259,7 @@ export function evaluateConsent(
   const explicitOnly = requiresExplicitScope(vault, schema, table, evaluatedAt);
   for (const grant of grants) {
     for (const scope of scopesFor(vault, grant.grant_id, schema, table)) {
-      // Reveal never rides read or act (#293): only an explicit
-      // 'reveal' scope covers it, and a 'reveal' scope covers nothing else.
+      // Reveal never rides read or act (#293).
       if (!verbAllowed(scope.verbs, verb)) continue;
       // High-sensitivity tables never ride a whole-schema scope.
       if (explicitOnly && scope.table_name === null) continue;

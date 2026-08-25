@@ -3,35 +3,24 @@ import type { IconName } from "@centraid/design";
 import { listVaults } from "../../../gateway-client.js";
 import type { PhoneBridgeProps } from "../../screen-contracts.js";
 
-/** Settings → Vault page data (#382) — scoped to the ACTIVE vault
- *  only; the cross-vault list + gateway "Connections" group both moved to
- *  the switcher, which is the pair manager now. */
+/** ACTIVE vault only. Cross-vault list lives on the switcher. */
 export interface ActiveVaultData {
   vaultId: string;
   name: string;
   icon: IconName;
   color: string;
   blurb: string;
-  /** False when this is the last vault on its gateway — mirrors the retired
-   *  Vaults list's `primordial` guard (never let the user delete their only
-   *  vault from here). */
+  /** False when this is the last vault on its gateway — never delete the only one. */
   deletable: boolean;
-  /** Present only when this vault is reached over a REMOTE connection — the
-   *  primordial local gateway is this machine, so there is nothing to
-   *  disconnect from and the danger-zone action is simply absent (#665). */
+  /** Present only on a REMOTE connection; primordial local has no disconnect (#665). */
   connection?: RemoteConnectionData;
 }
 
-/** The connection the active vault arrives over, and everything else that
- *  arrives with it — dropping it is connection-wide, never per-vault, so the
- *  confirm has to be able to name the siblings. */
 export interface RemoteConnectionData {
   gatewayId: string;
-  /** Every OTHER vault this connection serves, by name. */
   siblingNames: string[];
 }
 
-/** Settings → This device — the browser's own half of the pairing. */
 export interface ThisDeviceData {
   gatewayId?: string;
   gatewayLabel?: string;
@@ -51,17 +40,7 @@ export async function loadThisDeviceData(): Promise<ThisDeviceData> {
   };
 }
 
-/**
- * The modal's foot stamp: what this build is, and which gateway it is talking
- * to. `Centraid <version> · <host>`.
- *
- * ONLY WHAT THE BUILD CAN TRUTHFULLY PRODUCE. The version is the running
- * build's own (`getChangelog().currentVersion`, which the host reads from the
- * app itself — the release list is irrelevant here); the host is the authority
- * of the gateway's base URL. A part this client cannot answer for is left out
- * rather than guessed, so the stamp is never a hard-coded number pretending to
- * be a fact — which is exactly what the literal `v0.5.2` it replaces was.
- */
+/** Only what this build can truthfully produce — never a hard-coded version. */
 export async function loadSettingsStamp(): Promise<string> {
   const version = await window.CentraidApi.getChangelog?.()
     .then((changelog) => changelog.currentVersion.replace(/^v/iu, ""))
@@ -74,7 +53,6 @@ export async function loadSettingsStamp(): Promise<string> {
     .join(" · ");
 }
 
-/** The gateway's host, as the member would name it. `''` when unparseable. */
 function gatewayHost(baseUrl: string): string {
   try {
     return new URL(baseUrl).host;
@@ -83,14 +61,6 @@ function gatewayHost(baseUrl: string): string {
   }
 }
 
-/**
- * Turn this device's offline copy on or off.
- *
- * The pairing/onboarding flow stopped asking (it is ON by default), so this is
- * the whole of the user's control over it. The host owns the consequences —
- * cache purge, replica drop, durable-storage request — because they differ per
- * host; this is only the call.
- */
 export async function setOfflineCopy(enabled: boolean): Promise<boolean> {
   const result = await window.CentraidApi.setGatewayRememberDevice({
     rememberDevice: enabled,
@@ -98,12 +68,7 @@ export async function setOfflineCopy(enabled: boolean): Promise<boolean> {
   return result.rememberDevice;
 }
 
-/**
- * Drop this browser's pairing. `removeGateway` already owns the full local
- * purge (connection, device key, tunnel caches, replica); clearing
- * `onboardingCompletedAt` is what actually returns the shell to onboarding
- * rather than leaving it on a signed-out screen with no way forward.
- */
+/** `removeGateway` purges local state; clearing `onboardingCompletedAt` returns the shell to onboarding. */
 export async function forgetThisDeviceLocally(
   gatewayId: string | undefined
 ): Promise<void> {
@@ -131,13 +96,7 @@ export async function loadActiveVaultData(): Promise<ActiveVaultData | null> {
   };
 }
 
-/**
- * Resolve the active vault's connection, when it is a remote one.
- *
- * `listVaults()` already answers for the gateway this client addresses, so its
- * entries ARE the sibling set — no second probe. A local connection resolves to
- * `{}`: this machine is not something the owner disconnects from.
- */
+/** Remote only. `listVaults()` is the sibling set. Local resolves to `{}`. */
 async function loadRemoteConnection(
   activeVaultId: string,
   vaultList: readonly { vaultId: string; name: string }[]
@@ -160,9 +119,7 @@ async function loadRemoteConnection(
   };
 }
 
-// Account-page data — the Phone (app-phone.ts) bridge callback wiring for the
-// Settings Account pages. Phone talks to the main process, because the tunnel
-// endpoint outlives renderer reloads. There is no Import pane (#807).
+// Phone bridge: tunnel endpoint outlives renderer reloads. No Import pane (#807).
 
 export function phoneCallbacks(
   showToast: (m: string) => void

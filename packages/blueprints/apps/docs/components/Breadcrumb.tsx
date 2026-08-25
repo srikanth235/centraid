@@ -1,27 +1,4 @@
-// The breadcrumb (Docs spec §1.6, `breadBlock`) — the row every drive-ish
-// shelf opens with.
-//
-// "The trailing crumb owns the place, so it carries the place's menu — Drive's
-// 'My Drive ▾'. Every crumb before it is a link and nothing else." (§1.6,
-// verbatim.) That sentence is the whole component: the leading crumbs are
-// buttons that navigate and carry nothing else, and the last one is not a link
-// at all, because it is where the member already is.
-//
-// The chain itself is NOT computed here — `crumbsFor` (view-copy.ts) owns it,
-// for the same reason the shelf table does: the strip, the band, the app bar
-// and this row all have to agree about where a folder sits, and four surfaces
-// deriving that independently is four chances to disagree.
-//
-// THE TRAILING MENU IS THE PLACE'S MENU, and it is the only way a pointer
-// surface reaches the destinations that are off the shelf strip — Add, Scan,
-// Storage, what Docs may read, proposed filing, who a document names, and the
-// Locker boundary. The compact band reaches them through its More sheet; the
-// strip has six tabs and is not growing to fourteen, so without this menu
-// those seven routes would exist and be unreachable at a desk.
-//
-// Every entry goes somewhere. That was the condition this menu was waiting on
-// — "a menu that is half dead ends is worse than no menu" — and it is met now
-// that the routes are drawn.
+// Breadcrumb (Docs spec §1.6). Trailing crumb owns the place; crumbs before it are links. Chain is `crumbsFor`.
 import type { ReactNode } from "react";
 
 import {
@@ -45,17 +22,9 @@ export function Breadcrumb({
   onSelectShelf,
 }: {
   crumbs: readonly Crumb[];
-  /** The place's own menu, hung off the trailing crumb. Absent where the
-   *  place has nothing else to offer. The rows are `drive-copy.ts`'s
-   *  `PLACE_MENU`, which owns the words, the shapes and the grouping. */
   menu?: readonly PlaceMenuItem[];
   onSelectShelf: (shelf: ShelfId) => void;
 }): ReactNode {
-  // EVERY ROW CARRIES ITS SHAPE, AND THE GROUPS CARRY A RULE: seven bare words
-  // in one undifferentiated column would make a member read all of them to find
-  // any of them, and would not say that "Storage" answers a different question
-  // from "Docs and Locker". The glyphs come from `PLACE_ICONS` at the row
-  // menu's own 15/1.6, so the two popovers draw their rows at one weight.
   const openMenu = (anchor: HTMLElement): void => {
     openPopover(anchor, (box) => {
       for (const item of menu ?? []) {
@@ -87,9 +56,7 @@ export function Breadcrumb({
                 </span>
               ) : null}
               {last && menu && menu.length > 0 ? (
-                // The trailing crumb OWNS the place, so it carries the place's
-                // menu. It stays `aria-current` — pressing it does not navigate
-                // away, it opens what else this place can do.
+                // Trailing crumb owns the place — `aria-current`; opens the menu, does not navigate.
                 <button
                   type="button"
                   className={`kit-plain-btn ${styles.here} ${styles.hereBtn}`}
@@ -97,19 +64,15 @@ export function Breadcrumb({
                   aria-haspopup="menu"
                   onClick={(e) => openMenu(e.currentTarget)}
                 >
-                  {/* The label carries the truncation, not the button: the
-                      button is a flex row now, and `text-overflow` has nothing
-                      to act on once the label becomes an anonymous flex item. */}
+                  {/* Truncation lives on the label: the button is a flex row. */}
                   <span className={styles.hereLabel}>{label}</span>
-                  {/* The catalog's chevron rather than the `⌄` character,
-                      which hangs below its own baseline (FilterRow.tsx). */}
+                  {/* Catalog chevron, not `⌄` — that hangs below its baseline. */}
                   <span className={styles.caret}>
                     <Icon svg={I.chevDown!} />
                   </span>
                 </button>
               ) : last || crumb.shelf === undefined ? (
-                // `aria-current="page"` rather than a disabled link: the place
-                // is not unavailable, it is the one you are on.
+                // `aria-current="page"` rather than a disabled link: here, not unavailable.
                 <span className={styles.here} aria-current="page">
                   {label}
                 </span>
