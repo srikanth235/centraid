@@ -104,6 +104,34 @@ describe("web-host", () => {
     });
   });
 
+  test("a pre-multi-vault pairing response still enrolls with a derived vaultIds list", async () => {
+    pairGatewayOverIroh.mockResolvedValue({
+      endpointId: "browser-endpoint",
+      response: {
+        ok: true,
+        gatewayId: "gateway-endpoint",
+        vaultId: "vault-1",
+        vaultName: "Personal",
+      },
+    });
+
+    await expect(
+      window.CentraidApi.redeemGatewayPairing({ ticket: ticket() })
+    ).resolves.toMatchObject({
+      ok: true,
+      vaultId: "vault-1",
+      vaultIds: ["vault-1"],
+      vaults: [{ vaultId: "vault-1", vaultName: "Personal" }],
+    });
+    const persisted = JSON.parse(
+      localStorage.getItem("centraid.web.v1.connection") ?? "{}"
+    ) as Record<string, unknown>;
+    expect(persisted).toMatchObject({
+      vaultId: "vault-1",
+      vaultIds: ["vault-1"],
+    });
+  });
+
   test("an unremembered pairing survives closing the browser", async () => {
     pairGatewayOverIroh.mockResolvedValue({
       endpointId: "browser-endpoint",

@@ -401,6 +401,25 @@ export const MUTATION_SEEDS = [
       "packages/blueprints/vitest.search-scaffold.mutation.config.ts",
     ],
   },
+  // #864 W2 — the render boundary the whole shell trusts. `untrusted.ts` is
+  // the display-text scrubber and the four dynamic URL sinks; its only prior
+  // suite runs under jsdom, which Stryker's vitest runner cannot measure (it
+  // dry-runs a jsdom project as "No tests were executed"), so a node-side
+  // property suite is what lets this seed exist at all. The config says what it
+  // mutates and why.
+  {
+    id: "packages/blueprints/apps/_shared/untrusted",
+    label: "untrusted",
+    cwd: "packages/blueprints",
+    config: "stryker.untrusted.config.mjs",
+    report: "artifacts/mutation/untrusted-report.json",
+    watch: [
+      "packages/blueprints/apps/_shared/untrusted.ts",
+      "packages/blueprints/apps/_shared/untrusted-properties.test.ts",
+      "packages/blueprints/stryker.untrusted.config.mjs",
+      "packages/blueprints/vitest.untrusted.mutation.config.ts",
+    ],
+  },
   {
     id: "apps/mobile",
     label: "mobile",

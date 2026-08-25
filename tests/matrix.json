@@ -786,14 +786,6 @@
       "url": "https://github.com/srikanth235/centraid/issues/470",
       "state": "closed"
     },
-    "842": {
-      "url": "https://github.com/srikanth235/centraid/issues/842",
-      "state": "open"
-    },
-    "844": {
-      "url": "https://github.com/srikanth235/centraid/issues/844",
-      "state": "open"
-    },
     "471": {
       "url": "https://github.com/srikanth235/centraid/issues/471",
       "state": "closed"
@@ -840,7 +832,15 @@
     },
     "781": {
       "url": "https://github.com/srikanth235/centraid/issues/781",
-      "state": "open"
+      "state": "closed"
+    },
+    "790": {
+      "url": "https://github.com/srikanth235/centraid/issues/790",
+      "state": "closed"
+    },
+    "791": {
+      "url": "https://github.com/srikanth235/centraid/issues/791",
+      "state": "closed"
     },
     "831": {
       "url": "https://github.com/srikanth235/centraid/issues/831",
@@ -848,49 +848,53 @@
     },
     "834": {
       "url": "https://github.com/srikanth235/centraid/issues/834",
-      "state": "open"
-    },
-    "790": {
-      "url": "https://github.com/srikanth235/centraid/issues/790",
-      "state": "open"
-    },
-    "791": {
-      "url": "https://github.com/srikanth235/centraid/issues/791",
-      "state": "open"
+      "state": "closed"
     },
     "839": {
       "url": "https://github.com/srikanth235/centraid/issues/839",
+      "state": "closed"
+    },
+    "842": {
+      "url": "https://github.com/srikanth235/centraid/issues/842",
+      "state": "closed"
+    },
+    "844": {
+      "url": "https://github.com/srikanth235/centraid/issues/844",
+      "state": "closed"
+    },
+    "864": {
+      "url": "https://github.com/srikanth235/centraid/issues/864",
       "state": "open"
     }
   },
   "gaps": {
     "extension.offline": {
-      "trackingIssue": 781
+      "trackingIssue": 864
     },
     "extension.journey": {
-      "trackingIssue": 781
+      "trackingIssue": 864
     }
   },
   "revisitTriggers": {
     "blob-custody.compat": {
       "glob": "packages/core/src/blob/**/*.ts",
       "contains": "COMPAT\\(|SCHEMA_VERSION|FORMAT_VERSION_2",
-      "trackingIssue": 781
+      "trackingIssue": 864
     },
     "gateway.compat": {
       "glob": "packages/server/src/**/*.ts",
       "contains": "COMPAT\\(",
-      "trackingIssue": 781
+      "trackingIssue": 864
     },
     "app-engine.compat": {
       "glob": "packages/server/src/engine/**/*.ts",
       "contains": "COMPAT\\(",
-      "trackingIssue": 781
+      "trackingIssue": 864
     },
     "automations.compat": {
       "glob": "packages/server/src/automation/**/*.ts",
       "contains": "COMPAT\\(",
-      "trackingIssue": 781
+      "trackingIssue": 864
     }
   },
   "workspaceSurfaces": {
@@ -912,16 +916,16 @@
     "packages/model-runtime": "gateway"
   },
   "notes": {
-    "web.concurrency": "Partial→stronger: multi-writer.contract.test.ts now covers double-write distinct intents + exclusive claims (P3). web-pwa-cache.spec.ts still owns multi-tab shell bridge; Playwright double-write remains opportunistic. Tracked under #781 (originally #656).",
-    "mobile.performance": "Partial: tests/scale/large-vault.scale.test.ts pins the readiness data-volume/read budgets and native long lists are mechanically required to stay virtualized; a device-frame budget would strengthen this cell. Tracked under #781 (originally #659).",
-    "replica-sync.performance": "Partial: tests/perf/replica-sync-io.perf.test.ts exercises store/bootstrap/IO budget (replaces deleted in-memory fake). Tracked under #781 (originally #659).",
+    "web.concurrency": "Partial→stronger: multi-writer.contract.test.ts now covers double-write distinct intents + exclusive claims (P3). web-pwa-cache.spec.ts still owns multi-tab shell bridge; Playwright double-write remains opportunistic. Tracked under #864 (originally #656).",
+    "mobile.performance": "Partial: tests/scale/large-vault.scale.test.ts pins the readiness data-volume/read budgets and native long lists are mechanically required to stay virtualized; a device-frame budget would strengthen this cell. Tracked under #864 (originally #659).",
+    "replica-sync.performance": "Partial: tests/perf/replica-sync-io.perf.test.ts exercises store/bootstrap/IO budget (replaces deleted in-memory fake). Tracked under #864 (originally #659).",
     "tunnel-pairing.performance": "JS fallback floor remains in tunnel-throughput.perf.test.ts; native QUIC budget is tests/perf/tunnel-native.perf.test.ts (nightly when native module present).",
     "blob-custody.durability": "Owned by packages/vault/src/blob/enospc-custody.integration.test.ts (always-on fault-injected ENOSPC). Real hdiutil path remains in disk-full.integration.test.ts behind CENTRAID_DISKFULL_E2E=1 (darwin).",
-    "agent-runtime.journey": "packages/server/src/acp/backends/acp/journey.integration.test.ts carries two tests while also standing in for the app-engine journey and the three skipped desktop copilot specs; it is too thin for what it is asked to represent. Tracked under #781 (originally #656; copilot rig originally #657).",
+    "agent-runtime.journey": "packages/server/src/acp/backends/acp/journey.integration.test.ts carries two tests while also standing in for the app-engine journey and the three skipped desktop copilot specs; it is too thin for what it is asked to represent. Tracked under #864 (originally #656; copilot rig originally #657).",
     "mobile.scalability": "Owned by tests/agent-e2e-mobile/flows/volume-proof.mjs; records a nightly scalability budget and durable numeric measurements.",
-    "gateway.scalability": "Owned by tests/scale/gateway-sessions.scale.test.ts (multi-session headroom). Tracked under #781 (originally #659).",
-    "automations.scalability": "Owned by tests/scale/automations-fire.scale.test.ts (computeMissedWindows at volume — one missed entry per auto per gap; not live fire). Tracked under #781 (originally #659).",
-    "desktop.performance": "Partial crude cold-path budget in tests/perf/desktop-cold.perf.test.ts (module import / first-paint proxy — not full Electron launch). Tracked under #781 (originally #659).",
+    "gateway.scalability": "Owned by tests/scale/gateway-sessions.scale.test.ts (multi-session headroom). Tracked under #864 (originally #659).",
+    "automations.scalability": "Owned by tests/scale/automations-fire.scale.test.ts (computeMissedWindows at volume — one missed entry per auto per gap; not live fire). Tracked under #864 (originally #659).",
+    "desktop.performance": "Partial crude cold-path budget in tests/perf/desktop-cold.perf.test.ts (module import / first-paint proxy — not full Electron launch). Tracked under #864 (originally #659).",
     "G4.mutation": "StrykerJS nightly on property-defended core packages: vault, client/replica, automation, backup, blob-format, protocol, tunnel, app-engine, gateway, agent-runtime (#532/#545). Floors in tests/mutation-floors.json; scores in artifacts/mutation/ via e2e.yml mutation-testing job. Not per-PR.",
     "G5.interop": "packages/backup test:interop runs via .github/workflows/interop-weekly.yml (schedule + workflow_dispatch, CLAWGNITION_INTEROP=1). Not part of test:quality:nightly (perf+scale+report only).",
     "client.react.floor": "packages/client/src/react/** floors at 65/35 in coverage-floors.json (#587 sustained-level ratchet); journeys + extracted pure modules remain the primary owners.",
@@ -930,18 +934,18 @@
     "cross-linking": "Flow vault-cross-link owns core.link_entities (packages/vault/src/gateway/ext.test.ts).",
     "people": "Flow people-crm owns people.* commands (packages/vault/src/commands/people.test.ts).",
     "blank-machine-restore": "Product blank-machine journey is recover.integration.test.ts (recover() + kit). Backup primitive round-trips live under packages/backup engine tests.",
-    "appStates.copy-owners": "Copy-level owners in appStates (notes.pending, notes.stale) prove the state's user-facing copy renders under a render condition that can actually fire, not that the state was driven end-to-end; every other owned cell names a proof that reaches the state itself — the app-boot browser journeys, the app's own pending projection, or the view-state predicate that fires the banner. Tracked under #839.",
-    "agent-runtime.contracts": "Coverable-today suite (#535): owned by packages/server/src/acp/matrix-contracts.test.ts. Tracked under #781 (originally #656).",
-    "agent-runtime.durability": "Coverable-today suite (#535): owned by packages/server/src/acp/matrix-durability.test.ts. Tracked under #781 (originally #656).",
-    "agent-runtime.concurrency": "Coverable-today suite (#535): owned by packages/server/src/acp/matrix-concurrency.test.ts. Tracked under #781 (originally #656).",
-    "blueprints.contracts": "Coverable-today suite (#535): owned by packages/blueprints/src/matrix-contracts.test.ts. Tracked under #781 (originally #656).",
-    "blueprints.durability": "Coverable-today suite (#535): owned by packages/blueprints/src/matrix-durability.test.ts. Tracked under #781 (originally #656).",
-    "blueprints.concurrency": "Coverable-today suite (#535): owned by packages/blueprints/src/matrix-concurrency.test.ts. Tracked under #781 (originally #656).",
-    "desktop.contracts": "Coverable-today suite (#535): owned by apps/desktop/src/main/matrix-contracts.test.ts. Tracked under #781 (originally #656).",
-    "desktop.durability": "Coverable-today suite (#535): owned by apps/desktop/src/main/matrix-durability.test.ts. Tracked under #781 (originally #656).",
-    "desktop.concurrency": "Coverable-today suite (#535): owned by apps/desktop/src/main/matrix-concurrency.test.ts. Tracked under #781 (originally #656).",
-    "web.contracts": "Coverable-today suite (#535): owned by apps/web/src/matrix-contracts.test.ts. Tracked under #781 (originally #656).",
-    "web.durability": "Coverable-today suite (#535): owned by apps/web/src/matrix-durability.test.ts. Tracked under #781 (originally #656).",
+    "appStates.copy-owners": "Copy-level owners in appStates (notes.pending, notes.stale) prove the state's user-facing copy renders under a render condition that can actually fire, not that the state was driven end-to-end; every other owned cell names a proof that reaches the state itself — the app-boot browser journeys, the app's own pending projection, or the view-state predicate that fires the banner. Tracked under #864 (originally #839).",
+    "agent-runtime.contracts": "Coverable-today suite (#535): owned by packages/server/src/acp/matrix-contracts.test.ts. Tracked under #864 (originally #656).",
+    "agent-runtime.durability": "Coverable-today suite (#535): owned by packages/server/src/acp/matrix-durability.test.ts. Tracked under #864 (originally #656).",
+    "agent-runtime.concurrency": "Coverable-today suite (#535): owned by packages/server/src/acp/matrix-concurrency.test.ts. Tracked under #864 (originally #656).",
+    "blueprints.contracts": "Coverable-today suite (#535): owned by packages/blueprints/src/matrix-contracts.test.ts. Tracked under #864 (originally #656).",
+    "blueprints.durability": "Coverable-today suite (#535): owned by packages/blueprints/src/matrix-durability.test.ts. Tracked under #864 (originally #656).",
+    "blueprints.concurrency": "Coverable-today suite (#535): owned by packages/blueprints/src/matrix-concurrency.test.ts. Tracked under #864 (originally #656).",
+    "desktop.contracts": "Coverable-today suite (#535): owned by apps/desktop/src/main/matrix-contracts.test.ts. Tracked under #864 (originally #656).",
+    "desktop.durability": "Coverable-today suite (#535): owned by apps/desktop/src/main/matrix-durability.test.ts. Tracked under #864 (originally #656).",
+    "desktop.concurrency": "Coverable-today suite (#535): owned by apps/desktop/src/main/matrix-concurrency.test.ts. Tracked under #864 (originally #656).",
+    "web.contracts": "Coverable-today suite (#535): owned by apps/web/src/matrix-contracts.test.ts. Tracked under #864 (originally #656).",
+    "web.durability": "Coverable-today suite (#535): owned by apps/web/src/matrix-durability.test.ts. Tracked under #864 (originally #656).",
     "vault-core.offline": "Skip: vault is a storage primitive; offline UX is exercised by mobile.offline + web.offline consuming surfaces.",
     "vault-core.compat": "Owned by packages/vault/src/schema/migrate.test.ts: the forward-only ladder replays from older frontiers with owner rows intact, the COMPAT( repairs are idempotent, and a file whose user_version is ahead is refused untouched.",
     "vault-core.journey": "Skip: no end-user vault journey surface; blank-machine restore owns backup-restore.journey and search/enrichment flows own vault correctness paths.",
@@ -962,31 +966,31 @@
     "agent-runtime.performance": "Owned by tests/perf/harness-turn.perf.test.ts; records a nightly performance budget and durable numeric measurements.",
     "agent-runtime.scalability": "Owned by tests/scale/harness-sessions.scale.test.ts; records a nightly scalability budget and durable numeric measurements.",
     "agent-runtime.offline": "Skip: harnesses require a live CLI/ACP process; offline is not a runtime dimension (client offline owns UX).",
-    "blueprints.performance": "Partial: tests/scale/large-vault.scale.test.ts exercises the daily-use entity reads behind Photos, People, Agenda, and Notes at the #630 fixture sizes; a rendered interaction budget would strengthen this cell, and is the sharper gap since #834 gave Agenda, Notes and Tasks interfaces that render those reads. Tracked under #781 (originally #659).",
+    "blueprints.performance": "Partial: tests/scale/large-vault.scale.test.ts exercises the daily-use entity reads behind Photos, People, Agenda, and Notes at the #630 fixture sizes; a rendered interaction budget would strengthen this cell, and is the sharper gap since #834 gave Agenda, Notes and Tasks interfaces that render those reads. Tracked under #864 (originally #659).",
     "blueprints.scalability": "Owned by tests/scale/blueprint-clones.scale.test.ts; records a nightly scalability budget and durable numeric measurements.",
-    "blueprints.offline": "Partial: packages/client/src/replica/app-convergence.contract.test.ts proves deterministic replay for task/contact/expense/event blueprint writes; web/mobile journeys own the consuming offline UI. Tracked under #781 (originally #656).",
-    "blueprints.compat": "Partial: packages/blueprints/src/app-manifests.test.ts validates the shipped app.json contract and mobile's protocol wall prevents an incompatible host from mounting those apps. Tracked under #781 (originally #656).",
+    "blueprints.offline": "Partial: packages/client/src/replica/app-convergence.contract.test.ts proves deterministic replay for task/contact/expense/event blueprint writes; web/mobile journeys own the consuming offline UI. Tracked under #864 (originally #656).",
+    "blueprints.compat": "Partial: packages/blueprints/src/app-manifests.test.ts validates the shipped app.json contract and mobile's protocol wall prevents an incompatible host from mounting those apps. Tracked under #864 (originally #656).",
     "desktop.scalability": "Owned by tests/scale/desktop-windows.scale.test.ts; records a nightly scalability budget and durable numeric measurements.",
-    "desktop.offline": "Partial: apps/desktop/tests/e2e/pending-overlay.spec.ts owns the renderer's offline honesty — a write made with the network severed queues in the durable replica outbox and BOTH the optimistic row and its pending chip survive a full Electron reload. The journey drove Tally, Tasks and Agenda until #831 cleared those interfaces; the same change rebuilt it on Docs, whose production rows render the shared pending overlay, so the contract moved seats rather than lapsing. It stays on Docs now that #834 has given Agenda, Notes and Tasks interfaces again: the rebuilt Agenda proves the held-write chip at the boot tier instead (packages/blueprints/src/app-boot/agenda.test.ts drives a queued cancel through the production intent-invalidation derivation in airplane mode), which is a cheaper seat for the same contract than a second Electron journey. Still missing on this seat, and what keeps the cell partial: the reconnect half (the PWA's apps/web/tests/e2e/offline-reconnect.spec.ts proves replay settles exactly once; desktop has no equivalent) and a UI-driven offline write, which Docs cannot offer while its rename affordances live off the inline seat. Detached-gateway outage logging still covers host-side continuity. Tracked under #781.",
-    "desktop.compat": "Partial: gateway pairing response folding and primary-first multi-vault retention are covered by apps/desktop/src/main/gateway-pairing-core.test.ts; desktop settings/schema version-skew fixtures remain tracked under #781 (originally #656).",
+    "desktop.offline": "Partial: apps/desktop/tests/e2e/pending-overlay.spec.ts owns the renderer's offline honesty — a write made with the network severed queues in the durable replica outbox and BOTH the optimistic row and its pending chip survive a full Electron reload. The journey drove Tally, Tasks and Agenda until #831 cleared those interfaces; the same change rebuilt it on Docs, whose production rows render the shared pending overlay, so the contract moved seats rather than lapsing. It stays on Docs now that #834 has given Agenda, Notes and Tasks interfaces again: the rebuilt Agenda proves the held-write chip at the boot tier instead (packages/blueprints/src/app-boot/agenda.test.ts drives a queued cancel through the production intent-invalidation derivation in airplane mode), which is a cheaper seat for the same contract than a second Electron journey. Still missing on this seat, and what keeps the cell partial: the reconnect half (the PWA's apps/web/tests/e2e/offline-reconnect.spec.ts proves replay settles exactly once; desktop has no equivalent) and a UI-driven offline write, which Docs cannot offer while its rename affordances live off the inline seat. Detached-gateway outage logging still covers host-side continuity. Tracked under #864 (originally #781).",
+    "desktop.compat": "Partial: gateway pairing response folding and primary-first multi-vault retention are covered by apps/desktop/src/main/gateway-pairing-core.test.ts; desktop settings/schema version-skew fixtures remain tracked under #864 (originally #656).",
     "web.scalability": "Owned by tests/scale/web-tabs.scale.test.ts; records a nightly scalability budget and durable numeric measurements.",
-    "web.compat": "Partial: pairing persistence and primary-first multi-vault retention are covered by apps/web/src/web-host.test.ts; web storage/version-skew fixtures remain tracked under #781 (originally #656).",
-    "mobile.contracts": "apps/mobile/src/lib/replica/mobile-gateway-compatibility.test.ts states the update-wall contract, but apps/mobile has no coverage floor behind it and the same file also carries the compat claim. Tracked under #781 (originally #656).",
-    "mobile.compat": "Shares its only owner with mobile.contracts and has no coverage floor behind it; old-app/new-gateway skew is proven in one direction only. Tracked under #781 (originally #656).",
-    "tunnel-pairing.durability": "Was `skip` — durability read as not-applicable to a transport. #842 W3.1 made it applicable: tests/quality/network-chaos.integration.test.ts drives eight injected fault shapes (latency, jitter, fragmentation, asymmetric bandwidth, mid-request abort, mid-response disconnect, endpoint restart, address rebind) over a REAL iroh connection against the replica intent plane, and asserts the no-loss / apply-exactly-once / converge laws on real schedule_task and replica_intent_outcome rows. Byte-level loss and reorder are deliberately absent: QUIC converts those into delay, delivery, or connection failure, so injecting them would model a corrupt QUIC implementation rather than a lossy network. The two netem-tier faults that would need a privileged runner are declared, excluded from the schedule, and cannot be claimed for free. Partial rather than solid: no coverage floor gates the workspace that owns the rig, so the cell rests on the lane alone.",
+    "web.compat": "apps/web/src/web-host.test.ts enrolls a pre-multi-vault gateway reply (vaultId only). Web storage/version-skew fixtures beyond that remain tracked under #864 (originally #656).",
+    "mobile.contracts": "apps/mobile/src/lib/replica/mobile-gateway-compatibility.test.ts states the update-wall contract, but apps/mobile has no coverage floor behind it and the same file also carries the compat claim. Tracked under #864 (originally #656).",
+    "mobile.compat": "Shares its only owner with mobile.contracts and has no coverage floor behind it; old-app/new-gateway skew is proven in one direction only. Tracked under #864 (originally #656).",
+    "tunnel-pairing.durability": "Was `skip` — durability read as not-applicable to a transport. #842 W3.1 made it applicable: tests/quality/network-chaos.integration.test.ts drives eight injected fault shapes (latency, jitter, fragmentation, asymmetric bandwidth, mid-request abort, mid-response disconnect, endpoint restart, address rebind) over a REAL iroh connection against the replica intent plane, and asserts the no-loss / apply-exactly-once / converge laws on real schedule_task and replica_intent_outcome rows. Byte-level loss and reorder are deliberately absent: QUIC converts those into delay, delivery, or connection failure, so injecting them would model a corrupt QUIC implementation rather than a lossy network. The two netem-tier faults that would need a privileged runner are declared, excluded from the schedule, and cannot be claimed for free. Partial rather than solid: no coverage floor gates the workspace that owns the rig, so the cell rests on the lane alone. Remaining depth tracked under #864.",
     "tunnel-pairing.scalability": "Owned by tests/scale/tunnel-pairs.scale.test.ts; records a nightly scalability budget and durable numeric measurements.",
-    "extension.correctness": "Owned by apps/extension/src/origin-matching.test.ts: loopback origin matching accepts true 127.0.0.0/8 and rejects lookalike hostnames. Malformed cross-context payload handling has no owner. Tracked under #781 (originally #656).",
-    "extension.contracts": "Owned by apps/extension/src/credential-gesture.test.ts: only a browser-trusted gesture releases a credential and secret-bearing message properties are dropped after use. Browser-version and gateway protocol-skew fixtures have no owner. Tracked under #781 (originally #656).",
+    "extension.correctness": "Owned by apps/extension/src/origin-matching.test.ts: loopback origin matching accepts true 127.0.0.0/8 and rejects lookalike hostnames. Malformed cross-context payload handling has no owner. Tracked under #864 (originally #656).",
+    "extension.contracts": "Owned by apps/extension/src/credential-gesture.test.ts: only a browser-trusted gesture releases a credential and secret-bearing message properties are dropped after use. Browser-version and gateway protocol-skew fixtures have no owner. Tracked under #864 (originally #656).",
     "extension.durability": "Structural N/A: the extension owns no durable state; paired credentials are browser storage and gateway-owned.",
     "extension.concurrency": "Structural N/A for v0: one active popup/worker transaction is admitted per browser profile.",
     "extension.performance": "Structural N/A for v0: the companion performs no user-visible compute or transfer hot path.",
     "extension.scalability": "Structural N/A for v0: one companion serves one browser profile; fleet scale belongs to the gateway.",
-    "extension.security": "Owned by apps/extension/src/page-fields.test.ts: fills resolve at gesture time and never write into detached or hidden inputs. Hostile-page and revoked-pairing browser journeys have no owner. Tracked under #781 (originally #656).",
-    "extension.offline": "Tracked gap (#781, originally #656): the MV3 companion has no network-loss and reconnect journey.",
+    "extension.security": "Owned by apps/extension/src/page-fields.test.ts: fills resolve at gesture time and never write into detached or hidden inputs. Hostile-page and revoked-pairing browser journeys have no owner. Tracked under #864 (originally #656).",
+    "extension.offline": "Tracked gap (#864, originally #656): the MV3 companion has no network-loss and reconnect journey.",
     "extension.compat": "Structural N/A until a versioned extension storage format exists; gateway protocol contracts own wire compatibility.",
-    "extension.journey": "Tracked gap (#781, originally #656): install-to-paired extension journey evidence is not implemented.",
-    "oauth-worker.correctness": "Courier route tests cover valid exchanges; provider-specific negative responses remain under #587. Tracked under #781 (originally #656).",
-    "oauth-worker.contracts": "Request/response contract tests cover the courier envelope; version-skew fixtures remain under #587. Tracked under #781 (originally #656).",
+    "extension.journey": "Tracked gap (#864, originally #656): install-to-paired extension journey evidence is not implemented.",
+    "oauth-worker.correctness": "Courier route tests cover valid exchanges; provider-specific negative responses remain under #587. Tracked under #864 (originally #656).",
+    "oauth-worker.contracts": "Request/response contract tests cover the courier envelope; version-skew fixtures remain under #587. Tracked under #864 (originally #656).",
     "oauth-worker.durability": "Structural N/A: the OAuth courier intentionally holds no durable application state.",
     "oauth-worker.concurrency": "Structural N/A: stateless Cloudflare Worker isolates provide request concurrency; no shared mutable state exists.",
     "oauth-worker.performance": "Structural N/A: provider and edge latency dominate the stateless one-shot code courier.",
@@ -994,70 +998,72 @@
     "oauth-worker.offline": "Structural N/A: an edge OAuth callback service has no offline product mode.",
     "oauth-worker.compat": "Structural N/A: the courier exposes one versionless, short-lived exchange contract owned by contract tests.",
     "oauth-worker.journey": "Structural N/A: end-user OAuth journeys are owned by the consuming desktop/web surfaces; the worker is a stateless courier.",
-    "vault-core.durability": "packages/vault/src/wal-shipper.test.ts proves the current happy path; missing crash/restart recovery evidence. Tracked under #781 (originally #656).",
-    "vault-core.concurrency": "packages/vault/src/enrich/leases.test.ts proves the current happy path; missing multi-actor interleaving evidence. Tracked under #781 (originally #656).",
-    "vault-core.performance": "tests/perf/vault-write.perf.test.ts proves the current happy path; missing longitudinal regression evidence. Tracked under #781 (originally #659).",
-    "vault-core.scalability": "tests/scale/ontology.scale.test.ts proves the current happy path; missing a second volume profile and saturation signal. Tracked under #781 (originally #659).",
-    "blob-custody.concurrency": "packages/vault/src/blob/outbox-drain.test.ts proves the current happy path; missing multi-actor interleaving evidence. Tracked under #781 (originally #656).",
-    "blob-custody.performance": "tests/perf/blob-egress.perf.test.ts proves the current happy path; missing longitudinal regression evidence. Tracked under #781 (originally #659).",
-    "blob-custody.scalability": "tests/scale/blob-gc.scale.test.ts proves the current happy path; missing a second volume profile and saturation signal. Tracked under #781 (originally #659).",
-    "blob-custody.security": "packages/vault/src/blob/seal.test.ts proves the current happy path; missing adversarial input and authorization cases. Tracked under #781 (originally #656).",
+    "vault-core.durability": "packages/vault/src/wal-shipper-detectors.test.ts proves G7 crash-ordering (segment-fsync vs offset-fsync) and close-then-reopen generation identity. Tracked remaining: none for the happy-path-only hole (#864 W3).",
+    "vault-core.concurrency": "packages/vault/src/enrich/leases.test.ts proves one atomic claim excludes a second device until TTL, and two poster jobs claimed by two devices never share a requestId (#864 W4). Tracked remaining: none for the happy-path-only hole.",
+    "vault-core.performance": "tests/perf/vault-write.perf.test.ts proves the current write budget. Longitudinal drift across nightlies remains under #864 (originally #659).",
+    "vault-core.scalability": "tests/scale/ontology.scale.test.ts proves the current volume profile. A second volume profile and saturation signal remain under #864 (originally #659).",
+    "blob-custody.concurrency": "packages/vault/src/blob/outbox-drain.test.ts covers drain, resume, and close-fencing recheck. Multi-writer drain interleaving remains under #864 (originally #656).",
+    "blob-custody.performance": "tests/perf/blob-egress.perf.test.ts proves the current egress budget. Longitudinal drift across nightlies remains under #864 (originally #659).",
+    "blob-custody.scalability": "tests/scale/blob-gc.scale.test.ts proves the current GC volume profile. A second volume profile and saturation signal remain under #864 (originally #659).",
+    "blob-custody.security": "packages/vault/src/blob/seal.test.ts proves tamper-evidence (flipped byte, truncated directory, reordered frame). Authorization cases remain under #864 (originally #656).",
     "backup-restore.concurrency": "Skip: restore into a LIVE gateway was deleted with the founding plane (#603) — restore is the offline `recover` verb, so concurrent restore has no surface.",
-    "backup-restore.scalability": "tests/scale/backup-restore.scale.test.ts proves the current happy path; missing a second volume profile and saturation signal. Tracked under #781 (originally #659).",
-    "backup-restore.journey": "packages/server/src/backup/backup.integration.test.ts proves the current happy path; missing a cross-surface end-to-end assertion. Tracked under #781 (originally #656).",
-    "replica-sync.durability": "packages/client/src/replica/sqlite-store.test.ts proves the current happy path; missing crash/restart recovery evidence. Tracked under #781 (originally #656).",
-    "replica-sync.scalability": "tests/scale/replica-bootstrap.scale.test.ts proves the current happy path; missing a second volume profile and saturation signal. Tracked under #781 (originally #659).",
-    "replica-sync.security": "packages/client/src/replica/shell-session-admission.contract.test.ts proves the current happy path; missing adversarial input and authorization cases. Tracked under #781 (originally #656).",
-    "replica-sync.offline": "packages/client/src/replica/shell-session.test.ts proves the current happy path; missing disconnect/reconnect recovery evidence. Tracked under #781 (originally #656).",
-    "replica-sync.compat": "packages/vault/src/replica/change-log.test.ts proves the current happy path; missing migration and version-skew fixtures. Tracked under #781 (originally #656).",
-    "replica-sync.journey": "apps/web/tests/e2e/web-pwa.spec.ts proves the current happy path; missing a cross-surface end-to-end assertion. Tracked under #781 (originally #656).",
-    "gateway.durability": "packages/server/src/serve/disk-health.test.ts proves the current happy path; missing crash/restart recovery evidence. Tracked under #781 (originally #656).",
-    "gateway.concurrency": "packages/server/src/serve/serve-multiclient.test.ts proves the current happy path; missing multi-actor interleaving evidence. Tracked under #781 (originally #656).",
-    "gateway.performance": "tests/perf/gateway-request.perf.test.ts proves the current happy path; missing longitudinal regression evidence. Tracked under #781 (originally #659).",
-    "gateway.journey": "tests/agent-e2e-pairing/flows/device-pairing-lifecycle.mjs proves the current happy path; missing a cross-surface end-to-end assertion. Tracked under #781 (originally #656).",
-    "app-engine.durability": "packages/server/src/engine/conversation/archive/archive.contract.test.ts proves the current happy path; missing crash/restart recovery evidence. Tracked under #781 (originally #656).",
-    "app-engine.concurrency": "packages/server/src/engine/handlers/handler-pool.test.ts proves the current happy path; missing multi-actor interleaving evidence. Tracked under #781 (originally #656).",
-    "app-engine.scalability": "tests/scale/conversation-ledger.scale.test.ts proves the current happy path; missing a second volume profile and saturation signal. Tracked under #781 (originally #659).",
-    "automations.durability": "packages/server/src/automation/fire/scheduler-ledger.contract.test.ts proves the current happy path; missing crash/restart recovery evidence. Tracked under #781 (originally #656).",
-    "automations.concurrency": "packages/server/src/automation/fire/in-process-scheduler.test.ts proves the current happy path; missing multi-actor interleaving evidence. Tracked under #781 (originally #656).",
-    "automations.security": "packages/server/src/automation/handler/lint.test.ts proves the current happy path; missing adversarial input and authorization cases. Tracked under #781 (originally #656).",
-    "agent-runtime.correctness": "packages/server/src/acp/backends/acp/backend.test.ts proves the current happy path; missing negative and boundary cases. Tracked under #781 (originally #656).",
-    "agent-runtime.security": "packages/server/src/acp/preflight.test.ts proves the current happy path; adversarial input now covered by agent-prompt-injection-red-team (injected instructions carried in read content, driven over the real turn loop, #842 W2.2); authorization cases still missing. Tracked under #781 (originally #656).",
-    "agent-runtime.compat": "packages/server/src/acp/backends/acp/enumerate-models.test.ts proves the current happy path; missing migration and version-skew fixtures. Tracked under #781 (originally #656).",
-    "blueprints.security": "packages/blueprints/src/untrusted-rendering.test.ts proves the current happy path; missing broader adversarial input and authorization cases. Tracked under #781 (originally #656).",
-    "blueprints.journey": "apps/desktop/tests/e2e/appview-templates-insights.spec.ts proves the current happy path; missing a cross-surface end-to-end assertion. Tracked under #781 (originally #657).",
-    "desktop.correctness": "apps/desktop/src/main/gateway-supervisor-core.test.ts proves the current happy path; missing negative and boundary cases. Tracked under #781 (originally #656).",
-    "desktop.security": "apps/desktop/src/main/gateway-pairing-core.test.ts proves the current happy path; missing adversarial input and authorization cases. Tracked under #781 (originally #656).",
-    "web.correctness": "apps/web/src/web-host.test.ts proves the current happy path; missing negative and boundary cases. Tracked under #781 (originally #656).",
-    "mobile.concurrency": "apps/mobile/src/lib/replica/sqlite-intent-store.test.ts proves the current happy path; missing multi-actor interleaving evidence. Tracked under #781 (originally #656).",
-    "mobile.security": "apps/mobile/src/lib/upload/transfer-policy.test.ts proves the current happy path; missing adversarial input and authorization cases. Tracked under #781 (originally #656).",
-    "mobile.offline": "tests/agent-e2e-mobile/flows/native-v0-resilience.mjs proves the current happy path; missing disconnect/reconnect recovery evidence. Tracked under #781 (originally #656).",
-    "tunnel-pairing.correctness": "packages/tunnel/src/tunnel.integration.test.ts proves the current happy path; missing negative and boundary cases. Tracked under #781 (originally #656).",
-    "tunnel-pairing.concurrency": "packages/tunnel/src/tunnel.integration.test.ts proves the current happy path; missing multi-actor interleaving evidence. Tracked under #781 (originally #656).",
-    "tunnel-pairing.security": "tests/agent-e2e-pairing/flows/pairing-ticket-hygiene.mjs proves the current happy path; adversarial peer-target input now covered by tunnel-peer-target-differential (JS↔Rust↔route-layer differential, #842 W2.1), and admission/authorization abuse by hostile-peer-state-machine (replay, out-of-order, refused handshake, duplicate assertion, slow-loris, flood, expiry over a real iroh endpoint, #842 W2.3). Remaining depth tracked under #781 (originally #656).",
-    "tunnel-pairing.compat": "packages/tunnel/src/wire-conformance.contract.test.ts proves the current happy path; missing migration and version-skew fixtures. Tracked under #781 (originally #656).",
-    "vault-core.accessibility": "This service/storage surface has no standalone interactive UI. Its user-visible output is projected into the shared shell and first-party apps, whose real browser accessibility trees are scanned by apps/web/tests/e2e/accessibility.spec.ts. Remaining per-surface negative-state depth is tracked under #781.",
-    "blob-custody.accessibility": "This service/storage surface has no standalone interactive UI. Its user-visible output is projected into the shared shell and first-party apps, whose real browser accessibility trees are scanned by apps/web/tests/e2e/accessibility.spec.ts. Remaining per-surface negative-state depth is tracked under #781.",
-    "backup-restore.accessibility": "This service/storage surface has no standalone interactive UI. Its user-visible output is projected into the shared shell and first-party apps, whose real browser accessibility trees are scanned by apps/web/tests/e2e/accessibility.spec.ts. Remaining per-surface negative-state depth is tracked under #781.",
-    "replica-sync.accessibility": "This service/storage surface has no standalone interactive UI. Its user-visible output is projected into the shared shell and first-party apps, whose real browser accessibility trees are scanned by apps/web/tests/e2e/accessibility.spec.ts. Remaining per-surface negative-state depth is tracked under #781.",
-    "gateway.accessibility": "This service/storage surface has no standalone interactive UI. Its user-visible output is projected into the shared shell and first-party apps, whose real browser accessibility trees are scanned by apps/web/tests/e2e/accessibility.spec.ts. Remaining per-surface negative-state depth is tracked under #781.",
-    "app-engine.accessibility": "This service/storage surface has no standalone interactive UI. Its user-visible output is projected into the shared shell and first-party apps, whose real browser accessibility trees are scanned by apps/web/tests/e2e/accessibility.spec.ts. Remaining per-surface negative-state depth is tracked under #781.",
-    "automations.accessibility": "This service/storage surface has no standalone interactive UI. Its user-visible output is projected into the shared shell and first-party apps, whose real browser accessibility trees are scanned by apps/web/tests/e2e/accessibility.spec.ts. Remaining per-surface negative-state depth is tracked under #781.",
-    "agent-runtime.accessibility": "This service/storage surface has no standalone interactive UI. Its user-visible output is projected into the shared shell and first-party apps, whose real browser accessibility trees are scanned by apps/web/tests/e2e/accessibility.spec.ts. Remaining per-surface negative-state depth is tracked under #781.",
-    "tunnel-pairing.accessibility": "This service/storage surface has no standalone interactive UI. Its user-visible output is projected into the shared shell and first-party apps, whose real browser accessibility trees are scanned by apps/web/tests/e2e/accessibility.spec.ts. Remaining per-surface negative-state depth is tracked under #781.",
-    "extension.accessibility": "The companion feeds the consuming web surface; its user-visible handoff is covered by the real shared-shell browser accessibility lane. A distinct popup keyboard journey is not claimed by this cell and remains tracked under #781.",
-    "oauth-worker.accessibility": "This service/storage surface has no standalone interactive UI. Its user-visible output is projected into the shared shell and first-party apps, whose real browser accessibility trees are scanned by apps/web/tests/e2e/accessibility.spec.ts. Remaining per-surface negative-state depth is tracked under #781.",
-    "blueprints.accessibility": "A shipped first-party blueprint is scanned in its real inline renderer by apps/web/tests/e2e/accessibility.spec.ts; static source contracts remain a separate fast PR tripwire. Broader app-state depth is tracked under #781.",
-    "desktop.accessibility": "Desktop deliberately reuses the web axe owner: both hosts compile packages/client/src/react/boot.tsx as the renderer entry, so a second axe pass over Electron would duplicate the same DOM and rules. Electron-specific keyboard depth remains tracked under #781.",
-    "web.accessibility": "The connect screen, connected Home shell, and a shipped first-party app inline renderer are scanned with axe WCAG A/AA in Chromium by apps/web/tests/e2e/accessibility.spec.ts. Broader route/state depth is tracked under #781.",
-    "mobile.accessibility": "RNTL observes native role, accessible-name, and state/trait contracts in apps/mobile/src/apps/photos/PhotosHome.test.tsx; Maestro remains the device/runtime layer because its selectors cannot falsify RN role and trait semantics. Broader screen depth is tracked under #781.",
-    "web.performance": "The owning rig tests/perf/pwa-waterfall.perf.test.ts self-skips when the nightly waterfall artifact is missing, so a green run does not prove the budget ran. Tracked under #781 (originally #656).",
-    "web.security": "apps/web/tests/e2e/web-pwa.spec.ts is a single test asked to carry both the session-isolation law and the journey; the isolation claim needs a test of its own. Tracked under #781 (originally #656).",
-    "web.journey": "apps/web/tests/e2e/web-pwa.spec.ts is a single test shared with the security claim; the install-to-app journey has no separate owner. Tracked under #781 (originally #656).",
-    "mobile.correctness": "apps/mobile has no coverage floor scope, so nothing gates the replica session code these unit owners exercise. Tracked under #781 (originally #656).",
-    "mobile.durability": "apps/mobile/src/lib/upload/crash.test.ts proves upload crash recovery, but apps/mobile has no coverage floor gating the storage code around it. Tracked under #781 (originally #656).",
-    "mobile.journey": "tests/agent-e2e-mobile/flows/home-loads.mjs runs on iOS only, so the Android journey is unproven and the flow declares three checks. Tracked under #781 (originally #656).",
-    "app-admission": "The named claims an app satisfies to sit in the shell are docs/blueprint-seats.md#app-admission-contract; the appSeats, appStates and appEngines blocks here are that contract's ledger, and scripts/test-report/validate-app-axes.mjs is what refuses an app that goes quiet about one of them."
+    "backup-restore.scalability": "tests/scale/backup-restore.scale.test.ts proves the current restore volume profile. A second volume profile and saturation signal remain under #864 (originally #659).",
+    "backup-restore.journey": "packages/server/src/backup/backup.integration.test.ts proves the in-process backup/restore path. A cross-surface end-to-end assertion remains under #864 (originally #656).",
+    "replica-sync.durability": "packages/client/src/replica/sqlite-store.test.ts proves bootstrap, bounded reads, and rollback of an invalid batch. File-backed crash/reopen of the wasm store remains under #864 (originally #656).",
+    "replica-sync.scalability": "tests/scale/replica-bootstrap.scale.test.ts proves the current bootstrap volume profile. A second volume profile and saturation signal remain under #864 (originally #659).",
+    "replica-sync.security": "packages/client/src/replica/shell-session-admission.contract.test.ts covers admission. Broader adversarial authorization remains under #864 (originally #656).",
+    "replica-sync.offline": "packages/client/src/replica/shell-session.test.ts covers session lifecycle. Disconnect/reconnect recovery remains under #864 (originally #656).",
+    "replica-sync.compat": "packages/vault/src/replica/change-log.test.ts covers the replica change log. Migration and version-skew fixtures remain under #864 (originally #656).",
+    "replica-sync.journey": "apps/web/tests/e2e/web-pwa.spec.ts proves the in-surface PWA path. A cross-surface end-to-end assertion remains under #864 (originally #656).",
+    "gateway.durability": "packages/server/src/serve/disk-health.test.ts proves ENOSPC on the DiskFullTracker is still named by a replacement probe after the previous health loop is dropped (#864 W3). Gateway process crash/reopen remains a named-rig skip under #864 W5.",
+    "gateway.concurrency": "packages/server/src/serve/serve-multiclient.test.ts covers multi-client serve. Multi-actor write interleaving remains under #864 (originally #656).",
+    "gateway.performance": "tests/perf/gateway-request.perf.test.ts proves the current request budget. Longitudinal drift across nightlies remains under #864 (originally #659).",
+    "gateway.journey": "tests/agent-e2e-pairing/flows/device-pairing-lifecycle.mjs proves the pairing lifecycle. A cross-surface end-to-end assertion remains under #864 (originally #656).",
+    "app-engine.durability": "packages/server/src/engine/conversation/archive/archive.contract.test.ts proves crash/reopen keeps the archive index (close journal.db, reopen, no second segment). Tracked remaining: none for the happy-path-only hole (#864 W3).",
+    "app-engine.concurrency": "packages/server/src/engine/handlers/handler-pool.test.ts proves two concurrent dispatches complete without sharing a result (#864 W4). Tracked remaining: none for the happy-path-only hole.",
+    "app-engine.scalability": "tests/scale/conversation-ledger.scale.test.ts proves the current ledger volume profile. A second volume profile and saturation signal remain under #864 (originally #659).",
+    "automations.durability": "packages/server/src/automation/fire/scheduler-ledger.contract.test.ts proves lastTickAt survives a new store over the same KV (one gateway-down miss, never again). Tracked remaining: none for the happy-path-only hole (#864 W3).",
+    "automations.concurrency": "packages/server/src/automation/fire/in-process-scheduler.test.ts proves per-minute de-dup inside one scheduler. Two-process fire interleaving remains under #864 (originally #656).",
+    "automations.security": "packages/server/src/automation/handler/lint.test.ts refuses node:https/http/tls and process.argv/hrtime in addition to fs/net/child_process/process.env. Tracked under #864 (originally #656).",
+    "agent-runtime.correctness": "packages/server/src/acp/backends/acp/backend.test.ts covers the current turn loop. Negative and boundary cases remain under #864 (originally #656).",
+    "agent-runtime.security": "packages/server/src/acp/preflight.test.ts covers preflight; adversarial input is covered by agent-prompt-injection-red-team (injected instructions carried in read content, driven over the real turn loop, #842 W2.2). Authorization cases remain under #864 (originally #656).",
+    "agent-runtime.compat": "packages/server/src/acp/backends/acp/enumerate-models.test.ts covers model enumeration. Migration and version-skew fixtures remain under #864 (originally #656).",
+    "blueprints.security": "packages/blueprints/src/untrusted-rendering.test.ts is the untrusted-render property flow (#864 W2). Broader authorization cases remain under #864 (originally #656).",
+    "blueprints.journey": "apps/desktop/tests/e2e/appview-templates-insights.spec.ts proves the in-surface templates path. A cross-surface end-to-end assertion remains under #864 (originally #657).",
+    "desktop.correctness": "apps/desktop/src/main/gateway-supervisor-core.test.ts covers supervisor lifecycle. Negative and boundary cases remain under #864 (originally #656).",
+    "desktop.security": "apps/desktop/src/main/gateway-pairing-core.test.ts covers pairing core. Adversarial authorization cases remain under #864 (originally #656).",
+    "web.correctness": "apps/web/src/web-host.test.ts proves a pre-multi-vault pairing response still enrolls with a derived vaultIds list (#864 W4). Broader negative/boundary cases remain under #864 (originally #656).",
+    "mobile.concurrency": "apps/mobile/src/lib/replica/sqlite-intent-store.test.ts proves two claimNext actors on one queued intent: one sending, the other empty (#864 W4). Tracked under #864 (originally #656).",
+    "mobile.security": "apps/mobile/src/lib/upload/transfer-policy.test.ts refuses path traversal, unsigned, and cleartext provider URLs. Tracked remaining: broader authz cases under #864 (originally #656).",
+    "mobile.offline": "tests/agent-e2e-mobile/flows/native-v0-resilience.mjs covers native resilience. Disconnect/reconnect recovery remains under #864 (originally #656).",
+    "tunnel-pairing.correctness": "packages/tunnel/src/tunnel.integration.test.ts covers the current tunnel path. Negative and boundary cases remain under #864 (originally #656).",
+    "tunnel-pairing.concurrency": "packages/tunnel/src/tunnel.integration.test.ts covers the current tunnel path. Multi-actor interleaving remains under #864 (originally #656).",
+    "tunnel-pairing.security": "tests/agent-e2e-pairing/flows/pairing-ticket-hygiene.mjs covers ticket hygiene; adversarial peer-target input is covered by tunnel-peer-target-differential (JS↔Rust↔route-layer differential, #842 W2.1), and admission/authorization abuse by hostile-peer-state-machine (replay, out-of-order, refused handshake, duplicate assertion, slow-loris, flood, expiry over a real iroh endpoint, #842 W2.3). Remaining depth tracked under #864 (originally #656).",
+    "tunnel-pairing.compat": "packages/tunnel/src/wire-conformance.contract.test.ts covers wire conformance. Migration and version-skew fixtures remain under #864 (originally #656).",
+    "vault-core.accessibility": "This service/storage surface has no standalone interactive UI. Its user-visible output is projected into the shared shell and first-party apps, whose real browser accessibility trees are scanned by apps/web/tests/e2e/accessibility.spec.ts. Remaining per-surface negative-state depth is tracked under #864 (originally #781).",
+    "blob-custody.accessibility": "This service/storage surface has no standalone interactive UI. Its user-visible output is projected into the shared shell and first-party apps, whose real browser accessibility trees are scanned by apps/web/tests/e2e/accessibility.spec.ts. Remaining per-surface negative-state depth is tracked under #864 (originally #781).",
+    "backup-restore.accessibility": "This service/storage surface has no standalone interactive UI. Its user-visible output is projected into the shared shell and first-party apps, whose real browser accessibility trees are scanned by apps/web/tests/e2e/accessibility.spec.ts. Remaining per-surface negative-state depth is tracked under #864 (originally #781).",
+    "replica-sync.accessibility": "This service/storage surface has no standalone interactive UI. Its user-visible output is projected into the shared shell and first-party apps, whose real browser accessibility trees are scanned by apps/web/tests/e2e/accessibility.spec.ts. Remaining per-surface negative-state depth is tracked under #864 (originally #781).",
+    "gateway.accessibility": "This service/storage surface has no standalone interactive UI. Its user-visible output is projected into the shared shell and first-party apps, whose real browser accessibility trees are scanned by apps/web/tests/e2e/accessibility.spec.ts. Remaining per-surface negative-state depth is tracked under #864 (originally #781).",
+    "app-engine.accessibility": "This service/storage surface has no standalone interactive UI. Its user-visible output is projected into the shared shell and first-party apps, whose real browser accessibility trees are scanned by apps/web/tests/e2e/accessibility.spec.ts. Remaining per-surface negative-state depth is tracked under #864 (originally #781).",
+    "automations.accessibility": "This service/storage surface has no standalone interactive UI. Its user-visible output is projected into the shared shell and first-party apps, whose real browser accessibility trees are scanned by apps/web/tests/e2e/accessibility.spec.ts. Remaining per-surface negative-state depth is tracked under #864 (originally #781).",
+    "agent-runtime.accessibility": "This service/storage surface has no standalone interactive UI. Its user-visible output is projected into the shared shell and first-party apps, whose real browser accessibility trees are scanned by apps/web/tests/e2e/accessibility.spec.ts. Remaining per-surface negative-state depth is tracked under #864 (originally #781).",
+    "tunnel-pairing.accessibility": "This service/storage surface has no standalone interactive UI. Its user-visible output is projected into the shared shell and first-party apps, whose real browser accessibility trees are scanned by apps/web/tests/e2e/accessibility.spec.ts. Remaining per-surface negative-state depth is tracked under #864 (originally #781).",
+    "extension.accessibility": "The companion feeds the consuming web surface; its user-visible handoff is covered by the real shared-shell browser accessibility lane. A distinct popup keyboard journey is not claimed by this cell and remains tracked under #864 (originally #781).",
+    "oauth-worker.accessibility": "This service/storage surface has no standalone interactive UI. Its user-visible output is projected into the shared shell and first-party apps, whose real browser accessibility trees are scanned by apps/web/tests/e2e/accessibility.spec.ts. Remaining per-surface negative-state depth is tracked under #864 (originally #781).",
+    "blueprints.accessibility": "A shipped first-party blueprint is scanned in its real inline renderer by apps/web/tests/e2e/accessibility.spec.ts; static source contracts remain a separate fast PR tripwire. Broader app-state depth is tracked under #864 (originally #781).",
+    "desktop.accessibility": "Desktop deliberately reuses the web axe owner: both hosts compile packages/client/src/react/boot.tsx as the renderer entry, so a second axe pass over Electron would duplicate the same DOM and rules. Electron-specific keyboard depth remains tracked under #864 (originally #781).",
+    "web.accessibility": "The connect screen, connected Home shell, and a shipped first-party app inline renderer are scanned with axe WCAG A/AA in Chromium by apps/web/tests/e2e/accessibility.spec.ts. Broader route/state depth is tracked under #864 (originally #781).",
+    "mobile.accessibility": "RNTL observes native role, accessible-name, and state/trait contracts in apps/mobile/src/apps/photos/PhotosHome.test.tsx; Maestro remains the device/runtime layer because its selectors cannot falsify RN role and trait semantics. Broader screen depth is tracked under #864 (originally #781).",
+    "web.performance": "The owning rig tests/perf/pwa-waterfall.perf.test.ts throws in CI when the waterfall artifact is missing; a local skip is expected because the artifact is produced by the web-e2e job. Tracked under #864 (originally #656).",
+    "web.security": "apps/web/tests/e2e/web-pwa.spec.ts is a single test asked to carry both the session-isolation law and the journey; the isolation claim needs a test of its own. Tracked under #864 (originally #656).",
+    "web.journey": "apps/web/tests/e2e/web-pwa.spec.ts is a single test shared with the security claim; the install-to-app journey has no separate owner. Tracked under #864 (originally #656).",
+    "mobile.correctness": "apps/mobile has no coverage floor scope, so nothing gates the replica session code these unit owners exercise. Tracked under #864 (originally #656).",
+    "mobile.durability": "apps/mobile/src/lib/upload/crash.test.ts proves upload crash recovery, but apps/mobile has no coverage floor gating the storage code around it. Tracked under #864 (originally #656).",
+    "mobile.journey": "tests/agent-e2e-mobile/flows/home-loads.mjs runs on iOS only, so the Android journey is unproven and the flow declares three checks. Tracked under #864 (originally #656).",
+    "app-admission": "The named claims an app satisfies to sit in the shell are docs/blueprint-seats.md#app-admission-contract; the appSeats, appStates and appEngines blocks here are that contract's ledger, and scripts/test-report/validate-app-axes.mjs is what refuses an app that goes quiet about one of them.",
+    "appStates.offline-as-stale": "notes.offline and tasks.offline are owned by the reachability verdict deliberately surfacing as the app's STALE notice rather than a second offline banner, so the one reachability-driven sentence proves both the offline and the stale cell.",
+    "appSeats.desktop-nightly-only": "The six custodian desktop e2e owners newly wired under #864 (agenda, notes, tasks, people and photos plus docs' pending-overlay reuse) are nightly-validated only, because the authoring container has neither an Electron binary nor a Secret Service to run them at PR time."
   },
   "cellOwners": {
     "vault-core.correctness": {
@@ -1949,6 +1955,56 @@
     }
   ],
   "laws": {
+    "consent-denial-monotone": {
+      "statement": "Deleting a grant, removing a grant_scope, narrowing a clamp verb, or adding a consent_policy row can only turn an allow into a deny, never a deny into an allow.",
+      "owner": "packages/vault/src/gateway/consent-properties.test.ts",
+      "flow": "consent-chain-properties"
+    },
+    "consent-clamp-order-independent": {
+      "statement": "The decision, the set of returned rowFilter clauses, and the fieldMask are invariant under permutation of identity.scopeClamp.",
+      "owner": "packages/vault/src/gateway/consent-properties.test.ts",
+      "flow": "consent-chain-properties"
+    },
+    "consent-clamp-only-narrows": {
+      "statement": "For every allow, the returned rowFilter is a superset of the grant scope's and the clamp's clauses, and the fieldMask is exactly grantMask ∩ clampMask (null only when both are null).",
+      "owner": "packages/vault/src/gateway/consent-properties.test.ts",
+      "flow": "consent-chain-properties"
+    },
+    "consent-reveal-never-rides": {
+      "statement": "Reveal is allowed only when both a grant_scope and a clamp scope carry the 'reveal' verb; a 'reveal' scope never satisfies a read or act request.",
+      "owner": "packages/vault/src/gateway/consent-properties.test.ts",
+      "flow": "consent-chain-properties"
+    },
+    "consent-explicit-scope-unbypassable": {
+      "statement": "A table under a kind:'minimization' policy row is never allowed by a whole-schema (table_name IS NULL) grant scope; only a scope naming the table explicitly covers it.",
+      "owner": "packages/vault/src/gateway/consent-properties.test.ts",
+      "flow": "consent-chain-properties"
+    },
+    "consent-onbehalf-cap-precedes-grants": {
+      "statement": "When onBehalfOfOwner.mayAct is false, no grant set produces an allow for act or reveal, and the deny names the owner id, checked before any grant is consulted.",
+      "owner": "packages/vault/src/gateway/consent-properties.test.ts",
+      "flow": "consent-chain-properties"
+    },
+    "untrusted-display-total": {
+      "statement": "displayText never throws for any input (non-strings included), preserves code-point length and is idempotent for strings, and emits no character in the forbidden C0-control/DEL/bidi-override/bidi-isolate set.",
+      "owner": "packages/blueprints/apps/_shared/untrusted-properties.test.ts",
+      "flow": "untrusted-render-properties"
+    },
+    "untrusted-url-allowlist-closed": {
+      "statement": "safeExternalUrl/safeMediaUrl/safeDocumentUrl each return null or a value in that function's own scheme allowlist, never matching javascript:/vbscript:/data:text/html/data:image/svg; safeExternalUrl additionally never returns a value carrying a control code unit (<=32 or 127).",
+      "owner": "packages/blueprints/apps/_shared/untrusted-properties.test.ts",
+      "flow": "untrusted-render-properties"
+    },
+    "untrusted-media-subsumed-by-document": {
+      "statement": "Every value safeMediaUrl accepts, safeDocumentUrl accepts with an identical result; the converse (document accepts, media rejects) occurs only for data:application/pdf and data:text/plain.",
+      "owner": "packages/blueprints/apps/_shared/untrusted-properties.test.ts",
+      "flow": "untrusted-render-properties"
+    },
+    "untrusted-background-image-unescapable": {
+      "statement": "safeBackgroundImage output is undefined or a single sealed CSS url(\"…\") token whose every quote and backslash is escaped and which recovers exactly the URL the media sink admitted, so no member string can break out of the quoted string.",
+      "owner": "packages/blueprints/apps/_shared/untrusted-properties.test.ts",
+      "flow": "untrusted-render-properties"
+    },
     "commons-steward-ordered-convergence": {
       "statement": "Each Commons grant has one independent monotonic steward sequence; cursor-gapped members converge to the same domain state, and capability downgrades govern commands from their exact stream position onward.",
       "owner": "packages/vault/src/share/commons-convergence-properties.test.ts",
@@ -2485,12 +2541,14 @@
             "tier": "e2e"
           },
           "custodian": {
-            "status": "gap",
-            "trackingIssue": "839"
+            "status": "owned",
+            "owner": "apps/desktop/tests/e2e/agenda.spec.ts",
+            "tier": "e2e"
           },
           "viewer": {
-            "status": "gap",
-            "trackingIssue": "839"
+            "status": "owned",
+            "owner": "apps/web/tests/e2e/agenda.spec.ts",
+            "tier": "e2e"
           }
         }
       },
@@ -2543,12 +2601,14 @@
             "tier": "e2e"
           },
           "custodian": {
-            "status": "gap",
-            "trackingIssue": "839"
+            "status": "owned",
+            "owner": "apps/desktop/tests/e2e/notes.spec.ts",
+            "tier": "e2e"
           },
           "viewer": {
-            "status": "gap",
-            "trackingIssue": "839"
+            "status": "owned",
+            "owner": "apps/web/tests/e2e/notes.spec.ts",
+            "tier": "e2e"
           }
         }
       },
@@ -2556,12 +2616,14 @@
         "id": "people",
         "seats": {
           "origin": {
-            "status": "gap",
-            "trackingIssue": "839"
+            "status": "owned",
+            "owner": "tests/agent-e2e-mobile/flows/people-roster.mjs",
+            "tier": "e2e"
           },
           "custodian": {
-            "status": "gap",
-            "trackingIssue": "839"
+            "status": "owned",
+            "owner": "apps/desktop/tests/e2e/people.spec.ts",
+            "tier": "e2e"
           },
           "viewer": {
             "status": "owned",
@@ -2579,8 +2641,9 @@
             "tier": "e2e"
           },
           "custodian": {
-            "status": "gap",
-            "trackingIssue": "839"
+            "status": "owned",
+            "owner": "apps/desktop/tests/e2e/photos.spec.ts",
+            "tier": "e2e"
           },
           "viewer": {
             "status": "owned",
@@ -2618,19 +2681,21 @@
             "tier": "e2e"
           },
           "custodian": {
-            "status": "gap",
-            "trackingIssue": "839"
+            "status": "owned",
+            "owner": "apps/desktop/tests/e2e/tasks.spec.ts",
+            "tier": "e2e"
           },
           "viewer": {
-            "status": "gap",
-            "trackingIssue": "839"
+            "status": "owned",
+            "owner": "apps/web/tests/e2e/tasks.spec.ts",
+            "tier": "e2e"
           }
         }
       }
     ]
   },
   "appStates": {
-    "trackingIssue": "839",
+    "trackingIssue": "864",
     "states": [
       {
         "id": "dayone",
@@ -2666,20 +2731,24 @@
         "id": "agenda",
         "states": {
           "dayone": {
-            "status": "gap"
+            "status": "owned",
+            "owner": "packages/blueprints/apps/agenda/states.test.tsx"
           },
           "pending": {
             "status": "owned",
             "owner": "packages/blueprints/src/app-boot/agenda.test.ts"
           },
           "offline": {
-            "status": "gap"
+            "status": "owned",
+            "owner": "packages/blueprints/apps/agenda/states.test.tsx"
           },
           "stale": {
-            "status": "gap"
+            "status": "owned",
+            "owner": "packages/blueprints/apps/agenda/states.test.tsx"
           },
           "conflict": {
-            "status": "gap"
+            "status": "owned",
+            "owner": "packages/blueprints/apps/agenda/states.test.tsx"
           },
           "parked": {
             "status": "owned",
@@ -2699,7 +2768,8 @@
             "owner": "packages/blueprints/src/docs-shelves.test.ts"
           },
           "pending": {
-            "status": "gap"
+            "status": "owned",
+            "owner": "apps/desktop/tests/e2e/pending-overlay.spec.ts"
           },
           "offline": {
             "status": "owned",
@@ -2709,10 +2779,12 @@
             "status": "gap"
           },
           "conflict": {
-            "status": "gap"
+            "status": "owned",
+            "owner": "packages/blueprints/apps/docs/states.test.tsx"
           },
           "parked": {
-            "status": "gap"
+            "status": "owned",
+            "owner": "packages/blueprints/apps/docs/states.test.tsx"
           },
           "denied": {
             "status": "owned",
@@ -2724,7 +2796,8 @@
         "id": "locker",
         "states": {
           "dayone": {
-            "status": "gap"
+            "status": "owned",
+            "owner": "packages/blueprints/apps/locker/states.test.tsx"
           },
           "pending": {
             "status": "owned",
@@ -2760,17 +2833,20 @@
             "owner": "packages/blueprints/apps/notes/view-copy.test.ts"
           },
           "offline": {
-            "status": "gap"
+            "status": "owned",
+            "owner": "packages/blueprints/apps/notes/states.test.tsx"
           },
           "stale": {
             "status": "owned",
             "owner": "packages/blueprints/apps/notes/view-copy.test.ts"
           },
           "conflict": {
-            "status": "gap"
+            "status": "owned",
+            "owner": "packages/blueprints/apps/notes/states.test.tsx"
           },
           "parked": {
-            "status": "gap"
+            "status": "owned",
+            "owner": "packages/blueprints/apps/notes/states.test.tsx"
           },
           "denied": {
             "status": "owned",
@@ -2782,10 +2858,12 @@
         "id": "people",
         "states": {
           "dayone": {
-            "status": "gap"
+            "status": "owned",
+            "owner": "packages/blueprints/apps/people/states.test.tsx"
           },
           "pending": {
-            "status": "gap"
+            "status": "owned",
+            "owner": "packages/blueprints/apps/people/states.test.tsx"
           },
           "offline": {
             "status": "gap"
@@ -2797,7 +2875,8 @@
             "status": "gap"
           },
           "parked": {
-            "status": "gap"
+            "status": "owned",
+            "owner": "packages/blueprints/apps/people/states.test.tsx"
           },
           "denied": {
             "status": "owned",
@@ -2813,7 +2892,8 @@
             "owner": "packages/blueprints/src/photos-view-state.test.ts"
           },
           "pending": {
-            "status": "gap"
+            "status": "owned",
+            "owner": "packages/blueprints/apps/photos/states.test.tsx"
           },
           "offline": {
             "status": "owned",
@@ -2823,10 +2903,12 @@
             "status": "gap"
           },
           "conflict": {
-            "status": "gap"
+            "status": "owned",
+            "owner": "packages/blueprints/apps/photos/states.test.tsx"
           },
           "parked": {
-            "status": "gap"
+            "status": "owned",
+            "owner": "packages/blueprints/apps/photos/states.test.tsx"
           },
           "denied": {
             "status": "owned",
@@ -2879,22 +2961,604 @@
             "owner": "packages/blueprints/apps/_shared/pending-overlay.test.ts"
           },
           "offline": {
-            "status": "gap"
+            "status": "owned",
+            "owner": "packages/blueprints/apps/tasks/states.test.tsx"
           },
           "stale": {
-            "status": "gap"
+            "status": "owned",
+            "owner": "packages/blueprints/apps/tasks/states.test.tsx"
           },
           "conflict": {
-            "status": "gap"
+            "status": "owned",
+            "owner": "packages/blueprints/apps/tasks/states.test.tsx"
           },
           "parked": {
-            "status": "gap"
+            "status": "owned",
+            "owner": "packages/blueprints/apps/tasks/states.test.tsx"
           },
           "denied": {
             "status": "owned",
             "owner": "packages/blueprints/apps/tasks/logic.test.ts"
           }
         }
+      }
+    ]
+  },
+  "appScenarios": {
+    "trackingIssue": "864",
+    "layers": [
+      {
+        "id": "unit",
+        "label": "U"
+      },
+      {
+        "id": "component",
+        "label": "C"
+      },
+      {
+        "id": "journey",
+        "label": "E"
+      }
+    ],
+    "apps": [
+      {
+        "id": "agenda",
+        "doc": "docs/apps/agenda-scenarios.md",
+        "scenarios": [
+          {
+            "id": "week-origin",
+            "label": "week origin journey",
+            "layer": "journey",
+            "status": "owned",
+            "owner": "tests/agent-e2e-mobile/flows/agenda-week.mjs"
+          },
+          {
+            "id": "designed-states",
+            "label": "designed pending/parked/offline/conflict/stale/dayone",
+            "layer": "component",
+            "status": "owned",
+            "owner": "packages/blueprints/apps/agenda/states.test.tsx"
+          },
+          {
+            "id": "view-derivation",
+            "label": "view derivation",
+            "layer": "unit",
+            "status": "owned",
+            "owner": "packages/blueprints/apps/agenda/views.test.ts"
+          },
+          {
+            "id": "edit-occurrence-model",
+            "label": "edit-occurrence model",
+            "layer": "unit",
+            "status": "owned",
+            "owner": "packages/blueprints/apps/agenda/edits.test.ts"
+          },
+          {
+            "id": "day-context",
+            "label": "day-context copy",
+            "layer": "unit",
+            "status": "owned",
+            "owner": "packages/blueprints/apps/agenda/day-context.test.ts"
+          },
+          {
+            "id": "reminder-rrule",
+            "label": "a recurring event's reminder fires on each occurrence",
+            "layer": "unit",
+            "status": "owned",
+            "owner": "packages/server/src/reminders/due-reminders.test.ts"
+          },
+          {
+            "id": "recurring-dst",
+            "label": "recurring events keep wall-clock time across DST",
+            "layer": "unit",
+            "status": "owned",
+            "owner": "packages/blueprints/apps/agenda/format-locale.test.ts"
+          },
+          {
+            "id": "refused-create",
+            "label": "a refused create (busy-overlap) keeps the typed draft",
+            "layer": "component",
+            "status": "owned",
+            "owner": "packages/blueprints/apps/agenda/states.test.tsx"
+          },
+          {
+            "id": "allday-recurring",
+            "label": "an all-day recurring event lands on the day it names",
+            "layer": "unit",
+            "status": "owned",
+            "owner": "packages/blueprints/apps/agenda/format-locale.test.ts"
+          },
+          {
+            "id": "edit-this-occurrence",
+            "label": "edit this occurrence keeps every field that was set",
+            "layer": "unit",
+            "status": "owned",
+            "owner": "packages/blueprints/apps/agenda/edits.test.ts"
+          },
+          {
+            "id": "multiday-visibility",
+            "label": "multi-day events stay visible on every day they span",
+            "layer": "unit",
+            "status": "owned",
+            "owner": "packages/blueprints/apps/agenda/views.test.ts"
+          }
+        ]
+      },
+      {
+        "id": "docs",
+        "doc": "docs/apps/docs-scenarios.md",
+        "scenarios": [
+          {
+            "id": "upload-reload",
+            "label": "upload a file; the document and its bytes survive a reload",
+            "layer": "journey",
+            "status": "owned",
+            "owner": "apps/desktop/tests/e2e/docs-drive.spec.ts"
+          },
+          {
+            "id": "preview-reading",
+            "label": "Preview opens a reading sheet named for the file",
+            "layer": "unit",
+            "status": "owned",
+            "owner": "packages/blueprints/src/docs-reading-surface.test.ts"
+          },
+          {
+            "id": "drive-window",
+            "label": "drive window: folders, newest-filed-first, bounded window",
+            "layer": "unit",
+            "status": "owned",
+            "owner": "packages/blueprints/src/docs-drive.test.ts"
+          },
+          {
+            "id": "shelves",
+            "label": "shelf strip routing and band tabs",
+            "layer": "unit",
+            "status": "owned",
+            "owner": "packages/blueprints/src/docs-shelves.test.ts"
+          },
+          {
+            "id": "custody-mark",
+            "label": "custody mark: annotate the exception, never the norm",
+            "layer": "unit",
+            "status": "owned",
+            "owner": "packages/blueprints/apps/docs/custody-row-mark.test.ts"
+          },
+          {
+            "id": "kind-colours",
+            "label": "file-kind colours meet the contrast rulebook",
+            "layer": "unit",
+            "status": "owned",
+            "owner": "packages/blueprints/apps/docs/kind-colours.test.ts"
+          },
+          {
+            "id": "download-on-demand",
+            "label": "download on demand: explicit act, honest progress, no fabricated totals",
+            "layer": "unit",
+            "status": "owned",
+            "owner": "packages/blueprints/src/download-on-demand.test.ts"
+          },
+          {
+            "id": "pdf-extraction",
+            "label": "device-side PDF text extraction with gateway degradation",
+            "layer": "unit",
+            "status": "owned",
+            "owner": "packages/blueprints/src/docs-media.test.ts"
+          },
+          {
+            "id": "version-restore",
+            "label": "edit in place / version restore lands the exact restored bytes",
+            "layer": "unit",
+            "status": "owned",
+            "owner": "packages/vault/src/gateway/gateway.contract.test.ts"
+          },
+          {
+            "id": "pending-writes",
+            "label": "pending writes: replica overlay on Docs actions",
+            "layer": "unit",
+            "status": "owned",
+            "owner": "packages/blueprints/apps/_shared/pending-overlay.test.ts"
+          },
+          {
+            "id": "mobile-origin",
+            "label": "drive origin journey on the phone",
+            "layer": "journey",
+            "status": "owned",
+            "owner": "tests/agent-e2e-mobile/flows/docs-drive.mjs"
+          },
+          {
+            "id": "title-only-empty-body",
+            "label": "title-only edit on phone does not write an empty body",
+            "layer": "unit",
+            "status": "owned",
+            "owner": "apps/mobile/src/apps/docs/editor-write.test.ts"
+          },
+          {
+            "id": "export-path-traversal",
+            "label": "export filename cannot traverse out of the share folder",
+            "layer": "unit",
+            "status": "owned",
+            "owner": "apps/mobile/src/apps/docs/docs-export.test.ts"
+          }
+        ]
+      },
+      {
+        "id": "locker",
+        "doc": "docs/apps/locker-scenarios.md",
+        "scenarios": [
+          {
+            "id": "gate-origin",
+            "label": "gate origin journey",
+            "layer": "journey",
+            "status": "owned",
+            "owner": "tests/agent-e2e-mobile/flows/locker-gate.mjs"
+          },
+          {
+            "id": "designed-states",
+            "label": "designed dayone",
+            "layer": "component",
+            "status": "owned",
+            "owner": "packages/blueprints/apps/locker/states.test.tsx"
+          },
+          {
+            "id": "totp",
+            "label": "TOTP generation",
+            "layer": "unit",
+            "status": "owned",
+            "owner": "packages/blueprints/apps/locker/totp.test.ts"
+          },
+          {
+            "id": "origin-matching",
+            "label": "origin matching for autofill",
+            "layer": "unit",
+            "status": "owned",
+            "owner": "packages/blueprints/apps/locker/origin-matching.test.ts"
+          },
+          {
+            "id": "item-type",
+            "label": "item type partition",
+            "layer": "unit",
+            "status": "owned",
+            "owner": "packages/blueprints/apps/locker/locker-item-type.test.ts"
+          },
+          {
+            "id": "logic",
+            "label": "list/detail derivation",
+            "layer": "unit",
+            "status": "owned",
+            "owner": "packages/blueprints/apps/locker/logic.test.ts"
+          }
+        ]
+      },
+      {
+        "id": "notes",
+        "doc": "docs/apps/notes-scenarios.md",
+        "scenarios": [
+          {
+            "id": "library-origin",
+            "label": "library origin journey",
+            "layer": "journey",
+            "status": "owned",
+            "owner": "tests/agent-e2e-mobile/flows/notes-library.mjs"
+          },
+          {
+            "id": "designed-states",
+            "label": "designed pending/parked/offline/conflict",
+            "layer": "component",
+            "status": "owned",
+            "owner": "packages/blueprints/apps/notes/states.test.tsx"
+          },
+          {
+            "id": "shelves",
+            "label": "shelf routing",
+            "layer": "unit",
+            "status": "owned",
+            "owner": "packages/blueprints/apps/notes/shelves.test.ts"
+          },
+          {
+            "id": "format",
+            "label": "format / commonmark",
+            "layer": "unit",
+            "status": "owned",
+            "owner": "packages/blueprints/apps/notes/format.test.ts"
+          },
+          {
+            "id": "commands",
+            "label": "command dispatch",
+            "layer": "unit",
+            "status": "owned",
+            "owner": "packages/blueprints/apps/notes/logic-commands.test.ts"
+          },
+          {
+            "id": "pin-empty-overwrite",
+            "label": "Pin/Add-tag/Attach in the editor keeps the body",
+            "layer": "component",
+            "status": "owned",
+            "owner": "packages/blueprints/apps/notes/editor-keep-body.test.tsx"
+          },
+          {
+            "id": "autosave-drop",
+            "label": "autosave debounce does not drop a write on note-switch",
+            "layer": "unit",
+            "status": "owned",
+            "owner": "packages/blueprints/apps/notes/logic-commands.test.ts"
+          },
+          {
+            "id": "conflict-both-kept",
+            "label": "Both are kept conflict panel is a live control",
+            "layer": "unit",
+            "status": "owned",
+            "owner": "packages/blueprints/apps/notes/logic.test.ts"
+          },
+          {
+            "id": "untitled-web",
+            "label": "a new web note is named from its title, not Untitled note",
+            "layer": "unit",
+            "status": "owned",
+            "owner": "packages/blueprints/apps/notes/format.test.ts"
+          }
+        ]
+      },
+      {
+        "id": "people",
+        "doc": "docs/apps/people-scenarios.md",
+        "scenarios": [
+          {
+            "id": "roster-origin",
+            "label": "roster origin journey",
+            "layer": "journey",
+            "status": "owned",
+            "owner": "tests/agent-e2e-mobile/flows/people-roster.mjs"
+          },
+          {
+            "id": "designed-states",
+            "label": "designed pending/parked/dayone",
+            "layer": "component",
+            "status": "owned",
+            "owner": "packages/blueprints/apps/people/states.test.tsx"
+          },
+          {
+            "id": "grants",
+            "label": "per-person grants",
+            "layer": "component",
+            "status": "owned",
+            "owner": "packages/blueprints/apps/people/components/PersonGrants.test.tsx"
+          },
+          {
+            "id": "share-links",
+            "label": "share-link projection",
+            "layer": "unit",
+            "status": "owned",
+            "owner": "packages/blueprints/apps/people/queries/share-links.test.ts"
+          },
+          {
+            "id": "erase-after-30-days",
+            "label": "Erased after 30 days erases the person",
+            "layer": "unit",
+            "status": "owned",
+            "owner": "packages/vault/src/gateway/duties.test.ts"
+          },
+          {
+            "id": "merge-destructive",
+            "label": "merge keeps folded-in cadence, last-contacted, and colour",
+            "layer": "unit",
+            "status": "owned",
+            "owner": "packages/vault/src/commands/merge.test.ts"
+          },
+          {
+            "id": "overdue-arithmetic",
+            "label": "overdue arithmetic matches the cadence",
+            "layer": "unit",
+            "status": "owned",
+            "owner": "packages/blueprints/apps/people/format.test.ts"
+          },
+          {
+            "id": "leap-day",
+            "label": "leap-day birthdays fire on 28 Feb in non-leap years",
+            "layer": "unit",
+            "status": "owned",
+            "owner": "packages/blueprints/apps/people/format.test.ts"
+          },
+          {
+            "id": "month-day-validation",
+            "label": "month_day validation refuses impossible days",
+            "layer": "unit",
+            "status": "owned",
+            "owner": "packages/vault/src/commands/people-dates.test.ts"
+          },
+          {
+            "id": "row-cap",
+            "label": "the roster is not silently capped at 200 rows",
+            "layer": "unit",
+            "status": "owned",
+            "owner": "packages/blueprints/apps/people/queries/people-roster.test.ts"
+          }
+        ]
+      },
+      {
+        "id": "photos",
+        "doc": "docs/apps/photos-scenarios.md",
+        "scenarios": [
+          {
+            "id": "drawer-activity",
+            "label": "drawer activity, hide timer, pinned summary grains",
+            "layer": "component",
+            "status": "owned",
+            "owner": "apps/mobile/src/apps/photos/PhotosHome.test.tsx"
+          },
+          {
+            "id": "library-origin",
+            "label": "library origin journey",
+            "layer": "journey",
+            "status": "owned",
+            "owner": "tests/agent-e2e-mobile/flows/photos-library.mjs"
+          },
+          {
+            "id": "search-grouping",
+            "label": "search grouping and no-hits",
+            "layer": "unit",
+            "status": "owned",
+            "owner": "packages/blueprints/apps/photos/search-groups.test.ts"
+          },
+          {
+            "id": "search-journey",
+            "label": "search device journey",
+            "layer": "journey",
+            "status": "owned",
+            "owner": "tests/agent-e2e-mobile/flows/photos-search.mjs"
+          },
+          {
+            "id": "viewer-chrome",
+            "label": "viewer chrome and filmstrip",
+            "layer": "unit",
+            "status": "owned",
+            "owner": "packages/blueprints/apps/photos/viewer.test.ts"
+          },
+          {
+            "id": "collections",
+            "label": "Collections shelves and grouping",
+            "layer": "unit",
+            "status": "owned",
+            "owner": "packages/blueprints/apps/photos/grouping.test.ts"
+          },
+          {
+            "id": "permission-refused",
+            "label": "permission-refused takeover",
+            "layer": "journey",
+            "status": "owned",
+            "owner": "tests/agent-e2e-mobile/flows/photos-permissions.mjs"
+          },
+          {
+            "id": "select-write",
+            "label": "selection trash + restore write",
+            "layer": "journey",
+            "status": "owned",
+            "owner": "tests/agent-e2e-mobile/flows/photos-select-write.mjs"
+          },
+          {
+            "id": "designed-states",
+            "label": "designed pending/parked/conflict",
+            "layer": "component",
+            "status": "owned",
+            "owner": "packages/blueprints/apps/photos/states.test.tsx"
+          },
+          {
+            "id": "storage-arithmetic",
+            "label": "storage custody arithmetic",
+            "layer": "unit",
+            "status": "owned",
+            "owner": "packages/blueprints/apps/photos/storage-model.test.ts"
+          },
+          {
+            "id": "import-runupload",
+            "label": "web/desktop import does not drop files",
+            "layer": "unit",
+            "status": "owned",
+            "owner": "packages/blueprints/apps/photos/upload.test.ts"
+          },
+          {
+            "id": "free-up-pinned",
+            "label": "free-up-space preserves pinned originals",
+            "layer": "unit",
+            "status": "owned",
+            "owner": "apps/mobile/src/apps/photos/photos-library-pins.test.ts"
+          },
+          {
+            "id": "hide-vs-archive",
+            "label": "hide vs archive mean the same thing on every seat",
+            "layer": "unit",
+            "status": "owned",
+            "owner": "packages/blueprints/apps/photos/archive-copy.test.ts"
+          }
+        ]
+      },
+      {
+        "id": "tally",
+        "doc": "docs/apps/tally-scenarios.md",
+        "scenarios": [
+          {
+            "id": "interface-held",
+            "label": "rendered interface",
+            "layer": "unit",
+            "status": "held",
+            "citation": "#831"
+          }
+        ]
+      },
+      {
+        "id": "tasks",
+        "doc": "docs/apps/tasks-scenarios.md",
+        "scenarios": [
+          {
+            "id": "board-origin",
+            "label": "board origin journey",
+            "layer": "journey",
+            "status": "owned",
+            "owner": "tests/agent-e2e-mobile/flows/tasks-board.mjs"
+          },
+          {
+            "id": "designed-states",
+            "label": "designed pending/parked/offline/conflict/stale",
+            "layer": "component",
+            "status": "owned",
+            "owner": "packages/blueprints/apps/tasks/states.test.tsx"
+          },
+          {
+            "id": "board-derivation",
+            "label": "board derivation",
+            "layer": "unit",
+            "status": "owned",
+            "owner": "packages/blueprints/apps/tasks/logic.test.ts"
+          },
+          {
+            "id": "routes",
+            "label": "route table",
+            "layer": "unit",
+            "status": "owned",
+            "owner": "packages/blueprints/apps/tasks/routes.test.ts"
+          },
+          {
+            "id": "parent-hides-subtasks",
+            "label": "completing a parent leaves unfinished subtasks visible",
+            "layer": "unit",
+            "status": "owned",
+            "owner": "packages/blueprints/apps/tasks/logic.test.ts"
+          },
+          {
+            "id": "release-all-redates",
+            "label": "catch-up Release all does not re-date the someday pile",
+            "layer": "unit",
+            "status": "owned",
+            "owner": "packages/blueprints/apps/tasks/logic.test.ts"
+          },
+          {
+            "id": "house-scope",
+            "label": "a HOUSE-scope write stays in the HOUSE scope",
+            "layer": "unit",
+            "status": "owned",
+            "owner": "packages/blueprints/apps/tasks/writes.test.ts"
+          },
+          {
+            "id": "delete-cancels",
+            "label": "delete-confirm removes the row, it does not cancel it",
+            "layer": "unit",
+            "status": "owned",
+            "owner": "packages/blueprints/apps/tasks/writes.test.ts"
+          },
+          {
+            "id": "priority-scale",
+            "label": "priority scale matches the north star",
+            "layer": "unit",
+            "status": "owned",
+            "owner": "packages/blueprints/apps/tasks/format.test.ts"
+          },
+          {
+            "id": "today-utc",
+            "label": "Today is the member's day, not UTC",
+            "layer": "unit",
+            "status": "owned",
+            "owner": "packages/blueprints/apps/tasks/format.test.ts"
+          }
+        ]
       }
     ]
   },
@@ -2925,7 +3589,7 @@
         "packages/vault/src/gateway/consent.ts",
         "packages/blueprints/apps/_shared/consent-gate.ts"
       ],
-      "propertyFlow": null,
+      "propertyFlow": "consent-chain-properties",
       "mutationSeed": null,
       "appEngineColumn": true
     },
@@ -3032,8 +3696,8 @@
       "id": "untrusted-rendering",
       "label": "Untrusted rendering",
       "source": ["packages/blueprints/apps/_shared/untrusted.ts"],
-      "propertyFlow": null,
-      "mutationSeed": null,
+      "propertyFlow": "untrusted-render-properties",
+      "mutationSeed": "packages/blueprints/apps/_shared/untrusted",
       "appEngineColumn": false
     },
     {
@@ -3102,12 +3766,11 @@
       ],
       "refusalGrammar": "execution manifest does not declare <scope>",
       "adversary": {
-        "owner": null,
-        "flow": null,
-        "trackingIssue": "839"
+        "owner": "packages/server/src/serve/manifest-scope-denial.closed-grammar.test.ts",
+        "flow": "manifest-scope-denial-closed-grammar"
       },
       "seats": ["origin", "custodian", "viewer"],
-      "note": "Gap G4: no generated command × missing-scope denial sweep exists yet (#839 Wave 2)."
+      "note": "The G4 sweep landed (#839): manifest-scope-denial.{sweep,closed-grammar,fuzz} drive the real validateManifest + parseManifest + evaluateConsent over all 37 bundled manifests — every declared scope×verb allows, every undeclared combination denies closed inside the six DENY_CLASSES, and property fuzz holds. #864 M5 adds manifest-scope-denial.hostile: synthetic third-party/attacker manifests built in memory and pushed through the real validators — case, NFKC, whitespace and __proto__/constructor name variants and a 10000-scope list deny as manifest-undeclared, and the validator layer refuses malformed shapes (a garbage rowFilter op the app schema waves through is rejected by the automation validator). Open hole characterized by test.fails + a filed note: the app manifest validator types rowFilter.op as a bare string and executionClamp carries rowFilter/fieldMask contents opaquely, so a structurally-invalid clause reaches ALLOW and is refused only as a bare throw at filters.ts compile, outside the receipt grammar."
     },
     {
       "id": "grant-plane",
@@ -3311,14 +3974,14 @@
     }
   ],
   "journeys": {
-    "trackingIssue": "839",
+    "trackingIssue": "864",
     "suites": [
       {
         "id": "home-apps",
         "label": "Home apps",
         "runner": "tests/agent-e2e-mobile/run-home-apps-suite.mjs",
         "budgetDoc": "tests/agent-e2e-mobile/flows/home-apps-budget.md",
-        "budgetMinutes": 10,
+        "budgetMinutes": 11,
         "flows": [
           {
             "id": "docs-drive",
@@ -3342,6 +4005,12 @@
             "id": "tasks-board",
             "label": "Tasks board",
             "owner": "tests/agent-e2e-mobile/flows/tasks-board.mjs",
+            "flow": null
+          },
+          {
+            "id": "people-roster",
+            "label": "People roster",
+            "owner": "tests/agent-e2e-mobile/flows/people-roster.mjs",
             "flow": null
           },
           {
@@ -3439,6 +4108,33 @@
     ]
   },
   "flows": [
+    {
+      "id": "consent-chain-properties",
+      "name": "Consent chain: denial is monotone, order-independent, and the clamp only narrows",
+      "surface": "vault-core",
+      "dimension": "security",
+      "tier": "unit",
+      "owner": "packages/vault/src/gateway/consent-properties.test.ts",
+      "minimumTests": 6
+    },
+    {
+      "id": "manifest-scope-denial-hostile",
+      "name": "Hostile third-party manifests deny inside the grammar, never throw",
+      "surface": "gateway",
+      "dimension": "security",
+      "tier": "integration",
+      "owner": "packages/server/src/serve/manifest-scope-denial.hostile.test.ts",
+      "minimumTests": 12
+    },
+    {
+      "id": "untrusted-render-properties",
+      "name": "Untrusted display text and URL sinks are total, closed, and unescapable",
+      "surface": "blueprints",
+      "dimension": "security",
+      "tier": "unit",
+      "owner": "packages/blueprints/apps/_shared/untrusted-properties.test.ts",
+      "minimumTests": 12
+    },
     {
       "id": "blueprint-placement-law",
       "name": "Blueprint placement registry parity and exclusions",

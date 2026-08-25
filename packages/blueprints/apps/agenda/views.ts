@@ -11,10 +11,19 @@
 //   2. THE GRID IS FOR THINGS WITH A TIME COST. Nothing costless is turned
 //      into a segment here; day context arrives as a decoration around the
 //      grid, never as a row inside it.
-//   3. A MULTI-DAY OR ZONE-CROSSING EVENT IS ONE DAY'S ROW in v1, clamped and
-//      marked, rather than a bar spanning columns (`bucketByDay`).
+//   3. A MULTI-DAY EVENT IS VISIBLE ON EVERY LOCAL DAY IT SPANS. Each day's
+//      row is still that day's slice (`bucketByDay`); `clamped` is how the
+//      row says the run continues past midnight.
 
-import { localDayKey, startOfDay, startOfWeek, DAY_MS } from "./format.ts";
+import {
+  civilMidnight,
+  DAY_MS,
+  localDayKey,
+  namedDay,
+  spanLocalDays,
+  startOfDay,
+  startOfWeek,
+} from "./format.ts";
 import type { AgEvent, DaySegment, LaidSegment, ViewKind } from "./types.ts";
 
 /** Every view, in the order the switcher draws them. */
@@ -157,43 +166,57 @@ export function isAllDay(ev: AgEvent): boolean {
 }
 
 /**
- * Bucket each event into the ONE local day it is drawn on, with its span
- * clamped to that day.
+ * Bucket each event onto every local day it occupies, with the span on each
+ * day clamped to that day's midnight bounds.
  *
- * V1 BOUND, DELIBERATE (spec §"What is left"): a multi-day event, and an
- * event whose start and end sit in different zones, is drawn as a single-day
- * row on the day it starts rather than as a bar reaching across columns. The
- * `clamped` flag is how the row says so in words. Growing this into a real
- * spanning layout changes the week grid's geometry, the month cell's overflow
- * rule and the schedule's grouping all at once, which is a design decision
- * and not an implementation detail.
+ * An all-day civil `dtend` is the last named day (the editor stores it that
+ * way), so it is inclusive. A timed `dtend` is the instant the run ends. The
+ * `clamped` flag is how a day's row says the run continues past that midnight.
  */
 export function bucketByDay(
   list: readonly AgEvent[]
 ): Map<string, DaySegment[]> {
   const map = new Map<string, DaySegment[]>();
   for (const ev of list) {
-    const start = new Date(ev.dtstart);
+    const civilStart =
+      isAllDay(ev) && !ev.dtstart.includes("T") ? namedDay(ev.dtstart) : null;
+    const start = civilStart ? civilMidnight(civilStart) : new Date(ev.dtstart);
     if (Number.isNaN(start.getTime())) continue;
-    let end = ev.dtend ? new Date(ev.dtend) : start;
+    const civilEnd =
+      isAllDay(ev) && ev.dtend && !ev.dtend.includes("T")
+        ? namedDay(ev.dtend)
+        : null;
+    let end = civilEnd
+      ? new Date(civilMidnight(civilEnd).getTime() + DAY_MS)
+      : ev.dtend
+        ? new Date(ev.dtend)
+        : start;
     if (Number.isNaN(end.getTime()) || end < start) end = start;
-    const key = localDayKey(start);
-    const dayStart = startOfDay(start).getTime();
-    const dayEnd = dayStart + DAY_MS;
-    const segment: DaySegment = {
-      ev,
-      segStart: Math.max(start.getTime(), dayStart),
-      segEnd: Math.min(end.getTime(), dayEnd),
-      startsHere: true,
-      endsHere: end.getTime() <= dayEnd,
-      spansAll:
-        isAllDay(ev) ||
-        (start.getTime() <= dayStart && end.getTime() >= dayEnd),
-      clamped: end.getTime() > dayEnd,
-    };
-    const bucket = map.get(key);
-    if (bucket) bucket.push(segment);
-    else map.set(key, [segment]);
+    const eventStart = start.getTime();
+    const eventEnd = end.getTime();
+    for (const cursor of spanLocalDays(start, end)) {
+      const dayStart = cursor.getTime();
+      const next = new Date(
+        cursor.getFullYear(),
+        cursor.getMonth(),
+        cursor.getDate() + 1
+      );
+      const dayEnd = next.getTime();
+      const key = localDayKey(cursor);
+      const segment: DaySegment = {
+        ev,
+        segStart: Math.max(eventStart, dayStart),
+        segEnd: Math.min(eventEnd, dayEnd),
+        startsHere: eventStart >= dayStart && eventStart < dayEnd,
+        endsHere: eventEnd <= dayEnd,
+        spansAll:
+          isAllDay(ev) || (eventStart <= dayStart && eventEnd >= dayEnd),
+        clamped: eventEnd > dayEnd,
+      };
+      const bucket = map.get(key);
+      if (bucket) bucket.push(segment);
+      else map.set(key, [segment]);
+    }
   }
   for (const bucket of map.values())
     bucket.sort((a, b) => a.segStart - b.segStart);

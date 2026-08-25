@@ -104,6 +104,11 @@ export interface OccurrenceEditPayload {
   dtend?: string;
   summary?: string;
   description?: string;
+  recurrence_semantics?: "zoned" | "floating" | "all-day";
+  calendar_id?: string;
+  reminders?: { minutes_before: number }[];
+  conferencing_uri?: string;
+  attendee_party_ids?: string[];
   [key: string]: unknown;
 }
 
@@ -141,9 +146,8 @@ export interface DaySegment {
   /** Covers the whole of this day — drawn in the all-day rail, not the grid. */
   spansAll: boolean;
   /**
-   * The event runs past this day's bounds. V1 draws it as a SINGLE-DAY row
-   * anyway (spec §"What is left"), so the flag exists to say so in words
-   * rather than to grow a spanning bar.
+   * The event runs past this day's bounds. Each occupied day still gets its
+   * own row; the flag is how that row says the run continues.
    */
   clamped: boolean;
 }

@@ -9,6 +9,11 @@ import path from "node:path";
 
 import { FUZZ_TARGETS } from "../fuzz/targets.mjs";
 import { MUTATION_SEEDS } from "../mutation/seeds.mjs";
+import {
+  buildAppScenarioGrid,
+  countScenarioCells,
+  renderAppScenarioGrids,
+} from "./app-scenario-grid.mjs";
 import { EXPECTED_GREY } from "./expected-grey.mjs";
 import { historyPoint } from "./history-point.mjs";
 import {
@@ -19,7 +24,6 @@ import {
   renderConsentLedger,
   renderJoinGrid,
   renderJourneyGrid,
-  renderVerdictStrip,
 } from "./render-briefing.mjs";
 import {
   buildAdversaryPanel,
@@ -170,6 +174,7 @@ const enrichmentLive = buildEnrichmentLive(enrichmentLiveResult, {
 const appEngineGrid = buildAppEngineGrid(matrix, evidence);
 const appSeatGrid = buildAppSeatGrid(matrix);
 const appStateGrid = buildAppStateGrid(matrix);
+const appScenarioGrid = buildAppScenarioGrid(matrix);
 // #781 — reclassify registered no-lane absences AFTER normal cell states are
 // derived, so real evidence always wins and only enumerated no-evidence cells
 // become expected-grey (void the moment their lane has a start marker).
@@ -230,6 +235,7 @@ const summary = {
   unhandledErrors: unhandledErrors.length,
   unhandledErrorMessages: unhandledErrors,
   // Lane/cell honesty: failed = evidence ran and failed; missing = not run.
+  cellsPassed: cellStateCounts.cellsPassed,
   cellsFailed: cellStateCounts.cellsFailed,
   cellsMissing: cellStateCounts.cellsMissing,
   cellsFlaky: cellStateCounts.cellsFlaky,
@@ -265,6 +271,10 @@ const summary = {
   // here may reach the nightly zero-grey or ratchet arithmetic.
   appSeatCells: countAxisCells(appSeatGrid),
   appStateCells: countAxisCells(appStateGrid),
+  // #864 Wave 7 — per-app scenario ledger. Declarations, not evidence, so
+  // these counts never reach cellsMissing; the grid's own zero-grey rule is
+  // "no absence grey", asserted in generate-app-scenarios.test.mjs.
+  appScenarioCells: countScenarioCells(appScenarioGrid),
   cellsSolid: cells.filter((cell) => cell.assessment === "solid").length,
   cellsPartial: cells.filter((cell) => cell.assessment === "partial").length,
   cellsGap: cells.filter((cell) => cell.assessment === "gap").length,
@@ -387,10 +397,22 @@ summary.attentionQueue = attentionQueueForIssue(attentionQueue);
 
 const model = {
   generatedAt: new Date().toISOString(),
+  // Run identity for the masthead. Every field is honestly null off CI: the
+  // masthead then says "local render" rather than inventing a run.
+  runId: process.env.GITHUB_RUN_ID || null,
+  runUrl,
+  // The archive slug is computed OUTSIDE the generator, from the run's
+  // `created_at` (scripts/ci/run-slug.mjs), so it cannot be reconstructed from
+  // `generatedAt` without lying on a re-run. The workflow passes it in or the
+  // masthead carries no slot at all.
+  runSlug: process.env.TEST_REPORT_RUN_SLUG || null,
+  publicUrl: process.env.TEST_REPORT_PUBLIC_URL || null,
+  evidenceAgeMs: newestEvidenceAge(evidence, Date.now()),
   matrix,
   appEngineGrid,
   appSeatGrid,
   appStateGrid,
+  appScenarioGrid,
   joinGrid,
   journeyGrid,
   consentLedger,
@@ -1265,22 +1287,67 @@ function formatMs(value) {
     : `${Math.round(value)}ms`;
 }
 
+/**
+ * How old the newest timestamped evidence item is, or null when no item
+ * carries a timestamp at all. Null is rendered as "no timestamped evidence" —
+ * an evidence age of zero would read as "captured just now".
+ */
+function newestEvidenceAge(items, nowMs) {
+  const stamps = items
+    .map((item) => Date.parse(item.lastAt ?? ""))
+    .filter((value) => Number.isFinite(value));
+  return stamps.length ? Math.max(0, nowMs - Math.max(...stamps)) : null;
+}
+
+/** A duration as a coarse age: under an hour, hours, then days. */
+function formatAge(ms) {
+  if (ms == null) return null;
+  const hours = ms / 3_600_000;
+  if (hours < 1) return "under 1h";
+  if (hours < 48) return `${Math.round(hours)}h`;
+  return `${Math.round(hours / 24)}d`;
+}
+
+/** A signed delta, where zero reads as "flat" rather than as nothing. */
+function signed(value) {
+  return value > 0 ? `+${value}` : value < 0 ? String(value) : "±0";
+}
+
+/**
+ * One 96×22 sparkline over a real per-run series, with the newest point
+ * dotted. Under two finite points it draws nothing and says so: a flat line
+ * from a single night is an invented trend, and this page may not invent.
+ * Stroke and dot take their colour from `.spark` rules in the sheet — a
+ * `var()` inside an SVG presentation attribute is not reliably resolved.
+ */
 function trendSvg(values) {
   const numbers = values.filter((value) => Number.isFinite(value));
   if (numbers.length < 2) return '<span class="muted">No trend yet</span>';
+  const width = 96;
+  const height = 22;
   const min = Math.min(...numbers);
   const span = Math.max(1, Math.max(...numbers) - min);
-  const points = numbers
-    .map(
-      (value, index) =>
-        `${(index / (numbers.length - 1)) * 120},${34 - ((value - min) / span) * 28}`
-    )
-    .join(" ");
-  return `<svg class="spark" viewBox="0 0 120 40" role="img" aria-label="Result trend"><polyline points="${points}" /></svg>`;
+  const points = numbers.map((value, index) => [
+    ((index / (numbers.length - 1)) * (width - 6) + 3).toFixed(1),
+    (height - 4 - ((value - min) / span) * (height - 8)).toFixed(1),
+  ]);
+  const [lastX, lastY] = points.at(-1);
+  return `<svg class="spark" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}" role="img" aria-label="Trend across ${numbers.length} runs"><polyline points="${points.map(([x, y]) => `${x},${y}`).join(" ")}" /><circle cx="${lastX}" cy="${lastY}" r="2" /></svg>`;
 }
 
 function render(modelLocal) {
   const data = JSON.stringify(modelLocal).replaceAll("<", "\\u003c");
+  // Evidence age is measured against THIS run's own stamp rather than the wall
+  // clock, so an archived page keeps saying how old its evidence was on the
+  // night it was written. An untimestamped row gets null, and every caller
+  // prints an em dash for it — never an age of zero.
+  const generatedMs = Date.parse(modelLocal.generatedAt);
+  const ageOf = (lastAt) => {
+    const at = Date.parse(lastAt ?? "");
+    return Number.isFinite(at) && Number.isFinite(generatedMs)
+      ? formatAge(Math.max(0, generatedMs - at))
+      : null;
+  };
   const qualityRows = (modelLocal.qualities ?? [])
     .map(
       (quality) =>
@@ -1303,18 +1370,18 @@ function render(modelLocal) {
   const dimensionHeaders = modelLocal.matrix.dimensions
     .map(
       (dimension) =>
-        `<th scope="col"><span>${escapeHtml(dimension.label)}</span><small>${escapeHtml(dimension.lane)}</small></th>`
+        `<th scope="col">${escapeHtml(dimension.label)}<small>${escapeHtml(dimension.lane)}</small></th>`
     )
     .join("");
   const rows = modelLocal.matrix.surfaces
-    .map((surface, rowIndex) => {
+    .map((surface) => {
       const surfaceCells = modelLocal.cells.filter(
         (cell) => cell.surface === surface.id
       );
-      return `<tr style="--row:${rowIndex}"><th scope="row">${escapeHtml(surface.label)}</th>${surfaceCells
+      return `<tr><th scope="row">${escapeHtml(surface.label)}</th>${surfaceCells
         .map(
           (cell) =>
-            `<td><button class="cell ${cell.state} assessment-${cell.assessment}" data-cell="${escapeHtml(cell.id)}" aria-label="${escapeHtml(`${cell.surfaceLabel}, ${cell.dimensionLabel}: ${cell.state}; assessment ${cell.assessment}`)}"><span>${symbol(cell.state)}</span><small>${cell.owners.length || "—"}</small></button></td>`
+            `<td><button class="cell ${cell.state} assessment-${cell.assessment}" data-cell="${escapeHtml(cell.id)}" aria-label="${escapeHtml(`${cell.surfaceLabel}, ${cell.dimensionLabel}: ${cellWord(cell)} (${cell.state}); assessment ${cell.assessment}; ${cell.owners.length} evidence owner(s)`)}">${escapeHtml(cellWord(cell))}</button></td>`
         )
         .join("")}</tr>`;
     })
@@ -1337,7 +1404,7 @@ function render(modelLocal) {
     columns
       .map((column) => `<th scope="col">${escapeHtml(column.label)}</th>`)
       .join("");
-  const axisRows = (grid) =>
+  const axisRows = (grid, axisLabel) =>
     grid.apps
       .map(
         (app) =>
@@ -1346,17 +1413,25 @@ function render(modelLocal) {
               const badge = cell.badge
                 ? `<small>${escapeHtml(cell.badge)}</small>`
                 : "";
-              return `<td class="metric axis-${escapeHtml(cell.state)}" title="${escapeHtml(cell.detail)}">${axisSymbol(cell.state)}${badge}</td>`;
+              return `<td><button class="cell axis-${escapeHtml(cell.state)}" title="${escapeHtml(cell.detail)}" data-axis="${escapeHtml(`${axisLabel} · ${cell.column}`)}" data-axis-title="${escapeHtml(app.id)}" data-axis-detail="${escapeHtml(cell.detail)}" aria-label="${escapeHtml(`${app.id}, ${cell.column}: ${axisWord(cell.state)} — ${cell.detail}`)}">${axisWord(cell.state)}${badge}</button></td>`;
             })
             .join("")}</tr>`
       )
       .join("");
   const appSeatHeaders = axisHeaders(modelLocal.appSeatGrid.seats);
-  const appSeatRows = axisRows(modelLocal.appSeatGrid);
+  const appSeatRows = axisRows(modelLocal.appSeatGrid, "app × seat");
   const appStateHeaders = axisHeaders(modelLocal.appStateGrid.states);
-  const appStateRows = axisRows(modelLocal.appStateGrid);
+  const appStateRows = axisRows(
+    modelLocal.appStateGrid,
+    "app × designed state"
+  );
   const appSeatCounts = modelLocal.summary.appSeatCells ?? {};
   const appStateCounts = modelLocal.summary.appStateCells ?? {};
+  const appScenarioCounts = modelLocal.summary.appScenarioCells ?? {};
+  const scenarioTables = renderAppScenarioGrids(modelLocal.appScenarioGrid, {
+    escapeHtml,
+    axisWord,
+  });
   const coverageRowsLocal = modelLocal.coverageRows
     .map((row) => {
       const lineState =
@@ -1494,14 +1569,161 @@ function render(modelLocal) {
     );
   }
 
+  // ── Masthead: the run's identity, and nothing it cannot prove ─────────────
+  const scopeWord = modelLocal.reportScope || "local render";
+  const evidenceAge = formatAge(modelLocal.evidenceAgeMs);
+  const slotHref =
+    modelLocal.publicUrl && modelLocal.runSlug
+      ? `${modelLocal.publicUrl.replace(/\/$/u, "")}/runs/${modelLocal.runSlug}/`
+      : null;
+  const runMeta = [
+    escapeHtml(scopeWord),
+    escapeHtml(modelLocal.generatedAt.slice(0, 10)),
+    modelLocal.runId ? `run ${escapeHtml(modelLocal.runId)}` : "no run id",
+    evidenceAge
+      ? `evidence ${escapeHtml(evidenceAge)} old`
+      : "no timestamped evidence",
+    slotHref
+      ? `<a href="${escapeHtml(slotHref)}">immutable slot</a>`
+      : modelLocal.runSlug
+        ? `slot ${escapeHtml(modelLocal.runSlug)}`
+        : null,
+    modelLocal.runUrl
+      ? `<a href="${escapeHtml(modelLocal.runUrl)}">Actions run</a>`
+      : null,
+  ]
+    .filter(Boolean)
+    .join(" · ");
+
+  // ── Verdict bar: the computed level, tonight's counts, last night's move ──
+  const counts = modelLocal.verdict.counts ?? {};
+  const deltas = modelLocal.verdictDeltas ?? {};
+  const cellTitle = (id) => {
+    const cell = (modelLocal.cells ?? []).find((entry) => entry.id === id);
+    return cell ? `${cell.surfaceLabel} · ${cell.dimensionLabel}` : id;
+  };
+  const named = (ids) => {
+    const shown = ids.slice(0, 2).map(cellTitle).join(", ");
+    return ids.length > 2 ? `${shown}, +${ids.length - 2} more` : shown;
+  };
+  const newFailed = modelLocal.summary.newFailedCellIds ?? [];
+  const newMissing = modelLocal.summary.newMissingCellIds ?? [];
+  const deltaSentence = deltas.priorLabel
+    ? `since ${escapeHtml(deltas.priorLabel)}: ${[
+        Number.isFinite(deltas.greenDelta)
+          ? `<b>${signed(deltas.greenDelta)} green</b>`
+          : null,
+        Number.isFinite(deltas.deltas?.red)
+          ? `<b>${signed(deltas.deltas.red)} red</b>`
+          : null,
+        Number.isFinite(deltas.deltas?.grey)
+          ? `<b>${signed(deltas.deltas.grey)} grey</b>`
+          : null,
+        newFailed.length
+          ? `<b>${newFailed.length} new red</b> (${escapeHtml(named(newFailed))})`
+          : null,
+        newMissing.length
+          ? `<b>${newMissing.length} cell(s) lost their evidence</b> (${escapeHtml(named(newMissing))})`
+          : null,
+      ]
+        .filter(Boolean)
+        .join(" · ")}`
+    : "first recorded night — no prior nightly in the durable history to compare against yet";
+  // The one series the bar itself can draw: passing cells per night, from the
+  // same whitelisted history the trends read. Nights recorded before #862
+  // carry no `cellsPassed` and drop out, so the line appears once two real
+  // points exist and is absent — not flat — until then.
+  const greenSeries = (modelLocal.healthHistory ?? [])
+    .map((point) => point.cellsPassed)
+    .filter((value) => Number.isFinite(value));
+  const greenSpark = greenSeries.length > 1 ? trendSvg(greenSeries) : "";
+  const verdictBar = `<div class="verdictbar verdict-${escapeHtml(modelLocal.verdict.level)}" role="status"><span class="vword">${escapeHtml(modelLocal.verdict.label)}</span><span class="vstat"><b class="num">${counts.green ?? 0}</b>lanes green${greenSpark}</span><span class="vstat red"><b class="num">${counts.red ?? 0}</b>red</span><span class="vstat grey"><b class="num">${counts.grey ?? 0}</b>grey</span><span class="vstat grey"><b class="num">${counts.stale ?? 0}</b>stale</span><span class="delta">${deltaSentence}</span><p class="vwhy">${escapeHtml(modelLocal.verdict.reasons.join(" · "))}</p></div>`;
+
+  const toc = [
+    ["queue", "Attention"],
+    ["product", "Product"],
+    ["states", "States"],
+    ["scenarios", "Scenarios"],
+    ["consent", "Consent"],
+    ["joins", "Joins"],
+    ["journeys", "Journeys"],
+    ["adv", "Adversaries"],
+    ["infra", "Infrastructure"],
+    ["shelf", "Detail shelf"],
+  ]
+    .map(([id, label]) => `<a href="#${id}">${label}</a>`)
+    .join("");
+
+  // The register, painted (#864). Until this pass the legend was a line of
+  // coloured TEXT under one grid: it asked the reader to map a word's ink onto a
+  // cell's tint, which are two different treatments, and it appeared after the
+  // grid it explained. A chip below carries the cell's own classes, so it IS the
+  // treatment; the legend sits above every grid that uses the register; and the
+  // two alphabets now share their words, because "no owner" in §2 and the hole
+  // §8 used to call a "gap" are one fact.
+  const axisLegend = legend("Declaration register", [
+    [
+      legendChip("axis-declared", "owned"),
+      "an owner is declared — a declaration, never a green run",
+    ],
+    [
+      legendChip("axis-unowned", "no owner"),
+      "nobody owns this yet, carrying its tracking issue — the same fact, and the same paint, as §8",
+    ],
+    [
+      legendChip("axis-skipped", "n/a"),
+      "not taken by this app, or held with its interface, with the citation beside it",
+    ],
+    [
+      legendChip("axis-bug", "product bug"),
+      "the product is known-broken — a declared defect, not a missing test and not tonight's failed run",
+    ],
+  ]);
+  const matrixLegend = legend("Cell register", [
+    [legendChip("passed", "passed"), "every owner ran and passed"],
+    [
+      legendChip("passed assessment-partial", "partial passed"),
+      "passed, where the matrix claims only partial",
+    ],
+    [
+      `${legendChip("failed", "failed")}${legendChip("infra-mismatch", "infra")}`,
+      "the product failed, or the lane's environment disagreed with its declaration",
+    ],
+    [legendChip("flaky", "flaky"), "green only on retry"],
+    [
+      legendChip("gap", "no owner"),
+      "no test exists — the hole the matrix itself declares",
+    ],
+    [
+      legendChip("owner-silent", "silent"),
+      "owner silent — the lane ran and this owner reported nothing",
+    ],
+    [
+      legendChip("evidence-unmatched", "unmatched"),
+      "evidence unmatched — a basename collision resolved to another owner",
+    ],
+    [
+      `${legendChip("stale", "stale")}${legendChip("lane-did-not-run", "no lane")}`,
+      "the lane did not run, or its newest evidence is older than the window",
+    ],
+    [legendChip("missing", "missing"), "no evidence, outside nightly scope"],
+    [
+      legendChip("expected-grey", "named"),
+      "a registered absence with no lane yet (#781)",
+    ],
+    [legendChip("skipped", "n/a"), "n/a by design, with its citation"],
+  ]);
+
   return `<!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Centraid test health</title><style>
 ${designSystemCss()}
 ${REPORT_CSS}
 ${BRIEFING_CSS}
-</style></head><body><main>
-<header class="hero"><div><div class="eyebrow">Centraid · test intelligence</div><h1>Product health, with the gaps left visible.</h1><p class="lede">One view across per-PR correctness and nightly journey, performance, and scale evidence. Every absence is classified: wiring, a silent owner, or a lane that did not run.</p>${honestyBanners.join("")}${
+</style></head><body><main class="page">
+<div class="mast"><h1>Night watch</h1><span class="runmeta num">${runMeta}</span></div>
+${verdictBar}
+${honestyBanners.join("")}${
     modelLocal.summary.unhandledErrors
       ? `<p class="lede urgent">Unhandled Vitest errors: ${modelLocal.summary.unhandledErrors} — ${escapeHtml(
           (modelLocal.summary.unhandledErrorMessages ?? [])
@@ -1509,19 +1731,43 @@ ${BRIEFING_CSS}
             .slice(0, 400)
         )}</p>`
       : ""
-  }</div><div class="summary"><div class="stat"><b>${modelLocal.summary.passed}</b><small>evidence passed</small></div><div class="stat"><b>${modelLocal.summary.failed}</b><small>evidence failed</small></div><div class="stat"><b>${modelLocal.summary.cellsSolid ?? 0}</b><small>solid</small></div><div class="stat"><b>${modelLocal.summary.cellsPartial ?? 0}</b><small>partial</small></div><div class="stat"><b>${modelLocal.summary.cellsGap ?? 0}</b><small>declared gaps</small></div><div class="stat"><b>${modelLocal.summary.cellsNotApplicable ?? 0}</b><small>n/a by design</small></div><div class="stat"><b>${modelLocal.summary.cellsMissing ?? 0}</b><small>unproven cells</small></div><div class="stat"><b>${modelLocal.summary.cellsFlaky ?? 0}</b><small>flaky cells</small></div><div class="stat"><b>${modelLocal.summary.unhandledErrors ?? 0}</b><small>unhandled errors</small></div></div></header>
-${renderVerdictStrip(modelLocal.verdict, modelLocal.verdictDeltas, modelLocal.queueBands)}
-${renderAttentionQueue(modelLocal.attentionQueue)}
-<section class="qualities-shell"><h2>User-facing qualities</h2>${qualityRows}<p class="quality-debt">${existingQualityGates} of ${totalQualityGates} gates exist.</p></section>
-<section class="card wide"><h2>Blueprint app × shared engine</h2><div class="matrix-scroll"><table class="data"><thead><tr><th>App</th>${appEngineHeaders}</tr></thead><tbody>${appEngineRows}</tbody></table></div></section>
-<section class="card wide"><h2>Blueprint app × seat</h2><p class="muted axis-note">Declared seat ownership, not evidence: ◆ names the proof that owns this app on this seat, · is an unowned seat carrying its tracking issue, – is a seat this app does not take or a held interface, with its citation. ${appSeatCounts.declared ?? 0} owned · ${appSeatCounts.unowned ?? 0} unowned · ${appSeatCounts.skipped ?? 0} held/excluded.</p><div class="matrix-scroll"><table class="data"><thead><tr><th>App</th>${appSeatHeaders}</tr></thead><tbody>${appSeatRows}</tbody></table></div></section>
-<section class="card wide"><h2>Blueprint app × designed state</h2><p class="muted axis-note">One column per canonical designed state, mirrored from each app's <code>app.json#states</code>. ◆ names the proof that asserts the state, · is a state nobody owns yet, – is excluded by that app's own manifest or held with its interface, carrying its citation. ${appStateCounts.declared ?? 0} owned · ${appStateCounts.unowned ?? 0} unowned · ${appStateCounts.skipped ?? 0} excluded/held.</p><div class="matrix-scroll"><table class="data"><thead><tr><th>App</th>${appStateHeaders}</tr></thead><tbody>${appStateRows}</tbody></table></div></section>
-${renderJoinGrid(modelLocal.joinGrid)}
-${renderAdversaryPanel(modelLocal.adversaryPanel, trendSvg)}
-${renderJourneyGrid(modelLocal.journeyGrid)}
+  }
+<nav class="toc" aria-label="Report sections">${toc}</nav>
+<h2 id="queue"><span class="tag">§1</span>What needs a human today</h2>
+<p class="why">Every red, newly-grey, freshly-stale and pinned item, ranked by the harm the matrix's own claim implies — each carrying the file that owns it and the issue it files under. The reader never hunts; the report dispatches.</p>
+${renderAttentionQueue(modelLocal.attentionQueue, ageOf)}
+<h2 id="product"><span class="tag">§2</span>Product · Blueprint app × seat</h2>
+<p class="why">The member's view first: one row per bundled app, one column per seat. These cells are DECLARATIONS — they name the proof that owns the seat, and no lane reports per-seat evidence yet — so an owned cell stays neutral rather than green. ${appSeatCounts.declared ?? 0} owned · ${appSeatCounts.unowned ?? 0} with no owner · ${appSeatCounts.skipped ?? 0} held or excluded.</p>
+${axisLegend}
+<div class="gridwrap"><table class="heat"><thead><tr><th scope="col">App</th>${appSeatHeaders}</tr></thead><tbody>${appSeatRows}</tbody></table></div>
+<h2 id="states"><span class="tag">§3</span>Designed states · Blueprint app × designed state</h2>
+<p class="why">One column per canonical designed state, mirrored from each app's <code>app.json#states</code>: the grid that loses a seat the night an owner disappears. Same register as §2. ${appStateCounts.declared ?? 0} owned · ${appStateCounts.unowned ?? 0} with no owner · ${appStateCounts.skipped ?? 0} excluded or held.</p>
+${axisLegend}
+<div class="gridwrap"><table class="heat"><thead><tr><th scope="col">App</th>${appStateHeaders}</tr></thead><tbody>${appStateRows}</tbody></table></div>
+<h2 id="scenarios"><span class="tag">§3b</span>Scenarios · per-app verb ledger</h2>
+<p class="why">One cheapest falsifying layer per product verb — U, C, or E — so a write that loses data has a row that turns. These cells are DECLARATIONS: owned is never a green run, no owner is the same plum hole as §2/§3/§8, and a product bug is indigo so a known defect cannot hide as a missing test. The grid extends the nightly zero-grey contract by refusing the absence greys: every cell is owned, no owner, product bug, or n/a. ${appScenarioCounts.owned ?? 0} owned · ${appScenarioCounts.gap ?? 0} with no owner · ${appScenarioCounts.bug ?? 0} product bug · ${appScenarioCounts.skipped ?? 0} held or excluded.</p>
+${axisLegend}
+${scenarioTables}
+<h2 id="consent"><span class="tag">§4</span>Consent ledger</h2>
+<p class="why">Sovereignty is the promise, so it gets a panel rather than a cell: one row per permission layer, where it is enforced, the words it refuses in, the adversary that attacks it, and which seats prove it.</p>
 ${renderConsentLedger(modelLocal.consentLedger)}
-<section class="matrix-shell"><div class="matrix-head"><h2>Surface × quality dimension</h2><div class="legend"><span><i class="dot passed"></i>solid passed</span><span><i class="dot partial"></i>partial passed</span><span><i class="dot failed"></i>product failed</span><span><i class="dot flaky"></i>flaky</span><span><i class="dot gap"></i>tracked gap</span><span><i class="dot skipped"></i>n/a by design</span><span><i class="dot missing"></i>missing (PR-only)</span><span><i class="dot evidence-unmatched"></i>evidence unmatched</span><span><i class="dot owner-silent"></i>owner silent</span><span><i class="dot lane-did-not-run"></i>lane did not run / stale</span><span><i class="dot expected-grey"></i>named absence (no lane exists, #781)</span><span><i class="dot infra-mismatch"></i>infra mismatch</span></div></div><div class="matrix-scroll"><table class="heatmap"><thead><tr><th>Product surface</th>${dimensionHeaders}</tr></thead><tbody>${rows}</tbody></table></div><div class="inspector" aria-live="polite"><div><span class="kicker" id="inspector-kicker">Select a matrix cell</span><h3 id="inspector-title">Evidence inspector</h3></div><div class="flow-list" id="inspector-flows"><p class="muted">Choose any cell to see its canonical flow owner, tier, lane, latest result, and first error.</p></div></div></section>
-<section class="grid"><article class="card wide"><h2>Weekly real-model evidence · eight-day freshness</h2><table class="data"><thead><tr><th>Owner</th><th>Status</th><th>Captured</th><th>Evidence</th></tr></thead><tbody>${enrichmentLiveRow}</tbody></table></article><article class="card"><h2>Coverage vs ratchet floor</h2><table class="data"><thead><tr><th>Scope</th><th>Lines</th><th>Branches</th></tr></thead><tbody>${coverageRowsLocal}</tbody></table></article><article class="card"><h2>Mutation vs ratchet floor</h2><table class="data"><thead><tr><th>Package</th><th>Score</th><th>Status</th></tr></thead><tbody>${mutationRowsLocal}</tbody></table></article><article class="card"><h2>Per-package wall clock</h2><table class="data"><thead><tr><th>Package</th><th>Runtime</th></tr></thead><tbody>${runtimeRows}</tbody></table></article><article class="card wide"><h2>Slowest 10 test files · bloat watch</h2><table class="data"><thead><tr><th>#</th><th>File</th><th>Runtime</th><th>Skipped</th><th>Env-gated</th></tr></thead><tbody>${slowRows}</tbody></table></article><article class="card wide"><h2>Environment-gated matrix owners</h2>${
+<h2 id="joins"><span class="tag">§5</span>Joins · cross-seat law</h2>
+<p class="why">One gateway, N real seats, and the laws that make local-first true — plus the simulation half of the same registry. A red here outranks everything except data loss. The design's seeded-orderings tally — interleavings run, invariant violations, deepest ordering — is not rendered: a simulation law carries a pass or a fail and nothing numeric, and no lane emits those counts.</p>
+${renderJoinGrid(modelLocal.joinGrid, ageOf)}
+<h2 id="journeys"><span class="tag">§6</span>Journeys · suite × budget</h2>
+<p class="why">Journeys grouped by the suite that budgets them, wall clock against ceiling. The app × platform axis the design asks for is not rendered because nothing declares it: a journey flow carries no app id, and platform exists only as a property of an evidence item, never as a column.</p>
+${renderJourneyGrid(modelLocal.journeyGrid)}
+<h2 id="adv"><span class="tag">§7</span>Adversaries</h2>
+<p class="why">How hard the suite is trying to be wrong: mutation attacks the tests, fuzz attacks the code, property flows attack the orderings. Trends draw from the durable nightly series and stay empty until two nights exist.</p>
+${renderAdversaryPanel(modelLocal.adversaryPanel, trendSvg)}
+<h2 id="infra"><span class="tag">§8</span>Infrastructure · Surface × quality dimension</h2>
+<p class="why">The core matrix, unchanged in substance and demoted from the opening act to the foundation it is: ${modelLocal.matrix.surfaces.length} surfaces × ${modelLocal.matrix.dimensions.length} quality dimensions, each cell carrying the word for what tonight's evidence actually was. Choose a cell for its owners, results and errors.</p>
+${matrixLegend}
+<div class="gridwrap"><table class="heat"><thead><tr><th scope="col">Product surface</th>${dimensionHeaders}</tr></thead><tbody>${rows}</tbody></table></div>
+<h2 id="shelf"><span class="tag">§9</span>Detail shelf</h2>
+<p class="why">Everything the archive carried survives here, unmoved: the qualities panel, the engine grid, floors, wall clock, debt registers and trends. The restructure above moves the reader's first five minutes out of the weeds, not the evidence off the page.</p>
+<section class="qualities-shell"><h2>User-facing qualities</h2>${qualityRows}<p class="quality-debt">${existingQualityGates} of ${totalQualityGates} gates exist.</p></section>
+<section class="grid"><article class="card wide"><h2>Blueprint app × shared engine</h2><div class="matrix-scroll"><table class="data"><thead><tr><th>App</th>${appEngineHeaders}</tr></thead><tbody>${appEngineRows}</tbody></table></div></article><article class="card wide"><h2>Weekly real-model evidence · eight-day freshness</h2><table class="data"><thead><tr><th>Owner</th><th>Status</th><th>Captured</th><th>Evidence</th></tr></thead><tbody>${enrichmentLiveRow}</tbody></table></article><article class="card"><h2>Coverage vs ratchet floor</h2><table class="data"><thead><tr><th>Scope</th><th>Lines</th><th>Branches</th></tr></thead><tbody>${coverageRowsLocal}</tbody></table></article><article class="card"><h2>Mutation vs ratchet floor</h2><table class="data"><thead><tr><th>Package</th><th>Score</th><th>Status</th></tr></thead><tbody>${mutationRowsLocal}</tbody></table></article><article class="card"><h2>Per-package wall clock</h2><table class="data"><thead><tr><th>Package</th><th>Runtime</th></tr></thead><tbody>${runtimeRows}</tbody></table></article><article class="card wide"><h2>Slowest 10 test files · bloat watch</h2><table class="data"><thead><tr><th>#</th><th>File</th><th>Runtime</th><th>Skipped</th><th>Env-gated</th></tr></thead><tbody>${slowRows}</tbody></table></article><article class="card wide"><h2>Environment-gated matrix owners</h2>${
     (modelLocal.summary.envGatedOwners ?? []).length
       ? `<table class="data"><thead><tr><th>Cell</th><th>Owner</th><th>Env</th><th>Kind</th></tr></thead><tbody>${(
           modelLocal.summary.envGatedOwners ?? []
@@ -1564,19 +1810,102 @@ ${renderConsentLedger(modelLocal.consentLedger)}
       ? `<ul>${modelLocal.qualityOpen.map((item) => `<li>${escapeHtml(item)}</li>`).join("")}</ul>`
       : '<p class="empty">QUALITY.md has no open observations.</p>'
   }</article><article class="card wide"><h2>Nightly performance and scale trends</h2><div class="trend-grid">${trends}</div></article></section>
-<p class="foot">Generated ${escapeHtml(modelLocal.generatedAt)} · ${modelLocal.matrix.surfaces.length} surfaces · ${modelLocal.matrix.dimensions.length} dimensions · ${modelLocal.matrix.flows.length} canonical flows</p></main>
+<footer class="foot">Generated ${escapeHtml(modelLocal.generatedAt)} · ${escapeHtml(scopeWord)} · ${modelLocal.runId ? `run ${escapeHtml(modelLocal.runId)}` : "no run id"} · ${modelLocal.matrix.surfaces.length} surfaces · ${modelLocal.matrix.dimensions.length} dimensions · ${modelLocal.matrix.flows.length} canonical flows</footer></main>
+<div id="inspector" role="dialog" aria-modal="false" aria-live="polite" aria-labelledby="inspector-title"><div class="inwrap"><div><span class="kicker" id="inspector-kicker">Select a cell</span><h3 id="inspector-title">Evidence inspector</h3><div class="flow-list" id="inspector-flows"><p class="muted">Choose any cell to see its canonical flow owner, tier, lane, latest result, and first error.</p></div></div><button type="button" class="close" id="inspector-close">Close</button></div></div>
 <script type="application/json" id="report-data">${data}</script><script>
-const report=JSON.parse(document.querySelector('#report-data').textContent);const byId=new Map(report.cells.map(cell=>[cell.id,cell]));const kicker=document.querySelector('#inspector-kicker');const title=document.querySelector('#inspector-title');const flows=document.querySelector('#inspector-flows');for(const button of document.querySelectorAll('[data-cell]'))button.addEventListener('click',()=>{const cell=byId.get(button.dataset.cell);kicker.textContent=cell.dimensionLabel+' · '+cell.lane+' · '+cell.state+' · '+cell.assessment;title.textContent=cell.surfaceLabel;flows.innerHTML=cell.owners.length?cell.owners.map(owner=>'<div class="flow"><strong>'+safe(owner.name)+'</strong><span class="tier">'+safe(owner.tier)+'</span><span class="result '+safe(owner.latest.status)+'">'+safe(owner.latest.status)+'</span><span>'+duration(owner.latest.duration)+'</span><span class="path">'+safe(owner.owner)+(owner.latest.error?'<br><strong>Error:</strong> '+safe(owner.latest.error):'')+(owner.latest.runUrl?'<br><a href="'+safe(owner.latest.runUrl)+'">Actions run / artifacts</a>':'')+(owner.latest.attachments?.length?'<br>Attachments: '+owner.latest.attachments.map(item=>safe(item.name??item.path??'attachment')).join(', '):'')+'</span></div>').join(''):'<p class="muted">No evidence owner is expected for this cell. Catalog assessment: '+safe(cell.assessment)+'.</p>';for(const current of document.querySelectorAll('[data-cell][aria-pressed]'))current.removeAttribute('aria-pressed');button.setAttribute('aria-pressed','true')});function duration(value){if(!Number.isFinite(value))return '—';return value>=1000?(value/1000).toFixed(2)+'s':Math.round(value)+'ms'}function safe(value){const span=document.createElement('span');span.textContent=value??'';return span.innerHTML}
+const report=JSON.parse(document.querySelector('#report-data').textContent);const byId=new Map(report.cells.map(cell=>[cell.id,cell]));const kicker=document.querySelector('#inspector-kicker');const title=document.querySelector('#inspector-title');const flows=document.querySelector('#inspector-flows');const sheet=document.querySelector('#inspector');const openSheet=()=>sheet.classList.add('open');const closeSheet=()=>{sheet.classList.remove('open');for(const current of document.querySelectorAll('[aria-pressed]'))current.removeAttribute('aria-pressed')};document.querySelector('#inspector-close').addEventListener('click',closeSheet);document.addEventListener('keydown',event=>{if(event.key==='Escape')closeSheet()});for(const button of document.querySelectorAll('[data-cell]'))button.addEventListener('click',()=>{const cell=byId.get(button.dataset.cell);kicker.textContent=cell.dimensionLabel+' · '+cell.lane+' · '+cell.state+' · '+cell.assessment;title.textContent=cell.surfaceLabel;flows.innerHTML=cell.owners.length?cell.owners.map(owner=>'<div class="flow"><strong>'+safe(owner.name)+'</strong><span class="tier">'+safe(owner.tier)+'</span><span class="result '+safe(owner.latest.status)+'">'+safe(owner.latest.status)+'</span><span>'+duration(owner.latest.duration)+'</span><span class="path">'+safe(owner.owner)+(owner.latest.error?'<br><strong>Error:</strong> '+safe(owner.latest.error):'')+(owner.latest.runUrl?'<br><a href="'+safe(owner.latest.runUrl)+'">Actions run / artifacts</a>':'')+(owner.latest.attachments?.length?'<br>Attachments: '+owner.latest.attachments.map(item=>safe(item.name??item.path??'attachment')).join(', '):'')+'</span></div>').join(''):'<p class="muted">No evidence owner is expected for this cell. Catalog assessment: '+safe(cell.assessment)+'.</p>';for(const current of document.querySelectorAll('[aria-pressed]'))current.removeAttribute('aria-pressed');button.setAttribute('aria-pressed','true');openSheet()});for(const button of document.querySelectorAll('[data-axis]'))button.addEventListener('click',()=>{kicker.textContent=button.dataset.axis;title.textContent=button.dataset.axisTitle;flows.innerHTML='<p class="muted">'+safe(button.dataset.axisDetail)+'</p>';for(const current of document.querySelectorAll('[aria-pressed]'))current.removeAttribute('aria-pressed');button.setAttribute('aria-pressed','true');openSheet()});function duration(value){if(!Number.isFinite(value))return '—';return value>=1000?(value/1000).toFixed(2)+'s':Math.round(value)+'ms'}function safe(value){const span=document.createElement('span');span.textContent=value??'';return span.innerHTML}
 </script></body></html>`;
 }
 
 /**
- * The app-axis grids (B and D) speak DECLARATION, not health, so they get
- * their own three-symbol alphabet rather than borrowing the evidence one —
- * a declared owner must never be mistaken for a green run.
+ * One legend chip: the state's word wearing the state's own cell classes, so
+ * the legend is the treatment rather than a description of it (#864).
+ * @param {string} classes The `.cell` modifier classes, space separated.
+ * @param {string} word The word the cell says.
+ * @returns {string} HTML.
  */
-function axisSymbol(state) {
-  return { declared: "◆", unowned: "·", skipped: "–" }[state] ?? "·";
+function legendChip(classes, word) {
+  return `<b class="cell ${classes}">${escapeHtml(word)}</b>`;
+}
+
+/**
+ * A painted legend, printed ABOVE the grid it glosses.
+ * @param {string} label The accessible name for the list.
+ * @param {[string, string][]} entries `[chips, gloss]` pairs, one per treatment.
+ * @returns {string} HTML.
+ */
+function legend(label, entries) {
+  const items = entries
+    .map(
+      ([chips, gloss]) => `<li>${chips}<span>${escapeHtml(gloss)}</span></li>`
+    )
+    .join("");
+  return `<ul class="legend" aria-label="${escapeHtml(label)}">${items}</ul>`;
+}
+
+/**
+ * The app-axis grids (B and D) speak DECLARATION, not health: a declared owner
+ * must never be mistaken for a green run, so `owned` is its own word and its own
+ * neutral paint. The other two words are NOT a private alphabet — `no owner` is
+ * what §8 says for the same fact and `n/a` is what every grid says for an
+ * exclusion (#864). The grid that used to say "unowned" here while §8 said "gap"
+ * was making the reader learn two names for one hole.
+ */
+function axisWord(state) {
+  return (
+    {
+      declared: "owned",
+      skipped: "n/a",
+      unowned: "no owner",
+      bug: "product bug",
+    }[state] ?? "no owner"
+  );
+}
+
+/**
+ * The word a matrix cell says. Colour is the second reading here, never the
+ * only one: every one of the twelve states is legible as text, and the two
+ * pairs that share a tint (`failed`/`infra-mismatch`, `stale`/`lane-did-not-run`)
+ * are told apart by this word alone.
+ *
+ * `gap` says "no owner" rather than "gap" (#864). It is the same fact §2 and §3
+ * report, and it took a different word AND a different colour on each grid — red
+ * here, grey there — so the page contradicted itself about whether a missing
+ * test was tonight's emergency or nobody's problem. "No owner" is chosen over
+ * "gap" because it states the fact instead of naming it: a reader needs the
+ * legend to learn what a gap is, and needs nothing to read "no owner".
+ */
+function stateWord(state) {
+  return (
+    {
+      passed: "passed",
+      failed: "failed",
+      flaky: "flaky",
+      skipped: "n/a",
+      gap: "no owner",
+      stale: "stale",
+      missing: "missing",
+      "owner-silent": "silent",
+      "lane-did-not-run": "no lane",
+      "infra-mismatch": "infra",
+      "evidence-unmatched": "unmatched",
+      "expected-grey": "named",
+    }[state] ?? "missing"
+  );
+}
+
+/**
+ * The word a cell actually prints. A pass against a claim the matrix itself
+ * only calls PARTIAL is a different reading from a pass against a solid one —
+ * #864 gave it a tint of its own, and word-first means it needs a word of its
+ * own too, or the distinction would be legible only to a reader who sees hue.
+ * @param {{assessment: string, state: string}} cell A matrix cell.
+ * @returns {string} The word, complete enough to stand without the tint.
+ */
+function cellWord(cell) {
+  return cell.state === "passed" && cell.assessment === "partial"
+    ? "partial passed"
+    : stateWord(cell.state);
 }
 
 function symbol(state) {

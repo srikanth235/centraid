@@ -43,6 +43,11 @@ export const tasksPendingProjection = definePendingProjection({
     },
     "set-status": ({ input }) =>
       pendingPatch("schedule.task", input.task_id, input, ["status"]),
+    delete: ({ input }) => {
+      if (typeof input.task_id !== "string" || input.task_id.length === 0)
+        return [];
+      return [{ op: "delete", entity: "schedule.task", rowId: input.task_id }];
+    },
     edit: ({ input }) =>
       pendingPatch("schedule.task", input.task_id, input, TASK_FIELDS),
     "save-project": ({ input, intentId }) => {

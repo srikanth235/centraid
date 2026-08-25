@@ -19,6 +19,12 @@ export interface PhotoAsset {
    * able to reach all of them, so the identity is a set, not a single id.
    */
   localIds?: string[];
+  /**
+   * Every vault `media_asset.asset_id` that folded onto this row. SHA merge
+   * keeps one canonical `assetId` (the writable copy); album membership and
+   * free-up pins still name the other copies, so the set has to survive.
+   */
+  assetIds?: string[];
   uri: string;
   previewUri: string;
   originalUri: string;
@@ -82,6 +88,15 @@ function withLocalId(
   return ids;
 }
 
+function foldedAssetIds(...assets: readonly PhotoAsset[]): string[] {
+  return unique(
+    assets.flatMap((asset) => [
+      ...(asset.assetIds ?? []),
+      ...(asset.assetId ? [asset.assetId] : []),
+    ])
+  );
+}
+
 export function mergePhotoAssets(
   device: PhotoAsset[],
   remote: PhotoAsset[]
@@ -93,7 +108,7 @@ export function mergePhotoAssets(
     const position = remoteIndex.get(key);
     if (position === undefined) {
       remoteIndex.set(key, merged.length);
-      merged.push(asset);
+      merged.push({ ...asset, assetIds: foldedAssetIds(asset) });
       continue;
     }
     const current = merged[position]!;
@@ -101,6 +116,7 @@ export function mergePhotoAssets(
       current.canWrite !== true && asset.canWrite === true ? asset : current;
     merged[position] = {
       ...canonical,
+      assetIds: foldedAssetIds(current, asset),
       scopeIds: unique([
         ...(current.scopeIds ?? []),
         ...(asset.scopeIds ?? []),

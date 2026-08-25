@@ -343,6 +343,35 @@ describe(recordSchedulerTick, () => {
     expect(ledger.load().lastTickAt).toBe(at(8, 20).toISOString());
   });
 
+  it("a new store over the same KV records a crash gap once and never again", () => {
+    const kv = fakeConversationStore();
+    const automations = [
+      { ref: "a/every-minute", enabled: true, triggers: cron("* * * * *") },
+    ];
+    recordSchedulerTick({
+      ledger: new SchedulerLedgerStore(kv),
+      now: at(8, 0),
+      automations,
+    });
+
+    const afterCrash = recordSchedulerTick({
+      ledger: new SchedulerLedgerStore(kv),
+      now: at(8, 20),
+      automations,
+    });
+    expect(afterCrash).toHaveLength(1);
+    expect(afterCrash[0]!.automationRef).toBe("a/every-minute");
+    expect(afterCrash[0]!.reason).toBe("gateway-down");
+
+    const afterRecovery = recordSchedulerTick({
+      ledger: new SchedulerLedgerStore(kv),
+      now: at(8, 21),
+      automations,
+    });
+    expect(afterRecovery).toStrictEqual([]);
+    expect(new SchedulerLedgerStore(kv).load().missed).toHaveLength(1);
+  });
+
   it("never records for a disabled-only registry even across a real gap", () => {
     const ledger = new SchedulerLedgerStore(fakeConversationStore());
     recordSchedulerTick({

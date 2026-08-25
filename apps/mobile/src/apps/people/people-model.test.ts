@@ -56,14 +56,14 @@ describe("[law:people-overdue-never] cadence 0 is Never and never overdue", () =
     expect(dashboard.counts.reconnect).toBe(0);
   });
 
-  it("marks a person past their cadence with the dashboard's own >= 0 rule", () => {
-    // daysSince - cadence >= 0: exactly at the cadence is already due — the
-    // dashboard query's arithmetic, not the handoff's strict >.
-    const due = person({ cadence_days: 30, last_contacted_at: iso(30) });
+  it("marks a person overdue only after the cadence, not on the cadence day", () => {
+    const due = person({ cadence_days: 30, last_contacted_at: iso(31) });
+    const onCadence = person({ cadence_days: 30, last_contacted_at: iso(30) });
     const fresh = person({ cadence_days: 30, last_contacted_at: iso(29) });
     expect(isOverdue(due)).toBe(true);
+    expect(isOverdue(onCadence)).toBe(false);
     expect(isOverdue(fresh)).toBe(false);
-    expect(applyRosterFilter([due, fresh], "due")).toHaveLength(1);
+    expect(applyRosterFilter([due, onCadence, fresh], "due")).toHaveLength(1);
   });
 });
 

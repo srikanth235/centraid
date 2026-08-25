@@ -35,6 +35,7 @@ import {
   InCloudOriginalError,
   openDeviceOriginal,
 } from "./device-media";
+import { protectedAssetIdsFromPins } from "./photos-library-pins";
 import { styles } from "./PhotosLibrary.styles";
 import PhotosScreen from "./PhotosScreen";
 import type { PhotoAsset } from "./timeline-source";
@@ -144,13 +145,8 @@ export default function PhotosLibrary({
   // album originals as eligible for deletion.
   const pinsHydrated = pinsReady && !entries.loading;
   const protectedAssets = useMemo(
-    () =>
-      new Set(
-        entries.rows
-          .filter((row) => keptAlbums.includes(String(row.collection_id)))
-          .map((row) => String(row.target_id))
-      ),
-    [entries.rows, keptAlbums]
+    () => protectedAssetIdsFromPins(entries.rows, keptAlbums, assets),
+    [assets, entries.rows, keptAlbums]
   );
   const freeCandidates = useMemo(
     () => selectFreeUpCandidates(assets, protectedAssets),

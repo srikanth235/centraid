@@ -1387,6 +1387,44 @@ export async function waitForHome(page: Page): Promise<void> {
   }
 }
 
+/**
+ * First-run Home auto-fills a removable sample week so the springboard is
+ * useful. Custodian journeys that assert day-one empty canvases wait for that
+ * fill to land, then clear it through the product control — the same "one tap
+ * clears it" the offer discloses. Opening an app while the generators are
+ * still running is how empty copy never paints and the Photos replica stays
+ * busy behind a write the vault has not yet taken.
+ */
+export async function clearFirstRunSample(page: Page): Promise<void> {
+  await page
+    .getByTestId("home-sample-note")
+    .waitFor({ state: "visible", timeout: 120_000 });
+  // The identity title is the vault switcher. A click that lands there while
+  // Home is restyling during the fill leaves a body-portalled scrim over the
+  // Clear control. Escape is the same dismiss the popover already offers.
+  const switcher = page.getByRole("menu", { name: "Vaults" });
+  if ((await switcher.count()) > 0) {
+    await page.keyboard.press("Escape");
+    await switcher.waitFor({ state: "hidden" });
+  }
+  await page
+    .getByRole("button", { name: "Clear the sample", exact: true })
+    .click();
+  await page
+    .getByTestId("home-sample-offer")
+    .waitFor({ state: "visible", timeout: 60_000 });
+  await page
+    .getByRole("button", { name: "Fill it with a sample week", exact: true })
+    .waitFor({ state: "visible" });
+  // Replica catch-up: Home's first-run instruction only returns once the
+  // cleared rows have left the local copy. Opening an app before that is
+  // how Photos' write rail stays busy behind sample photograph deletes.
+  const firstRun = page.getByTestId("home-first-run");
+  if ((await firstRun.count()) > 0) {
+    await firstRun.waitFor({ state: "visible", timeout: 60_000 });
+  }
+}
+
 /** Open the ⌘K / Ctrl+K command palette (stem Search, with keyboard fallback). */
 export async function openCommandPalette(page: Page): Promise<void> {
   // Stem Search's accessible name is "Search" or "Search ⌘K" depending on host.

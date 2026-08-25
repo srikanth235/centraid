@@ -49,6 +49,25 @@ describe("first-line promotion", () => {
     expect(shown.preview).toBe("before Friday");
   });
 
+  test("a web note stored as Untitled note is named from its first line", () => {
+    const shown = promote({
+      title: "Untitled note",
+      preview: "Lease terms\nThe deposit clause moved to §4",
+    });
+    expect(shown.untitled).toBe(true);
+    expect(shown.heading).toBe("Lease terms");
+    expect(shown.preview).toBe("The deposit clause moved to §4");
+  });
+
+  test("a typed title still wins over the first line", () => {
+    const shown = promote({
+      title: "Lease terms",
+      preview: "The deposit clause moved to §4",
+    });
+    expect(shown.untitled).toBe(false);
+    expect(shown.heading).toBe("Lease terms");
+  });
+
   test("a note with nothing in it promotes nothing rather than inventing", () => {
     expect(promote({ title: "", preview: "" })).toStrictEqual({
       heading: "",

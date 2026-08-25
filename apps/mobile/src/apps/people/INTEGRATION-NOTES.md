@@ -33,7 +33,7 @@ Same set and same causes as the web build (docs/design-divergences.md § People)
 
 ## Departures inside the drawn set (web parity, not new)
 
-- Overdue is `daysSince − cadence ≥ 0` (the dashboard query's arithmetic); cadence 0 = `Never`, excluded outright. Both through the shared `format.ts`, tested in `people-model.test.ts`.
+- Overdue is `daysSinceContact > cadence` (strictly after the cadence day; cadence 0 = `Never`, excluded outright). Both through the shared `format.ts`, tested in `people-model.test.ts`.
 - Overdue meta is NOT gated on `linked` (web departure, kept).
 - `Vaults` tile counts linked people; `Starred` yields its tile to `To link` while the link counts are readable (`LINK_TOUCH_TILES`).
 - Search draws no link facts and no link chips (the web search query returns none; same person must not read two ways on two screens).

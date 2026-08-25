@@ -1,6 +1,6 @@
 import { describe, expect, test } from "vitest";
 
-import { formatBytes, formatRelativeTime } from "./format.js";
+import { formatBytes, formatRelativeTime, localDayKey } from "./format.js";
 
 describe("canonical formatter contract", () => {
   test("formatBytes uses one binary scale across profiles", () => {
@@ -17,5 +17,12 @@ describe("canonical formatter contract", () => {
     expect(formatRelativeTime(now - 30_000, now)).toBe("just now");
     expect(formatRelativeTime(now - 90 * 60_000, now)).toBe("1h ago");
     expect(formatRelativeTime(now - 2 * 86_400_000, now)).toBe("2d ago");
+  });
+
+  test("localDayKey keys the named zone, never the UTC prefix", () => {
+    const instant = "2026-08-21T23:00:00Z";
+    expect(instant.slice(0, 10)).toBe("2026-08-21");
+    expect(localDayKey(instant, "UTC")).toBe("2026-08-21");
+    expect(localDayKey(instant, "Pacific/Kiritimati")).toBe("2026-08-22");
   });
 });

@@ -1098,8 +1098,12 @@ const ADD_IMPORTANT_DATE: CommandDefinition = {
     properties: {
       party_id: { type: "string", minLength: 1 },
       label: { type: "string", minLength: 1 },
-      // MM-DD; the year of a recurring date is meaningless.
-      month_day: { type: "string", pattern: "^\\d{2}-\\d{2}$" },
+      // MM-DD; February 29 is real, April 31 is not.
+      month_day: {
+        type: "string",
+        pattern:
+          "^(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|02-(?:0[1-9]|1\\d|2[0-9]))$",
+      },
       reminder_on: { type: "boolean" },
     },
   },

@@ -36,6 +36,8 @@
  */
 export interface FreeUpAsset {
   assetId?: string;
+  /** Every vault asset id that folded onto this row (SHA merge). */
+  assetIds?: string[];
   sha256?: string;
   /** `"merged"` — present in a vault AND on this device. */
   source?: string;
@@ -67,6 +69,9 @@ export function selectFreeUpCandidates(
 ): FreeUpCandidate[] {
   return assets.flatMap((asset) => {
     const localIds = asset.localIds ?? (asset.localId ? [asset.localId] : []);
+    const identityKeys = [asset.assetId, ...(asset.assetIds ?? [])].filter(
+      (id): id is string => typeof id === "string" && id.length > 0
+    );
     const eligible =
       asset.assetId !== undefined &&
       asset.sha256 !== undefined &&
@@ -74,7 +79,7 @@ export function selectFreeUpCandidates(
       asset.backupState === "backed-up" &&
       asset.verifiedCasAck === true &&
       localIds.length > 0 &&
-      !protectedAssetIds.has(asset.assetId);
+      !identityKeys.some((id) => protectedAssetIds.has(id));
     return eligible
       ? [
           {

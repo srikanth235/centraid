@@ -144,6 +144,53 @@ describe("schedule organization commands", () => {
     });
   });
 
+  test("this-occurrence override keeps every field that was set", () => {
+    const eventId = recurringEvent();
+    const guestId = uuidv7();
+    db.vault
+      .prepare(
+        `INSERT INTO core_party
+          (party_id, kind, display_name, created_at, updated_at, ontology_version)
+         VALUES (?, 'person', 'Asha', ?, ?, '1.4')`
+      )
+      .run(guestId, new Date().toISOString(), new Date().toISOString());
+
+    expect(
+      invoke("schedule.edit_event_occurrence", {
+        event_id: eventId,
+        original_start: "2026-07-13T03:30:00.000Z",
+        scope: "occurrence",
+        action: "override",
+        summary: "Planning (moved)",
+        dtstart: "2026-07-13T05:30:00.000Z",
+        dtend: "2026-07-13T06:00:00.000Z",
+        recurrence_semantics: "zoned",
+        calendar_id: calendarId,
+        reminders: [{ minutes_before: 15 }],
+        conferencing_uri: "https://meet.example.test/planning",
+        attendee_party_ids: [guestId],
+      }).status
+    ).toBe("executed");
+
+    const row = db.vault
+      .prepare(
+        `SELECT override_json FROM schedule_recurrence_exception
+          WHERE target_id = ? AND original_start = ?`
+      )
+      .get(eventId, "2026-07-13T03:30:00.000Z") as { override_json: string };
+    expect(JSON.parse(row.override_json)).toMatchObject({
+      scope: "occurrence",
+      summary: "Planning (moved)",
+      start: "2026-07-13T05:30:00.000Z",
+      end: "2026-07-13T06:00:00.000Z",
+      recurrence_semantics: "zoned",
+      calendar_id: calendarId,
+      reminders: [{ minutes_before: 15 }],
+      conferencing_uri: "https://meet.example.test/planning",
+      attendee_party_ids: [guestId],
+    });
+  });
+
   test("series-scope edit can cancel or retarget the whole series", () => {
     const eventId = recurringEvent();
     expect(

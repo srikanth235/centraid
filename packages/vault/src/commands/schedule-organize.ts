@@ -234,6 +234,22 @@ const EDIT_OCCURRENCE: CommandDefinition = {
       dtend: STRING,
       summary: STRING,
       description: { type: "string" },
+      recurrence_semantics: {
+        type: "string",
+        enum: ["zoned", "floating", "all-day"],
+      },
+      calendar_id: STRING,
+      reminders: {
+        type: "array",
+        items: {
+          type: "object",
+          required: ["minutes_before"],
+          additionalProperties: false,
+          properties: { minutes_before: { type: "integer", minimum: 0 } },
+        },
+      },
+      conferencing_uri: { type: "string" },
+      attendee_party_ids: { type: "array", items: STRING },
     },
   },
   outputSchema: {
@@ -260,6 +276,36 @@ const EDIT_OCCURRENCE: CommandDefinition = {
   handler: editOccurrence,
 };
 
+function occurrenceOverrideJson(input: {
+  scope: "occurrence" | "future" | "series";
+  action: "skip" | "override";
+  dtstart?: string;
+  dtend?: string;
+  summary?: string;
+  description?: string;
+  recurrence_semantics?: string;
+  calendar_id?: string;
+  reminders?: { minutes_before: number }[];
+  conferencing_uri?: string;
+  attendee_party_ids?: string[];
+}): string | null {
+  if (input.action === "skip") return null;
+  const override: Record<string, unknown> = { scope: input.scope };
+  if (input.dtstart !== undefined) override.start = input.dtstart;
+  if (input.dtend !== undefined) override.end = input.dtend;
+  if (input.summary !== undefined) override.summary = input.summary;
+  if (input.description !== undefined) override.description = input.description;
+  if (input.recurrence_semantics !== undefined)
+    override.recurrence_semantics = input.recurrence_semantics;
+  if (input.calendar_id !== undefined) override.calendar_id = input.calendar_id;
+  if (input.reminders !== undefined) override.reminders = input.reminders;
+  if (input.conferencing_uri !== undefined)
+    override.conferencing_uri = input.conferencing_uri;
+  if (input.attendee_party_ids !== undefined)
+    override.attendee_party_ids = input.attendee_party_ids;
+  return JSON.stringify(override);
+}
+
 function editOccurrence(ctx: HandlerCtx): Record<string, unknown> {
   const input = ctx.input as {
     event_id: string;
@@ -270,6 +316,11 @@ function editOccurrence(ctx: HandlerCtx): Record<string, unknown> {
     dtend?: string;
     summary?: string;
     description?: string;
+    recurrence_semantics?: string;
+    calendar_id?: string;
+    reminders?: { minutes_before: number }[];
+    conferencing_uri?: string;
+    attendee_party_ids?: string[];
   };
   if (input.scope === "series") {
     // Series-wide skip is cancellation of the series identity — same terminal
@@ -329,16 +380,7 @@ function editOccurrence(ctx: HandlerCtx): Record<string, unknown> {
     }
     return { event_id: input.event_id, scope: input.scope };
   }
-  const override =
-    input.action === "skip"
-      ? null
-      : JSON.stringify({
-          scope: input.scope,
-          start: input.dtstart,
-          end: input.dtend,
-          summary: input.summary,
-          description: input.description,
-        });
+  const override = occurrenceOverrideJson(input);
   const exceptionId = ctx.newId();
   ctx.db
     .prepare(

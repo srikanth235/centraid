@@ -269,12 +269,53 @@ describe("the detail shelf survives beneath the briefing", () => {
 
   test("the briefing sits above the detail shelf, not inside it", () => {
     const result = runWith(makeFixtureRoot(), allGreenVitest());
-    expect(result.html.indexOf("Attention queue")).toBeLessThan(
-      result.html.indexOf("Surface × quality dimension")
-    );
-    expect(result.html.indexOf('class="verdict')).toBeLessThan(
+    // Measured against the shelf's own anchor rather than against whichever
+    // heading happens to open it: #862 promoted three of v1's shelf cards into
+    // top-level sections, and a test that pins one of those headings stops
+    // measuring the split the moment the heading moves again.
+    const shelf = result.html.indexOf('id="shelf"');
+    expect(shelf).toBeGreaterThan(0);
+    expect(result.html.indexOf('class="verdictbar')).toBeLessThan(
       result.html.indexOf("Attention queue")
     );
+    expect(result.html.indexOf("Attention queue")).toBeLessThan(shelf);
+    for (const promoted of [
+      "Blueprint app × seat",
+      "Blueprint app × designed state",
+      "Surface × quality dimension",
+    ]) {
+      expect(result.html.indexOf(promoted), promoted).toBeLessThan(shelf);
+    }
+  });
+
+  test("the Night Watch running order is the one that ships", () => {
+    const result = runWith(makeFixtureRoot(), allGreenVitest());
+    // The restructure IS the deliverable of #862, and nothing else pins it: a
+    // section that drifts back up — the infrastructure heatmap reclaiming the
+    // opening act, say — changes what the reader meets first while every
+    // content assertion on this page still passes.
+    const ids = [...result.html.matchAll(/<h2 id="(?<id>[a-z]+)"/gu)].map(
+      (hit) => hit.groups?.id
+    );
+    expect(ids).toStrictEqual([
+      "queue",
+      "product",
+      "states",
+      "scenarios",
+      "consent",
+      "joins",
+      "journeys",
+      "adv",
+      "infra",
+      "shelf",
+    ]);
+    // Every section is reachable from the sticky table of contents, so the
+    // running order is navigable and not merely present.
+    for (const id of ids) expect(result.html).toContain(`href="#${id}"`);
+    // The inspector is a fixed sheet OUTSIDE <main>: every grid on the page
+    // opens it, and in flow under §8 it would scroll off screen the moment a
+    // §2 cell was chosen.
+    expect(result.html).toMatch(/<\/main>\s*<div id="inspector"/u);
   });
 });
 

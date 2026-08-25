@@ -78,6 +78,46 @@ describe("the editor's continuous save", () => {
     await clock.advance(600);
     expect(app.statusTexts).toStrictEqual(["Denied by consent: no grant"]);
   });
+
+  it("does not drop a pending save when the member switches notes", async () => {
+    const clock = useFakeClock();
+    const app = harness({
+      data: {
+        notes: [
+          note({ note_id: "n1", body: "one" }),
+          note({ note_id: "n2", body: "two" }),
+        ],
+      },
+    });
+    app.logic.saveNote("n1", { body_text: "one edited" });
+    app.logic.saveNote("n2", { body_text: "two edited" });
+    await clock.advance(600);
+    expect(app.sent).toStrictEqual([
+      {
+        action: "edit-note",
+        input: { note_id: "n1", body_text: "one edited" },
+      },
+      {
+        action: "edit-note",
+        input: { note_id: "n2", body_text: "two edited" },
+      },
+    ]);
+  });
+
+  it("writes a pending save as soon as the editor is torn down", async () => {
+    useFakeClock();
+    const app = harness({
+      data: { notes: [note({ note_id: "n1", body: "one" })] },
+    });
+    app.logic.saveNote("n1", { body_text: "one edited" });
+    await app.logic.flushSave();
+    expect(app.sent).toStrictEqual([
+      {
+        action: "edit-note",
+        input: { note_id: "n1", body_text: "one edited" },
+      },
+    ]);
+  });
 });
 
 describe("the small note commands", () => {
@@ -146,6 +186,7 @@ describe("the small note commands", () => {
       },
     ]);
     expect(app.asked.map((ask) => ask.query)).toStrictEqual([
+      "history",
       "history",
       "note",
     ]);

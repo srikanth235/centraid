@@ -8,7 +8,10 @@
 import React, { useMemo, useState } from "react";
 import { Alert, Pressable, StyleSheet, View } from "react-native";
 
-import { PHOTOS_EMPTY_FAVORITES } from "@centraid/blueprints/apps/photos/shared-copy";
+import {
+  PHOTOS_ARCHIVE_EMPTY,
+  PHOTOS_EMPTY_FAVORITES,
+} from "@centraid/blueprints/apps/photos/shared-copy";
 
 import { Text } from "../../kit/components/NativeText";
 import SelectChip from "../../kit/components/SelectChip";
@@ -152,7 +155,7 @@ export default function PhotoStateView({
         // read differently depending on which surface a member is on.
         PHOTOS_EMPTY_FAVORITES
       : mode === "archive"
-        ? "Archive is empty."
+        ? PHOTOS_ARCHIVE_EMPTY
         : mode === "videos"
           ? "Videos you capture or import collect here."
           : mode === "person"

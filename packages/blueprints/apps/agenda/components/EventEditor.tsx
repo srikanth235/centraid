@@ -20,7 +20,7 @@ import type { ChangeEvent, ReactNode } from "react";
 import { displayText, safeExternalUrl } from "../../_shared/untrusted.ts";
 import { needsScopePanel, occurrenceEdit } from "../edits.ts";
 import type { EditScope } from "../edits.ts";
-import { toIsoUtc, toLocalInput } from "../format.ts";
+import { eventBounds, toLocalInput } from "../format.ts";
 import type {
   AgEvent,
   Calendar,
@@ -144,23 +144,22 @@ export function EventEditor(props: EventEditorProps): ReactNode {
   };
 
   const reminders = reminder === null ? [] : [{ minutes_before: reminder }];
-  const semantics = allDay ? "all-day" : "zoned";
+  const bounds = eventBounds(startVal, endVal, allDay);
+  const conferencingUri = safeExternalUrl(conferencing)
+    ? conferencing
+    : undefined;
 
   const commitNew = (): void => {
     props.onCreate({
       summary,
-      dtstart: toIsoUtc(startVal),
-      dtend: toIsoUtc(endVal),
+      ...bounds,
       calendar_id: calendarId,
-      recurrence_semantics: semantics,
       attendee_party_ids: [...invited],
       reminders,
       ...(rrule ? { rrule } : {}),
       // An unsafe scheme never leaves this form: the same allowlist that
       // refuses to paint it refuses to store it.
-      ...(safeExternalUrl(conferencing)
-        ? { conferencing_uri: conferencing }
-        : {}),
+      ...(conferencingUri ? { conferencing_uri: conferencingUri } : {}),
     });
   };
 
@@ -172,9 +171,14 @@ export function EventEditor(props: EventEditorProps): ReactNode {
         scope,
         intent: "edit",
         changes: {
-          dtstart: toIsoUtc(startVal),
-          dtend: toIsoUtc(endVal),
+          dtstart: bounds.dtstart,
+          dtend: bounds.dtend,
           summary,
+          recurrence_semantics: bounds.recurrence_semantics,
+          calendar_id: calendarId,
+          reminders,
+          attendee_party_ids: [...invited],
+          ...(conferencingUri ? { conferencing_uri: conferencingUri } : {}),
         },
       });
       if (payload) props.onEditOccurrence(payload);
@@ -183,15 +187,13 @@ export function EventEditor(props: EventEditorProps): ReactNode {
     props.onEdit({
       event_id: ev.event_id,
       summary,
-      dtstart: toIsoUtc(startVal),
-      dtend: toIsoUtc(endVal),
-      recurrence_semantics: semantics,
+      ...bounds,
       calendar_id: calendarId,
       attendee_party_ids: [...invited],
       reminders,
       ...(rrule ? { rrule } : { clear_rrule: true as const }),
-      ...(safeExternalUrl(conferencing)
-        ? { conferencing_uri: conferencing }
+      ...(conferencingUri
+        ? { conferencing_uri: conferencingUri }
         : { clear_conferencing: true as const }),
     });
   };

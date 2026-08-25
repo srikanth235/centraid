@@ -11,7 +11,12 @@
  *
  * Everything comes from the vault — this app holds no rows of its own; a
  * consent denial is a first-class outcome the UI renders, receipt included.
+ *
+ * Unfinished children of a completed or released parent are promoted onto
+ * the open board (`nestTaskFamilies`) so completing a parent cannot hide
+ * remaining work.
  */
+import { nestTaskFamilies } from "../when.ts";
 
 /** Raw schedule.task row shape as the vault projects it (the fields this
  *  query reads; unread columns ride the index signature). */
@@ -356,26 +361,15 @@ export default async function boardHandler({ input, ctx }: HandlerArgs) {
       });
     }
 
-    const childrenOf = new Map<string, RawTask[]>();
-    for (const task of rows) {
-      if (!task.parent_task_id) continue;
-      if (!childrenOf.has(task.parent_task_id))
-        childrenOf.set(task.parent_task_id, []);
-      childrenOf.get(task.parent_task_id)!.push(task);
-    }
-
-    // Priority per RFC 5545: 1 is highest, 0 is unset (sorts after 9).
-    const prio = (t: RawTask) => {
-      const p = Number(t.priority ?? 0);
-      return p > 0 ? p : 10;
-    };
+    // Priority per Todoist: higher is more urgent, 0 is unset (sorts last).
+    const prio = (t: RawTask) => Number(t.priority ?? 0);
     const byUrgency = (a: RawTask, b: RawTask) => {
       if (a.due_at == null && b.due_at != null) return 1;
       if (a.due_at != null && b.due_at == null) return -1;
       if (a.due_at != null && a.due_at !== b.due_at) {
         return String(a.due_at).localeCompare(String(b.due_at));
       }
-      if (prio(a) !== prio(b)) return prio(a) - prio(b);
+      if (prio(a) !== prio(b)) return prio(b) - prio(a);
       return String(a.title).localeCompare(String(b.title));
     };
 
@@ -420,29 +414,22 @@ export default async function boardHandler({ input, ctx }: HandlerArgs) {
       ...withRecurrence(task),
     });
 
-    const withChildren = (task: RawTask) => {
-      const children = (childrenOf.get(task.task_id) ?? [])
-        .toSorted(byUrgency)
-        .map(withAttachments);
+    const withChildren = (task: RawTask, children: RawTask[]) => {
+      const nested = children.toSorted(byUrgency).map(withAttachments);
       return {
         ...withAttachments(task),
-        children,
-        done_children: children.filter((c) => !OPEN.has(c.status)).length,
+        children: nested,
+        done_children: nested.filter((c) => !OPEN.has(c.status)).length,
       };
     };
 
-    const topLevel = rows.filter((t) => !t.parent_task_id);
-    const open = topLevel
-      .filter((t) => OPEN.has(t.status))
-      .toSorted(byUrgency)
-      .map(withChildren);
-    const logbook = topLevel
-      .filter((t) => !OPEN.has(t.status))
+    const families = nestTaskFamilies(rows, withChildren);
+    const open = families.open.toSorted(byUrgency);
+    const logbook = families.logbook
       .toSorted((a, b) =>
         String(b.completed_at ?? "").localeCompare(String(a.completed_at ?? ""))
       )
-      .slice(0, 50)
-      .map(withChildren);
+      .slice(0, 50);
 
     // Counts describe what was fetched, not the whole table — a full open
     // window means more open tasks exist beyond it, and `truncated` tells

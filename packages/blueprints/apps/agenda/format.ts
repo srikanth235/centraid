@@ -9,8 +9,7 @@
 // produced here; the isolation is applied where it is painted, because
 // `unicode-bidi: isolate` is a property of the box, not of the string.
 
-import { identityColor } from "@centraid/design";
-import { localDayKey } from "@centraid/design/elements";
+import { identityColor, localDayKey } from "@centraid/design";
 
 import type { AgEvent, Calendar } from "./types.ts";
 import { UNTITLED } from "./view-copy.ts";
@@ -24,8 +23,59 @@ export function toIsoUtc(local: string): string {
   return Number.isNaN(d.getTime()) ? "" : d.toISOString();
 }
 
+const CIVIL_DATE = /^(?<day>\d{4}-\d{2}-\d{2})/u;
+
+/** The named civil date prefix, or null when the value is not a date. */
+export function namedDay(iso: string): string | null {
+  return CIVIL_DATE.exec(iso)?.groups?.day ?? null;
+}
+
+/** Local midnight of a YYYY-MM-DD civil date — never UTC-parsed. */
+export function civilMidnight(isoDate: string): Date {
+  const [year, month, day] = isoDate.split("-").map(Number);
+  return new Date(year ?? 0, (month ?? 1) - 1, day ?? 1);
+}
+
+function viewerTimeZone(): string {
+  return Intl.DateTimeFormat().resolvedOptions().timeZone;
+}
+
+/**
+ * Start/end as the vault stores them: a zoned instant plus the viewer's zone,
+ * or a civil date for all-day so recurrence cannot slip a day off UTC+0.
+ */
+export function eventBounds(
+  localStart: string,
+  localEnd: string,
+  allDay: boolean
+): {
+  dtstart: string;
+  dtend: string;
+  start_tz: string;
+  recurrence_semantics: "all-day" | "zoned";
+} {
+  if (allDay) {
+    return {
+      dtstart: namedDay(localStart) ?? localStart.slice(0, 10),
+      dtend: namedDay(localEnd) ?? localEnd.slice(0, 10),
+      start_tz: viewerTimeZone(),
+      recurrence_semantics: "all-day",
+    };
+  }
+  return {
+    dtstart: toIsoUtc(localStart),
+    dtend: toIsoUtc(localEnd),
+    start_tz: viewerTimeZone(),
+    recurrence_semantics: "zoned",
+  };
+}
+
 /** An instant as the value a datetime-local input wants, in local time. */
 export function toLocalInput(dateish: string | number | Date): string {
+  if (typeof dateish === "string") {
+    const day = namedDay(dateish);
+    if (day && !dateish.includes("T")) return `${day}T00:00`;
+  }
   const d = dateish instanceof Date ? dateish : new Date(dateish);
   if (Number.isNaN(d.getTime())) return "";
   const pad = (n: number): string => String(n).padStart(2, "0");
@@ -115,6 +165,29 @@ export function startOfDay(d: Date): Date {
   return new Date(d.getFullYear(), d.getMonth(), d.getDate());
 }
 
+/**
+ * Every local civil day an interval occupies. End is exclusive at a civil
+ * midnight and inclusive otherwise — Friday 22:00–Sunday 09:00 occupies
+ * Friday, Saturday and Sunday. Web grids and the phone list both walk this
+ * so a multi-day run cannot vanish from the days in the middle.
+ */
+export function spanLocalDays(start: Date, end: Date): Date[] {
+  if (Number.isNaN(start.getTime())) return [];
+  let finish = end;
+  if (Number.isNaN(finish.getTime()) || finish < start) finish = start;
+  const days: Date[] = [];
+  let cursor = startOfDay(start);
+  do {
+    days.push(new Date(cursor));
+    cursor = new Date(
+      cursor.getFullYear(),
+      cursor.getMonth(),
+      cursor.getDate() + 1
+    );
+  } while (cursor.getTime() < finish.getTime());
+  return days;
+}
+
 /** The clicked day at the next round hour of the current time. */
 export function nextRoundHourOn(date: Date): Date {
   const now = new Date();
@@ -161,4 +234,6 @@ export function snippetSegments(
     .filter((segment) => segment.text !== "");
 }
 
-export { localDayKey } from "@centraid/design/elements";
+// Token-layer `localDayKey`, not `@centraid/design/elements`: Metro pulls this
+// file into the phone bundle, and the elements subpath is DOM-only / dist-only.
+export { localDayKey } from "@centraid/design";

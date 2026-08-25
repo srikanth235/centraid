@@ -1,3 +1,4 @@
+// governance: allow-repo-hygiene file-size-limit #864 keyed save flush and lazy history belong with the other writes
 // Every vault read and write Notes performs, and nothing that draws.
 //
 // `createLogic()` is a factory the orchestrator calls once at boot, closing
@@ -13,7 +14,8 @@
 // nothing here spins.
 import { debounce, outcomeMessage } from "@centraid/design/elements";
 
-import { checkStats, deriveTitle, promote } from "./format.ts";
+import { coalesceByKey } from "./draft-writes.ts";
+import { checkStats, deriveTitle, promote, UNTITLED_NOTE } from "./format.ts";
 import { sendLineToTasks } from "./send-to-tasks.ts";
 import { NOTE, TRASH, notebookIdFrom } from "./shelves.ts";
 import type { ShelfId } from "./shelves.ts";
@@ -121,12 +123,49 @@ export function createLogic({
     }
   }
 
+  /** Continuous save: patch the row in place; keyed so a note-switch flushes. */
+  const persistSave = async (
+    noteId: string,
+    patch: { title?: string; body_text?: string }
+  ): Promise<void> => {
+    const outcome = await act("edit-note", { note_id: noteId, ...patch });
+    const note = findNote(noteId);
+    if (outcome?.status === "executed") {
+      notice("");
+      if (note) {
+        if (patch.title != null) note.title = patch.title;
+        if (patch.body_text != null) {
+          note.body = patch.body_text;
+          note.preview = promote({
+            title: "",
+            body: patch.body_text,
+          }).preview;
+          note.check = checkStats(patch.body_text);
+        }
+        note.updated_at = new Date().toISOString();
+      }
+    } else if (outcome?.status === "parked") {
+      notice("");
+      state.queued += 1;
+    } else {
+      narrate(outcome);
+    }
+    render();
+  };
+
+  const { run: saveNote, flush: flushSave } = coalesceByKey(
+    persistSave,
+    (noteId) => noteId,
+    600
+  );
+
   /** Write, narrate, and re-read whatever changed shape. */
   async function write(
     action: string,
     input: Record<string, unknown>,
     friendly?: Friendly
   ): Promise<VaultOutcome | undefined> {
+    await flushSave();
     const outcome = await act(action, input);
     narrate(outcome, friendly);
     if (outcome?.status === "parked") state.queued += 1;
@@ -161,8 +200,13 @@ export function createLogic({
     state.noteId = noteId;
     state.versions = null;
     go(NOTE);
+    await flushSave();
     const note = findNote(noteId);
-    if (!note || typeof note.body === "string") return;
+    const history = loadHistory(noteId);
+    if (!note || typeof note.body === "string") {
+      await history;
+      return;
+    }
     let answer: { body?: unknown; vaultDenied?: unknown } | undefined;
     try {
       answer = await window.centraid.read({
@@ -170,14 +214,19 @@ export function createLogic({
         input: { note_id: noteId },
       });
     } catch {
+      await history;
       return;
     }
-    if (state.noteId !== noteId) return;
+    if (state.noteId !== noteId) {
+      await history;
+      return;
+    }
     const fresh = findNote(noteId);
     if (fresh && answer && !answer.vaultDenied) {
       fresh.body = typeof answer.body === "string" ? answer.body : "";
       render();
     }
+    await history;
   }
 
   /**
@@ -192,10 +241,12 @@ export function createLogic({
         input: { note_id: noteId },
       });
     } catch {
+      if (state.noteId != null && state.noteId !== noteId) return;
       state.versions = null;
       render();
       return;
     }
+    if (state.noteId != null && state.noteId !== noteId) return;
     state.versions = answer?.versions ?? [];
     render();
   }
@@ -214,7 +265,7 @@ export function createLogic({
    */
   async function createNote(seed = ""): Promise<string | null> {
     const input: Record<string, unknown> = {
-      title: deriveTitle("", seed) || "Untitled note",
+      title: deriveTitle("", seed) || UNTITLED_NOTE,
       body_text: seed || " ",
       format: "markdown",
     };
@@ -228,41 +279,6 @@ export function createLogic({
     }
     return null;
   }
-
-  /**
-   * The editor's continuous save. The one high-frequency write path, so a
-   * landed save patches the row it already has rather than re-reading the
-   * whole library — a refetch per keystroke would repaint the reading room
-   * under a member who is typing into it.
-   */
-  const saveNote = debounce(
-    async (noteId: string, patch: { title?: string; body_text?: string }) => {
-      const outcome = await act("edit-note", { note_id: noteId, ...patch });
-      const note = findNote(noteId);
-      if (outcome?.status === "executed") {
-        notice("");
-        if (note) {
-          if (patch.title != null) note.title = patch.title;
-          if (patch.body_text != null) {
-            note.body = patch.body_text;
-            note.preview = promote({
-              title: "",
-              body: patch.body_text,
-            }).preview;
-            note.check = checkStats(patch.body_text);
-          }
-          note.updated_at = new Date().toISOString();
-        }
-      } else if (outcome?.status === "parked") {
-        notice("");
-        state.queued += 1;
-      } else {
-        narrate(outcome);
-      }
-      render();
-    },
-    600
-  );
 
   async function togglePin(note: Note): Promise<void> {
     const pinned = note.pinned === 1 ? 0 : 1;
@@ -523,6 +539,7 @@ export function createLogic({
     loadHistory,
     createNote,
     saveNote,
+    flushSave,
     togglePin,
     moveNote,
     deleteNote,

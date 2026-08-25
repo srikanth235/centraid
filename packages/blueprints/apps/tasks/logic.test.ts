@@ -14,8 +14,10 @@ import {
   awayDays,
   boardState,
   byDue,
+  catchUpWrites,
   inboxGroup,
   landsToday,
+  nestTaskFamilies,
   reentryBuckets,
   todayGroups,
   upcomingGroups,
@@ -157,6 +159,63 @@ describe("Catch up", () => {
     ]);
     for (const bucket of buckets) expect(bucket.verb.length).toBeGreaterThan(0);
     expect(buckets[2]?.rows.map((row) => row.task_id)).toStrictEqual(["s1"]);
+  });
+
+  it("Release all cancels the someday pile instead of dating it into Today", () => {
+    const writes = catchUpWrites("sitting", [rows[2]!], "2026-08-21");
+    expect(writes).toStrictEqual([
+      {
+        action: "set-status",
+        input: { task_id: "s1", status: "cancelled" },
+      },
+    ]);
+    expect(writes.some((write) => "due_at" in write.input)).toBe(false);
+  });
+});
+
+describe("completing a parent leaves unfinished subtasks visible", () => {
+  function family(rows: readonly Task[]): { open: Task[]; logbook: Task[] } {
+    return nestTaskFamilies(rows, (row, children) => ({ ...row, children }));
+  }
+
+  it("promotes an unfinished child when its parent is completed", () => {
+    const nested = family([
+      task({ task_id: "p", status: "completed", completed_at: NOW }),
+      task({ task_id: "c", parent_task_id: "p" }),
+    ]);
+    expect(nested.open.map((row) => row.task_id)).toStrictEqual(["c"]);
+    expect(nested.logbook.map((row) => row.task_id)).toStrictEqual(["p"]);
+    expect(
+      nested.logbook[0]?.children?.map((row) => row.task_id)
+    ).toStrictEqual([]);
+  });
+
+  it("promotes an unfinished child when its parent is released", () => {
+    const nested = family([
+      task({ task_id: "p", status: "cancelled", completed_at: NOW }),
+      task({ task_id: "open", parent_task_id: "p" }),
+      task({
+        task_id: "done",
+        parent_task_id: "p",
+        status: "completed",
+        completed_at: NOW,
+      }),
+    ]);
+    expect(nested.open.map((row) => row.task_id)).toStrictEqual(["open"]);
+    expect(
+      nested.logbook[0]?.children?.map((row) => row.task_id)
+    ).toStrictEqual(["done"]);
+  });
+
+  it("keeps unfinished children nested under an open parent", () => {
+    const nested = family([
+      task({ task_id: "p" }),
+      task({ task_id: "c", parent_task_id: "p" }),
+    ]);
+    expect(nested.open.map((row) => row.task_id)).toStrictEqual(["p"]);
+    expect(nested.open[0]?.children?.map((row) => row.task_id)).toStrictEqual([
+      "c",
+    ]);
   });
 });
 

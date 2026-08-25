@@ -25,10 +25,11 @@
 // soft-delete pair `deleted_at` / `purge_at` with the CHECK guard
 // (`purge_at IS NULL OR deleted_at IS NOT NULL`), matching Docs/Photos/Locker —
 // so a delete here is a reversible grace-window trash, and the lifecycle sweep
-// (gateway/duties.ts) is what finally purges and cleans the row's polymorphic
-// references. #630 gives people_profile the same lifecycle in its forward
-// migration: the profile is membership in the People projection, so trashing
-// it hides the person without deleting the canonical party or linked facts.
+// (gateway/duties.ts) is what finally purges. #630 gives people_profile the
+// same lifecycle in its forward migration: trashing hides the person without
+// deleting the canonical party, so restore stays lossless for 30 days. Once
+// `purge_at` lapses the sweep erases the party, tags, and channels too
+// (#864) — the copy is "Erased after 30 days."
 //
 // All tables STRICT; PKs are TEXT UUIDv7; money is fixed-scale INTEGER minor
 // units; timestamps are TEXT ISO-8601 UTC — the core spine's conventions.
@@ -96,7 +97,8 @@ ${touchUpdatedAt("people_important_date", "date_id")}
 // #630 P5: people become reversible without deleting their canonical party.
 // The profile is the People-app membership row, so trashing it hides the person
 // from that projection while preserving shared links, Tally participation, and
-// every dependent fact for lossless restore.
+// every dependent fact for lossless restore. After the grace window the sweep
+// erases the party itself (#864).
 export const PEOPLE_PROFILE_LIFECYCLE_DDL = `
 ALTER TABLE people_profile ADD COLUMN deleted_at TEXT;
 ALTER TABLE people_profile ADD COLUMN purge_at TEXT

@@ -80,6 +80,9 @@ describe(lintHandlerSource, () => {
       "import fs from 'node:fs';",
       "const cp = require('child_process');",
       "import { connect } from 'node:net';",
+      "import { request } from 'node:https';",
+      "import http from 'http';",
+      "const tls = require('tls');",
     ]) {
       const f = lintHandlerSource(imp);
       expect(f[0]?.rule).toBe("no-node-io-import");
@@ -89,6 +92,12 @@ describe(lintHandlerSource, () => {
   it("flags ambient process reads", () => {
     const findings = lintHandlerSource("const k = process.env.TOKEN;");
     expect(findings[0]!.rule).toBe("no-process-ambient");
+    expect(lintHandlerSource("const a = process.argv;")[0]!.rule).toBe(
+      "no-process-ambient"
+    );
+    expect(lintHandlerSource("process.hrtime.bigint();")[0]!.rule).toBe(
+      "no-process-ambient"
+    );
   });
 
   it("allows only local asset I/O for release-managed model bundles", () => {

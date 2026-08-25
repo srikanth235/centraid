@@ -256,6 +256,7 @@ const NATIVE_FALLBACK: Readonly<Record<string, readonly string[]>> = {
   ],
   tasks: [
     "action.edit",
+    "action.delete",
     "action.attach",
     "action.detach",
     "action.add-tag",

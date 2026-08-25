@@ -6,12 +6,10 @@
 // re-derives "overdue" inline is how a roster row and a person screen end up
 // disagreeing about the same person on the same day.
 //
-// THE OVERDUE RULE IS THE DASHBOARD QUERY'S, NOT A SECOND OPINION.
-// `queries/dashboard.ts` keeps a person in Reconnect while
-// `daysSince(last_contacted_at ?? created_at) - cadence_days >= 0`, so this
-// module answers the same question with the same comparison. A client rule of
-// `> cadence` would have made the roster and the Touch screen differ by
-// exactly one day, every day, for every person.
+// THE OVERDUE RULE IS STRICT: a person is overdue only AFTER their cadence,
+// not on the cadence day. `Reach out every 30 days` is due on day 30 and
+// overdue on day 31. The dashboard query imports this comparison so Reconnect
+// and the roster cannot drift by a day.
 
 const DAY = 86_400_000;
 
@@ -63,7 +61,7 @@ export function isOverdue(
 ): boolean {
   const cadence = Number(person.cadence_days ?? 0);
   if (!(cadence > 0)) return false;
-  return daysSinceContact(person, now) - cadence >= 0;
+  return daysSinceContact(person, now) > cadence;
 }
 
 /** `41 days`, `1 day`, `Today` — the row's meta slot and the cadence line. */
@@ -87,8 +85,8 @@ export function monthDayLabel(monthDay: string): string {
   return name && day ? `${day} ${name}` : String(monthDay);
 }
 
-/** Days to the next annual occurrence of an `MM-DD` (0 = today). Mirrors the
- *  dashboard query's `daysUntilMonthDay` so Upcoming orders the same way. */
+/** Days to the next annual occurrence of an `MM-DD` (0 = today). February 29
+ *  clamps to 28 Feb in common years so a leap-day birthday still fires. */
 export function daysUntilMonthDay(monthDay: string, now = Date.now()): number {
   const [month, day] = String(monthDay).split("-").map(Number);
   if (!month || !day) return Number.MAX_SAFE_INTEGER;
@@ -98,8 +96,14 @@ export function daysUntilMonthDay(monthDay: string, now = Date.now()): number {
     today.getMonth(),
     today.getDate()
   );
-  let next = new Date(today.getFullYear(), month - 1, day);
-  if (next < midnight) next = new Date(today.getFullYear() + 1, month - 1, day);
+  const occurrence = (year: number): Date => {
+    const candidate = new Date(year, month - 1, day);
+    return candidate.getMonth() === month - 1
+      ? candidate
+      : new Date(year, month, 0);
+  };
+  let next = occurrence(today.getFullYear());
+  if (next < midnight) next = occurrence(today.getFullYear() + 1);
   return Math.round((next.getTime() - midnight.getTime()) / DAY);
 }
 

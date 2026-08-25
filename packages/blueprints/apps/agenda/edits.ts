@@ -31,7 +31,15 @@ export function occurrenceEdit(input: {
   intent: EditIntent;
   changes?: Pick<
     OccurrenceEditPayload,
-    "dtstart" | "dtend" | "summary" | "description"
+    | "dtstart"
+    | "dtend"
+    | "summary"
+    | "description"
+    | "recurrence_semantics"
+    | "calendar_id"
+    | "reminders"
+    | "conferencing_uri"
+    | "attendee_party_ids"
   >;
 }): OccurrenceEditPayload | null {
   const { event, scope, intent } = input;

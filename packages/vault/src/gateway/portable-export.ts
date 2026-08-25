@@ -20,6 +20,11 @@
 // header; no table, column, or CHECK changed). `enrich_embedding` and its
 // sibling tables were already carried by the canonical table walk, so export
 // completeness is unchanged — derived rows restore exactly like any other row.
+// Schema/export audit #864: the schema fingerprint moved on comment-only edits
+// to schema/domains-people.ts (S1 purge copy names the party, tags, and
+// channels the sweep erases after 30 days; no table, column, or CHECK
+// changed). `people_profile` and `people_important_date` were already carried
+// by the canonical table walk, so export completeness is unchanged.
 
 // Schema/export audit #724: `enrich_derivation` is a NEW TABLE — the
 // provenance stamp naming which capability, under which model, produced a

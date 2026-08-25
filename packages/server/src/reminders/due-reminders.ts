@@ -12,6 +12,7 @@
 // tickets ride the same feed so mobile categories for those kinds can fire.
 
 import { expandRecurrence } from "@centraid/core/time";
+import type { RecurrenceSemantics } from "@centraid/core/time";
 import type { VaultDb } from "@centraid/vault";
 
 export interface DueReminder {
@@ -47,7 +48,42 @@ interface EventReminderRow {
   event_id: string;
   summary: string;
   dtstart: string;
+  rrule: string | null;
+  start_tz: string | null;
+  recurrence_semantics: string | null;
   reminders_json: string;
+}
+
+function occurrenceStarts(
+  event: EventReminderRow,
+  rangeFrom: string,
+  rangeTo: string
+): { at: string; originalStart: string }[] {
+  if (!event.rrule) {
+    return [{ at: event.dtstart, originalStart: event.dtstart }];
+  }
+  const semantics = (event.recurrence_semantics ??
+    "zoned") as RecurrenceSemantics;
+  const instances = expandRecurrence({
+    rrule: event.rrule,
+    start: event.dtstart,
+    rangeFrom,
+    rangeTo,
+    timeZone: event.start_tz ?? "Etc/UTC",
+    semantics,
+    maxInstances: 32,
+  });
+  if (instances.length === 0) {
+    return [{ at: event.dtstart, originalStart: event.dtstart }];
+  }
+  return instances.map((instance) => ({
+    at: instance.start,
+    originalStart: instance.originalStart,
+  }));
+}
+
+function instantMs(value: string): number {
+  return Date.parse(value.includes("T") ? value : `${value}T00:00:00.000Z`);
 }
 
 function parseReminders(json: string): { minutes_before: number }[] {
@@ -106,26 +142,38 @@ export function computeDueReminders(
 
   const eventRows = db.vault
     .prepare(
-      `SELECT e.event_id AS event_id, e.summary AS summary, e.dtstart AS dtstart, x.reminders_json AS reminders_json
+      `SELECT e.event_id AS event_id, e.summary AS summary, e.dtstart AS dtstart,
+              e.rrule AS rrule, e.start_tz AS start_tz,
+              e.recurrence_semantics AS recurrence_semantics,
+              x.reminders_json AS reminders_json
          FROM core_event e JOIN schedule_event_ext x ON x.event_id = e.event_id
         WHERE e.status != 'cancelled' AND x.reminders_json IS NOT NULL`
     )
     .all() as unknown as EventReminderRow[];
   for (const e of eventRows) {
-    const startMs = Date.parse(e.dtstart);
-    if (Number.isNaN(startMs)) continue;
-    const staleAt = startMs + staleAfterMinutes * 60_000;
-    for (const r of parseReminders(e.reminders_json)) {
-      const fireAt = startMs - r.minutes_before * 60_000;
-      if (fireAt <= now && now <= staleAt) {
-        out.push({
-          key: `event:${e.event_id}:${r.minutes_before}`,
-          kind: "event",
-          id: e.event_id,
-          title: e.summary,
-          at: e.dtstart,
-          minutesBefore: r.minutes_before,
-        });
+    const leads = parseReminders(e.reminders_json);
+    if (leads.length === 0) continue;
+    const maxLead = Math.max(...leads.map((lead) => lead.minutes_before));
+    const rangeFrom = new Date(now - staleAfterMinutes * 60_000).toISOString();
+    const rangeTo = new Date(now + (maxLead + 1) * 60_000).toISOString();
+    for (const occurrence of occurrenceStarts(e, rangeFrom, rangeTo)) {
+      const startMs = instantMs(occurrence.at);
+      if (Number.isNaN(startMs)) continue;
+      const staleAt = startMs + staleAfterMinutes * 60_000;
+      for (const r of leads) {
+        const fireAt = startMs - r.minutes_before * 60_000;
+        if (fireAt <= now && now <= staleAt) {
+          out.push({
+            key: e.rrule
+              ? `event:${e.event_id}:${occurrence.originalStart}:${r.minutes_before}`
+              : `event:${e.event_id}:${r.minutes_before}`,
+            kind: "event",
+            id: e.event_id,
+            title: e.summary,
+            at: occurrence.at,
+            minutesBefore: r.minutes_before,
+          });
+        }
       }
     }
   }
@@ -232,17 +280,24 @@ export function nextReminderFireAt(
   const eventRows = db.vault
     .prepare(
       `SELECT e.event_id AS event_id, e.summary AS summary,
-              e.dtstart AS dtstart, x.reminders_json AS reminders_json
+              e.dtstart AS dtstart, e.rrule AS rrule, e.start_tz AS start_tz,
+              e.recurrence_semantics AS recurrence_semantics,
+              x.reminders_json AS reminders_json
          FROM core_event e JOIN schedule_event_ext x ON x.event_id = e.event_id
         WHERE e.status != 'cancelled' AND x.reminders_json IS NOT NULL`
     )
     .all() as unknown as EventReminderRow[];
   for (const event of eventRows) {
-    const start = Date.parse(event.dtstart);
-    if (!Number.isFinite(start)) continue;
-    for (const reminder of parseReminders(event.reminders_json)) {
-      const fireAt = start - reminder.minutes_before * 60_000;
-      if (fireAt > now && fireAt < next) next = fireAt;
+    const leads = parseReminders(event.reminders_json);
+    if (leads.length === 0) continue;
+    const rangeTo = new Date(now + 120 * 86_400_000).toISOString();
+    for (const occurrence of occurrenceStarts(event, nowIso, rangeTo)) {
+      const start = instantMs(occurrence.at);
+      if (!Number.isFinite(start)) continue;
+      for (const reminder of leads) {
+        const fireAt = start - reminder.minutes_before * 60_000;
+        if (fireAt > now && fireAt < next) next = fireAt;
+      }
     }
   }
   return Number.isFinite(next) ? new Date(next).toISOString() : undefined;

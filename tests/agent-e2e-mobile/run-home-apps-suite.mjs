@@ -1,5 +1,6 @@
-// The five home-journey covers that are not Photos (issue #839, gap G8), run
-// as one suite so they share ONE simulator boot and ONE fresh pairing.
+// The six home-journey covers that are not Photos (issue #839 gap G8; People
+// added by #864), run as one suite so they share ONE simulator boot and ONE
+// fresh pairing.
 //
 // Shape is deliberately identical to run-photos-suite.mjs: the first flow pairs
 // against the gateway, every later flow runs with MAESTRO_REUSE_PAIRED_STATE=1
@@ -12,16 +13,20 @@
 import { spawn } from "node:child_process";
 import path from "node:path";
 
+// Docs stays FIRST: it is the flow that pairs fresh, and every later entry runs
+// with MAESTRO_REUSE_PAIRED_STATE=1 against the profile it left behind.
+// `locker-gate` stays LAST because it is the only member that restarts the app.
 const FLOWS = [
   "docs-drive.mjs",
   "agenda-week.mjs",
   "notes-library.mjs",
   "tasks-board.mjs",
+  "people-roster.mjs",
   "locker-gate.mjs",
 ];
 // See flows/home-apps-budget.md for how this ceiling was derived and what to do
 // when it is breached. Do not raise it to buy time.
-const BUDGET_MS = 10 * 60_000;
+const BUDGET_MS = 11 * 60_000;
 const flowsDir = path.join(import.meta.dirname, "flows");
 
 function runFlow(file, reusePairedState) {
@@ -53,7 +58,7 @@ console.log(
 );
 if (elapsedMs >= BUDGET_MS) {
   console.error(
-    "[home-apps-suite] FAIL: the five home-app journeys exceeded ten minutes"
+    "[home-apps-suite] FAIL: the six home-app journeys exceeded eleven minutes"
   );
   exitCode = 1;
 }

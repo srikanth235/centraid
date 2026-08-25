@@ -59,6 +59,7 @@ export default function AgendaCreateModal({
       summary: summary.trim(),
       dtstart: start.toISOString(),
       dtend: new Date(start.getTime() + durationHours * HOUR_MS).toISOString(),
+      start_tz: Intl.DateTimeFormat().resolvedOptions().timeZone,
       calendar_id: calendarId,
       attendee_party_ids: [...guests],
     });

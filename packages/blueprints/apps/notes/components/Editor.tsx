@@ -232,8 +232,10 @@ function Attachments({
 
 export function Editor(props: EditorProps): ReactNode {
   const { note } = props;
-  const body = props.body ?? "";
-  const shown = promote({ title: note.title, body });
+  const shown = promote({
+    title: note.title,
+    body: props.body ?? "",
+  });
   const [tagDraft, setTagDraft] = useState("");
   const fileRef = useRef<HTMLInputElement | null>(null);
   const areaRef = useRef<HTMLTextAreaElement | null>(null);
@@ -243,10 +245,17 @@ export function Editor(props: EditorProps): ReactNode {
   // answer for state derived from a prop — an effect would paint one frame of
   // the previous note's name into this note's field first.
   const [shownNoteId, setShownNoteId] = useState(note.note_id);
+  // A library re-read ships no body. Forgetting the loaded text here would
+  // paint an empty field and the next keystroke would overwrite the note.
+  const [heldBody, setHeldBody] = useState<string | undefined>(props.body);
   if (shownNoteId !== note.note_id) {
     setShownNoteId(note.note_id);
     setTitle(shown.untitled ? "" : shown.heading);
+    setHeldBody(props.body);
+  } else if (typeof props.body === "string" && props.body !== heldBody) {
+    setHeldBody(props.body);
   }
+  const body = heldBody ?? "";
 
   const segments = bodySegments(body);
   const tally = tallyLabel(note.check);
