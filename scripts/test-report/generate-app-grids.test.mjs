@@ -55,7 +55,9 @@ describe("app × seat and app × designed state grids", () => {
     // alone survives the other being dropped: a cell that keeps its tint but
     // loses its text is exactly the unreadable grid the restructure removed.
     expect(result.html).toMatch(/class="cell axis-declared"[^>]*>owned</u);
-    expect(result.html).toMatch(/class="cell axis-unowned"[^>]*>unowned</u);
+    // "no owner" rather than "unowned": the app grids and §8 say one word for
+    // one fact since #864, and wear one treatment for it.
+    expect(result.html).toMatch(/class="cell axis-unowned"[^>]*>no owner</u);
     expect(result.html).toContain("Locker declares seats.disabledOn viewer.");
     expect(result.html).toContain("no seat owner yet — tracked by #839");
     expect(result.html).toContain("no owner yet — tracked by #839");

@@ -44,7 +44,9 @@ const STATE_WORDS = {
   failed: "failed",
   flaky: "flaky",
   skipped: "n/a",
-  gap: "gap",
+  // One word for "no test exists", on every grid (#864): §8 called it `gap` and
+  // §2/§3 called the same fact `unowned`, in two different colours.
+  gap: "no owner",
   "evidence-unmatched": "unmatched",
   "owner-silent": "silent",
   missing: "missing",
@@ -269,6 +271,45 @@ describe("the word a matrix cell says", () => {
         `${left} and ${right} share a treatment AND a word`
       ).not.toBe(seen.get(left));
     }
+  });
+
+  test("says so when a pass answers a claim the matrix calls partial", () => {
+    // #864 gave `passed` under a partial declaration a tint of its own, and a
+    // tint of its own is exactly the thing this file exists to refuse as the
+    // only reading. The word moves with it — otherwise a reader who sees no hue
+    // is told "passed" for two different strengths of claim.
+    const matrix = statesMatrix();
+    matrix.surfaces[0].assessment.passed = "partial";
+    const root = makeFixtureRoot({ matrix });
+    for (const name of ["passed", "perf-owner"]) {
+      writeFileSync(
+        path.join(root, "owners", `${name}.mjs`),
+        "test('owned behaviour', () => {});\n"
+      );
+    }
+    const vitestPath = writeJson(root, "in/vitest.json", {
+      startTime: CAPTURED_MS,
+      testResults: [
+        {
+          assertionResults: [],
+          endTime: CAPTURED_MS,
+          name: "owners/passed.mjs",
+          startTime: CAPTURED_MS,
+          status: "passed",
+        },
+      ],
+    });
+    const { html } = runGenerate(root, [
+      "--vitest",
+      vitestPath,
+      "--max-age-hours",
+      FRESH_WINDOW_HOURS,
+    ]);
+    const cell = matrixCells(html).find((one) => one.state === "passed");
+    expect(cell?.word).toBe("partial passed");
+    // And the accessible name says the same, so neither audience reads a
+    // strength of claim the other cannot.
+    expect(cell?.attrs).toContain(": partial passed (passed);");
   });
 
   test("gives all twelve states a word of their own", () => {

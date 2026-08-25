@@ -24,6 +24,12 @@ about what is still open.
 - [x] Leave nine state cells as honest product-surface gaps
 - [x] Apply the matrix owner-edits and keep validate-matrix green
 
+### Wave 6 (landed)
+
+- [x] Recolor the report to one hue one meaning
+- [x] Unify the vocabulary and paint the legend chips
+- [x] Invert the guardrail test to forbid shared tints
+
 ### Waves 2–5, 7
 
 - [ ] _placeholder — the root agent appends each wave's checklist as it lands_
@@ -34,6 +40,7 @@ about what is still open.
 | --- | --- | --- |
 | W0 | re-home closed-issue citations to #864; add the open-citation gate | landed |
 | W1 | own the app-axis state and seat cells; leave nine as product-surface gaps | landed |
+| W6 | recolor the report to one hue one meaning; invert the collision guardrail | landed |
 | W2 | _placeholder — root agent appends_ | pending |
 | W3 | _placeholder — root agent appends_ | pending |
 | W4 | _placeholder — root agent appends_ | pending |
@@ -186,7 +193,39 @@ the new per-app test files); `packages/blueprints/apps/agenda/app-root.tsx`
 `tests/agent-e2e-mobile/run-home-apps-suite.mjs` and
 `tests/agent-e2e-mobile/flows/home-apps-budget.md`.
 
-### W2–W6
+### W6 — the report says one thing per hue
+
+Wave 6 gave the nightly report one hue per meaning (M14). This did **recolor the
+report to one hue one meaning**: seven Night Watch tone families, each answering
+exactly one question — ok (passed a solid claim), partial (passed a partial
+claim, teal), danger (failed + infra-mismatch), flaky (green on retry, violet),
+gap (no test exists — the matrix hole and the app grids' unowned seat unified to
+one new plum family), attn (integrity, moved off the `--seam` literal it used to
+share with gap), grey (absence of evidence). Every type-on-tint pairing clears
+4.5:1 in both themes, recomputed rather than asserted.
+
+The §2/§3 axis alphabet, the §8 register and the ledgers' verdict words were
+merged to one map, and each grid now carries painted legend chips in the real
+cell treatments — this did **unify the vocabulary and paint the legend chips**;
+the "second verdict vocabulary" divergence row is superseded with a dated ruling.
+
+`report-theme.test.mjs` now asserts the inverse of its old collapse law — no two
+states with different meanings may share a background tint, the one allowed
+exception being failed≡infra told apart by word — and a companion check replays
+the seam≡attn defect so the detector is known to fire. This did **invert the
+guardrail test to forbid shared tints**.
+
+Wave 6 paths: `scripts/site-tokens.mjs` (the Night Watch ramp, 19→25 rungs, and
+the `--st-gap` re-point off `--seam`), the generated `scripts/test-report/report-tokens.css`,
+`scripts/test-report/report-theme.mjs`, `scripts/test-report/generate.mjs`,
+`scripts/test-report/render-briefing.mjs`, and the guardrail/word-map tests
+`scripts/test-report/report-theme.test.mjs`,
+`scripts/test-report/report-state-words.test.mjs`,
+`scripts/test-report/generate-app-grids.test.mjs`,
+`scripts/test-report/smoke.mjs`; the divergence and decision records
+`docs/design-divergences.md` and `docs/decisions.md`.
+
+### W2–W5
 
 _Placeholder — the root agent appends the remaining waves here._
 

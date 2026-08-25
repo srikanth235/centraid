@@ -36,27 +36,50 @@ function duration(value) {
 /**
  * The tone a verdict word is spoken in. Tone is the SECOND reading — the word
  * carries the meaning on its own, so a reader who sees no hue loses nothing.
+ *
+ * The families are the cell register's, not a second set (#864): a flaky law is
+ * violet in a ledger row exactly as it is in §8, an unowned layer takes the gap
+ * family, and `stale` rejoins the greys it belongs with — it used to be spoken
+ * in the attention tone, which on this page now means only "the report cannot
+ * vouch for its own evidence".
  */
 function tone(state) {
   if (state === "passed") return "ok";
   if (state === "failed" || state === "infra-mismatch") return "red";
-  if (state === "flaky" || state === "pinned" || state === "stale")
+  if (state === "flaky") return "flaky";
+  if (state === "unowned") return "gap";
+  if (
+    state === "pinned" ||
+    state === "owner-silent" ||
+    state === "evidence-unmatched"
+  ) {
     return "warn";
+  }
   return "grey";
 }
 
-/** What tonight's evidence for a ledger row actually was, as one word. */
+/**
+ * What tonight's evidence for a ledger row actually was, as one word.
+ *
+ * ONE word map for the whole page (#864). This used to be a second vocabulary —
+ * `green` where a cell said `passed`, `no evidence` where a cell said `missing`
+ * — on the argument that a ledger row sits beside prose and a cell carries a
+ * label. That argument cost more than it bought: a reader comparing §6 to §8 had
+ * to know that two words were one fact, and the legend could not gloss both. The
+ * words are now the cells' words, and `no owner` is the single name for "no test
+ * exists" on every grid, matrix and app-axis alike.
+ */
 function verdictWord(state) {
   return (
     {
-      passed: "green",
-      failed: "red",
+      passed: "passed",
+      failed: "failed",
       flaky: "flaky",
       stale: "stale",
       skipped: "n/a",
       pinned: "pinned",
       unowned: "no owner",
-      missing: "no evidence",
+      missing: "missing",
       "infra-mismatch": "infra",
       "owner-silent": "silent",
       "lane-did-not-run": "no lane",
@@ -155,7 +178,7 @@ export function renderJoinGrid(grid, ageOf) {
       ]);
     }),
   ];
-  return `<p class="budget"><b>${grid.rows.length} laws</b> from <code>tests/matrix.json#joinLaws</code>, pinned by a validator to the owning suites' own test declarations — a deleted law fails the matrix gate rather than quietly leaving this ledger · <b>${grid.counts.scripted}</b> scripted · <b>${grid.counts.simulation}</b> simulation · <b>${grid.counts.passed}</b> green tonight</p>${ledger("joins", "Join laws and simulation", rows)}`;
+  return `<p class="budget"><b>${grid.rows.length} laws</b> from <code>tests/matrix.json#joinLaws</code>, pinned by a validator to the owning suites' own test declarations — a deleted law fails the matrix gate rather than quietly leaving this ledger · <b>${grid.counts.scripted}</b> scripted · <b>${grid.counts.simulation}</b> simulation · <b>${grid.counts.passed}</b> passed tonight</p>${ledger("joins", "Join laws and simulation", rows)}`;
 }
 
 /** One sparkline, or the empty slot that fills as nights accrue. */
@@ -284,7 +307,7 @@ export function renderJourneyGrid(grid) {
       return `<p class="budget"><b>${escapeHtml(suite.label)}</b> · ${budget} · ${actual}${suite.budgetDoc ? ` · <code class="path">${escapeHtml(suite.budgetDoc)}</code>` : ""}</p>${ledger("journeys", `${suite.label} journeys`, rows)}`;
     })
     .join("");
-  return `<div aria-label="Journeys · budget vs actual"><p class="budget"><b>${grid.counts.journeys} journey(s)</b> from <code>tests/matrix.json#journeys</code>, whose suite membership and budget are pinned to each runner's own flow list and ceiling · <b>${grid.counts.passed}</b> green tonight · <b>${grid.counts.unbudgeted}</b> outside any aggregate budget</p>${suites}</div>`;
+  return `<div aria-label="Journeys · budget vs actual"><p class="budget"><b>${grid.counts.journeys} journey(s)</b> from <code>tests/matrix.json#journeys</code>, whose suite membership and budget are pinned to each runner's own flow list and ceiling · <b>${grid.counts.passed}</b> passed tonight · <b>${grid.counts.unbudgeted}</b> outside any aggregate budget</p>${suites}</div>`;
 }
 
 /**

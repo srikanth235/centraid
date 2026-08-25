@@ -1370,7 +1370,7 @@ function render(modelLocal) {
       return `<tr><th scope="row">${escapeHtml(surface.label)}</th>${surfaceCells
         .map(
           (cell) =>
-            `<td><button class="cell ${cell.state} assessment-${cell.assessment}" data-cell="${escapeHtml(cell.id)}" aria-label="${escapeHtml(`${cell.surfaceLabel}, ${cell.dimensionLabel}: ${stateWord(cell.state)} (${cell.state}); assessment ${cell.assessment}; ${cell.owners.length} evidence owner(s)`)}">${stateWord(cell.state)}</button></td>`
+            `<td><button class="cell ${cell.state} assessment-${cell.assessment}" data-cell="${escapeHtml(cell.id)}" aria-label="${escapeHtml(`${cell.surfaceLabel}, ${cell.dimensionLabel}: ${cellWord(cell)} (${cell.state}); assessment ${cell.assessment}; ${cell.owners.length} evidence owner(s)`)}">${escapeHtml(cellWord(cell))}</button></td>`
         )
         .join("")}</tr>`;
     })
@@ -1637,11 +1637,61 @@ function render(modelLocal) {
     .map(([id, label]) => `<a href="#${id}">${label}</a>`)
     .join("");
 
-  // The declaration alphabet (grids B and D) and the evidence alphabet (the
-  // matrix), each keyed to the treatment the reader is looking at. One entry
-  // per distinct treatment: the two deliberate collapses share their entry.
-  const axisKeyline = `<p class="keyline"><i>owned</i> an owner is declared — a declaration, never a green run · <i class="k-grey">unowned</i> nobody owns it yet, carrying its tracking issue · <i class="k-none">n/a</i> not taken by this app, or held with its interface, with the citation beside it</p>`;
-  const matrixKeyline = `<p class="keyline"><i class="k-ok">passed</i> every owner ran and passed · <i class="k-attn">partial passed</i> passed, where the matrix claims only partial · <i class="k-danger">failed</i> / <i class="k-danger">infra</i> the product failed, or the lane's environment disagreed with its declaration · <i class="k-attn">flaky</i> green only on retry · <i class="k-danger">gap</i> a hole the matrix itself declares · <i class="k-attn">silent</i> owner silent — the lane ran and this owner reported nothing · <i class="k-attn">unmatched</i> evidence unmatched — a basename collision resolved to another owner · <i class="k-grey">missing</i> no evidence, outside nightly scope · <i class="k-grey">stale</i> / <i class="k-grey">no lane</i> lane did not run / stale · <i class="k-grey">named</i> a registered absence with no lane yet (#781) · <i class="k-none">n/a</i> n/a by design, with its citation</p>`;
+  // The register, painted (#864). Until this pass the legend was a line of
+  // coloured TEXT under one grid: it asked the reader to map a word's ink onto a
+  // cell's tint, which are two different treatments, and it appeared after the
+  // grid it explained. A chip below carries the cell's own classes, so it IS the
+  // treatment; the legend sits above every grid that uses the register; and the
+  // two alphabets now share their words, because "no owner" in §2 and the hole
+  // §8 used to call a "gap" are one fact.
+  const axisLegend = legend("Declaration register", [
+    [
+      legendChip("axis-declared", "owned"),
+      "an owner is declared — a declaration, never a green run",
+    ],
+    [
+      legendChip("axis-unowned", "no owner"),
+      "nobody owns this yet, carrying its tracking issue — the same fact, and the same paint, as §8",
+    ],
+    [
+      legendChip("axis-skipped", "n/a"),
+      "not taken by this app, or held with its interface, with the citation beside it",
+    ],
+  ]);
+  const matrixLegend = legend("Cell register", [
+    [legendChip("passed", "passed"), "every owner ran and passed"],
+    [
+      legendChip("passed assessment-partial", "partial passed"),
+      "passed, where the matrix claims only partial",
+    ],
+    [
+      `${legendChip("failed", "failed")}${legendChip("infra-mismatch", "infra")}`,
+      "the product failed, or the lane's environment disagreed with its declaration",
+    ],
+    [legendChip("flaky", "flaky"), "green only on retry"],
+    [
+      legendChip("gap", "no owner"),
+      "no test exists — the hole the matrix itself declares",
+    ],
+    [
+      legendChip("owner-silent", "silent"),
+      "owner silent — the lane ran and this owner reported nothing",
+    ],
+    [
+      legendChip("evidence-unmatched", "unmatched"),
+      "evidence unmatched — a basename collision resolved to another owner",
+    ],
+    [
+      `${legendChip("stale", "stale")}${legendChip("lane-did-not-run", "no lane")}`,
+      "the lane did not run, or its newest evidence is older than the window",
+    ],
+    [legendChip("missing", "missing"), "no evidence, outside nightly scope"],
+    [
+      legendChip("expected-grey", "named"),
+      "a registered absence with no lane yet (#781)",
+    ],
+    [legendChip("skipped", "n/a"), "n/a by design, with its citation"],
+  ]);
 
   return `<!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
@@ -1666,13 +1716,13 @@ ${honestyBanners.join("")}${
 <p class="why">Every red, newly-grey, freshly-stale and pinned item, ranked by the harm the matrix's own claim implies — each carrying the file that owns it and the issue it files under. The reader never hunts; the report dispatches.</p>
 ${renderAttentionQueue(modelLocal.attentionQueue, ageOf)}
 <h2 id="product"><span class="tag">§2</span>Product · Blueprint app × seat</h2>
-<p class="why">The member's view first: one row per bundled app, one column per seat. These cells are DECLARATIONS — they name the proof that owns the seat, and no lane reports per-seat evidence yet — so an owned cell stays neutral rather than green. ${appSeatCounts.declared ?? 0} owned · ${appSeatCounts.unowned ?? 0} unowned · ${appSeatCounts.skipped ?? 0} held or excluded.</p>
+<p class="why">The member's view first: one row per bundled app, one column per seat. These cells are DECLARATIONS — they name the proof that owns the seat, and no lane reports per-seat evidence yet — so an owned cell stays neutral rather than green. ${appSeatCounts.declared ?? 0} owned · ${appSeatCounts.unowned ?? 0} with no owner · ${appSeatCounts.skipped ?? 0} held or excluded.</p>
+${axisLegend}
 <div class="gridwrap"><table class="heat"><thead><tr><th scope="col">App</th>${appSeatHeaders}</tr></thead><tbody>${appSeatRows}</tbody></table></div>
-${axisKeyline}
 <h2 id="states"><span class="tag">§3</span>Designed states · Blueprint app × designed state</h2>
-<p class="why">One column per canonical designed state, mirrored from each app's <code>app.json#states</code>: the grid that turns grey the night an owner disappears. Same declaration alphabet as §2. ${appStateCounts.declared ?? 0} owned · ${appStateCounts.unowned ?? 0} unowned · ${appStateCounts.skipped ?? 0} excluded or held.</p>
+<p class="why">One column per canonical designed state, mirrored from each app's <code>app.json#states</code>: the grid that loses a seat the night an owner disappears. Same register as §2. ${appStateCounts.declared ?? 0} owned · ${appStateCounts.unowned ?? 0} with no owner · ${appStateCounts.skipped ?? 0} excluded or held.</p>
+${axisLegend}
 <div class="gridwrap"><table class="heat"><thead><tr><th scope="col">App</th>${appStateHeaders}</tr></thead><tbody>${appStateRows}</tbody></table></div>
-${axisKeyline}
 <h2 id="consent"><span class="tag">§4</span>Consent ledger</h2>
 <p class="why">Sovereignty is the promise, so it gets a panel rather than a cell: one row per permission layer, where it is enforced, the words it refuses in, the adversary that attacks it, and which seats prove it.</p>
 ${renderConsentLedger(modelLocal.consentLedger)}
@@ -1687,8 +1737,8 @@ ${renderJourneyGrid(modelLocal.journeyGrid)}
 ${renderAdversaryPanel(modelLocal.adversaryPanel, trendSvg)}
 <h2 id="infra"><span class="tag">§8</span>Infrastructure · Surface × quality dimension</h2>
 <p class="why">The core matrix, unchanged in substance and demoted from the opening act to the foundation it is: ${modelLocal.matrix.surfaces.length} surfaces × ${modelLocal.matrix.dimensions.length} quality dimensions, each cell carrying the word for what tonight's evidence actually was. Choose a cell for its owners, results and errors.</p>
+${matrixLegend}
 <div class="gridwrap"><table class="heat"><thead><tr><th scope="col">Product surface</th>${dimensionHeaders}</tr></thead><tbody>${rows}</tbody></table></div>
-${matrixKeyline}
 <h2 id="shelf"><span class="tag">§9</span>Detail shelf</h2>
 <p class="why">Everything the archive carried survives here, unmoved: the qualities panel, the engine grid, floors, wall clock, debt registers and trends. The restructure above moves the reader's first five minutes out of the weeds, not the evidence off the page.</p>
 <section class="qualities-shell"><h2>User-facing qualities</h2>${qualityRows}<p class="quality-debt">${existingQualityGates} of ${totalQualityGates} gates exist.</p></section>
@@ -1743,14 +1793,43 @@ const report=JSON.parse(document.querySelector('#report-data').textContent);cons
 }
 
 /**
- * The app-axis grids (B and D) speak DECLARATION, not health, so they get
- * their own three-word alphabet rather than borrowing the evidence one —
- * a declared owner must never be mistaken for a green run.
+ * One legend chip: the state's word wearing the state's own cell classes, so
+ * the legend is the treatment rather than a description of it (#864).
+ * @param {string} classes The `.cell` modifier classes, space separated.
+ * @param {string} word The word the cell says.
+ * @returns {string} HTML.
+ */
+function legendChip(classes, word) {
+  return `<b class="cell ${classes}">${escapeHtml(word)}</b>`;
+}
+
+/**
+ * A painted legend, printed ABOVE the grid it glosses.
+ * @param {string} label The accessible name for the list.
+ * @param {[string, string][]} entries `[chips, gloss]` pairs, one per treatment.
+ * @returns {string} HTML.
+ */
+function legend(label, entries) {
+  const items = entries
+    .map(
+      ([chips, gloss]) => `<li>${chips}<span>${escapeHtml(gloss)}</span></li>`
+    )
+    .join("");
+  return `<ul class="legend" aria-label="${escapeHtml(label)}">${items}</ul>`;
+}
+
+/**
+ * The app-axis grids (B and D) speak DECLARATION, not health: a declared owner
+ * must never be mistaken for a green run, so `owned` is its own word and its own
+ * neutral paint. The other two words are NOT a private alphabet — `no owner` is
+ * what §8 says for the same fact and `n/a` is what every grid says for an
+ * exclusion (#864). The grid that used to say "unowned" here while §8 said "gap"
+ * was making the reader learn two names for one hole.
  */
 function axisWord(state) {
   return (
-    { declared: "owned", unowned: "unowned", skipped: "n/a" }[state] ??
-    "unowned"
+    { declared: "owned", skipped: "n/a", unowned: "no owner" }[state] ??
+    "no owner"
   );
 }
 
@@ -1759,6 +1838,13 @@ function axisWord(state) {
  * only one: every one of the twelve states is legible as text, and the two
  * pairs that share a tint (`failed`/`infra-mismatch`, `stale`/`lane-did-not-run`)
  * are told apart by this word alone.
+ *
+ * `gap` says "no owner" rather than "gap" (#864). It is the same fact §2 and §3
+ * report, and it took a different word AND a different colour on each grid — red
+ * here, grey there — so the page contradicted itself about whether a missing
+ * test was tonight's emergency or nobody's problem. "No owner" is chosen over
+ * "gap" because it states the fact instead of naming it: a reader needs the
+ * legend to learn what a gap is, and needs nothing to read "no owner".
  */
 function stateWord(state) {
   return (
@@ -1767,7 +1853,7 @@ function stateWord(state) {
       failed: "failed",
       flaky: "flaky",
       skipped: "n/a",
-      gap: "gap",
+      gap: "no owner",
       stale: "stale",
       missing: "missing",
       "owner-silent": "silent",
@@ -1777,6 +1863,20 @@ function stateWord(state) {
       "expected-grey": "named",
     }[state] ?? "missing"
   );
+}
+
+/**
+ * The word a cell actually prints. A pass against a claim the matrix itself
+ * only calls PARTIAL is a different reading from a pass against a solid one —
+ * #864 gave it a tint of its own, and word-first means it needs a word of its
+ * own too, or the distinction would be legible only to a reader who sees hue.
+ * @param {{assessment: string, state: string}} cell A matrix cell.
+ * @returns {string} The word, complete enough to stand without the tint.
+ */
+function cellWord(cell) {
+  return cell.state === "passed" && cell.assessment === "partial"
+    ? "partial passed"
+    : stateWord(cell.state);
 }
 
 function symbol(state) {
