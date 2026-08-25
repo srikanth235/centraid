@@ -1,32 +1,11 @@
 import { fmtBytes } from "@centraid/design/elements";
 
-// Storage — what the bytes cost and where they are (v4 handoff §12).
-//
-// EVERY NUMBER HERE IS READ, NEVER INVENTED. Two sources, and the screen is
-// explicit about which is speaking:
-//
-//   * the ROLLUP (#711) — `blob.custody_rollup`, computed by the
-//     gateway's standing blob sweep over the WHOLE library and read by
-//     queries/storage.ts. It answers where the originals are and how much of
-//     the local tier is provably safe to release. Until the sweep has run
-//     there is nothing to report, and this screen will not guess.
-//   * the LOADED WINDOW — the rows this app happens to hold. It is the only
-//     thing that can speak about the trash, and it says which window it means,
-//     with its exact size; rows with no recorded size are counted and named,
-//     so a total smaller than the truth is never presented as the truth.
-//
-// WHAT IS NOT HERE, AND WHY. The prototype's Storage tab also carries a backup
-// POLICY block (Wi-Fi only, metered, roaming, charging) and a "Back up now"
-// control. Both belong to the origin seat's upload queue — radios and a
-// transfer engine this seat has neither of — and neither is readable nor
-// writable through this app's granted surface. A switch that reported nothing
-// and moved nothing would be a lie with a hit target, so the block is absent
-// rather than decorative.
-//
-// NO FILLED ELEMENT LIVES HERE. The frame's app bar already carries the one
-// filled ink control in the view (§18), so the single action on this screen —
-// the way to the trash, which is the only thing on this seat that actually
-// frees bytes — is an outlined control.
+// Storage (v4 handoff §12). EVERY NUMBER HERE IS READ, NEVER INVENTED, from
+// two sources the screen names apart: the whole-library ROLLUP (#711,
+// `blob.custody_rollup`, silent until the sweep has run) and the LOADED
+// WINDOW, which alone can speak about the trash. No backup-policy block and no
+// "Back up now" — neither is readable or writable through this seat's grant.
+// No filled control either: the app bar owns the view's one filled ink (§18).
 import { assetBytes } from "../format.ts";
 import { custodyHealth, freeUpIsOfferable } from "../storage-model.ts";
 import type { CustodyFacts, Totals } from "../storage-model.ts";
@@ -35,13 +14,9 @@ import { STORAGE_COPY } from "../view-copy.ts";
 
 import styles from "./Storage.module.css";
 
-/** The screen's window-scoped numbers, derived from the loaded rows alone. */
 export interface StorageFacts {
-  /** How many photographs these numbers cover. */
   shown: number;
-  /** Older photographs exist beyond the loaded window. */
   truncated: boolean;
-  /** Bytes across the rows that recorded a size. */
   bytes: number;
   /** Rows with no recorded size — the reason `bytes` is a floor, not a total. */
   unsized: number;
@@ -73,16 +48,6 @@ export function storageFacts(
   };
 }
 
-/**
- * A section head, with the numbers it introduces in its META slot (proto
- * 4357/4364/4371 — `sectionBlock(label, meta)`).
- *
- * There are no big `.figure` displays on this screen: the prototype has none,
- * and they are the wrong object for it. Storage answers "is it safe, and what
- * would freeing space cost me?", and a 31px total answers neither. Every
- * number sits where it belongs — beside the row or the section it describes,
- * in the numeric register.
- */
 function Head({
   label,
   meta,
@@ -90,7 +55,6 @@ function Head({
 }: {
   label: string;
   meta?: string;
-  /** The meta names a state that has not landed yet — see `.pending`. */
   pending?: boolean;
 }) {
   return (
@@ -107,7 +71,6 @@ function Head({
   );
 }
 
-/** One ruled row: what it is on the leading edge, its count on the trailing. */
 function Row({
   label,
   totals,
@@ -115,7 +78,6 @@ function Row({
 }: {
   label: string;
   totals: Totals;
-  /** These bytes are on their way somewhere, not settled — see `.pending`. */
   pending?: boolean;
 }) {
   return (
@@ -130,8 +92,7 @@ function Row({
   );
 }
 
-/** The custody buckets in severity order, worst last — a reader scanning down
- *  ends on the thing that needs them, not on the thing that is fine. */
+/** Severity order, worst last: a reader scanning down ends on what needs them. */
 const CUSTODY_ORDER = [
   "replicated",
   "remote-only",
@@ -140,11 +101,7 @@ const CUSTODY_ORDER = [
   "missing",
 ] as const;
 
-/**
- * The count the health sentence is about. Each verdict names exactly one
- * bucket, so the sentence and the number can never drift apart; `unknown` and
- * `held` take no number at all and are handled before this is called.
- */
+/** `unknown` and `held` take no number and are handled before this is called. */
 function healthCount(
   custody: CustodyFacts,
   health: "missing" | "only-here" | "waiting"
@@ -154,13 +111,8 @@ function healthCount(
   return custody.waiting.count;
 }
 
-/**
- * Backup health: one verdict, one sentence, both derived from the rollup.
- *
- * `null` is a THIRD state, not a zero: the read has not landed. Saying
- * "nobody has counted your originals" then would be an answer this screen does
- * not have yet, and the member would read it as a finding.
- */
+/** `null` is a THIRD state, not a zero: the read has not landed, and a member
+ *  would read a count of nothing as a finding. */
 function Health({ custody }: { custody: CustodyFacts | null }) {
   if (!custody) {
     return (
@@ -173,9 +125,7 @@ function Health({ custody }: { custody: CustodyFacts | null }) {
   const health = custodyHealth(custody);
   return (
     <>
-      {/* `waiting` is the one verdict that is neither settled nor wrong: the
-          copies are queued. It takes `--seam`, the role for exactly that
-          (issue #765) — every other verdict keeps the quiet numeric ink. */}
+      {/* `waiting` is queued, not wrong — `--seam` is that role (#765). */}
       <Head
         label={STORAGE_COPY.healthHead}
         meta={STORAGE_COPY.healthMeta[health]}
@@ -210,7 +160,7 @@ function Health({ custody }: { custody: CustodyFacts | null }) {
   );
 }
 
-/** Where the originals are — the whole library, not the loaded window. */
+/** The whole library, not the loaded window. */
 function WhereTheOriginalsAre({ custody }: { custody: CustodyFacts }) {
   const totalsOf: Record<(typeof CUSTODY_ORDER)[number], Totals> = {
     replicated: custody.backedUp,
@@ -235,8 +185,6 @@ function WhereTheOriginalsAre({ custody }: { custody: CustodyFacts }) {
               key={bucket}
               label={STORAGE_COPY.custodyRow[bucket]}
               totals={totalsOf[bucket]}
-              // Queued-to-be-copied is the one bucket in flight; the other four
-              // are answers. `--seam` marks it as in-flight rather than wrong.
               pending={bucket === "pending-offsite"}
             />
           )
@@ -246,12 +194,7 @@ function WhereTheOriginalsAre({ custody }: { custody: CustodyFacts }) {
   );
 }
 
-/**
- * The free-up statement. It describes a release that is possible, not a
- * control that performs one — see the file header. The unproven remainder is
- * printed BESIDE the offer, because "what is not on the table" is the part a
- * reader needs in order to trust the part that is.
- */
+/** A statement, not a control: the unproven remainder prints beside the offer. */
 function FreeUp({ custody }: { custody: CustodyFacts }) {
   return (
     <>
@@ -287,7 +230,6 @@ export function StorageView({
   onOpenTrash,
 }: {
   facts: StorageFacts;
-  /** The whole-library rollup, or null until the read lands. */
   custody: CustodyFacts | null;
   onOpenTrash: () => void;
 }) {
@@ -297,9 +239,7 @@ export function StorageView({
 
       <Health custody={custody} />
 
-      {/* Both of these are statements ABOUT the counted library. With nothing
-          counted they would be statements about nothing, so they are absent
-          rather than zeroed — the health block above has already said why. */}
+      {/* Absent rather than zeroed: with nothing counted these say nothing. */}
       {custody?.known ? (
         <>
           <WhereTheOriginalsAre custody={custody} />

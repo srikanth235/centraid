@@ -1,10 +1,5 @@
-// oklab colour maths shared by the contrast grids.
-//
-// The accent and state ramps are `color-mix()` over a runtime hue, so a test
-// that only understands `hsl()` cannot see them — which is exactly how
-// `--accent-deep` shipped at 3.04:1 under its own ink. This is the browser's
-// oklab mix, extracted from `contrast.test.ts` so both that file and its
-// callers stay under the file-size limit.
+// oklab colour maths for the contrast grids. The accent and state ramps are
+// `color-mix()` over a runtime hue, so an `hsl()`-only test cannot see them.
 
 import { parseColor, rgbToHsl, SELF_TINT, toHex } from "./color.js";
 
@@ -38,7 +33,6 @@ function oklabToHex(lab: Triple): string {
   return toHex([rgb[0] ?? 0, rgb[1] ?? 0, rgb[2] ?? 0]);
 }
 
-/** Linear-light sRGB triple for one oklab colour, BEFORE gamut clamping. */
 function oklabToLinearRgb([L, a, b]: Triple): Triple {
   const l = (L + 0.3963377774 * a + 0.2158037573 * b) ** 3;
   const m = (L - 0.1055613458 * a - 0.0638541728 * b) ** 3;
@@ -57,18 +51,9 @@ const inGamut = (rgb: Triple): boolean =>
     (channel) => channel >= -IN_GAMUT_EPSILON && channel <= 1 + IN_GAMUT_EPSILON
   );
 
-/**
- * `oklch(<l> <c> <h>)` resolved to an sRGB hex at BUILD TIME.
- *
- * React Native has no `oklch()` and no `color-mix()`, and the shell must paint
- * the same pixels as the app surface, so an identity hue may never reach a
- * renderer as a colour function. The one subtlety is gamut: `oklch(0.5 0.09 h)`
- * is inside sRGB at every hue this package ships, but a caller can ask for a
- * chroma that is not, and naively clipping the channels shifts the HUE (the
- * clipped channel moves the colour sideways, not just inward). So chroma is
- * bisected down to the largest value that still lands in gamut, which keeps
- * lightness and hue exact — the two properties the app palette is defined by.
- */
+/** Resolved at BUILD TIME: React Native has no `oklch()` or `color-mix()`.
+ *  Chroma is bisected to the largest in-gamut value because clipping channels
+ *  shifts the HUE; lightness and hue stay exact. */
 export function oklchToHex(
   lightness: number,
   chroma: number,
@@ -97,8 +82,7 @@ export function oklchToHex(
   return toHex([rgb[0] ?? 0, rgb[1] ?? 0, rgb[2] ?? 0]);
 }
 
-/** Split on the top-level (paren-depth 0) commas of a function's argument
- *  list — `hsl(a, b, c)` nested inside a mix must survive intact. */
+/** Depth-0 commas only — a nested `hsl(a, b, c)` must survive. */
 function topLevelArgs(body: string): string[] {
   const out: string[] = [];
   let depth = 0;
@@ -116,10 +100,8 @@ function topLevelArgs(body: string): string[] {
   return out.map((s) => s.trim());
 }
 
-/** Evaluate every `color-mix(in oklab, A p%, B)` in `value`, innermost first,
- *  the way a browser composites it. Only the oklab form is supported — it is
- *  the only one this package emits, and an unrecognised space must not be
- *  silently averaged in the wrong one. */
+/** Innermost first. Only the oklab form — another space must not be silently
+ *  averaged in the wrong one. */
 export function evalColorMix(value: string): string {
   let out = value;
   for (;;) {
@@ -155,18 +137,12 @@ export function evalColorMix(value: string): string {
   }
 }
 
-/** Perceptual distance in oklab — the space the mixes are already done in,
- *  and the only one where "these two look the same" is a number. */
 export function oklabDistance(a: string, b: string): number {
   const [al, aa, ab] = rgbToOklab(a);
   const [bl, ba, bb] = rgbToOklab(b);
   return Math.hypot(al - bl, aa - ba, ab - bb);
 }
 
-/** `color-mix(in oklab, C p%, transparent)` composited over `bg` — the alpha
- *  blend a browser performs for every hue-wash chip in the tree. Separate from
- *  `evalColorMix` because the second operand there is a colour, not the
- *  surface the mix ends up painted on. */
 export function alphaOver(color: string, bg: string, share: number): string {
   const fg = parseColor(color).rgb;
   const back = parseColor(bg).rgb;
@@ -177,10 +153,7 @@ export function alphaOver(color: string, bg: string, share: number): string {
   );
 }
 
-/** Substitute the knobs the token CSS parameterizes colours by, so an
- *  `hsl(0 0% calc(var(--bg-l) + 4.5%))` becomes a measurable colour. This is
- *  CSS measurement machinery; React Native receives already-concrete values
- *  from `toNativeTheme()` and never parses this syntax. */
+/** CSS measurement only; React Native never parses this syntax. */
 export function resolveVars(
   value: string,
   scope: Record<string, string>
@@ -197,8 +170,6 @@ export function resolveVars(
     );
 }
 
-// Emitted-CSS readers: pull a selector's declarations out of a generated
-// stylesheet and resolve a value's var() references within that scope.
 export function declarations(
   css: string,
   selector: string
@@ -214,31 +185,21 @@ export function declarations(
   return out;
 }
 
-// ── Semantic states ────────────────────────────────────────────────────────
-/** The three state roles, in the order the separation check reports them. */
+// ── semantic states ──
 export const SEMANTIC_STATES = ["--danger", "--success", "--warning"] as const;
 export { SELF_TINT } from "./color.js";
-/** Past this a state has stopped being its hue and become near-black (light)
- *  or near-white (dark). Same guard the accent fills carry. */
+/** Past this a state is near-black or near-white, not its hue. */
 export const RECOGNISABLE_STATE = 12;
-/** …and the other way a solve can cheat: desaturate. A grey clears every
- *  contrast floor on every surface and stays 0.06 from its neighbours in
- *  oklab, and codes nothing — "this is an error" has to be legible as RED, not
- *  just legible. So each role is held to its hue family and to real chroma.
- *  Bands are wide (they are a sanity check, not a tuning knob) but they are
- *  closed: nothing outside them can be the role. */
+/** Desaturation is the other cheat: a grey clears every floor and codes
+ *  nothing. Bands are wide but closed. */
 export const STATE_HUE = {
   // Red, wrapping 0.
   "--danger": [340, 20],
-  // Green.
   "--success": [70, 160],
-  // Amber/ochre.
   "--warning": [20, 60],
 } as const;
 export const MIN_STATE_SATURATION = 0.2;
 
-/** True while `value` still reads as `role`'s colour: right hue family, and
- *  saturated enough to be a hue at all rather than a grey. */
 export function readsAsRole(
   value: string,
   role: keyof typeof STATE_HUE
@@ -249,8 +210,6 @@ export function readsAsRole(
   return inBand && sat >= MIN_STATE_SATURATION;
 }
 
-/** `color-mix(in oklab, C 12%, transparent)` over `bg` — the alpha composite a
- *  browser performs for a state-tinted chip. */
 export function selfTint(value: string, bg: string): string {
   const fg = parseColor(value).rgb;
   const back = parseColor(bg).rgb;

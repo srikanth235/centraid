@@ -1,12 +1,9 @@
 /*
  * Renderer-side client for the gateway's owner consent surface
- * (`/centraid/_vault/*`, duaility §12). Everything here is an OWNER act
- * executed by the gateway with the owner-device credential — apps never
- * see these routes; their door is `ctx.vault` inside handlers.
- *
- * When the active gateway mounts no vault plane the routes 404; callers
- * get `undefined` from `vaultStatus()` and should render the
- * "no vault on this gateway" state rather than an error.
+ * (`/centraid/_vault/*`). Every call is an OWNER act on the owner-device
+ * credential; apps never see these routes — their door is `ctx.vault`.
+ * A gateway that mounts no vault plane 404s, which reads as `undefined`
+ * here: render the "no vault" state, never an error.
  */
 
 import {
@@ -17,7 +14,6 @@ import {
   readJson,
 } from "./gateway-client-core.js";
 
-/** Presence + the ADDRESSED vault's identity, from `GET /_vault/status`. */
 export interface VaultStatus {
   vaultId: string;
   name: string;
@@ -25,73 +21,37 @@ export interface VaultStatus {
   fresh: boolean;
 }
 
-/**
- * One vault of the registry, from `GET /_vault/vaults` (filtered to the
- * caller's enrollments, #289). There is no server-side "active" flag any
- * more — the client owns its vault pointer; the switcher compares each
- * `vaultId` against `getGatewayAuth().vaultId`.
- */
+/** The client owns the vault pointer; there is no server-side active flag (#289). */
 export interface VaultListEntry {
   vaultId: string;
   name: string;
   ownerPartyId: string;
-  /**
-   * True for the owner's PERSONAL vault — the gateway's default target,
-   * marked in the vault itself at founding. Survives the fresh path renaming
-   * it to the owner's display name, so this (not `name === "Personal"`) is
-   * how a client finds "my own vault".
-   */
+  /** Marked at founding — how a client finds its own vault, never `name`. */
   personal?: boolean;
-  /**
-   * Presentation out of `core_vault.settings_json` (#280: profiles are
-   * vaults — the switcher's color/icon/blurb live IN the vault).
-   */
   color?: string;
   icon?: string;
   blurb?: string;
 }
 
-/**
- * One SCOPE an app may be mounted over, from `GET /_vault/scopes?app=<id>`
- * (#599). A scope is a vault the CALLING OWNER owns (#726) — so this is
- * the ownership-aware successor to `listVaults`, which answers per DEVICE
- * enrollment and carries neither `canWrite` nor whether the app is installed
- * there.
- *
- * Order is the gateway's: oldest vault first, which puts the owner's own
- * (primary) scope first. `installed` is present only when `app` was named.
- */
+/** A scope is a vault the calling OWNER owns (#726) — the ownership-aware
+ *  successor to `listVaults`. Order is the gateway's, oldest vault first. */
 export interface AppScopeEntry {
   vaultId: string;
   label: string;
-  /**
-   * Whether this is the member's OWN vault — the durable founding marker
-   * (#711). An app's "somewhere other than my own" marker is
-   * exactly `personal === false`, never a match on `label`. Optional only
-   * because a gateway older than the marker omits it, and "unknown" must read
-   * as the member's own (unmarked) rather than falsely marking everything.
-   */
+  /** The founding marker (#711): "not mine" is `personal === false`, never a
+   *  label match. Absent on an older gateway, and absent must read as own. */
   personal?: boolean;
   color?: string;
   icon?: string;
-  /** Ownership-sourced writability (#726): a vault you own is writable.
-   *  Supplied by the gateway, never derived client-side from a role. */
+  /** Supplied by the gateway (#726), never derived client-side from a role. */
   canWrite: boolean;
   installed?: boolean;
 }
 
-/**
- * The whole scopes answer: the rows this app is mounted over (#599).
- */
 export interface AppScopePlane {
   scopes: AppScopeEntry[];
 }
 
-/**
- * The scopes plane for one app. `undefined` when the gateway mounts none
- * (route 404s) — an older gateway, not an error; callers fall back to the
- * single ambient scope.
- */
 export async function readAppScopePlane(
   appId?: string
 ): Promise<AppScopePlane | undefined> {
@@ -110,17 +70,12 @@ export async function readAppScopePlane(
   return await readJson<AppScopePlane>(res, "list app scopes");
 }
 
-/**
- * Just the rows (the shell's own scope registry). `undefined` has the same
- * meaning as above.
- */
 export async function listAppScopes(
   appId?: string
 ): Promise<AppScopeEntry[] | undefined> {
   return (await readAppScopePlane(appId))?.scopes;
 }
 
-/** One scope of a grant or a manifest request: schema-wide or one table. */
 export interface VaultScope {
   schema: string;
   table?: string | null;
@@ -129,7 +84,6 @@ export interface VaultScope {
   fieldMask?: string[] | null;
 }
 
-/** An active grant an enrolled app holds. */
 export interface VaultGrant {
   grantId: string;
   purposeConceptId: string;
@@ -138,10 +92,8 @@ export interface VaultGrant {
   scopes: VaultScope[];
 }
 
-/** An enrolled app with its active grants — one row of the consent surface. */
 export interface VaultAppEntry {
   appId: string;
-  /** The Centraid app id — enrollment stores it as `consent.app.name`. */
   name: string;
   status: string;
   origin: string;
@@ -160,7 +112,6 @@ export interface VaultAgentEntry {
   grants: VaultGrant[];
 }
 
-/** Active enrolled agents, including the stable id used by consent rows. */
 export async function listAgents(): Promise<VaultAgentEntry[]> {
   const { baseUrl, token } = await auth();
   const res = await doFetch(baseUrl, "/centraid/_vault/agents", {
@@ -191,7 +142,6 @@ export interface VaultAnchorHit extends VaultEntityHit {
   sourceField: string;
 }
 
-/** Owner-trust entity search used by stable @-tokens in automation instructions. */
 export async function listVaultEntityTypes(): Promise<string[]> {
   const { baseUrl, token } = await auth();
   const res = await doFetch(baseUrl, "/centraid/_vault/entities", {
@@ -224,7 +174,6 @@ export async function searchVaultEntities(
   return body.cards;
 }
 
-/** Owner-trust live anchors used for row/field/span-grade automation tags. */
 export async function searchVaultAnchors(
   term: string
 ): Promise<VaultAnchorHit[]> {
@@ -244,14 +193,8 @@ export async function searchVaultAnchors(
   return body.anchors;
 }
 
-/**
- * An invocation parked for owner confirmation (risk above app ceiling).
- * `callerKind` refines `'agent'` into `'assistant'` when the requester is
- * the vault assistant's own identity, not an automation's — the Approvals
- * row badge reads this to say WHO is asking. `callerId` is the enrolled row
- * id, stable even if the
- * display name changes; `caller` is the display name shown to the owner.
- */
+/** `callerKind` refines `'agent'` to `'assistant'` for the vault assistant's
+ *  own identity; `callerId` stays stable when the display name changes. */
 export interface VaultParkedEntry {
   invocationId: string;
   command: string;
@@ -262,10 +205,6 @@ export interface VaultParkedEntry {
   input: Record<string, unknown>;
 }
 
-/**
- * Plane presence. `undefined` means the gateway mounts no vault plane
- * (route 404s) — a valid deployment, not an error.
- */
 export async function vaultStatus(): Promise<VaultStatus | undefined> {
   const { baseUrl, token } = await auth();
   const res = await doFetch(baseUrl, "/centraid/_vault/status", {
@@ -279,10 +218,6 @@ export async function vaultStatus(): Promise<VaultStatus | undefined> {
   return readJson<VaultStatus>(res, "fetch vault status");
 }
 
-/**
- * Every vault of the registry, active flagged. `undefined` when the gateway
- * mounts no vault registry (route 404s) — a valid deployment, not an error.
- */
 export async function listVaults(): Promise<VaultListEntry[] | undefined> {
   const { baseUrl, token } = await auth();
   const res = await doFetch(baseUrl, "/centraid/_vault/vaults", {
@@ -297,14 +232,8 @@ export async function listVaults(): Promise<VaultListEntry[] | undefined> {
   return body.vaults;
 }
 
-/**
- * Rename a vault and/or update its presentation (color/icon/blurb — #280:
- * profiles are vaults). Switching which vault is ACTIVE is NOT done here
- * any more (#289) — it is a pure client-side pointer flip via
- * `window.CentraidApi.setActiveVault`; the server holds no active pointer.
- * Vault create/delete are admin acts (server CLI over SSH) and no longer
- * have an HTTP surface — a POST/DELETE here answers 405.
- */
+/** Rename and presentation only. Activation is a client pointer flip
+ *  (`setActiveVault`), and create/delete are CLI admin acts: POST/DELETE 405. */
 export async function updateVault(input: {
   vaultId: string;
   name?: string;
@@ -330,7 +259,6 @@ export async function updateVault(input: {
   return readJson<VaultListEntry>(res, "update vault");
 }
 
-/** Enrolled apps with their active grants. */
 export async function vaultApps(): Promise<VaultAppEntry[]> {
   const { baseUrl, token } = await auth();
   const res = await doFetch(baseUrl, "/centraid/_vault/apps", {
@@ -344,11 +272,7 @@ export async function vaultApps(): Promise<VaultAppEntry[]> {
   return body.apps;
 }
 
-/**
- * Owner approval of an app's requested access. The request is the
- * manifest-declared `vault` block verbatim — the UI never invents scopes
- * the app didn't ask for.
- */
+/** The manifest's `vault` block verbatim — the UI invents no scopes. */
 export async function approveVaultGrant(input: {
   appId: string;
   purpose: string;
@@ -372,7 +296,6 @@ export async function approveVaultGrant(input: {
   return readJson<{ grantId: string }>(res, "approve vault grant");
 }
 
-/** Revoke one grant (owner act; the cascade runs gateway-side). */
 export async function revokeVaultGrant(input: {
   grantId: string;
 }): Promise<{ viewsRevoked: number; parkedDropped: number }> {
@@ -388,7 +311,6 @@ export async function revokeVaultGrant(input: {
   return readJson(res, "revoke vault grant");
 }
 
-/** Invocations parked for the owner's say-so. */
 export async function vaultParked(): Promise<VaultParkedEntry[]> {
   const { baseUrl, token } = await auth();
   const res = await doFetch(baseUrl, "/centraid/_vault/parked", {
@@ -402,7 +324,6 @@ export async function vaultParked(): Promise<VaultParkedEntry[]> {
   return body.parked;
 }
 
-/** Owner decision on one parked invocation. */
 export async function confirmVaultParked(input: {
   invocationId: string;
   approve: boolean;
@@ -420,14 +341,12 @@ export async function confirmVaultParked(input: {
   return readJson<{ status: string }>(res, "confirm parked invocation");
 }
 
-/** One app's scenario-seed state (#290). */
 export interface VaultDemoApp {
   appId: string;
   rows: number;
   seedable: boolean;
 }
 
-/** Per-app demo status: which apps ship a scenario, which have rows loaded. */
 export async function vaultDemoStatus(): Promise<VaultDemoApp[]> {
   const { baseUrl, token } = await auth();
   const res = await doFetch(baseUrl, "/centraid/_vault/demo", {
@@ -441,7 +360,6 @@ export async function vaultDemoStatus(): Promise<VaultDemoApp[]> {
   return body.apps;
 }
 
-/** Run an app's seed.js scenario generator (demo register, owner act). */
 export async function vaultDemoLoad(appId: string): Promise<{ rows: number }> {
   const { baseUrl, token } = await auth();
   const res = await doFetch(baseUrl, `/centraid/_vault/demo/${enc(appId)}`, {
@@ -451,7 +369,6 @@ export async function vaultDemoLoad(appId: string): Promise<{ rows: number }> {
   return readJson<{ rows: number }>(res, "load demo data");
 }
 
-/** One connection's health (#290). */
 export interface VaultConnection {
   connectionId: string;
   kind: string;
@@ -468,7 +385,6 @@ export interface VaultConnection {
   } | null;
 }
 
-/** Connection health — every connection with its latest run. */
 export async function vaultConnections(): Promise<VaultConnection[]> {
   const { baseUrl, token } = await auth();
   const res = await doFetch(baseUrl, "/centraid/_vault/imports/connections", {
@@ -482,7 +398,6 @@ export async function vaultConnections(): Promise<VaultConnection[]> {
   return body.connections;
 }
 
-/** Pause or resume a connection (owner act). */
 export async function vaultConnectionSetStatus(
   connectionId: string,
   status: "paused" | "active"

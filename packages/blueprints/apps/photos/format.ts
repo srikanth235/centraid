@@ -1,13 +1,10 @@
-// Pure formatting/predicate helpers over an asset row — no DOM, no vault IO,
-// no app state. Shared by app.tsx's own orchestrators (refresh/matchesSearch)
-// and by every component file that needs to format or classify an asset.
+// Pure formatting/predicate helpers over an asset row — no DOM, IO or state.
 import { fmtBytes, localDayKey } from "@centraid/design/elements";
 
 import type { Asset, CustodyMeta, ExifRow } from "./types.ts";
 
 export function dayKey(iso: string | number | Date | null | undefined): string {
-  // Local wall-clock bucketing (kit localDayKey), never the UTC slice — an
-  // evening photo must not land on tomorrow's stack.
+  // Local wall clock, never the UTC slice: an evening photo is not tomorrow's.
   return iso ? localDayKey(iso) : "";
 }
 
@@ -38,7 +35,6 @@ export function fmtMonth(key: string): string {
   }
 }
 
-// What a datetime-local input wants: local wall-clock, minute precision.
 export function toLocalInputValue(iso: string | null | undefined): string {
   if (!iso) return "";
   const d = new Date(iso);
@@ -47,8 +43,6 @@ export function toLocalInputValue(iso: string | null | undefined): string {
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
 }
 
-// Byte size straight off the asset row when the vault recorded one,
-// otherwise recovered from the base64 payload length.
 export function assetBytes(asset: Asset): number | null {
   const recorded = asset.byte_size ?? asset.bytes ?? asset.size_bytes;
   if (typeof recorded === "number") return recorded;
@@ -62,13 +56,8 @@ export function assetBytes(asset: Asset): number | null {
   return null;
 }
 
-// Human labels for the EXIF keys `packages/vault/src/blob/pipeline.ts`'s
-// `parseJpegExif`/`extractBlobMeta` may write into `media_asset.
-// exif_json` at upload — plus a few common camera fields (make/model/iso/
-// aperture/shutter/focal length) that infra doesn't populate YET but a
-// future codec plug-in could (see enrich.ts's own "same queries" note on
-// the phash sidecar for the same forward-looking shape). Reading a key this
-// vault never writes just means that row never renders — see exifRows below.
+// A key this vault never writes simply renders no row, so unpopulated camera
+// fields are safe to list here.
 const EXIF_LABELS: Record<string, string> = {
   make: "Camera make",
   model: "Camera model",
@@ -84,20 +73,7 @@ const EXIF_LABELS: Record<string, string> = {
   artist: "Artist",
 };
 
-/**
- * The Lightbox details panel's rows: whatever `asset.exif_json` actually
- * carries (#352 — today that's captured time/GPS from
- * packages/vault/src/blob/pipeline.ts's minimal EXIF walk, never camera
- * make/model/ISO/aperture — this vault doesn't parse those tags yet) plus
- * the always-available dimensions/size/captured-time/type every asset row
- * carries regardless of EXIF. Degrades to an empty array when nothing is
- * known — the panel then shows its own "nothing to show" copy.
- *
- * WHERE it was taken is not among these rows and must not be added back: a
- * location is a phrase (`place-phrase.ts`), rendered by the info panel, and a
- * coordinate is only ever spelled out behind the member's own "exact
- * location" action.
- */
+/** Empty when nothing is known; the panel owns that copy. */
 export function exifRows(asset: Asset): ExifRow[] {
   const rows: ExifRow[] = [];
   let exif: Record<string, unknown> | null = null;
@@ -124,9 +100,6 @@ export function exifRows(asset: Asset): ExifRow[] {
       .filter(Boolean)
       .join(" · ");
     if (exposure) rows.push({ label: "Exposure", value: exposure });
-    // Any OTHER labeled EXIF key this vault might carry beyond the two
-    // folded groups above (lens today; forward-compatible with whatever a
-    // future codec plug-in adds) — see EXIF_LABELS' own doc comment.
     const FOLDED = new Set([
       "make",
       "model",
@@ -141,13 +114,8 @@ export function exifRows(asset: Asset): ExifRow[] {
       if (FOLDED.has(key)) continue;
       if (exif[key] != null) rows.push({ label, value: String(exif[key]) });
     }
-    // NO Location row, and no coordinate. Where a photograph was taken is a
-    // phrase, not a fact in a details grid — `place-phrase.ts` resolves it and
-    // the info panel renders it, with the digits behind an explicit "exact
-    // location" action. This row must never print "37.44190, -122.14300" as a
-    // link to a public map host, which hands a third party the exact
-    // coordinates of somebody's photographs to answer a question the app can
-    // answer on the device.
+    // NO location row, ever: a place is a phrase (`place-phrase.ts`), and
+    // coordinates never go to a map host to answer what the device can.
   }
   if (asset.width && asset.height) {
     rows.push({
@@ -169,9 +137,7 @@ export function exifRows(asset: Asset): ExifRow[] {
   if (captured) {
     const d = new Date(captured);
     if (!Number.isNaN(d.getTime())) {
-      // `dateStyle`/`timeStyle` can't be mixed with component options like
-      // `weekday` (Intl.DateTimeFormat throws) — `dateStyle: 'full'` already
-      // spells out the weekday on its own.
+      // `dateStyle`/`timeStyle` cannot be mixed with `weekday` — Intl throws.
       rows.push({
         label: "Captured",
         value: d.toLocaleString(undefined, {
@@ -185,18 +151,11 @@ export function exifRows(asset: Asset): ExifRow[] {
   return rows;
 }
 
-// The blob custody projection (#352 phase 3/4, blob/custody.ts) in
-// owner-facing words + a tone the CSS keys off (custody-ok/custody-warn/
-// custody-danger). Returns null for a custody-less row (asset has no
-// content_id resolvable to `blob_custody_state`, or the standing sweep
-// hasn't run yet) — the caller renders nothing rather than a wrong claim.
+// The blob custody projection in owner-facing words plus a tone the CSS keys
+// off. A custody-less row gets null, and the caller draws nothing.
 const CUSTODY_META: Record<string, CustodyMeta> = {
   "local-only": { label: "On this device only", tone: "warn" },
-  // A state the projection has always written and this table never had a row
-  // for (#712), so a photograph with an upload still outstanding
-  // showed NO backup fact at all — silently indistinguishable from one whose
-  // custody had never been computed. "warn", not "ok": a queued copy is not a
-  // copy.
+  // "warn", not "ok": a queued copy is not a copy.
   "pending-offsite": { label: "Copy queued, not finished", tone: "warn" },
   replicated: { label: "Backed up", tone: "ok" },
   "remote-only": { label: "Only in the cloud", tone: "warn" },
@@ -227,9 +186,6 @@ export function isAudioAsset(asset: Asset): boolean {
   );
 }
 
-// Joins truthy class fragments — the same `.tile-wrap selected faved`-style
-// composition the Lit port used, unchanged by the move to JSX (`className=`
-// still just wants a string).
 export const cls = (
   ...parts: Array<string | false | null | undefined>
 ): string => parts.filter(Boolean).join(" ");

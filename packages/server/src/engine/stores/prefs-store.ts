@@ -1,19 +1,6 @@
-/*
- * Centraid gateway prefs store (#280).
- *
- * There is no parallel gateway-side user identity — the vault owner IS the
- * user (`core_vault.owner_party_id`), so the only thing left at the
- * gateway is device-level configuration: which coding harness to run, its
- * binary path, UI theme/density for this host, etc. Those are a handful
- * of keys written from one process — a plain JSON file, not a database.
- *
- * Exposed over HTTP at the `/_centraid-user` prefix (wire surface
- * unchanged so the desktop client keeps working):
- *   GET /_centraid-user/id     → { id }   — the ACTIVE vault's owner party
- *                                 id, via the host-injected provider
- *   GET /_centraid-user/prefs  → { prefs }
- *   PUT /_centraid-user/prefs  body {patch} → { prefs }
- */
+// Gateway prefs (#280): device-level config only — the vault owner IS the
+// user, so there is no gateway-side identity. A JSON file, not a database.
+// The wire prefix stays `/_centraid-user` for desktop-client compatibility.
 
 import { mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import type { IncomingMessage, ServerResponse } from "node:http";
@@ -32,7 +19,6 @@ export class PrefsStore {
   private readonly persistence: PrefsPersistence | undefined;
   private cache: Record<string, unknown> | undefined;
 
-  /** Hosts may inject database persistence; string paths retain legacy test compatibility. */
   constructor(source: string | PrefsPersistence) {
     if (typeof source === "string") this.file = source;
     else this.persistence = source;
@@ -70,16 +56,11 @@ export class PrefsStore {
     renameSync(tmp, this.file!);
   }
 
-  /** Every pref as a `Record<string, unknown>` (a defensive copy). */
   getAllPrefs(): Record<string, unknown> {
     return { ...this.load() };
   }
 
-  /**
-   * Merge a patch into the store. `undefined` and `null` values are
-   * treated as deletions so callers can clear a key by sending
-   * `{ foo: null }`. Written atomically (tmp + rename).
-   */
+  /** `undefined` and `null` are deletions. Atomic (tmp + rename). */
   setPrefs(patch: Record<string, unknown>): Record<string, unknown> {
     const keys = Object.keys(patch);
     if (keys.length === 0) return this.getAllPrefs();
@@ -94,32 +75,11 @@ export class PrefsStore {
   }
 }
 
-/* ---------- Per-subsystem harness + model resolution ---------- */
-
-/**
- * The chat/automation surfaces that can each carry their own model
- * override. `'ask'` is the per-app copilot register, `'builder'` the
- * per-app build register, `'assistant'` the shell-level vault assistant,
- * `'automations'` the fire pipeline's `ctx.delegate` calls.
- */
+/** `assistant` is the shell's vault assistant, `automations` `ctx.delegate`. */
 export type ModelSubsystem = "assistant" | "ask" | "builder" | "automations";
 
-/**
- * Resolve which harness a subsystem's turn runs on, in priority order:
- *
- *   1. `harness.<subsystem>` — the per-subsystem harness override;
- *   2. `harness.kind`  — the default harness (the host-wide fallback every
- *      subsystem inherits when it hasn't been pinned);
- *   3. `'codex'` — the built-in default, matching the settings panel's
- *      "Codex preferred when both present" copy.
- *
- * Empty-string pref values are treated as unset (a cleared override), same
- * as `undefined`/`null` at the prefs-store level — so clearing a subsystem's
- * pin falls back to the default harness rather than pinning `''`.
- *
- * The config seeder writes only its declared launch keys; subsystem pins are
- * user-owned preferences under the same canonical harness namespace.
- */
+/** `harness.<subsystem>`, then `harness.kind`, then `codex`. An empty string
+ *  is unset, so a cleared pin falls back rather than pinning `''`. */
 export function resolveSubsystemHarness(
   prefs: Record<string, unknown>,
   subsystem: ModelSubsystem
@@ -131,12 +91,7 @@ export function resolveSubsystemHarness(
   return "codex";
 }
 
-/**
- * Resolve the ordered failover ladder for one subsystem. Arrays are stored
- * directly by current clients; JSON strings remain accepted for CLI-authored
- * prefs. The selected primary is always first and duplicate/unknown kinds are
- * removed.
- */
+/** The primary is always first; duplicate and unknown kinds are dropped. */
 export function resolveSubsystemHarnessLadder(
   prefs: Record<string, unknown>,
   subsystem: ModelSubsystem,
@@ -160,19 +115,8 @@ export function resolveSubsystemHarnessLadder(
   return ladder;
 }
 
-/**
- * Resolve the model id/alias for one LLM turn, in priority order:
- *
- *   1. `explicit` — a caller-supplied override (request body `model`, or
- *      an automation manifest's `requires.model`);
- *   2. `model.<harnessKind>.<subsystem>` — the per-subsystem prefs override;
- *   3. `model.<harnessKind>.default` — the harness-wide prefs default;
- *   4. `undefined` — nothing resolved; the caller sends no `model` field
- *      and the harness falls back to its own built-in default.
- *
- * Empty-string pref values are treated as unset (a cleared override), same
- * as `undefined`/`null` at the prefs-store level.
- */
+/** `explicit`, then `model.<harnessKind>.<subsystem>`, then `.default`, then
+ *  `undefined` — send no `model` at all so the harness uses its own. */
 export function resolveSubsystemModel(
   prefs: Record<string, unknown>,
   harnessKind: string,
@@ -187,14 +131,8 @@ export function resolveSubsystemModel(
   return undefined;
 }
 
-/**
- * Resolve open ACP config categories for one harness/subsystem.
- *
- * Pref keys are `config.<harnessKind>.<slot>.<category>`, where `<slot>` is a
- * subsystem or `default`. Callers pass manifest/request pins in `explicit`;
- * those win category-by-category. Empty strings are unset. The result remains
- * a category-keyed map so adapter-specific ids never leak into policy.
- */
+/** Keys are `config.<harnessKind>.<slot>.<category>`. The result stays
+ *  category-keyed so adapter-specific ids never leak into policy. */
 export function resolveSubsystemConfigPins(
   prefs: Record<string, unknown>,
   harnessKind: string,
@@ -229,8 +167,6 @@ export function resolveSubsystemConfigPins(
   return resolved;
 }
 
-/* ---------- HTTP route handler ---------- */
-
 const ROUTE_PREFIX = "/_centraid-user";
 
 async function readJsonBody(req: IncomingMessage): Promise<unknown> {
@@ -257,19 +193,12 @@ function sendError(res: ServerResponse, status: number, message: string): void {
   sendJson(res, status, { error: message });
 }
 
-/**
- * Build the prefs HTTP route handler (wire prefix `/_centraid-user`, kept
- * for client compatibility). `getOwnerId` backs the `/id` sub-route with
- * the ACTIVE vault's owner party id — the one user identity that exists
- * (#280); without a provider the route 404s.
- */
 export interface UserStoreRouteHooks {
-  /** Return a user-facing reason to reject an atomic prefs patch. */
+  /** Return a user-facing reason to reject the patch. */
   validatePatch?: (
     patch: Record<string, unknown>,
     current: Record<string, unknown>
   ) => Promise<string | undefined>;
-  /** Observe a committed patch, including its before/after snapshots. */
   afterPatch?: (
     patch: Record<string, unknown>,
     before: Record<string, unknown>,
@@ -277,6 +206,8 @@ export interface UserStoreRouteHooks {
   ) => Promise<void> | void;
 }
 
+/** `getOwnerId` backs `/id` with the ACTIVE vault's owner party id; without a
+ *  provider that route 404s. */
 export function makeUserStoreRouteHandler(
   getStore: () => PrefsStore,
   getOwnerId?: () => string,

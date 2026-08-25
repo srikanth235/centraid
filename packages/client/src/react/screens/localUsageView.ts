@@ -1,19 +1,5 @@
-/*
- * The Storage page's presentation derivation (#544) — every decision
- * about what the footprint READS AS, kept pure and framework-free so the
- * numbers can be asserted in a unit test instead of a rendered DOM.
- *
- * The gateway reports per-vault components and gateway-level components
- * separately (`serve/local-usage.ts`), because that is the shape it can
- * measure honestly. The owner does not think in that split — they think
- * "what is using my disk", and only THEN "which vault". So this rolls the two
- * into one ordered legend, and keeps the per-vault rows available underneath.
- *
- * Colour is assigned per component id, not per rank: a component keeps its
- * hue as the numbers move, so the bar does not reshuffle its palette between
- * two polls. Hues come from the icon palette (`--c-*`), which is the one
- * ramp in this codebase already designed to be told apart at a glance.
- */
+// The Storage page's presentation derivation (#544). Colour is assigned per
+// component id, never per rank, so the palette never reshuffles between polls.
 
 import { formatBytes } from "../../format.js";
 import type {
@@ -27,14 +13,11 @@ export { formatBytes } from "../../format.js";
 
 export interface ComponentPresentation {
   label: string;
-  /** A CSS colour token — the segment's hue and its legend chip. */
   color: string;
-  /** One line of plain language: what this actually is. */
   blurb: string;
 }
 
-/** Fixed per-component presentation. Order of the keys is the tiebreak order
- *  used when two components report the same byte count. */
+/** Key order is the tiebreak order for equal byte counts. */
 export const COMPONENT_PRESENTATION: Readonly<
   Record<LocalComponentId, ComponentPresentation>
 > = Object.freeze({
@@ -96,18 +79,8 @@ const COMPONENT_ORDER = Object.keys(
   COMPONENT_PRESENTATION
 ) as LocalComponentId[];
 
-/**
- * Presentation for a component id, INCLUDING one this build does not
- * recognize. `LocalComponentId` is a checked union in this file's own type
- * system, but the wire gives no such guarantee at runtime: a newer gateway
- * can report a component id shipped after this client was built, and
- * `readJson`'s cast does not validate against the union. Indexing
- * `COMPONENT_PRESENTATION` directly with such an id reads `undefined` and
- * throws on the next `.label`/`.color` access. Falling back to the raw id as
- * its own label keeps the real byte count on screen (never
- * dropped, never a thrown card) without inventing a name for something this
- * build cannot describe.
- */
+/** The wire can carry an id newer than this build's union — never index
+ *  `COMPONENT_PRESENTATION` directly. */
 export function presentationFor(component: string): ComponentPresentation {
   return (
     COMPONENT_PRESENTATION[component as LocalComponentId] ?? {
@@ -124,15 +97,12 @@ export interface FootprintSlice {
   color: string;
   blurb: string;
   bytes: number;
-  /** Share of the total footprint in [0, 1]; 0 when the total is 0. */
   fraction: number;
-  /** Any read failure encountered under this component, verbatim. */
+  /** A read failure under this component, verbatim. */
   unreadable?: string;
 }
 
-/** Roll per-vault and gateway-level components into ONE ordered legend,
- *  largest first. Zero-byte components are dropped — a legend row that always
- *  reads "0 B" is noise, and the per-vault detail still lists them. */
+/** One legend, largest first; zero-byte components drop out. */
 export function footprintSlices(report: LocalUsageReportDTO): FootprintSlice[] {
   const totals = new Map<
     LocalComponentId,
@@ -177,28 +147,15 @@ export function footprintSlices(report: LocalUsageReportDTO): FootprintSlice[] {
 export type FootprintScaleKind = "budget" | "disk" | "none";
 
 export interface FootprintScale {
-  /** What the rail is drawn against. */
   kind: FootprintScaleKind;
-  /** Denominator in bytes; `null` when there is nothing to scale against. */
   againstBytes: number | null;
-  /** Fill fraction, clamped to [0, 1] so an over-budget bar stays in its box. */
+  /** Clamped, so an over-budget bar stays in its box. */
   fillFraction: number;
-  /** `true` once used bytes exceed `againstBytes` — the rail shows overflow. */
   over: boolean;
-  /** Where the warn threshold sits along the rail, in [0, 1]; `null` off-budget. */
   warnFraction: number | null;
 }
 
-/**
- * What the occupancy rail measures against, in priority order:
- *
- *   1. the owner's budget, when they set one — that is the number they care
- *      about, and the only one they chose;
- *   2. otherwise the physical disk, which at least gives the figure a sense
- *      of scale;
- *   3. otherwise nothing — a bare total, no bar. Inventing a denominator
- *      ("assume 100 GB") would make the fill fraction a fiction.
- */
+/** Budget, else disk, else nothing: an invented denominator is a fiction. */
 export function footprintScale(report: LocalUsageReportDTO): FootprintScale {
   const budget = report.limits.totalLimitBytes;
   if (budget !== null && budget > 0) {
@@ -211,8 +168,7 @@ export function footprintScale(report: LocalUsageReportDTO): FootprintScale {
       warnFraction: Math.min(1, report.limits.warnAtPercent / 100),
     };
   }
-  // Disk total, not free space: "3 GB of 500 GB" is a stable statement, while
-  // "3 GB of 142 GB free" moves whenever anything else on the machine writes.
+  // Disk total, not free space: free space moves when anything else writes.
   const diskTotal = report.disk?.totalBytes ?? 0;
   if (diskTotal > 0) {
     return {
@@ -232,8 +188,7 @@ export function footprintScale(report: LocalUsageReportDTO): FootprintScale {
   };
 }
 
-/** Parses "12", "12 GB", "500mb" into bytes. `null` for anything unparseable
- *  — the limit inputs refuse rather than guess at a unit. */
+/** `null` for anything unparseable — the inputs refuse rather than guess. */
 export function parseBytes(
   input: string,
   defaultUnit: "MB" | "GB" = "GB"
@@ -256,9 +211,7 @@ export function parseBytes(
   return Math.round(value * (scale[unit] ?? 1));
 }
 
-/** One sentence naming the state of the budget. Deliberately says what is NOT
- *  happening when over-budget: nothing is blocked, and a user staring at a red
- *  bar deserves to know that before they start deleting things in a panic. */
+/** Over-budget must say what is NOT happening: nothing is blocked. */
 export function budgetSummary(
   report: LocalUsageReportDTO,
   limits: StorageLimitsDTO

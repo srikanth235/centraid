@@ -1,41 +1,17 @@
 #!/usr/bin/env node
 /*
- * `centraid-gateway` — standalone daemon for the centraid gateway.
+ * `centraid-gateway` — the standalone daemon around the same `serve()` the
+ * desktop embeds. `usage()` below is the authority on subcommands and flags.
  *
- * The same `serve()` the Electron desktop embeds, wrapped with:
- *   - JSON config file (`--config <path>`)
- *   - a loopback bearer DERIVED FROM CUSTODY (#505, #568):
- *     `HMAC(endpoint-key.bin,
- *     "centraid/landlord-http/v1")`. It is never written to disk as a token
- *     and never printed, but it is STABLE for the life of the endpoint
- *     identity and is not rotated — any local process that can open the
- *     gateway's KeyStore reproduces it, which is how the CLI and the desktop
- *     reach a daemon they did not spawn. A parent that DOES spawn this daemon
- *     may pin a per-launch value via the `CENTRAID_GATEWAY_TOKEN` env.
- *   - SIGINT / SIGTERM graceful shutdown
+ * The loopback bearer is DERIVED FROM CUSTODY (#505, #568):
+ * `HMAC(endpoint-key.bin, "centraid/landlord-http/v1")` — never written to
+ * disk, never printed, never rotated. Any local process that can open the
+ * KeyStore reproduces it, which is how the CLI and the desktop reach a daemon
+ * they did not spawn; a spawning parent may pin `CENTRAID_GATEWAY_TOKEN`.
  *
- * v0 PoC scope per centraid#131: loopback or LAN bind, no TLS. Shared and
- * per-device HTTP credentials are retired. Remote access is iroh-only and
- * every request carries a cryptographically proved EndpointId resolved
- * through persisted vault enrollments. Filesystem maintenance commands take
- * gateway.db's exclusive lock and therefore refuse while the daemon runs.
- * TLS termination stays a documented out-of-scope follow-up.
- *
- * Subcommands:
- *   centraid-gateway serve [--config <path>] [--data-dir <path>] [--host <h>] [--port <p>]
- *   centraid-gateway vault <list|create|rename|delete> --data-dir <path> …   (offline maintenance)
- *   centraid-gateway pair [--config <path> | --data-dir <path>] [--port <p>] [--vault <name-or-id>] …
- *   centraid-gateway owners <list|add|rename|remove> --data-dir <path> …
- *   centraid-gateway devices <list|add|revoke> --data-dir <path> …
- *   centraid-gateway key <status|export|restore|rotate> --data-dir <path> …  (custody, #298)
- *   centraid-gateway service <install|uninstall|status> …                    (OS service unit, #351)
- *   centraid-gateway status [--data-dir <path> | --config <path>] [--json]   (#382)
- *   centraid-gateway --help
- *   centraid-gateway --version
- *
- * `--json` on `pair`/`vault list`/`vault create`/`status` (#382) swaps
- * the human text for a single machine-readable line. Every other
- * subcommand's output is unchanged.
+ * No TLS in v0 (#131): loopback or LAN bind only, remote access iroh-only with
+ * a proved EndpointId per request. Maintenance commands take gateway.db's
+ * exclusive lock and refuse while the daemon runs.
  */
 
 import { promises as fs, realpathSync } from "node:fs";
@@ -82,7 +58,7 @@ async function bundledWebRoot(): Promise<string | undefined> {
       await fs.access(path.join(candidate, "index.html"));
       return true;
     } catch {
-      // Try the source-runner/built-package alternative.
+      // Try the built-package alternative.
       return false;
     }
   });
@@ -189,7 +165,6 @@ function parseServeArgs(args: string[]): ParsedServe {
 
 async function resolveConfig(parsed: ParsedServe): Promise<DaemonConfig> {
   const cfg = await resolveDaemonConfig(parsed, fail);
-  // CLI overrides
   if (parsed.host) cfg.host = parsed.host;
   if (parsed.port !== undefined) cfg.port = parsed.port;
   return cfg;
@@ -205,27 +180,16 @@ async function commandServe(args: string[]): Promise<void> {
     lock: "exclusive",
   });
 
-  // Loopback bearer (#505, #568). This is
-  // the bearer the in-process iroh endpoint host forwards with when it hands a
-  // proved iroh request to the loopback HTTP listener; forwarded requests also
-  // carry the per-boot device proof header, so the real per-device identity is
-  // what `composedHandler` scopes on (this bearer only unlocks the loopback
-  // door). It is NOT per-boot: `landlordBearerForEndpointSecret` derives it
-  // from the KeyStore-custodied endpoint key, so it is stable for the life of
-  // that identity and is never rotated — that stability is what lets the CLI
-  // and the desktop reach a daemon they did not spawn. A parent that DOES
-  // spawn this daemon (the
-  // desktop's detached gateway) may pin a per-launch value via
-  // `CENTRAID_GATEWAY_TOKEN`.
+  // The loopback bearer unlocks the loopback door only (#505, #568): a
+  // forwarded iroh request also carries the per-boot device proof header, and
+  // `composedHandler` scopes on that identity, never on this bearer.
   const dataPlaneSecret = process.env.CENTRAID_DATA_PLANE_SECRET;
   const dataPlaneHttpUrl = process.env.CENTRAID_DATA_PLANE_HTTP_URL;
   const desktopEndpointId =
     process.env.CENTRAID_DESKTOP_ENDPOINT_ID?.trim() || undefined;
 
-  // Device plane (#289): enrollment-scoped vault resolution for
-  // requests arriving over the iroh endpoint. Constructed before serve()
-  // so its `deviceAccess` participates in every request; the endpoint
-  // itself binds after the HTTP listener is up.
+  // Device plane (#289). Construct it BEFORE serve() so `deviceAccess`
+  // participates in every request; the endpoint binds after the listener.
   const logger = {
     info: (msg: string) => process.stdout.write(`[centraid-gateway] ${msg}\n`),
     warn: (msg: string) => process.stderr.write(`[centraid-gateway] ${msg}\n`),
@@ -237,8 +201,8 @@ async function commandServe(args: string[]): Promise<void> {
   const loopbackSecret =
     process.env.CENTRAID_GATEWAY_TOKEN?.trim() ||
     landlordBearerForEndpointSecret(keyStore.loadOrCreate("endpoint-key.bin"));
-  // The daemon always has a host identity: it is the device the auto-founded
-  // vaults are owned by (#603), and the identity `pair` mints against.
+  // The daemon always has a host identity: auto-founded vaults are owned by it
+  // (#603) and `pair` mints against it.
   const hostEndpointId =
     desktopEndpointId ??
     kitlessHostIdentity(keyStore.loadOrCreate("endpoint-key.bin"));
@@ -253,9 +217,7 @@ async function commandServe(args: string[]): Promise<void> {
     loopbackEndpointId: hostEndpointId,
   });
 
-  // The ephemeral secret opens only the process-local HTTP listener. Device
-  // authorization still resolves through a real EndpointId enrollment: iroh
-  // proof normally, or the spawning desktop's OS-custodied identity.
+  // Device authorization still resolves through a real EndpointId enrollment.
   const webRoot = await bundledWebRoot();
   const allowedHosts = mergeAllowedHosts(parsed.allowedHosts);
   const handle = await serve({
@@ -295,9 +257,8 @@ async function commandServe(args: string[]): Promise<void> {
       endpointTicket: () => endpoint?.ticket(),
       onEndpointRevoked: (endpointId) => endpoint?.revokeEndpoint(endpointId),
     },
-    // Durable PWA control sessions (#376): persist control cookies so
-    // a web pairing survives a restart, and propagate `devices revoke` to
-    // live cookies via the SAME enrollment store the endpoint admits from.
+    // Durable PWA control sessions (#376). Revocation must read the SAME
+    // enrollment store the endpoint admits from.
     webSessions: {
       controlStore: WebControlSessionStore.open(gatewayDatabase),
       isDeviceValid: (key) => devicePlane.pairing.enrollments.isEnrolled(key),
@@ -307,11 +268,8 @@ async function commandServe(args: string[]): Promise<void> {
           web: {
             rootDir: webRoot,
             ...(config.host ? { host: config.host } : {}),
-            // The web UI rides on the API port + 1. If that derived port is
-            // already taken, `startWebUiServer` degrades gracefully — it falls
-            // back to an ephemeral port instead of rejecting — so a web-port
-            // collision can never take down the gateway's API. `handle.webUrl`
-            // (printed below) reflects the real listening port.
+            // API port + 1; `startWebUiServer` falls back to an ephemeral port
+            // so a web-port collision never takes down the API.
             ...(config.port !== undefined && config.port < 65_535
               ? { port: config.port === 0 ? 0 : config.port + 1 }
               : {}),
@@ -321,9 +279,8 @@ async function commandServe(args: string[]): Promise<void> {
   });
   vaultsRef = handle.vaults;
 
-  // The iroh endpoint (#289): the gateway's permanent
-  // identity + the only remote transport. Best-effort so the loopback
-  // maintenance surface can still start when iroh is temporarily unavailable.
+  // The gateway's permanent identity and only remote transport (#289).
+  // Best-effort: loopback maintenance must start without iroh.
   const endpoint =
     config.endpoint === false
       ? undefined
@@ -337,8 +294,7 @@ async function commandServe(args: string[]): Promise<void> {
     );
   }
 
-  // Seed harness prefs *after* serve(). The write is an atomic JSON
-  // replace, so re-seed on every boot is safe.
+  // After serve(); the write is an atomic replace, so re-seeding is safe.
   try {
     seedHarnessPrefs(handle.prefs, config);
   } catch (error) {
@@ -347,8 +303,7 @@ async function commandServe(args: string[]): Promise<void> {
     );
   }
 
-  // The loopback secret is deliberately NOT printed (#505) — it
-  // is ephemeral in-process plumbing, not a credential to paste anywhere.
+  // Never print the loopback secret (#505): it is plumbing, not a credential.
   process.stdout.write(
     `[centraid-gateway] listening on ${handle.url}\n${handle.webUrl ? `[centraid-gateway] web app: ${handle.webUrl}\n` : ""}[centraid-gateway] dataDir: ${path.resolve(config.dataDir)}\n`
   );
@@ -420,11 +375,10 @@ async function main(): Promise<void> {
   }
 }
 
-// Only boot when this file is the process entrypoint (tsx/node/bin). Importing
-// pure helpers for unit tests (#545) must not call process.exit.
-// Node realpaths the ESM main for import.meta.url but leaves argv[1] as the
-// install symlink (node_modules/.bin/centraid-gateway); Bun realpaths both.
-// Compare realpaths so the documented Node bin is not a silent no-op (#545).
+// Boot only as the process entrypoint: importing helpers for unit tests must
+// not call process.exit (#545). Compare REALPATHS — Node leaves argv[1] as the
+// install symlink while Bun resolves it, and a plain compare makes the
+// documented Node bin a silent no-op.
 if (isProcessMainModule(process.argv[1], import.meta.url)) {
   main().catch((error) => {
     process.stderr.write(
@@ -434,7 +388,6 @@ if (isProcessMainModule(process.argv[1], import.meta.url)) {
   });
 }
 
-/** True when argv[1] is this module after resolving install symlinks. */
 export function isProcessMainModule(
   argv1: string | undefined,
   moduleUrl: string | URL

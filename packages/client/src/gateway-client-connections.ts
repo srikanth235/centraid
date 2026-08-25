@@ -1,29 +1,7 @@
 /*
- * Renderer-side client for the broker-owned OAuth / BYO-client connections
- * surface (#304's gateway routes, `packages/server/src/routes/
- * connections-routes.ts`). Split out of `gateway-client.ts` so the new
- * Settings → Connections screen doesn't grow the barrel file further; the
- * barrel re-exports this module so call sites still import from
- * `./gateway-client.js`.
- *
- * Wire contract (all under `/centraid/_vault/…`, owner-authenticated except
- * the OAuth callback which the gateway itself serves — the renderer never
- * calls that endpoint directly):
- *
- *   GET    /_vault/connections                — list + health (never a secret cell)
- *   GET    /_vault/connections/providers       — BYO-client wizard presets
- *   POST   /_vault/connections                 — configure a credential (or detach with cred_kind:'none')
- *   PATCH  /_vault/connections/<id>            — {status, note?} pause / resume
- *   DELETE /_vault/connections/<id>            — remove entirely; 404 unknown id, 409 when undecided
- *                                                 outbox items or receipted sync history block it
- *   POST   /_vault/connections/<id>/authorize  — {redirect_uri?} → {auth_url, state}
- *
- * The list/configure endpoints answer in the DB's raw snake_case column
- * shape (see `listConnections` in the gateway route) — this module maps
- * that onto camelCase types, same convention as `listVersions`'s `GitVersion`
- * mapping in `gateway-client.ts`. The provider-presets endpoint already
- * answers in camelCase (it serializes a TS interface directly), so those
- * types pass through unchanged.
+ * Renderer-side client for the broker-owned connections surface (#304).
+ * Never call the OAuth callback from here — the gateway serves it. The
+ * list/configure routes answer raw snake_case columns, mapped below.
  */
 
 import {
@@ -43,9 +21,9 @@ import {
   withClientSession,
 } from "./gateway-client-core.js";
 
-// ─── Connection health list (GET /_vault/connections) ─────
+// ─── health list ─────
 
-/** Raw wire shape of one row — verbatim SQL column names, see the gateway route. */
+/** Verbatim SQL column names. */
 interface ConnectionWireRow {
   connection_id: string;
   kind: string;
@@ -65,7 +43,6 @@ interface ConnectionWireRow {
   auth_note: string | null;
 }
 
-/** One data-source connection with its broker-carried credential + health. */
 export interface ConnectionEntry {
   connectionId: string;
   kind: string;
@@ -75,8 +52,7 @@ export interface ConnectionEntry {
   trust: "staged" | "auto-publish";
   createdAt: string;
   lastRunAt: string | null;
-  /** `null` = no credential attached yet — the connection rides the
-   *  harness-ambient lane instead of a BYO credential. */
+  /** `null` rides the harness-ambient lane instead of a BYO credential. */
   credKind: "oauth2" | "api_key" | null;
   oauthMode: "byo" | "assist" | null;
   provider: string | null;
@@ -108,7 +84,6 @@ function fromWireRow(r: ConnectionWireRow): ConnectionEntry {
   };
 }
 
-/** Every configured connection, newest-first (the gateway's own ordering). */
 export async function listConnections(): Promise<ConnectionEntry[]> {
   const { baseUrl, token } = await auth();
   const res = await doFetch(baseUrl, ROUTES.vaultConnections, {
@@ -122,18 +97,15 @@ export async function listConnections(): Promise<ConnectionEntry[]> {
   return (out.connections ?? []).map(fromWireRow);
 }
 
-/**
- * Redirect URI the owner pastes into their OAuth developer app (Google Cloud,
- * Azure, Dropbox). Matches the gateway's bearer-free callback path.
- */
+/** Pasted into the owner's OAuth developer app; must match the gateway's
+ *  callback path. */
 export async function oauthCallbackUri(): Promise<string> {
   const { baseUrl } = await auth();
   return `${baseUrl.replace(/\/$/u, "")}${ROUTES.vaultOAuthCallback}`;
 }
 
-// ─── BYO-client wizard presets (GET /_vault/connections/providers) ─────
+// ─── wizard presets ─────
 
-/** One bundled connector template a provider preset unlocks. */
 export interface ConnectionProviderConnector {
   templateId: string;
   kind: string;
@@ -164,9 +136,7 @@ export interface ConnectionProviderCapabilities {
   actions: ConnectionProviderActionCapability[];
 }
 
-/** A provider's wizard content — mirrors `ProviderPreset` in
- *  `packages/server/src/routes/connection-providers.ts` (already camelCase
- *  on the wire, since the gateway serializes the TS interface directly). */
+/** Mirrors `ProviderPreset` in `connection-providers.ts`. */
 export interface ConnectionProviderPreset {
   id: string;
   name: string;
@@ -177,7 +147,7 @@ export interface ConnectionProviderPreset {
   allowedHosts: string[];
   setup: string[];
   connectors: ConnectionProviderConnector[];
-  /** Declared syncs + actions (no secrets). Optional for older gateways. */
+  /** No secrets. Optional for older gateways. */
   capabilities?: ConnectionProviderCapabilities;
 }
 
@@ -215,19 +185,16 @@ export async function loadConnectionProviderCatalog(): Promise<ConnectionProvide
   };
 }
 
-/** The BYO-client wizard's provider catalog (Google, GitHub, …). */
 export async function listConnectionProviders(): Promise<
   ConnectionProviderPreset[]
 > {
   return (await loadConnectionProviderCatalog()).providers;
 }
 
-// ─── Configure / detach a credential (POST /_vault/connections) ─────
+// ─── configure / detach ─────
 
-/** Attach (or, with `credKind: 'none'`, detach) a credential on a connection,
- *  identified by `(kind, label)` — the same pair the connector manifest
- *  names (#304 decision: "credential attaches to the connection row,
- *  not the manifest"). A `(kind, label)` that doesn't exist yet is created. */
+/** A credential attaches to the connection row, not the manifest (#304).
+ *  `(kind, label)` identifies it; an unknown pair is created. */
 export interface ConfigureConnectionInput {
   kind: string;
   label: string;
@@ -239,8 +206,8 @@ export interface ConfigureConnectionInput {
   clientId?: string;
   clientSecret?: string;
   apiKey?: string;
-  /** Required (non-empty) for every `credKind` except `'none'` — the
-   *  anti-exfiltration host pin the injected fetch enforces. */
+  /** The anti-exfiltration host pin the injected fetch enforces; required
+   *  non-empty for every `credKind` but `'none'`. */
   allowedHosts?: string[];
 }
 
@@ -307,7 +274,7 @@ export async function configureConnection(
   };
 }
 
-// ─── Pause / resume (PATCH /_vault/connections/<id>) ─────
+// ─── pause / resume ─────
 
 export async function setConnectionStatus(input: {
   connectionId: string;
@@ -335,16 +302,10 @@ export async function setConnectionStatus(input: {
   return { connectionId: out.connection_id, status: out.status };
 }
 
-// ─── Remove entirely (DELETE /_vault/connections/<id>) ─────
+// ─── remove ─────
 
-/**
- * The route answers a real, structured `{ok:false, error}` body on refusal
- * (409: undecided outbox items, or receipted sync history — see
- * `sync.remove_connection`'s doc comment) — read it regardless of HTTP
- * status, same idiom `gateway-client-outbox.ts`'s `readOutcome` uses for the
- * outbox decide/revoke routes, so the caller gets the server's own reason
- * instead of a generic "HTTP 409" message.
- */
+/** Read the `{ok:false, error}` body whatever the HTTP status, so the caller
+ *  gets the server's reason and not "HTTP 409". */
 async function readRemoveOutcome(
   res: Response,
   op: string
@@ -371,18 +332,13 @@ async function readRemoveOutcome(
     const body = JSON.parse(text) as { error?: string };
     if (typeof body.error === "string") reason = body.error;
   } catch {
-    // Non-JSON body — fall back to the raw text above.
+    // Non-JSON body — keep the raw text above.
   }
   throw new GatewayClientError("conflict", reason);
 }
 
-/**
- * The real delete (#304's missing renderer half): removes the
- * connection row, its credential + health sidecars and cursor state. Refused
- * (409) when the connection still has undecided outbox items or receipted
- * sync history — `reason` is the server's own explanation, meant for a
- * toast, not a generic HTTP-status message.
- */
+/** Refused (409) while undecided outbox items or receipted sync history
+ *  remain. */
 export async function removeConnection(
   connectionId: string
 ): Promise<{ connectionId: string }> {
@@ -395,7 +351,7 @@ export async function removeConnection(
   return { connectionId: out.connection_id };
 }
 
-// ─── Begin the PKCE consent ceremony (POST /_vault/connections/<id>/authorize) ─────
+// ─── PKCE consent ceremony ─────
 
 export interface BeginConnectionAuthorization {
   authUrl: string;
@@ -403,14 +359,8 @@ export interface BeginConnectionAuthorization {
   redirectUri: string;
 }
 
-/**
- * Starts the OAuth ceremony for an `oauth2` connection: the gateway mints a
- * PKCE `auth_url` + single-use `state` and returns them; the caller is
- * responsible for getting the owner's browser to `auth_url` (this module
- * does not open windows — see `SettingsConnectionsScreen.tsx`). The
- * provider redirects back to the gateway's own `/oauth/callback`, which
- * finishes the ceremony server-side — the renderer never sees the code.
- */
+/** The caller navigates the owner's browser to `auth_url` — this module opens
+ *  no windows. The ceremony finishes server-side; no code reaches here. */
 export async function beginConnectionAuthorization(input: {
   connectionId: string;
   redirectUri?: string;

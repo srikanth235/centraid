@@ -1,57 +1,12 @@
-/*
- * Settings merge — gateway-wide user prefs ⊕ per-app settings ⊕ caller
- * overrides → the `SettingsInject` payload a host applies to its app
- * surface's root element.
- *
- * Precedence (lowest → highest):
- *   1. global user prefs (UserStore)
- *   2. per-app `__centraid_settings` (apps own this row)
- *   3. caller-supplied overrides
- *
- * Routing — there are two namespaces:
- *
- *   - GLOBAL keys (theme/density/accent/…) are explicitly registered in
- *     `KNOWN_KEYS`. Anything outside that registry AND outside the `app*`
- *     namespace is dropped, so a typo in a global setting can't smear a
- *     stray attribute onto the root element.
- *
- *   - APP-LEVEL keys (any key shaped like `app<Capital>…`) are routed
- *     DYNAMICALLY. Each app declares which knobs it honours in its
- *     `app.json#knobs[]`; the harness can extend that list per app, so the
- *     runtime can't predict the universe of knob keys ahead of time.
- *     Routing is by name convention:
- *       - keys ending in `Color` or `Accent` → CSS var `--app-<kebab>`
- *       - everything else                    → data attr `data-app-<kebab>`
- *     Values are coerced to a non-empty string; everything else is dropped.
- *
- * Adding a new GLOBAL pref is a single edit to `KNOWN_KEYS`. Adding a new
- * per-app knob is a manifest edit in `<app>/app.json#knobs[]` plus the
- * matching CSS — no runtime change required.
- *
- * Nothing in this repo calls `buildSettingsInject` (#799): the gateway serves
- * no UI bytes and the shells resolve appearance themselves
- * (`packages/client/src/react/shell/appearance.ts`). It stays as the
- * engine's public settings-routing contract for hosts that need it.
- */
+// Settings merge: global prefs ⊕ per-app settings ⊕ caller overrides, last
+// layer winning. A global key must be in `KNOWN_KEYS`; anything outside it and
+// outside the dynamic `app*` namespace is dropped. Unused in this repo (#799).
 
-/**
- * Where merged settings land on a host's app-surface root element.
- * `dataAttrs` become `data-<key>="…"`; `cssVars` become `--<key>: …`.
- */
 export interface SettingsInject {
   dataAttrs?: Record<string, string>;
   cssVars?: Record<string, string>;
 }
 
-/**
- * The settings keys this build understands, plus where each one lands on the
- * host's root element. `kind: 'data'` becomes `data-<key>="..."`,
- * `kind: 'css'` becomes a CSS custom property on the same element's `style`.
- *
- * Each entry also carries an optional `coerce` so values can survive
- * round-tripping through JSON — e.g. the bgL slider stores `5`, but the
- * CSS var wants `5%`.
- */
 type KeySpec =
   | { kind: "data"; attr: string; coerce?: (v: unknown) => string | undefined }
   | {
@@ -71,9 +26,7 @@ export const KNOWN_KEYS: Record<string, KeySpec> = {
   theme: { kind: "data", attr: "theme", coerce: asString },
   density: { kind: "data", attr: "density", coerce: asString },
   cards: { kind: "data", attr: "cards", coerce: asString },
-  // bgL is an explicit lightness OVERRIDE stored as a number; the CSS var
-  // wants `<n>%`. Absent means the active theme's own anchor governs, so this
-  // must not be defaulted anywhere in the pipeline.
+  // Absent means the theme's own anchor governs — never default this.
   bgL: { kind: "css", cssVar: "bg-l", coerce: asPercent },
   accent: { kind: "css", cssVar: "accent", coerce: asString },
   accentLight: { kind: "css", cssVar: "accent-light", coerce: asString },
@@ -90,38 +43,21 @@ export const KNOWN_KEYS: Record<string, KeySpec> = {
   lineSel: { kind: "css", cssVar: "line-sel", coerce: asString },
 };
 
-/**
- * Convert a camelCase tail (e.g. `Font`, `FontFamily`, `CornerRadius`) into
- * the kebab-case attribute / variable suffix the runtime injects onto the
- * root element. Used only by the dynamic `app*` routing — the registered
- * global keys (`KNOWN_KEYS`) pre-declare their target name.
- */
 function camelTailToKebab(tail: string): string {
-  // First char is uppercase (we strip it before calling), so we just
-  // lowercase and prefix subsequent uppercase boundaries with `-`.
   return (
     tail.charAt(0).toLowerCase() +
     tail.slice(1).replace(/[A-Z]/gu, (c) => `-${c.toLowerCase()}`)
   );
 }
 
-/**
- * Is `key` an app-level knob? We use the camelCase prefix convention
- * `app<Capital>...` so `appFont`, `appColor`, `appCornerRadius` all match
- * but bare `app` (probably a typo) or `apps` does not.
- */
+/** `app<Capital>…` only, so a bare `app`/`apps` typo does not match. */
 function isAppKnobKey(key: string): key is `app${string}` {
   if (key.length <= 3 || !key.startsWith("app")) return false;
   const c = key.charCodeAt(3);
   return c >= 65 && c <= 90; // 'A'..'Z'
 }
 
-/**
- * Decide whether an app-knob value lands as a data attribute or a CSS
- * variable. Convention: keys ending in `Color` or `Accent` are colours
- * (continuous CSS values), everything else is a discrete state best
- * styled with attribute selectors.
- */
+/** `Color`/`Accent` tails become CSS vars; the rest, data attrs. */
 function appKnobTarget(
   key: string
 ): { kind: "data"; attr: string } | { kind: "css"; cssVar: string } {
@@ -134,12 +70,6 @@ function appKnobTarget(
     : { kind: "data", attr: name };
 }
 
-/**
- * Merge layered settings into the {@link SettingsInject} shape. Layers are
- * merged in order — later layers override earlier ones. `undefined` /
- * `null` in any layer is treated as "no value" and falls through to the
- * previous layer.
- */
 export function buildSettingsInject(
   layers: Array<Record<string, unknown> | undefined>
 ): Required<SettingsInject> {
@@ -166,8 +96,6 @@ export function buildSettingsInject(
       }
       continue;
     }
-    // Dynamic routing for the per-app `app*` namespace — keeps templates +
-    // harness free to introduce new knobs without a runtime change.
     if (isAppKnobKey(k)) {
       const coerced = asString(raw);
       if (coerced === undefined) continue;

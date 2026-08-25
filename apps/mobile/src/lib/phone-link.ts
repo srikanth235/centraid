@@ -1,24 +1,9 @@
 // Pairing state + tunnel lifecycle for the phone ↔ gateway link (#263).
-//
-// Two ticket shapes, one Settings entry point:
-//
-// 1. Desktop "Connect phone" QR — JSON `{v:1, kind:'centraid-pair', ticket, code}`
-//    redeemed over `centraid/pair/1` (pairWithDesktop).
-// 2. Headless VPS ticket — base64url JSON `{v:1, kind:'centraid-gw-pair', gw, t, s, …}`
-//    from `centraid-gateway pair` / `pair --qr`, redeemed over `centraid/gw-pair/1`
-//    (pairWithGateway). Only `gw`, a refreshable EndpointTicket address hint,
-//    is stored; one-time `t`/`s` capabilities are discarded.
-//
-// The phone never holds a gateway bearer. From then on `ensureTunnelStarted()`
-// runs a localhost HTTP proxy — everything (documents, module imports, SSE)
-// rides the iroh tunnel; the gateway/desktop attaches auth on its side.
-//
-// The phone can pair with several gateways: each pairing is recorded as a
-// (gateway, vault) VaultLink in lib/vaults, and this module operates on the ACTIVE
-// VaultLink's projected slot (LINK_* keys). `pair()` adds a VaultLink, `switchVaultLink()`
-// re-points the active slot (restarting the tunnel when the gateway changes),
-// and `forgetVaultLink()`/`unpair()` drop one. The device secret key is device-wide
-// — one EndpointId enrolls with every desktop — so it is never per-vault.
+// Two ticket shapes, one Settings entry: desktop `centraid-pair` and headless
+// `centraid-gw-pair` (only its refreshable `gw` hint is kept; `t`/`s` are
+// one-time). Each pairing is a VaultLink and this module reads the ACTIVE
+// link's LINK_* slot. The phone holds no gateway bearer — the peer attaches
+// auth. The device secret key is device-wide, never per-vault.
 
 import { Platform } from "react-native";
 
@@ -51,10 +36,6 @@ import {
 } from "./vault-links";
 import type { VaultLink } from "./vault-links";
 
-// The active-slot keys now live in their new owner, lib/vault-links (the Vaults
-// registry projects the active (gateway, vault) tuple into them); imported above
-// for this module's own tunnel/link reads.
-
 export class PhoneLinkError extends Error {
   constructor(
     public readonly kind:
@@ -69,10 +50,8 @@ export class PhoneLinkError extends Error {
   }
 }
 
-/** Pull link prefs into Store + secrets into secure storage. Idempotent. */
 export async function hydratePhoneLink(): Promise<void> {
-  // Hydrate the registry first: it folds any pre-registry install into a VaultLink
-  // and projects the active VaultLink into the LINK_* slot keys read below.
+  // Registry first: it projects the active link into the LINK_* keys read below.
   await hydrateVaultLinks();
   await Promise.all([
     hydrateSecure(LINK_ENDPOINT_HINT_KEY, ""),
@@ -92,10 +71,6 @@ export function getDesktopName(): string {
   return Store.get<string>(LINK_DESKTOP_NAME_KEY, "");
 }
 
-/**
- * Pair from a scanned QR payload or a pasted ticket. Accepts desktop
- * `centraid-pair` JSON and headless `centraid-gw-pair` one-liners.
- */
 export async function pair(
   qrPayloadString: string,
   deviceName: string
@@ -142,15 +117,10 @@ export async function pair(
     }
     const desktopName = result.desktopName ?? "";
     const deviceId = result.deviceId;
-    // A new pairing may target a DIFFERENT gateway than the running tunnel. Stop
-    // it so the re-init (driven by the active-vault change) dials the gateway we
-    // just paired with rather than reusing the old proxy.
+    // A new pairing may target a different gateway — drop the old proxy.
     await stopTunnel().catch(() => {
       /* not running */
     });
-    // Record this desktop as the active VaultLink; addVaultLink projects the active
-    // LINK_* slot (endpoint hint + names). vaultId starts empty and is filled by
-    // ReplicaProvider's bootstrap probe.
     await addVaultLink({
       gatewayId: result.gatewayId,
       desktopName,
@@ -176,10 +146,6 @@ export async function pair(
       result.error ?? "Pairing was refused by the gateway."
     );
   }
-  // The tunnel dials the gateway EndpointTicket (`gw`) embedded in the pairing
-  // token. A new pairing may target a DIFFERENT gateway than the running tunnel,
-  // so stop it — the re-init (driven by the active-vault change) dials the
-  // gateway we just paired with rather than reusing the old proxy.
   await stopTunnel().catch(() => {
     /* not running */
   });
@@ -206,12 +172,7 @@ export async function pair(
   const metadata = new Map(
     returnedVaults.map((vault) => [vault.vaultId, vault] as const)
   );
-  // EndpointId is durable identity. `gw` is only a refreshable dial hint; a
-  // relay change updates it in-place because addVaultLink keys on EndpointId.
-  // The first grant remains active after all grants are recorded, preserving
-  // the ticket's primary-vault landing behavior.
-  // `addVaultLink` updates one shared registry projection, so these writes
-  // intentionally stay ordered even though the response is a batch.
+  // Ordered: addVaultLink writes one shared projection, first grant stays active.
   const links = await returnedVaultIds.reduce<Promise<VaultLink[]>>(
     async (previous, vaultId) => {
       const prior = await previous;
@@ -237,12 +198,7 @@ export async function pair(
   return { desktopName, deviceId, vaultIds: returnedVaultIds };
 }
 
-/**
- * Forget the ACTIVE desktop/gateway link (Settings' "Unpair"). Stops the tunnel
- * and removes the active VaultLink, falling back to another VaultLink if one remains.
- * Keeps the device secret key so a future re-pair presents the same EndpointId
- * (the peer can also revoke it by name).
- */
+/** Keeps the device secret key, so a re-pair presents the same EndpointId. */
 export async function unpair(): Promise<void> {
   await hydrateVaultLinks();
   const active = getActiveVaultLink();
@@ -256,13 +212,7 @@ export async function unpair(): Promise<void> {
   if (active) await removeVaultLink(active.id);
 }
 
-/**
- * Make a saved VaultLink active. Re-points the active slot to its (gateway, vault)
- * tuple; when the gateway differs from the current one, stops the tunnel so the
- * next `ensureTunnelStarted` dials the new gateway (a same-gateway vault switch
- * keeps the tunnel up and only changes the vault header + replica key). The
- * replica re-keys off the active-vault change; returns the now-active VaultLink.
- */
+/** Stops the tunnel only when the gateway changes. */
 export async function switchVaultLink(
   id: string
 ): Promise<VaultLink | undefined> {
@@ -279,12 +229,7 @@ export async function switchVaultLink(
   return next;
 }
 
-/**
- * Forget one VaultLink by id (the switcher's "Remove from this phone"). The vault
- * stays on the gateway — this only drops the local tuple + its ticket. When the
- * forgotten VaultLink is active, the tunnel is stopped so the fallback VaultLink (if
- * any) can re-connect cleanly.
- */
+/** Local tuple only — the vault stays on the gateway. */
 export async function forgetVaultLink(id: string): Promise<void> {
   await hydrateVaultLinks();
   const active = getActiveVaultLink();
@@ -319,12 +264,7 @@ async function revokePushRegistration(): Promise<void> {
 // Deduplicate concurrent starts (Home and a cover can race on mount).
 let startInFlight: Promise<{ baseUrl: string } | undefined> | undefined;
 
-/**
- * Start (or reuse) the localhost tunnel proxy for the paired peer.
- * Resolves the base URL every RN gateway fetch should use. Returns
- * `undefined` when unpaired or when the native module is unavailable
- * (Expo Go); throws PhoneLinkError when a start attempt fails.
- */
+/** `undefined` when unpaired or without the native module (Expo Go). */
 export async function ensureTunnelStarted(): Promise<
   { baseUrl: string } | undefined
 > {
@@ -356,7 +296,7 @@ export async function ensureTunnelStarted(): Promise<
   }
 }
 
-/** Status subscription passthrough — no-op remover when the module is unavailable. */
+/** No-op remover when the module is unavailable. */
 export function subscribeTunnelStatus(cb: (status: TunnelStatus) => void): {
   remove: () => void;
 } {

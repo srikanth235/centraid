@@ -1,22 +1,7 @@
-// PROJECTION IS INGEST (#726 decision D11).
-//
-// A row that arrives over a share edge must take the SAME door an authored
-// row takes at the audience. The closure deliberately carries no derived
-// state (closure.ts exclusion 2) and NULLs every cross-vault foreign key, so a
-// projected photograph lands with no place, no embedding and none of the
-// origin's ontology — which is correct, and also means the audience must
-// re-register it for itself, exactly as `stage-file.ts` → `publishBatch` does
-// for a photograph the owner dropped on their own vault.
-//
-// Hooks run inside the projection's transaction (project-closure.ts), so a
-// replicating device never sees the row before its registration.
-//
-// KEYED BY ENTITY TYPE, NEVER BY APP. `media.asset` is vault ontology;
-// "Photos" is an app that happens to read it. The table below is closed and
-// owned by vault core: an app's scope-kit `projectionIngest` declaration names
-// an entity door, it does not register one — so no app id is representable
-// here, let alone branched on. A record-only app declares nothing and gets
-// nothing.
+// PROJECTION IS INGEST (#726 D11): a row arriving over a share edge takes the
+// SAME door an authored row takes — the closure NULLs every cross-vault key.
+// Hooks run inside the projection's transaction, so a replicating device never
+// sees a row before registration. KEYED BY ENTITY TYPE, NEVER BY APP.
 
 import type { DatabaseSync } from "node:sqlite";
 
@@ -25,34 +10,21 @@ import { findOrCreatePlaceTx } from "../commands/media.js";
 import { uuidv7 } from "../ids.js";
 import type { ProjectedItem, ShareableItemType } from "./closure.js";
 
-/** The clock a hook writes with — the projection's, so one share is one instant. */
 export interface ProjectionIngestContext {
-  /** ISO 8601, the same instant the lineage row records. */
+  /** The projection's instant, so one share is one instant. */
   now: string;
 }
 
-/**
- * Re-register one projected row in the audience vault. Runs INSIDE the
- * projection transaction and may only write the audience database.
- */
+/** Runs INSIDE the projection transaction; writes only the audience. */
 export type ProjectionIngestHook = (
   audience: DatabaseSync,
   item: ProjectedItem,
   ctx: ProjectionIngestContext
 ) => void;
 
-/**
- * Read the EXIF the asset carries and file it under the AUDIENCE's places.
- *
- * The coordinates crossed on `exif_json` (the camera's testimony, structural);
- * the `place_id` did not, because a place id names a row in the origin's
- * graph. So the audience re-derives its own, through the same
- * `findOrCreatePlaceTx` an upload uses — a photo shared into Family lands at
- * the family's "12.9716, 77.5946", not at a dangling id.
- *
- * An audience whose media policy is `strip` gets NO place: its own door would
- * not have recorded one, and a share is not a way around a vault's own rule.
- */
+/** A `place_id` names a row in the ORIGIN's graph, so the audience re-derives
+ *  its own. A `strip` policy gets none: a share is no way around the
+ *  audience's own rule. */
 function linkProjectedPlace(
   audience: DatabaseSync,
   assetId: string,
@@ -69,8 +41,7 @@ function linkProjectedPlace(
   try {
     exif = JSON.parse(row.exif_json) as { latitude?: unknown };
   } catch {
-    // Unparseable testimony is a fact about the origin's row, not a reason to
-    // fail a share. The asset simply lands without a place.
+    // Unparseable EXIF is a fact about the origin's row, not a failed share.
     return;
   }
   const { latitude, longitude } = exif as {
@@ -80,9 +51,7 @@ function linkProjectedPlace(
   if (typeof latitude !== "number" || typeof longitude !== "number") return;
   if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) return;
   const placeId = findOrCreatePlaceTx(
-    // `wrote` is the command pipeline's provenance collector; a share is not a
-    // command and emits no receipt, so the minted place is recorded by the
-    // replica commit bracket around this transaction and nothing else.
+    // A share emits no receipt: the replica commit bracket records this.
     { vault: audience, now: ctx.now, newId: uuidv7, wrote: () => undefined },
     latitude,
     longitude
@@ -93,16 +62,9 @@ function linkProjectedPlace(
 }
 
 /**
- * The one contribution a projected asset structurally cannot have: its
- * EMBEDDING. Derivatives crossed, so previews/thumbs need nothing; captions
- * and faces are consent-gated enrichers and a placement must never manufacture
- * an owner's consent (`enrich_request.capability` is a consent record — see
- * schema/enrich.ts). An embedding is the ambient index the audience's own
- * sweep would compute anyway; the row only says "this one first", which is
- * what makes a just-shared photo findable instead of findable-next-sweep.
- *
- * `required_capability` stays NULL on purpose: a device lease lane row would
- * hand this to a paired device, and a projected asset is gateway work.
+ * EMBEDDING ONLY: captions and faces are consent-gated, and a placement must
+ * never manufacture an owner's consent. `required_capability` stays NULL,
+ * since a device-lease row would hand gateway work to a paired device.
  */
 function requestProjectedEnrichment(
   audience: DatabaseSync,
@@ -137,20 +99,13 @@ const HOOKS = new Map<ShareableItemType, ProjectionIngestHook>([
   ["media.asset", projectedAsset],
 ]);
 
-/** The ingest door an item type takes at the audience, if it declares one. */
 export function projectionIngest(
   itemType: ShareableItemType
 ): ProjectionIngestHook | undefined {
   return HOOKS.get(itemType);
 }
 
-/**
- * Run every declared door over what this projection wrote.
- *
- * A DEDUPED row is skipped: the audience already held it, so it already went
- * through this door once, and re-running would re-ask for work the vault may
- * have already done.
- */
+/** A DEDUPED row is skipped: it went through this door once already. */
 export function runProjectionIngest(
   audience: DatabaseSync,
   projected: readonly ProjectedItem[],

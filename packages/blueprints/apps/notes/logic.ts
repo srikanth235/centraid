@@ -1,16 +1,8 @@
 // Every vault read and write Notes performs, and nothing that draws.
-//
-// `createLogic()` is a factory the orchestrator calls once at boot, closing
-// over the exact `state`/`data` objects it owns (passed by reference and
-// mutated in place, never reassigned) plus the three entry points only the
-// orchestrator can define — `render`, `refresh` and `status`. Everything
-// returned here is threaded back down as props, exactly like any other value.
-//
-// EVERY WRITE IS OPTIMISTIC. The shell's pending projection
-// (`pending-projection.ts`) paints the row the moment the intent is made; a
-// park is a calm designed state carried by the row's own chip, and a refusal
-// lands on the frame's one status line. Nothing here raises a toast, and
-// nothing here spins.
+// `createLogic()` closes over the orchestrator's `state`/`data` (mutated in
+// place, never reassigned) plus `render`/`refresh`/`status`. EVERY WRITE IS
+// OPTIMISTIC: the pending projection paints at intent, a park is a designed
+// state on the row's chip, a refusal lands on the one status line — no toasts.
 import { debounce, outcomeMessage } from "@centraid/design/elements";
 
 import { checkStats, deriveTitle, promote } from "./format.ts";
@@ -26,16 +18,10 @@ import type {
 } from "./types.ts";
 import { RENAME_REFUSAL, notebookDeleted } from "./view-copy.ts";
 
-/** A vault predicate, translated into the product's own sentence. The
- *  gateway stringifies a failed precondition as `"name: column op value"`,
- *  so the lookup keys off the substring before the first ": ". */
+/** Keyed by the text before the first ": ". */
 type Friendly = Record<string, string>;
 
-/**
- * The vault refuses a notebook name already used by a sibling. The refusal
- * is the VAULT'S — this app surfaces it on the status line rather than
- * pre-empting it with a rule of its own, because the two could disagree.
- */
+/** The refusal is the VAULT'S; never pre-empt it with a local rule. */
 const NOTEBOOK_NAME_FRIENDLY: Friendly = {
   name_unused_by_owner: RENAME_REFUSAL,
   name_unused: RENAME_REFUSAL,
@@ -55,9 +41,7 @@ export interface LogicDeps {
   data: AppData;
   render: () => void;
   refresh: () => Promise<void> | void;
-  /** Put one outcome on the frame's single status line, or take it down. */
   status: (text: string, undo?: () => void) => void;
-  /** Move to a route — a write that lands somewhere says where. */
   go: (shelf: ShelfId) => void;
 }
 
@@ -69,8 +53,7 @@ export function createLogic({
   status,
   go,
 }: LogicDeps) {
-  // The notice banner is driven imperatively (it carries no JSX children), so
-  // these DOM writes are never clobbered by reconciliation.
+  // Imperative — no JSX children, so reconciliation cannot clobber it.
   function notice(text: string): void {
     const el = document.querySelector<HTMLElement>("#noticeBanner");
     if (!el) return;
@@ -78,8 +61,7 @@ export function createLogic({
     el.hidden = !text;
   }
 
-  /** True when the write landed. A PARK IS NOT A FAILURE: it clears the
-   *  banner and leaves the row's pending chip to say where the write is. */
+  /** True when the write landed. A PARK IS NOT A FAILURE. */
   function narrate(
     outcome: VaultOutcome | undefined,
     friendly?: Friendly
@@ -107,8 +89,7 @@ export function createLogic({
     return false;
   }
 
-  /** The raw write. A throw is the gateway being out of reach, which is a
-   *  fact about the gateway and not about the note. */
+  /** A throw is the gateway out of reach, not a fact about the note. */
   async function act(
     action: string,
     input: Record<string, unknown>
@@ -121,7 +102,6 @@ export function createLogic({
     }
   }
 
-  /** Write, narrate, and re-read whatever changed shape. */
   async function write(
     action: string,
     input: Record<string, unknown>,
@@ -135,7 +115,7 @@ export function createLogic({
     return outcome;
   }
 
-  // ────────── Reading one note ──────────
+  // ─── reading one note ───
 
   function findNote(noteId: string): Note | null {
     return (
@@ -151,12 +131,8 @@ export function createLogic({
     );
   }
 
-  /**
-   * Open the editor and pull the canonical body lazily. The library ships a
-   * preview, never a body (#404), so the full text is fetched here on
-   * open; a note whose body is already in hand skips the round trip, and a
-   * denial leaves the editor usable with what the preview had.
-   */
+  /** The library ships a preview, never a body (#404); a denial leaves the
+   *  editor usable with it. */
   async function openNote(noteId: string): Promise<void> {
     state.noteId = noteId;
     state.versions = null;
@@ -180,10 +156,6 @@ export function createLogic({
     }
   }
 
-  /**
-   * The version chain, newest first — the query walks the append-only
-   * `revises` chain and its first row is the live body.
-   */
   async function loadHistory(noteId: string): Promise<void> {
     let answer: { versions?: NoteVersion[] } | undefined;
     try {
@@ -200,18 +172,10 @@ export function createLogic({
     render();
   }
 
-  // ────────── Writing a note ──────────
+  // ─── writing a note ───
 
-  /**
-   * A new note is UNTITLED, UNFILED AND WRITING IMMEDIATELY. There is no
-   * dialog, no template and no type to choose — the four graduating touches
-   * (a title, a notebook, a tag, a link) happen in the same editor, in any
-   * order or never.
-   *
-   * The vault will not accept a nameless note, so the first line stands in
-   * for the name (`deriveTitle`) — which is exactly what `promote` reads
-   * back out, so the member never sees the derivation.
-   */
+  /** Untitled and unfiled, writing immediately. The vault refuses a nameless
+   *  note, so the first line stands in (`deriveTitle`). */
   async function createNote(seed = ""): Promise<string | null> {
     const input: Record<string, unknown> = {
       title: deriveTitle("", seed) || "Untitled note",
@@ -229,12 +193,8 @@ export function createLogic({
     return null;
   }
 
-  /**
-   * The editor's continuous save. The one high-frequency write path, so a
-   * landed save patches the row it already has rather than re-reading the
-   * whole library — a refetch per keystroke would repaint the reading room
-   * under a member who is typing into it.
-   */
+  /** A landed save patches the row rather than re-reading the library under
+   *  a member who is typing. */
   const saveNote = debounce(
     async (noteId: string, patch: { title?: string; body_text?: string }) => {
       const outcome = await act("edit-note", { note_id: noteId, ...patch });
@@ -269,8 +229,7 @@ export function createLogic({
     await write("edit-note", { note_id: note.note_id, pinned });
   }
 
-  /** A note lives in ONE notebook or none. Moving it out is `move-note` with
-   *  no notebook, which is the vault's own way of saying unfiled. */
+  /** `move-note` with no notebook is the vault's way of saying unfiled. */
   async function moveNote(
     noteId: string,
     notebookId: string | null
@@ -292,11 +251,7 @@ export function createLogic({
     if (outcome?.status === "executed") status("Restored in place");
   }
 
-  /**
-   * RESTORING APPENDS. The chain is append-only, so an earlier body becomes
-   * the newest one and nothing in between is lost — which is the standing
-   * answer to the lost paragraph, and what the history status line says.
-   */
+  /** RESTORING APPENDS: nothing in between is lost. */
   async function restoreVersion(
     noteId: string,
     contentId: string
@@ -312,7 +267,7 @@ export function createLogic({
     await openNote(noteId);
   }
 
-  // ────────── Notebooks ──────────
+  // ─── notebooks ───
 
   async function createNotebook(name: string): Promise<void> {
     const trimmed = name.trim();
@@ -339,8 +294,7 @@ export function createLogic({
     render();
   }
 
-  /** Deleting a notebook UNFILES its notes; nothing is deleted with it, and
-   *  the status line reports the vault's own count of what moved. */
+  /** Deleting a notebook UNFILES its notes. */
   async function deleteNotebook(notebookId: string): Promise<void> {
     const outcome = await write(
       "delete-notebook",
@@ -352,7 +306,7 @@ export function createLogic({
     if (notebookIdFrom(state.shelf) === notebookId) go(null);
   }
 
-  // ────────── Tags, links, files ──────────
+  // ─── tags, links, files ───
 
   async function addTag(noteId: string, label: string): Promise<void> {
     const trimmed = label.trim();
@@ -364,12 +318,8 @@ export function createLogic({
     await write("remove-tag", { tag_id: tagId });
   }
 
-  /**
-   * Compile one reviewed `[[wikilink]]` into a typed reference. The anchor —
-   * exact/prefix/suffix/start — travels with it when the member had a
-   * passage selected, so the far end can point back at the sentence rather
-   * than at the note.
-   */
+  /** The anchor travels with the link, so the far end points at the
+   *  sentence. */
   async function linkNote(
     noteId: string,
     target: LinkTarget,
@@ -394,9 +344,7 @@ export function createLogic({
     await write("link", input);
   }
 
-  /** Pin a file to a note. The bytes ride as a data URI, which is what the
-   *  `attach` command accepts for a file this size; the canonical content
-   *  item it becomes is deduped by the vault. */
+  /** Bytes ride as a data URI, which is what `attach` accepts at this size. */
   async function attachFile(noteId: string, file: File): Promise<void> {
     const dataUri = await new Promise<string>((resolve, reject) => {
       const reader = new FileReader();
@@ -422,13 +370,9 @@ export function createLogic({
     await write("detach", { attachment_id: attachmentId });
   }
 
-  // ────────── Checklists ──────────
+  // ─── checklists ───
 
-  /**
-   * Toggle one checklist box, by line. The body is the fact — a box is a
-   * character in it — so the toggle is an edit to that line and the tally on
-   * every card follows from the same text.
-   */
+  /** The body is the fact — a box is a character in it. */
   async function toggleCheck(noteId: string, line: number): Promise<void> {
     const note = findNote(noteId);
     if (!note || typeof note.body !== "string") return;
@@ -449,7 +393,7 @@ export function createLogic({
     saveNote(noteId, { body_text: body });
   }
 
-  // ────────── Search, and the powerbox ──────────
+  // ─── search, and the powerbox ───
 
   const runSearch = debounce(async (term: string) => {
     const trimmed = term.trim();
@@ -470,9 +414,8 @@ export function createLogic({
         notes?: Note[];
         vaultDenied?: unknown;
       }>({ query: "search", input: { term: trimmed } });
-      // A DENIAL IS NOT AN EMPTY RESULT SET, and neither is a throw: both
-      // would otherwise print "nothing matches", which is a claim nobody
-      // verified.
+      // A DENIAL IS NOT AN EMPTY RESULT SET, nor is a throw — neither may
+      // print "nothing matches".
       if (answer?.vaultDenied) reached = false;
       else rows = answer?.notes ?? [];
     } catch {
@@ -545,11 +488,6 @@ export function createLogic({
   };
 }
 
-// ────────── Pure derivations (no closure — a component may call these) ──────────
-
-/** The rows a route paints: the trash on the trash shelf, the ranked matches
- *  while a query is live, the Journal place's own set, else the library
- *  window — narrowed by the open notebook and the tag lens. */
 export function rowsFor(
   data: AppData,
   state: AppState,
@@ -564,9 +502,8 @@ export function rowsFor(
     rows = rows.filter((note) =>
       (note.notebook_ids ?? []).includes(notebookId)
     );
-  // THE SCOPE IS THE MEMBER'S, and it only exists where they came from a
-  // notebook: Everywhere is the default, This notebook narrows to the place
-  // Search was reached from.
+  // THE SCOPE IS THE MEMBER'S: Everywhere by default, This notebook only
+  // where Search was reached from one.
   if (
     state.search.trim() &&
     state.searchScope === "notebook" &&
@@ -583,8 +520,7 @@ export function rowsFor(
       (note.tags ?? []).some((tag) => tag.concept_id === conceptId)
     );
   }
-  // PINNED FIRST, THEN NEWEST EDITED. Nothing else reorders the reading
-  // room: no relevance weighting on a browse, no manual order, no streak.
+  // PINNED FIRST, THEN NEWEST EDITED; nothing else reorders.
   return rows.toSorted(
     (a, b) =>
       (b.pinned ?? 0) - (a.pinned ?? 0) ||
@@ -592,8 +528,7 @@ export function rowsFor(
   );
 }
 
-/** notebook_id → how many notes of the WINDOW sit in it. Bounded honesty:
- *  the window is what the library read, and the tree says so. */
+/** Within the WINDOW the library read — bounded honesty. */
 export function notebookCounts(data: AppData): Map<string, number> {
   const counts = new Map<string, number>();
   for (const note of data.notes) {
@@ -603,14 +538,11 @@ export function notebookCounts(data: AppData): Map<string, number> {
   return counts;
 }
 
-/** How many of the window's notes are in no notebook at all. Unfiled is a
- *  PLACE, and a place has a count like any other. */
 export function unfiledCount(data: AppData): number {
   return data.notes.filter((note) => (note.notebook_ids ?? []).length === 0)
     .length;
 }
 
-/** concept_id → note count within the window, for the tag lens. */
 export function tagCounts(data: AppData): Map<string, number> {
   const counts = new Map<string, number>();
   for (const note of data.notes) {

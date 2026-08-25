@@ -1,22 +1,8 @@
-// The phone's bottom band, as Docs claims it (Binding Layer v12 handoff,
-// Part 2 §"The band"; #821).
-//
-// Docs claims the band with FIVE destinations — `All · Folders · Coming due ·
-// Search · More` — which is the invariant's exact cap (five destinations, of
-// which the fifth is More). More opens a SHEET, never a route: Docs has more
-// shelves than slots, so the sixth onward live in the sheet rather than
-// stealing a tab.
-//
-// The anatomy is Photos' anatomy, deliberately: two plates in a transparent
-// row, the frame's 52pt Home capsule outside the tab group, the shared plate
-// geometry from `kit/band-surface.ts`. The MODEL is restated here rather than
-// imported from `apps/photos/photos-band.ts` because one app may not import
-// another (`scripts/check-import-boundaries.ts`); what the two bands share
-// structurally already lives in the kit.
-//
-// This module is deliberately free of `react-native` imports so the rules can
-// be asserted directly (`docs-band.test.ts`). `DocsBand.tsx` renders them and
-// adds nothing.
+// Docs' claim on the phone's bottom band (#821): five destinations, the fifth
+// being More, which opens a sheet, never a route. Restated rather than
+// imported from Photos' band — one app may not import another
+// (`scripts/check-import-boundaries.ts`). No `react-native` here, so the rules
+// stay assertable.
 
 import {
   CAPABILITIES,
@@ -31,10 +17,6 @@ import { MORE_ROWS } from "@centraid/blueprints/apps/docs/view-copy";
 import type { BandOwner } from "../../kit/band/band-owner";
 import type { DocsStackParamList } from "../../navigation";
 
-/** A destination in the claimed band. `more` opens the sheet, not a route.
- *  The other four are `DocsHome`'s own `destination` param — the frame's
- *  `navigation.ts` spells the same union longhand, and `DocsScreen.tsx`'s
- *  band handler pins the two together at its own typecheck. */
 export type DocsBandDestinationKey =
   | "all"
   | "folders"
@@ -44,27 +26,14 @@ export type DocsBandDestinationKey =
 
 export interface DocsBandDestination {
   key: DocsBandDestinationKey;
-  /** Copy is final (handoff Part 2 §"The band") — these five strings ARE the
-   *  band. */
   label: string;
   icon: string;
 }
 
-/** The cap the frame's band lives under, and therefore the cap a claiming app
- *  lives under: five destinations, of which the fifth is More. Docs sits at
- *  the exact cap — deviation 1 of the handoff says so out loud. */
 export const DOCS_BAND_MAX_DESTINATIONS = 5;
 
-/** The frame capsule's width (the handoff's 52; height comes from the row's
- *  `align-items: stretch`, same as Photos). */
 export const DOCS_BAND_CAPSULE_SIZE = 52;
 
-/**
- * Docs' five, in the handoff's order. `due` is a band tab because tentative
- * obligations are work a member returns to; the shelves that are not
- * (Recently changed, Starred, Trash, Storage, capabilities, Add) live in the
- * More sheet.
- */
 export const DOCS_BAND_DESTINATIONS: readonly DocsBandDestination[] = [
   { key: "all", label: "All", icon: "FileText" },
   { key: "folders", label: "Folders", icon: "Folder" },
@@ -73,13 +42,12 @@ export const DOCS_BAND_DESTINATIONS: readonly DocsBandDestination[] = [
   { key: "more", label: "More", icon: "more-vertical" },
 ];
 
-/** The frame's capsule — a frame control, never one of the app's tabs. */
 export interface DocsBandCapsule {
   label: "Home";
   icon: "Home";
   size: number;
   edge: "leading";
-  /** The seam. `false` is the whole reason it is not a sixth tab. */
+  /** `false` is why the capsule is not a sixth tab. */
   inTabGroup: false;
 }
 
@@ -91,8 +59,6 @@ export const DOCS_BAND_CAPSULE: DocsBandCapsule = {
   inTabGroup: false,
 };
 
-/** Exactly one band exists at any moment — same latch and same resolution
- *  rule as Photos (`kit/band/band-owner.ts`). */
 export type ResolvedDocsBand =
   | {
       owner: "app";
@@ -115,13 +81,6 @@ export function resolveDocsBand(owner: BandOwner): ResolvedDocsBand {
   };
 }
 
-// ───────────────────────────────────────────────────────────────────────────
-// The More sheet (handoff Part 2 §"The band": "The sheet lists: Recently
-// changed, Starred, Trash, Storage, What Docs may read, Add to Docs.")
-// ───────────────────────────────────────────────────────────────────────────
-
-/** Every key the sheet carries — a closed union so `resolveDocsMoreRoute`
- *  switches exhaustively; a new row fails to typecheck before it can dangle. */
 export type DocsMoreRowKey =
   | "recent"
   | "starred"
@@ -134,14 +93,10 @@ export interface DocsMoreRow {
   key: DocsMoreRowKey;
   label: string;
   icon: string;
-  /** The shared table's own meta prose where the prose is a rule; counts are
-   *  interpolated at render time from live data, never stored here. */
   meta?: string;
 }
 
-/** The mobile sheet's six shelves, in the handoff's own order, keyed to the
- *  shared `MORE_ROWS` shelf ids so the LABELS and META stay the web app's
- *  words rather than a second spelling of them. */
+/** Labels and meta come from `MORE_ROWS`, never respelled here. */
 const SHEET_SHELVES: readonly { key: DocsMoreRowKey; shelf: string }[] = [
   { key: "recent", shelf: RECENT },
   { key: "starred", shelf: STARRED },
@@ -173,7 +128,6 @@ export const DOCS_MORE_ROWS: readonly DocsMoreRow[] = SHEET_SHELVES.map(
   }
 );
 
-/** The param-less Docs screens the sheet can reach. */
 export type DocsMoreScreen = Extract<
   keyof DocsStackParamList,
   | "DocsRecent"
@@ -184,9 +138,7 @@ export type DocsMoreScreen = Extract<
   | "DocsAdd"
 >;
 
-/** Where a More-sheet row goes — a pure, exhaustively-switched mapping so a
- *  row added to the sheet without a route fails to TYPECHECK, not at tap
- *  time (the same rule `photos-band.ts` learned from its silent fallthrough). */
+/** Exhaustive: a row without a route fails typecheck, not at tap. */
 export function resolveDocsMoreRoute(key: DocsMoreRowKey): DocsMoreScreen {
   switch (key) {
     case "recent":

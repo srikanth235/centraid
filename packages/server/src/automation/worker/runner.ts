@@ -6,11 +6,8 @@ import path from "node:path";
 import { pathToFileURL } from "node:url";
 import { parentPort, workerData } from "node:worker_threads";
 
-/**
- * Load the sandbox bootstrap by absolute path — a plain relative `.js`
- * specifier does not resolve when this worker runs from `src/` under native
- * type stripping. See the header of `engine/sandbox/boot.ts`.
- */
+/** Absolute path: a relative `.js` specifier does not resolve under native
+ *  type stripping. */
 async function loadSandboxBoot(): Promise<
   typeof import("../../engine/sandbox/boot.js")
 > {
@@ -23,23 +20,9 @@ async function loadSandboxBoot(): Promise<
 }
 
 /**
- * Which containment lane the PARENT chose for this run (#842).
- * Handler-chosen containment would be no containment, so this is never read
- * from the handler bundle or its manifest — only from the parent's request.
- *
- *   `"automation-handler"` — strict: no filesystem, no sockets, no
- *     subprocess, no native addons, empty environment. This is the DEFAULT and
- *     the floor: a request that names no lane gets this one.
- *   `"model-runtime"` — read-confined filesystem plus native addons, for the
- *     ONNX-backed bundles. See policy.ts for why that lane is a named hole.
- *   `"media-transcode"` — the same plus a subprocess grant, for the one bundle
- *     that decodes media by shelling out to ffmpeg. A larger hole, named as
- *     one in policy.ts.
- *
- * There is no "no sandbox" option (#846). The floor applies to everyone,
- * and a handler that needs more says so in its manifest — where the ask is
- * reviewable — rather than every handler getting everything because one
- * needs more.
+ * The lane the PARENT chose (#842) — never the handler bundle or its manifest;
+ * handler-chosen containment would be no containment. Lane widths: policy.ts.
+ * There is no "no sandbox" option (#846); `automation-handler` is the floor.
  */
 type SandboxLaneRequest =
   | "automation-handler"
@@ -49,20 +32,14 @@ type SandboxLaneRequest =
 interface WorkerRequest {
   handlerFile: string;
   args: unknown;
-  /** Containment lane; absent means the `automation-handler` floor. */
+  /** Absent means the `automation-handler` floor. */
   sandboxLane?: SandboxLaneRequest;
-  /** Absolute read roots for the two filesystem-granting lanes. */
   sandboxReadRoots?: string[];
-  /**
-   * Resolved model-runtime directory, planted on `globalThis` before the
-   * handler's graph loads. A sandboxed handler has no `process.env`, so this
-   * is how the `CENTRAID_AUTOMATION_RUNTIME_DIR` override still reaches it
-   * (#846). A path, not a capability.
-   */
+  /** Planted on `globalThis` before the handler's graph loads: a sandboxed
+   *  handler has no `process.env` (#846). A path, not a capability. */
   sandboxRuntimeDir?: string;
-  /** Fire-start instant fixed by the parent; stable for the whole run. */
+  /** Fixed by the parent for the whole run. */
   now: string;
-  /** The payload this run was invoked with — surfaced as `ctx.input`. */
   input?: unknown;
 }
 
@@ -85,12 +62,6 @@ type ParentMessage =
   | { type: "abort"; reason?: string }
   | { type: "run"; request: WorkerRequest };
 
-/**
- * A `ctx.fetch` request. Connector calls may carry secret placeholders;
- * may carry `{{secret:locker:<item_id>:<column>}}` placeholders — the PARENT
- * resolves them after the message leaves this worker, so plaintext secrets
- * never enter handler memory and cannot be logged from here.
- */
 export interface FetchSpec {
   url: string;
   method?: string;
@@ -157,8 +128,6 @@ const boot = workerData as { pooled?: boolean } & Partial<WorkerRequest>;
 let req = boot as WorkerRequest;
 
 let nextCallId = 1;
-// One id space, one pending map for every request/reply lane. The reply type
-// discriminates on the wire; the promise doesn't care which lane it rode.
 const pendingCalls = new Map<
   number,
   { resolve: (v: unknown) => void; reject: (e: Error) => void }
@@ -173,8 +142,7 @@ type RpcRequest = DistributiveOmit<
   "id"
 >;
 
-/** Post one request message and await its `*-reply`. Each ctx.* call is an
- *  ordering barrier — the handler awaits the reply before its next line. */
+/** Each `ctx.*` call is an ordering barrier. */
 function rpcCall(msg: RpcRequest): Promise<unknown> {
   return new Promise((resolve, reject) => {
     const id = nextCallId++;
@@ -278,12 +246,8 @@ const runs = {
   },
 };
 
-// ctx.vault — a second RPC channel aimed at the owner's personal vault
-// (duaility §12). The parent resolves this automation to its enrolled
-// `consent.agent` credential host-side; the worker carries capability, never
-// a key. Same surface an app handler's `ctx.vault` exposes, plus `parked`
-// (this agent's invocations awaiting owner confirmation) and `changes`
-// (the consented journal feed data triggers ride).
+// The worker carries capability, never a key: the parent resolves this
+// automation to its enrolled `consent.agent` credential host-side.
 function vaultCall(
   op:
     | "read"
@@ -305,7 +269,7 @@ const vault = {
   read(request: Record<string, unknown>): Promise<unknown> {
     return vaultCall("read", request);
   },
-  /** FTS5 search over a text-indexed entity — match vault-side, never grep a full read. */
+  /** Match vault-side, never grep a read. */
   search(request: Record<string, unknown>): Promise<unknown> {
     return vaultCall("search", request);
   },
@@ -324,33 +288,24 @@ const vault = {
   changes(request: Record<string, unknown>): Promise<unknown> {
     return vaultCall("changes", request);
   },
-  /** Reference cards for cross-domain (type, id) refs (#272). */
   resolve(request: Record<string, unknown>): Promise<unknown> {
     return vaultCall("resolve", request);
   },
-  /** Plaintext of one entity's sealed columns — `reveal` verb, receipted per item (#293). */
+  /** Plaintext of sealed columns; receipted per item (#293). */
   reveal(request: Record<string, unknown>): Promise<unknown> {
     return vaultCall("reveal", request);
   },
-  /**
-   * One content item's derivative, size-bounded (#299): `variant` is
-   * `thumb`, `preview` or `text` — originals never egress. Every fetch is a
-   * receipted read on the host side.
-   */
+  /** Derivatives only — originals never egress (#299). */
   content(request: Record<string, unknown>): Promise<unknown> {
     return vaultCall("content", request);
   },
 };
 
 const ctx = {
-  /** ISO fire-start instant: current enough for leases, deterministic on replay. */
+  /** Deterministic on replay. */
   now: req.now,
-  /**
-   * Governed transport. Connector strings may reference
-   * declared secrets as `{{secret:locker:<item_id>:<column>}}` — the host
-   * substitutes and performs the request; the secret never enters this
-   * worker.
-   */
+  /** `{{secret:locker:<item_id>:<column>}}` placeholders are substituted by
+   *  the host; the plaintext secret never enters this worker. */
   fetch(spec: FetchSpec): Promise<{
     status: number;
     headers: Record<string, string>;
@@ -362,13 +317,8 @@ const ctx = {
       text: string;
     }>;
   },
-  /**
-   * One bounded model turn — the ONLY billed rail. `content` names vault
-   * derivatives (thumb / preview / text of a content item) to hand the model
-   * alongside the prompt — the HOST resolves them under this automation's
-   * grant, receipts each fetch, and stages the bytes for the provider; the
-   * worker never holds them (#299).
-   */
+  /** The ONLY billed rail. `content` names vault derivatives the HOST resolves
+   *  under this automation's grant; the worker never holds the bytes (#299). */
   delegate(args: {
     prompt: string;
     json?: unknown;
@@ -461,9 +411,8 @@ function cursorManager(initial: Record<string, unknown>) {
 }
 
 async function executePullSpec(spec: PullSpec): Promise<unknown> {
-  // Pull specs deliberately receive no vault/state/runs/delegate rails. Run
-  // identity, staging, cursor persistence and finish semantics are owned by
-  // the parent engine and therefore cannot be overridden by handler code.
+  // Pull specs get no vault/state/runs/delegate rails; identity, staging,
+  // cursors and finish stay the parent engine's.
   const pullCtx: PullContext = {
     now: ctx.now,
     input: ctx.input,
@@ -511,15 +460,13 @@ function execute(request: WorkerRequest): void {
   void (async () => {
     try {
       {
-        // Planted BEFORE the sandbox installs, because installing it replaces
-        // `process.env` with a frozen empty object — see the field's doc.
+        // Before the sandbox installs: it freezes `process.env` empty.
         if (request.sandboxRuntimeDir !== undefined) {
           (globalThis as Record<string, unknown>)[
             "__centraidAutomationRuntimeDir"
           ] = request.sandboxRuntimeDir;
         }
-        // Unconditional (#846). An absent lane is the strict floor, never
-        // "no containment".
+        // Unconditional (#846): an absent lane is the floor, not "none".
         const sandboxApi = await (await loadSandboxBoot()).loadSandbox();
         const roots = request.sandboxReadRoots ?? [];
         const policy =

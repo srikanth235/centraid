@@ -30,8 +30,7 @@ describe("registry", () => {
   });
 
   test("every kind keeps the USER-FACING CLI as its default bin; custom acp has none", () => {
-    // Adapter-backed kinds included: preflight probes and version-hints the CLI
-    // the user installs, never the ACP adapter we launch it through.
+    // Preflight probes the CLI the user installs, never the ACP adapter.
     expect(HARNESSES.codex.defaultBin).toBe("codex");
     expect(HARNESSES["claude-code"].defaultBin).toBe("claude");
     expect(HARNESSES.gemini.defaultBin).toBe("gemini");
@@ -44,19 +43,17 @@ describe("registry", () => {
     expect(HARNESSES.goose.defaultBin).toBe("goose");
     expect(HARNESSES.auggie.defaultBin).toBe("auggie");
     expect(HARNESSES.droid.defaultBin).toBe("droid");
-    // copilot: the npm package is `@github/copilot` but the BIN is `copilot`.
-    // Also NOT `copilot-language-server` — that is a different package entirely
-    // (an LSP for editor completions), and it does not speak ACP.
+    // The package is `@github/copilot`, the BIN `copilot`; the LSP package is
+    // unrelated and cannot speak ACP.
     expect(HARNESSES.copilot.defaultBin).toBe("copilot");
     expect(HARNESSES.copilot.defaultBin).not.toBe("@github/copilot");
     expect(HARNESSES.copilot.defaultBin).not.toBe("copilot-language-server");
-    // cursor: the installer makes BOTH `agent` and `cursor-agent`. We use the
-    // qualified one on purpose — a bare `agent` on PATH is far too generic.
+    // The installer makes both; a bare `agent` on PATH is far too generic.
     expect(HARNESSES.cursor.defaultBin).toBe("cursor-agent");
     expect(HARNESSES.cursor.defaultBin).not.toBe("agent");
-    // vibe: `vibe-acp` is a SEPARATE binary from `vibe`, not a mode of it.
+    // `vibe-acp` is a SEPARATE binary from `vibe`, not a mode of it.
     expect(HARNESSES.vibe.defaultBin).toBe("vibe-acp");
-    // pi: same shape as vibe — `pi-acp` is a standalone ACP server binary.
+    // Same shape: `pi-acp` is a standalone ACP server binary.
     expect(HARNESSES.pi.defaultBin).toBe("pi-acp");
     expect(HARNESSES.acp.defaultBin).toBeUndefined();
   });
@@ -87,21 +84,15 @@ describe("registry", () => {
     );
   });
 
-  // ──── ACP-native kinds: launch invocation is the only thing that differs ────
-
   test("opencode/grok/kimi launch ACP natively with their own subcommand", () => {
-    // The ACP entry point is the whole per-kind difference, so it is pinned
-    // exactly. `opencode acp` and `kimi acp` are SUBCOMMANDS: kimi's deprecated
-    // `--acp` flag is single-session and has no session/load, which would break
-    // resume, so a regression to the flag form must fail here.
+    // `acp` is a SUBCOMMAND: kimi's `--acp` flag has no session/load.
     expect(acpConfigFor("opencode", {}).acpArgs).toStrictEqual(["acp"]);
     expect(acpConfigFor("grok", {}).acpArgs).toStrictEqual(["agent", "stdio"]);
     expect(acpConfigFor("kimi", {}).acpArgs).toStrictEqual(["acp"]);
 
     for (const kind of ["opencode", "grok", "kimi"] as const) {
       const config = acpConfigFor(kind, { binPath: `/opt/bin/${kind}` });
-      // No adapter: these CLIs are the ACP process, so binPath is the spawn
-      // target rather than an adapter env var.
+      // No adapter: the CLI is the ACP process, so binPath is the spawn target.
       expect(config.adapter).toBeUndefined();
       expect(config.binPath).toBe(`/opt/bin/${kind}`);
       // Claude tier vocabulary must not leak onto non-Claude harnesses.
@@ -110,8 +101,7 @@ describe("registry", () => {
   });
 
   test("opencode is never launched with --mdns, which would bind 0.0.0.0", () => {
-    // `--mdns` defaults opencode's hostname to 0.0.0.0, exposing an
-    // unauthenticated code-execution harness on the LAN. We contribute only `acp`.
+    // It binds 0.0.0.0, exposing a code-execution harness on the LAN.
     expect(acpConfigFor("opencode", {}).acpArgs).not.toContain("--mdns");
   });
 
@@ -135,42 +125,34 @@ describe("registry", () => {
   });
 
   test("kimi install hint uses the Python toolchain, not npm", () => {
-    // Every other hint is an `npm i -g`; kimi-cli is installed with uv or the
-    // vendor script, so a copy-pasted npm hint would be wrong for it.
+    // kimi-cli installs with uv, so a copy-pasted npm hint would be wrong.
     const hint = HARNESSES.kimi.installHint;
     expect(hint).toMatch(/uv tool install kimi-cli/u);
     expect(hint).not.toMatch(/npm/u);
-    // Grok's paid-subscription requirement is what makes an install-but-fail
-    // harness self-explanatory, so it must stay in the hint.
+    // Grok's paid subscription is what makes an install-but-fail explicable.
     expect(HARNESSES.grok.installHint).toMatch(/SuperGrok|X Premium/u);
   });
 
-  // ──── wave 7: eight more ACP-native kinds ─────────────────────────────────
-
   test("the eight added kinds pin their exact ACP invocation", () => {
-    // The invocation is the whole per-kind difference, so each is pinned
-    // exactly — a "tidy-up" that changes any of these ships a broken harness.
+    // A "tidy-up" that changes any of these ships a broken harness.
     expect(acpConfigFor("copilot", {}).acpArgs).toStrictEqual(["--acp"]);
     expect(acpConfigFor("cursor", {}).acpArgs).toStrictEqual(["acp"]);
     expect(acpConfigFor("kilo", {}).acpArgs).toStrictEqual(["acp"]);
     expect(acpConfigFor("cline", {}).acpArgs).toStrictEqual(["--acp"]);
     expect(acpConfigFor("goose", {}).acpArgs).toStrictEqual(["acp"]);
     expect(acpConfigFor("auggie", {}).acpArgs).toStrictEqual(["--acp"]);
-    // droid: a subcommand plus a VALUE-BEARING flag. The three tokens are one
-    // invocation; splitting or reordering them is not equivalent.
+    // A subcommand plus a VALUE-BEARING flag: one invocation, not three tokens.
     expect(acpConfigFor("droid", {}).acpArgs).toStrictEqual([
       "exec",
       "--output-format",
       "acp-daemon",
     ]);
-    // vibe: EMPTY. `vibe-acp` is its own entrypoint, so there is no mode flag to
-    // pass. If this ever becomes `['acp']`, the harness is broken.
+    // EMPTY: `vibe-acp` is its own entrypoint, so `['acp']` would break it.
     expect(acpConfigFor("vibe", {}).acpArgs).toStrictEqual([]);
   });
 
   test("copilot is never launched in TCP mode", () => {
-    // `--acp --port <n>` is a real Copilot mode, but it puts the harness on a
-    // socket our stdio ACP client never reads. We contribute only `--acp`.
+    // A real mode, but it puts the harness on a socket stdio never reads.
     expect(acpConfigFor("copilot", {}).acpArgs).not.toContain("--port");
   });
 
@@ -188,15 +170,12 @@ describe("registry", () => {
       const config = acpConfigFor(kind, { binPath: `/opt/bin/${kind}` });
       expect(config.adapter, kind).toBeUndefined();
       expect(config.binPath, kind).toBe(`/opt/bin/${kind}`);
-      // Claude tier vocabulary must not leak onto non-Claude harnesses.
       expect(config.resolveModel, kind).toBeUndefined();
     }
   });
 
   test("auggie and droid carry their self-update suppressors as native launch env", () => {
-    // These CLIs update themselves by default, which can swap the binary out
-    // from under a running turn. The env vars are the fix — and they prove the
-    // launch-env field reaches NATIVE kinds, not just adapter-backed ones.
+    // These CLIs self-update, swapping the binary under a running turn.
     expect(acpConfigFor("auggie", {}).env).toStrictEqual({
       AUGMENT_DISABLE_AUTO_UPDATE: "1",
     });
@@ -204,13 +183,11 @@ describe("registry", () => {
       DROID_DISABLE_AUTO_UPDATE: "true",
       FACTORY_DROID_AUTO_UPDATE_ENABLED: "false",
     });
-    // Kinds that need no launch env carry none.
     expect(acpConfigFor("kilo", {}).env).toBeUndefined();
   });
 
   test("a native kind with launch env spawns with it applied", () => {
-    // The seam that matters: `planLaunch` must merge `config.env` on the native
-    // path too. Asserted on the spawn plan, so nothing is actually spawned.
+    // `planLaunch` must merge `config.env` on the native path too.
     const plan = planLaunch(acpConfigFor("droid", {}), undefined, []);
     expect(plan.bin).toBe("droid");
     expect(plan.args).toStrictEqual(["exec", "--output-format", "acp-daemon"]);
@@ -224,9 +201,7 @@ describe("registry", () => {
   });
 
   test("cursor pins a CalVer floor, which still compares numerically", () => {
-    // 2026.07.16 is year.month.day, NOT semver. It flows through the same
-    // numeric comparison and orders correctly, so it needs no special case —
-    // but do not "normalise" the major down to something semver-shaped.
+    // year.month.day, NOT semver: never "normalise" the major down.
     expect(HARNESSES.cursor.minVersion).toStrictEqual({
       major: 2026,
       minor: 7,
@@ -270,8 +245,7 @@ describe("registry", () => {
   });
 
   test("pi launches ACP natively through its own dedicated binary, like vibe", () => {
-    // `pi-acp` is the ACP server's own entrypoint, so `acpArgs` is EMPTY (no mode
-    // flag to add) and there is no adapter — binPath is the spawn target.
+    // `pi-acp` is the ACP entrypoint: `acpArgs` EMPTY, no adapter.
     expect(acpConfigFor("pi", {}).acpArgs).toStrictEqual([]);
     expect(HARNESSES.pi.minVersion).toStrictEqual({
       major: 0,
@@ -281,31 +255,26 @@ describe("registry", () => {
     const config = acpConfigFor("pi", { binPath: "/opt/bin/pi-acp" });
     expect(config.adapter).toBeUndefined();
     expect(config.binPath).toBe("/opt/bin/pi-acp");
-    // Claude tier vocabulary must not leak onto a non-Claude harness.
     expect(config.resolveModel).toBeUndefined();
     expect(HARNESSES.pi.installHint).toMatch(/pi-acp/u);
   });
 
   test("paid-plan and out-of-band-setup requirements stay in the install hints", () => {
-    // An installed-but-failing harness has to explain itself, or it reads as our
-    // bug. These three fail AFTER a successful install for reasons only the
-    // hint can convey.
+    // These fail AFTER a successful install; only the hint can say why.
     expect(HARNESSES.copilot.installHint).toMatch(
       /paid Copilot subscription/iu
     );
     expect(HARNESSES.cursor.installHint).toMatch(/paid Cursor plan/iu);
     expect(HARNESSES.auggie.installHint).toMatch(/paid Augment plan/iu);
-    // goose fails session/new with an opaque -32603, NOT ACP's AUTH_REQUIRED,
-    // until a provider is configured — so the hint has to say so up front.
+    // goose fails session/new with an opaque -32603, not AUTH_REQUIRED.
     expect(HARNESSES.goose.installHint).toMatch(/goose configure/u);
-    // vibe is a Python tool, like kimi — an npm hint would be wrong.
+    // A Python tool like kimi — an npm hint would be wrong.
     expect(HARNESSES.vibe.installHint).toMatch(/uv tool install mistral-vibe/u);
     expect(HARNESSES.vibe.installHint).not.toMatch(/npm/u);
   });
 
   test("the eight added kinds route their turns through the generic ACP client", async () => {
-    // An already-aborted turn can only terminate with the ACP client's own
-    // `aborted` event, and nothing is spawned on that path.
+    // An aborted turn ends in the ACP client's own `aborted`; nothing spawns.
     await Promise.all(
       (
         [
@@ -341,13 +310,8 @@ describe("registry", () => {
     );
   });
 
-  // ──── issue #479: one integration path, per-kind launch config ─────────────
-
   test("codex and claude-code drive the generic ACP client, not a bespoke harness", async () => {
-    // The bespoke backends are gone; the only way to observe the transport from
-    // here is that a turn now fails the way an ACP launch fails. Point each kind
-    // at a binPath that cannot be a harness and confirm the ACP client's own
-    // error surface (not a codex/claude-specific one) is what we get.
+    // One integration path (#479): only the ACP error surface shows it.
     await Promise.all(
       (["codex", "claude-code"] as const).map(async (kind) => {
         const events: TurnStreamEvent[] = [];
@@ -364,16 +328,12 @@ describe("registry", () => {
           { prefs: { kind } }
         );
         expect(result.harnessKind).toBe(kind);
-        // The ACP client always terminates an aborted turn with `aborted`.
         expect(events.map((e) => e.type)).toContain("aborted");
       })
     );
   });
 
   test("the ACP-native kinds route their turns through the generic ACP client", async () => {
-    // Same observation as the codex/claude-code case: an already-aborted turn
-    // can only terminate with the ACP client's own `aborted` event, and nothing
-    // is spawned on that path.
     await Promise.all(
       (["opencode", "grok", "kimi"] as const).map(async (kind) => {
         const events: TurnStreamEvent[] = [];
@@ -396,13 +356,10 @@ describe("registry", () => {
   });
 
   test("codex launches headless; claude launches in bypass mode; binPath targets the CLI", () => {
-    // The launch config is what makes each adapter behave like the bespoke
-    // harness it replaced, so it is asserted explicitly rather than inferred.
     const codex = acpConfigFor("codex", { binPath: "/opt/bin/codex" });
     expect(codex.adapter?.packageName).toBe("@agentclientprotocol/codex-acp");
-    // Headless full-access: the adapter never round-trips an approval.
-    // Launch env is ONE field shared by native and adapter-backed kinds, so it
-    // reads off the config, not off `adapter`.
+    // Headless full-access: no approval is ever round-tripped. Launch env is
+    // ONE field, read off the config, never off `adapter`.
     expect(codex.env).toStrictEqual({
       INITIAL_AGENT_MODE: "agent-full-access",
     });
@@ -423,13 +380,11 @@ describe("registry", () => {
     // Capability tiers still resolve to the CLI's aliases before matching.
     expect(claude.resolveModel?.("smart")).toBe("opus");
 
-    // Natively ACP-speaking kinds carry no adapter at all.
     expect(acpConfigFor("gemini", {}).adapter).toBeUndefined();
   });
 
   test("both adapter packages resolve to a real executable entry point", () => {
-    // Guards the "no runtime npx -y" rule: the adapters must be installed
-    // dependencies whose bin we can resolve offline.
+    // The "no runtime npx -y" rule: adapters must resolve offline.
     for (const pkg of [
       "@agentclientprotocol/codex-acp",
       "@agentclientprotocol/claude-agent-acp",
@@ -444,8 +399,6 @@ describe("registry", () => {
   });
 
   test("runTurn dispatches to the harness for the configured kind", async () => {
-    // Stub a harness in the table and confirm runTurn routes to it, threading
-    // input/config through unchanged.
     const original = HARNESSES.acp;
     let seen: { input?: TurnInput; config?: TurnConfig } = {};
     HARNESSES.acp = {

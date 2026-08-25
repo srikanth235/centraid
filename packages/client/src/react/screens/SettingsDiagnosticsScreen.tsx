@@ -22,32 +22,12 @@ import type {
 import controlsCss from "../styles/controls.module.css";
 import styles from "./SettingsDiagnosticsScreen.module.css";
 
-// Gateway → Components: the owner surface over the gateway's
-// component-level health (`GET /centraid/_gateway/health`). Uptime says
-// the process answers; this says which subsystem stopped working — vaults,
-// schedulers, outbox, connections — with each component's last error and
-// the gateway's recent structured warn/error tail. Prop-driven like
-// SettingsHarnessesScreen: this file owns the view + load/refresh state,
-// the gateway I/O lives in `routes/settingsDiagnosticsData.ts`. Mounted from
-// the Gateway page's Components drill-in (GatewayScreen.tsx), not Settings.
+// Gateway → Components: which subsystem stopped working, with its last error
+// and the gateway's warn/error tail. Prop-driven — the view and refresh state
+// live here, the gateway I/O in `routes/settingsDiagnosticsData.ts`.
 //
-// BUILT FROM THE BLOCK KIT (binding layer v11) — NOT a page of its own
-// furniture: a status bar with an inline Refresh, four uppercase metric tiles,
-// one bespoke row per component carrying a coloured dot AND an uppercase
-// HEALTHY/DEGRADED badge, two uppercase `<div>` sub-heads over two more bespoke
-// panels. That way six components read as six shouted words, with the actual
-// sentence — WHAT stopped, and WHEN — set smaller than the badge.
-//
-// In v11 the page is the same four statements said in the shared vocabulary:
-// the count and the Refresh verb are the SECTION HEAD, the gateway's coarse
-// figures are a fact panel, every component is a row whose meta is its status
-// in lower case, and the two sub-lists get real heads. The dot is gone — a
-// row that says "degraded" in its meta and carries `net` does not also need a
-// colour swatch to say it a third time.
-//
-// The drill-ins repeat at the foot, as the prototype has them: a member who
-// got here from an alert should not have to go back to the overview to read
-// the lines that alert came from.
+// BUILT FROM THE BLOCK KIT, never its own furniture: status is a row's lower-case
+// meta plus `net`, so no badge or colour dot may say it a second time.
 
 export type HealthStatus = "ok" | "degraded" | "error";
 
@@ -68,7 +48,6 @@ export interface HealthEventDTO {
   message: string;
 }
 
-/** Coarse numeric signals from the gateway health snapshot (#521). */
 export interface HealthMetricsDTO {
   rssBytes: number;
   outboxPending: number;
@@ -81,22 +60,11 @@ export interface HealthMetricsDTO {
   storageFsyncMs?: number;
   hardwareProfileClass?: string;
   resourceMode?: string;
-  /**
-   * Structured resource contract (#528) — host facts, class,
-   * mode, and the resolved knobs the profile derived. Present on modern
-   * gateways only; the Resource card's L1/L2 disclosure gates on it.
-   */
+  /** Modern gateways only; the Resource card's disclosure gates on it (#528). */
   resourceProfile?: ResourceProfileDTO;
-  /**
-   * Background-work pause state (#528). Present on modern
-   * gateways only; absent hides the Resource card's pause control.
-   */
+  /** Absent hides the Resource card's pause control (#528). */
   backgroundPause?: BackgroundPauseDTO;
-  /**
-   * Power-context posture (#528) — the gateway host's battery /
-   * mains / server situation. Present on modern gateways only; drives the
-   * Resource card's posture note (battery/thermal chrome or a server fact).
-   */
+  /** Drives the Resource card's posture note; modern gateways only (#528). */
   powerContext?: PowerContextState;
   uptimeMs: number;
 }
@@ -111,23 +79,13 @@ export interface GatewayHealthDTO {
   metrics?: HealthMetricsDTO;
 }
 
-/**
- * Host plumbing, the one place it is allowed to be visible (#665).
- *
- * Everywhere else the owner manages vaults; here the machine serving them is
- * the subject, so "host" and "connection" are the right words and the three
- * rare, deliberate acts against one — prove it works, relabel it, stop talking
- * to it — belong together. Omitted by hosts that expose no registry (web,
- * stubbed test bridges): the whole section then simply isn't rendered.
- */
+/** The one place host plumbing may be visible (#665); omitted drops the section. */
 export interface DiagnosticsConnectionsProps {
-  /** Refresh the registry: resolves with the cached rows to paint now and
-   *  calls `onUpdate` again for each probe that lands. */
+  /** Resolves with cached rows to paint now, then calls `onUpdate` per probe. */
   loadConnections: (
     onUpdate: (rows: GatewayRow[]) => void
   ) => Promise<GatewayRow[]>;
-  /** Bumped by the owner of the rename/remove modals once one commits, so the
-   *  list re-reads instead of showing the label it had a moment ago. */
+  /** Bumped on a committed rename/remove so the list re-reads. */
   refreshKey?: number;
   onTest?: (gatewayId: string, label: string) => void;
   onRename?: (gatewayId: string, label: string) => void;
@@ -136,18 +94,13 @@ export interface DiagnosticsConnectionsProps {
 
 export interface SettingsDiagnosticsBridgeProps {
   loadHealth: () => Promise<GatewayHealthDTO>;
-  /** Jump into the Logs drill-in, focused on this component's lines — omitted
-   *  when the caller has nowhere to send the click (only wired from the
-   *  Gateway page, where Logs is a sibling drill-in). */
+  /** Omitted when the caller has nowhere to send the click. */
   onJumpToLogs?: (component: string) => void;
-  /** Open the Alert history drill-in — the second half of the foot rows. */
   onOpenAlerts?: () => void;
-  /** Host plumbing. Absent on hosts with no gateway registry. */
   connections?: DiagnosticsConnectionsProps;
 }
 
-/** The row's own meta word. LOWER CASE, like every other meta in the kit: the
- *  status is a fact about the row, not a badge shouting over its name. */
+/** Lower case, like every meta in the kit — a fact, not a badge. */
 const STATUS_WORD: Record<HealthStatus, string> = {
   ok: "healthy",
   degraded: "degraded",
@@ -167,8 +120,7 @@ const COMPONENT_LABEL: Record<string, string> = {
   "load-shed": "Background load",
   disk: "Disk space",
   "storage-latency": "Storage latency",
-  // The health-component namespace is the GATEWAY's, not the shell's — this
-  // stays `backups` even though the page that shows it is now called Storage.
+  // The component namespace is the GATEWAY's: stays `backups`, not `storage`.
   backups: "Backups",
   "storage-limit": "Disk budget",
   enrichment: "Media enrichment",
@@ -240,9 +192,7 @@ function eventClock(iso: string): string {
   });
 }
 
-/** One component as a row. The sub-line reads the most useful thing per state:
- *  a failing component shows its LAST ERROR (the actionable bit); a healthy one
- *  shows its probe detail ("2 vaults mounted") or last-ok recency. */
+/** The sub-line carries the actionable thing: last error, else probe detail. */
 function componentRow(
   row: HealthComponentDTO,
   onJumpToLogs?: (component: string) => void
@@ -252,9 +202,7 @@ function componentRow(
       ? (row.detail ??
         (row.lastOkAt ? `last ok ${relativeTime(row.lastOkAt)}` : undefined))
       : (row.lastError ?? row.detail);
-  // The error tally belongs in the sentence, not in a cell of its own: "12
-  // errors since it last answered" is a reading; "12 errs" beside a badge is a
-  // number the reader has to assemble a meaning for.
+  // The tally belongs in the sentence, never in a cell of its own.
   const tally =
     row.errorCount > 0
       ? `${row.errorCount} error${row.errorCount === 1 ? "" : "s"} since the gateway started`
@@ -278,7 +226,6 @@ function componentRow(
   };
 }
 
-/** The gateway's coarse figures, as facts rather than as a tile grid. */
 function metricFacts(metrics: HealthMetricsDTO): PanelFact[] {
   return [
     { key: "up for", mono: true, value: formatUptime(metrics.uptimeMs) },
@@ -309,8 +256,7 @@ function metricFacts(metrics: HealthMetricsDTO): PanelFact[] {
   ];
 }
 
-/** Reachability as the row's own word — a still-probing host has no verdict
- *  yet, so it says so rather than borrowing a healthy one. */
+/** A still-probing host must not borrow a healthy verdict. */
 function connectionWord(row: GatewayRow): string {
   const rail = railStatus(row);
   if (rail === "ready") return "reachable";
@@ -318,7 +264,6 @@ function connectionWord(row: GatewayRow): string {
   return "checking";
 }
 
-/** What one host is currently serving, in the fewest words that still say it. */
 function connectionSummary(row: GatewayRow): string {
   if (row.status !== "ready") return gatewayStatusCopy(row);
   const names = (row.vaults ?? []).map((vault) => vault.name);
@@ -351,10 +296,8 @@ function ConnectionsPanel({
     };
   }, [loadConnections, refreshKey]);
 
-  // THREE ACTS, so they go UNDER the row rather than into its one trailing
-  // slot (`RowDef.children`). Prove it works, relabel it, stop talking to it —
-  // rare and deliberate, and each one is about this host in particular, so
-  // none of them can be promoted to a section verb without losing its subject.
+  // Three acts, each about this host in particular: they go under the row and
+  // none can be promoted to a section verb without losing its subject.
   const rowsFor = (list: GatewayRow[]): RowDef[] =>
     list.map((row) => ({
       id: row.gatewayId,
@@ -441,8 +384,7 @@ export default function SettingsDiagnosticsScreen({
 }: SettingsDiagnosticsBridgeProps): JSX.Element {
   const [health, setHealth] = useState<GatewayHealthDTO | null>(null);
   const [error, setError] = useState<string | null>(null);
-  // The mount read is already in flight when the first render happens, so the
-  // busy flag starts true rather than being flipped from inside the effect.
+  // The mount read is already in flight at first render, so busy starts true.
   const [busy, setBusy] = useState(true);
 
   const load = useCallback((): void => {
@@ -461,7 +403,6 @@ export default function SettingsDiagnosticsScreen({
       .finally(() => setBusy(false));
   }, [loadHealth]);
 
-  /** The "Check again" button — the only path that re-arms the busy flag. */
   const refresh = useCallback((): void => {
     setBusy(true);
     load();
@@ -481,7 +422,6 @@ export default function SettingsDiagnosticsScreen({
   }
 
   const troubled = health.components.filter((row) => row.status !== "ok");
-  // The head answers the page's own question before a single row is read.
   const componentsMeta =
     health.components.length === 0
       ? "none reporting"
@@ -489,9 +429,8 @@ export default function SettingsDiagnosticsScreen({
         ? `${health.components.length} · all answering`
         : `${health.components.length} · ${troubled.length} in trouble`;
 
-  // The two drill-ins repeat at the foot, as the prototype has them. The Logs
-  // row names the component it will focus on, because a link that says "Logs"
-  // and lands on an unfiltered stream has not taken the reader anywhere.
+  // The Logs row names the component it focuses on: a bare "Logs" landing on
+  // an unfiltered stream takes the reader nowhere.
   const firstTroubled = troubled[0];
   const foot: RowDef[] = [];
   if (onJumpToLogs)

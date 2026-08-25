@@ -29,8 +29,6 @@ import {
 import type { PeerDial } from "./peer-link-client.js";
 import type { VaultLinksStore } from "./vault-links-store.js";
 
-/** Presences worth a log line — a closed episode or a healthy laptop-closed
- *  gap is not, an escalating or parked one is (#731). */
 const NOTEWORTHY_PRESENCE = new Set([
   "degraded",
   "absent",
@@ -38,13 +36,6 @@ const NOTEWORTHY_PRESENCE = new Set([
   "parked",
 ]);
 
-/**
- * Surface a degraded/absent/link-down/parked steward instead of dropping
- * `pullPeerCommons`'s status on the floor — `recordCommonsPull` already
- * persisted it durably (diagnostics + the recovery route read it back), this
- * is only the sweep's own log line so it shows up in the tail without an
- * operator having to query vault.db.
- */
 function logStewardConcern(
   logger: { warn: (message: string) => void } | undefined,
   memberVaultId: string,
@@ -63,36 +54,21 @@ function logStewardConcern(
 export interface MountedCommonsVault {
   vaultId: string;
   db: VaultDb;
-  /** Present for a fully mounted vault; omitted by narrow peer-only fixtures. */
   gateway?: VaultGateway;
-  /** Host-held owner credential. It never crosses a member/app boundary. */
   credential?: Credential;
 }
 
-/** First retry delay after one failed dial; doubles per consecutive failure. */
 export const COMMONS_SWEEP_BACKOFF_BASE_MS = 30 * 1000;
-/** Ceiling: even a long-absent steward is re-probed at least hourly. */
 export const COMMONS_SWEEP_BACKOFF_MAX_MS = 60 * 60 * 1000;
 
-/**
- * Exponential per-grant backoff off the RECORDED absence evidence (#750
- * defect e). `share_commons_steward_contact` — written by every pull through
- * `recordCommonsPull` — already carries consecutive failures and the last
- * attempt time; the sweep consults it instead of serially dialing an absent
- * steward for every intent of every grant on every tick. Returns the epoch ms
- * before which this grant's steward should NOT be dialed, or undefined when
- * the evidence says it is worth trying now.
- */
+/** Backoff off RECORDED absence evidence (#750 defect e). Epoch ms before
+ *  which not to dial, or undefined when it is worth trying now. */
 function stewardBackoffUntil(
   db: VaultDb,
   grantId: string,
   memberVaultId: string
 ): number | undefined {
-  // One reader of `share_commons_steward_contact`, not two: the observability
-  // module owns how a contact row becomes a status, and the sweep asks it
-  // rather than re-deriving "is this steward absent" from the raw columns. A
-  // second local reading of the same evidence is how two answers to one
-  // question drift apart.
+  // One reader of `share_commons_steward_contact` — never re-derive here.
   const status = readCommonsStewardStatus({
     db: db.vault,
     grantId,
@@ -149,7 +125,6 @@ export async function sweepPeerCommons(input: {
   dial?: PeerDial;
   limit: number;
   now?: string;
-  /** Same shape `PeerPlaneSweepOptions.logger` carries (#731). */
   logger?: { warn: (message: string) => void };
 }): Promise<{ progressed: number }> {
   let progressed = 0;
@@ -158,19 +133,13 @@ export async function sweepPeerCommons(input: {
   );
   for (const local of input.vaults) {
     if (progressed >= input.limit) break;
-    // Bounded parked-intent life (#731 goal 2): expire before this
-    // seat's own retry pass, so a request that has waited past its review
-    // window stops being retried and instead surfaces as terminal. Cheap
-    // (one indexed UPDATE) and idempotent — the sweep is this overlay's only
-    // periodic tick, so this is its natural home rather than a new timer.
+    // Before this seat's retry pass, so a request past its review window
+    // goes terminal (#731 goal 2).
     expireParkedCommonsIntents({
       seat: local.db.vault,
       now: input.now ?? new Date().toISOString(),
     });
-    // Steward absence and consent-growth are conditions this seat already has
-    // the evidence for; the sweep is the periodic tick that turns them into
-    // the notices an owner actually sees (#750). A card must never cost
-    // the sweep its real work, so a failure here is logged, not thrown.
+    // A card must never cost the sweep its real work: log, never throw.
     try {
       raiseCommonsNotices({
         db: local.db,
@@ -193,8 +162,7 @@ export async function sweepPeerCommons(input: {
           ORDER BY created_at, intent_id LIMIT ?`
       )
       .all(input.limit - progressed) as unknown as PendingIntent[];
-    // Grants whose steward answered "unavailable" THIS tick: later intents for
-    // the same grant skip the dial instead of repeating a known-dead call.
+    // Later intents for the same grant skip a dial already known dead.
     const unreachableThisTick = new Set<string>();
     for (const intent of intents) {
       const stewardId = stewardVaultId(local.db, intent.grant_id);
@@ -257,25 +225,20 @@ export async function sweepPeerCommons(input: {
         });
         if (answer.decision.accepted) {
           if (!answer.seats) {
-            // The steward already committed this signed nonce on an earlier
-            // attempt, but that attempt may have died before fan-out. Rebuild
-            // the member seats before making the local intent terminal.
+            // Already committed on an attempt that may have died before
+            // fan-out: rebuild seats first.
             compileCommons({
               steward: mountedSteward.db,
               stewardVaultId: stewardId,
               grantId: intent.grant_id,
               seats,
               now,
-              // Crash repair, not ordinary fan-out: the earlier attempt died
-              // at an unknown point, so the seats are reconciled from the
-              // closure rather than from a tail whose replay may already have
-              // committed.
+              // Crash repair: reconcile from the closure, not a tail whose
+              // replay may already have committed.
               forceFullProjection: true,
             });
           }
-          // `executeCommonsCommand` normally settles while compiling. Repeat
-          // the exact-id update so crash replay through `priorSignedDecision`
-          // also reaches the member's durable terminal state.
+          // Repeat the exact-id update so crash replay also goes terminal.
           settleCommonsIntent({
             seat: local.db.vault,
             intentId: intent.intent_id,
@@ -283,9 +246,7 @@ export async function sweepPeerCommons(input: {
             now,
           });
         } else {
-          // A refusal is itself an ordered Commons operation. The domain
-          // closure did not change, but every joined seat must observe the
-          // same log/cursor result as it would over the peer bootstrap rail.
+          // A refusal is itself an ordered Commons operation.
           compileCommons({
             steward: mountedSteward.db,
             stewardVaultId: stewardId,
@@ -317,9 +278,7 @@ export async function sweepPeerCommons(input: {
         ? input.links.peerForVault(stewardId, local.vaultId)
         : undefined;
       if (!stewardId || !link || !input.dial) continue;
-      // Absence-evidence backoff (#750 defect e): a steward the contact
-      // record says is unreachable is not dialed again — per intent, per
-      // grant — until its exponential window has elapsed.
+      // Absence-evidence backoff (#750 defect e), per intent per grant.
       if (
         unreachableThisTick.has(intent.grant_id) ||
         backedOff(
@@ -387,9 +346,8 @@ export async function sweepPeerCommons(input: {
           reason: answer.reason,
           now,
         });
-        // A refusal the member cannot fix by editing the command: their vault
-        // identity is not the one this commons pinned (#750). Name it
-        // where they will see it, pointing at re-invitation.
+        // No edit to the command fixes this: the vault identity is not the
+        // one this commons pinned (#750).
         if (isCommonsIdentityRefusal(answer.reason))
           raiseCommonsIdentityNotice({
             db: local.db,

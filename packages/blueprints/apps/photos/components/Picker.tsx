@@ -1,23 +1,7 @@
-// The album picker — "Add photographs" from inside an album (v4 handoff §E:
-// "the picker is drawn as a panel in the content area, labelled as the dialog
-// it is").
-//
-// IT OFFERS THE SAME TILE THE TIMELINE DOES, and never a second square tile of
-// its own: a hand-rolled one with its own check circle and its own accent
-// outline makes a photograph look like one thing in the grid and another thing
-// here, and reflows the moment its bytes land, because its shape comes from the
-// CSS rather than from the record. The rows come from the shared `justify()`
-// packer and every box is a `<Tile>`: `--skel` ground at the packed geometry
-// from the first frame, four overlay slots, 2px gutters, and selection drawn as
-// 2px of INK — never Photos' hue on a control.
-//
-// The picker is permanently IN SELECTION (`selectMode`), because picking is the
-// only thing it does: a tile's media click toggles, exactly as the check does,
-// and there is nothing here to open.
-//
-// `onCancel`/`onSubmit` are picker.tsx's `closePicker`/`submitPicker` — both
-// touch app-owned picker state (`pickerAlbum`/`pickerPicked`), so they stay
-// there and are passed straight through.
+// The album picker, drawn as a panel. IT OFFERS THE SAME `<Tile>` THE TIMELINE
+// DOES over the shared `justify()` packer — never a second square tile whose
+// shape comes from CSS instead of the record. Permanently in `selectMode`:
+// picking is all it does, and there is nothing here to open.
 import { useEffect, useRef, useState } from "react";
 import type { RefObject } from "react";
 
@@ -27,40 +11,16 @@ import { Tile } from "./Tile.tsx";
 
 import styles from "./Picker.module.css";
 
-/**
- * The picker packs at rung S (§4.2): small enough that a panel shows a real
- * choice at a glance, large enough that the kind slot (a duration, `live`) is
- * still readable. It is NOT the member's timeline rung — the stepper sets how
- * the library reads, and a modal panel is a different question.
- */
+/** Rung S — never the member's timeline rung. */
 const PICKER_RUNG = 1;
 const PICKER_ROW_HEIGHT = RUNGS[PICKER_RUNG]!.desktop;
 
-/**
- * The packing width before the first measurement lands (and in any environment
- * with no layout at all, e.g. a static render in a test). The real number is
- * the grid element's own content width, read by the observer below.
- */
 const FALLBACK_WIDTH = 720;
 
-/**
- * The picker's own narrowing field (v4 handoff proto :4283,
- * `fieldBlock('','Search the library to narrow this',false)`).
- *
- * IT FILTERS WHAT IS OFFERED, AND ITS COPY SAYS SO. The prototype's placeholder
- * says "the library"; this panel is handed the loaded own-scope window
- * (picker.tsx's `getAssets()`), which on a large library is a window and not
- * the whole of it, and this app has no picker-side path to the gateway's FTS5
- * index. Claiming to have searched the library from here would be the same
- * class of untruth `view-copy.ts` already refuses elsewhere, so the field
- * describes exactly what it does. Nothing else about the field changes: it is
- * the shared `kit-input`, and it is the only text control on the panel.
- */
+/** It filters what is OFFERED — a loaded window, with no path to the gateway's
+ *  index — so the copy may never claim to search the library. */
 const NARROW_PLACEHOLDER = "Narrow the photographs offered here";
 
-/** Case-insensitive match over the one member-facing string a candidate row
- *  carries. `kind` is matched too so `video` narrows to videos — both are
- *  facts already on the row, never a second read. */
 function matchesQuery(asset: Asset, query: string): boolean {
   if (query === "") return true;
   const needle = query.toLowerCase();
@@ -71,7 +31,6 @@ function matchesQuery(asset: Asset, query: string): boolean {
   );
 }
 
-/** The grid's live content width in CSS pixels — what `justify()` packs into. */
 function useGridWidth(): [RefObject<HTMLDivElement | null>, number] {
   const ref = useRef<HTMLDivElement | null>(null);
   const [width, setWidth] = useState(FALLBACK_WIDTH);
@@ -99,8 +58,6 @@ export function PickerView({
   album: Album;
   candidates: Asset[];
   picked: Set<string>;
-  /** True while the add is running. The panel keeps its geometry and its
-   *  controls; the counts go to the frame's ONE status line (§14). */
   busy?: boolean;
   onToggle: (id: string) => void;
   onCancel: () => void;
@@ -127,9 +84,6 @@ export function PickerView({
         aria-label={NARROW_PLACEHOLDER}
         placeholder={NARROW_PLACEHOLDER}
         value={query}
-        // Inert while the add runs, like every other control on the panel —
-        // narrowing the list under a commit that is already reading it would
-        // be answering a different question than the one being committed.
         disabled={busy}
         onChange={(e) => setQuery(e.currentTarget.value)}
       />
@@ -140,20 +94,12 @@ export function PickerView({
             Everything in your library is already in this album.
           </p>
         ) : offered.length === 0 ? (
-          // A narrowed-to-nothing list is not an empty album — it keeps the
-          // panel's geometry and says which of the two it is (§14).
           <p className={styles.empty}>
             {`Nothing offered here matches “${query}”.`}
           </p>
         ) : (
           rows.map((tiles, i) => (
-            <div
-              // Rows are re-packed from the same ordered list on every render,
-              // so a row's position IS its identity here — same key the
-              // timeline's own packed rows carry.
-              key={`row-${i}`}
-              className={styles.row}
-            >
+            <div key={`row-${i}`} className={styles.row}>
               {tiles.map((t) => (
                 <Tile
                   key={t.asset.asset_id}
@@ -162,10 +108,8 @@ export function PickerView({
                   height={t.height}
                   rung={PICKER_RUNG}
                   selected={picked.has(t.asset.asset_id)}
-                  // Always picking: a media click toggles, same as the check.
                   selectMode
-                  // Album membership is own-scope only (#599), so every
-                  // candidate is the member's own and none is marked (§H).
+                  // Album membership is own-scope only (#599): nothing is marked.
                   vaultMark={null}
                   onOpen={() => onToggle(t.asset.asset_id)}
                   onToggleSelect={() => onToggle(t.asset.asset_id)}
@@ -190,19 +134,14 @@ export function PickerView({
         >
           Cancel
         </button>
-        {/* The ONE filled ink element in this view (§18) — and it stops being
-            filled the moment it cannot fire, rather than offering a commit
-            that would be refused. */}
+        {/* The ONE filled ink element here (§18); unfilled once it cannot fire. */}
         <button
           type="button"
           className={n === 0 || busy ? "kit-btn" : "kit-btn primary"}
           disabled={n === 0 || busy}
           onClick={onSubmit}
         >
-          {/* The commit CARRIES ITS COUNT (proto :4285, `Add 12`) — the member
-              reads what the press will do off the control itself, not off a
-              line beside it. With nothing picked there is no number to carry
-              and the control is already refusing. */}
+          {/* The commit carries its count: what the press does, on the control. */}
           {n === 0 ? "Add" : `Add ${n}`}
         </button>
       </div>

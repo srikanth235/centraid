@@ -1,10 +1,5 @@
-// How the phone decides *what* to mount before `ReplicaProvider` mounts it.
-//
-// Four questions, all of which have an offline answer and none of which is React:
-// which gateway and vault this device is addressing, which enrolled scopes make
-// the four-scope cut, when each of those last successfully pulled, and what to
-// forget when one is revoked. Kept beside the provider rather than inside it so
-// the provider file is the lifecycle and this file is the policy.
+// Mount policy — identity, scope selection, freshness, revocation — all
+// answerable offline. `ReplicaProvider` holds only the lifecycle.
 
 import AsyncStorage from "@react-native-async-storage/async-storage";
 
@@ -23,36 +18,17 @@ import { LAST_BASE, noteActiveIdentity } from "../../lib/vault-links";
 import type { VaultLink } from "../../lib/vault-links";
 import { Store } from "../../storage";
 
-/** Copy the pairing wall shows; also the error a missing gateway throws. */
 export const REPLICA_UNPAIRED_MESSAGE =
   "Pair this phone with your Centraid desktop to work offline.";
 
-/**
- * Fallback replica namespace when a probe's gateway reports no endpoint id
- * (an older gateway, or a read that failed) and nothing else names one. Kept
- * as a local literal rather than reaching into lib/vault-links for it: the
- * value has to match `addActiveGatewayVault`'s own `"manual"` gateway id
- * there (a device with no active VaultLink gets the same namespace either
- * way), but that is a coincidence of the two fallbacks meaning the same
- * thing, not a shared constant either module is required to keep exporting.
- */
+/** Must match `addActiveGatewayVault`'s `"manual"` id; not shared. */
 const MANUAL_GATEWAY_FALLBACK = "manual";
 
 interface ScopeWire {
   vaultId: string;
   label: string;
   canWrite: boolean;
-  /**
-   * Whether this is the member's OWN vault — what the vault *is*, which is not
-   * what it is called. Apps derive the "somewhere other than my own vault"
-   * marker from this and never from `label`: a member who names their own
-   * vault "Sharing" has not shared anything. The gateway sends it on every
-   * scope row (`ScopeRow.personal` in `scopes-routes.ts`), and the phone must
-   * not drop it.
-   *
-   * Optional because a scope cached by an older build, or the synthesised
-   * fallback below, genuinely does not know.
-   */
+  /** Derive "not my vault" from this, never `label`. Older caches omit it. */
   personal?: boolean;
 }
 
@@ -69,12 +45,8 @@ export function fetcher(vaultId?: string): ReplicaFetcher {
   };
 }
 
-/**
- * The gateway's own durable EndpointId, straight off `/centraid/_gateway/info`.
- * `undefined` on any failure — bad response, no body, an old gateway that
- * omits the field — so the ladder in `resolveIdentity` can fall through
- * rather than adopt a namespace that will move under the next launch.
- */
+/** `undefined` on failure, so the ladder below falls through instead of taking
+ *  a namespace that moves under the next launch. */
 async function fetchEndpointId(baseUrl: string): Promise<string | undefined> {
   try {
     const response = await fetch(new URL("/centraid/_gateway/info", baseUrl), {
@@ -109,14 +81,8 @@ export async function resolveIdentity(vault: VaultLink | undefined): Promise<{
   }
   const liveBase = await resolveGatewayBase().catch(() => undefined);
   if (!liveBase) throw new Error(REPLICA_UNPAIRED_MESSAGE);
-  // THE FIRST BOOTSTRAP AFTER PAIRING lands here: pairing stores a real
-  // gateway id with `vaultId: ""` for this probe to fill in. The ladder below
-  // prefers the gateway's OWN reported endpoint id — the durable fact — over
-  // the vault we were already carrying, and only falls to a stable literal
-  // when the gateway cannot report one at all. It never asks the desktop's
-  // display name: that would demote a durable endpoint id to whatever the
-  // desktop happens to be called at that moment and write it back through
-  // `noteActiveIdentity`.
+  // Ladder: endpoint id, carried vault, literal — never the display name,
+  // which demotes a durable id to a renameable one.
   const [probe, endpointId] = await Promise.all([
     fetchReplicaBootstrapPage(
       { baseUrl: liveBase },
@@ -134,14 +100,8 @@ export async function resolveIdentity(vault: VaultLink | undefined): Promise<{
   };
 }
 
-/**
- * Fetch this gateway's enrolled scopes and refresh the offline cache that
- * `mountedScopes` reads. Split out of `mountedScopes` so a LIVE session — one
- * that mounted offline (see mount-plan.ts) and only later hears the gateway
- * answer, in `ReplicaProvider`'s `refreshReachability` pass — can prime the
- * cache too, without remounting anything. Network errors are swallowed: the
- * offline cache stays authoritative until the gateway returns.
- */
+/** Separate so an offline-mounted session primes the cache without
+ *  remounting. */
 export async function refreshCachedScopes(
   gatewayId: string,
   baseUrl: string
@@ -158,21 +118,12 @@ export async function refreshCachedScopes(
       }
     }
   } catch {
-    // Offline cache below is authoritative until the gateway returns.
+    // The cache stays authoritative until the gateway answers.
   }
 }
 
-/**
- * The scopes this device mounts, in active-first order.
- *
- * Refreshing the cache (when online) happens BEFORE reading it, never
- * instead of reading it — every path, online or not, reads the same
- * AsyncStorage cache, so the ordering/fallback logic below only has one
- * source to reason about. This carries a one-launch lag by design: a scope
- * granted while the app is already mounted lands in the cache via
- * `refreshCachedScopes` (phase B, `refreshReachability`) but only mounts a
- * replica database for it on the NEXT launch, when this function runs again.
- */
+/** Refresh BEFORE the read, never instead of it. A scope granted mid-session
+ *  mounts only on the next launch. */
 export async function mountedScopes(
   identity: Awaited<ReturnType<typeof resolveIdentity>>,
   storageLocation?: string
@@ -208,7 +159,6 @@ export async function mountedScopes(
   );
 }
 
-/** Where one `(gateway, vault)` pair's last-successful-pull stamp is stored. */
 export function freshnessKey(gatewayId: string, vaultId: string): string {
   return `centraid:replica-freshness:${encodeURIComponent(
     `${gatewayId} ${vaultId}`
@@ -250,7 +200,7 @@ export async function removeCachedScope(
       );
     }
   } catch {
-    // A malformed optional scope cache must not retain revoked freshness.
+    // A malformed cache must not retain revoked freshness.
   }
   await AsyncStorage.removeItem(freshnessKey(gatewayId, vaultId));
 }

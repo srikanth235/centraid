@@ -1,20 +1,6 @@
-/**
- * Scaffold a new automation app (#98 unified folder model).
- *
- * An automation is never standalone — it is one app folder under
- * `appsDir`, an *automation app*: a folder whose `app.json` declares
- * `kind: 'automation'` and which holds exactly one automation under
- * `automations/<id>/`. It carries no UI assets. This module writes the
- * minimal layout the builder harness then fills in:
- *
- *   <appsDir>/<appId>/app.json                              — app metadata
- *   <appsDir>/<appId>/automations/<autoId>/automation.json  — the manifest
- *   <appsDir>/<appId>/automations/<autoId>/handler.js       — the handler
- *
- * The automation's globally-unique handle is `<appId>/<autoId>`. The
- * builder harness rewrites `automation.json` (prompt / schedule / requires
- * / apps) and `handler.js` during the build conversation.
- */
+// Scaffold a new automation app (#98). An automation is never standalone: it
+// is one app folder declaring `kind: 'automation'`, holding exactly one
+// automation under `automations/<id>/`. The handle is `<appId>/<autoId>`.
 
 import { promises as fs } from "node:fs";
 import path from "node:path";
@@ -40,63 +26,29 @@ import { isValidId } from "../manifest/ref.js";
 import { APP_AUTOMATIONS_SUBDIR } from "./app.js";
 
 export interface ScaffoldOptions {
-  /** Display name. Defaults to the app id. */
   name?: string;
   description?: string;
-  /** The human intent the builder harness translates into `handler.js`. */
   prompt?: string;
-  /**
-   * 5-field cron expression for a single cron trigger. Ignored when
-   * `triggers` is set. Defaults to a daily 9am schedule.
-   */
+  /** Defaults to daily 9am; ignored when `triggers` is set. */
   cronExpr?: string;
-  /**
-   * Explicit trigger list — overrides `cronExpr`. An empty array is a
-   * legal "manual fire only" automation. Webhook triggers must already
-   * carry their generated `id` + `secretHash`, or be the pending form.
-   */
+  /** Overrides `cronExpr`; an empty array is a legal manual-fire-only one. */
   triggers?: readonly Trigger[];
-  /** App ids this automation is associated with. */
   apps?: readonly string[];
-  /** Open harness-registry key to pin for this automation. */
   harness?: string;
-  /** Model `ctx.delegate` calls route through (`provider/model-id`). */
   model?: string;
-  /** Run-retention policy. Defaults to keeping the last 100 runs. */
+  /** Defaults to the last 100 runs. */
   historyKeep?: HistoryKeep;
-  /** Automation to fire when this one fails — a `<appId>/<id>` handle. */
   onFailure?: string;
-  /**
-   * Requested vault access a `condition`/`data` trigger's consented read
-   * runs under (duaility §12). `validateManifest` requires this block
-   * whenever `triggers` carries a condition/data entry — omitting it while
-   * declaring one of those triggers fails validation loudly rather than
-   * scaffolding an automation that can never evaluate its own trigger.
-   */
+  /** Required whenever `triggers` carries a condition/data entry — omitting it
+   *  fails validation rather than scaffolding an unevaluable trigger. */
   vault?: ManifestVault;
-  /** Published connector block (deterministic pull/send). */
   connector?: ConnectorSpec;
-  /** Soft credential bindings for delegate-using automations. */
   connections?: readonly ConnectionBinding[];
-  /**
-   * Initial `enabled` flag. Defaults to `true`. The conversational
-   * builder scaffolds a *draft* (`false`) so the cron does not start
-   * firing before the user reviews the automation and enables it.
-   */
+  /** Defaults to `true`; the builder scaffolds a draft so cron waits. */
   enabled?: boolean;
-  /**
-   * Id of the single automation under `automations/`. Defaults to the
-   * app id itself (or `main` when the app id is not a valid automation
-   * slug).
-   */
   automationId?: string;
 }
 
-/**
- * Validate an automation app folder id. Automation apps are marked by the
- * manifest's `kind: 'automation'` field (not a dotted `auto.` prefix), so
- * this is just the plain app-id slug check.
- */
 export function validateAppId(appId: string): void {
   if (!isValidAppId(appId)) {
     throw new AppScaffoldError(
@@ -106,7 +58,6 @@ export function validateAppId(appId: string): void {
   }
 }
 
-/** Validate an automation id (the directory slug under `automations/`). */
 export function validateId(id: string): void {
   if (id.startsWith("_") || !isValidId(id)) {
     throw new AppScaffoldError(
@@ -116,7 +67,6 @@ export function validateId(id: string): void {
   }
 }
 
-/** Derive the inner automation id from the app id. */
 function defaultAutomationId(appId: string): string {
   return isValidId(appId) ? appId : "main";
 }
@@ -185,11 +135,8 @@ function starterManifest(name: string, opts: ScaffoldOptions): Manifest {
     opts.triggers === undefined
       ? [{ kind: "cron", expr: opts.cronExpr?.trim() || "0 9 * * *" }]
       : opts.triggers;
-  // Emit the `requires` slots the builder may fill (#167): `model` is the
-  // ctx.delegate capability tier (`provider/model-id`) — picked for the cheapest
-  // tier that does the inference (e.g. a small/cheap tier for summarization).
-  // It is left out until chosen so it is never a misleading default; a handler
-  // that never calls ctx.delegate needs no `requires` at all.
+  // `requires` slots stay empty until chosen (#167): a default here would be
+  // misleading, and a handler that never delegates needs none at all.
   const requires: Record<string, unknown> = {};
   if (opts.harness?.trim()) requires.harness = opts.harness.trim();
   if (opts.model?.trim()) requires.model = opts.model.trim();
@@ -210,17 +157,11 @@ function starterManifest(name: string, opts: ScaffoldOptions): Manifest {
   if (opts.connector) raw.connector = opts.connector;
   if (opts.connections && opts.connections.length > 0)
     raw.connections = [...opts.connections];
-  // Round-trip through the validator so a scaffold can never write a
-  // manifest the runtime would later reject.
+  // Round-trip: a scaffold must never write a manifest the runtime rejects.
   return validateManifest(raw);
 }
 
-/**
- * Filesystem-free variant (#141): build the file map for a new
- * automation app — `app.json` plus a single automation under
- * `automations/<autoId>/` (manifest + handler). The caller PUTs these
- * into a git-store session and publishes.
- */
+/** Filesystem-free (#141): the caller PUTs these into a git-store session. */
 export function scaffoldAppFiles(
   appId: string,
   opts: ScaffoldOptions = {}
@@ -230,15 +171,11 @@ export function scaffoldAppFiles(
   validateId(automationId);
 
   const name = opts.name?.trim() || appId;
-  // Manifest must satisfy the post-#107 schema (manifestVersion + id +
-  // actions[] + queries[]). An automation app has no user-facing
-  // actions/queries — the automation lives under `automations/<id>/`.
+  // No user-facing actions/queries, but the #107 schema requires both keys.
   const appJson: Record<string, unknown> = {
     manifestVersion: 1,
     id: appId,
     name,
-    // Marks this as a UI-less automation app — the desktop surfaces it on the
-    // Automations page.
     kind: "automation",
     version: "0.1.0",
     actions: [],
@@ -257,13 +194,7 @@ export function scaffoldAppFiles(
   ];
 }
 
-/**
- * Flip an automation's `enabled` toggle within a draft file map (issue
- * #141). Returns the changed files (the one `automation.json`), or `[]`
- * when the automation is absent or already at the requested state.
- * Round-trips through `validateManifest` so we never write a manifest the
- * runtime would reject.
- */
+/** Returns `[]` when the automation is absent or already in that state. */
 export function setEnabledInFiles(
   current: ScaffoldFile[],
   automationId: string,
@@ -283,12 +214,7 @@ export function setEnabledInFiles(
   return [{ path: target, content: JSON.stringify(manifest, null, 2) + "\n" }];
 }
 
-/**
- * Remove one automation from a draft file map (#141). Returns the
- * surviving files plus the removed paths (everything under
- * `automations/<automationId>/`) so the caller can DELETE them in the
- * git-store session.
- */
+/** Returns survivors plus removed paths, for the caller to DELETE. */
 export function deleteFromFiles(
   current: ScaffoldFile[],
   automationId: string
@@ -303,12 +229,7 @@ export function deleteFromFiles(
   return { keep, removed };
 }
 
-/**
- * Scaffold a new automation app folder under `<appsDir>/<appId>/` — an
- * `app.json` plus a single automation under `automations/<autoId>/`.
- * Thin filesystem wrapper over {@link scaffoldAppFiles}.
- * Throws `AppScaffoldError` on a bad id or an app folder that already exists.
- */
+/** Throws `AppScaffoldError` on a bad id or an existing app folder. */
 export async function scaffoldApp(
   appsDir: string,
   appId: string,

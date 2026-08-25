@@ -1,41 +1,15 @@
-// Device-side CBSF v2 edge sealing (#419.4).
+// Device-side CBSF v2 edge sealing (#419.4) — the SECOND writer of the format
+// owned by `packages/vault/src/blob/seal-frames.ts`; `cbsf.test.ts` unseals
+// this output with the vault's own `unsealFrame`/`openDirectory`. Big-endian:
+// header(37) | frames[nonce 12 | algo+ct | tag 16] | directory | trailer(13).
 //
-// The wire format is defined by `packages/vault/src/blob/seal-frames.ts` and
-// enforced on arrival by `packages/vault/src/blob/remote-verify.ts`
-// (`verifyRemoteSealedObject`). This module is the SECOND writer of that same
-// format — after the vault (node:crypto) — and the only device-side one: the
-// browser shells have no edge sealer (#799) and upload through the gateway's
-// authoritative POST instead, while the vault's
-// own writer is not importable from Hermes. `cbsf.test.ts` unseals this
-// module's output with
-// the vault's own `unsealFrame`/`openDirectory` so the two can never drift.
+// Frames are ALWAYS store-only (algo 0x00): the id rides inside the seal, so
+// this interops with a compressing reader and `sealedSize` is computable
+// before a byte is read — the gateway needs it at `begin`.
 //
-// Layout (all integers big-endian), quoting seal-frames.ts:
-//
-//   [ header    ] magic "CBSF" (4) | version (1) | plaintext sha (32) = 37
-//   [ frame i   ] nonce (12) | ciphertext | tag (16)
-//   [ directory ] SEALED: nonce | ct | tag; plaintext is
-//                 frameSize (4) | totalSize (8) | frameCount (4) |
-//                 sealedLen[0..N-1] (4 each)
-//   [ trailer   ] magic (4) | version (1) | dirLen (4) | frameCount (4) = 13
-//
-// Two deliberate choices, both interop-safe:
-//
-//  1. Frames are ALWAYS store-only (algo id 0x00). The algo id rides inside
-//     the seal and the vault's reader dispatches on it, so a store-only writer
-//     interops with a compressing one. Store-only is what makes `sealedSize`
-//     computable BEFORE any byte is read — the gateway needs it at `begin` to
-//     mint the multipart plan.
-//
-//  2. Nonces are HMAC-derived, not random. This follows seal-frames.ts
-//     (`nonceFor`), whose comment is load-bearing for us: a content key
-//     belongs to exactly one plaintext sha and every frame label is distinct
-//     under it, so derived nonces stay unique while making a re-seal
-//     BYTE-IDENTICAL after a crash. That is precisely what a resumable
-//     multipart upload needs — a re-sealed part is bit-for-bit the part the
-//     provider may already hold, so replaying a PUT is a true no-op and
-//     confirmed parts can coexist with re-sealed ones. `edge-upload.js` uses a
-//     random nonce and forfeits that property; the durable queue does not.
+// Nonces are HMAC-derived, not random (seal-frames.ts `nonceFor`), so a
+// re-seal after a crash is BYTE-IDENTICAL and replaying a multipart PUT is a
+// true no-op.
 
 import { concatBytes, hexToBytes, u32be, u64be, utf8 } from "./bytes";
 import type { UploadCrypto } from "./crypto";
@@ -47,9 +21,9 @@ export const TRAILER_BYTES = 13;
 const NONCE_BYTES = 12;
 const ALGO_STORE = 0x00;
 
-/** Plaintext bytes per sealed frame — must equal seal-frames.ts DEFAULT_FRAME_SIZE. */
+/** Must equal seal-frames.ts `DEFAULT_FRAME_SIZE`. */
 export const FRAME_BYTES = 4 * 1024 * 1024;
-/** Frames per multipart part, giving the repo's fixed 16 MiB plaintext part. */
+/** Gives the repo's fixed 16 MiB plaintext part. */
 export const FRAMES_PER_PART = 4;
 export function frameCountFor(plaintextSize: number): number {
   return plaintextSize === 0 ? 0 : Math.ceil(plaintextSize / FRAME_BYTES);
@@ -59,10 +33,7 @@ export function partCountFor(frameCount: number): number {
   return Math.max(1, Math.ceil(frameCount / FRAMES_PER_PART));
 }
 
-/**
- * Sealed size of the whole object, known before reading a byte.
- * header(37) + [plain + 29/frame] + [sealed directory 44 + 4/frame] + trailer(13).
- */
+/** header(37) + [plain + 29/frame] + [directory 44 + 4/frame] + trailer(13). */
 export function sealedSizeFor(
   plaintextSize: number,
   frameCount: number
@@ -70,7 +41,7 @@ export function sealedSizeFor(
   return plaintextSize + 94 + 33 * frameCount;
 }
 
-/** Sealed length of each frame: nonce(12) + algo(1) + plaintext + tag(16). */
+/** nonce(12) + algo(1) + plaintext + tag(16). */
 export function frameSealedLengths(
   plaintextSize: number,
   frameCount: number
@@ -90,7 +61,7 @@ function directoryAad(sha: string, frameCount: number): Uint8Array {
   return utf8(`blobdir:${sha}:v${SEAL_VERSION}:n${frameCount}`);
 }
 
-/** Retry-stable nonce derivation — mirrors seal-frames.ts `nonceFor`. */
+/** Mirrors seal-frames.ts `nonceFor`. */
 async function nonceFor(
   crypto: UploadCrypto,
   key: Uint8Array,
@@ -118,7 +89,6 @@ export function encodeTrailer(
   ]);
 }
 
-/** Seal one store-only frame: `nonce(12) | ciphertext | tag(16)`. */
 export async function sealFrame(
   crypto: UploadCrypto,
   key: Uint8Array,
@@ -138,7 +108,6 @@ export async function sealFrame(
   return concatBytes([nonce, sealed]);
 }
 
-/** Seal the footer directory that maps plaintext offsets onto sealed frames. */
 export async function sealDirectory(
   crypto: UploadCrypto,
   key: Uint8Array,
@@ -165,19 +134,14 @@ export interface SealPartInput {
   frameCount: number;
   /** 1-based, matching the gateway's part numbering. */
   partNumber: number;
-  /** Pre-sealed directory; identical for every part, so seal it once per drain. */
+  /** Identical for every part — seal it once per drain. */
   directory: Uint8Array;
-  /** Reads plaintext at an absolute offset. */
   read: (offset: number, length: number) => Promise<Uint8Array>;
 }
 
-/**
- * Assemble one multipart part's sealed bytes. The header rides part 1 and the
- * directory + trailer ride the last part, so parts are NOT uniform 16 MiB —
- * only their plaintext spans are. Frame indices are global across the object
- * (they are bound into each frame's AAD), which is why `frameCount` must be
- * known before any part is sealed.
- */
+/** Header rides part 1, directory + trailer the last, so parts are NOT uniform
+ *  16 MiB — only their plaintext spans are. Frame indices are global (bound
+ *  into each frame's AAD), so `frameCount` precedes any sealing. */
 export async function sealPart(input: SealPartInput): Promise<Uint8Array> {
   const {
     crypto,
@@ -193,8 +157,6 @@ export async function sealPart(input: SealPartInput): Promise<Uint8Array> {
   const last = Math.min(frameCount, first + FRAMES_PER_PART);
   const body: Uint8Array[] = [];
   if (partIndex === 0) body.push(encodeHeader(sha256));
-  // A part's bytes are an ordered authenticated frame sequence; append one
-  // frame before constructing the next so the output is deterministic.
   const sealNextFrame = async (index: number): Promise<void> => {
     if (index >= last) return;
     const offset = index * FRAME_BYTES;

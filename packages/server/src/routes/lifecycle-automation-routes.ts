@@ -1,9 +1,7 @@
 // governance: allow-repo-hygiene file-size-limit (#387) one cohesive lifecycle handler family (create/update/set-enabled/rotate/delete) sharing the same session+stage+publish plumbing; splitting duplicates the shared helpers
-// Automation lifecycle handlers for the gateway-owned builder (issue
-// #141, Phase 2): scaffold an automation app, toggle its `enabled` flag,
-// and delete it. Dispatched from `makeLifecycleRouteHandler` in
-// `lifecycle-routes.ts`. Webhook secrets are
-// minted here — the plaintext is returned once, only the hash persists.
+// Automation lifecycle handlers for the gateway-owned builder (#141),
+// dispatched from `makeLifecycleRouteHandler`. Webhook secrets are minted
+// here: the plaintext is returned once, only the hash persists.
 
 import crypto from "node:crypto";
 import { promises as fs } from "node:fs";
@@ -40,7 +38,7 @@ function refuseSystemRecipeMutation(
   });
 }
 
-// ──── POST /centraid/_automations/compile?ref= (hidden builder compile) ────
+// ─── POST /centraid/_automations/compile ───
 
 export async function handleAutomationCompile(
   opts: LifecycleRouteOptions,
@@ -82,7 +80,7 @@ export async function handleAutomationCompile(
   return sendJson(res, 202, { compileTurnId });
 }
 
-// ──── POST /centraid/_automations/revise?ref= (rewrite + existing compile) ────
+// ─── POST /centraid/_automations/revise ───
 
 export async function handleAutomationRevise(
   opts: LifecycleRouteOptions,
@@ -129,7 +127,7 @@ export async function handleAutomationRevise(
   return sendJson(res, 202, { compileTurnId });
 }
 
-// ──── POST /centraid/_automations (scaffold an automation app) ────
+// ─── POST /centraid/_automations ───
 
 export async function handleAutomationCreate(
   opts: LifecycleRouteOptions,
@@ -149,9 +147,8 @@ export async function handleAutomationCreate(
   const sessionId = explicitSession || defaultSessionId(id);
   const ephemeralSession = !explicitSession;
 
-  // Bundled ids are RESERVED (#434): a code-store app must never shadow
-  // a shipped blueprint the resolver serves in place. This create is the code
-  // store's only door (#799), so the reservation is enforced here.
+  // Bundled ids are RESERVED (#434): a code-store app must never shadow a
+  // shipped blueprint. This create is the code store's only door (#799).
   if (opts.isBundledAppId?.(id)) {
     throw new AppScaffoldError(
       "already_exists",
@@ -167,15 +164,10 @@ export async function handleAutomationCreate(
     );
   }
 
-  // Mint webhook secrets gateway-side: plaintext returned once, manifest
-  // persists only the hash. A `webhook` trigger entry carries no secret in.
-  // `cron`/`webhook`/`condition`/`data`/`event` are the trigger kinds the
-  // manifest schema knows — anything else is rejected loudly instead of
-  // being silently coerced. `condition`/`data` specs are passed through to
-  // the real validator below (`validateManifest`, via `scaffoldAppFiles`)
-  // rather than re-implemented here, so a malformed one (missing entity,
-  // non-array `where`/`entities`, bad cron gate, …) 400s with the
-  // validator's own field-scoped message.
+  // The closed trigger vocabulary: an unknown kind is rejected loudly rather
+  // than coerced, and `validateManifest` (via `scaffoldAppFiles`) owns
+  // condition/data spec validation so its field-scoped message is the one
+  // callers see.
   const ALLOWED_TRIGGER_KINDS = new Set([
     "cron",
     "webhook",
@@ -240,10 +232,8 @@ export async function handleAutomationCreate(
       ...(tz === undefined ? {} : { tz }),
     };
   });
-  // A condition/data trigger's consented read runs under a requested vault
-  // grant (duaility §12) — `validateManifest` refuses those trigger kinds
-  // without one, so pass an explicit `{ vault }` body through untouched and
-  // let the same validator reject a malformed one.
+  // `validateManifest` refuses condition/data triggers without a vault grant,
+  // so `{ vault }` is passed through untouched for it to judge.
   const vaultInput =
     body.vault !== null &&
     typeof body.vault === "object" &&
@@ -301,7 +291,7 @@ export async function handleAutomationCreate(
     ephemeralSession,
   });
 
-  // Read the published row back for the renderer (only on `main`).
+  // The published row, for the renderer (only on `main`).
   let row: unknown = null;
   if (publish) {
     const { rows } = await automation.list(opts.codeAppsDir());
@@ -315,7 +305,7 @@ export async function handleAutomationCreate(
   });
 }
 
-// ──── POST /centraid/_automations/set-enabled?ref= (toggle enabled) ────
+// ─── POST /centraid/_automations/set-enabled ───
 
 export async function handleAutomationSetEnabled(
   opts: LifecycleRouteOptions,
@@ -361,34 +351,19 @@ export async function handleAutomationSetEnabled(
       ephemeralSession,
     });
   } else if (ephemeralSession) {
-    // Nothing to publish, but a throwaway session may have been opened —
-    // close it so it doesn't orphan a worktree.
+    // Close the throwaway session so it doesn't orphan a worktree.
     await opts.store.closeSession(sessionId);
   }
   return sendJson(res, 200, { ok: true, staged: !publish });
 }
 
-// ──── POST /centraid/_automations/update?ref= (edit name/prompt/triggers) ────
+// ─── POST /centraid/_automations/update ───
 
 /**
- * The instructions-first editor's save path: patch an automation's
- * `name` / `prompt` (manifest `prompt` — the human intent) / `triggers`
- * without going through the builder chat. Every field is optional and only
- * a present one is applied — this is `PATCH` semantics over `POST`, mirroring
- * `set-enabled`'s "load current manifest → apply → re-validate → stage +
- * publish" shape rather than re-scaffolding.
- *
- * Triggers follow create's wire shape (`CentraidCreateTrigger[]`), with one
- * v1 refinement: a `{kind:'webhook'}` entry mints a fresh id + secret ONLY
- * when the automation had no webhook trigger before — an edit that keeps an
- * existing webhook must not silently rotate its secret out from under
- * configured callers (that is `rotate-webhook`'s dedicated job). A `triggers`
- * array that omits `webhook` drops it. Renamed automations pick up their new
- * display name on the enrolled agent automatically: `publishAndReconcile`'s
- * `reconcile()` re-derives `nameByOwnerApp` from the just-published manifest
- * and re-enrolls (`ensureAgentEnrolled`'s `displayName`-driven upsert) —
- * exactly the mechanism `set-enabled`/create already ride, no special-casing
- * needed here.
+ * PATCH semantics over POST: only a present field is applied. A
+ * `{kind:'webhook'}` entry mints a fresh id + secret ONLY when there was no
+ * webhook before — an edit must never silently rotate a configured caller's
+ * secret, which is `rotate-webhook`'s job; omitting `webhook` drops it.
  */
 export async function handleAutomationUpdate(
   opts: LifecycleRouteOptions,
@@ -490,15 +465,10 @@ export async function handleAutomationUpdate(
     });
   }
 
-  // A corrupt-on-disk manifest surfaces the same 400 an invalid patch would
-  // (via `sendLifecycleError`'s `ManifestError` mapping) rather than a 500 —
-  // the route's own try/catch (in `makeLifecycleRouteHandler`) covers this.
+  // A corrupt-on-disk manifest 400s like an invalid patch, never 500s.
   const existing = automation.parseManifest(file.content);
 
-  // Same closed trigger-kind vocabulary + validator delegation as create
-  // (see the comment above `ALLOWED_TRIGGER_KINDS` there): reject an unknown
-  // kind loudly instead of coercing it, let `validateManifest` below reject a
-  // malformed condition/data spec with its own field-scoped message.
+  // Same closed vocabulary as create.
   const ALLOWED_TRIGGER_KINDS = new Set([
     "cron",
     "webhook",
@@ -523,9 +493,8 @@ export async function handleAutomationUpdate(
     const existingWebhook = automation.webhookTriggerOf(existing.triggers);
     triggers = triggersInput.map((t) => {
       if (t.kind === "webhook") {
-        // Wire shape carries no id/secretHash (those are gateway-minted) —
-        // the only way to tell "keep the existing one" from "mint a new
-        // one" is whether the automation already had a provisioned webhook.
+        // The wire carries no id/secretHash, so an already-provisioned
+        // webhook is the only signal for "keep" rather than "mint".
         if (existingWebhook) return existingWebhook;
         const wid = automation.generateWebhookId();
         const secret = automation.generateWebhookSecret();
@@ -571,9 +540,8 @@ export async function handleAutomationUpdate(
     });
   }
 
-  // Round-trip through the real validator so a patched manifest can never
-  // land a shape the runtime would later reject — untouched fields (incl.
-  // `generated`, `enabled`, `history`) survive via the spread.
+  // Round-tripped through the real validator so a patch cannot land a shape
+  // the runtime would reject; untouched fields survive the spread.
   const patched: Record<string, unknown> = {
     ...existing,
     ...(nameInput === undefined ? {} : { name: nameInput }),
@@ -636,11 +604,9 @@ export async function handleAutomationUpdate(
           "delegate recognition requires an explicit pinned model before provider egress can be consented",
       });
     }
-    // This writes the RECIPE's own switch, which since #807 is one of two
-    // selectors: an engine profile the policy cascade resolves also elects the
-    // delegate variant (automation/fire/fire.ts). So `selected: "deterministic"`
-    // here means "this recipe does not itself elect delegate", never "this run
-    // will be deterministic" — read the resolved policy for that.
+    // The RECIPE's own switch, one of two selectors since #807: an engine
+    // profile can also elect delegate, so `selected: "deterministic"` means
+    // "this recipe does not elect delegate", never "this run is deterministic".
     patched.enrich = {
       ...enrich,
       delegateStep: { ...enrich.delegateStep, selected: body.recognitionStep },
@@ -661,14 +627,12 @@ export async function handleAutomationUpdate(
     ephemeralSession,
   });
 
-  // Read the published row back for the renderer (only on `main`) — same
-  // pattern as create.
+  // The published row, for the renderer.
   let row: unknown = null;
   if (publish) {
     const { rows } = await automation.list(opts.codeAppsDir());
-    // Compare on the parsed handle, not the raw query string — `rawRef` is
-    // whatever the caller typed and need not be byte-identical to the
-    // canonical `<appId>/<automationId>` form `Row.ref` always is.
+    // Compare on the parsed handle: `rawRef` need not be byte-identical to
+    // the canonical form `Row.ref` always carries.
     const wantRef = `${ref.appId}/${ref.automationId}`;
     row = rows.find((r) => r.ref === wantRef) ?? null;
   }
@@ -679,18 +643,12 @@ export async function handleAutomationUpdate(
   });
 }
 
-// ──── POST /centraid/_automations/rotate-webhook?ref= (mint a fresh secret) ────
+// ─── POST /centraid/_automations/rotate-webhook ───
 
 /**
- * Rotate a webhook-triggered automation's shared secret. The plaintext is
- * shown to the owner exactly once, at mint time (create/clone) — miss that
- * one-time reveal and the automation is otherwise permanently uncallable,
- * since only the SHA-256 hash persists in `automation.json`. This mints a
- * fresh secret over the SAME route id (any caller already configured with
- * the webhook URL keeps working; only its credential changes) and persists
- * only the new hash, exactly like the mint path — the response shape
- * mirrors create's `webhook` field so the renderer's existing one-time
- * reveal UI works unchanged.
+ * Mints a fresh secret over the SAME route id, so a caller already configured
+ * with the webhook URL keeps working and only its credential changes. The
+ * plaintext is revealed once; only the SHA-256 hash persists.
  */
 export async function handleAutomationRotateWebhook(
   opts: LifecycleRouteOptions,
@@ -765,14 +723,11 @@ export async function handleAutomationRotateWebhook(
   });
 }
 
-// ──── POST /centraid/_automations/enrichment (batch toggle, issue #306) ────
+// ─── POST /centraid/_automations/enrichment ───
 
 /**
- * "Enable enrichment" is ONE owner decision (#306 decision 6): flip
- * every installed enricher automation in one act instead of nine separate
- * discoveries. Enrichers are identified by the blueprint catalog's
- * `category: "Enrichment"` template ids; the response reports what toggled
- * so a surface can render the checklist honestly.
+ * ONE owner decision (#306): every installed enricher flips in one act.
+ * Enrichers are the catalog's `category: "Enrichment"` template ids.
  */
 export async function handleEnrichmentToggle(
   opts: LifecycleRouteOptions,
@@ -836,7 +791,7 @@ export async function handleEnrichmentToggle(
   return sendJson(res, 200, { ok: true, enabled, toggled, unchanged });
 }
 
-// ──── DELETE /centraid/_automations?ref=&publish= (remove an automation) ────
+// ─── DELETE /centraid/_automations ───
 
 export async function handleAutomationDelete(
   opts: LifecycleRouteOptions,
@@ -854,22 +809,20 @@ export async function handleAutomationDelete(
   if (refused) return refused;
   const publish = url.searchParams.get("publish") === "true";
 
-  // A whole automation app (`kind: 'automation'`) is removed wholesale;
-  // an app-owned automation loses just its `automations/<id>/` subdir.
+  // An automation app goes wholesale; an app-owned automation loses only its
+  // `automations/<id>/` subdir.
   const apps = await opts.store.listAppsWithMeta().catch(() => []);
   const appKind = apps.find((a) => a.id === ref.appId)?.kind;
 
   if (appKind === "automation") {
-    // Drop the code from `main`, deregister (removing the data dir + run
-    // ledgers — NOT a stray `ensureRegistered`, which would re-create them),
-    // and reconcile the scheduler. The sequence lives in lifecycle-shared.
+    // Deregistering removes the data dir and run ledgers; never follow it
+    // with `ensureRegistered`, which would re-create them.
     await deleteAppAndReconcile(opts, ref.appId);
     return sendJson(res, 200, { ok: true, deletedApp: true });
   }
 
-  // A subdir delete is a one-shot off `main` — use a fresh throwaway session
-  // (no renderer editing session is supplied here) and close it once done so
-  // it doesn't orphan a worktree.
+  // One-shot off `main` in a throwaway session, closed so it doesn't orphan
+  // a worktree.
   const sessionId = defaultSessionId(ref.appId);
   await prepareLifecycleSession(opts.store, sessionId, true);
   const appDir = await opts.store.snapshotSessionAppDir(sessionId, ref.appId);
@@ -883,10 +836,8 @@ export async function handleAutomationDelete(
     return sendJson(res, 200, { ok: true, staged: !publish });
   }
 
-  // The surviving files already live in the worktree; just drop the
-  // removed `automations/<id>/` subdir, then optionally publish so `main`
-  // no longer lists it. The publish→reconcile→close sequence lives in
-  // lifecycle-shared so this route doesn't hand-orchestrate it.
+  // Drop the removed subdir, then optionally publish so `main` stops listing
+  // it; the publish→reconcile→close sequence lives in lifecycle-shared.
   await Promise.all(
     removed.map((rel) => fs.rm(nodePath.resolve(appDir, rel), { force: true }))
   );

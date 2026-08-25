@@ -1,23 +1,8 @@
-// The viewer (v4 handoff §7.1) — one of the three modes that stand on the
-// STAGE: full-bleed `--stage` in both themes, ink `--on-stage`, hairlines
-// `--stage-line`, covering the entire frame including the stem.
-//
-// THE STAGE IS NOT A THEMED SURFACE. `--stage` is the same literal in light
-// and dark because a media ground does not follow the theme; the one thing
-// that must still work there is FOCUS, so the focus ring on this surface takes
-// its colour from `--focus-ring-color` and its inner gap from `--stage` —
-// never from `currentColor`, which would vanish the moment a control inverted.
-//
-// WHAT LIVES WHERE. The pure rules — the label breakpoint, the zoom ladder and
-// its readout, the transports, where the original lives — are in viewer.ts, so
-// the tests and this file read the same answers. The stage's media, steps,
-// zoom and transport are in ViewerStage.tsx; the action set is in
-// ViewerActions.tsx, described once and laid out twice. What is left here is
-// the shell: which regions exist, and what the bar carries.
-//
-// `refresh`/`onClose` are the only orchestrator-owned pieces threaded down;
-// every command fires through `act` (outcomes.ts) directly, and every outcome
-// lands on the FRAME's one status line via `notice`.
+// The viewer (v4 §7.1) covers the whole frame. THE STAGE IS NOT A THEMED
+// SURFACE: `--stage` is one literal in both themes, so the focus ring takes
+// `--focus-ring-color` and its gap from `--stage`, never `currentColor`.
+// Pure rules are in viewer.ts, the stage in ViewerStage.tsx, the actions in
+// ViewerActions.tsx. Every outcome lands on the FRAME's one status line.
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import { GrantSheet } from "../../_shared/GrantSheet.tsx";
@@ -65,9 +50,7 @@ interface Dims {
   height: number;
 }
 
-/** The compact form factor, in ONE place. Below this the top bar keeps close
- *  and More only, and the five actions move to a bottom bar where a thumb is
- *  (§7.1, §D). */
+/** Below this the five actions move to a bottom bar (§7.1). */
 const COMPACT = 720;
 
 function withProbedDims(asset: Asset, probed: Dims | null): Asset {
@@ -76,9 +59,6 @@ function withProbedDims(asset: Asset, probed: Dims | null): Asset {
     : asset;
 }
 
-/** An element's live inline size. Two things are derived from a measurement
- *  rather than a media query here: whether the bar is labelled, and whether
- *  the actions sit in the bar at all. */
 function useWidth(): [(el: HTMLElement | null) => void, number] {
   const [width, setWidth] = useState(0);
   const observer = useRef<ResizeObserver | null>(null);
@@ -114,8 +94,6 @@ export function LightboxShell({
   albums: Album[];
   places: Place[];
   renderSeq: number;
-  /** What the member calls the machine the originals live on. Never invented
-   *  as a hostname — `the gateway` is true on every deployment. */
   gatewayName?: string;
   onStep: (delta: number) => void;
   refresh: () => Promise<void>;
@@ -128,10 +106,8 @@ export function LightboxShell({
   const [probed, setProbed] = useState<Dims | null>(null);
   const [rootRef, rootWidth] = useWidth();
   const [barRef, barWidth] = useWidth();
-  // Dims probed off the previous asset are dropped during the render that
-  // first sees a new asset_id (React's "adjust state when a prop changes"
-  // pattern), not one commit later from an effect — an effect would paint the
-  // old dimensions against the new photograph for a frame (#573).
+  // Adjusted during render, never in an effect: an effect would paint the old
+  // dims against the new photograph for a frame (#573).
   const [probedFor, setProbedFor] = useState(asset.asset_id);
   if (probedFor !== asset.asset_id) {
     setProbedFor(asset.asset_id);
@@ -139,9 +115,8 @@ export function LightboxShell({
     setMoreOpen(false);
   }
   const displayAsset = withProbedDims(asset, probed);
-  // Same rule as the grid tile: a read-only audience's photograph is viewable,
-  // and the actions that would write are DISABLED with the reason rather than
-  // firing and apologising (§6, #599).
+  // Read-only audiences view; writing actions are DISABLED with the reason
+  // rather than firing and apologising (#599).
   const canWrite = canWriteScope(asset.scope_id);
   const readOnly = canWrite ? undefined : "This library is read-only for you.";
   const compact = rootWidth > 0 && rootWidth < COMPACT;
@@ -149,9 +124,7 @@ export function LightboxShell({
   const downloadHref = safeMediaUrl(asset.content_uri);
   const editable =
     isRenderableUri(asset.content_uri) && !isVideoAsset(asset) && canWrite;
-  // Share is a STANDING GRANT over this one photograph (#825): the object-first
-  // entry into the shared grant kit, `media.asset` as its subject. Photos owns
-  // only the roster and the status line; the sheet owns everything else.
+  // A STANDING GRANT over this photograph (#825); the sheet owns the rest.
   const share = usePhotoShare(notice);
   const scopes = mountedScopes();
   const actorVaultId = asset.scope_id ?? scopes[0]?.id ?? "";
@@ -235,10 +208,8 @@ export function LightboxShell({
       id: "edit",
       icon: EditIcon,
       disabled: !editable,
-      // The reason must name THIS control's actual blocker. `readOnly` is
-      // right for favorite/trash, but edit has two more ways to be off —
-      // a video, or an original that is not here to render — and telling a
-      // member "read-only" over a video misstates their own grant (§6).
+      // Name THIS control's blocker: edit is also off for a video or a
+      // missing original, where "read-only" would misstate it (§6).
       reason: canWrite
         ? isVideoAsset(asset)
           ? "Only photographs can be cropped and rotated."
@@ -256,9 +227,7 @@ export function LightboxShell({
       id: "copy",
       icon: ShareIcon,
       label: commonsResident ? "Save to my vault" : "Share",
-      // Never disabled on a guess: whether there is anybody to name is an
-      // asynchronous question, and `share.request` answers it on the status
-      // line rather than greying the control out on a stale reading.
+      // Never disabled on a guess: `share.request` answers on the status line.
       disabled: false,
       onRun: () => (commonsResident ? void saveToMyVault() : share.request()),
     },
@@ -300,24 +269,19 @@ export function LightboxShell({
     <div
       className={styles.lightbox}
       ref={rootRef}
-      // THE SHEET'S STATE IS THE WHOLE VIEWER'S STATE, not the body's. It has
-      // to reach the filmstrip and the stage foot, which are the body's
-      // SIBLINGS, so it is said once here rather than twice further down.
+      // The sheet's state is the whole viewer's — the filmstrip and stage
+      // foot are the body's SIBLINGS.
       data-info={!editing && infoOpen ? "open" : undefined}
     >
       <GrantSheet
         open={share.open}
         onClose={() => share.close()}
         audiences={share.audiences}
-        // OBJECT-FIRST: the sheet was opened over THIS photograph, so the
-        // "what" step is a fixed line and the standing list is this
-        // photograph's own. The capability picker is the registry's answer for
-        // `media.asset`, never a choice made here.
+        // OBJECT-FIRST: opened over THIS photograph; the capability picker is
+        // the registry's answer for `media.asset`.
         subject={{
           subjectType: "media.asset",
           subjectId: asset.asset_id,
-          // Its own title when it has one; the kit falls back to the
-          // registry's noun rather than to an id dressed up as a name.
           ...(displayText(asset.title ?? "").trim()
             ? { label: displayText(asset.title ?? "").trim() }
             : {}),
@@ -328,21 +292,15 @@ export function LightboxShell({
         <button
           type="button"
           className={styles.close}
-          // NO `title` BESIDE AN IDENTICAL `aria-label`. The two carried the
-          // same word, so the tooltip told nobody anything the accessible name
-          // did not already say — and the native tooltip paints over the 34px
-          // control that summoned it, hiding the mark it claims to label. The
-          // accessible name is the one that stays.
+          // No `title` beside an identical `aria-label` — the native tooltip
+          // paints over the 34px control it claims to label.
           aria-label="Close"
           onClick={onClose}
         >
           <CloseIcon size={18} />
         </button>
         <div className={styles.heading}>
-          {/* While editing, the bar names the ACT, not the photograph — the
-              title is `Crop and rotate` and the meta says what the source is
-              (proto 4510–4511). The viewer's caption/capture pair returns the
-              moment the editor closes. */}
+          {/* While editing the bar names the ACT, not the photograph. */}
           <div className={styles.title}>
             {editing
               ? "Crop and rotate"
@@ -352,9 +310,6 @@ export function LightboxShell({
             {editing
               ? editorSourceLine(
                   displayAsset,
-                  // The source of an edited copy, when this page happens to
-                  // hold it (#711). `list` is a bounded window, so a
-                  // miss is ordinary — the line handles not knowing.
                   list.find(
                     (a) => a.asset_id === displayAsset.source_asset_id
                   ) ?? null
@@ -362,9 +317,7 @@ export function LightboxShell({
               : captureLine(displayAsset)}
           </div>
         </div>
-        {/* THE SPACER MUST NOT FLEX. Beside a `flex: 1` heading, a growable
-            spacer splits the slack with it and the title truncates with empty
-            space beside it (§7.1). */}
+        {/* MUST NOT FLEX: beside a `flex: 1` heading the title truncates. */}
         <span className={styles.spacer} aria-hidden="true" />
         {editing ? null : compact ? (
           <button
@@ -392,9 +345,7 @@ export function LightboxShell({
       ) : null}
 
       <div className={styles.body}>
-        {/* No backdrop-shield onClick here: `#lightbox`'s native close listener
-            already gates on `e.target === e.currentTarget` (see lightbox.tsx),
-            so a click on this region never reached it in the first place. */}
+        {/* `#lightbox`'s close listener gates on `e.target === e.currentTarget`. */}
         {editing ? (
           <div className={styles.editorHost}>
             <EditorView
@@ -423,8 +374,7 @@ export function LightboxShell({
         )}
         {!editing && infoOpen ? (
           <aside className={styles.info} aria-label="About this photograph">
-            {/* The phone's sheet is dragged by its grabber; on the rail the
-                same element is the seam between the panel and the stage. */}
+            {/* Grabber on the phone; a seam on the rail. */}
             <span className={styles.grabber} aria-hidden="true" />
             <LightboxInfo
               key={renderSeq}
@@ -449,16 +399,8 @@ export function LightboxShell({
   );
 }
 
-/**
- * The filmstrip (§7.1) — KEPT ON THE PHONE, at 58px. Swipe and the strip are
- * the same control approached from two directions, and dropping it there would
- * make the phone a slideshow.
- *
- * A frame is a step-to control, not a grid tile: it has no selection slot, no
- * vault rule and no state line, so it deliberately does not reach for
- * Tile.tsx. What it shares with the grid is the CHEAP source rule — a thumb,
- * never a full remote original.
- */
+/** Kept on the phone. A frame is a step-to control, not a grid tile, so it
+ *  does not reach for Tile.tsx; it shares only the CHEAP source rule. */
 function Filmstrip({
   list,
   current,
@@ -478,15 +420,12 @@ function Filmstrip({
         const active = a.asset_id === current.asset_id;
         return (
           <button
-            // Scope-qualified for the same reason the grid's tiles are.
             key={`${a.scope_id ?? ""}:${a.asset_id}`}
             type="button"
             aria-current={active ? "true" : undefined}
             className={styles.frame}
             data-active={active ? "true" : "false"}
             aria-label={displayText(a.title ?? "Photograph")}
-            /* The strip mixes scopes: each frame names its own so the
-               authorizer's nearest-ancestor lookup finds the right one. */
             data-scope={scopeAttr(a.scope_id)}
             onClick={(e) => {
               e.stopPropagation();

@@ -1,63 +1,33 @@
-/*
- * Shared HTTP + JSON-envelope handling for `centraid-storage-provider/1`
- * clients (PROTOCOL.md § Error envelope): `{ "data": … }` on success,
- * `{ "error": { type, code, message, details? } }` on failure, mapped to
- * `BackupProviderError`. `RemoteBackupProvider` uses this for the full
- * workload surface; `cas-grant.ts`'s `requestStorageGrant` uses it standalone
- * so a CAS consumer never needs to construct a `BackupProvider`.
- */
+// Shared HTTP + JSON-envelope handling for `centraid-storage-provider/1`
+// clients (PROTOCOL.md § Error envelope), mapped to `BackupProviderError`.
 
 import { BackupProviderError } from "./provider.js";
 import type { BackupProviderErrorCode } from "./provider.js";
 
 export interface WireClientOptions {
-  /** e.g. "https://api.clawgnition.com" — no trailing slash required. */
   baseUrl: string;
   apiKey: string;
-  /** Injectable for tests. Defaults to global `fetch`. */
   fetchImpl?: typeof fetch;
-  /**
-   * Transient-failure backpressure handling (PROTOCOL/#412). Two classes
-   * of response are retryable, with deliberately different budgets:
-   *   - **429** — explicit rate-limit backpressure. The client respects a
-   *     `Retry-After` header when present, otherwise backs off exponentially,
-   *     and is willing to wait out a full rate window (`rateLimit` budget).
-   *   - **5xx / non-JSON** — a transient provider-internal failure
-   *     (`provider_error` / `internal_error`, or a bare overload page that
-   *     isn't even a JSON envelope). Retried on a SHORT, jittered budget
-   *     (`serverError`): these clear fast, and prolonging retries only piles
-   *     more load onto an already-struggling provider. A deterministic failure
-   *     exhausts the small budget and surfaces unchanged.
-   * Client-caused failures (4xx other than 429) are never retried. Full jitter
-   * de-correlates concurrent clients. Overridable for tests; defaults are
-   * production-safe.
-   */
+  /** Backpressure (#412): 429 waits out a rate window; 5xx/non-JSON gets a
+   *  short jittered budget. 4xx are client faults — never retried. */
   retry?: {
     rateLimit?: RetryBudget;
     serverError?: RetryBudget;
-    /** Injectable sleep for tests. Defaults to a real timer. */
     sleep?: (ms: number) => Promise<void>;
-    /** Injectable jitter in [0,1). Defaults to `Math.random`. */
     random?: () => number;
   };
 }
 
 interface RetryBudget {
-  /** Max attempts (incl. the first) before surfacing the error. */
+  /** Incl. the first. */
   maxAttempts?: number;
-  /** Base backoff in ms (before jitter) when no `Retry-After` is present. */
   baseDelayMs?: number;
-  /** Per-attempt backoff ceiling in ms (before jitter). */
   maxDelayMs?: number;
-  /** Cap on total time spent waiting across retries, in ms. */
   maxTotalWaitMs?: number;
 }
 
 const RATE_LIMIT_DEFAULTS: Required<RetryBudget> = {
-  // A rate limiter that counts every request (including the ones it rejects)
-  // only drains once the client goes quiet, so retries must be SPARSE: a high
-  // ceiling makes later attempts wait tens of seconds, letting a saturated
-  // window age out instead of being kept full by the retries themselves.
+  // A limiter counting rejects too drains only when the client goes quiet.
   maxAttempts: 12,
   baseDelayMs: 2_000,
   maxDelayMs: 30_000,
@@ -96,7 +66,6 @@ const defaultSleep = (ms: number): Promise<void> =>
     setTimeout(resolve, ms);
   });
 
-/** Parse a `Retry-After` header — integer seconds or an HTTP-date — into ms. */
 function retryAfterMs(header: string | null): number | undefined {
   if (!header) return undefined;
   const seconds = Number(header);
@@ -123,8 +92,6 @@ export async function callProviderRoute<T>(
   let serverErrorAttempts = 0;
   let rateLimitWaited = 0;
   let serverErrorWaited = 0;
-  // Retries are a serial state machine: each attempt consumes the preceding
-  // response's budget and delay before another request may be sent.
   const attempt = async (): Promise<T> => {
     const res = await fetchImpl(`${baseUrl}${routePath}`, {
       method,
@@ -135,9 +102,7 @@ export async function callProviderRoute<T>(
       ...(body === undefined ? {} : { body: JSON.stringify(body) }),
     });
     const text = await res.text();
-    // The body is normally a JSON envelope, but a provider under duress can
-    // return a bare plaintext overload page (not JSON) — tolerate that instead
-    // of throwing a SyntaxError that would defeat the retry path below.
+    // A bare overload page is not JSON; a SyntaxError would defeat the retry.
     let parsed: { data?: unknown } | ErrorEnvelope = {};
     let parseFailed = false;
     if (text.length > 0) {
@@ -148,10 +113,6 @@ export async function callProviderRoute<T>(
       }
     }
 
-    // Backpressure (#412): 429 = explicit rate-limit (patient budget);
-    // 5xx or an unparseable body = transient provider-internal failure (short,
-    // jittered budget — don't pile load onto a struggling provider). 4xx with a
-    // valid envelope are client faults and never retried.
     const isRateLimit = res.status === 429;
     const isServerError = res.status >= 500 || (parseFailed && !res.ok);
     const active = isRateLimit ? rateLimit : isServerError ? serverError : null;
@@ -165,11 +126,8 @@ export async function callProviderRoute<T>(
         active.baseDelayMs * 2 ** attempts,
         active.maxDelayMs
       );
-      // Rate limits get *equal* jitter (a floor of half the ceiling) so every
-      // retry waits a meaningful amount and actually drains a saturated window
-      // — the provider sends no Retry-After on the auth limiter, so a full-jitter
-      // near-zero sleep would burn an attempt without helping. Transient 5xx
-      // gets *full* jitter [0, ceiling] to de-correlate and clear fast.
+      // EQUAL jitter for rate limits: the auth limiter sends no Retry-After,
+      // and a near-zero sleep burns an attempt. 5xx: full jitter, to spread.
       const jittered = isRateLimit
         ? Math.round(ceiling / 2 + random() * (ceiling / 2))
         : Math.round(random() * ceiling);

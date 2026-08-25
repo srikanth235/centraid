@@ -1,25 +1,11 @@
-// The timeline's row list: month headers, day sub-labels, and justified asset
-// rows (Photos v4 handoff §4.1, §4.3).
-//
-// Pure, and separate from the component, because this is where the grouping
-// rules and the packing meet — and both are things to assert rather than to
-// eyeball. The component below it only maps rows to views.
+// Row list for the timeline: month headers, day sub-labels, justified rows.
 
 import { justify } from "./justify";
 import type { JustifiedTile } from "./justify";
 import type { PhotoAsset, PhotoSection } from "./timeline-model";
 
-// NO COUNTS ON THE TIMELINE (issue 712 iOS parity). The month and day headers
-// state no tally: iOS' own Library states neither, and the reason holds here —
-// the tally of a month is not what a member scrolls a timeline to find out,
-// and printing it on every header puts a number in the reading path of every
-// single row. The counts still exist where a count IS the question: the period
-// cards of the Years and Months grains (`buildPeriods`, the one caller of
-// `describeCounts` below) summarise a period the member cannot see the whole
-// of, and the Collections shelves state their own sizes.
-//
-// The day's PLACE survives, because it is not a tally — it says where you
-// were, which is the one thing about a day a row of thumbnails cannot show.
+// NO COUNTS ON THE TIMELINE (#712): headers state no tally. Counts belong to
+// period cards and Collections shelves. A day's place is not a tally.
 export type TimelineRow =
   | {
       type: "month";
@@ -31,8 +17,6 @@ export type TimelineRow =
       type: "day";
       key: string;
       title: string;
-      /** The day's place, when one is known for the whole day — `Lyme Regis`,
-       *  or empty. Never a count; see above. */
       place: string;
       assets: PhotoAsset[];
       height: number;
@@ -44,18 +28,10 @@ export type TimelineRow =
       height: number;
     };
 
-/** Sticky month header. Micro-caps label, mono count, persists while its month
- *  is on screen. */
 export const MONTH_ROW_HEIGHT = 46;
-/** Day sub-label. */
 export const DAY_ROW_HEIGHT = 34;
-/** Vertical gutter between packed rows — 2px, the same as the horizontal one. */
 export const ROW_GAP = 2;
 
-/**
- * `86 photographs · 4 videos`. Videos are named only when there are some;
- * a count of zero is not information, it is chrome.
- */
 export function describeCounts(assets: readonly PhotoAsset[]): string {
   const videos = assets.filter((asset) => asset.kind === "video").length;
   const photographs = assets.length - videos;
@@ -67,10 +43,7 @@ export function describeCounts(assets: readonly PhotoAsset[]): string {
   return parts.join(" · ") || "0 photographs";
 }
 
-/** The day's place — `Lyme Regis`, or empty when there is not one. A place
- *  that varies through the day is not the day's place, so it is left off
- *  rather than guessed at, and an unknown place prints nothing rather than a
- *  hedge. */
+/** Empty unless one place covers the whole day — never a guess or a hedge. */
 export function dayPlace(
   assets: readonly PhotoAsset[],
   placeNames: ReadonlyMap<string, string>
@@ -82,11 +55,6 @@ export function dayPlace(
   return (only ? placeNames.get(only) : undefined) ?? "";
 }
 
-/**
- * Builds the flat row list a virtualised list consumes. Month headers are
- * emitted once per month (not per day), so the sticky header is the month the
- * member is actually scrolling through.
- */
 export function buildRows(
   sections: readonly PhotoSection[],
   containerWidth: number,
@@ -126,13 +94,10 @@ export function buildRows(
   return rows;
 }
 
-/** Indices of the sticky month headers, for the list's `stickyHeaderIndices`. */
 export function monthHeaderIndices(rows: readonly TimelineRow[]): number[] {
   return rows.flatMap((row, index) => (row.type === "month" ? [index] : []));
 }
 
-/** Prefix-summed row tops, so a scrub or a drag maps an offset to a row by
- *  binary search instead of re-walking every height. */
 export function rowTops(rows: readonly TimelineRow[]): number[] {
   const tops: number[] = [];
   let cursor = 0;
@@ -143,23 +108,9 @@ export function rowTops(rows: readonly TimelineRow[]): number[] {
   return tops;
 }
 
-/**
- * The `PhotoSection.day` at a scroll offset — where the member currently IS.
- *
- * The grain control needs an answer to "which day is on screen" to keep a
- * member's place when they switch to Years or Months (`timeline-grains.ts`), and
- * the answer has to be in the same vocabulary a period card speaks: a section
- * day, never a row index or a pixel. Day and asset rows both carry the day in
- * their key (`d:2026-08-06`, `r:2026-08-06:0:112`), so the walk back from the
- * row at the offset finds it without a second pass over the sections.
- *
- * Month headers carry no day of their own, so the walk steps off them: back
- * first, to the day the member has already scrolled past — a sticky header is
- * on screen for its whole month, and answering from it would report the first
- * day of the month however far into it the member had scrolled — and forward
- * only when there is nothing behind, which happens exactly once, at the very
- * top of the list where the first row IS a month header.
- */
+/** Month headers carry no day, so step BACK first: a sticky header spans its
+ *  whole month and would report day one however far in the member scrolled.
+ *  Forward only at the top of the list. */
 export function dayAtOffset(
   rows: readonly TimelineRow[],
   tops: readonly number[],
@@ -187,15 +138,12 @@ export function dayAtOffset(
   return undefined;
 }
 
-/** The section day a row belongs to, read off its own key — `d:2026-08-06`
- *  and `r:2026-08-06:0:112` both carry it, a month header does not. */
 function dayOfRow(row: TimelineRow | undefined): string | undefined {
   if (row?.type === "day") return row.key.slice(2);
   if (row?.type === "assets") return row.key.split(":")[1];
   return undefined;
 }
 
-/** The month a row belongs to, for the scrub rail's bubble. */
 export function monthLabelAt(
   rows: readonly TimelineRow[],
   index: number

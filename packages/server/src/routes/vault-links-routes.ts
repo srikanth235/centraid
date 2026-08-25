@@ -1,23 +1,7 @@
-/*
- * `/centraid/_gateway/links` — the same-machine "link ceremony" a
- * cross-owner edge needs before it may cross (#726), PLUS the
- * owner-facing door onto the remote half (audit #726 finding 1).
- *
- * Same-owner edges never reach this surface: owning both vaults already IS
- * the authorization, so nothing here applies to them. Propose/approve exist
- * only for the co-hosted cross-owner case (father→daughter, both vaults on
- * this one gateway) and write the SAME rows the remote ceremony writes — one
- * table, one answerer (D3) — differing only in that neither side needs a
- * route to reach the other.
- *
- * `ticket`/`redeem` are that remote ceremony's owner-facing door onto
- * `PeerLinkTicketStore.mint` and `redeemLinkTicket` (`serve/peer-link-*.ts`).
- * `ticket` mints a one-time capability for a vault the caller
- * owns (mirrors `propose`'s ownership check); `redeem` is the OTHER
- * gateway's owner pasting/scanning what `ticket` produced, and dials out
- * over `peerPlane.dial` (`serve/peer-dial.ts`) to actually run the ceremony
- * — `redeemLinkTicket` is the client, unchanged.
- */
+// `/centraid/_gateway/links` (#726): the link ceremony a cross-owner edge needs
+// before it may cross. Same-owner edges never reach here — owning both vaults
+// already IS the authorization. Local propose/approve and remote
+// `ticket`/`redeem` write the SAME rows.
 
 import type { IncomingMessage, ServerResponse } from "node:http";
 
@@ -48,24 +32,13 @@ export interface VaultLinksRouteDeps {
   enrollments: EnrollmentStore;
   store: VaultLinksStore;
   gatewayDatabase: GatewayDatabase;
-  /** Base64 identity public key of a vault on this gateway (P1). */
   vaultPublicKey: (vaultId: string) => string | undefined;
-  /** A LOCAL vault's own display name (#726 P6 gap 3) — both sides of a
-   *  same-machine link are already known, so `propose()` can label them
-   *  immediately instead of leaving the link unnamed forever. Absent only in
-   *  a test double with no registry; a link proposed without it is labeled
-   *  `null`, same as before this gap closed. */
+  /** Absent only in a test double; the link is then labeled `null`. */
   vaultName?: (vaultId: string) => string | undefined;
   ownerPartyFor?: (vaultId: string) => string | undefined;
-  /**
-   * The remote ceremony's transport (audit #726 finding 1). Absent means
-   * this build cannot dial out at all — `ticket` and `redeem` both answer a
-   * typed refusal rather than minting a ticket that could never be
-   * redeemed, or pretending to redeem one it cannot reach.
-   */
+  /** Absent means this build cannot dial out: `ticket` and `redeem` answer a
+   *  typed refusal rather than minting an unredeemable ticket. */
   peer?: {
-    /** This gateway's own dial route, embedded in a minted ticket so the
-     *  OTHER side can reach back. */
     localRoute: () => { endpointId?: string; relayHints: string[] };
     dial: PeerDial;
   };
@@ -85,12 +58,7 @@ function linkDto(
     linkId: link.linkId,
     vaultA: link.vaultA,
     vaultB: link.vaultB,
-    // #726 P6 gap 3: the vault's own name/self-declared label, symmetric
-    // with vaultA/vaultB — `null` when genuinely unknown (an older link
-    // proposed before this field was recorded), never a raw id standing in
-    // for a name. The People panel renders that honestly instead of
-    // printing the id itself. Labels live in the vault directory (#750
-    // invariant 1), so both sides read the same record every link does.
+    // `null` when unknown, never a raw id standing in for a name (#750).
     labelA: store.directoryEntry(link.vaultA)?.label ?? null,
     labelB: store.directoryEntry(link.vaultB)?.label ?? null,
     partyIdA: partyIdForLinkedVault(link, link.vaultA) ?? null,
@@ -98,8 +66,7 @@ function linkDto(
     approvedByA: link.approvedByA,
     approvedByB: link.approvedByB,
     approved: isLinkApproved(link),
-    // Which side, if either, this gateway must route to reach — a vault is
-    // remote exactly when it holds a `vault_routes` row (#750 invariant 2).
+    // Remote exactly when it holds a `vault_routes` row (#750 invariant 2).
     remoteVaultId:
       store.routeFor(link.vaultA) === undefined
         ? store.routeFor(link.vaultB) === undefined
@@ -111,13 +78,8 @@ function linkDto(
   };
 }
 
-/**
- * Mint a one-time ticket for `vaultId` — the SHOWING half of the remote
- * ceremony (#726 P3 decision 3; the ticket shape and TTL are
- * `peer-link-tickets.ts`'s, unchanged). Authorization mirrors `propose`:
- * owning the vault IS the authorization, so a vault the caller does not own
- * is `not_found`, indistinguishable from one that does not exist.
- */
+/** The SHOWING half. Owning the vault IS the authorization, so one the caller
+ *  does not own is `not_found` — as if it did not exist. */
 async function handleMintTicket(
   req: IncomingMessage,
   res: ServerResponse,
@@ -182,17 +144,8 @@ const REDEEM_STATUS: Record<string, number> = {
   unreachable: 200,
 };
 
-/**
- * Redeem a ticket someone showed — the SCANNING half. `vaultId` is the LOCAL
- * vault the caller owns and wants linked; the redeeming side dials the peer
- * using the ticket's own endpoint (`serve/peer-dial.ts` is the transport),
- * then `redeemLinkTicket` (`serve/peer-link-client.ts`) runs the proven
- * ceremony unchanged. A build with no peer plane wired at all refuses BEFORE
- * any of that, with the same typed capability refusal `handleMintTicket`
- * gives (503 `peer_plane_unavailable`). Past that gate, every one of
- * `redeemLinkTicket`'s own typed states is relayed as-is — its
- * `unreachable` answers 200 (a fact about the network, not about this build).
- */
+/** The SCANNING half; `vaultId` is the LOCAL vault. Past the peer-plane gate
+ *  `redeemLinkTicket`'s typed states are relayed as-is. */
 async function handleRedeemTicket(
   req: IncomingMessage,
   res: ServerResponse,
@@ -223,13 +176,8 @@ async function handleRedeemTicket(
       error: "invalid_ticket",
       message: "not a Centraid link ticket",
     });
-  // A missing `deps.peer` is a CAPABILITY this build lacks — same refusal
-  // `handleMintTicket` gives, and for the same reason: there is no dial to
-  // attempt at all, which is a fact about this build, not about the network.
-  // `redeemLinkTicket`'s OWN `state: "unreachable"` (below, via `REDEEM_STATUS`)
-  // is the genuine network fact — a live peer plane that dialed out and got no
-  // answer — and stays a distinct, 200-mapped state so a caller can always
-  // tell "this build cannot do that" from "that machine is asleep".
+  // A missing `deps.peer` is a CAPABILITY this build lacks; keep it distinct
+  // from the 200-mapped `unreachable`, which is a fact about the network.
   if (!deps.peer) {
     return sendJson(res, 503, {
       error: "peer_plane_unavailable",
@@ -284,9 +232,8 @@ export function makeVaultLinksRouteHandler(
     const owners = deps.enrollments.owners;
     const method = req.method ?? "GET";
 
-    // `ticket`/`redeem` are checked BEFORE the generic linkId sub-routes
-    // below, which would otherwise treat "ticket"/"redeem" as a malformed
-    // linkId and 404 without ever reaching these handlers.
+    // Before the generic linkId sub-routes, which would read "ticket" as a
+    // malformed linkId and 404.
     if (url.pathname === TICKET_PATH) {
       if (method !== "POST")
         return sendJson(res, 405, { error: "method_not_allowed" });
@@ -328,16 +275,13 @@ export function makeVaultLinksRouteHandler(
           error: "invalid_link",
           message: "a vault cannot link to itself",
         });
-      // Proposing requires owning the vault you propose FROM. The other
-      // vault need only exist on this gateway — the whole point of a
-      // cross-owner link is that someone else owns it.
+      // Own the vault you propose FROM; the other need only exist.
       if (owners.ownerOf(vaultId) !== caller.ownerId)
         return sendJson(res, 404, { error: "not_found" });
       if (owners.ownerOf(otherVaultId) === undefined)
         return sendJson(res, 404, { error: "not_found" });
-      // Every vault has an identity keypair (P1), so a local link records the
-      // same two keys a remote one does. A vault that cannot produce its own
-      // key is not linkable — refused, never linked keyless.
+      // A vault that cannot produce its own key is refused, never linked
+      // keyless.
       const fromPublicKey = deps.vaultPublicKey(vaultId);
       const toPublicKey = deps.vaultPublicKey(otherVaultId);
       if (!fromPublicKey || !toPublicKey)
@@ -368,9 +312,8 @@ export function makeVaultLinksRouteHandler(
     if (!linkId || rest.length !== 2) return false;
     const link = deps.store.get(linkId);
     if (!link) return sendJson(res, 404, { error: "not_found" });
-    // Whichever side the caller's owner actually holds. Owning neither side
-    // is indistinguishable from the link not existing at all (topology
-    // hiding: a link between two strangers' vaults is invisible).
+    // Owning neither side is indistinguishable from the link not existing —
+    // topology hiding.
     const callerSide =
       owners.ownerOf(link.vaultA) === caller.ownerId
         ? link.vaultA

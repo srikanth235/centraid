@@ -1,21 +1,8 @@
 /*
- * Renderer-side app *session* + *lifecycle* over direct HTTP (#141).
- * `gateway-client.ts` re-exports these, so call sites `import … from
- * './gateway-client.js'`.
- *
- * What lives here (#799): the `desktop-<id>` editing session (opened/closed
- * lazily and shared with the automation-authoring harness), and the
- * deterministic lifecycle the gateway owns — clone / install / meta / delete.
- * Automation CRUD lives next door in `gateway-client-automation-editing.ts`
- * and is the only remaining writer of the code store.
- *
- * Two lifecycles meet here, and the difference is *where the code comes
- * from* (#434). A bundled app `install`s: the gateway records consent and
- * serves it from the shipped release — nothing is copied, no git, and it
- * upgrades with the software. Generated code (automations) still `clone`s
- * with `publish: true` to land a *baseline* version on `main` (its "git
- * init"), because code that exists nowhere else has to live in the vault's
- * code store.
+ * Renderer-side app session + lifecycle over HTTP (#141); `gateway-client.ts`
+ * re-exports these. Install vs clone turns on where the code comes from (#434):
+ * a bundled app installs (consent recorded, served from the shipped release, no
+ * copy and no git), while generated code clones with `publish: true`.
  */
 
 import {
@@ -28,28 +15,21 @@ import {
   scopedAuthHeaders,
 } from "./gateway-client-core.js";
 
-// One open editing session per app id, opened lazily and reused across
-// reads / writes / lifecycle mutations / publish. The id scheme matches
-// the main process's `app-sessions.ts` (`desktop-<appId>`) ON PURPOSE:
-// the local-only builder harness edits the same `desktop-<appId>` worktree,
-// so the renderer and the harness share one draft. Whoever opens the session
-// first wins; the other reuses it (a re-open of the same id 409s, which we
-// treat as success).
+// `desktop-<appId>` matches the main process's `app-sessions.ts` ON PURPOSE:
+// the builder harness edits the same worktree, so a re-open 409s and that
+// counts as success.
 const appSessions = new Map<string, Promise<string>>();
 
 function sessionIdFor(appId: string): string {
   return `desktop-${appId}`;
 }
 
-/** Drop the cached session ids (without closing) — e.g. on gateway swap. */
 export function resetAppSessions(): void {
   appSessions.clear();
 }
 
-// The cached sessions belong to the old gateway after a switch.
 window.CentraidApi.onGatewayChanged(() => resetAppSessions());
 
-/** Open the app's editing session (idempotent), returning its id. */
 async function openAppSession(sessionId: string): Promise<string> {
   const { baseUrl, token } = await auth();
   const res = await doFetch(baseUrl, `/centraid/_apps/_sessions`, {
@@ -61,12 +41,6 @@ async function openAppSession(sessionId: string): Promise<string> {
   return out.sessionId;
 }
 
-/**
- * Get the open session id for an app, opening one if needed. Concurrent
- * callers share the in-flight open; a 409 (the main-side harness already
- * opened this id) is treated as success — the worktree exists, which is
- * all we need. A rejected cached open is evicted so the next call retries.
- */
 export async function ensureAppSession(appId: string): Promise<string> {
   const existing = appSessions.get(appId);
   if (existing) {
@@ -86,7 +60,6 @@ export async function ensureAppSession(appId: string): Promise<string> {
   return p;
 }
 
-/** Close + forget an app's session (e.g. on delete). Idempotent. */
 export async function dropAppSession(appId: string): Promise<void> {
   const existing = appSessions.get(appId);
   appSessions.delete(appId);
@@ -105,9 +78,6 @@ export async function dropAppSession(appId: string): Promise<void> {
   }).catch(() => undefined);
 }
 
-// ───────────────────────── lifecycle ─────────────────────
-
-/** Template display metadata echoed back by the clone endpoint. */
 interface ClonedTemplateMeta {
   id: string;
   name: string;
@@ -118,7 +88,6 @@ interface ClonedTemplateMeta {
   kind: "app" | "automation";
 }
 
-/** Clone a bundled template into a fresh app; mints any webhook secrets. */
 export async function cloneTemplate(input: { templateId: string }): Promise<{
   app: {
     id: string;
@@ -148,20 +117,9 @@ export async function cloneTemplate(input: { templateId: string }): Promise<{
   return { app: out.app, template: out.template, webhooks: out.webhooks ?? [] };
 }
 
-/**
- * Install a bundled blueprint app in place (#434): registration +
- * consent grants, no code copy, no git. Keeps the blueprint's own id.
- * Idempotent — installing an already-installed app returns its existing
- * registration (`alreadyInstalled: true`). Unlike {@link cloneTemplate}
- * (still used for automations, which fork into the code store), this app
- * serves straight from the shipped package and upgrades with every release.
- */
 export async function installTemplate(input: {
   templateId: string;
-  /** The vault the app is installed into (#599). Omitted falls back to
-   *  the internal default — the only spelling there is (#708); the remaining
-   *  caller is the gateway's own "app follows the member into an audience
-   *  vault" seam. */
+  /** Omitted falls back to the internal default — the only spelling (#708). */
   scopeId?: string;
 }): Promise<{
   app: {
@@ -192,14 +150,8 @@ export async function installTemplate(input: {
   return { app: out.app, alreadyInstalled: out.alreadyInstalled ?? false };
 }
 
-/**
- * Rename an installed bundled app (#434) — sets its per-vault label
- * override in the registry, with NO editing session. The gateway's meta route
- * short-circuits bundled ids to the label override (their code is read-only,
- * so nothing is staged/published); routing this through {@link updateAppMeta}
- * would open a `desktop-<id>` session worktree that then sits empty. An empty
- * `name` clears the override, falling back to the manifest name.
- */
+/** NO editing session (#434): the meta route short-circuits bundled ids to a
+ *  label override, and `updateAppMeta` would leave an empty worktree behind. */
 export async function renameInstalledApp(input: {
   id: string;
   name: string;
@@ -214,7 +166,6 @@ export async function renameInstalledApp(input: {
   return { ok: true };
 }
 
-/** Patch the app's `app.json` name/description in its draft, then publish. */
 export async function updateAppMeta(input: {
   id: string;
   name?: string;
@@ -238,16 +189,12 @@ export async function updateAppMeta(input: {
   return { ok: true };
 }
 
-/** Delete an app from `main`, then close its editing session. */
 export async function deleteApp(input: { id: string }): Promise<{ ok: true }> {
   const { baseUrl, token } = await auth();
   const res = await doFetch(baseUrl, `/centraid/_apps/${enc(input.id)}`, {
     method: "DELETE",
     headers: authHeaders(token),
   });
-  // Surface a gateway rejection (401/404/409/500) instead of reporting a
-  // phantom success — and only drop the draft session once the delete is
-  // confirmed, so a failed delete leaves the editing session intact.
   await readJson(res, "delete app");
   await dropAppSession(input.id);
   return { ok: true };

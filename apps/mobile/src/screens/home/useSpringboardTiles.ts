@@ -1,29 +1,13 @@
 // Per-app data plumbing for the Home springboard (#708 A).
 //
-// Home is not an app and has no vault grant of its own, so every read here goes
-// out under the OWNING app's id — `useReplicaQuery("photos", …)` resolves the
-// Photos shape, `("tasks", …)` the Tasks shape. That is deliberate: a tile can
-// only ever show what the app it launches is already allowed to read offline,
-// and revoking an app's grant blanks its tile rather than leaking through Home.
-//
-// Read shape and cost, on purpose:
-//
-//  - Every read is bounded by an explicit `limit`, and the tile renders `N+`
-//    when a count saturates it. An unbounded read silently defaults to 1000
-//    rows (packages/client/src/replica/query.ts); a visible cap beats a hidden
-//    one.
-//  - `orderBy` is used only where the tile means "the newest": the replica
-//    evaluator sorts before it slices, so ordered+limited is the only way to get
-//    a truthful "most recent N" out of a large table. It costs the pushdown page
-//    (apps/mobile/src/lib/replica/replica-read-pushdown.ts explains why an
-//    ordered read cannot be truncated per scope), so it is paid exactly where
-//    the answer would otherwise be an arbitrary subset.
-//  - Locker issues NO read. Its items are sealed columns behind an online,
-//    session-gated RPC (apps/locker/LockerHome.tsx), so the honest tile is the
-//    state chip the brief asks for, with the count withheld.
-//
-// Every `request` is memoized: `useReplicaQuery` keeps it in the read effect's
-// dependency list, so an inline object literal re-reads on every render.
+// Home has no grant of its own: every read goes out under the OWNING app's id,
+// so a tile shows only what its app may already read offline. Every read
+// carries an explicit `limit` — unbounded reads silently default to 1000 rows
+// (packages/client/src/replica/query.ts) — and `orderBy` only where the tile
+// means "the newest", since the evaluator sorts before it slices and the
+// ordered read costs the pushdown page. Locker issues NO read: its items sit
+// behind an online, session-gated RPC. Memoize every `request` — an inline
+// literal re-reads each render.
 
 import { useFocusEffect } from "@react-navigation/native";
 import { useCallback, useMemo, useState } from "react";
@@ -51,7 +35,6 @@ import {
 } from "./tile-model";
 import type { AgendaOccurrence, TileData, TileStatus } from "./tile-model";
 
-/** Row ceilings. High enough to be the true count in any plausible vault. */
 const LIMITS = {
   documents: 300,
   events: 500,
@@ -63,18 +46,12 @@ const LIMITS = {
   tasks: 500,
 } as const;
 
-/** How far ahead the Agenda tile expands recurrences, and what it counts. */
 const AGENDA_HORIZON_DAYS = 30;
 const AGENDA_COUNT_DAYS = 7;
 
-/** Only the newest handful of rows ever reaches a tile body. */
 const BODY_LOOKUP_ROWS = 12;
 
-/**
- * A bounded `in` lookup, with the sentinel form for "nothing to look up yet".
- * Bounded on purpose: an unbounded second read would blow past the 1000-row
- * default at photo scale and return none of the ids that matter.
- */
+/** Bounded: an unbounded second read blows past the 1000-row default. */
 function idFilter(
   entity: string,
   column: string,
@@ -89,13 +66,8 @@ function idFilter(
       };
 }
 
-/**
- * One tile's data-availability answer.
- *
- * `unavailable` (no session, no grant) and a failed read both stay `unknown`:
- * neither is evidence that the app is empty, and the first-run treatment is a
- * claim about the vault that only a settled, successful, empty read can earn.
- */
+/** `unavailable` and a failed read stay `unknown` — neither is evidence the
+ *  app is empty, and only a settled empty read may claim first-run. */
 function combineStatus(
   states: readonly ReplicaQueryState[],
   hasContent: boolean
@@ -115,7 +87,6 @@ function capped(rows: readonly unknown[], limit: number): boolean {
   return rows.length >= limit;
 }
 
-/** Body ids worth a second lookup. */
 function topIds(rows: readonly ReplicaRow[], column: string): string[] {
   const ids = new Set<string>();
   for (const row of rows.slice(0, BODY_LOOKUP_ROWS)) {
@@ -127,27 +98,14 @@ function topIds(rows: readonly ReplicaRow[], column: string): string[] {
 
 const str = (value: unknown): string => (value == null ? "" : String(value));
 
-/**
- * Every tile's data, keyed by app id.
- *
- * Hooks are unconditional and flat by necessity, so this reads as one long
- * declaration list; the selection logic it feeds lives in ./tile-model, which
- * is where the behaviour is tested.
- */
+/** The selection logic lives in ./tile-model, where it is tested. */
 export function useSpringboardTiles(): Map<string, TileData> {
   const { gatewayBase, online } = useReplica();
-  // `gatewayBase` is also the address used to queue writes and can remain
-  // cached while the tunnel is down. It is not proof that a media request can
-  // succeed. Home must not turn that stale address into four failed Image
-  // loads; remote-only photos are explicitly waiting for the gateway until
-  // reachability says the bytes can be fetched. Pinned on-device thumbnails
-  // still win because `selectPhotoMosaic` checks them independently.
+  // `gatewayBase` stays cached while the tunnel is down; it is not proof the
+  // bytes can be fetched, so remote-only photos wait rather than fail to load.
   const photoGatewayBase = online ? gatewayBase : undefined;
-  // One clock reading per visit, not per render: reading the clock in a render
-  // body is impure (the assembly memo below would never be stable), and a
-  // minute-by-minute ticker would re-render the whole springboard while nobody
-  // is looking at it. Focus is when the answer is actually read, so focus is
-  // when the clock moves — the same moment Home re-loads its registry.
+  // One clock reading per visit: reading the clock in a render body is impure,
+  // and a ticker would re-render the springboard while nobody is looking.
   const [now, setNow] = useState(new Date());
   useFocusEffect(
     useCallback(() => {
@@ -155,7 +113,6 @@ export function useSpringboardTiles(): Map<string, TileData> {
     }, [])
   );
 
-  // --- photos: newest assets, thumbnails bleeding to the tile edge ----------
   const photos = useReplicaQuery(
     "photos",
     useMemo(
@@ -169,7 +126,6 @@ export function useSpringboardTiles(): Map<string, TileData> {
     )
   );
 
-  // --- docs: newest document's title + prose --------------------------------
   const documents = useReplicaQuery(
     "docs",
     useMemo(
@@ -194,7 +150,6 @@ export function useSpringboardTiles(): Map<string, TileData> {
     )
   );
 
-  // --- notes: newest note's title + opening line -----------------------------
   const notes = useReplicaQuery(
     "notes",
     useMemo(
@@ -219,7 +174,6 @@ export function useSpringboardTiles(): Map<string, TileData> {
     )
   );
 
-  // --- agenda: next occurrence + the after-line -------------------------------
   const events = useReplicaQuery(
     "agenda",
     useMemo(
@@ -238,7 +192,6 @@ export function useSpringboardTiles(): Map<string, TileData> {
     )
   );
 
-  // --- people: overlapping face circles ---------------------------------------
   const profiles = useReplicaQuery(
     "people",
     useMemo(
@@ -258,7 +211,6 @@ export function useSpringboardTiles(): Map<string, TileData> {
     useMemo(() => idFilter("core.party", "party_id", partyIds), [partyIds])
   );
 
-  // --- tasks: checkbox rows, exactly one struck through ------------------------
   const tasks = useReplicaQuery(
     "tasks",
     useMemo(
@@ -270,7 +222,6 @@ export function useSpringboardTiles(): Map<string, TileData> {
     )
   );
 
-  // --- tally: one large figure in the numeric register --------------------------
   const monthStart = monthStartDate(now);
   const expenses = useReplicaQuery(
     "tally",
@@ -365,9 +316,6 @@ export function useSpringboardTiles(): Map<string, TileData> {
       count: peopleTotal,
       countCapped: capped(profiles.rows, LIMITS.profiles),
       countLabel: "people",
-      // The brief's People body is circles PLUS one line; the line is the
-      // directory the circles are a sample of, from the same real total the
-      // header counts — never a fabricated one.
       body: {
         kind: "people",
         faces,
@@ -401,9 +349,8 @@ export function useSpringboardTiles(): Map<string, TileData> {
       },
     });
 
-    // Locker: no read, by design. `count` stays undefined so the header shows
-    // the withheld glyph rather than a zero it cannot stand behind, and the
-    // status is `unknown` so a sealed Locker never votes the vault empty.
+    // No read, by design: `count` stays undefined so the header shows the
+    // withheld glyph, and `unknown` keeps Locker from voting the vault empty.
     tiles.set("locker", {
       appId: "locker",
       status: "unknown",
@@ -469,18 +416,8 @@ function expandOccurrences(
   });
 }
 
-/**
- * The Agenda body's "when", in the numeric register: `Wed 11 · 08:15`.
- *
- * Weekday AND day-of-month, because a bare weekday is ambiguous the moment an
- * event is more than a week out — "Wed" could be this Wednesday or the next
- * one, and a next-event line that cannot be trusted about WHICH day is not a
- * next-event line. Today drops the date half entirely and reads as a clock
- * time, since "today" is the one day that needs no naming.
- *
- * The middle dot separates two facts of different kinds (which day, what time)
- * and is what stops the string reading as one long number.
- */
+/** `Wed 11 · 08:15`. Weekday AND day-of-month, because a bare weekday is
+ *  ambiguous past a week out; today drops the date half. */
 function formatEventTime(iso: string): string {
   const when = new Date(iso);
   if (Number.isNaN(when.getTime())) return "";

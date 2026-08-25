@@ -1,10 +1,6 @@
 import type { ReactNode } from "react";
 
-// The lightbox's render orchestrator — same shape as toolbar.jsx/picker.tsx:
-// a small private slice of state (which asset id is open, the render-seq
-// PanelBody keys off) plus its one root. It lives outside app.tsx so that file
-// does not grow unbounded as regions (search/slideshow/duplicates) land beside
-// it; the pure view is components/Lightbox.tsx.
+// Orchestrator only; the pure view is components/Lightbox.tsx.
 import { assetKey } from "./asset-key.ts";
 import { LightboxShell } from "./components/Lightbox.tsx";
 import { $ } from "./dom.ts";
@@ -12,9 +8,6 @@ import type { Album, Asset, Place } from "./types.ts";
 
 type Root = { render: (node: ReactNode) => void };
 
-/** What a key pressed over an OPEN lightbox means. Pure, and exported, because
- *  the interesting half of it is a refusal: while the editor is up, ←/→ mean
- *  NOTHING. See `viewerKeyAction`. */
 export type ViewerKeyAction =
   | "cancel-edit"
   | "close"
@@ -22,19 +15,8 @@ export type ViewerKeyAction =
   | "step-next"
   | null;
 
-/**
- * THE EDITOR IS A DECISION SURFACE, AND A DECISION SURFACE DOES NOT LOSE THE
- * DECISION TO AN ADJACENT KEYSTROKE (§7.4, proto 4627: nothing is written
- * until Save).
- *
- * The viewer beneath the editor steps with ←/→, and the editor is mounted per
- * asset (`key={asset.asset_id}` in Lightbox.tsx) — so a step while an edit is
- * in progress silently throws away the member's crop and rotation, with no
- * prompt and nothing written anywhere. Hence: while editing, the arrows mean
- * nothing at all, and Escape CANCELS THE EDIT rather than closing the whole
- * viewer. Escape from the viewer itself still closes it — one Escape, one
- * layer, innermost first.
- */
+/** The editor is per-asset and writes nothing until Save, so a mid-edit step
+ *  discards the crop: arrows mean nothing, Escape cancels the EDIT (§7.4). */
 export function viewerKeyAction(
   key: string,
   editing: boolean
@@ -69,8 +51,7 @@ export function createLightbox({
     ) => void;
   };
 }) {
-  // The COMPOSITE key of the open row (asset-key.ts), non-null while open. A
-  // bare `asset_id` would be ambiguous across scopes (#599).
+  // COMPOSITE (asset-key.ts): a bare `asset_id` is ambiguous per scope (#599).
   let openKey: string | null = null;
   let renderSeq = 0;
   let priorFocus: HTMLElement | null = null;
@@ -104,15 +85,7 @@ export function createLightbox({
     renderLightbox();
   }
 
-  // Closes the lightbox (same full-screen real estate, only one at a time)
-  // and hands the slideshow the CURRENT visibleAssets() — the same
-  // list/order the grid and lightbox were just showing (search/album/
-  // favorites scoping included).
-  //
-  // THE VIEWER KEEPS THE PHOTOGRAPH YOU STOPPED ON (§7.3). The slideshow's
-  // status line promises exactly that, so the run reports where it stopped and
-  // the viewer reopens there — not back at the photograph the run began on,
-  // and not closed.
+  // The CURRENT scoped list; the viewer reopens where it stopped (§7.3).
   function startSlideshow(id: string | null) {
     const list = visibleAssets();
     const wasOpen = openKey != null;
@@ -157,17 +130,8 @@ export function createLightbox({
     });
   }
 
-  // A plain native listener directly on `#lightbox` (which doubles as this
-  // region's React root container) — `e.stopPropagation()` inside a nested
-  // component's onClick handler cannot save us here: React's own delegated
-  // listener lives on this SAME node and is registered *after* this one (at
-  // `createRoot()` time, in app.tsx's Boot), so a raw `addEventListener` here
-  // would otherwise always fire first and close the box before React's
-  // synthetic dispatch (and its stopPropagation calls) ever run — breaking
-  // every click inside the lightbox (nav arrows, favorite, caption, chips…),
-  // not just genuine backdrop clicks. Gating on `e.target === e.currentTarget`
-  // sidesteps the race entirely: only a click that lands on the backdrop
-  // itself (never on a descendant) closes it, regardless of listener order.
+  // React's delegated listener sits on this SAME node and registers AFTER it,
+  // so nested `stopPropagation` cannot help — only this gate can.
   $("lightbox").addEventListener("click", (e) => {
     if (e.target === e.currentTarget) closeLightbox();
   });
@@ -194,12 +158,7 @@ export function createLightbox({
     }
   });
 
-  // IS THE EDITOR UP? Asked of the DOM, not of a mirrored flag: `editing` is
-  // LightboxShell's own state (components/Lightbox.tsx), and a second copy of
-  // it here is a second thing that can be wrong. The editor marks its own root
-  // (`data-editor="open"`, Editor.tsx) exactly so this question has one honest
-  // answer, the same way the Tab trap below reads the live subtree rather than
-  // a remembered focus list.
+  // Ask the DOM (`data-editor="open"`), never a mirrored `editing` flag.
   const editorEl = (): HTMLElement | null =>
     $("lightbox").querySelector<HTMLElement>('[data-editor="open"]');
 
@@ -209,20 +168,13 @@ export function createLightbox({
     step,
     startSlideshow,
     isEditing: () => editorEl() !== null,
-    /**
-     * Cancel an edit in progress, returning to the viewer with the photograph
-     * still open. Fired through the editor's OWN Cancel button rather than a
-     * callback threaded down: the button is the one place that knows what
-     * cancelling means (it is `onCancel` — Lightbox.tsx's `setEditing(false)`),
-     * and going through it means the key and the click can never diverge.
-     * Answers whether it did anything, so a caller can fall through.
-     */
+    /** Through the editor's OWN Cancel button, so key and click cannot
+     *  diverge. Answers whether it acted. */
     cancelEdit: (): boolean => {
       const button = editorEl()?.querySelector<HTMLButtonElement>(
         "[data-editor-cancel]"
       );
-      // A busy editor (a Save in flight) has a disabled Cancel — nothing is
-      // cancelled, and nothing else happens either: the keystroke is spent.
+      // A Save in flight disables Cancel.
       if (!button || button.disabled) return false;
       button.click();
       return true;

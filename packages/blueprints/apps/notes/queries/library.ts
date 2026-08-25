@@ -1,21 +1,10 @@
 /**
- * The notes projection as a bounded recent window: the newest notes by
- * updated_at (caller-sized, default 200) plus every pinned note — never the
- * whole knowledge.note table, because vault data has no upper bound (issue
- * #262). Placements, attachments and canonical bodies are joined only for
- * the windowed rows; anything older is reachable through the FTS search
- * query or by growing the window (`truncated` tells the UI to offer that).
- * Writes go through the knowledge domain's typed commands via this app's
- * actions.
- *
- * People-journal entries are knowledge notes too, and they are EXCLUDED here
- * (#834 R-journal): the Journal place — a filter over the journal scheme — is
- * their one home in Notes, so they never reach the library, the trash shelf,
- * or the tag chips derived from it. Opening one by id still works (`note`,
- * `history`). See `../../_shared/journal-scheme.ts`.
- *
- * A consent denial is a first-class outcome, not an error: the UI renders
- * it as the "ask the owner for access" state, receipt id included.
+ * The notes projection as a BOUNDED recent window (#262): newest by
+ * updated_at plus every pinned note, never the whole table; `truncated` tells
+ * the UI to offer a wider one. People-journal entries are EXCLUDED (#834
+ * R-journal) — they must never reach the library, the trash shelf, or the tag
+ * chips derived from it, though opening one by id still works. A consent
+ * denial is a first-class outcome, not an error.
  */
 
 import { readJournalNoteIds } from "../../_shared/journal-scheme.ts";
@@ -89,10 +78,7 @@ interface CardRow extends Record<string, unknown> {
   id: string;
 }
 
-/**
- * Decode a note body from a content item's content_uri. Canonical bodies
- * live inline as data: URIs; anything else is opaque to this projection.
- */
+/** Canonical bodies are inline data: URIs; anything else is opaque here. */
 function decodeBody(uri: unknown): string {
   if (typeof uri !== "string" || !uri.startsWith("data:"))
     return "(external content)";
@@ -112,13 +98,8 @@ function decodeBody(uri: unknown): string {
   }
 }
 
-// The list only needs a short preview + the checklist tally, never the whole
-// body — shipping every note's full body on every doorbell was the cost this
-// projection existed to pay (#404). The editor pulls the canonical body
-// on open via the `note` query. `previewOf` mirrors format.ts's previewText
-// (flatten the first blocks, glyph the checklist/bullets) capped to ~200
-// chars; `checkOf` mirrors checkStats via the same checklist regex. Both are
-// inlined here because query handlers are standalone modules.
+// A short preview + checklist tally, never the whole body (#404). Mirrors
+// format.ts's previewText/checkStats — inlined, as handlers are standalone.
 const CHECK_RE = /^\s*[-*] \[(?<mark> |x|X)\]\s?(?<text>.*)$/u;
 
 function previewOf(body: unknown): string {
@@ -163,12 +144,7 @@ function checkOf(body: unknown): { total: number; done: number } {
   return { total, done };
 }
 
-/**
- * Group the owner's attachments for one subject type into a map keyed by
- * target_id, each value a UI-ready list joined to its content item. This is
- * the shared attachment-projection shape every app copies — polymorphic edges
- * in core.attachment, bytes in core.content_item.
- */
+/** The shared attachment-projection shape, keyed by target_id. */
 function attachmentsBySubject(
   subjectType: string,
   attachments: AttachmentRow[],
@@ -207,9 +183,7 @@ export default async function libraryHandler({ input, ctx }: HandlerArgs) {
   const purpose = "dpv:ServiceProvision";
   const window = Math.min(Math.max(Number(input?.limit) || 200, 20), 2000);
   try {
-    // Pinned notes ride beside the window, not inside it — a pin is the
-    // owner saying "always on top", which must survive the note aging out
-    // of the recent slice.
+    // Pinned notes ride beside the window: a pin survives the note aging out.
     const [recent, pinnedNotes, trashedNotes, notebooks, journalNoteIds] =
       await Promise.all([
         ctx.vault.read({
@@ -239,8 +213,7 @@ export default async function libraryHandler({ input, ctx }: HandlerArgs) {
         }),
         // Notebooks are collections (#274) — the one curation mechanism.
         ctx.vault.read({ entity: "core.collection", purpose }),
-        // The journal marker set, resolved by its own bounded reads. It rides
-        // this Promise.all so the exclusion costs no extra round trip.
+        // Rides this Promise.all so the exclusion costs no extra round trip.
         readJournalNoteIds(ctx.vault, purpose),
       ]);
     const byId = new Map<string, NoteRow>();
@@ -251,8 +224,7 @@ export default async function libraryHandler({ input, ctx }: HandlerArgs) {
     ]) {
       byId.set(n.note_id, n);
     }
-    // Keep the app's notebook row shape over collection rows: a collection
-    // may also hold photos and documents; this surface renders its notes.
+    // A collection may also hold photos and documents; this surface renders notes.
     const books = ((notebooks.rows ?? []) as unknown as CollectionRow[])
       .map((c) => ({
         notebook_id: c.collection_id,
@@ -260,10 +232,7 @@ export default async function libraryHandler({ input, ctx }: HandlerArgs) {
         sort_order: c.sort_order,
       }))
       .toSorted((a, b) => (a.sort_order ?? 0) - (b.sort_order ?? 0));
-    // Journal entries leave BEFORE anything is derived from the rows: their
-    // ids never reach the placement/attachment/link/tag joins, so no
-    // journal-only concept can surface as a library filter chip and no
-    // journal body is ever previewed or check-tallied here (#834 R-journal).
+    // Journal ids must never reach the joins below (#834 R-journal).
     const windowed = [...byId.values()].filter(
       (note) => !journalNoteIds.has(note.note_id)
     );
@@ -279,9 +248,7 @@ export default async function libraryHandler({ input, ctx }: HandlerArgs) {
     }
     const noteIds = windowed.map((n) => n.note_id);
 
-    // Joins are `in`-bounded by the window — placements, attachment edges,
-    // live outbound links (#272), then one content pull covering both
-    // bodies and attachment bytes.
+    // Joins stay `in`-bounded by the window (#272).
     const [placements, attachments, links, backlinks, tags] = await Promise.all(
       [
         ctx.vault.read({
@@ -328,11 +295,8 @@ export default async function libraryHandler({ input, ctx }: HandlerArgs) {
         }),
       ]
     );
-    // Re-narrowed to the surviving window in memory. The read is already
-    // `in`-bounded by `noteIds`, but the tag→concept→chip chain is exactly
-    // where a journal-only concept would leak back in as a filter chip, so
-    // the exclusion is enforced HERE rather than trusted upstream (#834
-    // R-journal).
+    // Re-narrowed in memory: tag→concept→chip is where a journal-only concept
+    // would leak back in, so the exclusion is enforced here, not trusted (#834).
     const survivingIds = new Set(noteIds);
     const tagRows = ((tags.rows ?? []) as unknown as TagRow[]).filter((t) =>
       survivingIds.has(t.target_id)
@@ -346,9 +310,7 @@ export default async function libraryHandler({ input, ctx }: HandlerArgs) {
             purpose,
           })
         : { rows: [] };
-    // Same re-narrowing, one link further down the chain: `tags` is derived
-    // from these rows, so a concept no surviving note carries must not reach
-    // the chip list even if the read answered wider than it was asked.
+    // Same re-narrowing one link on: a read may answer wider than it was asked.
     const wantedConcepts = new Set(conceptIds);
     const conceptRows = (
       (concepts.rows ?? []) as unknown as ConceptRow[]
@@ -373,9 +335,7 @@ export default async function libraryHandler({ input, ctx }: HandlerArgs) {
       .map(([concept_id, label]) => ({ concept_id, label }))
       .toSorted((a, b) => a.label.localeCompare(b.label));
 
-    // Cross-domain reference cards: the resolver renders what the owner
-    // linked in (resolvable-if-linked) — this app holds no media/finance/…
-    // read scopes, and needs none to show the far end of its own links.
+    // Resolvable-if-linked: no media/finance read scopes are needed here.
     const linkRows = (links.rows ?? []) as unknown as LinkRow[];
     const backlinkRows = (backlinks.rows ?? []) as unknown as LinkRow[];
     const uniqueRefs = [
@@ -389,9 +349,7 @@ export default async function libraryHandler({ input, ctx }: HandlerArgs) {
         ].map((ref) => [`${ref.type}/${ref.id}`, ref])
       ).values(),
     ];
-    // Standoff anchors (#282): the inline locator a link may carry.
-    // Resolution to text spans is presentation — the app/kit does it; this
-    // projection only ships each live link's selector alongside its card.
+    // Standoff anchors (#282): ship the selector; resolving it is presentation.
     const [resolved, anchors] = await Promise.all([
       uniqueRefs.length > 0
         ? ctx.vault.resolve({ refs: uniqueRefs, purpose })
@@ -525,13 +483,8 @@ export default async function libraryHandler({ input, ctx }: HandlerArgs) {
           String(b.updated_at).localeCompare(String(a.updated_at))
       );
 
-    // A full window means there may be older notes beyond it — the UI
-    // offers "Show more" (a re-read with a larger window) and search.
-    // Measured PRE-exclusion, on purpose: the window is what the vault
-    // returned, so a slice made entirely of journal entries still reports
-    // "there is more behind this" rather than claiming the library ends here
-    // (#834 R-journal). The corollary is honest and worth stating — `notes`
-    // may hold fewer than `window` rows while `truncated` is true.
+    // Measured PRE-exclusion on purpose (#834): the window is what the vault
+    // returned, so `notes` may hold fewer rows than `window` while this is true.
     const truncated =
       ((recent.rows ?? []) as unknown as NoteRow[]).length >= window;
     return {

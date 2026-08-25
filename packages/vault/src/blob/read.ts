@@ -1,13 +1,6 @@
-// Blob egress resolution (#296). Deduped content is polymorphically
-// shared — the same bytes can back a note attachment, a photo and an invoice
-// — so byte-read authorization is DERIVED, never granted: content X serves
-// iff some edge in the reference registry links X to a subject row, i.e. the
-// owner put these bytes somewhere in their model (#272's
-// both-endpoints rule extended to content items). Trashed edges still count
-// (the Photos/Docs trash views render what they hold until the purge sweep
-// actually reclaims the bytes); a fully unreferenced-but-unpurged item is in
-// its grace window and still serves. What never serves: a sha nothing
-// claims, and variants of an unservable parent.
+// Blob egress resolution (#296). Byte-read authorization is DERIVED, never
+// granted: content serves iff some edge links it to a subject row, and trashed
+// edges still count (trash renders until purge).
 
 import type { DatabaseSync } from "node:sqlite";
 
@@ -19,20 +12,11 @@ import {
 import type { BinaryDerivativeVariant } from "./derivatives.js";
 import { shaOfBlobUri } from "./store.js";
 
-// Mirrors commands/links.ts RELATIONS_SCHEME_URI (imported by literal to
-// keep blob/ free of command-layer imports; the scheme URI is contract).
+// A literal, not an import: blob/ stays free of command-layer imports.
 const RELATIONS_SCHEME_URI = "urn:duaility:relations";
 
-/**
- * Byte-renting edges, the serve-side twin of media.ts CONTENT_REFERENCES —
- * deliberately WITHOUT the live-rows-only clamp (trash must render). A
- * document's CURRENT content is a direct edge (core_document.current_content
- * _id); a SUPERSEDED revision serves through the `revises` chain instead —
- * version history must render just as readily as the current page (issue
- * #352). Both fold in regardless of the document's own trash state, matching
- * the old folder-tag behaviour that survived trash (the tag was never
- * removed) and never fully removed either (trash renders until purge).
- */
+/** The serve-side twin of media.ts CONTENT_REFERENCES, without its
+ *  live-rows-only clamp: trash must render (#352). */
 const SERVE_REFERENCES: string[] = [
   "SELECT 1 FROM core_attachment WHERE content_id = i.content_id",
   "SELECT 1 FROM core_party WHERE avatar_content_id = i.content_id",
@@ -62,22 +46,16 @@ export interface ServableBlob {
   mediaType: string;
   byteSize: number;
   title: string | null;
-  /** Which variant resolved — `original` when no variant was asked. */
   variant: "original" | BinaryDerivativeVariant;
 }
 
 export type BlobResolveOutcome =
   | { status: "ok"; blob: ServableBlob }
   | { status: "not-found" }
-  | { status: "not-blob" } // inline text/* content has no byte endpoint
-  | { status: "unreferenced" } // exists but nothing in the model claims it
-  | { status: "no-variant" }; // parent serves, asked variant doesn't exist
+  | { status: "not-blob" } // inline text/* has no byte endpoint
+  | { status: "unreferenced" } // exists, but nothing claims it
+  | { status: "no-variant" }; // parent serves, the variant does not
 
-/**
- * Resolve one content id (and optional variant) to servable bytes metadata.
- * The reachability derivation runs here so every transport (HTTP route,
- * future tunnel surface) inherits the same rule.
- */
 export function resolveServableBlob(
   vault: DatabaseSync,
   contentId: string,
@@ -145,34 +123,18 @@ export function resolveServableBlob(
   };
 }
 
-/** One derivative rung resolved for a content id — the sha + how to serve it. */
 export interface DerivativeRef {
   sha256: string;
   mediaType: string;
   byteSize: number;
 }
 
-/**
- * Chunk size for the batched derivative resolve (#405). SQLite's
- * default `SQLITE_MAX_VARIABLE_NUMBER` is comfortably above this, but a
- * bounded IN list keeps the prepared statement small and the plan stable
- * across arbitrarily large id sets.
- */
+/** A bounded IN list keeps the plan stable across large id sets. */
 const DERIVATIVE_IN_CHUNK = 500;
 
-/**
- * Resolve one binary rung (`thumb` or `preview`) for MANY content ids in a
- * single pass (#405 §2: "tinies for these N content ids in one pass").
- * The browse grid (and #405's later previews-first restore wave) paints N
- * tiles at once — asking `resolveServableBlob` per id would be N statements
- * and N reachability derivations; this is one indexed sweep over
- * `core_content_derivative` (chunked at `DERIVATIVE_IN_CHUNK`). Ids with no
- * such rung are simply absent from the map (the caller renders a placeholder,
- * the #404 contract). Deliberately does NOT re-run the serve-reachability
- * check — a derivative is only ever reachable through its parent, so the
- * caller filters ids to reachable ones before batching (the grid already
- * queries only reachable assets).
- */
+/** One rung for MANY ids in one indexed sweep (#405); ids with no such rung
+ *  are absent. Does NOT re-run serve-reachability, so CALLERS must filter ids
+ *  to reachable ones before batching. */
 export function resolveDerivativeShas(
   vault: DatabaseSync,
   contentIds: readonly string[],
@@ -207,11 +169,6 @@ export function resolveDerivativeShas(
   return out;
 }
 
-/**
- * Every sha the model still claims — original blobs, binary variants, staged
- * bytes (their TTL is their claim). This is the live set reconciliation
- * diffs the remote tier against, and what a purge sweep must NOT delete.
- */
 export function liveBlobShas(vault: DatabaseSync): Set<string> {
   const live = new Set<string>();
   const uris = vault
@@ -240,18 +197,14 @@ export function liveBlobShas(vault: DatabaseSync): Set<string> {
 }
 
 interface LiveShaMemo {
-  /** The vault's write position when the set was computed. */
   writeKey: string;
   shas: ReadonlySet<string>;
 }
 
 const liveShaMemo = new WeakMap<DatabaseSync, LiveShaMemo>();
 
-/**
- * A write position for the whole file: `data_version` moves when ANOTHER
- * connection commits, `total_changes` when this one writes. Together they
- * cannot miss a mutation, and both are O(1) reads.
- */
+/** `data_version` moves on another connection's commit, `total_changes` on
+ *  this one's; together they cannot miss a mutation. */
 function vaultWriteKey(vault: DatabaseSync): string {
   const dataVersion = (
     vault.prepare("PRAGMA data_version").get() as { data_version: number }
@@ -262,21 +215,8 @@ function vaultWriteKey(vault: DatabaseSync): string {
   return `${dataVersion}:${totalChanges}`;
 }
 
-/**
- * `liveBlobShas`, computed once per write (#659).
- *
- * The live set is three full scans of the content tables, and the hourly CAS
- * mark/sweep, the backup reconciliation tick, and the remote sweep each
- * recomputed it independently — the same answer, three times an hour, on a
- * vault where nothing had changed. This memo derives it once per write
- * position and hands the same set to every caller in between.
- *
- * The returned set is READ-ONLY on purpose: it is shared. A caller that needs
- * to union extra roots (archived segments, retained snapshots) checks the
- * other sets separately rather than mutating this one — see
- * `sweepLocalOrphans`. Callers that genuinely want their own mutable copy
- * keep using `liveBlobShas`.
- */
+/** Computed once per write position (#659). The set is READ-ONLY because it is
+ *  shared — for a mutable copy, call `liveBlobShas`. */
 export function liveBlobShasCached(vault: DatabaseSync): ReadonlySet<string> {
   const writeKey = vaultWriteKey(vault);
   const memo = liveShaMemo.get(vault);

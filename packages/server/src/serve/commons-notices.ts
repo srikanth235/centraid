@@ -1,16 +1,7 @@
 /**
- * The member-facing cards for the Commons plane (#750).
- *
- * Two conditions the seat already holds, given a surface here: a steward whose
- * device has been silent for a week (recorded in
- * `share_commons_steward_contact`, derived by `commons-observability.ts`), and
- * a commons that grew past the size the member consented to when they
- * accepted the invitation.
- *
- * They land on the ordinary notices store (#647) — the same durable
- * `(kind, sourceRef)` card the inbox renders — rather than a bespoke Commons
- * panel, so an absent steward reads like every other thing the vault needs
- * the owner to know about, and the recovery ceremony is one deep link away.
+ * The member-facing cards for the Commons plane (#750). They land on the
+ * ORDINARY notices store (#647), never a bespoke Commons panel, so they read
+ * like everything else the owner needs to know.
  */
 
 import type { VaultDb } from "@centraid/vault";
@@ -30,26 +21,16 @@ export const COMMONS_ABSENCE_NOTICE_KIND = "commons-steward";
 export const COMMONS_GROWTH_NOTICE_KIND = "commons-size";
 export const COMMONS_IDENTITY_NOTICE_KIND = "commons-identity";
 
-/**
- * Where a card sends the owner: the Household page, whose People & circles
- * panel renders steward absence and carries the recovery ceremony's button
- * (`packages/client/src/react/screens/SharingCard.tsx`, and the mobile
- * Sharing screen). The shell routes notices by their `kind`/detail rather than
- * by this string, so it must name a place that actually exists — a link to a
- * route no client has is worse than no link at all.
- */
+/** The Household page carries the recovery button (`SharingCard.tsx`). It must
+ *  name a route that exists — a link no client has is worse than none. */
 const COMMONS_DEEP_LINK = "/household";
 
 function days(ms: number): number {
   return Math.max(1, Math.round(ms / (24 * 60 * 60 * 1000)));
 }
 
-/**
- * The card an ABSENT (or fault-parked) steward raises. `absent` means the
- * seat proved its own link was working while the steward stayed silent past
- * `COMMONS_STEWARD_ABSENT_AFTER_MS` — the evidence, not a guess, which is why
- * this card is allowed to name recovery as the next step.
- */
+/** `absent` means the seat PROVED its own link worked while the steward stayed
+ *  silent — evidence, not a guess, which is why this card may name recovery. */
 export function commonsAbsenceNotice(input: {
   grantId: string;
   containerType: string;
@@ -79,8 +60,7 @@ export function commonsAbsenceNotice(input: {
         ? {}
         : { silentForMs: input.silentForMs }),
       ...(input.stewardVaultId ? { stewardVaultId: input.stewardVaultId } : {}),
-      // A parked seat must never be re-founded from state it could not
-      // verify, so only a real absence offers the ceremony.
+      // A parked seat must never be re-founded from unverified state.
       recoverable: input.presence === "absent",
     },
     // Losing a group's only steward is not background information.
@@ -88,9 +68,8 @@ export function commonsAbsenceNotice(input: {
   };
 }
 
-/** Re-raise only when the CONDITION changed, never on every sweep tick: the
- *  notice store clears `read_at` on every write, so an unchanged card would
- *  pop back up forever (the same rule the enrichment card follows). */
+/** Re-raise only when the CONDITION changed: the store clears `read_at` on
+ *  every write, so an unchanged card would pop back up forever. */
 export function shouldWriteCommonsAbsenceNotice(
   prior: Notice | undefined,
   presence: string
@@ -98,16 +77,8 @@ export function shouldWriteCommonsAbsenceNotice(
   return !prior || prior.detail["presence"] !== presence;
 }
 
-/**
- * The card a commons that OUTGREW its accepted size raises.
- *
- * A member consents to a byte size at acceptance; the grant may then grow to
- * `max_size_bytes` without anyone asking again. The invitation row keeps the
- * size that was accepted, so the growth is measurable — and this says it out
- * loud once, on the member's own seat, rather than letting the disk quietly
- * fill. It is information, not a refusal: the bytes are already here and the
- * member can leave the commons if they disagree.
- */
+/** A grant may grow to `max_size_bytes` without asking again; the invitation
+ *  row keeps the size that WAS accepted. Information, never a refusal. */
 export function commonsGrowthNotice(input: {
   grantId: string;
   containerLabel?: string;
@@ -137,11 +108,7 @@ interface AcceptedInvitation {
   current_size_bytes: number;
 }
 
-/**
- * Raise both cards for one mounted vault from evidence already on disk.
- * Called by the commons sweep, so it must never throw for a condition the
- * next tick can re-derive.
- */
+/** Never throws for a condition the sweep's next tick can re-derive. */
 export function raiseCommonsNotices(input: {
   db: VaultDb;
   vaultId: string;
@@ -163,8 +130,7 @@ export function raiseCommonsNotices(input: {
   for (const grant of observability.grants) {
     const presence = grant.steward.presence;
     if (presence !== "absent" && presence !== "parked") continue;
-    // A grant this seat already re-founded has a live successor; the dead
-    // steward behind it is history, not a call to action.
+    // A re-founded grant has a live successor; its dead steward is history.
     if (grant.supersededBy) continue;
     const prior = notices().getBySource(
       COMMONS_ABSENCE_NOTICE_KIND,
@@ -215,8 +181,7 @@ export function raiseCommonsNotices(input: {
       COMMONS_GROWTH_NOTICE_KIND,
       invitation.grant_id
     );
-    // One card per accepted size — the consent that was given never changes,
-    // so this says it once rather than on every byte added afterward.
+    // One card per accepted size: the consent given never changes.
     if (prior) continue;
     raised.push(
       notices().put({
@@ -235,16 +200,8 @@ export function raiseCommonsNotices(input: {
   return raised;
 }
 
-/**
- * The card the NAMED identity fault raises on the member's own seat.
- *
- * A member vault that was re-created (lost seed, restored-from-nothing) still
- * links and still signs — but the key this commons pinned when it joined is
- * gone, so every command it sends is refused. The refusal reason carries
- * `COMMONS_MEMBER_IDENTITY_CHANGED`, and this turns that into the one thing
- * the member can act on: ask the steward to invite this vault again. Rotation
- * is deferred by decision (docs/decisions.md), so re-invitation IS the cure.
- */
+/** A re-created member vault still links and signs, but the pinned key is
+ *  gone. Rotation is deferred by decision, so RE-INVITATION is the cure. */
 export function commonsIdentityChangedNotice(input: {
   grantId: string;
   reason: string;
@@ -266,14 +223,12 @@ export function commonsIdentityChangedNotice(input: {
   };
 }
 
-/** True when a steward refusal is the named identity fault rather than an
- *  ordinary "no" about the command itself. */
+/** The named identity fault, not an ordinary "no" about the command. */
 export function isCommonsIdentityRefusal(reason: string | undefined): boolean {
   return reason?.startsWith(COMMONS_MEMBER_IDENTITY_CHANGED) === true;
 }
 
-/** Raise the identity card for one refused intent. Never throws: a card must
- *  not turn a settled refusal into a sweep failure. */
+/** Never throws: a card must not turn a settled refusal into a sweep failure. */
 export function raiseCommonsIdentityNotice(input: {
   db: VaultDb;
   grantId: string;

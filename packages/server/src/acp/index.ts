@@ -1,28 +1,7 @@
 /*
- * @centraid/server/acp
- *
- * Engine layer for Centraid's harness surfaces. Every harness kind runs
- * through ONE integration path — the Agent Client Protocol (ACP): JSON-RPC
- * 2.0 over stdio, spoken natively by most kinds and via a first-party adapter
- * for claude-code and codex (#479). A single backend normalizes every
- * kind's stream into the same `TurnStreamEvent` shape, so downstream surfaces
- * don't need to know which harness ran a given turn.
- *
- * Where this package fits in the bigger picture:
- *
- *   - `runTurn` is the mode-agnostic engine primitive. The builder
- *     (the gateway's unified conversation runner) calls it directly with its own cwd /
- *     preamble / resume plumbing.
- *
- *   - `makeConversationRunner` is the data-chat driver (see ./conversation-driver.ts)
- *     that wraps `runTurn` into a `ConversationRunner` the gateway's
- *     `/_turn` route can inject. It's one of two `ConversationRunner`
- *     implementations in the repo — the other is the gateway's
- *     `makeUnifiedConversationRunner`.
- *
- * The package also ships a tiny `centraid` CLI bin (subcommand:
- * `preview snapshot`) that harness shell tools can invoke when they need
- * host-side capabilities.
+ * @centraid/server/acp — every harness kind runs through ONE path, ACP over
+ * stdio (#479), normalized to `TurnStreamEvent`. `runTurn` is the engine
+ * primitive; scheduling lives in `@centraid/server/automation`.
  */
 
 export {
@@ -30,14 +9,6 @@ export {
   type MakeConversationRunnerOptions,
 } from "./conversation-driver.js";
 
-// The shared per-turn chat spine (`makeConversationRunnerCore`) lives in
-// `@centraid/server/engine`, next to the `ConversationRunner` interface and the
-// harness-turn contract it wires together. `makeConversationRunner` (above) is
-// this backend's thin config over it, injecting `runTurn` as the `RunTurnFn`;
-// the gateway's `makeUnifiedConversationRunner` configures the same core.
-
-// Builder harness sessions still want the `centraid` CLI on PATH for the
-// `centraid preview snapshot` flow; expose the dist-dir resolver.
 export { defaultCentraidCliDir } from "./cli/centraid-cli-dir.js";
 
 export type { HarnessKind, HarnessPrefs } from "./types.js";
@@ -50,17 +21,12 @@ export {
   type ToolContext,
 } from "./runtime.js";
 
-// The backend-neutral vault-register tool specs (name / description /
-// inputSchema). Every harness backend declares its tools from these.
 export {
   VAULT_SQL_TOOL,
   VAULT_INVOKE_TOOL,
   VAULT_CONTENT_TOOL,
 } from "./vault-sql-tool.js";
 
-// The single turn-driving path (#479). codex and claude-code have no
-// bespoke backends — they are ACP entries whose adapter is launched by
-// `AcpAdapterSpec`, same as every other kind.
 export {
   runAcpTurn,
   type AcpAdapterSpec,
@@ -75,9 +41,6 @@ export {
   type AcpHarnessCapabilities,
 } from "./backends/acp/capabilities-cache.js";
 
-// Harness-spec registry — the single dispatch table every harness kind
-// registers with. `runTurn`, preflight, and model enumeration all read from
-// it; the gateway can enumerate `HARNESSES` for labels / defaults.
 export {
   HARNESSES,
   SUPPORTED_HARNESSES,
@@ -98,11 +61,6 @@ export {
   compareSemver,
 } from "./preflight.js";
 
-// Per-harness model catalog (#188). The pure read (`readHarnessModels`) is
-// exposed so the gateway can surface each harness's models for the per-harness
-// picker in Settings → Agents and the active harness via harness-status; the
-// `CatalogWarmer` owns enumeration (boot + Refresh) and `deriveStatus` turns
-// the cache into the picker's loading/ready/empty tri-state.
 export { readHarnessModels } from "./models/catalog.js";
 export {
   CatalogWarmer,
@@ -113,17 +71,7 @@ export {
 } from "./models/catalog-warmer.js";
 export { enumerateHarnessModels } from "./models/enumerators.js";
 
-// Local-side per-fire orchestrator for automations (#90 model-B).
-// Looks up the user-owned automation and runs its handler against a live
-// dispatch surface. The only billed rail is `ctx.delegate` — a bounded model
-// turn routed through the harness registry (#479); the deterministic
-// rails (`ctx.vault` / `ctx.fetch` / `ctx.state` / `ctx.runs`) run in-process.
 export {
   runAutomation,
   type RunAutomationOptions,
 } from "./automation/run-automation.js";
-
-// Scheduling lives in `@centraid/server/automation` (#149): the gateway
-// owns an in-process cron `InProcessScheduler` and fires automations while it
-// runs. There is no OS scheduler (launchd / systemd / Task Scheduler) and no
-// `centraid run-automation` entry point.

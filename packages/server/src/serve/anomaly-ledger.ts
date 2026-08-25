@@ -1,33 +1,9 @@
 /*
- * Local crash/anomaly ledger (#842).
- *
- * `gateway-log-store.ts` answers "what was the gateway saying"; it is a
- * ring of prose, rotated and bounded, and a crash three restarts ago is
- * long gone. This ledger answers the different question support actually
- * asks — "what has gone WRONG on this machine, how often, and where" —
- * and it answers it in structured, low-cardinality facts rather than
- * prose, so the record is aggregatable and, critically, so it can be put
- * in a shareable bundle without a redaction pass having to guess.
- *
- * Three properties make that true:
- *
- *  - **Structured by construction.** A record carries a `code` (a stable
- *    machine token, e.g. `vault.mount.schema-mismatch`), a `component`,
- *    a severity, and a `facts` map of numbers/booleans/enum tokens. There
- *    is no free-text field. The raw error message is kept only as a
- *    `messageDigest`; the plaintext never enters the ledger, so it cannot
- *    be leaked from it later.
- *  - **Stack fingerprints, not stacks.** Frames are reduced to
- *    `function@basename:line`. The directory — which on a real machine
- *    contains the owner's home directory and therefore their name — is
- *    dropped at record time, not at share time.
- *  - **Bounded and local.** A ring in memory, optionally mirrored to
- *    `<dir>/anomalies.jsonl` with the same rotation posture as the log
- *    store. Nothing here opens a socket; see the no-egress test.
- *
- * Determinism: the clock is injected (`now`). Nothing in this module reads
- * `Date.now()` or any randomness, so a seeded test produces byte-identical
- * ledgers across runs.
+ * Local crash/anomaly ledger (#842): structured low-cardinality facts, so a
+ * bundle carries it without a redaction pass. No free text ever enters — a
+ * message is kept as a digest, a stack as `function@basename:line` frames whose
+ * directories go at RECORD time. Bounded, local, opens no socket; the clock is
+ * injected, so a seeded test replays byte-identically.
  */
 
 import fs from "node:fs";
@@ -56,20 +32,14 @@ export type AnomalySeverity = (typeof ANOMALY_SEVERITIES)[number];
 export type AnomalyFact = number | boolean | null;
 
 export interface AnomalyRecord {
-  /** Monotonic within a process. Resume/dedupe cursor for readers. */
   readonly seq: number;
   readonly at: string;
   readonly kind: AnomalyKind;
   readonly severity: AnomalySeverity;
-  /** Stable, low-cardinality grouping token: `<area>.<site>.<reason>`. */
   readonly code: string;
-  /** Emitting subsystem, e.g. `serve.vault-registry`. */
   readonly component: string;
-  /** sha256/12 of the originating error message. Plaintext is never kept. */
   readonly messageDigest: string;
-  /** `function@basename:line` frames, newest first. Directories dropped. */
   readonly stack: readonly string[];
-  /** Numeric/boolean facts only — no strings, so nothing can be smuggled. */
   readonly facts: Readonly<Record<string, AnomalyFact>>;
 }
 
@@ -78,20 +48,16 @@ export interface AnomalyInput {
   readonly severity: AnomalySeverity;
   readonly code: string;
   readonly component: string;
-  /** Raw error/message. Digested on the way in; never stored. */
   readonly message?: string;
   readonly error?: unknown;
   readonly facts?: Readonly<Record<string, AnomalyFact>>;
 }
 
-/** Ring capacity — a few hundred anomalies is several months of a healthy
- *  machine and a single afternoon of an unhealthy one. */
 const DEFAULT_CAPACITY = 512;
 const FILE_NAME = "anomalies.jsonl";
 const ROTATE_BYTES = 1024 * 1024;
 const MAX_STACK_FRAMES = 12;
-/** Refuse anything that is not a machine token, so `code`/`component`
- *  cannot become a smuggling channel for interpolated owner data. */
+/** Machine tokens only: no smuggling channel for interpolated owner data. */
 const TOKEN_SHAPE = /^[a-z0-9][a-z0-9.:-]{0,63}$/u;
 const UNKNOWN_TOKEN = "unknown";
 
@@ -99,12 +65,7 @@ function token(value: string): string {
   return TOKEN_SHAPE.test(value) ? value : UNKNOWN_TOKEN;
 }
 
-/**
- * `at Foo.bar (/Users/priya/app/dist/serve/x.js:12:9)` ->
- * `Foo.bar@x.js:12`. Anonymous frames keep the location only. Frames that
- * do not parse are dropped rather than passed through — an unparsed frame
- * is exactly the case where a path would survive.
- */
+/** An unparsed frame is dropped: that is where a path would survive. */
 export function fingerprintStack(stack: string | undefined): string[] {
   if (typeof stack !== "string") return [];
   const frames: string[] = [];
@@ -126,10 +87,7 @@ export function fingerprintStack(stack: string | undefined): string[] {
   return frames;
 }
 
-/** Facts are numbers and booleans only. A string-valued fact is dropped —
- *  the caller is asking for a channel this ledger does not have. Keys that
- *  look secret-shaped are dropped too, so a `retryToken: 3` cannot teach
- *  the next author that secret-shaped keys are fine here. */
+/** Strings and secret-shaped keys are dropped, not coerced. */
 function sanitizeFacts(
   facts: Readonly<Record<string, AnomalyFact>> | undefined
 ): Record<string, AnomalyFact> {
@@ -145,10 +103,8 @@ function sanitizeFacts(
 }
 
 export interface AnomalyLedgerOptions {
-  /** Optional on-disk mirror directory. Omit for memory-only. */
   readonly dir?: string;
   readonly capacity?: number;
-  /** Injected clock — epoch ms. Required to keep the ledger deterministic. */
   readonly now: () => number;
 }
 
@@ -191,12 +147,10 @@ export class AnomalyLedger {
     return entry;
   }
 
-  /** Newest-last. */
   snapshot(): readonly AnomalyRecord[] {
     return [...this.records];
   }
 
-  /** `code` -> occurrences, for the bundle's "what keeps happening" lane. */
   histogram(): Record<string, number> {
     const out: Record<string, number> = {};
     for (const entry of this.records)
@@ -208,9 +162,7 @@ export class AnomalyLedger {
     return this.droppedWrites;
   }
 
-  /** Best-effort mirror. A ledger that crashes the process it exists to
-   *  observe is worse than no ledger, so every failure is swallowed and
-   *  counted. */
+  /** Crashing the observed process is worse than no ledger: failures counted. */
   private persist(entry: AnomalyRecord): void {
     const file = this.file;
     if (!file) return;
@@ -220,7 +172,7 @@ export class AnomalyLedger {
         if (fs.statSync(file).size > ROTATE_BYTES)
           fs.renameSync(file, `${file}.1`);
       } catch {
-        // No file yet, or an unreadable stat — the append below decides.
+        // No file yet, or an unreadable stat: the append decides.
       }
       fs.appendFileSync(file, `${JSON.stringify(entry)}\n`);
     } catch {
@@ -229,11 +181,7 @@ export class AnomalyLedger {
   }
 }
 
-/**
- * Read a persisted ledger back (current generation plus the rotated one),
- * newest-last. Unparseable lines are skipped: a torn final line from a
- * hard kill must not make the whole post-mortem unreadable.
- */
+/** Unparseable lines are skipped: a torn line must not cost the post-mortem. */
 export function readAnomalyLedger(dir: string): AnomalyRecord[] {
   const out: AnomalyRecord[] = [];
   for (const name of [`${FILE_NAME}.1`, FILE_NAME]) {

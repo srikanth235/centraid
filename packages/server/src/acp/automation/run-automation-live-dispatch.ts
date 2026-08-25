@@ -1,24 +1,7 @@
-/*
- * Live `ctx.delegate` dispatch for the local automation harness.
- *
- * This module owns the one billed rail — `ctx.delegate`, a bounded one-shot turn
- * against the user's real provider.
- *
- * Issue #743 — `ctx.delegate` honours every registered harness kind through
- * the same injected, accounted TurnPlane seam as chat. Pinning
- * `harness.automations` to any kind actually drives that harness.
- *
- * Issue #484 — there is no `ctx.tool` rail and no per-fire mock-LLM HTTP
- * server. A fire whose handler never calls `ctx.delegate` starts ZERO child
- * processes and ZERO HTTP servers: the deterministic rails (`ctx.vault`,
- * `ctx.fetch`, `ctx.state`, `ctx.runs`) are serviced in-process, parent-side.
- * The only thing this surface allocates lazily is a scratch dir — and only
- * when a `ctx.delegate` call actually carries vault-derivative attachments.
- *
- * Issue #91: an automation is a standalone app — the harness runs with the app
- * directory as cwd, and the dispatch context carries the automation id (no
- * owning app).
- */
+// Live `ctx.delegate` dispatch: the one billed rail, through the same accounted
+// TurnPlane seam chat uses (#743). A fire that never calls `ctx.delegate` must
+// start ZERO child processes and ZERO HTTP servers — every other `ctx.*` rail is
+// serviced parent-side and the scratch dir is lazy (#484). cwd is the app (#91).
 
 import { randomUUID } from "node:crypto";
 import { promises as fs } from "node:fs";
@@ -48,37 +31,23 @@ export interface LiveDispatchOptions {
   /** The automation app directory — also the harness's cwd. */
   workdir: string;
   runId: string;
-  /** Stable automation conversation identity (`<appId>/<automationId>`). */
+  /** `<appId>/<automationId>`. */
   automationRef: string;
-  /** Canonical per-vault ledger holding harness bindings and hydration watermarks. */
   journalDbFile: string;
   /** Host-accounted dispatch seam. No automation may reach a harness directly. */
   runTurn: RunTurnFn;
   harness: HarnessKind;
-  /**
-   * Model id/alias for `ctx.delegate` calls (manifest `requires.model`, or the
-   * caller's prefs-resolved fallback — see `RunAutomationOptions.model`).
-   * Undefined means "no override" — the harness's own default applies.
-   */
+  /** Undefined means no override — the harness's own default applies. */
   model?: string;
-  /** Semantic ACP configuration pins, keyed by capability category. */
   configPins?: Readonly<Record<string, string>>;
-  /** Load launch settings/default config for this fire's selected harness. */
   harnessPrefsFor?: (harness: HarnessKind) => Promise<HarnessPrefs | undefined>;
   harnessHealth?: HarnessHealthController;
   harnessHealthContext?: string;
   /** Required fail-closed controller for every unattended provider egress. */
   providerEgressConsent: ProviderEgressConsentController;
-  /**
-   * How the user authored this rung's harness: `direct` = their automations
-   * primary, `ladder` = current failover membership (validated against the
-   * live ladder before anything egresses). Both are user-authored consent
-   * (#567). Omit when the harness came from a source the user did not
-   * author — a manifest `requires.harness` pin naming a provider absent from
-   * their settings — so the fire is denied unless a real grant already exists.
-   */
+  /** How the user authored this rung's harness (#567). Omit for a source the
+   *  user did not author, so the fire is denied without a real grant. */
   consentSource?: ProviderConsentSource;
-  /** Resolve historical upload hashes into the owning automation's blob CAS. */
   hydrationAttachmentPath?: (hash: string) => string;
   onLog: (level: "info" | "warn" | "error", msg: string) => void;
 }
@@ -91,8 +60,7 @@ export interface LiveDispatch {
     turnId: string,
     ok: boolean
   ) => void;
-  /** Tear down the scratch dir (only ever created if an attachment was
-   *  staged). Safe to call once. */
+  /** Safe to call once. */
   close: () => Promise<void>;
 }
 
@@ -105,7 +73,7 @@ export interface AutomationDelegateFailure {
   explicitHarness?: boolean;
 }
 
-/** Preserve typed harness failure metadata through the handler worker boundary. */
+/** Preserves typed failure metadata across the handler worker boundary. */
 export function parseAutomationDelegateFailure(
   error: string | undefined
 ): AutomationDelegateFailure | undefined {
@@ -113,10 +81,8 @@ export function parseAutomationDelegateFailure(
   const at = error.indexOf(DELEGATE_FAILURE_PREFIX);
   if (at < 0) return undefined;
   try {
-    // Handler workers preserve the original error text but append their own
-    // stack after a newline. The structured marker is deliberately one
-    // JSON-encoded line (embedded newlines in `message` are escaped), so only
-    // parse that line instead of letting a worker stack suppress failover.
+    // Workers append a stack after a newline; the marker is one JSON line, so
+    // parse only that or the stack suppresses failover.
     const payload = error
       .slice(at + DELEGATE_FAILURE_PREFIX.length)
       .split(/\r?\n/u, 1)[0]
@@ -143,13 +109,7 @@ function delegateFailureError(failure: AutomationDelegateFailure): Error {
   return new Error(`${DELEGATE_FAILURE_PREFIX}${JSON.stringify(failure)}`);
 }
 
-/**
- * Stand up the live dispatch surface for the CLI harness. `ctx.delegate` routes to
- * the user's REAL provider through the harness registry; everything else on the
- * `ctx.*` surface is deterministic and serviced parent-side, so this allocates
- * nothing eagerly. The scratch dir is created lazily, only when a `ctx.delegate`
- * call carries vault derivatives to stage.
- */
+/** Allocates nothing eagerly; the scratch dir is created on first stage. */
 export async function startLiveDispatch(
   opts: LiveDispatchOptions
 ): Promise<LiveDispatch> {
@@ -202,10 +162,7 @@ export async function startLiveDispatch(
     scratchReady = true;
   };
 
-  // Vault-derivative attachments (#299): the harness already resolved
-  // and receipted them; here they become scratch files the harness's native
-  // multimodal Read path picks up — one mechanism for every harness, no
-  // per-harness wire format. The scratch dir materializes only on first use.
+  // Vault derivatives (#299) become scratch files for the harness's Read path.
   const stageAttachments = async (
     call: automation.DelegateCall
   ): Promise<{
@@ -231,18 +188,8 @@ export async function startLiveDispatch(
     return { prompt: call.prompt, attachments };
   };
 
-  // ctx.delegate routes to the user's provider through the SAME accounted
-  // TurnPlane door chat uses — one integration path for every harness.
-  // `runTurn` normalizes each harness's stream into TurnStreamEvents, so this
-  // reads `final` / `error` and coerces the answer with no per-harness wire
-  // format anywhere in this file.
-  //
-  // Two deliberate limits. (1) ACP has no `--output-schema` equivalent, so
-  // `call.json` is enforced by `coerceDelegateAnswer` alone. (2) A fire carries
-  // only the harness KIND (the gateway drops binPath / extraArgs for every
-  // kind), so the harness resolves its default binary off PATH. The custom
-  // `acp` kind has no default binary and therefore surfaces a clear `error`
-  // event, raised below.
+  // Two limits: ACP has no `--output-schema`, so `call.json` rests on
+  // `coerceDelegateAnswer`; and a fire carries only the harness KIND.
   const delegateDispatcher: automation.DelegateDispatcher = async (
     call,
     ctx
@@ -257,15 +204,10 @@ export async function startLiveDispatch(
       });
     }
     const harness = call.harness ?? opts.harness;
-    // Unattended egress is never prompted (#567) — it is authorized at
-    // authoring time. So derive the grant honestly rather than minting one:
-    // `recordDerived` refuses to resurrect a revoked provider and refuses a
-    // ladder source the user's live settings do not contain. A controller
-    // without the derived-consent seam denies rather than assumes.
+    // Unattended egress is never prompted (#567): derive the grant, never mint
+    // one. A controller without the derived-consent seam denies.
     const consent = opts.providerEgressConsent;
-    // Defense in depth for untyped JavaScript callers: the public TypeScript
-    // contract requires this controller, but a missing host dependency must
-    // still deny before attachments are staged or a harness is reached.
+    // Untyped JS callers can still omit it; deny before anything is staged.
     if (!consent) {
       throw delegateFailureError({
         harness,
@@ -456,15 +398,14 @@ export async function startLiveDispatch(
       if (closed) return;
       closed = true;
       try {
-        // Turn settlement owns binding/watermark finalization transactionally
-        // through `finalizeTurn`; close only releases process-local resources.
+        // `finalizeTurn` owns binding/watermark settlement; close only frees
+        // process-local resources.
       } finally {
         clearInterval(lockLeaseHeartbeat);
         runsStore.releaseTurnLock(opts.automationRef, lockToken);
         runsStore.close();
       }
-      // Only ever created if an attachment was staged — the rm is a no-op
-      // otherwise, so a tool-free / attachment-free fire touches no disk here.
+      // An attachment-free fire must touch no disk here.
       if (scratchReady) {
         await fs
           .rm(scratchDir, { recursive: true, force: true })

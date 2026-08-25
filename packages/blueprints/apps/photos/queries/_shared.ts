@@ -1,28 +1,9 @@
 /**
- * Shared read/join helpers for the photos app's queries (#352 phase
- * 3/4) — pulled out once queries/library.js and queries/search.js both
- * needed the SAME bounded joins over the same windowed asset/content ids:
- * free-form labels (core.tag_item/untag_item over the shared "Tags" scheme —
- * packages/vault/src/commands/tags.ts, shared with notes/tasks), the
- * linked place (core.place, media.ts's EXIF-GPS auto-link +
- * media.set_asset_place) and the blob custody projection
- * (blob.custody_state, blob/custody.ts).
- *
- * FAVORITE IS NOT JOINED HERE, and must not be: it is a first-class
- * `favorite` column on media.asset (#419), never a flags-scheme starred
- * tag on the canonical content item. The photos replica shape has to be
- * self-contained, and a native client cannot reconstruct a star from a
- * three-table concept join it was never granted — the column is the only
- * source of truth, and nothing dual-writes the tag path.
- *
- * NOT a query itself — the dispatcher resolves a query name straight to
- * `queries/<name>.js` (never a directory scan: packages/server/src/engine/
- * handlers/dispatcher.ts), so a plain helper module beside the handlers is
- * invisible to it and to build-manifest.mjs's install-copy walk; nothing
- * needs to know this file exists besides the two callers that import it.
+ * Shared bounded joins for the photos queries. FAVORITE IS NOT JOINED HERE:
+ * it is a first-class `favorite` column on media.asset (#419), never a tag.
+ * NOT a query — the dispatcher resolves names straight to `queries/<name>.js`.
  */
 
-/** The subset of a content-item row `srcOf` needs to build serve URLs. */
 interface SrcContent {
   content_id?: string;
   content_uri?: unknown;
@@ -37,16 +18,7 @@ interface RawPlace {
   address_json?: string | null;
 }
 
-/**
- * The settlement name the opt-in gazetteer automation writes into a place's
- * `address_json`, or null.
- *
- * Nothing writes it yet, so every branch here is the absent one today — which
- * is exactly why it has to tolerate absence, blank, malformed JSON and a
- * non-object payload without throwing. A place list that refuses to load
- * because one row's address blob is unparseable would take the whole shelf
- * down over a field nobody asked for.
- */
+/** One bad address blob must not take the whole shelf down. */
 function gazetteerOf(addressJson: string | null | undefined): string | null {
   if (typeof addressJson !== "string" || addressJson === "") return null;
   let parsed: unknown;
@@ -89,11 +61,7 @@ interface CustodyRow {
 export const BLOB_ROUTE = "/centraid/_vault/blobs";
 const TAGS_SCHEME_URI = "centraid:tags:v1";
 
-/**
- * Blob-backed bytes (#296) resolve to same-origin serve URLs (Range,
- * immutable caching, server thumb variants); inline `data:` URIs pass
- * through untouched.
- */
+/** Blob bytes become same-origin serve URLs; `data:` URIs pass through. */
 export function srcOf(content: SrcContent | undefined) {
   const uri = content?.content_uri;
   if (typeof uri !== "string")
@@ -109,14 +77,6 @@ export function srcOf(content: SrcContent | undefined) {
   };
 }
 
-/**
- * The full known place list (never windowed — a personal vault's place
- * count is small) plus a `place_id -> row` lookup. There is no app-plane
- * command to MINT a brand-new place (only media.set_asset_place, which
- * points an asset at one that already exists, or clears it) — see that
- * command's own doc comment — so this full list is what the lightbox's
- * place picker offers to choose among.
- */
 export async function readPlaces({
   ctx,
   purpose,
@@ -125,14 +85,8 @@ export async function readPlaces({
   purpose: string;
 }) {
   const result = await ctx.vault.read({ entity: "core.place", purpose });
-  // Coordinates ride along because the Places shelf DRAWS them (place-map.ts)
-  // — a place list without them can only be a list. They stay `null` for a
-  // place that has no geography at all (a room, a venue someone typed), which
-  // the map filters rather than plotting at 0°,0° off the coast of Africa.
-  // `kind` and the gazetteer name ride along because a location is a PHRASE
-  // before it is a pin (place-phrase.ts): the ladder needs to know which place
-  // is home to say "3.4 km NE of Home", and a settlement name outranks any
-  // phrase derived from geometry.
+  // Coordinates for the map — `null`, never 0°,0°; `kind` and gazetteer
+  // because a location is a PHRASE before it is a pin.
   const rows = ((result.rows ?? []) as unknown as RawPlace[]).map((p) => ({
     place_id: p.place_id,
     name: p.name,
@@ -144,13 +98,7 @@ export async function readPlaces({
   return { rows, byId: new Map(rows.map((p) => [p.place_id, p] as const)) };
 }
 
-/**
- * Every bounded per-asset join the grid/lightbox rows need beyond the raw
- * asset/content columns: free-form labels and custody state. Favorite is no
- * longer here — it is a first-class `favorite` column on the asset (issue
- * #419), read straight off the row. Callers pass the WINDOWED asset/content
- * ids only — never a table scan. Returns `{ tagsByAsset, custodyByContent }`.
- */
+/** WINDOWED ids only — never a table scan. */
 export async function readAssetJoins({
   ctx,
   purpose,
@@ -174,11 +122,7 @@ export async function readAssetJoins({
       : { rows: [] },
   ]);
 
-  // Free-form labels (#352): core.tag_item targets the ASSET itself
-  // (target_type 'media.asset'), unlike the content-item-scoped
-  // favorite star above — see tags.ts's SUBJECT_PK. Each entry carries the
-  // tag_id too: untag-asset.js removes by tag_id (core.untag_item), not by
-  // label, so the UI needs it to render a working remove control.
+  // Tags target the ASSET; untag removes by tag_id, never by label.
   const schemeRows = (schemes.rows ?? []) as unknown as SchemeRow[];
   const conceptRows = (concepts.rows ?? []) as unknown as ConceptRow[];
   const custodyRows = (custody.rows ?? []) as unknown as CustodyRow[];
@@ -205,7 +149,7 @@ export async function readAssetJoins({
     });
     for (const t of (labelTags.rows ?? []) as unknown as TagRow[]) {
       const label = labelConceptById.get(t.concept_id);
-      if (!label) continue; // a tag on this asset from some OTHER scheme
+      if (!label) continue; // from another scheme
       if (!tagsByAsset.has(t.target_id)) tagsByAsset.set(t.target_id, []);
       tagsByAsset.get(t.target_id)!.push({ tag_id: t.tag_id, label });
     }

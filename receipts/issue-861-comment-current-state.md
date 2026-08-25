@@ -3531,6 +3531,204 @@ moved down. Files changed (full inventory):
 
 
 
+### Wave 3b — remainder of Wave 3 (2026-08-25)
+
+The 146 Wave 3 files the paused agents never reached, swept by 7 agents and
+integrated in one pass. This completes Wave 3 (with Wave 3a above). Per the
+user's directive the session stops after this wave; remaining work is listed
+under "Remaining worklist" below.
+
+| figure | after Wave 3a | after Wave 3b |
+| --- | --- | --- |
+| global character share | 19.00% | 17.68% |
+| global line density | 11.18% | 10.27% |
+| files over 15% cap | 1,769 | 1,647 |
+
+Verification (all green before commit):
+
+```
+node scripts/comment-only-diff.mjs HEAD   # 146 changed file(s) — all comment-only
+bun run format:check                      # clean after bun run format
+bun run lint                              # oxlint --deny-warnings clean
+node scripts/check-comment-density-ratchet.mjs --write && node scripts/check-comment-density-ratchet.mjs
+# ok comment-density — no pin rose, no unpinned file over cap
+```
+
+Allowlist rulings (8 accepted, allowlist now 47 entries): sqlite-vec.ts
+(security-rule battery), photos-collections-menu.ts (declaration-leaf policy),
+automation/fire/host.ts (contract leaf), worktree-store/types.ts (declaration
+leaf), people/grant-dashboard.ts (#825 ruling register), acp/spawn-env.ts
+(PATH-shadowing rationale), vault/src/blob/store.ts (driver-contract leaf),
+apps/web/tests/e2e/playwright.config.ts (config policy leaf). Nominated but
+declined: apps/mobile/src/kit/fetch-gate/policy.ts — now under the 40-line
+threshold, so the cap no longer applies; no entry needed.
+
+Residues staying pinned above 13% without allowlist entries (load-bearing
+floors, candidates for the residue re-pass): batch 4's small-code leaves
+(outcomes.ts 34.8%, first-moves.ts 29.8%, appearance.ts 30.0%,
+places-map-libre.tsx 29.7%, device-media.ts 24.1%, atlasSampleRows.ts 25.8%,
+Blocks.tsx 21.7%, SearchShelf.tsx 22.4%, projection-ingest.ts 26.2%,
+fulfillment-edit.ts 19.3%), batch 3's declaration/policy leaves (print.ts
+36.2%, restore-warm.ts 33.0%, places-map-apple.tsx 23.5%, cbsf.ts 23.6%,
+codec.ts 22.0%, commons-notices.ts 20.5%, commons-sim-grant-world
+.test-fixtures.ts 21.0%), and link-party-bindings.ts 21.0%, Shared.tsx
+(docs) 22.2%. All were pinned downward; none rose.
+
+Known metric limitation reconfirmed (batch 4): JSX `{/* … */}` text counts as
+code, not comment chars, so shortening a JSX comment shrinks the denominator
+and can raise the measured share while the diff stays comment-only. Recorded
+in the Wave 1 section; unchanged this wave.
+
+Files changed (full inventory):
+
+- `apps/mobile/src/apps/automations/useAutomations.ts`
+- `apps/mobile/src/apps/docs/docs-band.ts`
+- `apps/mobile/src/apps/docs/document-read-model.ts`
+- `apps/mobile/src/apps/people/people-model.ts`
+- `apps/mobile/src/apps/photos/FaceReview.tsx`
+- `apps/mobile/src/apps/photos/TimelineGrainControl.tsx`
+- `apps/mobile/src/apps/photos/device-media.ts`
+- `apps/mobile/src/apps/photos/duplicate-clusters.ts`
+- `apps/mobile/src/apps/photos/lightbox-gestures.ts`
+- `apps/mobile/src/apps/photos/photos-collections-menu.ts`
+- `apps/mobile/src/apps/photos/photos-more-router.test.ts`
+- `apps/mobile/src/apps/photos/places-map-apple.tsx`
+- `apps/mobile/src/apps/photos/places-map-libre.tsx`
+- `apps/mobile/src/apps/photos/places-map-mode.ts`
+- `apps/mobile/src/apps/photos/timeline-rows.ts`
+- `apps/mobile/src/apps/photos/viewer-read-only-reason.test.ts`
+- `apps/mobile/src/kit/band/band-owner.ts`
+- `apps/mobile/src/kit/fetch-gate/policy.ts`
+- `apps/mobile/src/kit/replica/ReplicaProvider.tsx`
+- `apps/mobile/src/kit/replica/replica-mount.ts`
+- `apps/mobile/src/lib/enrichment.ts`
+- `apps/mobile/src/lib/phone-link.ts`
+- `apps/mobile/src/lib/replica/op-sqlite-driver.ts`
+- `apps/mobile/src/lib/replica/replica-read-pushdown.ts`
+- `apps/mobile/src/lib/upload/cbsf.ts`
+- `apps/mobile/src/screens/home/LauncherGrid.tsx`
+- `apps/mobile/src/screens/home/first-moves.ts`
+- `apps/mobile/src/screens/home/home-pins.ts`
+- `apps/mobile/src/screens/home/search-model.ts`
+- `apps/mobile/src/screens/home/useSpringboardTiles.ts`
+- `apps/web/tests/e2e/offline-reconnect.spec.ts`
+- `apps/web/tests/e2e/playwright.config.ts`
+- `apps/web/tests/e2e/renderer-leak.spec.ts`
+- `packages/backup/src/compress.ts`
+- `packages/backup/src/crypto.ts`
+- `packages/backup/src/wire-client.ts`
+- `packages/blueprints/apps/_shared/grant-copy.ts`
+- `packages/blueprints/apps/agenda/day-context.ts`
+- `packages/blueprints/apps/agenda/format-locale.test.ts`
+- `packages/blueprints/apps/docs/components/Blocks.tsx`
+- `packages/blueprints/apps/docs/components/QuickLookStage.tsx`
+- `packages/blueprints/apps/docs/components/Shared.tsx`
+- `packages/blueprints/apps/docs/filters.ts`
+- `packages/blueprints/apps/docs/frame.tsx`
+- `packages/blueprints/apps/docs/nav-rail.ts`
+- `packages/blueprints/apps/docs/print.ts`
+- `packages/blueprints/apps/docs/queries/drive.ts`
+- `packages/blueprints/apps/notes/format.ts`
+- `packages/blueprints/apps/notes/logic.ts`
+- `packages/blueprints/apps/notes/queries/library.ts`
+- `packages/blueprints/apps/notes/send-to-tasks.ts`
+- `packages/blueprints/apps/notes/view-copy.ts`
+- `packages/blueprints/apps/people/components/Shared.tsx`
+- `packages/blueprints/apps/people/grant-dashboard.ts`
+- `packages/blueprints/apps/people/logic.ts`
+- `packages/blueprints/apps/photos/components/Lightbox.tsx`
+- `packages/blueprints/apps/photos/components/LightboxLocation.tsx`
+- `packages/blueprints/apps/photos/components/LoadingGrid.tsx`
+- `packages/blueprints/apps/photos/components/Picker.tsx`
+- `packages/blueprints/apps/photos/components/PlaceMap.tsx`
+- `packages/blueprints/apps/photos/components/SearchShelf.tsx`
+- `packages/blueprints/apps/photos/components/Storage.tsx`
+- `packages/blueprints/apps/photos/components/Tile.tsx`
+- `packages/blueprints/apps/photos/components/Timeline.tsx`
+- `packages/blueprints/apps/photos/components/Toolbar.tsx`
+- `packages/blueprints/apps/photos/format.ts`
+- `packages/blueprints/apps/photos/lightbox.tsx`
+- `packages/blueprints/apps/photos/outcomes.ts`
+- `packages/blueprints/apps/photos/people.ts`
+- `packages/blueprints/apps/photos/queries/_shared.ts`
+- `packages/blueprints/apps/photos/shelves.ts`
+- `packages/blueprints/apps/photos/tile-state.ts`
+- `packages/blueprints/apps/tasks/types.ts`
+- `packages/blueprints/apps/tasks/view-copy.ts`
+- `packages/client/src/gateway-client-connections.ts`
+- `packages/client/src/gateway-client-editing.ts`
+- `packages/client/src/gateway-client-links.ts`
+- `packages/client/src/gateway-client-outbox.ts`
+- `packages/client/src/gateway-client-vault-enrich.ts`
+- `packages/client/src/gateway-client-vault.ts`
+- `packages/client/src/react/screens/AtlasRelationsTab.tsx`
+- `packages/client/src/react/screens/AutomationsOverviewScreen.tsx`
+- `packages/client/src/react/screens/SettingsDiagnosticsScreen.tsx`
+- `packages/client/src/react/screens/SettingsEnrichmentCapabilities.tsx`
+- `packages/client/src/react/screens/atlasSampleRows.ts`
+- `packages/client/src/react/screens/insights-model.ts`
+- `packages/client/src/react/screens/localUsageView.ts`
+- `packages/client/src/react/screens/privacyStores.ts`
+- `packages/client/src/react/shell/appearance.ts`
+- `packages/client/src/react/shell/capabilities.ts`
+- `packages/client/src/react/shell/routes/approvalsPhrasing.ts`
+- `packages/client/src/react/shell/routes/connectFlow-core.ts`
+- `packages/client/src/replica/search.ts`
+- `packages/core/src/time/time-zoo-zone-crossing.test.ts`
+- `packages/design/src/css.ts`
+- `packages/design/src/elements/feedback.ts`
+- `packages/design/src/identity.ts`
+- `packages/design/src/oklab.ts`
+- `packages/server/src/acp/automation/run-automation-live-dispatch.ts`
+- `packages/server/src/acp/backends/acp/enumerate-models.ts`
+- `packages/server/src/acp/index.ts`
+- `packages/server/src/acp/registry.test.ts`
+- `packages/server/src/acp/spawn-env.ts`
+- `packages/server/src/automation/fire/cron-cursor.ts`
+- `packages/server/src/automation/fire/host.ts`
+- `packages/server/src/automation/scaffold/scaffold.ts`
+- `packages/server/src/automation/worker/runner.ts`
+- `packages/server/src/backup/recover-reconcile.ts`
+- `packages/server/src/backup/restore-warm.ts`
+- `packages/server/src/cli/cli.ts`
+- `packages/server/src/engine/sandbox/bundle-lane-conformance.test.ts`
+- `packages/server/src/engine/sandbox/install.test.ts`
+- `packages/server/src/engine/settings/settings-merge.ts`
+- `packages/server/src/engine/stores/prefs-store.ts`
+- `packages/server/src/enrich/sqlite-vec.ts`
+- `packages/server/src/preview/codec.ts`
+- `packages/server/src/routes/device-invitations.ts`
+- `packages/server/src/routes/grant-routes.ts`
+- `packages/server/src/routes/lifecycle-automation-routes.ts`
+- `packages/server/src/routes/templates-routes.ts`
+- `packages/server/src/routes/vault-links-routes.ts`
+- `packages/server/src/serve/anomaly-ledger.ts`
+- `packages/server/src/serve/commons-notices.ts`
+- `packages/server/src/serve/disk-health.ts`
+- `packages/server/src/serve/journal-limit.ts`
+- `packages/server/src/serve/link-party-bindings.ts`
+- `packages/server/src/serve/outbox-edit.ts`
+- `packages/server/src/serve/peer-commons-sweep.ts`
+- `packages/server/src/serve/vault-integrity-health.ts`
+- `packages/server/src/serve/web-control-sessions.ts`
+- `packages/server/src/serve/web-ui-server.ts`
+- `packages/server/src/worktree-store/types.ts`
+- `packages/vault/src/blob/local-orphan-sweep.ts`
+- `packages/vault/src/blob/local.ts`
+- `packages/vault/src/blob/read.ts`
+- `packages/vault/src/blob/replica-index.ts`
+- `packages/vault/src/blob/store.ts`
+- `packages/vault/src/grant/fulfillment-edit.ts`
+- `packages/vault/src/grant/fulfillment-invite.ts`
+- `packages/vault/src/ingest/stage-file.ts`
+- `packages/vault/src/ingest/staging.ts`
+- `packages/vault/src/retention.ts`
+- `packages/vault/src/share/commons-bootstrap.ts`
+- `packages/vault/src/share/commons-sim-grant-world.test-fixtures.ts`
+- `packages/vault/src/share/projection-ingest.ts`
+- `packages/vault/src/vault-limit.ts`
+- `tests/comment-density-ratchet.json`
+
 ## Session
 
 <!-- Session identifiers are maintained by the agent-session-identity pre-commit hook. -->

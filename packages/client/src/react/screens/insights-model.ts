@@ -1,16 +1,7 @@
 // What Analytics SAYS about the run rollup (#775) — the words, not the frame.
-//
-// Pure: no React and no gateway, so the copy contract is under test without
-// mounting anything. The screen owns the column of blocks; every string in it
-// is decided here.
-//
-// TWO HONEST GAPS, unchanged and stated where they bite rather than papered
-// over:
-//   1. The daily rollup (`insights-sql.ts`, `daily`) does NOT split a day by
-//      outcome, so the chart's columns carry one segment and no legend. The
-//      window's failure count is stated once, in the Runs count line.
-//   2. No run duration is recorded anywhere, so a "median duration" fact cannot
-//      be served and is absent rather than estimated.
+// TWO HONEST GAPS: the daily rollup does not split a day by outcome, so the
+// columns carry one segment and no legend; and no run duration is recorded,
+// so a median-duration fact is absent rather than estimated.
 
 import {
   barShares,
@@ -34,17 +25,10 @@ import type { ResourceUsageDTO } from "./resource-summary.js";
 
 export type Breakdown = InsightBreakdown;
 
-/** The three windows. The page's one parameter, and its whole state. */
 export const WINDOW_OPTIONS = [7, 30, 90] as const;
 
-/**
- * Columns the chart draws: ONE PER DAY (#775).
- *
- * Folding a window into 7–14 columns is how a single $40 afternoon becomes a
- * smear across four ordinary days — the one shape a spend chart exists to
- * show, averaged away. The compact form factor is the only place that folds at
- * all, and it says so in every column's own label.
- */
+/** ONE PER DAY (#775): folding smears a $40 afternoon across four ordinary
+ *  days. Only the compact form folds, and it labels every column. */
 export function columnCount(windowDays: number, compact: boolean): number {
   return compact ? Math.min(windowDays, 10) : windowDays;
 }
@@ -53,22 +37,14 @@ function runWord(runs: number): string {
   return `${runs.toLocaleString()} ${runs === 1 ? "run" : "runs"}`;
 }
 
-/**
- * The chart's columns: SPEND per day, scaled against the window's own peak.
- *
- * Spend and not runs, because "how much did this cost" is the question the page
- * is answering and a run count answers a different one — twenty cheap chats and
- * one long build are the same column by volume and nothing like it by money.
- * The run count stays in each column's own sentence.
- */
+/** SPEND per day, not runs — volume and money are different columns. */
 export function buildBars(
   summary: InsightsSummary,
   windowDays: number,
   compact: boolean
 ): BarDatum[] {
   const buckets = dayFold(summary.daily, {
-    // The rollup's own clock, not the reader's: a summary rendered an hour
-    // later must still say the same thing about the same days.
+    // The rollup's own clock: an hour later it must say the same thing.
     anchor: summary.generatedAt > 0 ? summary.generatedAt : Date.now(),
     columns: columnCount(windowDays, compact),
     windowDays,
@@ -87,12 +63,6 @@ export function buildBars(
   });
 }
 
-/**
- * The axis marks: real dates, oldest → newest.
- *
- * "30 days ago · halfway · today" told a reader nothing they could check a
- * spike against — a column is a day, and a day has a name.
- */
 export function axisMarks(
   summary: InsightsSummary,
   windowDays: number
@@ -112,11 +82,6 @@ export function axisMarks(
   return marks;
 }
 
-/**
- * The peak day, in words — the only place a column's actual value is stated,
- * because the plot has no value axis. `undefined` when the rollup found no
- * peak (a window where nothing ran).
- */
 export function peakNote(summary: InsightsSummary): string | undefined {
   const peak = summary.peakDay;
   if (!peak) return undefined;
@@ -128,8 +93,7 @@ export function peakNote(summary: InsightsSummary): string | undefined {
   ].join(" · ");
 }
 
-/** Where the money came from, said plainly. Never "free" for what we could
- *  not price — an unpriced run is unknown, not zero. */
+/** Never "free" for what we could not price — unpriced is unknown, not zero. */
 export function pricingLine(summary: InsightsSummary): string {
   const { kpis } = summary;
   const parts: string[] = [];
@@ -148,14 +112,7 @@ export function pricingLine(summary: InsightsSummary): string {
   return `${parts.join(" · ")}.`;
 }
 
-/**
- * The one promoted figure: what the window cost.
- *
- * "Did this month cost $2 or $200" is the question a member opens this page
- * with, and it was being answered by a 13px string in the middle of a fact
- * list. "At least" is the honest label while runs are unpriced: the figure is a
- * floor, and a floor that calls itself a total is a lie.
- */
+/** "At least" while runs are unpriced: a floor calling itself a total lies. */
 export function spendFigure(
   summary: InsightsSummary,
   windowDays: number
@@ -169,13 +126,6 @@ export function spendFigure(
   };
 }
 
-/**
- * The facts beside the figure — volume, forecast, and what the failures cost.
- *
- * `retries` and `failedCostUsd` are on the wire and were rendered nowhere: a
- * page about spend that cannot say what was spent on work that failed is
- * missing the number a member would act on.
- */
 export function spendFacts(summary: InsightsSummary): PanelFact[] {
   const { kpis } = summary;
   const facts: PanelFact[] = [
@@ -204,7 +154,7 @@ export function spendFacts(summary: InsightsSummary): PanelFact[] {
     facts.push({
       key: "failed",
       mono: true,
-      // The one fact here that is bad news, so the one that takes `net`.
+      // The only bad news here, so the only `net`.
       net: true,
       value: `${kpis.failedRuns} · ${insUsd(kpis.failedCostUsd)} spent`,
     });
@@ -218,11 +168,7 @@ export function spendFacts(summary: InsightsSummary): PanelFact[] {
   return facts;
 }
 
-/**
- * The coarse read over the per-source breakdown: runs, share of the window, and
- * what they cost. Failures are not attributed per source by the rollup, so they
- * are not claimed here.
- */
+/** Failures are not attributed per source, so none are claimed. */
 export function sourceFacts(summary: InsightsSummary): PanelFact[] {
   return insightSourceRollups(summary.bySource).map((row) => ({
     key: row.bucket,
@@ -231,7 +177,6 @@ export function sourceFacts(summary: InsightsSummary): PanelFact[] {
   }));
 }
 
-/** Spend by harness — which runner the money went to. */
 export function harnessBreakdown(summary: InsightsSummary): Breakdown {
   return insightBreakdown(
     summary.byHarness.map((row) => ({
@@ -247,7 +192,6 @@ export function harnessBreakdown(summary: InsightsSummary): Breakdown {
   );
 }
 
-/** Spend by model — the one breakdown a member can act on by switching. */
 export function modelBreakdown(summary: InsightsSummary): Breakdown {
   return insightBreakdown(
     summary.byModel.map((row) => ({
@@ -263,7 +207,6 @@ export function modelBreakdown(summary: InsightsSummary): Breakdown {
   );
 }
 
-/** Spend by effort — the harness-confirmed thought level, and what it cost. */
 export function effortBreakdown(summary: InsightsSummary): Breakdown {
   return insightBreakdown(
     summary.byEffort.map((row) => ({
@@ -279,7 +222,6 @@ export function effortBreakdown(summary: InsightsSummary): Breakdown {
   );
 }
 
-/** Spend per source — the automation, chat or app the work came from. */
 export function sourceBreakdown(summary: InsightsSummary): Breakdown {
   return insightBreakdown(
     summary.bySource.map((row) => ({
@@ -295,13 +237,7 @@ export function sourceBreakdown(summary: InsightsSummary): Breakdown {
   );
 }
 
-/**
- * The gateway's own measured numbers, with each row's caveat attached to the
- * row it qualifies.
- *
- * Every row is something the gateway actually reports — no disk figure and no
- * shared-compute figure appear, because this gateway serves neither.
- */
+/** Only what the gateway actually reports — no disk, no shared compute. */
 export function gatewayFacts(usage: ResourceUsageDTO): PanelFact[] {
   const facts: PanelFact[] = [
     ...processUsageRows(usage),
@@ -322,13 +258,7 @@ export function gatewayFacts(usage: ResourceUsageDTO): PanelFact[] {
   return facts;
 }
 
-/**
- * The measurement window the gateway's numbers were counted over.
- *
- * Without it every figure on that panel is a number with no denominator: "120s
- * of CPU" is unremarkable over a week and alarming over a minute, and without
- * it the panel makes the reader guess which.
- */
+/** "120s of CPU" is unremarkable over a week and alarming over a minute. */
 export function gatewaySince(usage: ResourceUsageDTO | undefined): string {
   if (!usage) return "your own machine";
   return `since ${relativeTime(new Date(usage.sinceMs).toISOString())}`;
