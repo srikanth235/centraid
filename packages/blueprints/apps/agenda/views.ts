@@ -20,6 +20,7 @@ import {
   DAY_MS,
   localDayKey,
   namedDay,
+  spanLocalDays,
   startOfDay,
   startOfWeek,
 } from "./format.ts";
@@ -193,8 +194,7 @@ export function bucketByDay(
     if (Number.isNaN(end.getTime()) || end < start) end = start;
     const eventStart = start.getTime();
     const eventEnd = end.getTime();
-    let cursor = startOfDay(start);
-    do {
+    for (const cursor of spanLocalDays(start, end)) {
       const dayStart = cursor.getTime();
       const next = new Date(
         cursor.getFullYear(),
@@ -216,8 +216,7 @@ export function bucketByDay(
       const bucket = map.get(key);
       if (bucket) bucket.push(segment);
       else map.set(key, [segment]);
-      cursor = next;
-    } while (cursor.getTime() < eventEnd);
+    }
   }
   for (const bucket of map.values())
     bucket.sort((a, b) => a.segStart - b.segStart);

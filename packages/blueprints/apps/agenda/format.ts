@@ -166,6 +166,29 @@ export function startOfDay(d: Date): Date {
   return new Date(d.getFullYear(), d.getMonth(), d.getDate());
 }
 
+/**
+ * Every local civil day an interval occupies. End is exclusive at a civil
+ * midnight and inclusive otherwise — Friday 22:00–Sunday 09:00 occupies
+ * Friday, Saturday and Sunday. Web grids and the phone list both walk this
+ * so a multi-day run cannot vanish from the days in the middle.
+ */
+export function spanLocalDays(start: Date, end: Date): Date[] {
+  if (Number.isNaN(start.getTime())) return [];
+  let finish = end;
+  if (Number.isNaN(finish.getTime()) || finish < start) finish = start;
+  const days: Date[] = [];
+  let cursor = startOfDay(start);
+  do {
+    days.push(new Date(cursor));
+    cursor = new Date(
+      cursor.getFullYear(),
+      cursor.getMonth(),
+      cursor.getDate() + 1
+    );
+  } while (cursor.getTime() < finish.getTime());
+  return days;
+}
+
 /** The clicked day at the next round hour of the current time. */
 export function nextRoundHourOn(date: Date): Date {
   const now = new Date();

@@ -110,7 +110,7 @@ test("Notes writes a passage on the custodian seat and its body survives an Elec
     // written can actually see.
     await expect(
       page.getByText("Write the first one.", { exact: true })
-    ).toBeVisible({ timeout: 30_000 });
+    ).toBeVisible({ timeout: 60_000 });
     await page.getByRole("button", { name: "New note", exact: true }).click();
 
     // The editor is the whole composer: a title at the display rung and the

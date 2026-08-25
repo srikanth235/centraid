@@ -53,20 +53,22 @@ about what is still open.
 - [x] Fix the cheap S2 wrong-display bugs with a failing test first
 - [x] Flip each repaired S2 scenario-ledger cell from product-bug to owned
 
-### Wave 3 (landed, partial)
+### Wave 3 (landed, remainder closed the happy-path-only holes)
 
 - [x] Add crash/reopen durability tests for app-engine and automations
 - [x] Add adversarial-input tests for automations lint and mobile transfer-policy
 - [x] Correct the stale pwa-waterfall honesty note (CI already throws)
+- [x] Rewrite remaining M6–M11 notes that overclaimed "happy path only"; add cheapest durability/adversary proofs beside existing owners
 
-### Wave 4 (landed, partial)
+### Wave 4 (landed, remainder closed the happy-path-only holes)
 
 - [x] Add a two-actor claimNext interleaving on the mobile intent store
 - [x] Add a pre-multi-vault gateway reply version-skew fixture on web host
+- [x] Add exclusive two-device lease claims and concurrent handler-pool dispatch
 
 ### Wave 5
 
-- [ ] Deferred: the 18 skip sites still wait on named rigs (disk-full, launchd, Clawgnition interop); standing those up is out of this PR's machine budget
+- [x] Explicitly deferred: the 18 skip sites still wait on named rigs (disk-full, launchd, Clawgnition interop); standing those up is out of this PR's machine budget. No Maestro flows added in this remainder.
 
 ## Waves
 
@@ -79,9 +81,9 @@ about what is still open.
 | W7 | per-app scenario ledger + report grid; M18 seeded as product-bug | landed |
 | M18 S1 | fix data-loss / consent / false-promise bugs; flip product-bug → owned | landed |
 | M18 S2 | cheap wrong-display bugs; flip product-bug → owned | landed |
-| W3 | durability crash/reopen + adversarial lint/transfer; pwa-waterfall honesty | landed (partial — remaining surfaces still happy-path) |
-| W4 | mobile claimNext interleaving + web pairing version-skew | landed (partial — remaining concurrency cells still happy-path) |
-| W5 | named rigs (disk-full, launchd, …) | deferred |
+| W3 | durability crash/reopen + adversarial lint/transfer; remaining notes honest | landed |
+| W4 | claimNext + pairing skew + exclusive leases + concurrent handler-pool | landed |
+| W5 | named rigs (disk-full, launchd, …) | deferred (explicit; no machines stood up) |
 
 ## What changed
 
@@ -386,9 +388,8 @@ refused create keeps the draft (`states.test.tsx`); all-day civil dates
 (`edits.test.ts`).
 
 This did **Flip each repaired scenario-ledger cell from product-bug to owned**
-in `tests/matrix.json#appScenarios` (18 cells). S2 rows stay `product-bug`
-(untitled web note, People overdue/leap-day/month_day/cap, Photos hide vs
-archive, Tasks priority/Today UTC, Agenda multi-day visibility).
+in `tests/matrix.json#appScenarios` (18 cells). S2 rows were still
+`product-bug` at this checkpoint and flipped in the S2 section below.
 
 ### M18 S2 — silently-wrong-display, cheapest layer first
 
@@ -420,19 +421,63 @@ This did **Add a two-actor claimNext interleaving on the mobile intent store**
 and **Add a pre-multi-vault gateway reply version-skew fixture on web host**.
 Remaining concurrency/compat cells still happy-path.
 
+### W3/W4 remainder — remaining M6–M11 notes stop overclaiming
+
+The leftover "proves the current happy path; missing crash/adversary/
+interleaving" cells either gained a cheapest falsifying test next to the
+existing owner, or the note now names what the owner actually proves and
+what is still open under #864 (scale second volume, perf longitudinal
+drift, cross-surface journeys, two-process fire, file-backed replica
+reopen, named-rig gateway crash).
+
+New tests this remainder:
+
+- `leases.test.ts` — two poster jobs claimed by two devices never share a
+  `requestId`
+- `handler-pool.test.ts` — two concurrent dispatches both complete
+- `disk-health.test.ts` — a replacement probe still names ENOSPC after the
+  previous health loop is dropped
+- **Mobile origin seat (primary):** `agenda-days.test.ts` — a Friday–Sunday
+  run occupies every local day on the native list, not only the start day.
+  The phone does not render `packages/blueprints` components; it groups
+  replica occurrences itself via the shared `spanLocalDays` arithmetic.
+
+**Maestro.** Wave 1 added exactly one flow:
+`tests/agent-e2e-mobile/flows/people-roster.mjs` (People origin seat,
+cadence join on device). Other Maestro files (`agenda-week`,
+`notes-library`, `tasks-board`, Photos suite, …) pre-existed #864. This
+remainder adds none: a multi-day overnight is not in the agenda demo seed,
+so the cheapest falsifying layer is the native grouping function.
+
+Desktop e2e empty-canvas and photos replica waits raised 30s → 60s so the
+custodian seat specs wait as long as the write-rail probe (CI
+`client-e2e / desktop-e2e` and `desktop-e2e-macos` were timing out the
+empty copy / replica probe).
+
+**No additional Maestro flows.** The only Maestro file this umbrella added
+is Wave 1's `tests/agent-e2e-mobile/flows/people-roster.mjs`.
+
 ### W5 — deferred
 
 Named-rig skips (disk-full, launchd, Clawgnition weekly pretence) stay
-inventoried under #864. This PR does not stand up those machines.
+inventoried under #864. This PR does not stand up those machines. The
+deferral is the close of Wave 5 for this umbrella, not a silent "owned".
 
 ### CI ratchets for this branch
 
 `tests/quality/classification-ratchet.json` re-pins the `tests/matrix.json`
-whole-file fingerprint (governed qualities payload unchanged).
-`apps/mobile/native-fingerprints.json` L4 iOS identity only (L1–L3 green;
-JS under `apps/mobile/src` moved the Expo fingerprint).
+whole-file fingerprint (governed qualities payload unchanged). The previous
+tip's pin lagged the file bytes after oxfmt, which is why `gates` /
+`lint:quality-knobs` failed on PR 866. This remainder re-pins to the
+current bytes. `apps/mobile/native-fingerprints.json` L4 iOS identity only
+(L1–L3 green; JS under `apps/mobile/src` moved the Expo fingerprint).
 `packages/blueprints/manifest.json` lists the S1/S2 files (covers the
 earlier manifest-only commit that CI rejected for not touching the receipt).
+
+Desktop e2e empty-canvas / photos replica waits on the Wave 1 custodian
+specs raised 30s → 60s to match the write-rail probe. If those jobs stay
+red after this, the failure is past the replica probe (empty canvas never
+paints) and belongs in the PR body, not a hidden skip.
 
 ## Decisions
 

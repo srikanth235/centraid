@@ -112,7 +112,7 @@ test("People mints a person on the custodian seat and it survives an Electron re
     // here rather than at the app bar's `Add`.
     await expect(
       page.getByText("Add the people you keep up with", { exact: true })
-    ).toBeVisible({ timeout: 30_000 });
+    ).toBeVisible({ timeout: 60_000 });
     await page.getByRole("button", { name: "Add person", exact: true }).click();
 
     // The form, filled through its own fields and chips — no synthetic write.

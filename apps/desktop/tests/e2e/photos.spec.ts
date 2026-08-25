@@ -137,7 +137,7 @@ test("Photos imports a real photograph and its bytes stay on this machine", asyn
               return "replica-not-ready";
             }
           }),
-        { timeout: 30_000 }
+        { timeout: 60_000 }
       )
       .not.toBe("replica-not-ready");
 

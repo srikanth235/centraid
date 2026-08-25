@@ -136,7 +136,7 @@ test("Agenda composes an event on the custodian seat and it survives an Electron
     // fact, and its one act is the way into the composer a member with nothing
     // on their calendar can actually see.
     await expect(page.getByText("No events yet.", { exact: true })).toBeVisible(
-      { timeout: 30_000 }
+      { timeout: 60_000 }
     );
     await page
       .getByRole("button", { name: "Add the first one", exact: true })

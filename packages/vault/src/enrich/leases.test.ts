@@ -113,6 +113,44 @@ describe("leases", () => {
     });
   });
 
+  test("two poster jobs claimed by two devices never share a requestId", () => {
+    queueDeviceEnrichmentRequest(db.vault, {
+      requestId: "poster-2",
+      entityType: "core.content_item",
+      entityId: "video-2",
+      capability: "poster",
+      contributionVariant: "poster",
+      requestedAt: T0,
+    });
+    const left = leaseNextEnrichmentRequest(db.vault, {
+      deviceId: "laptop-a",
+      capabilities: ["poster"],
+      now: T0,
+      ttlMs: 30_000,
+      token: "token-a",
+    });
+    const right = leaseNextEnrichmentRequest(db.vault, {
+      deviceId: "laptop-b",
+      capabilities: ["poster"],
+      now: T0,
+      ttlMs: 30_000,
+      token: "token-b",
+    });
+    expect([left?.requestId, right?.requestId].sort()).toStrictEqual([
+      "poster-1",
+      "poster-2",
+    ]);
+    expect(left?.deviceId).not.toBe(right?.deviceId);
+    expect(
+      leaseNextEnrichmentRequest(db.vault, {
+        deviceId: "laptop-c",
+        capabilities: ["poster"],
+        now: T0,
+        token: "token-c",
+      })
+    ).toBeNull();
+  });
+
   test("completion is device/token/TTL bound and duplicate completion is a no-op", () => {
     const lease = leaseNextEnrichmentRequest(db.vault, {
       deviceId: "phone",

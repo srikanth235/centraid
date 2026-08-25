@@ -45,6 +45,7 @@ import {
 } from "../../lib/birthday-notifications";
 import type { AgendaScreenProps } from "../../navigation";
 import type { AgendaBandDestinationKey } from "./agenda-band";
+import { groupEventsByLocalDay } from "./agenda-days";
 import AgendaBand from "./AgendaBand";
 import AgendaCreateModal from "./AgendaCreateModal";
 import type { AgendaCreateInput } from "./AgendaCreateModal";
@@ -184,27 +185,20 @@ export default function AgendaHome({
     surface,
   ]);
 
-  // One row per DAY, each carrying its own events and its own decorations.
+  // One row per DAY the event occupies — not just the start day. A Friday–
+  // Sunday run must still paint Saturday. The walk is `spanLocalDays`, the
+  // same interval helper the web grid uses.
   const days = useMemo<AgendaDay[]>(() => {
-    const out: AgendaDay[] = [];
-    let current: AgendaDay | undefined;
-    for (const event of visible) {
-      const date = new Date(event.start);
-      const key = date.toDateString();
-      if (current?.key !== key) {
-        const dayKey = contextDayKey(date);
-        current = {
-          key,
-          date,
-          events: [],
-          ribbon: birthdaysOn(dayKey, agenda.parties, agenda.starred),
-          due: dueOn(dayKey, agenda.dueTasks),
-        };
-        out.push(current);
-      }
-      current.events.push(event);
-    }
-    return out;
+    return groupEventsByLocalDay(visible).map((bucket) => {
+      const dayKey = contextDayKey(bucket.date);
+      return {
+        key: bucket.key,
+        date: bucket.date,
+        events: bucket.events,
+        ribbon: birthdaysOn(dayKey, agenda.parties, agenda.starred),
+        due: dueOn(dayKey, agenda.dueTasks),
+      };
+    });
   }, [agenda.dueTasks, agenda.parties, agenda.starred, visible]);
 
   /** Hand a task to Tasks. A NAVIGATION, never an edit. */
