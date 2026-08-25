@@ -1,12 +1,6 @@
 /*
- * HTTP route dispatcher for the conversation-history store.
- *
- * Mounted under `/_centraid-conversations` by both gateway hosts:
- *   - the standalone daemon's `composedHandler`
- *   - `startRuntimeHttpServer` for the desktop's embedded local runtime
- *
- * The store itself lives in `history.ts`, together with its schema and SQL —
- * one file, where the per-user scoping rules can be audited at a glance.
+ * Route dispatcher for the conversation-history store. Schema, SQL, and
+ * per-user scoping stay in `history.ts` so they audit in one place.
  */
 
 import type { IncomingMessage, ServerResponse } from "node:http";
@@ -19,11 +13,8 @@ import type {
 import { sendJsonNegotiated } from "./compression.js";
 
 /**
- * `?turns=<n>&beforeSeq=<seq>` → a {@link TranscriptWindow} (#659).
- * Absent parameters mean "the whole transcript", so an existing caller's
- * request is unchanged. A malformed value is REJECTED rather than ignored: a
- * silently dropped `beforeSeq` would serve the newest page to a client paging
- * backwards, which reads as "the conversation ends here".
+ * Absent ⇒ whole transcript. Malformed is REJECTED, never ignored: a dropped
+ * `beforeSeq` reads to the client as "the conversation ends here" (#659).
  */
 function parseTranscriptWindow(url: URL): TranscriptWindow | "invalid" {
   const window: TranscriptWindow = {};
@@ -42,7 +33,7 @@ function parseTranscriptWindow(url: URL): TranscriptWindow | "invalid" {
 
 const ROUTE_PREFIX = "/_centraid-conversations";
 
-const MAX_UPLOAD_BYTES = 25 * 1024 * 1024; // 25 MB per attachment.
+const MAX_UPLOAD_BYTES = 25 * 1024 * 1024;
 
 async function readRawBody(req: IncomingMessage): Promise<Buffer> {
   const chunks: Buffer[] = [];
@@ -79,27 +70,10 @@ function sendError(res: ServerResponse, status: number, message: string): void {
 }
 
 /**
- * Build the conversation HTTP route handler. The store is resolved lazily
- * via `getStore()` so the SQLite connection only opens in the gateway
- * process (route handlers don't fire in harness-worker contexts), avoiding
- * stray DB handles in subprocesses that never touch chat history.
- *
- * Chat is app-scoped (#98): every route carries the owning `appId`,
- * which the store uses to resolve that app's `runtime.sqlite`. Per-user
- * scoping is still enforced inside the store via its `userIdProvider`.
- *
- * Dispatch map:
- *   GET    /_centraid-conversations/apps/<appId>/sessions        list (this app)
- *   GET    /_centraid-conversations/apps/<appId>/sessions/search?q=  FTS search
- *   POST   /_centraid-conversations/apps/<appId>/sessions        create  body: {mode?, title?}
- *   GET    /_centraid-conversations/apps/<appId>/sessions/<id>   load (with transcript)
- *   PATCH  /_centraid-conversations/apps/<appId>/sessions/<id>   update  body: {title?, pinned?, archived?}
- *   DELETE /_centraid-conversations/apps/<appId>/sessions/<id>   delete
- *   PATCH  /_centraid-conversations/apps/<appId>/sessions/<id>/turns/<turnId>/feedback
- *                                                              set 👍/👎  body: {feedback: 'up'|'down'|null}
- *
- * The transcript is not appended over HTTP — a chat turn is recorded as a
- * `runs` row by the `/centraid/<id>/_turn` route's runner (#90 fold).
+ * Keep the store behind `getStore()`: SQLite must open only in the gateway
+ * process, never in harness workers. Every route carries the owning `appId`
+ * (#98); per-user scoping stays in the store's `userIdProvider`. Transcripts
+ * are never appended over HTTP — a turn is a `runs` row from `_turn`.
  */
 export function makeConversationRouteHandler(
   getStore: () => ConversationHistoryStore
@@ -109,16 +83,13 @@ export function makeConversationRouteHandler(
     res: ServerResponse
   ): Promise<boolean> => {
     if (!req.url || !req.url.startsWith(ROUTE_PREFIX)) return false;
-    // Use a dummy host because IncomingMessage.url is path-only.
+    // Dummy host: IncomingMessage.url is path-only.
     const url = new URL(req.url, "http://x");
-    const sub = url.pathname.slice(ROUTE_PREFIX.length); // e.g. "/apps/foo/sessions/abc"
+    const sub = url.pathname.slice(ROUTE_PREFIX.length);
     const method = (req.method ?? "GET").toUpperCase();
     const store = getStore();
 
     try {
-      // Attachment blob CAS (#190):
-      //   POST /apps/<appId>/blobs            upload bytes → { hash, sizeBytes, url }
-      //   GET  /apps/<appId>/blobs/<hash>     download bytes
       const blobMatch = sub.match(
         /^\/apps\/(?<appId>[^/]+)\/blobs(?:\/(?<hash>[a-f0-9]{64}))?\/?$/u
       );
@@ -163,8 +134,6 @@ export function makeConversationRouteHandler(
         return true;
       }
 
-      // Per-turn message feedback (#420):
-      //   PATCH /apps/<appId>/sessions/<id>/turns/<turnId>/feedback  body {feedback}
       const fb = sub.match(
         /^\/apps\/(?<appId>[^/]+)\/sessions\/(?<sessionId>[^/]+)\/turns\/(?<turnId>[^/]+)\/feedback\/?$/u
       );
@@ -196,11 +165,7 @@ export function makeConversationRouteHandler(
         return true;
       }
 
-      // Lightweight turn-settle poll (#420): the client's
-      // reconnect catch-up path polls this after a mid-stream drop to learn
-      // whether the turn finished server-side (its `turnCount` climbed) before
-      // reloading the full transcript. Cheap — one conversations-row read, no
-      // item reconstruction. Matched BEFORE the generic sessions/<id> route.
+      // Turn-settle poll (#420). Must match BEFORE sessions/<id>.
       const statusMatch = sub.match(
         /^\/apps\/(?<appId>[^/]+)\/sessions\/(?<sessionId>[^/]+)\/status\/?$/u
       );
@@ -224,9 +189,7 @@ export function makeConversationRouteHandler(
         return true;
       }
 
-      // Conversation FTS search (#420) — matched BEFORE the generic
-      // sessions/<id> route so "search" isn't read as a session id:
-      //   GET /apps/<appId>/sessions/search?q=<query>&limit=<n>  → { results }
+      // Must match BEFORE sessions/<id> so "search" isn't read as a session id.
       const searchMatch = sub.match(
         /^\/apps\/(?<appId>[^/]+)\/sessions\/search\/?$/u
       );
@@ -247,7 +210,6 @@ export function makeConversationRouteHandler(
         return true;
       }
 
-      // /apps/<appId>/sessions  and  /apps/<appId>/sessions/<id>
       const m = sub.match(
         /^\/apps\/(?<appId>[^/]+)\/sessions(?:\/(?<sessionId>[^/]+))?\/?$/u
       );
@@ -277,13 +239,8 @@ export function makeConversationRouteHandler(
       }
 
       if (method === "GET") {
-        // Archive-aware read (#438): serves live rows and merges
-        // any custody-gated-pruned history back from the CAS, read-only.
-        // Transcript paging (#659). No parameters ⇒ the whole thread,
-        // exactly as before. `turns` windows to the NEWEST N — the end a reader
-        // opens to — and `beforeSeq` walks strictly backwards from a previous
-        // response's `oldestSeq`. A paged response carries ONLY that page's
-        // messages so the client can prepend them to what it already holds.
+        // Archive-aware (#438): merges pruned history from the CAS, read-only.
+        // A paged response carries ONLY that page's messages (#659).
         const window = parseTranscriptWindow(url);
         if (window === "invalid") {
           sendError(res, 400, "turns and beforeSeq must be positive integers");
@@ -294,10 +251,7 @@ export function makeConversationRouteHandler(
           sendError(res, 404, "session not found");
           return true;
         }
-        // The one genuinely large response on this router — a whole transcript,
-        // JSON, highly repetitive. Negotiated compression (#659); the
-        // opaque-tunnel transports never send Accept-Encoding and so still get
-        // raw bytes (see compression.ts).
+        // Whole transcripts are the one large response here; negotiate (#659).
         await sendJsonNegotiated(req, res, 200, full);
         return true;
       }
@@ -305,9 +259,7 @@ export function makeConversationRouteHandler(
         const body = (await readJsonBody(req)) as
           | { title?: unknown; pinned?: unknown; archived?: unknown }
           | undefined;
-        // One PATCH surface for rename + pin + archive (#420). Any subset
-        // of fields may be present; each provided field is applied in turn and
-        // the last successful update's fresh summary is returned.
+        // Any subset may be present; the last update's summary wins (#420).
         let updated: ConversationSummary | undefined;
         let touched = false;
         if (typeof body?.title === "string") {
@@ -335,7 +287,7 @@ export function makeConversationRouteHandler(
           }
         }
         if (!touched) {
-          // Back-compat: a bare PATCH with no recognized field is a rename to ''.
+          // A bare PATCH with no recognized field is a rename to ''.
           updated = store.renameSession(appId, id, "");
         }
         if (!updated) {

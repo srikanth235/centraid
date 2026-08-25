@@ -14,32 +14,18 @@ import {
 } from "./worker-pool.js";
 
 function resolveWorkerFile(): string {
-  // `here` is this module's dir (`src/handlers` → `dist/handlers` once built);
-  // the worker runner lives one level up under `worker/`.
   const here = import.meta.dirname;
   const jsPath = path.join(here, "..", "worker", "runner.js");
   if (existsSync(jsPath)) return jsPath;
-  // Running tests via tsx from src/ where .js isn't emitted — fall back to
-  // the .ts source. tsx propagates its loader to spawned Workers via
-  // NODE_OPTIONS, so this works under `tsx --test`.
+  // tsx: no .js from src/; its loader reaches spawned Workers.
   return path.join(here, "..", "worker", "runner.ts");
 }
 
 const WORKER_FILE = resolveWorkerFile();
 
-/**
- * Absolute path to the worker-runner entry. Exported so tests can build their
- * own {@link WorkerPool} against the same runner the production dispatch uses.
- */
 export const HANDLER_WORKER_FILE = WORKER_FILE;
 
-/**
- * The one warm-spare pool guarding every real handler dispatch (#404).
- * Lazily constructed so the module import doesn't spawn threads (tests /
- * tools that never dispatch pay nothing), and so `CENTRAID_WORKER_POOL_SIZE`
- * is read at first use. Tests pass their own `pool` to keep spare counts
- * cheap and deterministic.
- */
+/** Lazy — import must not spawn threads (#404). */
 let sharedWorkerPoolInstance: WorkerPool | undefined;
 function sharedWorkerPool(): WorkerPool {
   if (!sharedWorkerPoolInstance) {
@@ -59,35 +45,13 @@ export interface RunHandlerOptions {
   handlerKind: "query" | "action";
   args: Record<string, unknown>;
   timeoutMs?: number;
-  /**
-   * Fired once after an ACTION handler completes successfully. With the
-   * per-app silo gone the handler's writes ride ctx.vault, so there is no
-   * table-level changeset to enumerate — the notification means "this app
-   * acted; re-derive what you render". Query handlers never fire it.
-   */
+  /** ACTION turns only, on success. */
   onWrite?: (tables: string[]) => void;
-  /**
-   * Host-injected `ctx.vault` executor, already bound to this app's vault
-   * identity. When absent, every `ctx.vault.*` call fails closed with
-   * `VAULT_UNAVAILABLE` — the worker-side surface always exists, the
-   * capability behind it is the host's to mount.
-   */
+  /** Absent ⇒ `ctx.vault.*` fails closed: `VAULT_UNAVAILABLE`. */
   vault?: VaultBridge;
-  /**
-   * Host-resolved module URL for the shared civil-time implementation. The
-   * stable app-engine layer only defines the structural capability; a runtime
-   * host mounts the implementation so this package does not reverse the
-   * dependency DAG.
-   */
+  /** Host-mounted; this layer must not depend on a runtime host. */
   timeModuleUrl?: string;
-  /** Overridable for tests; production callers take the shared default (#351). */
   admission?: WorkerAdmission;
-  /**
-   * Warm-spare worker pool (#404). Overridable for tests; production
-   * callers take the lazily-built shared default. Every run still gets a
-   * single-use worker — the pool only pre-pays the thread/module boot on a
-   * spare so it's off the request's critical path.
-   */
   pool?: WorkerPool;
 }
 
@@ -96,23 +60,14 @@ export interface HandlerOutcome {
   value?: unknown;
   error?: string;
   logs: Array<{ level: "info" | "warn" | "error"; msg: string }>;
-  /** Set when `ok` is false because admission refused a worker slot (#351) — no worker ever spawned. */
   busy?: boolean;
 }
 
-/**
- * Runs a user handler in a worker thread. The handler's only data door is
- * `ctx.vault` — a message-passing bridge the host binds to the app's vault
- * credential. No SQLite handle, no file path: the silo is gone (issue
- * #286 phase 2).
- */
 export async function runHandler(
   opts: RunHandlerOptions
 ): Promise<HandlerOutcome> {
   const admission = opts.admission ?? sharedWorkerAdmission();
-  // Admission gates the WORKER SPAWN itself (#351) — a saturated
-  // gateway must fail fast here, before a single extra worker thread comes
-  // into existence, not after.
+  // Gate the spawn (#351): fail before another thread exists.
   try {
     await admission.acquire();
   } catch (error) {
@@ -132,10 +87,6 @@ export async function runHandler(
 
   const logs: HandlerOutcome["logs"] = [];
 
-  // Take a pre-booted, single-use worker from the warm-spare pool and hand it
-  // the request. The pool has already paid the thread/module boot on a spare
-  // thread (#404); this worker runs exactly this one handler and is then
-  // terminated at finish() — isolation identical to spawn-per-run.
   const pool = opts.pool ?? sharedWorkerPool();
   const worker = pool.acquire();
   const runMessage = {
@@ -163,31 +114,22 @@ export async function runHandler(
       resolved = true;
       releaseSlot();
       if (timeoutHandle) clearTimeout(timeoutHandle);
-      // Notify only on successful action turns — the app acted, views
-      // should re-derive. The notifier is wrapped so a thrown listener
-      // can't change the handler outcome.
       if (opts.onWrite && opts.handlerKind !== "query" && outcome.ok) {
         try {
           opts.onWrite([]);
         } catch {
-          /* never let notification change the handler outcome */
+          /* must not change the outcome */
         }
       }
       worker.removeAllListeners();
       worker.terminate().catch(() => {});
-      // Fire-and-forget log persistence — see log-store.ts for the rotation
-      // story. Resolving the outcome is independent of the disk write.
       if (persistedEntries.length > 0) {
         void appendLogs(opts.app.dir, persistedEntries);
       }
-      // The `resolved` guard above makes this safe across multiple finish() callers
       // oxlint-disable-next-line promise/no-multiple-resolved -- grandfathered pre-existing suppression (#247)
       resolve(outcome);
     };
 
-    // Timeout must unblock the caller even if terminate()/exit is delayed
-    // under thread pressure (#811). finish() already terminates the worker
-    // and releases the admission slot.
     if (opts.timeoutMs && opts.timeoutMs > 0) {
       timeoutHandle = setTimeout(() => {
         const error = `worker timed out after ${opts.timeoutMs}ms`;
@@ -246,8 +188,6 @@ export async function runHandler(
           value?: unknown;
           error?: string;
         };
-        // If the handler failed, also persist an error log so the Logs panel
-        // surfaces the failure even when the user didn't call `log.error`.
         if (!r.ok && r.error) {
           persistedEntries.push({
             ts: Date.now(),
@@ -261,8 +201,6 @@ export async function runHandler(
       }
     });
     worker.on("error", (err) => {
-      // @types/node 26 types this callback's argument as `unknown` — a worker
-      // can reject with any value, not only an Error.
       const message = err instanceof Error ? err.message : String(err);
       persistedEntries.push({
         ts: Date.now(),

@@ -23,75 +23,46 @@ import { useCompactLayout } from "./useCompactLayout.js";
 
 import styles from "./ShellApp.module.css";
 
-// The navigation surface handed to the stem + outlet render-props. It exposes
-// the current route and the history verbs, so callers dispatch navigations
-// without touching the reducer.
+// Callers dispatch navigations through this surface, never the reducer.
 export interface ShellNav {
   route: ShellRoute;
-  /** Whether the desktop navigation stem is visible in the current frame. */
   stemOpen: boolean;
-  /** Toggle the persistent desktop navigation stem. */
   toggleStem: () => void;
   navigate: (route: ShellRoute) => void;
-  /** Swap the current history entry in place (no new back-stack entry). */
   replace: (route: ShellRoute) => void;
   back: () => void;
   forward: () => void;
   canGoBack: boolean;
   canGoForward: boolean;
-  /** Full-bleed route-owned frames use the same Assistant state as the shell. */
   assistantOpen?: boolean;
   toggleAssistant?: () => void;
 }
 
 /**
- * What a screen says in the app bar (#708, invariant 3).
- *
- * The brief models this as per-app configuration — a title, a meta line, and
- * at most two actions, of which at most one is the filled ink. It is data
- * rather than a context a screen writes into, because the bar renders in the
- * frame ABOVE the outlet: a screen that set it from an effect would paint one
- * frame with the previous route's title, which is the flicker the whole
- * "chrome is persistent" invariant exists to prevent.
+ * App-bar content (#708, invariant 3): at most two actions, at most one filled.
+ * Keep it DATA, never a context a screen writes into — the bar renders above
+ * the outlet, so an effect-set title paints one frame stale.
  */
 export interface ShellAppBar {
-  /** The app's own title; a full identity lockup promotes it to display. */
   title?: string;
-  /** The line under it, in the numeric register. */
   meta?: ReactNode;
-  /** A count BESIDE the title, on the same line — see `ShellFrameProps.appCount`. */
   count?: ReactNode;
-  /** The app's mark, leading the title — see `ShellFrameProps.appMark`. */
   mark?: ReactNode;
-  /** The app's actions, trailing. Quiet first, the one commit control last. */
   actions?: ReactNode;
-  /** Makes the title a control — see `ShellFrameProps.appTitleAction`. */
   titleAction?: ShellFrameProps["appTitleAction"];
 }
 
 export interface ShellAppProps {
-  /** Where the shell opens (usually `{ kind: 'home' }`). */
   initialRoute: ShellRoute;
-  /** The navigation stem for the current route (gets the nav surface). */
   renderStem: (nav: ShellNav) => ReactNode;
-  /** What the current route says in the app bar. A route that returns nothing
-   *  gets the bare frame bar (history + new app), which is what a full-bleed
-   *  surface drawing its own header wants. */
+  /** Returning nothing gets the bare frame bar. */
   renderAppBar?: (nav: ShellNav) => ShellAppBar | undefined;
-  /** The page body for the current route (the outlet). */
   renderScreen: (nav: ShellNav) => ReactNode;
-  /** Routes that paint their own full window (an inline app, the automation
-   *  handoff) and so bypass the chrome frame. */
   isFullBleed?: (route: ShellRoute) => boolean;
-  /** Receives the current nav surface whenever it changes, so the App root can
-   *  wire document-level shortcuts + external re-scope (gateway/vault change)
-   *  against live navigation without owning the router. */
+  /** Lets the root wire shortcuts against live nav without owning the router. */
   onNavReady?: (nav: ShellNav) => void;
-  /** The one persistent status line. Full-bleed routes mount their own frame
-   *  and are handed the same node directly, so this is the framed case only. */
   statusLine?: ReactNode;
-  /** The Assistant is frame state, not a route. This renderer receives the
-   *  one open state shared by app-bar controls, keyboard shortcut, and rail. */
+  /** The Assistant is frame state, not a route — one shared open state. */
   renderAssistantCompanion?: (
     nav: ShellNav,
     state: {
@@ -106,14 +77,8 @@ const DEFAULT_FULL_BLEED = (r: ShellRoute): boolean =>
   r.kind === "app" || r.kind === "automation-builder";
 
 /**
- * A real component boundary around a render-prop outlet (#659).
- *
- * `renderScreen(nav)` and `renderStem(nav)` were plain function calls, so
- * every re-render of the shell root rebuilt the whole route's element tree —
- * including for state the route does not read, like the 5s gateway heartbeat.
- * A function call has no boundary React can stop at; a memoized component does.
- * It re-renders when the nav or the render function changes, which is why both
- * callers keep those stable.
+ * A component boundary the render-prop call lacks (#659). Keep `nav` and the
+ * render functions stable or this memo buys nothing.
  */
 const Outlet = memo(
   ({
@@ -126,8 +91,6 @@ const Outlet = memo(
 );
 Outlet.displayName = "Outlet";
 
-/** Where the stem's open/closed preference lives. Persisted, because a member
- *  who reclaims the band on a narrow window means it for more than one session. */
 const STEM_OPEN_KEY = "shell.stemOpen";
 
 export default function ShellApp({
@@ -143,12 +106,7 @@ export default function ShellApp({
   const [state, dispatch] = useReducer(routerReducer, INITIAL_ROUTER, (init) =>
     routerReducer(init, { type: "navigate", route: initialRoute })
   );
-  // The stem can be reclaimed (⌘B), but it never becomes a DRAWER: hidden is a
-  // persisted preference, not a mode you fall into. Nothing dismisses it for
-  // you, nothing floats it over the content, and there is no scrim — the three
-  // affordances the pre-#707 three-zone sidebar needed and this one still does
-  // not. Compact ignores the preference entirely: the band is the navigation
-  // there, and a phone with no way to move is not a phone.
+  // The stem is never a DRAWER: no auto-dismiss, no float, no scrim (#707).
   const compact = useCompactLayout();
   const [assistantOpen, setAssistantOpen] = useState(false);
   const toggleAssistant = useCallback(
@@ -215,10 +173,7 @@ export default function ShellApp({
     surface: compact ? "touch" : "pointer",
   });
 
-  // Full-bleed routes render their own window frame (app view / builder),
-  // so the ordinary shell frame steps aside. The Assistant remains frame
-  // state, however: this host reserves its pointer rail while the route-owned
-  // frame opens the touch sheet from its ordinary app-bar Assistant glyph.
+  // Full-bleed routes own their frame; the Assistant stays frame state here.
   if (isFullBleed(route))
     return (
       <div

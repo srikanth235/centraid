@@ -1,52 +1,30 @@
 // Token-purity ratchet allowlist (#686).
 //
-// packages/design owns every color, type ramp, radius, and font in the
-// product. Blueprint app CSS is supposed to *consume* those tokens through
-// `var(--token)` and never restate them — a hardcoded `#fff` or a locally
-// declared `--c-*` silently forks the palette and breaks theming the moment
-// the design package changes a value.
-//
-// The apps are not clean yet. This file is the burn-down ledger: every entry
-// records exactly how many violations of each kind a file still carries.
-// `token-purity.test.ts` asserts the real counts EQUAL these numbers, so:
-//
-//   * adding a new hardcoded literal turns the suite red (count too high);
-//   * cleaning a file up ALSO turns the suite red (count too low) until the
-//     entry here is shrunk or deleted in the same change.
-//
-// That second direction is deliberate. The ledger may only ever get smaller,
-// and every shrink is a reviewed diff. Do not add new entries or raise a
-// count without a very good reason — the intended end state is an empty
-// object and the deletion of this file.
-//
-// Counting rules live in token-purity.test.ts (comments are stripped first,
-// `font-family` values built only from `var()` are legitimate, and
-// `customProps` lists distinct reserved-namespace property NAMES, not
-// occurrences).
+// packages/design owns every color, type ramp, radius, and font; blueprint app
+// CSS consumes them through `var(--token)` and never restates them, since a
+// hardcoded literal or a local `--c-*` forks the palette. This file is the
+// burn-down ledger of what each file still carries: `token-purity.test.ts`
+// asserts real counts EQUAL these numbers, so a new literal AND an uncounted
+// cleanup both turn the suite red. The ledger may only shrink — do not add an
+// entry or raise a count; the end state is an empty object and no file here.
+// Counting rules live in token-purity.test.ts.
 
-/** Per-file violation budget, keyed by path relative to `packages/blueprints/apps`. */
+/** Keyed by path relative to `packages/blueprints/apps`. */
 export interface TokenPurityBudget {
-  /** `#rgb` / `#rrggbb` / `#rrggbbaa` literals. */
   hex: number;
-  /** `rgb()` / `rgba()` / `hsl()` / `hsla()` literals. */
+  /** `rgb()` / `hsl()` literals, with or without alpha. */
   functional: number;
-  /** `font-family` declarations naming a concrete font stack. */
+  /** `font-family` declarations naming a concrete stack. */
   fontFamily: number;
-  /** Distinct reserved-namespace custom properties declared in the file. */
+  /** Distinct reserved-namespace custom property NAMES, not occurrences. */
   customProps: readonly string[];
 }
 
 export const TOKEN_PURITY_ALLOWLIST: Readonly<
   Record<string, TokenPurityBudget>
 > = {
-  // Remaining entries after the #686 burn-down (was 28 files / 252 violations).
-  // What's left is sanctioned: per-app identity props
-  // (--app-hue / --app-identity), the photos wall,
-  // and hsl(var(--app-hue) ...) theater-stage backdrops awaiting a --stage
-  // token in packages/design.
-  // Docs' teal identity, declared in the same commit that added it. The two
-  // knobs are the sanctioned per-app identity surface (see `people` and
-  // `photos` below); everything else in that file is contract vocabulary.
+  // Sanctioned residue: the two per-app identity knobs, plus photos' stage
+  // backdrop awaiting a `--stage` token in packages/design.
   "docs/Chrome.module.css": {
     hex: 0,
     functional: 0,
@@ -68,12 +46,9 @@ export const TOKEN_PURITY_ALLOWLIST: Readonly<
 };
 
 /**
- * Fallback-less `var()` references that resolve to nothing (#686).
- *
- * **This list is empty and must stay that way.** Any entry is a live latent
- * bug: the declaration is dropped at computed-value time, so the rule silently
- * does not apply. Resolve a new one by reading what the site is actually doing
- * — bind the name to the token its peers already use, or give the documented
- * default as an explicit fallback — rather than listing it here.
+ * Fallback-less `var()` references that resolve to nothing (#686). Empty, and
+ * must stay so: every entry is a live bug — the declaration is dropped at
+ * computed-value time, so the rule silently does not apply. Bind the name to a
+ * token or give an explicit fallback instead of listing it here.
  */
 export const UNRESOLVED_VAR_DEBT: readonly string[] = [];

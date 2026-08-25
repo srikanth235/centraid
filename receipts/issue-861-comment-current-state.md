@@ -3471,6 +3471,66 @@ Files swept in Wave 2 (plus `scripts/comment-only-diff.mjs`,
 - `packages/vault/src/share/commons-sim.test.ts`
 - `packages/vault/src/vault-footprint.ts`
 
+### Wave 3a — partial sweep, paused on user request (2026-08-25)
+
+The user paused the session mid-Wave 3 ("stop...we'll resume later"). The 8
+sweep agents were halted; the 30 files they had already finished are integrated
+here so the work survives the ephemeral container. The remaining ~146 Wave 3
+files stay on the worklist for resumption.
+
+| figure | after Wave 2 | after Wave 3a |
+| --- | --- | --- |
+| global character share | 19.26% | 19.00% |
+| global line density | 11.35% | 11.18% |
+| files over 15% cap | 1,791 | 1,769 |
+
+Verification (all green before commit):
+
+```
+node scripts/comment-only-diff.mjs HEAD   # 30 changed file(s) — all comment-only
+bun run format:check                      # clean after bun run format
+bun run lint                              # oxlint --deny-warnings clean
+node scripts/check-comment-density-ratchet.mjs --write && node scripts/check-comment-density-ratchet.mjs
+# ok comment-density — no pin rose, no unpinned file over cap
+```
+
+No allowlist changes and no hand-raises in this partial wave; every touched pin
+moved down. Files changed (full inventory):
+
+- `apps/desktop/src/main/update-signature-core.ts`
+- `apps/desktop/src/main/update-signature-gate.ts`
+- `apps/desktop/tests/e2e/pending-overlay.spec.ts`
+- `apps/mobile/src/kit/replica/replica-status.ts`
+- `apps/mobile/src/kit/transfer/backup-verdict.ts`
+- `apps/mobile/src/kit/transfer/transfer-consent.ts`
+- `apps/mobile/src/lib/atlas.ts`
+- `packages/blueprints/apps/_shared/grant-door.ts`
+- `packages/blueprints/apps/_shared/shelves.ts`
+- `packages/blueprints/apps/_shared/view-state-kit.ts`
+- `packages/blueprints/apps/agenda/app-root.tsx`
+- `packages/blueprints/apps/people/shelves.ts`
+- `packages/blueprints/apps/photos/components/DuplicateReview.tsx`
+- `packages/blueprints/apps/photos/components/Import.tsx`
+- `packages/blueprints/src/photos-media.test.ts`
+- `packages/blueprints/src/token-purity-allowlist.ts`
+- `packages/client/src/approvals-copy.ts`
+- `packages/client/src/assistant-rich.ts`
+- `packages/client/src/react/shell/ShellApp.tsx`
+- `packages/client/src/react/shell/routes/settingsEnrichmentData.ts`
+- `packages/client/src/react/ui/Button.tsx`
+- `packages/client/src/react/ui/DecideBlock.tsx`
+- `packages/server/src/engine/handlers/handler-runner.ts`
+- `packages/server/src/engine/http/compression.ts`
+- `packages/server/src/engine/http/conversation-routes.ts`
+- `packages/server/src/engine/model-pricing.ts`
+- `packages/server/src/serve/resource-accounting.ts`
+- `packages/server/src/serve/serve.ts`
+- `packages/server/src/serve/share-coordinator.ts`
+- `packages/server/src/serve/vault-context.ts`
+- `tests/comment-density-ratchet.json`
+
+
+
 ## Session
 
 <!-- Session identifiers are maintained by the agent-session-identity pre-commit hook. -->

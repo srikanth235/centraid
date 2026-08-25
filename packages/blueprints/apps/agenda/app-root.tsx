@@ -1,25 +1,12 @@
 // governance: allow-repo-hygiene file-size-limit — this file holds the app's whole orchestration as one React tree by design (#505/#834); the views, the rail, the editor and the states each live in their own module and this is the wiring between them.
-// Agenda — query-free React tree. Holds the `Root` component and everything it
-// needs that does NOT depend on the node-side `./queries/*` modules; the
-// `app-inline.tsx` descriptor pairs this with the query wiring.
+// Agenda — query-free React tree; keep `./queries/*` out of it.
 //
-// THE APP IS A ROUTE INSIDE THE FRAME. It draws no bar, no status line and no
-// navigation column of its own: the range, the view switcher and the one
-// filled verb are contributed through `frame.tsx`, outcomes go to the frame's
-// single status line, and the shell's stem is the only navigation.
+// THE APP IS A ROUTE INSIDE THE FRAME: no bar, status line or nav column of its
+// own — bar and band are contributed through `frame.tsx`.
 //
-// THE DAY-CONTEXT LAYERS mount here (#834): `day-context` is dispatched
-// alongside `upcoming` over the same window, and its facts reach the views
-// through `Chrome`'s `dayContext` rail slot and the `dayRibbon` / `dayShelf`
-// props the grids and the lists accept. They are a SECOND read, not a second
-// store: the layers decorate days, they never become event rows, and a read
-// that is refused degrades to no decoration rather than to a broken rail.
-//
-// SCOPE (#834 R-shelf-scope). The due counts are read on the PERSONAL scope
-// only — Agenda is a single-scope mount (`app-inline.tsx` sets no
-// `multiScope`), so `window.centraid.read` addresses the member's own vault
-// and there is deliberately no `readAll` fan-out. A shelf that counted other
-// people's work would reintroduce "someone should, so no one does".
+// THE DAY-CONTEXT LAYERS (#834) are a second read, not a second store: they
+// decorate days, never become event rows, and a refused read degrades to no
+// decoration. Due counts read the PERSONAL scope only — no `readAll` fan-out.
 
 import { useCallback, useEffect, useReducer, useRef, useState } from "react";
 import type { ReactElement, ReactNode } from "react";
@@ -94,8 +81,6 @@ import {
 
 import styles from "./Chrome.module.css";
 
-/** The vault entities this app's queries read — the shell's change-subscription
- *  filter, unchanged by the rebuild. */
 export const CHANGE_TABLES = [
   "core.event",
   "schedule.event_ext",
@@ -106,18 +91,14 @@ export const CHANGE_TABLES = [
   "core.attachment",
   "core.content_item",
   "core.vault",
-  // The day-context projection's own entities (#834 R-daycontext): open tasks
-  // coming due, and the starred-flag vocabulary that answers a birthday's
-  // relationship tier. Without them a completed task or a newly starred
-  // person would leave the grid's decorations stale until the next nav.
+  // Day-context entities (#834): without them decorations go stale.
   "schedule.task",
   "core.tag",
   "core.concept",
   "core.concept_scheme",
 ];
 
-/** The `upcoming` payload. A consent denial rides `vaultDenied` — a first-class
- *  outcome, never an error. */
+/** A consent denial rides `vaultDenied` — an outcome, never an error. */
 interface UpcomingData {
   events?: AgEvent[];
   calendars?: Calendar[];
@@ -150,15 +131,12 @@ export function Root({
   const [narrow, setNarrow] = useState(false);
   const [moreOpen, setMoreOpen] = useState(false);
   const [consent, setConsent] = useState<{ message: string } | null>(null);
-  /** A read that actually came back FAILED — the only honest evidence this app
-   *  has for "the gateway is out of reach". */
+  /** A read that came back FAILED — the only evidence for "out of reach". */
   const [readFailedState, setReadFailedState] = useState(false);
-  /** Calendars whose slice the vault refused. A PARTIAL denial is a normal
-   *  state and it names the slice; it never pretends the merge was whole. */
+  /** A partial denial is normal and names its slice. */
   const [deniedCalendars, setDeniedCalendars] = useState<readonly string[]>([]);
 
-  /** Which day's shelf the member has opened. ONE at a time and per day: a
-   *  shelf is a glance, and every day expanded at once is a second task list. */
+  /** ONE open shelf at a time: a shelf is a glance, not a second task list. */
   const [openShelf, setOpenShelf] = useState<string | null>(null);
 
   const rootElRef = useRef<HTMLDivElement | null>(null);
@@ -179,10 +157,7 @@ export function Root({
   });
   const stateRef = useRef<AppState>(makeState(defaultView(false)));
   const logicRef = useRef<ReturnType<typeof createLogic> | null>(null);
-  /** The day-context facts, and whether the layers may be offered at all. A
-   *  refused or unreachable read leaves this at `NO_DAY_CONTEXT` and
-   *  `layersReady` false, which draws the rail's empty line — never switches
-   *  over facts the app does not have. */
+  /** A refused read holds `NO_DAY_CONTEXT` and `layersReady` false. */
   const dayContextRef = useRef<DayContextData>(NO_DAY_CONTEXT);
   const [layersReady, setLayersReady] = useState(false);
   const prefsRef = useRef<ReturnType<typeof createMemberPrefs> | null>(null);
@@ -192,12 +167,7 @@ export function Root({
   const state = stateRef.current;
   const data = dataRef.current;
 
-  /**
-   * One read per paint. The canvas range and the rail's mini month usually
-   * coincide (Month), and where they do not the mini month is served from the
-   * same rows rather than by a second read — a rail is decoration, and a
-   * decoration that doubles the vault traffic is a defect.
-   */
+  /** One read per paint: the mini month is served from the canvas rows. */
   const load = useCallback(async (): Promise<void> => {
     const logic = logicRef.current;
     if (!logic) return;
@@ -227,18 +197,15 @@ export function Root({
         bump();
         return;
       }
-      // Mutate `data` in place (never reassign): logic.ts closed over this
-      // exact object at boot.
+      // Mutate in place: `createLogic` closed over this exact object.
       store.events = next.events ?? [];
       store.miniEvents = store.events;
       store.calendars = next.calendars ?? [];
       store.calById = new Map(
         store.calendars.map((cal): [string, Calendar] => [cal.calendar_id, cal])
       );
-      // A calendar the read named but returned no rows for is NOT a denial;
-      // a calendar the read could not see at all is. The query answers the
-      // second by omitting it from `calendars` while events still reference
-      // it, so that is exactly what is counted here.
+      // Denial is a calendar omitted from `calendars` while events still
+      // reference it — not one merely returning no rows.
       const named = new Set(store.calendars.map((cal) => cal.calendar_id));
       setDeniedCalendars([
         ...new Set(
@@ -255,12 +222,8 @@ export function Root({
       bump();
     };
 
-    /**
-     * The layers, over the same window. Settled on its OWN — the calendar is
-     * the read that matters, and a denied People or Tasks slice must leave the
-     * grid drawn and merely undecorated. `vaultDenied` comes back inside the
-     * payload rather than as a throw, so both refusals land in one place.
-     */
+    /** Settled on its own: a denied People or Tasks slice leaves the grid
+     *  drawn and merely undecorated. */
     const applyContext = (next: DayContextData | null): void => {
       if (seq !== loadSeqRef.current) return;
       const usable = next && !next.vaultDenied;
@@ -273,10 +236,7 @@ export function Root({
       resolveView(stateRef.current.view, compact),
       stateRef.current.anchorDay
     );
-    // The day window the decorations are asked for, as the projection's own
-    // `{from, to}` day keys rather than the calendar's instants. Schedule and
-    // Waiting on have no upper bound, and the query's own forward runway is
-    // the honest answer there rather than a bound invented here.
+    // Day keys, not instants. Unbounded views take the query's own runway.
     const contextRange = {
       from: localDayKey(new Date(range.from)),
       ...(range.to ? { to: localDayKey(new Date(range.to)) } : {}),
@@ -294,9 +254,8 @@ export function Root({
       apply(await read);
     } catch {
       if (seq !== loadSeqRef.current) return;
-      // The attempted live read never established a dependency. Drop the
-      // listener so a later doorbell can retry rather than leaving this view
-      // inert. A BROKEN VAULT MUST NOT LOOK LIKE AN EMPTY ONE.
+      // No dependency was established: drop the listener so a doorbell can
+      // retry. A BROKEN VAULT MUST NOT LOOK LIKE AN EMPTY ONE.
       replaceLive([]);
       readFailed(document.querySelector<HTMLElement>("#noticeBanner"));
       readFailedRef.current = true;
@@ -316,9 +275,7 @@ export function Root({
   }
   const logic = logicRef.current;
 
-  /** The invite directory, read ONCE and only when a composer needs it. The
-   *  boot read stays a single query, and a member who never opens the editor
-   *  never asks People for anything. */
+  /** Read ONCE, and only when a composer needs it: boot stays a single query. */
   const ensureParties = useCallback(() => {
     if (partiesReadRef.current) return;
     partiesReadRef.current = true;
@@ -330,8 +287,7 @@ export function Root({
         bump();
       })
       .catch(() => {
-        // A denied directory leaves the picker empty; it never takes the
-        // editor down with it.
+        // A denied directory empties the picker; it never takes the editor down.
       });
   }, [data]);
 
@@ -424,7 +380,6 @@ export function Root({
     bump();
   }, []);
 
-  /** The app bar's own New event: a composer with no slot behind it. */
   const openCreate = useCallback(() => {
     ensureParties();
     stateRef.current.createOpen = true;
@@ -432,11 +387,7 @@ export function Root({
     bump();
   }, [ensureParties]);
 
-  /**
-   * Edit, from a quick-add draft. THE DRAFT SURVIVES: the whole point of the
-   * flow is that a title typed on a slot is carried into the full editor,
-   * so clearing it here would make Edit mean "start again".
-   */
+  /** THE DRAFT SURVIVES into the full editor — never clear it here. */
   const openCreateFromQuick = useCallback(() => {
     ensureParties();
     stateRef.current.createOpen = true;
@@ -473,10 +424,8 @@ export function Root({
     prefsRef.current?.toggleLayer(id);
   }, []);
 
-  /** Hand a task to Tasks. The tap-through is a NAVIGATION, never an edit:
-   *  Agenda shows that a task comes due and the task's own room owns it. The
-   *  door is absent on hosts that offer no way to leave the app, and then no
-   *  shelf row is drawn as a control at all. */
+  /** A NAVIGATION, never an edit — the task's own room owns it. Absent on
+   *  hosts with no way to leave the app. */
   const openInTasks = window.centraid.openApp
     ? (taskId: string): void => {
         window.centraid.openApp?.("tasks", { taskId });
@@ -541,8 +490,7 @@ export function Root({
   const searching = state.search.trim() !== "";
 
   // ──── the day-context seams ────
-  // Both are plain closures over this render's facts, so switching a layer off
-  // removes its ribbon or its shelf on the next paint and touches nothing else.
+  // Closures over this render's facts, so a layer switched off just vanishes.
   const dayContext = dayContextRef.current;
   const dayRibbon = (dayKey: string): ReactNode => (
     <DayRibbon facts={ribbonsFor(dayKey, dayContext, layers)} />
@@ -568,8 +516,7 @@ export function Root({
       </div>
     );
   } else if (consent) {
-    // The banner above carries the way forward; the canvas draws nothing
-    // rather than an empty grid pretending the vault answered.
+    // Never draw a grid pretending the vault answered.
     canvas = null;
   } else if (rows.length === 0) {
     canvas = (
@@ -629,8 +576,7 @@ export function Root({
     );
   }
 
-  // The second control row: what is true about this read. It renders only
-  // where there is something to declare — an empty band is chrome.
+  // Renders only where there is something to declare.
   const offline = typeof navigator !== "undefined" && !navigator.onLine;
   const stateRow: ReactNode =
     readFailedState || offline || deniedCalendars.length > 0 ? (
@@ -763,9 +709,8 @@ export function Root({
   );
 
   return (
-    // Fill the app pane (a flex child of the route body) so the inline chrome
-    // gets real width — otherwise it collapses to content width and the
-    // component-width narrow observer wrongly flips to the phone layout.
+    // Fill the app pane so chrome gets real width — content width makes the
+    // narrow observer flip to the phone layout.
     <div
       ref={setRoot}
       style={{
@@ -798,10 +743,7 @@ export function Root({
               onToggle={toggleCalendar}
             />
           ),
-          // THE LAYERS. Switches only once the projection has actually
-          // answered: a refused or unreachable read leaves the section saying
-          // what is true — nothing is decorating these days — rather than
-          // offering three toggles that would change nothing.
+          // Never offer toggles over facts the app does not have.
           dayContext: layersReady ? (
             <LayerToggles layers={layers} onToggle={toggleLayer} />
           ) : (
@@ -837,10 +779,7 @@ export function Root({
             />
           ) : null,
           overlays,
-          // The sheet carries the SEARCH FIELD and the calendar filters. On
-          // compact it is the band's sixth slot; on a pointer surface it is
-          // where the app bar's Search control leads, because the rail beside
-          // it holds the filters but has no field.
+          // Carries the search FIELD: the rail holds filters but no field.
           moreSheet: moreOpen ? (
             <MoreSheet
               calendars={data.calendars}
