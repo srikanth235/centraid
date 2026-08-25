@@ -26,8 +26,10 @@
     image-rendering: pixelated;
     image-rendering: crisp-edges;
     background: #5c94fc;
-    max-width: 100vw; max-height: 78vh;
-    width: auto; height: auto;
+    width: min(96vw, 1100px);
+    max-height: 78vh;
+    aspect-ratio: 512 / 240;
+    height: auto;
     border-radius: 6px;
     box-shadow: 0 10px 40px rgba(0,0,0,.55), 0 0 0 2px #1b2547;
     display: block;
@@ -59,7 +61,7 @@
 </head>
 <body>
 <div id="wrap">
-  <canvas id="game" width="512" height="480"></canvas>
+  <canvas id="game" width="512" height="240"></canvas>
   <div id="hint">
     <b>←</b> / <b>→</b> move &nbsp;·&nbsp; hold <b>→</b>+<b>Shift</b> or <b>Z</b> to run &nbsp;·&nbsp;
     <b>↑</b> / <b>Space</b> jump &nbsp;·&nbsp; <b>S</b> shoot fireball (with Fire Flower) &nbsp;·&nbsp;
@@ -86,7 +88,7 @@
 
 (() => {
   const TILE = 16;                 // tile size in source pixels
-  const VW = 32, VH = 30;          // viewport in tiles (512x480)
+  const VW = 32, VH = 15;          // viewport in tiles (512x240)
   const canvas = document.getElementById('game');
   const ctx = canvas.getContext('2d');
   ctx.imageSizeSmoothingEnabled = false;
@@ -309,6 +311,15 @@
         }
       }
     }
+    // fill pipe centers: maps write pipes as "[ ]" / "{ }" — the middle column
+    // becomes a solid pipe-center tile ('P' lip, 'p' shaft)
+    for (let y=0; y<h; y++)
+      for (let x=1; x<width-1; x++)
+        if (grid[y][x]===' ') {
+          if (grid[y][x-1]==='[' && grid[y][x+1]===']') grid[y][x]='P';
+          else if (grid[y][x-1]==='{' && grid[y][x+1]==='}') grid[y][x]='p';
+        }
+
     // find true flag column (leftmost F)
     let fx = null;
     for (let x=0; x<width && fx===null; x++) {
@@ -352,7 +363,7 @@
   function makeEnemy(x, y, type) {
     return {
       x, y, w:14, h: type==='shell'?15:14,
-      vx: -0.5, vy:0, dir:-1, type,
+      vx: -0.6, vy:0, dir:-1, type,
       state:'walk',       // walk | shell | slide | dead
       onGround:false, t:0, alive:true, stompT:0, awake:false,
     };
@@ -361,7 +372,7 @@
   // =======================================================================
   //  TILE HELPERS
   // =======================================================================
-  const SOLID = new Set(['G','b','?','M','S','[',']','{','}','=','x','U']); // U=used block
+  const SOLID = new Set(['G','b','?','M','S','[',']','{','}','P','p','=','x','U']); // U=used block, P/p=pipe centers
   function tileAt(w, tx, ty) {
     if (ty<0 || ty>=w.height || tx<0 || tx>=w.width) return ' ';
     return w.grid[ty][tx];
@@ -640,7 +651,11 @@
     }
     e.t++;
 
-    if (e.state === 'dead') { return; }
+    if (e.state === 'dead') {
+      // squashed: lie flat briefly, then vanish
+      if (game.t > (e.squashUntil||0)) e.alive = false;
+      return;
+    }
 
     if (e.state === 'shell') {
       // idle shell; if player pushes, it may already be sliding
@@ -666,13 +681,8 @@
       if (e.vy>0){ e.y = ty*TILE - e.h; e.onGround=true; e.vy=0; }
       else { e.y = ty*TILE+TILE; e.vy=0; }
     }
-    // ledge turn for walkers (don't walk off edges) — optional gentle behavior
-    if (e.onGround && (e.state==='walk')) {
-      const aheadX = e.dir>0 ? e.x+e.w+1 : e.x-1;
-      const belowTile = tileAt(w, Math.floor(aheadX/TILE), Math.floor((e.y+e.h+2)/TILE));
-      if (!isSolid(belowTile)) { e.dir*=-1; e.vx = e.dir*Math.abs(e.vx||0.5); }
-    }
-    if (e.state==='walk' && Math.abs(e.vx)<0.1) e.vx = e.dir*0.5;
+    // walkers march straight ahead, off ledges and all — only walls turn them
+    if (e.state==='walk' && Math.abs(e.vx)<0.1) e.vx = e.dir*0.6;
 
     // fell out
     if (e.y > w.pxHeight+40) { e.alive=false; return; }
@@ -814,6 +824,10 @@
     if (!w) { drawTitle(); return; }
 
     const cam = Math.floor(game.cam);
+    // anchor the level to the bottom of the viewport so the ground meets the screen edge
+    const vShift = Math.max(0, VH*TILE - w.pxHeight);
+    ctx.save();
+    ctx.translate(0, vShift);
 
     // deco (parallax-ish, drawn at 0.5 scroll)
     for (const d of w.deco) {
@@ -857,6 +871,8 @@
     // player
     drawPlayer(w.player, cam);
 
+    ctx.restore();   // end bottom-anchor translate
+
     // HUD
     drawHUD();
 
@@ -870,7 +886,7 @@
     if (game.messageT>0 && game.state==='play') {
       ctx.save();
       ctx.globalAlpha = Math.min(1, game.messageT/20);
-      drawText(game.message, VW*TILE/2, 90, 'center', C.star, 2);
+      drawText(game.message, VW*TILE/2, 56, 'center', C.star, 2);
       ctx.restore();
       game.messageT--;
     }
@@ -951,10 +967,44 @@
         px(x,y,TILE,2,'#5a3418'); px(x+7,y,2,TILE,'#5a3418'); px(x,y+7,TILE,2,'#5a3418');
         break;
       }
-      case '[': px(x,y,TILE,TILE,C.pipe); px(x,y,TILE,3,C.pipeLight); px(x,y,3,TILE,C.pipeLight); px(x+13,y,3,TILE,C.pipeDark); px(x,y+13,TILE,3,C.pipeDark); break;
-      case ']': px(x,y,TILE,TILE,C.pipe); px(x,y,TILE,3,C.pipeLight); px(x+13,y,3,TILE,C.pipeDark); px(x,y,3,TILE,C.pipeLight); px(x,y+13,TILE,3,C.pipeDark); break;
-      case '{': px(x,y,TILE,TILE,C.pipe); px(x+1,y,3,TILE,C.pipeLight); px(x+12,y,4,TILE,C.pipeDark); break;
-      case '}': px(x,y,TILE,TILE,C.pipe); px(x,y,3,TILE,C.pipeLight); px(x+12,y,4,TILE,C.pipeDark); break;
+      case '[': // pipe lip, left half: outlined rim with highlight bands
+        px(x,y,TILE,TILE,C.pipe);
+        px(x,y,TILE,2,'#000'); px(x,y+14,TILE,2,'#000'); px(x,y,2,TILE,'#000');
+        px(x+2,y+2,3,12,C.pipeLight);
+        px(x+7,y+2,2,12,C.pipeLight);
+        px(x+12,y+2,4,12,C.pipeDark);
+        break;
+      case ']': // pipe lip, right half
+        px(x,y,TILE,TILE,C.pipe);
+        px(x,y,TILE,2,'#000'); px(x,y+14,TILE,2,'#000'); px(x+14,y,2,TILE,'#000');
+        px(x,y+2,2,12,C.pipeDark);
+        px(x+3,y+2,2,12,C.pipeLight);
+        px(x+8,y+2,6,12,C.pipeDark);
+        break;
+      case '{': // pipe shaft, left half: inset from the lip, outlined
+        px(x+2,y,14,TILE,C.pipe);
+        px(x+2,y,2,TILE,'#000');
+        px(x+4,y,3,TILE,C.pipeLight);
+        px(x+9,y,2,TILE,C.pipeLight);
+        px(x+14,y,2,TILE,C.pipeDark);
+        break;
+      case '}': // pipe shaft, right half
+        px(x,y,14,TILE,C.pipe);
+        px(x+12,y,2,TILE,'#000');
+        px(x,y,2,TILE,C.pipeDark);
+        px(x+5,y,7,TILE,C.pipeDark);
+        break;
+      case 'P': // pipe lip, center fill
+        px(x,y,TILE,TILE,C.pipe);
+        px(x,y,TILE,2,'#000'); px(x,y+14,TILE,2,'#000');
+        px(x+1,y+2,3,12,C.pipeLight);
+        px(x+11,y+2,5,12,C.pipeDark);
+        break;
+      case 'p': // pipe shaft, center fill
+        px(x,y,TILE,TILE,C.pipe);
+        px(x+2,y,3,TILE,C.pipeLight);
+        px(x+11,y,5,TILE,C.pipeDark);
+        break;
       case 'o': drawCoinTile(x,y); break;
       case 'F': /* pole drawn separately */ break;
       default: break;
@@ -1240,21 +1290,16 @@
 
   // ---- Title screen ------------------------------------------------------
   function drawTitle() {
-    drawText('PIXEL JUMPER', VW*TILE/2, 120, 'center', C.star, 3);
-    drawText('AN ORIGINAL PLATFORMER', VW*TILE/2, 168, 'center', '#bcd', 1);
-    // draw a little hero and enemy
-    const w0 = {player:makePlayer({x:0,y:0})};
-    // arrows
+    drawText('PIXEL JUMPER', VW*TILE/2, 34, 'center', C.star, 3);
+    drawText('AN ORIGINAL PLATFORMER', VW*TILE/2, 66, 'center', '#bcd', 1);
     const lines = [
-      'ARROWS  MOVE  AND  JUMP',
-      'Z / SHIFT  RUN',
+      'ARROWS  MOVE  AND  JUMP  ·  Z / SHIFT  RUN',
       'S  SHOOT  FIREBALL  (FIRE FLOWER)',
-      'STOMP  ENEMIES  ·  GRAB  POWER-UPS',
-      'REACH  THE  FLAG  TO  CLEAR',
+      'STOMP  ENEMIES  ·  REACH  THE  FLAG',
     ];
-    lines.forEach((l,i)=> drawText(l, VW*TILE/2, 230+i*20, 'center', '#e8ecff', 1));
-    if (Math.floor(game.t/20)%2) drawText('PRESS  ENTER  TO  START', VW*TILE/2, 360, 'center', C.coin, 2);
-    drawText('© ORIGINAL WORK · NOT AFFILIATED WITH ANY EXISTING GAME', VW*TILE/2, 452, 'center', '#5a6a9a', 1);
+    lines.forEach((l,i)=> drawText(l, VW*TILE/2, 96+i*14, 'center', '#e8ecff', 1));
+    if (Math.floor(game.t/20)%2) drawText('PRESS  ENTER  TO  START', VW*TILE/2, 160, 'center', C.coin, 2);
+    drawText('© ORIGINAL WORK · NOT AFFILIATED WITH ANY EXISTING GAME', VW*TILE/2, 222, 'center', '#5a6a9a', 1);
   }
 
   // =======================================================================
